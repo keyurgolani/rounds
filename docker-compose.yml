@@ -1,0 +1,31 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "${BACKEND_PORT:-3099}:8000"
+    volumes:
+      - ./data:/app/data
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./data/interview.db}
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-3001}:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      # Same-origin /api/* is proxied to the backend service via
+      # frontend/vite.config.ts. Override VITE_API_PROXY_TARGET only when
+      # pointing the dev server at a backend on a different host.
+      - VITE_API_PROXY_TARGET=${VITE_API_PROXY_TARGET:-http://backend:8000}
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-}
+      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY:-}
+      - VITE_OAUTH_GOOGLE_ENABLED=${VITE_OAUTH_GOOGLE_ENABLED:-false}
+      - VITE_OAUTH_GITHUB_ENABLED=${VITE_OAUTH_GITHUB_ENABLED:-false}
+    depends_on:
+      - backend
+    restart: unless-stopped

@@ -1,0 +1,397 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --paper: #f7f2e7;
+    --paper-2: #efe8d7;
+    --paper-3: #e5dcc5;
+    --ink: #181613;
+    --ink-2: #2a2621;
+    --ink-3: #514a3e;
+    --ink-4: #857c6b;
+    --ink-5: #b4a992;
+
+    --terracotta: #c9633f;
+    --terracotta-soft: #e8c9b8;
+    --forest: #2f5d4a;
+    --forest-soft: #c2d4c8;
+    --ochre: #b68c2a;
+    --ochre-soft: #e8d9a8;
+    --plum: #7c3a4e;
+    --plum-soft: #e0c7ce;
+
+    --bg: var(--paper);
+    --bg-elev: #fdfbf5;
+    --bg-sunken: var(--paper-2);
+    --text: var(--ink);
+    --text-2: var(--ink-3);
+    --text-3: var(--ink-4);
+    --text-4: var(--ink-5);
+    --border: rgba(24, 22, 19, 0.1);
+    --border-strong: rgba(24, 22, 19, 0.18);
+    --accent: var(--terracotta);
+    --accent-soft: var(--terracotta-soft);
+
+    --ease: var(--forest);
+    --ease-soft: var(--forest-soft);
+    --med: var(--ochre);
+    --med-soft: var(--ochre-soft);
+    --hard: var(--plum);
+    --hard-soft: var(--plum-soft);
+
+    --unit: 4px;
+    --radius: 8px;
+    --radius-lg: 14px;
+
+    /* Density-scaled spacing — consumed by .card, .card-lg and component
+       grid gaps so that the `density` tweak actually changes padding and
+       gutters, not just corner radii. */
+    --pad-xs: 10px;
+    --pad-sm: 14px;
+    --pad-md: 18px;
+    --pad-lg: 24px;
+    --gap-sm: 10px;
+    --gap-md: 16px;
+    --gap-lg: 22px;
+
+    --font-display: 'Instrument Serif', 'Fraunces', Georgia, serif;
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    --shadow-card: 0 1px 0 rgba(24, 22, 19, 0.04), 0 0 0 1px rgba(24, 22, 19, 0.07),
+      0 2px 6px -2px rgba(24, 22, 19, 0.04);
+    --shadow-card-hover: 0 1px 0 rgba(24, 22, 19, 0.05), 0 0 0 1px rgba(24, 22, 19, 0.11),
+      0 10px 24px -8px rgba(24, 22, 19, 0.1);
+    --shadow-elev: 0 1px 0 rgba(24, 22, 19, 0.06), 0 0 0 1px rgba(24, 22, 19, 0.1),
+      0 20px 40px -20px rgba(24, 22, 19, 0.18);
+  }
+
+  [data-theme='dark'] {
+    --paper: #0e1513;
+    --paper-2: #151e1b;
+    --paper-3: #1e2a26;
+    --ink: #e9e2d0;
+    --ink-2: #d1c9b6;
+    --ink-3: #a59c87;
+    --ink-4: #7a7264;
+    --ink-5: #4d4a43;
+
+    --bg: var(--paper);
+    --bg-elev: #131b18;
+    --bg-sunken: #0a100e;
+    --text: var(--ink);
+    --text-2: var(--ink-2);
+    --text-3: var(--ink-3);
+    --text-4: var(--ink-4);
+    --border: rgba(233, 226, 208, 0.1);
+    --border-strong: rgba(233, 226, 208, 0.22);
+
+    --terracotta: #e87e56;
+    --terracotta-soft: rgba(232, 126, 86, 0.18);
+    --forest: #6fb095;
+    --forest-soft: rgba(111, 176, 149, 0.18);
+    --ochre: #d9b25a;
+    --ochre-soft: rgba(217, 178, 90, 0.18);
+    --plum: #d48aa0;
+    --plum-soft: rgba(212, 138, 160, 0.18);
+
+    --ease: var(--forest);
+    --ease-soft: var(--forest-soft);
+    --med: var(--ochre);
+    --med-soft: var(--ochre-soft);
+    --hard: var(--plum);
+    --hard-soft: var(--plum-soft);
+
+    --shadow-card: 0 0 0 1px rgba(233, 226, 208, 0.08), 0 2px 6px -2px rgba(0, 0, 0, 0.3);
+    --shadow-card-hover: 0 0 0 1px rgba(233, 226, 208, 0.16), 0 10px 24px -8px rgba(0, 0, 0, 0.4);
+  }
+
+  [data-theme='sepia'] {
+    --paper: #efe2c7;
+    --paper-2: #e5d5b5;
+    --paper-3: #d9c7a0;
+    --bg: var(--paper);
+    --bg-elev: #f5ead2;
+    --bg-sunken: var(--paper-2);
+    --border: rgba(62, 46, 22, 0.14);
+    --border-strong: rgba(62, 46, 22, 0.22);
+  }
+
+  [data-accent='forest'] {
+    --accent: var(--forest);
+    --accent-soft: var(--forest-soft);
+  }
+  [data-accent='ochre'] {
+    --accent: var(--ochre);
+    --accent-soft: var(--ochre-soft);
+  }
+  [data-accent='plum'] {
+    --accent: var(--plum);
+    --accent-soft: var(--plum-soft);
+  }
+  [data-accent='ink'] {
+    --accent: var(--ink);
+    --accent-soft: rgba(24, 22, 19, 0.12);
+  }
+
+  [data-density='compact'] {
+    --unit: 3px;
+    --radius: 6px;
+    --radius-lg: 10px;
+    --pad-xs: 6px;
+    --pad-sm: 10px;
+    --pad-md: 14px;
+    --pad-lg: 18px;
+    --gap-sm: 6px;
+    --gap-md: 12px;
+    --gap-lg: 18px;
+  }
+  [data-density='spacious'] {
+    --unit: 5px;
+    --radius: 10px;
+    --radius-lg: 16px;
+    --pad-xs: 14px;
+    --pad-sm: 18px;
+    --pad-md: 24px;
+    --pad-lg: 32px;
+    --gap-sm: 14px;
+    --gap-md: 22px;
+    --gap-lg: 30px;
+  }
+
+  [data-type='sans-only'] {
+    --font-display: 'Inter', system-ui, sans-serif;
+  }
+  [data-type='fraunces'] {
+    --font-display: 'Fraunces', Georgia, serif;
+  }
+
+  [data-cards='flat'] {
+    --shadow-card: none;
+    --shadow-card-hover: 0 0 0 1px var(--border-strong);
+  }
+  [data-cards='bordered'] {
+    --shadow-card: 0 0 0 1px var(--border);
+    --shadow-card-hover: 0 0 0 1px var(--border-strong);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.35;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.08 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+  [data-theme='dark'] body::before {
+    mix-blend-mode: screen;
+    opacity: 0.2;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-4);
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: var(--bg-elev);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+  }
+  input,
+  textarea,
+  select {
+    font-family: inherit;
+    color: inherit;
+  }
+}
+
+@layer components {
+  .display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+  .display-italic {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+  .mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-feature-settings: 'ss01', 'ss02';
+  }
+  .eyebrow {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    font-weight: 500;
+  }
+
+  .card {
+    background: var(--bg-elev);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+  }
+  /* Density-aware card padding for callers that opt in via `card-pad`.
+     We don't apply padding to `.card` itself because most call sites
+     set their own inline padding for pixel-precise layouts. */
+  .card-pad {
+    padding: var(--pad-md);
+  }
+  .card-pad-lg {
+    padding: var(--pad-lg);
+  }
+  .card-pad-sm {
+    padding: var(--pad-sm);
+  }
+  .card-hover {
+    transition: box-shadow 160ms ease, transform 160ms ease;
+  }
+  .card-hover:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-1px);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+}
+
+/* ReactFlow overrides — make the diagram read as native to the theme. */
+.rounds-reactflow .react-flow__controls-button {
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--text-2);
+}
+.rounds-reactflow .react-flow__controls-button:hover {
+  background: var(--bg-sunken);
+}
+.rounds-reactflow .react-flow__controls-button svg {
+  fill: var(--text-2);
+}
+.rounds-reactflow .react-flow__edge-path {
+  stroke: var(--border-strong);
+}
+.rounds-reactflow .react-flow__handle {
+  background: var(--accent);
+  border-color: var(--bg-elev);
+}
+.rounds-reactflow .react-flow__attribution {
+  display: none;
+}
+.rounds-reactflow .react-flow__minimap-mask {
+  fill: rgba(24, 22, 19, 0.06);
+}
+
+/* Density: scale font-size on html so rem-based values shift with it.
+   comfortable is the default (no data-density attr set). */
+html {
+  font-size: 15.5px;
+}
+
+[data-density='compact'] {
+  font-size: 14px;
+}
+[data-density='compact'] .card {
+  padding: 12px;
+}
+[data-density='compact'] h1.display-italic {
+  margin-bottom: 8px;
+}
+[data-density='compact'] h2.display-italic {
+  margin-bottom: 6px;
+}
+[data-density='compact'] .eyebrow {
+  margin-bottom: 6px;
+}
+
+[data-density='spacious'] {
+  font-size: 17px;
+}
+[data-density='spacious'] .card {
+  padding: 24px;
+}
+[data-density='spacious'] h1.display-italic {
+  margin-bottom: 16px;
+}
+[data-density='spacious'] h2.display-italic {
+  margin-bottom: 12px;
+}
+
+@layer utilities {
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .fade-up {
+    animation: fadeUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
