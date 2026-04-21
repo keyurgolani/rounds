@@ -1,0 +1,74 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      skip_schema:
+        description: 'Skip Supabase schema apply'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  schema:
+    name: Apply Supabase schema
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.skip_schema }}
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply supabase/schema.sql via Management API
+        run: |
+          set -euo pipefail
+          payload=$(jq -Rs '{query: .}' < supabase/schema.sql)
+          http_code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+            -d "$payload")
+          echo "HTTP $http_code"
+          cat /tmp/resp.json
+          echo
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            exit 1
+          fi
+
+  deploy:
+    name: Deploy frontend to Vercel
+    needs: schema
+    if: ${{ always() && (needs.schema.result == 'success' || needs.schema.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install Vercel CLI
+        run: npm i -g vercel@51
+      - name: Pull Vercel project env (production)
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - name: Build with Vercel
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+      - name: Deploy prebuilt artifact to production
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "Deployed: $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Summary
+        run: echo "Production URL → ${{ steps.deploy.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
