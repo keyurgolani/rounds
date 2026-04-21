@@ -65,8 +65,8 @@ export default function NewApplication() {
 
       <form
         onSubmit={handleSubmit}
-        className="mx-auto px-8 py-6 grid gap-5"
-        style={{ maxWidth: 920, gridTemplateColumns: 'minmax(0, 1fr) 320px' }}
+        className="px-8 py-6 grid gap-5"
+        style={{ gridTemplateColumns: 'minmax(0, 1fr) 320px' }}
       >
         <div className="card p-6 flex flex-col gap-4">
           <div className="eyebrow">The essentials</div>

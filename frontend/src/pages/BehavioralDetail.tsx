@@ -324,7 +324,7 @@ export default function BehavioralDetail() {
             )}
 
             {activeTab === 'sample' && (
-              <div className="space-y-5" style={{ maxWidth: 900 }}>
+              <div className="space-y-5">
                 <AnimatedCard className="card" style={{ padding: 24 }}>
                   <div className="eyebrow mb-2">Sample response</div>
                   <p
