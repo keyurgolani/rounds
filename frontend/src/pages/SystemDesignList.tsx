@@ -35,15 +35,15 @@ export default function SystemDesignList() {
         subtitle="Designing at scale is practice, not talent. Walk the same ground until the tradeoffs come naturally."
       />
 
-      <div className="mx-auto px-8 py-6" style={{ maxWidth: 1280 }}>
+      <div className="px-8 py-6">
         {loading ? (
           <div className="text-center py-16" style={{ color: 'var(--text-3)' }}>
             Loading…
           </div>
         ) : (
           <div
-            className="grid gap-4"
-            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}
+            className="grid gap-5"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))' }}
           >
             {questions.map((q, i) => {
               const status = effectiveStatus('system', q.id);
@@ -51,9 +51,9 @@ export default function SystemDesignList() {
                 <Link
                   key={q.id}
                   to={`/system-design/question/${slugify(q.title) || q.id}`}
-                  className="card card-hover fade-up flex flex-col gap-3"
+                  className="card card-hover fade-up flex flex-col gap-4"
                   style={{
-                    padding: 20,
+                    padding: 28,
                     animationDelay: `${i * 30}ms`,
                     textDecoration: 'none',
                     color: 'var(--text)',
@@ -64,16 +64,16 @@ export default function SystemDesignList() {
                   </div>
                   <div
                     className="display-italic"
-                    style={{ fontSize: 24, lineHeight: 1.15, fontWeight: 400 }}
+                    style={{ fontSize: 30, lineHeight: 1.1, fontWeight: 400 }}
                   >
                     {q.title}
                   </div>
                   <p
                     style={{
                       margin: 0,
-                      fontSize: 12.5,
+                      fontSize: 14,
                       color: 'var(--text-3)',
-                      lineHeight: 1.55,
+                      lineHeight: 1.6,
                     }}
                     className="line-clamp-3"
                   >
@@ -81,7 +81,7 @@ export default function SystemDesignList() {
                   </p>
                   {q.tags && q.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      {q.tags.slice(0, 4).map((tag) => (
+                      {q.tags.slice(0, 5).map((tag) => (
                         <span
                           key={tag}
                           className="pill"
@@ -97,7 +97,7 @@ export default function SystemDesignList() {
                     </div>
                   )}
                   <div
-                    className="flex items-center gap-2 pt-2"
+                    className="flex items-center gap-2 pt-3 mt-auto"
                     style={{ borderTop: '1px solid var(--border)' }}
                   >
                     <StatusDot status={status} />

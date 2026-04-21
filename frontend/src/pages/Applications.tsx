@@ -50,7 +50,7 @@ export default function Applications() {
         </Link>
       </PageHeader>
 
-      <div className="mx-auto px-8 py-5" style={{ maxWidth: 1280 }}>
+      <div className="px-8 py-5">
         <div
           className="grid gap-2.5 mb-5"
           style={{ gridTemplateColumns: `repeat(${statuses.length}, 1fr)` }}

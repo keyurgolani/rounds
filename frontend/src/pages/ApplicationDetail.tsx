@@ -136,8 +136,8 @@ export default function ApplicationDetail() {
       </PageHeader>
 
       <div
-        className="mx-auto px-8 py-6 grid gap-5"
-        style={{ maxWidth: 1200, gridTemplateColumns: 'minmax(0, 1fr) 320px' }}
+        className="px-8 py-6 grid gap-5"
+        style={{ gridTemplateColumns: 'minmax(0, 1fr) 320px' }}
       >
         <div className="flex flex-col gap-5">
           <div className="card p-6">

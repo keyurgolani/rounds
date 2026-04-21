@@ -60,7 +60,7 @@ export default function CodingList() {
         subtitle="Algorithms and data structures, one problem at a time. Start with the pattern, then sharpen the implementation."
       />
 
-      <div className="mx-auto px-8 py-6" style={{ maxWidth: 1280 }}>
+      <div className="px-8 py-6">
         <div className="flex flex-wrap gap-2 mb-5 items-center">
           <input
             value={query}

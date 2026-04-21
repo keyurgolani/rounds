@@ -82,7 +82,7 @@ export default function Interviews() {
         </Link>
       </PageHeader>
 
-      <div className="mx-auto px-8 py-5" style={{ maxWidth: 1280 }}>
+      <div className="px-8 py-5">
         <div className="grid gap-5" style={{ gridTemplateColumns: '2fr 1fr' }}>
           <section>
             <div className="eyebrow mb-3">Upcoming</div>

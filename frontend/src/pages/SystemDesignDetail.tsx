@@ -223,7 +223,7 @@ export default function SystemDesignDetail() {
       <Tabs tabs={tabList} active={activeTab} onChange={setActiveTab} />
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-8 py-6 mx-auto w-full" style={{ maxWidth: 1280 }}>
+        <div className="px-8 py-6 w-full">
           <PageTransition routeKey={activeTab}>
             {activeTab === 'problem' && (
               <div className="space-y-5">

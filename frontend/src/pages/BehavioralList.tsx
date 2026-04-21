@@ -306,7 +306,7 @@ export default function BehavioralList() {
         subtitle="Not questions to memorize — stories to own. Drag a question onto an anecdote (or the reverse) to link them. Hover to see the web."
       />
 
-      <div className="mx-auto px-8 py-5" style={{ maxWidth: 1280 }}>
+      <div className="px-8 py-5">
         <div className="flex gap-2 flex-wrap mb-5">
           <CatChip
             active={activeCat === null}

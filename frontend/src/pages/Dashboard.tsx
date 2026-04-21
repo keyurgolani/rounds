@@ -132,7 +132,7 @@ export default function Dashboard() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto px-12 pt-10 pb-10" style={{ maxWidth: 1280 }}>
+      <div className="px-12 pt-10 pb-10">
         <div className="fade-up flex justify-between items-end gap-8 flex-wrap">
           <div className="min-w-0">
             <div className="eyebrow mb-2.5">{formatDate(new Date())}</div>
