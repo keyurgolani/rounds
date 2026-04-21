@@ -70,6 +70,11 @@ function extractFunctionName(code: string, lang: string): string {
 type LeftPanel = 'solutions' | 'hints';
 type RightPanel = 'run' | 'evaluate';
 
+function StatusBar({ questionId }: { questionId: number }) {
+  const [status, setStatus] = usePracticeStatus('coding', questionId, 'todo');
+  return <PracticeStatusControl size="sm" status={status} onChange={setStatus} />;
+}
+
 export default function CodingDetail() {
   const { slug } = useParams<{ slug: string }>();
   const { theme } = useTheme();
@@ -85,7 +90,6 @@ export default function CodingDetail() {
   const [leftPanel, setLeftPanel] = useState<LeftPanel>('hints');
   const [rightPanel, setRightPanel] = useState<RightPanel>('evaluate');
   const [showSolution, setShowSolution] = useState(-1);
-  const [status, setStatus] = usePracticeStatus('coding', slug ?? '', 'todo');
   const [leftWidth, setLeftWidth] = useState(440);
   const [rightWidth, setRightWidth] = useState(420);
   const [wordWrap, setWordWrap] = useState<'on' | 'off'>('off');
@@ -251,7 +255,7 @@ export default function CodingDetail() {
           </h1>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <PracticeStatusControl size="sm" status={status} onChange={setStatus} />
+          <StatusBar questionId={q.id} />
         </div>
       </header>
 

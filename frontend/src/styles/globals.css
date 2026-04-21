@@ -214,19 +214,20 @@
     opacity: 0.2;
   }
 
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  /* Scrollbars are hidden globally — scrolling still works with trackpad,
+     keyboard, or wheel, but the chrome itself doesn't render anywhere. */
+  * {
+    scrollbar-width: none;        /* Firefox */
+    -ms-overflow-style: none;     /* legacy Edge / IE */
   }
-  ::-webkit-scrollbar-track {
+  *::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
     background: transparent;
   }
-  ::-webkit-scrollbar-thumb {
-    background: var(--border-strong);
-    border-radius: 4px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--text-4);
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-thumb {
+    background: transparent;
   }
 
   ::selection {

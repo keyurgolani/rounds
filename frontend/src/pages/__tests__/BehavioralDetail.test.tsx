@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import BehavioralDetail from '../BehavioralDetail';
@@ -48,7 +48,7 @@ function renderAt(url: string) {
       <Routes>
         <Route path="/behavioral/question/:slug" element={<BehavioralDetail />} />
       </Routes>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
@@ -62,96 +62,54 @@ beforeEach(() => {
   });
 });
 
-describe('BehavioralDetail — tab structure', () => {
-  it('renders exactly 3 tabs', async () => {
+describe('BehavioralDetail — single-scroll layout', () => {
+  it('renders all sections in one page (no tab switching)', async () => {
     renderAt('/behavioral/question/tell-me-about-a-conflict');
     await waitFor(() => screen.getByText('Tell me about a conflict'));
 
-    // New tabs should be present
-    expect(screen.getByRole('button', { name: 'Question & Anecdotes' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'STAR Guide & Tips' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sample Response' })).toBeInTheDocument();
+    // No tab toggles for the old Question/STAR/Sample split.
+    expect(screen.queryByRole('button', { name: 'Question & Anecdotes' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'STAR Guide & Tips' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sample Response' })).toBeNull();
 
-    // Old standalone tabs should NOT be present
-    expect(screen.queryByRole('button', { name: 'Question' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'My Anecdotes' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'STAR Guide' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Tips & Pitfalls' })).toBeNull();
+    // Primary section headings all appear together.
+    expect(screen.getByRole('heading', { level: 2, name: /prompt/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: /star guide/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: /sample response/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: /your anecdotes/i }),
+    ).toBeInTheDocument();
   });
 
-  it('defaults to the Question & Anecdotes tab', async () => {
+  it('anecdotes panel mounts alongside the question content', async () => {
     renderAt('/behavioral/question/tell-me-about-a-conflict');
     await waitFor(() => screen.getByText('Tell me about a conflict'));
-
-    // Question prompt should be visible (appears in header and in card — use getAllByText)
-    expect(screen.getAllByText(/Describe a time you disagreed with a teammate/).length).toBeGreaterThan(0);
-    // MyAnecdotesPanel sentinel should be visible
     expect(screen.getByText('[MyAnecdotesPanel]')).toBeInTheDocument();
   });
 
-  it('STAR & Tips tab renders both STAR cards and Do/Don\'t cards', async () => {
+  it('pushes follow-ups, tips, pitfalls, and interviewer cues to the right rail', async () => {
     renderAt('/behavioral/question/tell-me-about-a-conflict');
     await waitFor(() => screen.getByText('Tell me about a conflict'));
 
-    // Click the STAR Guide & Tips tab
-    fireEvent.click(screen.getByRole('button', { name: 'STAR Guide & Tips' }));
+    // No H2 for rail-only content.
+    expect(screen.queryByRole('heading', { level: 2, name: /likely follow-ups/i })).toBeNull();
+    expect(screen.queryByRole('heading', { level: 2, name: /tips & pitfalls/i })).toBeNull();
 
-    await waitFor(() => {
-      // STAR cards: letter 'S' should be present as STAR accent
-      const sLetters = screen.getAllByText('S');
-      expect(sLetters.length).toBeGreaterThan(0);
-    });
-
-    // Do and Don't eyebrows should be present
-    expect(screen.getByText('Do')).toBeInTheDocument();
-    expect(screen.getByText("Don't")).toBeInTheDocument();
-
-    // Tips & Pitfalls eyebrow section heading
-    expect(screen.getByText('Tips & Pitfalls')).toBeInTheDocument();
-
-    // Actual tip content
+    // The content itself is still rendered somewhere on the page.
+    expect(screen.getByText('follow up?')).toBeInTheDocument();
     expect(screen.getByText('do this')).toBeInTheDocument();
     expect(screen.getByText("don't do that")).toBeInTheDocument();
-  });
-
-  it('Sample Response tab renders a redesigned card layout', async () => {
-    renderAt('/behavioral/question/tell-me-about-a-conflict');
-    await waitFor(() => screen.getByText('Tell me about a conflict'));
-
-    // Click the Sample Response tab
-    fireEvent.click(screen.getByRole('button', { name: 'Sample Response' }));
-
-    await waitFor(() => {
-      // Eyebrow "Sample response" card should be present
-      expect(screen.getByText('Sample response')).toBeInTheDocument();
-    });
-
-    // STAR letter accents — S, T, A, R
-    expect(screen.getByText('S')).toBeInTheDocument();
-    expect(screen.getByText('T')).toBeInTheDocument();
-    expect(screen.getByText('A')).toBeInTheDocument();
-    expect(screen.getByText('R')).toBeInTheDocument();
-
-    // Key strengths pills should be present
+    expect(screen.getByText('structure')).toBeInTheDocument();
     expect(screen.getByText('Empathy')).toBeInTheDocument();
-    expect(screen.getByText('Ownership')).toBeInTheDocument();
-
-    // Key strengths demonstrated eyebrow
-    expect(screen.getByText('Key strengths demonstrated')).toBeInTheDocument();
   });
 
-  it('no emoji characters on STAR & Tips tab', async () => {
+  it('does not render emoji markers for Do/Don\'t in the rail', async () => {
     renderAt('/behavioral/question/tell-me-about-a-conflict');
     await waitFor(() => screen.getByText('Tell me about a conflict'));
-
-    // Click the STAR Guide & Tips tab
-    fireEvent.click(screen.getByRole('button', { name: 'STAR Guide & Tips' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Do')).toBeInTheDocument();
-    });
-
-    // Assert no checkmark or cross emoji characters in DOM text
     const bodyText = document.body.textContent ?? '';
     expect(bodyText).not.toContain('✓');
     expect(bodyText).not.toContain('✕');

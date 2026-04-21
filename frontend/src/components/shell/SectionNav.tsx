@@ -7,9 +7,19 @@ interface SectionNavProps {
   items: SectionNavItem[];
   scrollContainer?: RefObject<HTMLElement | null>;
   offset?: number;
+  /** When true, the nav is rendered statically — the parent is expected
+   *  to manage any sticky positioning. Avoids the nested-sticky overlap
+   *  that happens when a sticky SectionNav sits inside a separately
+   *  scrollable/sticky rail. */
+  nonSticky?: boolean;
 }
 
-export default function SectionNav({ items, scrollContainer, offset = 0 }: SectionNavProps) {
+export default function SectionNav({
+  items,
+  scrollContainer,
+  offset = 0,
+  nonSticky = false,
+}: SectionNavProps) {
   const [activeId, setActiveId] = useState<string>(items[0]?.id ?? '');
   const observerRef = useRef<IntersectionObserver | null>(null);
 
@@ -78,7 +88,7 @@ export default function SectionNav({ items, scrollContainer, offset = 0 }: Secti
       <nav
         aria-label="On this page"
         className="hidden lg:block"
-        style={{ position: 'sticky', top: offset + 16 }}
+        style={nonSticky ? undefined : { position: 'sticky', top: offset + 16 }}
       >
         <div className="eyebrow mb-3">On this page</div>
         <ol className="flex flex-col gap-1.5 list-none p-0 m-0">
