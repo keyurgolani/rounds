@@ -64,7 +64,7 @@ npm --prefix frontend run dev
 
 The app uses Supabase for auth + data. No backend process to run.
 
-### Mode B — Legacy FastAPI (for offline development)
+### Mode B — Legacy FastAPI (local development)
 
 ```sh
 # backend

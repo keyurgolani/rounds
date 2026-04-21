@@ -6,8 +6,8 @@ build a reusable library of STAR-format behavioral anecdotes, and track every
 job application and interview round you're running.
 
 The production build is a single-page React app backed by Supabase
-(Postgres + Auth). A FastAPI backend is kept in the repo for fully offline /
-self-hosted use.
+(Postgres + Auth). A FastAPI backend is kept in the repo as a local
+development option.
 
 ---
 
@@ -67,7 +67,7 @@ self-hosted use.
 | Editor | Monaco |
 | Diagrams / charts | Mermaid, Recharts, D3 (scale/array) |
 | Auth + DB (prod) | Supabase (Postgres + Auth, RLS) |
-| Backend (offline / self-host) | FastAPI, SQLAlchemy, SQLite |
+| Backend (local dev only) | FastAPI, SQLAlchemy, SQLite |
 | Testing | Vitest + Testing Library (frontend), pytest (backend) |
 | Hosting | Vercel (static bundle) + Supabase |
 
@@ -85,7 +85,7 @@ self-hosted use.
 │   │   ├── lib/           Supabase client, slug + draft helpers
 │   │   └── theme/         Theme provider + tweaks panel
 │   └── public/
-├── backend/           FastAPI server (offline / self-hosted mode)
+├── backend/           FastAPI server (local development mode)
 │   ├── routers/           questions, applications
 │   ├── runner.py          Sandboxed code-execution primitive
 │   ├── seed_data.py       Question + category fixtures
@@ -118,7 +118,7 @@ Before the first run, open your Supabase project's SQL editor and run
 `supabase/schema.sql` to create every table, index, trigger, and RLS
 policy. See [`docs/supabase.md`](docs/supabase.md) for details.
 
-### Option B — FastAPI + SQLite (fully offline)
+### Option B — FastAPI + SQLite (local development)
 
 ```sh
 # backend

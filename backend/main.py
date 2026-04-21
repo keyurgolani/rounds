@@ -28,7 +28,7 @@ def _ensure_columns():
 
 _ensure_columns()
 
-app = FastAPI(title="Interview Command Center", version="1.0.0")
+app = FastAPI(title="Interview Command Center", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,

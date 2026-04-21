@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import {
+  AuthFormHeader,
   AuthShell,
   Divider,
   Field,
@@ -49,11 +50,9 @@ export default function Signup() {
   }
 
   return (
-    <AuthShell
-      eyebrow="Start your rounds"
-      title="Create your account."
-      subtitle="Write anecdotes, track practice progress, and keep every application in one place. Takes under a minute."
-    >
+    <AuthShell>
+      <AuthFormHeader eyebrow="Start your rounds" heading="Create your account" />
+
       {oauthConfig.anyEnabled && (
         <>
           <div className="flex gap-2 mb-5">

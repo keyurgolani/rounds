@@ -44,11 +44,9 @@ export default function Login() {
   }
 
   return (
-    <AuthShell
-      eyebrow="Welcome back"
-      title="Sign in to Rounds."
-      subtitle="Pick up where you left off — your anecdotes, practice progress, and applications are right where you parked them."
-    >
+    <AuthShell>
+      <AuthFormHeader eyebrow="Welcome back" heading="Sign in" />
+
       {oauthConfig.anyEnabled && (
         <>
           <div className="flex gap-2 mb-5">
@@ -123,36 +121,43 @@ export default function Login() {
   );
 }
 
-export function AuthShell({
-  eyebrow,
-  title,
-  subtitle,
-  children,
-}: {
-  eyebrow: string;
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
-}) {
+const MARKETING_FEATURES = [
+  {
+    title: 'System design, visually',
+    body: 'Mermaid architecture, sequence, and ER diagrams with zoomable charts and animated tradeoff sliders.',
+  },
+  {
+    title: 'Coding with a real runner',
+    body: 'Monaco editor, persistent drafts, sandboxed execution against public and hidden tests.',
+  },
+  {
+    title: 'Anecdotes that stay reusable',
+    body: 'Write STAR stories once, link them to the behavioral questions they answer.',
+  },
+  {
+    title: 'Pipeline, not spreadsheets',
+    body: 'Track every application, round, interviewer, and result in the same surface as your prep.',
+  },
+];
+
+export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      className="min-h-dvh flex"
-      style={{ background: 'var(--bg)' }}
-    >
+    <div className="min-h-dvh flex" style={{ background: 'var(--bg)' }}>
       <aside
         className="hidden lg:flex flex-col justify-between p-12"
         style={{
-          flexBasis: '42%',
+          flexBasis: '46%',
           background: 'var(--bg-sunken)',
           borderRight: '1px solid var(--border)',
         }}
       >
         <RoundsLockup markSize={28} textSize={28} />
-        <div style={{ maxWidth: 420 }}>
-          <div className="eyebrow mb-3">Brand · Rounds</div>
+
+        <div style={{ maxWidth: 460 }}>
+          <div className="eyebrow mb-3">A calmer way to prep</div>
           <p
             className="display-italic"
-            style={{ fontSize: 38, lineHeight: 1.15, margin: 0, fontWeight: 400 }}
+            style={{ fontSize: 40, lineHeight: 1.12, margin: 0, fontWeight: 400 }}
           >
             Small, consistent reps beat long cram sessions.
           </p>
@@ -162,16 +167,56 @@ export function AuthShell({
               fontSize: 13.5,
               color: 'var(--text-3)',
               lineHeight: 1.6,
-              maxWidth: 380,
+              maxWidth: 420,
             }}
           >
-            Rounds is a calm, editorial home for the entire interview cycle — one practice surface for System
-            Design, Coding, and Behavioral, plus a tracker for the companies you're pursuing and the rounds
-            you're prepping for.
+            Rounds is an editorial home for the entire interview cycle — one practice surface for
+            System Design, Coding, and Behavioral, plus a tracker for the companies you're pursuing
+            and the rounds you're prepping for.
           </p>
+
+          <ul
+            className="flex flex-col gap-4"
+            style={{ marginTop: 32, listStyle: 'none', padding: 0 }}
+          >
+            {MARKETING_FEATURES.map((f) => (
+              <li key={f.title} className="flex gap-3">
+                <span
+                  aria-hidden
+                  style={{
+                    flex: '0 0 auto',
+                    marginTop: 7,
+                    width: 6,
+                    height: 6,
+                    borderRadius: 999,
+                    background: 'var(--accent)',
+                  }}
+                />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
+                    {f.title}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color: 'var(--text-3)',
+                      lineHeight: 1.55,
+                      marginTop: 2,
+                    }}
+                  >
+                    {f.body}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
-        <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-4)', letterSpacing: '0.14em' }}>
-          SELF-HOSTED · NO TELEMETRY · YOURS
+
+        <div
+          className="mono"
+          style={{ fontSize: 10.5, color: 'var(--text-4)', letterSpacing: '0.14em' }}
+        >
+          SYSTEM DESIGN · CODING · BEHAVIORAL
         </div>
       </aside>
 
@@ -180,7 +225,7 @@ export function AuthShell({
           <div className="lg:hidden mb-6 flex justify-center">
             <RoundsLockup markSize={24} textSize={24} />
           </div>
-          <div className="eyebrow mb-2">{eyebrow}</div>
+          <div className="eyebrow mb-2">Rounds · interview prep</div>
           <h1
             className="display-italic"
             style={{
@@ -191,7 +236,7 @@ export function AuthShell({
               letterSpacing: '-0.02em',
             }}
           >
-            {title}
+            Your interview command center.
           </h1>
           <p
             style={{
@@ -202,11 +247,36 @@ export function AuthShell({
               maxWidth: 380,
             }}
           >
-            {subtitle}
+            One calm workspace for System Design, Coding, and Behavioral practice — plus the
+            pipeline of companies and rounds you're running.
           </p>
           {children}
         </div>
       </main>
+    </div>
+  );
+}
+
+export function AuthFormHeader({
+  eyebrow,
+  heading,
+}: {
+  eyebrow: string;
+  heading: string;
+}) {
+  return (
+    <div className="mb-5">
+      <div className="eyebrow mb-1">{eyebrow}</div>
+      <div
+        style={{
+          fontSize: 18,
+          fontWeight: 500,
+          color: 'var(--text)',
+          letterSpacing: '-0.01em',
+        }}
+      >
+        {heading}
+      </div>
     </div>
   );
 }
