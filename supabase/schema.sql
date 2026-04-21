@@ -302,7 +302,13 @@ create policy "Profile is self-readable" on public.profiles
   for select using (auth.uid() = id);
 drop policy if exists "Profile is self-updatable" on public.profiles;
 create policy "Profile is self-updatable" on public.profiles
-  for update using (auth.uid() = id);
+  for update using (auth.uid() = id) with check (auth.uid() = id);
+-- PostgREST upserts run INSERT ... ON CONFLICT DO UPDATE, which requires
+-- an INSERT policy even when the row already exists. Without this the
+-- Supabase client's `.upsert()` silently fails for any profile edits.
+drop policy if exists "Profile is self-insertable" on public.profiles;
+create policy "Profile is self-insertable" on public.profiles
+  for insert with check (auth.uid() = id);
 
 drop policy if exists "Anecdotes CRUD by owner" on public.anecdotes;
 create policy "Anecdotes CRUD by owner" on public.anecdotes

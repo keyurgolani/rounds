@@ -210,15 +210,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function updateProfile(patch: Partial<User>) {
     if (supabase && user) {
-      const { error } = await supabase
+      const nextName = patch.name ?? user.name;
+      const nextBio = patch.bio ?? user.bio ?? '';
+      const nextTarget = patch.target ?? user.target ?? '';
+
+      // Write to both the profiles table (the authoritative store that the
+      // hydrate() loader reads on each login) AND auth.users metadata. The
+      // metadata copy is a belt-and-braces fallback: if a profiles row is
+      // missing — for legacy accounts created before handle_new_user() fired,
+      // or if an RLS hiccup drops the row — userFromSession() can still
+      // recover the display name from user_metadata on the next session.
+      const { error: profileError } = await supabase
         .from('profiles')
-        .upsert({
-          id: user.id,
-          name: patch.name ?? user.name,
-          bio: patch.bio ?? user.bio ?? '',
-          target: patch.target ?? user.target ?? '',
+        .upsert(
+          {
+            id: user.id,
+            name: nextName,
+            bio: nextBio,
+            target: nextTarget,
+          },
+          { onConflict: 'id' },
+        );
+      if (profileError) throw new Error(profileError.message);
+
+      if (patch.name !== undefined && patch.name !== user.name) {
+        const { error: metaError } = await supabase.auth.updateUser({
+          data: { name: nextName },
         });
-      if (error) throw new Error(error.message);
+        if (metaError) throw new Error(metaError.message);
+      }
+
       setUser({ ...user, ...patch });
       return;
     }

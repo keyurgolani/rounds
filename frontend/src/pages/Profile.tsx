@@ -134,7 +134,7 @@ export default function Profile() {
                 className="mono"
                 style={{ fontSize: 10.5, color: 'var(--text-4)', letterSpacing: '0.08em' }}
               >
-                {streak.totalDays} {streak.totalDays === 1 ? 'day' : 'days'} total
+                LONGEST · {streak.longest}
               </span>
             </div>
             <div className="flex items-baseline gap-2 mb-3.5">
@@ -156,12 +156,6 @@ export default function Profile() {
               >
                 {streak.current === 1 ? 'day' : 'days'}
               </span>
-              <span
-                className="mono ml-auto"
-                style={{ fontSize: 10.5, color: 'var(--text-4)', letterSpacing: '0.08em' }}
-              >
-                LONGEST · {streak.longest}
-              </span>
             </div>
             <LoginHistoryStrip cells={streak.last30} />
             <div
@@ -172,30 +166,71 @@ export default function Profile() {
                 lineHeight: 1.55,
               }}
             >
-              {streak.firstLogin
-                ? `First login ${prettyDate(streak.firstLogin)}. One visit a day keeps the streak alive.`
-                : 'Your first login counts — welcome.'}
+              One visit a day keeps the streak alive.
             </div>
-            {streak.recent.length > 0 && (
-              <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                <div className="eyebrow mb-2">Recent logins</div>
+          </div>
+
+          <div className="card p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="eyebrow">Login activity</div>
+              <span
+                className="mono"
+                style={{ fontSize: 10.5, color: 'var(--text-4)', letterSpacing: '0.08em' }}
+              >
+                {streak.totalDays} {streak.totalDays === 1 ? 'day' : 'days'}
+              </span>
+            </div>
+            <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 12 }}>
+              <ActivityStat
+                label="First login"
+                value={streak.firstLogin ? prettyDate(streak.firstLogin) : '—'}
+                sub={streak.firstLogin ? relativeDate(streak.firstLogin) : ''}
+              />
+              <ActivityStat
+                label="Most recent"
+                value={streak.all[0] ? prettyDate(streak.all[0]) : '—'}
+                sub={streak.all[0] ? relativeDate(streak.all[0]) : ''}
+              />
+            </div>
+            {streak.all.length > 0 ? (
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
                 <ul
                   className="flex flex-col gap-1"
-                  style={{ maxHeight: 180, overflowY: 'auto', listStyle: 'none', padding: 0, margin: 0 }}
+                  style={{
+                    maxHeight: 260,
+                    overflowY: 'auto',
+                    listStyle: 'none',
+                    padding: 0,
+                    margin: 0,
+                  }}
                 >
-                  {streak.recent.map((d) => (
+                  {streak.all.map((d) => (
                     <li
                       key={d}
                       className="flex items-center justify-between"
                       style={{ fontSize: 12, color: 'var(--text-2)' }}
                     >
                       <span>{prettyDate(d)}</span>
-                      <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-4)' }}>
+                      <span
+                        className="mono"
+                        style={{ fontSize: 10.5, color: 'var(--text-4)' }}
+                      >
                         {relativeDate(d)}
                       </span>
                     </li>
                   ))}
                 </ul>
+              </div>
+            ) : (
+              <div
+                style={{
+                  fontSize: 11.5,
+                  color: 'var(--text-3)',
+                  borderTop: '1px solid var(--border)',
+                  paddingTop: 10,
+                }}
+              >
+                We'll record every day you open Rounds — come back tomorrow.
               </div>
             )}
           </div>
@@ -295,6 +330,44 @@ function relativeDate(d: string): string {
   if (diffDays < 30) return `${diffDays} days ago`;
   if (diffDays < 365) return `${Math.round(diffDays / 30)} mo ago`;
   return `${Math.round(diffDays / 365)} yr ago`;
+}
+
+function ActivityStat({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div
+      className="card"
+      style={{
+        padding: '10px 12px',
+        background: 'var(--bg-sunken)',
+        boxShadow: 'none',
+        border: '1px solid var(--border)',
+      }}
+    >
+      <div
+        className="eyebrow"
+        style={{ fontSize: 9.5, marginBottom: 4 }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.2 }}>{value}</div>
+      {sub && (
+        <div
+          className="mono"
+          style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}
+        >
+          {sub}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function InfoRow({

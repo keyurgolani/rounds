@@ -89,6 +89,7 @@ export type LoginStreakInfo = {
   totalDays: number;
   firstLogin: string | null;
   recent: string[];         // ISO dates, most recent first, up to 15
+  all: string[];            // full ledger, most recent first
 };
 
 function compute(userId: string | null): LoginStreakInfo {
@@ -115,7 +116,8 @@ function compute(userId: string | null): LoginStreakInfo {
   if (bumpedLongest !== longest) {
     save(userId, { dates, longest: bumpedLongest });
   }
-  const recent = [...dates].reverse().slice(0, 15);
+  const allDesc = [...dates].reverse();
+  const recent = allDesc.slice(0, 15);
   return {
     current,
     longest: bumpedLongest,
@@ -125,6 +127,7 @@ function compute(userId: string | null): LoginStreakInfo {
     totalDays: dates.length,
     firstLogin: dates[0] ?? null,
     recent,
+    all: allDesc,
   };
 }
 
