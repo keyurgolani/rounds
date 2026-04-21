@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { AnecdoteCard } from './AnecdoteCard';
+import { CategoryIcon } from '../../components/shell/CategoryIcon';
 import { Skeleton } from '../../components/visual/Skeleton';
 import type { Anecdote, BehavioralCategoryLite, BehavioralQuestionLite } from './types';
 
@@ -75,9 +76,13 @@ export function AnecdoteLibrary({ categories, questions: _questions }: AnecdoteL
               style={{
                 backgroundColor: selectedCat === c.id ? c.color : `${c.color}15`,
                 color: selectedCat === c.id ? '#fff' : c.color,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
               }}
             >
-              {c.icon} {c.name}
+              <CategoryIcon name={c.icon} size={12} strokeWidth={1.8} />
+              {c.name}
             </button>
           ))}
         </div>

@@ -1723,15 +1723,93 @@ def _seed_coding(db):
 
 
 def _seed_behavioral_categories(db):
+    # Generic behavioral interview competencies — the shared taxonomy used
+    # across career-coaching, HR research (SHRM, Harvard Business Review),
+    # and standardized question banks (The Muse, LinkedIn, Big Interview).
+    # Deliberately NOT tied to any single company's leadership principles
+    # so stories stay reusable across companies and roles.
     categories = [
-        BehavioralCategory(name="Customer Obsession", description="Leaders start with the customer and work backwards. They work vigorously to earn and keep customer trust.", color="#0070f3", icon="🎯"),
-        BehavioralCategory(name="Ownership", description="Leaders are owners. They think long term and don't sacrifice long-term value for short-term results.", color="#ff5b4f", icon="🔑"),
-        BehavioralCategory(name="Bias for Action", description="Speed matters. Many decisions are reversible and don't need extensive study. Leaders value calculated risk-taking.", color="#0a72ef", icon="⚡"),
-        BehavioralCategory(name="Deliver Results", description="Leaders focus on the key inputs and deliver them with the right quality in a timely fashion.", color="#7928ca", icon="🏆"),
-        BehavioralCategory(name="Learn and Be Curious", description="Leaders are never done learning and always seek to improve themselves.", color="#50e3c2", icon="📚"),
-        BehavioralCategory(name="Disagree and Commit", description="Leaders respectfully challenge decisions when they disagree, but once committed, they wholly support the decision.", color="#de1d8d", icon="🤝"),
-        BehavioralCategory(name="Insist on Highest Standards", description="Leaders have relentlessly high standards. They raise the bar continuously and drive their teams to deliver high-quality products.", color="#f5a623", icon="⭐"),
-        BehavioralCategory(name="Think Big", description="Thinking small is a self-fulfilling prophecy. Leaders create bold directions that deliver results.", color="#0072f5", icon="🌍"),
+        # `icon` values are Lucide icon names (kebab-case). The frontend
+        # maps these to <lucide-react> components via a small lookup table
+        # — see frontend/src/components/shell/CategoryIcon.tsx.
+        BehavioralCategory(
+            name="Leadership",
+            description="Leading projects, teams, or decisions — including influence without formal authority. Stories about motivating others, setting direction, and mentoring.",
+            color="#c9633f",
+            icon="compass",
+        ),
+        BehavioralCategory(
+            name="Teamwork & Collaboration",
+            description="Working effectively with peers, cross-functional partners, and distributed teams. Pulling in the same direction when you don't own the outcome alone.",
+            color="#2f5d4a",
+            icon="users",
+        ),
+        BehavioralCategory(
+            name="Communication",
+            description="Verbal, written, and visual clarity. Active listening, presenting to non-experts, translating technical detail for executives, and giving/receiving feedback.",
+            color="#0070f3",
+            icon="message-circle",
+        ),
+        BehavioralCategory(
+            name="Problem Solving",
+            description="Structured, analytical approach to ambiguous or complex problems. Breaking issues down, identifying root causes, and choosing between options with data.",
+            color="#7c3a4e",
+            icon="puzzle",
+        ),
+        BehavioralCategory(
+            name="Decision Making",
+            description="Making judgment calls under uncertainty — weighing trade-offs, committing with incomplete information, and owning the consequences.",
+            color="#b68c2a",
+            icon="scale",
+        ),
+        BehavioralCategory(
+            name="Conflict Resolution",
+            description="Navigating disagreements with peers, managers, or stakeholders. Separating the person from the problem and reaching durable outcomes, not just quiet ones.",
+            color="#de1d8d",
+            icon="swords",
+        ),
+        BehavioralCategory(
+            name="Adaptability",
+            description="Handling ambiguity, shifting priorities, and change. Staying effective when goals move, constraints tighten, or the context you planned around disappears.",
+            color="#50e3c2",
+            icon="wind",
+        ),
+        BehavioralCategory(
+            name="Time Management & Prioritization",
+            description="Juggling competing demands — deciding what to work on, what to defer, and what to say no to. Protecting focus and delivering on commitments.",
+            color="#0a72ef",
+            icon="calendar-clock",
+        ),
+        BehavioralCategory(
+            name="Ownership & Accountability",
+            description="Driving things to completion end-to-end. Taking responsibility for outcomes — including mistakes — without waiting to be asked.",
+            color="#ff5b4f",
+            icon="key-round",
+        ),
+        BehavioralCategory(
+            name="Learning & Growth",
+            description="Seeking out feedback, developing new skills, and deliberately improving over time. Curiosity as a habit, not a claim.",
+            color="#7928ca",
+            icon="book-open",
+        ),
+        BehavioralCategory(
+            name="Handling Failure",
+            description="Setbacks, mistakes, and missed goals — and how you recovered, what you changed, and what you learned. Resilience as a track record, not a platitude.",
+            color="#8a6e4a",
+            icon="life-buoy",
+        ),
+        BehavioralCategory(
+            name="Customer & Stakeholder Focus",
+            description="Understanding who you're building for — users, customers, or internal stakeholders — and letting that shape scope, trade-offs, and polish.",
+            color="#f5a623",
+            icon="target",
+        ),
+        BehavioralCategory(
+            name="Innovation & Creativity",
+            description="Generating new approaches, challenging defaults, and prototyping. Finding solutions that weren't in the playbook.",
+            color="#0072f5",
+            icon="lightbulb",
+        ),
     ]
     for c in categories:
         db.add(c)
@@ -1743,7 +1821,7 @@ def _seed_behavioral(db):
         BehavioralQuestion(
             title="Conflict with a Teammate",
             question_text="Tell me about a time you had a conflict with a teammate. How did you resolve it?",
-            category_ids=[categories.get("Disagree and Commit", 0), categories.get("Ownership", 0)],
+            category_ids=[categories.get("Conflict Resolution", 0), categories.get("Communication", 0)],
             star_guide={
                 "situation": "Set the scene: who was the teammate, what was the project, what was the context of the disagreement?",
                 "task": "What was your responsibility? What needed to be resolved?",
@@ -1793,7 +1871,7 @@ def _seed_behavioral(db):
         BehavioralQuestion(
             title="Decision Without Full Information",
             question_text="Describe a situation where you had to make a decision without having all the information you needed. What was the outcome?",
-            category_ids=[categories.get("Bias for Action", 0), categories.get("Deliver Results", 0)],
+            category_ids=[categories.get("Decision Making", 0), categories.get("Adaptability", 0)],
             star_guide={
                 "situation": "What was the decision? Why was it time-sensitive? What information was missing and why?",
                 "task": "What were the stakes? What were the possible consequences of waiting vs acting?",
@@ -1843,7 +1921,7 @@ def _seed_behavioral(db):
         BehavioralQuestion(
             title="Failure and Learning",
             question_text="Tell me about a time you failed. What did you learn from it?",
-            category_ids=[categories.get("Learn and Be Curious", 0), categories.get("Ownership", 0), categories.get("Insist on Highest Standards", 0)],
+            category_ids=[categories.get("Handling Failure", 0), categories.get("Learning & Growth", 0), categories.get("Ownership & Accountability", 0)],
             star_guide={
                 "situation": "What was the project or task? What was your role? Set the context clearly.",
                 "task": "What were you trying to achieve? What were the expectations?",
