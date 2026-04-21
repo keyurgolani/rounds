@@ -1,5 +1,5 @@
 import { Accordion } from './Accordion';
-import { MermaidRenderer } from './MermaidRenderer';
+import { SmartDiagram } from './SmartDiagram';
 import type { SeniorTopic } from './types';
 
 interface SeniorTopicsPanelProps {
@@ -22,7 +22,7 @@ function TopicBody({ topic }: { topic: SeniorTopic }) {
       ))}
       {topic.diagram && (
         <div className="card p-3 overflow-hidden">
-          <MermaidRenderer chart={topic.diagram} />
+          <SmartDiagram source={topic.diagram} />
         </div>
       )}
       {topic.sources.length > 0 && (

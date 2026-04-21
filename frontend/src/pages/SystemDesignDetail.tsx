@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { ArchitectureDiagram } from '../components/visual/ArchitectureDiagram';
-import { MermaidRenderer } from '../components/visual/MermaidRenderer';
+import { FlowchartDiagram } from '../components/visual/FlowchartDiagram';
+import { ERDiagram } from '../components/visual/ERDiagram';
+import { SequenceDiagram } from '../components/visual/SequenceDiagram';
 import { TradeoffSlider } from '../components/visual/TradeoffSlider';
 import { AnimatedCard } from '../components/visual/AnimatedCard';
 import { AnimatedCounter } from '../components/visual/AnimatedCounter';
@@ -337,7 +339,7 @@ export default function SystemDesignDetail() {
                       <SectionHeading>Approach map</SectionHeading>
                       <AnimatedCard className="card p-4 overflow-hidden">
                         <Zoomable label="Approach map">
-                          <MermaidRenderer chart={q.thought_flow} />
+                          <FlowchartDiagram source={q.thought_flow} />
                         </Zoomable>
                       </AnimatedCard>
                     </section>
@@ -614,7 +616,7 @@ export default function SystemDesignDetail() {
                         <AnimatedCard className="card p-5 overflow-hidden mb-4">
                           <h3 className="eyebrow mb-3">Schema relationships</h3>
                           <Zoomable label="Schema relationships">
-                            <MermaidRenderer chart={q.er_diagram} />
+                            <ERDiagram source={q.er_diagram} />
                           </Zoomable>
                         </AnimatedCard>
                       )}
@@ -741,7 +743,7 @@ export default function SystemDesignDetail() {
                           <AnimatedCard className="lg:col-span-7 card p-4 overflow-hidden">
                             <h3 className="eyebrow mb-3">Request flow</h3>
                             <Zoomable label="Request flow">
-                              <MermaidRenderer chart={q.sequence_diagram} />
+                              <SequenceDiagram source={q.sequence_diagram} />
                             </Zoomable>
                           </AnimatedCard>
                         )}

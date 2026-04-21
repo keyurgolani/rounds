@@ -3,7 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { SeniorTopicsPanel } from '../SeniorTopicsPanel';
 import type { SeniorTopic } from '../types';
 
-// Stub MermaidRenderer so we don't spin up real mermaid in jsdom.
+// Stub MermaidRenderer so we don't spin up real mermaid in jsdom when a
+// diagram type isn't supported by the custom renderers.
 vi.mock('../MermaidRenderer', () => ({
   MermaidRenderer: ({ chart }: { chart: string }) => (
     <div data-testid="stub-mermaid">{chart}</div>
@@ -47,9 +48,11 @@ describe('SeniorTopicsPanel', () => {
     expect(screen.getByText('Details')).toBeInTheDocument();
   });
 
-  it('renders the Mermaid diagram for topics that have one', () => {
+  it('renders the flowchart diagram for topics that have one', () => {
     render(<SeniorTopicsPanel topics={topics} />);
-    expect(screen.getByTestId('stub-mermaid')).toHaveTextContent('graph TD');
+    // `graph TD` source gets routed to the custom flowchart renderer,
+    // which emits a flowchart-diagram wrapper rather than Mermaid output.
+    expect(screen.getByTestId('flowchart-diagram')).toBeInTheDocument();
   });
 
   it('renders sources with external links', () => {
