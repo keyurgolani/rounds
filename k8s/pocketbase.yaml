@@ -1,0 +1,85 @@
+---
+# PocketBase owns all app data + auth. One replica only — pb_data is a
+# single SQLite file and PocketBase isn't designed for multi-writer
+# setups. For HA, swap the PVC for a managed Postgres connection string
+# (PocketBase 0.23+) and bump replicas.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pocketbase-data
+  namespace: rounds
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pocketbase
+  namespace: rounds
+  labels:
+    app: pocketbase
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # never run two writers against one PVC
+  selector:
+    matchLabels:
+      app: pocketbase
+  template:
+    metadata:
+      labels:
+        app: pocketbase
+    spec:
+      containers:
+        - name: pocketbase
+          image: ghcr.io/your-org/rounds-pocketbase:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8090
+          env:
+            - name: ROUNDS_DISABLE_SIGNUPS
+              value: "false"
+          volumeMounts:
+            - name: data
+              mountPath: /pb/pb_data
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8090
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8090
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pocketbase-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pocketbase
+  namespace: rounds
+spec:
+  selector:
+    app: pocketbase
+  ports:
+    - name: http
+      port: 8090
+      targetPort: 8090

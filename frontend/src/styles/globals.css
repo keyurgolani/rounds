@@ -1,0 +1,1084 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --paper: #f7f2e7;
+    --paper-2: #efe8d7;
+    --paper-3: #e5dcc5;
+    --ink: #181613;
+    --ink-2: #2a2621;
+    --ink-3: #514a3e;
+    --ink-4: #857c6b;
+    --ink-5: #b4a992;
+
+    --terracotta: #c9633f;
+    --terracotta-soft: #e8c9b8;
+    --forest: #2f5d4a;
+    --forest-soft: #c2d4c8;
+    --ochre: #b68c2a;
+    --ochre-soft: #e8d9a8;
+    --plum: #7c3a4e;
+    --plum-soft: #e0c7ce;
+
+    --bg: var(--paper);
+    --bg-elev: #fdfbf5;
+    --bg-sunken: var(--paper-2);
+    --text: var(--ink);
+    --text-2: var(--ink-3);
+    --text-3: var(--ink-4);
+    --text-4: var(--ink-5);
+    --border: rgba(24, 22, 19, 0.1);
+    --border-strong: rgba(24, 22, 19, 0.18);
+    --accent: var(--terracotta);
+    --accent-soft: var(--terracotta-soft);
+
+    --ease: var(--forest);
+    --ease-soft: var(--forest-soft);
+    --med: var(--ochre);
+    --med-soft: var(--ochre-soft);
+    --hard: var(--plum);
+    --hard-soft: var(--plum-soft);
+
+    /* Status colors are intentionally divorced from --accent so the
+       pass/fail signal stays unambiguous regardless of theme accent
+       choice. Used by ResultCard, TestCasesTab, etc. */
+    --status-pass: #2e8b57;
+    --status-pass-soft: rgba(46, 139, 87, 0.16);
+    --status-fail: #c0392b;
+    --status-fail-soft: rgba(192, 57, 43, 0.16);
+    --status-warn: #c98a14;
+    --status-warn-soft: rgba(201, 138, 20, 0.16);
+
+    --unit: 4px;
+    --radius: 8px;
+    --radius-lg: 14px;
+
+    /* Density-scaled spacing — consumed by .card, .card-lg and component
+       grid gaps so that the `density` tweak actually changes padding and
+       gutters, not just corner radii. */
+    --pad-xs: 10px;
+    --pad-sm: 14px;
+    --pad-md: 18px;
+    --pad-lg: 24px;
+    --gap-sm: 10px;
+    --gap-md: 16px;
+    --gap-lg: 22px;
+
+    --font-display: 'Instrument Serif', 'Fraunces', Georgia, serif;
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    --shadow-card: 0 1px 0 rgba(24, 22, 19, 0.04), 0 0 0 1px rgba(24, 22, 19, 0.07),
+      0 2px 6px -2px rgba(24, 22, 19, 0.04);
+    --shadow-card-hover: 0 1px 0 rgba(24, 22, 19, 0.05), 0 0 0 1px rgba(24, 22, 19, 0.11),
+      0 10px 24px -8px rgba(24, 22, 19, 0.1);
+    --shadow-elev: 0 1px 0 rgba(24, 22, 19, 0.06), 0 0 0 1px rgba(24, 22, 19, 0.1),
+      0 20px 40px -20px rgba(24, 22, 19, 0.18);
+  }
+
+  [data-theme='dark'] {
+    --paper: #0e1513;
+    --paper-2: #151e1b;
+    --paper-3: #1e2a26;
+    --ink: #e9e2d0;
+    --ink-2: #d1c9b6;
+    --ink-3: #a59c87;
+    --ink-4: #7a7264;
+    --ink-5: #4d4a43;
+
+    --bg: var(--paper);
+    --bg-elev: #131b18;
+    --bg-sunken: #0a100e;
+    --text: var(--ink);
+    --text-2: var(--ink-2);
+    --text-3: var(--ink-3);
+    --text-4: var(--ink-4);
+    --border: rgba(233, 226, 208, 0.1);
+    --border-strong: rgba(233, 226, 208, 0.22);
+
+    --terracotta: #e87e56;
+    --terracotta-soft: rgba(232, 126, 86, 0.18);
+    --forest: #6fb095;
+    --forest-soft: rgba(111, 176, 149, 0.18);
+    --ochre: #d9b25a;
+    --ochre-soft: rgba(217, 178, 90, 0.18);
+    --plum: #d48aa0;
+    --plum-soft: rgba(212, 138, 160, 0.18);
+
+    --ease: var(--forest);
+    --ease-soft: var(--forest-soft);
+    --med: var(--ochre);
+    --med-soft: var(--ochre-soft);
+    --hard: var(--plum);
+    --hard-soft: var(--plum-soft);
+
+    /* Status colors — see light theme above. Brighter values for the
+       darker background. */
+    --status-pass: #56c684;
+    --status-pass-soft: rgba(86, 198, 132, 0.18);
+    --status-fail: #e9685a;
+    --status-fail-soft: rgba(233, 104, 90, 0.18);
+    --status-warn: #e5b15a;
+    --status-warn-soft: rgba(229, 177, 90, 0.18);
+
+    --shadow-card: 0 0 0 1px rgba(233, 226, 208, 0.08), 0 2px 6px -2px rgba(0, 0, 0, 0.3);
+    --shadow-card-hover: 0 0 0 1px rgba(233, 226, 208, 0.16), 0 10px 24px -8px rgba(0, 0, 0, 0.4);
+  }
+
+  [data-theme='sepia'] {
+    --paper: #efe2c7;
+    --paper-2: #e5d5b5;
+    --paper-3: #d9c7a0;
+    --bg: var(--paper);
+    --bg-elev: #f5ead2;
+    --bg-sunken: var(--paper-2);
+    --border: rgba(62, 46, 22, 0.14);
+    --border-strong: rgba(62, 46, 22, 0.22);
+  }
+
+  [data-accent='forest'] {
+    --accent: var(--forest);
+    --accent-soft: var(--forest-soft);
+  }
+  [data-accent='ochre'] {
+    --accent: var(--ochre);
+    --accent-soft: var(--ochre-soft);
+  }
+  [data-accent='plum'] {
+    --accent: var(--plum);
+    --accent-soft: var(--plum-soft);
+  }
+  [data-accent='ink'] {
+    --accent: var(--ink);
+    --accent-soft: rgba(24, 22, 19, 0.12);
+  }
+  [data-accent='indigo'] {
+    --accent: #4c5fd6;
+    --accent-soft: rgba(76, 95, 214, 0.18);
+  }
+  [data-accent='teal'] {
+    --accent: #147a6b;
+    --accent-soft: rgba(20, 122, 107, 0.18);
+  }
+  [data-accent='rose'] {
+    --accent: #c7305f;
+    --accent-soft: rgba(199, 48, 95, 0.18);
+  }
+
+  /* ---------- Additional themes ---------- */
+
+  [data-theme='ocean'] {
+    --paper: #eaf2f4;
+    --paper-2: #d8e5e9;
+    --paper-3: #c0d3d8;
+    --ink: #0f2a33;
+    --ink-2: #204352;
+    --ink-3: #466572;
+    --ink-4: #789aa4;
+    --ink-5: #a8c0c7;
+    --bg: var(--paper);
+    --bg-elev: #f3f8f9;
+    --bg-sunken: var(--paper-2);
+    --border: rgba(15, 42, 51, 0.12);
+    --border-strong: rgba(15, 42, 51, 0.22);
+    --text: var(--ink);
+    --text-2: var(--ink-2);
+    --text-3: var(--ink-3);
+    --text-4: var(--ink-4);
+  }
+  [data-theme='slate'] {
+    --paper: #14181d;
+    --paper-2: #1b2128;
+    --paper-3: #232b35;
+    --ink: #e7ecf3;
+    --ink-2: #c4cddc;
+    --ink-3: #8a95a7;
+    --ink-4: #626a79;
+    --ink-5: #3a404a;
+    --bg: var(--paper);
+    --bg-elev: #19202a;
+    --bg-sunken: #0f141a;
+    --border: rgba(231, 236, 243, 0.08);
+    --border-strong: rgba(231, 236, 243, 0.2);
+    --text: var(--ink);
+    --text-2: var(--ink-2);
+    --text-3: var(--ink-3);
+    --text-4: var(--ink-4);
+  }
+  [data-theme='rose'] {
+    --paper: #fbeef0;
+    --paper-2: #f6dee1;
+    --paper-3: #ebc8cd;
+    --ink: #34141e;
+    --ink-2: #55242f;
+    --ink-3: #7c4351;
+    --ink-4: #a27584;
+    --ink-5: #c7a9b2;
+    --bg: var(--paper);
+    --bg-elev: #fff5f7;
+    --bg-sunken: var(--paper-2);
+    --border: rgba(52, 20, 30, 0.12);
+    --border-strong: rgba(52, 20, 30, 0.22);
+    --text: var(--ink);
+    --text-2: var(--ink-2);
+    --text-3: var(--ink-3);
+    --text-4: var(--ink-4);
+  }
+  [data-theme='mono'] {
+    --paper: #f3f3f1;
+    --paper-2: #e7e7e4;
+    --paper-3: #d4d4d0;
+    --ink: #0a0a0a;
+    --ink-2: #2a2a2a;
+    --ink-3: #5a5a5a;
+    --ink-4: #8a8a8a;
+    --ink-5: #b4b4b4;
+    --bg: var(--paper);
+    --bg-elev: #fafaf9;
+    --bg-sunken: var(--paper-2);
+    --border: rgba(0, 0, 0, 0.12);
+    --border-strong: rgba(0, 0, 0, 0.22);
+    --text: var(--ink);
+    --text-2: var(--ink-2);
+    --text-3: var(--ink-3);
+    --text-4: var(--ink-4);
+  }
+
+  /* ---------- Corner radius ---------- */
+  [data-radius='sharp'] {
+    --radius: 0px;
+    --radius-lg: 2px;
+  }
+  [data-radius='soft'] {
+    --radius: 8px;
+    --radius-lg: 14px;
+  }
+  [data-radius='round'] {
+    --radius: 14px;
+    --radius-lg: 22px;
+  }
+  [data-radius='pill'] {
+    --radius: 999px;
+    --radius-lg: 999px;
+  }
+
+  /* ---------- Shadow depth ---------- */
+  [data-shadow='none'] {
+    --shadow-card: 0 0 0 1px var(--border);
+    --shadow-card-hover: 0 0 0 1px var(--border-strong);
+    --shadow-elev: 0 0 0 1px var(--border-strong);
+  }
+  [data-shadow='subtle'] {
+    --shadow-card: 0 0 0 1px rgba(24, 22, 19, 0.05);
+    --shadow-card-hover: 0 0 0 1px rgba(24, 22, 19, 0.1);
+    --shadow-elev: 0 2px 6px -2px rgba(24, 22, 19, 0.08),
+      0 0 0 1px rgba(24, 22, 19, 0.08);
+  }
+  [data-shadow='bold'] {
+    --shadow-card: 0 2px 4px -1px rgba(24, 22, 19, 0.08),
+      0 0 0 1px rgba(24, 22, 19, 0.1), 0 8px 16px -6px rgba(24, 22, 19, 0.08);
+    --shadow-card-hover: 0 4px 8px -2px rgba(24, 22, 19, 0.12),
+      0 0 0 1px rgba(24, 22, 19, 0.18),
+      0 18px 32px -12px rgba(24, 22, 19, 0.16);
+    --shadow-elev: 0 6px 12px -2px rgba(24, 22, 19, 0.14),
+      0 0 0 1px rgba(24, 22, 19, 0.16),
+      0 28px 56px -16px rgba(24, 22, 19, 0.22);
+  }
+
+  /* ---------- Card accents ---------- */
+  [data-card-accent='tinted'] .card {
+    background: var(--bg-elev);
+    box-shadow: var(--shadow-card), inset 4px 0 0 var(--accent);
+    padding-left: 18px;
+  }
+  [data-card-accent='ruled'] .card {
+    background: var(--bg-elev);
+    box-shadow: var(--shadow-card);
+    border-top: 2px solid var(--accent);
+  }
+
+  /* ---------- Filled card treatment ---------- */
+  [data-cards='filled'] .card {
+    background: var(--bg-sunken);
+    box-shadow: none;
+  }
+  [data-cards='filled'] .card-hover:hover {
+    background: var(--bg-elev);
+  }
+
+  [data-density='compact'] {
+    --unit: 3px;
+    --radius: 6px;
+    --radius-lg: 10px;
+    --pad-xs: 6px;
+    --pad-sm: 10px;
+    --pad-md: 14px;
+    --pad-lg: 18px;
+    --gap-sm: 6px;
+    --gap-md: 12px;
+    --gap-lg: 18px;
+  }
+  [data-density='spacious'] {
+    --unit: 5px;
+    --radius: 10px;
+    --radius-lg: 16px;
+    --pad-xs: 14px;
+    --pad-sm: 18px;
+    --pad-md: 24px;
+    --pad-lg: 32px;
+    --gap-sm: 14px;
+    --gap-md: 22px;
+    --gap-lg: 30px;
+  }
+
+  [data-type='sans-only'] {
+    --font-display: var(--font-sans);
+  }
+  [data-type='fraunces'] {
+    --font-display: 'Fraunces', Georgia, serif;
+  }
+  [data-type='playfair'] {
+    --font-display: 'Playfair Display', Georgia, serif;
+  }
+  [data-type='dm-serif'] {
+    --font-display: 'DM Serif Display', Georgia, serif;
+  }
+
+  /* Sans family override */
+  [data-sans='geist'] {
+    --font-sans: 'Geist', 'Inter', system-ui, sans-serif;
+  }
+  [data-sans='manrope'] {
+    --font-sans: 'Manrope', 'Inter', system-ui, sans-serif;
+  }
+  [data-sans='space-grotesk'] {
+    --font-sans: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  }
+  [data-sans='system'] {
+    --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  [data-cards='flat'] {
+    --shadow-card: none;
+    --shadow-card-hover: 0 0 0 1px var(--border-strong);
+  }
+  [data-cards='bordered'] {
+    --shadow-card: 0 0 0 1px var(--border);
+    --shadow-card-hover: 0 0 0 1px var(--border-strong);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Grainy noise overlay — default (grainy is the default app background). */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.35;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.08 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+  [data-theme='dark'] body::before,
+  [data-theme='slate'] body::before {
+    mix-blend-mode: screen;
+    opacity: 0.2;
+  }
+  /* When the user picks a non-grainy background, hide the noise. */
+  [data-app-bg='mesh'] body::before,
+  [data-app-bg='gradient'] body::before,
+  [data-app-bg='paper'] body::before,
+  [data-app-bg='natural'] body::before {
+    display: none;
+  }
+
+  /* Scrollbars are hidden globally — scrolling still works with trackpad,
+     keyboard, or wheel, but the chrome itself doesn't render anywhere. */
+  * {
+    scrollbar-width: none;        /* Firefox */
+    -ms-overflow-style: none;     /* legacy Edge / IE */
+  }
+  *::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent;
+  }
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-thumb {
+    background: transparent;
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: var(--bg-elev);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+  }
+  input,
+  textarea,
+  select {
+    font-family: inherit;
+    color: inherit;
+  }
+}
+
+@layer components {
+  .display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+  .display-italic {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+  .mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-feature-settings: 'ss01', 'ss02';
+  }
+  .eyebrow {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    font-weight: 500;
+  }
+
+  .card {
+    background: var(--bg-elev);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+  }
+  /* Density-aware card padding for callers that opt in via `card-pad`.
+     We don't apply padding to `.card` itself because most call sites
+     set their own inline padding for pixel-precise layouts. */
+  .card-pad {
+    padding: var(--pad-md);
+  }
+  .card-pad-lg {
+    padding: var(--pad-lg);
+  }
+  .card-pad-sm {
+    padding: var(--pad-sm);
+  }
+  .card-hover {
+    transition: box-shadow 160ms ease, transform 160ms ease;
+  }
+  .card-hover:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-1px);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+}
+
+/* ReactFlow overrides — make the diagram read as native to the theme. */
+.rounds-reactflow .react-flow__controls-button {
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--text-2);
+}
+.rounds-reactflow .react-flow__controls-button:hover {
+  background: var(--bg-sunken);
+}
+.rounds-reactflow .react-flow__controls-button svg {
+  fill: var(--text-2);
+}
+.rounds-reactflow .react-flow__edge-path {
+  stroke: var(--border-strong);
+}
+.rounds-reactflow .react-flow__handle {
+  background: var(--accent);
+  border-color: var(--bg-elev);
+}
+.rounds-reactflow .react-flow__attribution {
+  display: none;
+}
+.rounds-reactflow .react-flow__minimap-mask {
+  fill: rgba(24, 22, 19, 0.06);
+}
+
+/* Density: scale font-size on html so rem-based values shift with it.
+   comfortable is the default (no data-density attr set). The attr
+   selectors below scale a `--density-mult` variable that structural
+   surfaces (cards, navs, form controls, tables, buttons) consume so
+   padding and gap shift along with text size. */
+html {
+  font-size: 15.5px;
+  --density-mult: 1;
+}
+
+[data-density='compact'] {
+  font-size: 13px;
+  --density-mult: 0.7;
+}
+[data-density='spacious'] {
+  font-size: 19px;
+  --density-mult: 1.4;
+}
+
+/* Card padding/margins scale with density. */
+[data-density='compact'] .card {
+  padding: 8px;
+}
+[data-density='spacious'] .card {
+  padding: 32px;
+}
+[data-density='compact'] .card-pad {
+  padding: 10px;
+}
+[data-density='spacious'] .card-pad {
+  padding: 28px;
+}
+[data-density='compact'] .card-pad-lg {
+  padding: 14px;
+}
+[data-density='spacious'] .card-pad-lg {
+  padding: 36px;
+}
+[data-density='compact'] .card-pad-sm {
+  padding: 6px;
+}
+[data-density='spacious'] .card-pad-sm {
+  padding: 22px;
+}
+[data-density='compact'] h1.display-italic {
+  margin-bottom: 4px;
+}
+[data-density='compact'] h2.display-italic {
+  margin-bottom: 3px;
+}
+[data-density='compact'] .eyebrow {
+  margin-bottom: 3px;
+}
+[data-density='spacious'] h1.display-italic {
+  margin-bottom: 22px;
+}
+[data-density='spacious'] h2.display-italic {
+  margin-bottom: 16px;
+}
+
+/* Section gaps for stack layouts (Tailwind gap-* utilities use rem,
+   which the html font-size already scales, but flex/grid with px-style
+   inline gaps need an extra nudge — pages use `gap-N` Tailwind utilities
+   which are rem-based, so they scale automatically with html font-size). */
+
+/* Nav rail items — sidebar + topbar. Uses generic <nav> selector so
+   both the sidebar NavLink and topbar entries inherit. */
+[data-density='compact'] nav > a,
+[data-density='compact'] nav > button {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+[data-density='spacious'] nav > a,
+[data-density='spacious'] nav > button {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+/* Native form controls — inputs/textarea/select. (Our custom Select
+   and DatePicker are buttons, so they're covered by the button rule.) */
+[data-density='compact'] input:not([type='checkbox']):not([type='radio']),
+[data-density='compact'] textarea,
+[data-density='compact'] select {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+[data-density='spacious'] input:not([type='checkbox']):not([type='radio']),
+[data-density='spacious'] textarea,
+[data-density='spacious'] select {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+/* Buttons participate in density too. Buttons are everywhere — pills,
+   filter rows, sort selects, etc. — so the change here cascades. */
+[data-density='compact'] button {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+[data-density='spacious'] button {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+/* …but spinner / icon-only buttons in <header> shouldn't grow tall;
+   AppHeader / Layout buttons are sized by inline style, so this rule
+   leans on inline overrides being authoritative. */
+
+/* Section padding. Page bodies that use the standard `px-5 sm:px-8 py-5`
+   wrappers should breathe more in spacious mode and tighten up in
+   compact. We use a CSS variable so each page can opt-in via inline
+   styles without hard-coding. */
+:root {
+  --page-pad-x: 20px;
+  --page-pad-y: 20px;
+}
+[data-density='compact'] {
+  --page-pad-x: 12px;
+  --page-pad-y: 10px;
+}
+[data-density='spacious'] {
+  --page-pad-x: 32px;
+  --page-pad-y: 32px;
+}
+
+/* Pills scale their vertical padding. */
+[data-density='compact'] .pill {
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
+[data-density='spacious'] .pill {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* Page header vertical padding. */
+[data-density='compact'] header,
+[data-density='compact'] main > div:first-child {
+  /* no-op fallback */
+}
+
+@layer utilities {
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .fade-up {
+    animation: fadeUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* CodingDetail side panels: stack full-width on mobile; on lg+ pin to
+     the user-resized pixel width carried in --side-width. */
+  @media (min-width: 1024px) {
+    .coding-side-left,
+    .coding-side-right {
+      width: var(--side-width, 440px) !important;
+      max-height: none !important;
+    }
+    .coding-side-left {
+      border-right: 1px solid var(--border);
+      border-bottom: none !important;
+    }
+    .coding-side-right {
+      border-left: 1px solid var(--border);
+      border-top: none !important;
+    }
+  }
+
+  /* CodingDetail mobile layout — "sheet over editor" model.
+
+     On mobile the editor owns the whole viewport and the Problem +
+     Results panels turn into bottom sheets that slide up when the user
+     asks for them. Scrolling never fights the editor: content is
+     either Monaco (fullscreen) or a sheet (overlay on top).
+
+     Both side asides become full-width sheets anchored to the bottom
+     of the page container, translated off-screen by default. When
+     `data-mobile-sheet` matches, the corresponding aside slides in
+     over the editor. Desktop (lg+) is unaffected. */
+  @media (max-width: 1023px) {
+    [data-mobile-sheet] > .coding-side-left,
+    [data-mobile-sheet] > .coding-side-right {
+      display: flex !important;
+      flex-direction: column !important;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 56px;
+      bottom: 0;
+      height: auto;
+      max-height: none !important;
+      z-index: 40;
+      background: var(--bg-elev);
+      border: 0 !important;
+      border-top: 1px solid var(--border) !important;
+      border-radius: 18px 18px 0 0;
+      box-shadow: 0 -12px 32px -4px rgba(24, 22, 19, 0.22),
+        0 0 0 1px var(--border);
+      transform: translateY(calc(100% + 24px));
+      transition: transform 260ms cubic-bezier(0.22, 0.8, 0.36, 1);
+      min-height: 0;
+      overscroll-behavior: contain;
+    }
+    [data-theme='dark'] [data-mobile-sheet] > .coding-side-left,
+    [data-theme='dark'] [data-mobile-sheet] > .coding-side-right {
+      box-shadow: 0 -12px 32px -4px rgba(0, 0, 0, 0.6),
+        0 0 0 1px var(--border);
+    }
+    [data-mobile-sheet='problem'] > .coding-side-left,
+    [data-mobile-sheet='results'] > .coding-side-right {
+      transform: translateY(0);
+    }
+
+    /* The editor takes the whole body area on mobile and no longer
+       needs its 40vh minimum (that minimum only mattered when the two
+       asides were eating vertical space above and below it). */
+    [data-mobile-sheet] > .coding-editor {
+      display: flex !important;
+      flex-direction: column !important;
+      flex: 1 1 auto;
+      min-height: 0;
+      width: 100%;
+    }
+  }
+
+  /* Sheet backdrop — semi-opaque scrim behind an open sheet so the
+     dimmed editor reads as "paused." Clicks on the backdrop close
+     the sheet (wired up in CodingDetail.tsx). */
+  .coding-sheet-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(24, 22, 19, 0.35);
+    backdrop-filter: blur(2px);
+    z-index: 35;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 220ms ease;
+  }
+  .coding-sheet-backdrop[data-open='true'] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  [data-theme='dark'] .coding-sheet-backdrop {
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  /* Generic mobile bottom sheet (shell component). Used by
+     SystemDesignDetail + BehavioralDetail to surface reference
+     content (hints, tips, follow-ups, interviewer look-fors) that
+     their desktop sidebar used to hold but which was lost on mobile.
+     Coding uses its own in-layout sheet pattern because the asides
+     are shared with the desktop 3-pane view. */
+  .bottom-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(24, 22, 19, 0.35);
+    backdrop-filter: blur(2px);
+    z-index: 60;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 220ms ease;
+  }
+  .bottom-sheet-backdrop[data-open='true'] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  [data-theme='dark'] .bottom-sheet-backdrop {
+    background: rgba(0, 0, 0, 0.55);
+  }
+  .bottom-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 75vh;
+    max-height: 85vh;
+    z-index: 65;
+    background: var(--bg-elev);
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -12px 32px -4px rgba(24, 22, 19, 0.22),
+      0 0 0 1px var(--border);
+    transform: translateY(calc(100% + 24px));
+    transition: transform 260ms cubic-bezier(0.22, 0.8, 0.36, 1);
+    overscroll-behavior: contain;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  [data-theme='dark'] .bottom-sheet {
+    box-shadow: 0 -12px 32px -4px rgba(0, 0, 0, 0.6),
+      0 0 0 1px var(--border);
+  }
+  .bottom-sheet[data-open='true'] {
+    transform: translateY(0);
+  }
+
+  /* Floating "Reference" trigger — sits bottom-right on content-heavy
+     detail pages to summon the BottomSheet on mobile. */
+  .detail-reference-fab {
+    position: fixed;
+    right: 16px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    z-index: 40;
+  }
+
+  /* Bottom action bar + FAB helpers for the mobile editor chrome. */
+  :root {
+    --coding-mobile-dock-h: 60px;
+  }
+  .coding-mobile-dock {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .coding-mobile-fab {
+    bottom: calc(var(--coding-mobile-dock-h) + 14px + env(safe-area-inset-bottom, 0px));
+  }
+
+  @media (max-width: 1023px) {
+    .detail-reference-fab {
+      bottom: calc(16px + 44px + 12px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+}
+
+/* =====================================================================
+   Glass effect
+   --------------------------------------------------------------------
+   Three sliders feed CSS variables on :root from ThemeProvider:
+     --glass-alpha           background opacity (0..1)
+     --glass-blur            backdrop-filter blur radius (px)
+     --glass-saturate        backdrop saturation multiplier
+     --glass-shadow-strength shadow density (0..1)
+     --glass-highlight       inner-edge highlight alpha (0..1, derived)
+   Per-theme blocks below override --glass-tint so each palette gets
+   the right surface base. Cards/pills inherit the lot via .card and
+   .pill when [data-glass='on'] is set. Glass composes with the selected
+   card treatment instead of being a card treatment itself.
+   ===================================================================== */
+
+:root {
+  --glass-alpha: 0.4;
+  --glass-blur: 14px;
+  --glass-saturate: 1.3;
+  --glass-shadow-strength: 0.5;
+  --glass-highlight: 0.22;
+  --glass-tint: 255, 255, 255;
+}
+
+[data-theme='dark'] {
+  --glass-tint: 26, 32, 30;
+}
+[data-theme='slate'] {
+  --glass-tint: 28, 36, 46;
+}
+[data-theme='ocean'] {
+  --glass-tint: 220, 235, 240;
+}
+[data-theme='sepia'] {
+  --glass-tint: 245, 232, 200;
+}
+[data-theme='rose'] {
+  --glass-tint: 255, 232, 235;
+}
+[data-theme='mono'] {
+  --glass-tint: 245, 245, 244;
+}
+
+[data-glass='on'] .card {
+  background: rgba(var(--glass-tint), var(--glass-alpha));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid rgba(var(--glass-tint), calc(var(--glass-highlight) + 0.05));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, var(--glass-highlight)),
+    inset 0 -1px 0 rgba(0, 0, 0, calc(var(--glass-shadow-strength) * 0.06)),
+    0 1px 2px rgba(0, 0, 0, calc(var(--glass-shadow-strength) * 0.18)),
+    0 16px 32px -10px rgba(0, 0, 0, calc(var(--glass-shadow-strength) * 0.42));
+}
+
+[data-glass='on'] .card-hover {
+  transition: box-shadow 200ms ease, transform 200ms ease, background 200ms ease;
+}
+[data-glass='on'] .card-hover:hover {
+  background: rgba(var(--glass-tint), calc(var(--glass-alpha) + 0.1));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, calc(var(--glass-highlight) * 1.4)),
+    inset 0 -1px 0 rgba(0, 0, 0, calc(var(--glass-shadow-strength) * 0.08)),
+    0 4px 8px rgba(0, 0, 0, calc(var(--glass-shadow-strength) * 0.22)),
+    0 26px 48px -10px rgba(0, 0, 0, calc(var(--glass-shadow-strength) * 0.5));
+  transform: translateY(-1px);
+}
+
+[data-glass='on'] .pill {
+  background: rgba(var(--glass-tint), calc(var(--glass-alpha) * 0.9));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5));
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.5));
+  box-shadow: inset 0 0 0 1px rgba(var(--glass-tint), calc(var(--glass-highlight) + 0.1));
+}
+
+/* Glass composes with card accent treatments. */
+[data-glass='on'][data-card-accent='tinted'] .card {
+  box-shadow:
+    inset 4px 0 0 var(--accent),
+    inset 0 1px 0 rgba(255, 255, 255, var(--glass-highlight)),
+    0 1px 2px rgba(0, 0, 0, calc(var(--glass-shadow-strength) * 0.18)),
+    0 16px 32px -10px rgba(0, 0, 0, calc(var(--glass-shadow-strength) * 0.42));
+  padding-left: 18px;
+}
+[data-glass='on'][data-card-accent='ruled'] .card {
+  border-top: 2px solid var(--accent);
+}
+
+/* =====================================================================
+   Application backgrounds
+   --------------------------------------------------------------------
+   Five options × 7 themes. Each option gives the body a different
+   background-image stack. The grainy noise overlay (body::before) is
+   gated separately above. We tag the layers `fixed` so they don't
+   scroll with content.
+   ===================================================================== */
+
+:root {
+  /* Natural-scene palette (driven by data-theme below). The defaults
+     are the light-mode warm palette. */
+  --nat-sky-top: #ffe9d4;
+  --nat-sky-bot: #fff5e7;
+  --nat-sun: rgba(232, 178, 86, 0.55);
+  --nat-hill-a: rgba(85, 130, 95, 0.55);
+  --nat-hill-b: rgba(120, 165, 130, 0.5);
+  --nat-hill-c: rgba(150, 190, 160, 0.42);
+}
+[data-theme='dark'] {
+  --nat-sky-top: #1d1730;
+  --nat-sky-bot: #3a253a;
+  --nat-sun: rgba(232, 178, 86, 0.4);
+  --nat-hill-a: rgba(8, 18, 22, 0.85);
+  --nat-hill-b: rgba(20, 36, 40, 0.75);
+  --nat-hill-c: rgba(36, 56, 60, 0.6);
+}
+[data-theme='slate'] {
+  --nat-sky-top: #1f2a3b;
+  --nat-sky-bot: #34465e;
+  --nat-sun: rgba(217, 178, 90, 0.45);
+  --nat-hill-a: rgba(15, 25, 35, 0.85);
+  --nat-hill-b: rgba(28, 42, 55, 0.75);
+  --nat-hill-c: rgba(50, 70, 86, 0.6);
+}
+[data-theme='ocean'] {
+  --nat-sky-top: #d4ecf2;
+  --nat-sky-bot: #ebf5f7;
+  --nat-sun: rgba(217, 178, 90, 0.45);
+  --nat-hill-a: rgba(20, 95, 110, 0.55);
+  --nat-hill-b: rgba(60, 130, 145, 0.45);
+  --nat-hill-c: rgba(110, 165, 175, 0.38);
+}
+[data-theme='sepia'] {
+  --nat-sky-top: #f1d9a8;
+  --nat-sky-bot: #f5e6c4;
+  --nat-sun: rgba(180, 130, 50, 0.55);
+  --nat-hill-a: rgba(115, 90, 50, 0.55);
+  --nat-hill-b: rgba(150, 125, 80, 0.45);
+  --nat-hill-c: rgba(180, 160, 115, 0.4);
+}
+[data-theme='rose'] {
+  --nat-sky-top: #fad5dd;
+  --nat-sky-bot: #ffe6ec;
+  --nat-sun: rgba(199, 48, 95, 0.4);
+  --nat-hill-a: rgba(124, 58, 78, 0.5);
+  --nat-hill-b: rgba(160, 95, 115, 0.42);
+  --nat-hill-c: rgba(200, 145, 165, 0.35);
+}
+[data-theme='mono'] {
+  --nat-sky-top: #e8e8e6;
+  --nat-sky-bot: #f3f3f1;
+  --nat-sun: rgba(80, 80, 80, 0.25);
+  --nat-hill-a: rgba(40, 40, 40, 0.55);
+  --nat-hill-b: rgba(80, 80, 80, 0.45);
+  --nat-hill-c: rgba(130, 130, 130, 0.35);
+}
+
+/* Mesh — multi-radial gradient using accent + ease + med soft tints. */
+[data-app-bg='mesh'] body {
+  background:
+    radial-gradient(ellipse 60% 50% at 12% 8%, var(--accent-soft), transparent 60%),
+    radial-gradient(ellipse 50% 50% at 88% 22%, var(--ease-soft), transparent 60%),
+    radial-gradient(ellipse 70% 60% at 50% 95%, var(--med-soft), transparent 65%),
+    radial-gradient(ellipse 40% 40% at 18% 88%, var(--hard-soft), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+/* Linear gradient — mostly within bg→bg-elev range with a hint of
+   accent at one corner. */
+[data-app-bg='gradient'] body {
+  background:
+    linear-gradient(135deg, var(--bg) 0%, var(--bg-elev) 55%, var(--accent-soft) 130%);
+  background-attachment: fixed;
+}
+
+/* Paper — coarser warm-tone fiber texture on top of bg. The SVG is
+   sized down via background-size for a finer grain look. */
+[data-app-bg='paper'] body {
+  background:
+    url("data:image/svg+xml;utf8,<svg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'><filter id='p'><feTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.95 0 0 0 0 0.92 0 0 0 0 0.85 0 0 0 0.18 0'/></filter><rect width='100%25' height='100%25' filter='url(%23p)'/></svg>"),
+    var(--bg);
+  background-size: 280px 280px, auto;
+  background-attachment: fixed;
+}
+[data-theme='dark'] [data-app-bg='paper'] body,
+[data-app-bg='paper'][data-theme='dark'] body,
+[data-app-bg='paper'][data-theme='slate'] body {
+  background:
+    url("data:image/svg+xml;utf8,<svg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'><filter id='p'><feTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.18 0 0 0 0 0.18 0 0 0 0 0.16 0 0 0 0.22 0'/></filter><rect width='100%25' height='100%25' filter='url(%23p)'/></svg>"),
+    var(--bg);
+  background-size: 280px 280px, auto;
+  background-attachment: fixed;
+}
+
+/* Natural — calm scene composed entirely with CSS gradients so each
+   theme can retint via the --nat-* custom properties above. Three
+   layered hills at the bottom, a soft sun in the upper-right, and a
+   sky that fades from --nat-sky-top to --nat-sky-bot. */
+[data-app-bg='natural'] body {
+  background:
+    radial-gradient(ellipse 80% 35% at 30% 100%, var(--nat-hill-a) 0%, transparent 62%),
+    radial-gradient(ellipse 90% 32% at 75% 100%, var(--nat-hill-b) 0%, transparent 62%),
+    radial-gradient(ellipse 110% 28% at 50% 100%, var(--nat-hill-c) 0%, transparent 62%),
+    radial-gradient(circle 220px at 78% 22%, var(--nat-sun) 0%, transparent 70%),
+    linear-gradient(to bottom, var(--nat-sky-top) 0%, var(--nat-sky-bot) 60%);
+  background-attachment: fixed;
+}

@@ -1,0 +1,120 @@
+[
+  {
+    "slug": "master-coding-interview-guide",
+    "title": "Coding Interview Cheat Sheet",
+    "description": "A practical coding-round reference: pattern triggers, complexity targets, debugging checks, and answer scripts you can use during mock interviews.",
+    "sections": [
+      {
+        "id": "round-script",
+        "title": "10-Minute Operating Script",
+        "summary": "Use this exact order when you get a new problem.",
+        "items": [
+          "0:00 Restate: input, output, one example, and goal.",
+          "0:45 Ask: n size, duplicates, negatives, sorted?, mutate?, empty?, return all or one?, tie behavior?",
+          "1:30 Brute force: say the simplest correct approach and O(...) baseline.",
+          "2:30 Find bottleneck: repeated lookup, nested scan, recomputed state, sorting, recursion fanout, or graph revisit.",
+          "3:30 Pick pattern: hash map, two pointers, sliding window, heap, BFS/DFS, DP, backtracking, monotonic stack, union-find.",
+          "4:30 State invariant: 'window contains...', 'heap stores...', 'dp[i] means...', 'visited prevents...'.",
+          "5:00 Code only after interviewer agrees with the plan.",
+          "8:00 Test: sample, empty/singleton, duplicate, boundary, impossible case.",
+          "9:30 Close: final time, space, and one trade-off."
+        ]
+      },
+      {
+        "id": "pattern-triggers",
+        "title": "Pattern Trigger Table",
+        "summary": "Map the prompt wording to the likely technique.",
+        "items": [
+          "Contains pair/count/frequency/anagram/first unique -> hash map or set.",
+          "Sorted array, find pair/triplet, remove duplicates, partition -> two pointers.",
+          "Longest/shortest subarray or substring with condition -> sliding window.",
+          "Range sum, subarray equals k, immutable queries -> prefix sum plus map.",
+          "Next greater/smaller, histogram, temperatures -> monotonic stack.",
+          "Top k, merge k lists, running median, scheduling by priority -> heap.",
+          "Cycle or middle in linked list -> fast/slow pointers.",
+          "Shortest path in unweighted graph/grid -> BFS.",
+          "All paths/components/tree recursion -> DFS with visited or parent guard.",
+          "Dependencies, course schedule, build order -> topological sort.",
+          "Groups/connectivity/dynamic components -> union-find.",
+          "Min/max/count ways with overlapping choices -> dynamic programming.",
+          "All subsets/permutations/combinations -> backtracking with choose/explore/unchoose."
+        ]
+      },
+      {
+        "id": "complexity-targets",
+        "title": "Complexity Targets",
+        "summary": "Use n to reject approaches before coding.",
+        "items": [
+          "n <= 20: exponential/backtracking can be acceptable.",
+          "n <= 100: O(n^3) may pass if constants are small.",
+          "n <= 1,000: O(n^2) is usually the ceiling.",
+          "n <= 100,000: target O(n log n) or O(n).",
+          "n >= 1,000,000: target O(n), O(log n), or streaming.",
+          "Graph: O(V + E) is the default target for traversal.",
+          "DP state count times transition count is the real runtime.",
+          "Sorting costs O(n log n); only sort if ordering unlocks simpler logic."
+        ]
+      }
+    ],
+    "checklists": [
+      {"title":"Clarify Before Coding","items":["n and constraints", "duplicates", "negative values", "sortedness", "empty input", "mutation allowed", "tie-breaking", "return index/value", "all answers or one answer"]},
+      {"title":"Bug Sweep","items":["off-by-one", "empty window", "stale max/min", "visited marked too late", "heap comparator reversed", "integer overflow", "wrong base case", "forgot final window", "duplicate result"]}
+    ],
+    "resources": [
+      {"category":"Guide Pages","items":[
+        {"title":"Interview Strategy","slug":"interview-strategy","summary":"Exact scripts, invariants, and communication lines for live coding."},
+        {"title":"Pattern Playbook","slug":"pattern-playbook","summary":"Concrete trigger words and templates for high-frequency patterns."},
+        {"title":"Optimization and Testing","slug":"optimization-testing","summary":"How to reduce time, space, and bug risk with specific checks."},
+        {"title":"Practice Plan","slug":"practice-plan","summary":"A drill schedule with problem counts, timing, and review artifacts."}
+      ]}
+    ]
+  },
+  {
+    "slug": "interview-strategy",
+    "title": "Coding Interview Strategy",
+    "description": "Concrete phrases and control points for the live round.",
+    "sections": [
+      {"id":"opening-script","title":"Opening Script","summary":"Say this before solving.","items":["'Let me restate: given [input], return [output], optimizing for [goal].'","'Can input be empty? Are values unique? Are negatives possible? Is the array sorted? Can I mutate it?'","'For n around [size], O(...) is likely too slow, so I will target O(...).'","'I'll start with a brute force baseline, then optimize the repeated work.'"]},
+      {"id":"invariant-lines","title":"Invariant Lines","summary":"Use these to explain correctness while coding.","items":["Sliding window: 'At every step, the window is the largest valid window ending at right.'","Two pointers: 'Because the array is sorted, moving left increases the sum and moving right decreases it.'","Heap: 'The heap keeps only the best k candidates seen so far.'","BFS: 'The first time we pop a node, we have the shortest distance in an unweighted graph.'","DP: 'dp[i] stores the best answer for prefix i, so later states reuse solved prefixes.'","Backtracking: 'The path is the current partial choice; after recursion I undo the choice.'"]},
+      {"id":"stuck-protocol","title":"If You Get Stuck","summary":"Use a reset protocol instead of going silent.","items":["Generate a 3-item example and trace the desired output.","Name the bottleneck in brute force: lookup, repeated compute, ordering, or choice explosion.","Ask: 'Is there a monotonic property here?' If yes, consider binary search/two pointers/monotonic stack.","Ask: 'What state would I need if I processed left to right?' If small, consider hash/prefix/DP.","Say: 'I have a partial approach; let me validate it on the example before coding.'"]}
+    ],
+    "checklists": [{"title":"Never Skip","items":["one worked example", "brute force baseline", "complexity before coding", "invariant while coding", "manual test after coding"]}],
+    "resources": []
+  },
+  {
+    "slug": "pattern-playbook",
+    "title": "Pattern Playbook",
+    "description": "Trigger words, templates, and gotchas for common coding interview patterns.",
+    "sections": [
+      {"id":"arrays-strings","title":"Arrays and Strings","summary":"Most array/string problems are state tracking problems.","items":["Hash map template: for each x, check needed value before inserting x when matching pairs by index.","Sliding window template: expand right, update state, while invalid shrink left, record answer after valid.","Prefix sum template: running += nums[i]; answer += count[running - target]; count[running]++.","Two pointers template: initialize l=0,r=n-1; move the pointer that can improve the sorted condition.","Monotonic stack template: while stack top is worse than current, pop and resolve top using current as next boundary.","Gotcha: with negative numbers, fixed-size or sum-based sliding window often fails; use prefix sums instead."]},
+      {"id":"graphs-trees","title":"Graphs and Trees","summary":"Choose traversal by guarantee needed.","items":["DFS recursion: subtree aggregation, path enumeration, connected components.","BFS queue: shortest number of edges, level order, nearest target, grid spread time.","Topological sort: indegree map + queue of zero indegree nodes; cycle if processed count < n.","Union-find: path compression + union by rank; use when edges arrive and connectivity is queried repeatedly.","Tree DP: return two values when node has include/exclude choices, e.g. rob/not rob.","Gotcha: mark visited when enqueueing, not when dequeueing, to avoid duplicate queue entries."]},
+      {"id":"dp-backtracking","title":"DP and Backtracking","summary":"The hard part is naming state and transition.","items":["1D DP: dp[i] usually means best/count/possible for prefix ending at i.","2D DP: dp[i][j] usually means best answer using first i and first j, or interval i..j.","Knapsack trigger: choose/not choose items with capacity or target sum.","LIS trigger: sequence order plus increasing condition; O(n^2) DP or O(n log n) tails.","Backtracking duplicate rule: sort first, then skip nums[i] if i > start and nums[i] == nums[i-1].","Memo key should include every variable that changes future choices. Missing one causes false sharing."]}
+    ],
+    "checklists": [{"title":"Pattern Gotchas","items":["negative numbers break sum window", "duplicates need sorted skip", "BFS mark on enqueue", "DP base row/column", "heap size capped at k", "binary search loop invariant", "graph may be disconnected"]}],
+    "resources": []
+  },
+  {
+    "slug": "optimization-testing",
+    "title": "Optimization and Testing",
+    "description": "Concrete ways to turn a correct idea into an efficient, defensible solution.",
+    "sections": [
+      {"id":"optimization-map","title":"Optimization Map","summary":"Replace the expensive operation, not the whole solution.","items":["Nested membership check -> hash set/map.","Repeated range sum -> prefix sum.","Repeated subtree/path result -> memoization.","Need top k only -> min heap of size k, not full sort.","Need ordered dynamic min/max -> heap or balanced tree, not repeated scan.","Search answer with monotonic feasibility -> binary search on answer.","Many string prefixes -> trie.","Many interval overlaps -> sort endpoints or sweep line."]},
+      {"id":"test-cases","title":"Test Case Menu","summary":"Pick cases by pattern.","items":["Array: empty, one item, two items, duplicates, all same, negatives, sorted, reverse sorted.","String: empty, one char, repeated chars, unicode if relevant, overlapping matches.","Graph: disconnected, cycle, self-loop, no path, multiple shortest paths.","Tree: null, single node, skewed, balanced, duplicate values.","Intervals: touching endpoints, nested intervals, same start, no overlap, complete overlap.","DP: zero capacity/target, impossible target, exactly one solution, repeated choices."]},
+      {"id":"complexity-language","title":"Complexity Language","summary":"Use precise statements.","items":["'Time is O(n) because each index enters and leaves the window once.'","'Time is O(V + E) because every node and edge is processed once.'","'Time is O(n log k) because each item can cause one heap operation on a heap of size k.'","'Space is O(n) for the map plus O(h) recursion stack, where h is tree height.'","'The sort dominates at O(n log n); the scan after sorting is O(n).'","'Memoization has O(states * transition cost), not just O(n).' "]}
+    ],
+    "checklists": [{"title":"Final Pass","items":["sample traced", "edge case traced", "loop termination", "return value correct", "complexity stated", "trade-off named"]}],
+    "resources": []
+  },
+  {
+    "slug": "practice-plan",
+    "title": "Coding Practice Plan",
+    "description": "A concrete practice loop for pattern recognition and interview execution.",
+    "sections": [
+      {"id":"two-week-drill","title":"Two-Week Drill","summary":"Repeatable schedule for one focused sprint.","items":["Day 1: arrays/hash maps, 5 untimed, write triggers after each.","Day 2: two pointers/sliding window, 5 untimed, trace every pointer move.","Day 3: stack/heap/binary search, 5 mixed.","Day 4: trees/graphs BFS/DFS, 5 mixed.","Day 5: DP/backtracking, 4 slower problems, write state definition first.","Day 6: 3 timed mixed problems at 35 minutes each.","Day 7: redo every miss from memory.","Week 2: same rotation, but every problem is timed and spoken aloud."]},
+      {"id":"review-log","title":"Review Log Fields","summary":"Do not just mark solved. Capture the failure mode.","items":["Missed pattern: what trigger should have revealed it?","Bug type: off-by-one, stale state, bad base case, duplicate handling, wrong comparator.","Complexity gap: what operation made it too slow?","Hint needed: what was the smallest hint that unlocked it?","Redo date: schedule 2 days later and 7 days later."]},
+      {"id":"readiness","title":"Ready for Real Rounds","summary":"Observable readiness checks.","items":["Solve medium array/string in 25 minutes with explanation.","Solve medium graph/tree in 35 minutes with tests.","Can name invariant before coding for 8 common patterns.","Can recover from a wrong approach without freezing.","Can produce 4 edge cases without interviewer prompting."]}
+    ],
+    "checklists": [{"title":"Daily Reps","items":["1 warmup easy", "2 focused pattern problems", "1 mixed timed problem", "1 redo", "5-minute retro"]}],
+    "resources": []
+  }
+]

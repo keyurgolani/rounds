@@ -1,0 +1,180 @@
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MyAnecdotesPanel } from '../MyAnecdotesPanel';
+import type { Anecdote, BehavioralCategoryLite, BehavioralQuestionLite } from '../types';
+import { api } from '../../../api/client';
+
+vi.mock('../../../api/client', () => ({
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
+}));
+
+const navigateMock = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => navigateMock };
+});
+
+beforeEach(() => {
+  navigateMock.mockClear();
+  vi.clearAllMocks();
+});
+
+const cats: BehavioralCategoryLite[] = [
+  { id: 1, name: 'Ownership', color: '#7928ca', icon: '◆' },
+  { id: 2, name: 'Empathy', color: '#0072f5', icon: '○' },
+];
+const questions: BehavioralQuestionLite[] = [
+  { id: 10, title: 'Tell me about a conflict' },
+  { id: 11, title: 'Tell me about a failure' },
+];
+const anecdotes: Anecdote[] = [
+  {
+    id: 1,
+    title: 'Linked story',
+    description: '',
+    situation: 'X situation',
+    task: '',
+    action: '',
+    result: '',
+    category_ids: [2],
+    linked_question_ids: [10],
+    notes: '',
+    updated_at: '2026-04-18T00:00:00',
+  },
+  {
+    id: 2,
+    title: 'Match candidate',
+    description: '',
+    situation: 'Y situation',
+    task: '',
+    action: '',
+    result: '',
+    category_ids: [2],
+    linked_question_ids: [],
+    notes: '',
+    updated_at: '2026-04-17T00:00:00',
+  },
+  {
+    id: 3,
+    title: 'Other story',
+    description: '',
+    situation: 'Z situation',
+    task: '',
+    action: '',
+    result: '',
+    category_ids: [1],
+    linked_question_ids: [],
+    notes: '',
+    updated_at: '2026-04-16T00:00:00',
+  },
+];
+
+function renderPanel(questionId = 10) {
+  return render(
+    <MyAnecdotesPanel
+      questionId={questionId}
+      questionCategoryIds={[2]}
+      categories={cats}
+      questions={questions}
+    />
+  );
+}
+
+describe('MyAnecdotesPanel', () => {
+  it('auto-selects the first linked anecdote and loads it into the STAR editor', async () => {
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    renderPanel();
+    await waitFor(() => screen.getByDisplayValue('Linked story'));
+    expect(screen.getByDisplayValue('X situation')).toBeInTheDocument();
+  });
+
+  it('opens the library panel and excludes already-linked anecdotes', async () => {
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    renderPanel();
+    await waitFor(() => screen.getByDisplayValue('Linked story'));
+    fireEvent.click(screen.getByRole('button', { name: /Link from library/i }));
+    expect(screen.getByText('Match candidate')).toBeInTheDocument();
+    expect(screen.getByText('Other story')).toBeInTheDocument();
+    expect(screen.queryAllByText('Linked story').length).toBe(1);
+  });
+
+  it('library list orders category-matching anecdotes first', async () => {
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    renderPanel();
+    await waitFor(() => screen.getByDisplayValue('Linked story'));
+    fireEvent.click(screen.getByRole('button', { name: /Link from library/i }));
+    const rows = screen
+      .getAllByRole('button')
+      .filter((b) => /Match candidate|Other story/.test(b.textContent ?? ''));
+    const matchIdx = rows.findIndex((el) => (el.textContent ?? '').includes('Match candidate'));
+    const otherIdx = rows.findIndex((el) => (el.textContent ?? '').includes('Other story'));
+    expect(matchIdx).toBeLessThan(otherIdx);
+  });
+
+  it('clicking a library row PUTs the anecdote with the question added', async () => {
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    (api.put as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...anecdotes[1],
+      linked_question_ids: [10],
+    });
+    renderPanel();
+    await waitFor(() => screen.getByDisplayValue('Linked story'));
+    fireEvent.click(screen.getByRole('button', { name: /Link from library/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Match candidate/i }));
+    await waitFor(() => expect(api.put).toHaveBeenCalled());
+    const [path, body] = (api.put as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(path).toMatch(/\/api\/anecdotes\/2$/);
+    expect(body.linked_question_ids).toContain(10);
+  });
+
+  it('Unlink removes the current question from the selected anecdote', async () => {
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    (api.put as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...anecdotes[0],
+      linked_question_ids: [],
+    });
+    renderPanel();
+    await waitFor(() => screen.getByDisplayValue('Linked story'));
+    fireEvent.click(screen.getByRole('button', { name: /unlink/i }));
+    await waitFor(() => expect(api.put).toHaveBeenCalled());
+    const body = (api.put as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(body.linked_question_ids).not.toContain(10);
+  });
+
+  it('New anecdote button navigates to new anecdote page with ?question=<slug>', async () => {
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    renderPanel();
+    await waitFor(() => screen.getByDisplayValue('Linked story'));
+    fireEvent.click(screen.getByRole('button', { name: /^\s*New anecdote\s*$/i }));
+    expect(navigateMock).toHaveBeenCalledWith('/behavioral/anecdotes/new?question=tell-me-about-a-conflict');
+  });
+
+  it('defaults to description mode when the selected anecdote has only description content', async () => {
+    const descOnly: Anecdote[] = [
+      {
+        id: 10,
+        title: 'Desc only',
+        description: 'A quick summary of what happened.',
+        situation: '',
+        task: '',
+        action: '',
+        result: '',
+        category_ids: [2],
+        linked_question_ids: [10],
+        notes: '',
+        updated_at: '2026-04-18T00:00:00',
+      },
+    ];
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(descOnly);
+    renderPanel();
+    await waitFor(() => screen.getByDisplayValue('Desc only'));
+    expect(screen.getByDisplayValue('A quick summary of what happened.')).toBeInTheDocument();
+  });
+
+  it('defaults to STAR mode when the anecdote has STAR content', async () => {
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    renderPanel();
+    await waitFor(() => screen.getByDisplayValue('Linked story'));
+    expect(screen.getByDisplayValue('X situation')).toBeInTheDocument();
+  });
+});

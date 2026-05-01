@@ -1,0 +1,35 @@
+---
+# Single Ingress in front of the frontend Service. The frontend's own
+# nginx already proxies /api/* and /_/* to the PocketBase and runner
+# Services, so the Ingress doesn't need per-path rules — it just sends
+# all traffic at the frontend.
+#
+# Update `host` and the tls block to match your domain + cert-manager
+# issuer. If you're on a cluster without cert-manager, delete the tls
+# section and terminate TLS at the load balancer instead.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rounds
+  namespace: rounds
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - rounds.example.com
+      secretName: rounds-tls
+  rules:
+    - host: rounds.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

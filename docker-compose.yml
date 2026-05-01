@@ -1,0 +1,57 @@
+services:
+  pocketbase:
+    build: ./pocketbase
+    ports:
+      - "${POCKETBASE_PORT:-8090}:8090"
+    volumes:
+      - pb_data:/pb/pb_data
+    environment:
+      # Migration 1700000500_bootstrap_admin.js reads these on fresh
+      # setup and creates the first admin. Override in .env for real
+      # credentials; defaults are dev-only and obviously placeholder.
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-admin@local.dev}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-changemenowplz}
+      - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
+    restart: unless-stopped
+
+  runner:
+    build: ./backend
+    # Override the image CMD for dev so we get hot reload on source edits.
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports:
+      - "${RUNNER_PORT:-3099}:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-*}
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${FRONTEND_PORT:-3001}:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      # Same-origin /api/* is proxied to the backend service via
+      # frontend/vite.config.ts. Override VITE_API_PROXY_TARGET only when
+      # pointing the dev server at a backend on a different host.
+      # Runner is reached through the /api/run etc. proxy; PB via /api/*.
+      - VITE_API_PROXY_TARGET=${VITE_API_PROXY_TARGET:-http://runner:8000}
+      - VITE_POCKETBASE_PROXY_TARGET=${VITE_POCKETBASE_PROXY_TARGET:-http://pocketbase:8090}
+      # Leave VITE_POCKETBASE_URL empty so the browser uses same-origin
+      # — works from the host *and* from any device on the LAN.
+      - VITE_POCKETBASE_URL=${VITE_POCKETBASE_URL:-}
+      - VITE_OAUTH_GOOGLE_ENABLED=${VITE_OAUTH_GOOGLE_ENABLED:-false}
+      - VITE_OAUTH_GITHUB_ENABLED=${VITE_OAUTH_GITHUB_ENABLED:-false}
+      - VITE_DISABLE_SIGNUPS=${VITE_DISABLE_SIGNUPS:-false}
+    depends_on:
+      - runner
+      - pocketbase
+    restart: unless-stopped
+
+volumes:
+  pb_data:

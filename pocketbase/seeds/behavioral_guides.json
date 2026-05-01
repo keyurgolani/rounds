@@ -1,0 +1,72 @@
+[
+  {
+    "slug": "master-behavioral-interview-guide",
+    "title": "Behavioral Interview Cheat Sheet",
+    "description": "A concrete behavioral prep reference: story templates, signal mapping, answer scripts, senior framing, and red-flag fixes.",
+    "sections": [
+      {"id":"story-bank","title":"Minimum Story Bank","summary":"Build these eight stories before any loop.","items":["Impact: shipped measurable business/user/technical result.","Conflict: disagreed with peer, manager, PM, or cross-functional team and resolved it.","Failure: made a mistake, owned it, repaired damage, changed behavior.","Ambiguity: unclear goal, missing data, shifting constraints, created structure.","Leadership: influenced without authority or raised team standards.","Mentorship: helped someone improve, not just answered questions.","Pressure: deadline, incident, outage, launch risk, or competing priorities.","Customer/user focus: changed plan because of user evidence or stakeholder need."]},
+      {"id":"answer-shape","title":"Answer Shape","summary":"Use fixed ratios to avoid rambling.","items":["Situation: 15 seconds. Project, stakes, constraint.","Task: 10 seconds. Your responsibility in one sentence.","Action: 60-90 seconds. Decisions, trade-offs, communication, execution.","Result: 15-25 seconds. Numbers and concrete outcome.","Reflection: 10-20 seconds. What changed in your future behavior.","Default answer length: 90-150 seconds, then pause for follow-up."]},
+      {"id":"signal-map","title":"Signal Map","summary":"Do not claim traits. Attach each trait to proof.","items":["Ownership -> noticed problem, created plan, drove follow-through.","Ambiguity -> framed options, gathered data, aligned decision makers.","Conflict -> represented both sides fairly, found shared goal, changed outcome.","Leadership -> others acted differently because of your influence.","Growth -> feedback, discomfort, behavior change, later evidence.","Impact -> metric moved, risk reduced, team velocity improved, customer pain removed."]}
+    ],
+    "checklists": [
+      {"title":"Story Portfolio","items":["impact", "conflict", "failure", "ambiguity", "leadership", "mentorship", "pressure", "customer focus"]},
+      {"title":"Red Flag Fixes","items":["replace blame with ownership", "replace we with I for actions", "add numbers", "cut setup", "name trade-off", "include reflection", "show follow-up behavior"]}
+    ],
+    "resources": [
+      {"category":"Guide Pages","items":[
+        {"title":"Story Crafting","slug":"story-crafting","summary":"STAR(R) templates, before/after rewrites, and reusable story angles."},
+        {"title":"Signal Rubric","slug":"signal-rubric","summary":"Question types mapped to what the interviewer is actually testing."},
+        {"title":"Senior Behavioral","slug":"senior-behavioral","summary":"Scope, influence, judgment, and defensive framing for senior candidates."},
+        {"title":"Practice Playbook","slug":"practice-playbook","summary":"Mock interview drills, scoring sheets, and answer repair loops."}
+      ]}
+    ]
+  },
+  {
+    "slug": "story-crafting",
+    "title": "Story Crafting Cheat Sheet",
+    "description": "How to turn raw experience into specific, reusable behavioral answers.",
+    "sections": [
+      {"id":"star-template","title":"STAR(R) Fill-in Template","summary":"Fill these blanks before practicing aloud.","items":["Situation: 'At [company/team], we were trying to [goal], but [constraint/risk].'","Task: 'I was responsible for [specific ownership], and success meant [metric/outcome].'","Action 1: 'I first [diagnosed/framed] by [method/data/conversation].'","Action 2: 'The key trade-off was [A vs B], so I chose [choice] because [reason].'","Action 3: 'To align people, I [meeting/doc/prototype/escalation] with [stakeholders].'","Result: 'This led to [number/result], and [secondary impact].'","Reflection: 'I learned [principle], and later applied it when [proof].'"]},
+      {"id":"story-angles","title":"Reusable Story Angles","summary":"One story can answer several prompts if the angle is honest.","items":["Impact angle: lead with metric and why it mattered.","Conflict angle: lead with disagreement and how you built alignment.","Failure angle: lead with your bad assumption and repair work.","Ambiguity angle: lead with missing context and how you created structure.","Leadership angle: lead with how you influenced people outside your reporting line.","Growth angle: lead with feedback received and behavior changed."]},
+      {"id":"weak-to-strong","title":"Weak to Strong Rewrites","summary":"Concrete replacements for vague answer language.","items":["Weak: 'We improved performance.' Strong: 'I profiled p95 latency, found N+1 queries, added batching, and reduced p95 from 1.8s to 420ms.'","Weak: 'There was conflict.' Strong: 'PM wanted launch speed; infra wanted rollback safety. I proposed a staged rollout with kill switch.'","Weak: 'I learned communication is important.' Strong: 'I now send written decision logs before cross-team reviews.'","Weak: 'My manager asked me to.' Strong: 'After seeing repeated incidents, I proposed the migration plan and got buy-in.'"]}
+    ],
+    "checklists": [{"title":"Story Quality Bar","items":["specific stakes", "personal action", "trade-off", "stakeholders", "metric", "lesson", "later proof"]}],
+    "resources": []
+  },
+  {
+    "slug": "signal-rubric",
+    "title": "Behavioral Signal Rubric",
+    "description": "Map common questions to the signal being evaluated and the evidence to show.",
+    "sections": [
+      {"id":"question-map","title":"Question to Signal Map","summary":"Decode what the interviewer is asking.","items":["'Tell me about yourself' -> motivation, trajectory, role fit. Use present-past-future in 60 seconds.","'Disagreement' -> empathy, judgment, influence. Show both sides and decision criteria.","'Failure' -> ownership, honesty, learning. Own your part before context.","'Ambiguous problem' -> structure, autonomy, prioritization. Show how you narrowed options.","'Tight deadline' -> prioritization, communication, risk management. Show what you cut and why.","'Leadership' -> influence, standards, delegation. Show how others changed behavior.","'Feedback' -> coachability. Show feedback, emotional reaction, action, later result."]},
+      {"id":"evidence-menu","title":"Evidence Menu","summary":"Use concrete artifacts instead of personality claims.","items":["Metrics: revenue, conversion, latency, p95, defects, incidents, hours saved, adoption, SLA.","Artifacts: design doc, RFC, dashboard, runbook, rollout plan, experiment, prototype, migration checklist.","Stakeholders: PM, design, legal, support, customer, SRE, data, leadership, partner team.","Decision criteria: customer impact, risk, cost, reversibility, deadline, maintainability, operational load.","Follow-up proof: reused process, mentored others, prevented recurrence, changed team standard."]},
+      {"id":"company-values","title":"Company Values Translation","summary":"Translate your stories into company language without sounding scripted.","items":["Amazon ownership -> say what you did without being assigned and how you measured the outcome.","Google collaboration -> show data, inclusion, and technical rigor in disagreement.","Meta impact -> lead with metric, speed, prioritization, and scope.","Apple craft -> show customer empathy, detail, quality bar, and cross-functional secrecy/discipline where relevant.","Startup bias for action -> show scrappy validation, reversibility, and fast learning."]}
+    ],
+    "checklists": [{"title":"Answer Must Prove","items":["trait", "context", "action", "judgment", "outcome", "learning"]}],
+    "resources": []
+  },
+  {
+    "slug": "senior-behavioral",
+    "title": "Senior Behavioral Cheat Sheet",
+    "description": "Concrete senior-level framing for scope, influence, and judgment.",
+    "sections": [
+      {"id":"scope-ladder","title":"Scope Ladder","summary":"Make level visible in the story.","items":["Mid-level scope: owned feature or service with clear requirements.","Senior scope: owned ambiguous project, cross-functional alignment, risk, rollout, and team execution.","Staff scope: changed org direction, platform standard, multi-team architecture, or business-critical operating model.","Principal scope: created strategy across domains, resolved systemic constraints, influenced leadership decisions.","Say scope numbers: teams, users, QPS, revenue, regions, incidents, migration size, timeline, people influenced."]},
+      {"id":"senior-answer-frame","title":"Senior Answer Frame","summary":"Senior answers need decision frameworks, not just actions.","items":["Open with outcome: 'This reduced incidents by 38% across three teams.'","Name the ambiguity: unclear owner, conflicting goals, missing data, legacy constraint, or risk.","Name decision criteria: reversibility, blast radius, customer impact, cost, reliability, team capacity.","Show alignment mechanism: RFC, working group, escalation, prototype, phased rollout, dashboard.","Show operating maturity: observability, rollback, runbook, ownership, post-launch review.","End with lesson applied later at larger scope."]},
+      {"id":"defensive-framing","title":"Defensive Framing","summary":"Close interpretations that make senior candidates look risky.","items":["If you escalated: explain what you tried first and why escalation was needed.","If you disagreed: state the other side's valid concern before your position.","If you failed: quantify impact, repair, prevention, and later proof.","If the project was assigned: explain where you added judgment beyond the assignment.","If results were mixed: separate what worked, what did not, and what you changed.","If many people helped: say your exact role and credit the team for shared outcome."]}
+    ],
+    "checklists": [{"title":"Senior Story Minimums","items":["cross-team scope", "ambiguous constraint", "decision criteria", "stakeholder alignment", "risk control", "measured outcome", "operating lesson"]}],
+    "resources": []
+  },
+  {
+    "slug": "practice-playbook",
+    "title": "Behavioral Practice Playbook",
+    "description": "Concrete drills to make answers structured, specific, and flexible.",
+    "sections": [
+      {"id":"mock-drill","title":"30-Minute Mock Drill","summary":"Use this for one behavioral practice session.","items":["5 min: choose one story and write only STAR(R) bullets.","5 min: answer once in 2 minutes, record it.","5 min: cut setup and add numbers/artifacts.","5 min: answer the same story as conflict, failure, and leadership angles.","5 min: answer three follow-ups: why, alternative, what changed later.","5 min: score red flags and write one better opening sentence."]},
+      {"id":"scorecard","title":"Self-Scorecard","summary":"Score every answer from 1 to 3.","items":["Specificity: 1 vague, 2 named actions, 3 actions plus numbers/artifacts.","Ownership: 1 mostly we, 2 some I, 3 clear personal decisions and follow-through.","Judgment: 1 no trade-off, 2 trade-off named, 3 criteria and alternative explained.","Impact: 1 no result, 2 qualitative result, 3 quantified result and secondary effect.","Reflection: 1 generic lesson, 2 specific lesson, 3 later behavior proof."]},
+      {"id":"answer-bank","title":"Answer Bank Format","summary":"Store stories in a way that supports reuse.","items":["Title: one-line memory hook.","Signals: ownership, conflict, ambiguity, leadership, failure, growth, impact.","Numbers: metrics, scope, timeline, teams, users.","Actions: 3 bullets starting with verbs.","Follow-ups: why this choice, what alternative, what you would change.","Weak spot: one likely interviewer concern and your clarification."]}
+    ],
+    "checklists": [{"title":"Before Loop","items":["8 story bank complete", "each story under 2 minutes", "failure story honest", "conflict story fair", "senior scope story quantified", "why company prepared"]}],
+    "resources": []
+  }
+]

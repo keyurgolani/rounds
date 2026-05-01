@@ -1,0 +1,98 @@
+[
+  {
+    "slug": "master-system-design-interview-guide",
+    "title": "System Design Interview Cheat Sheet",
+    "description": "A concrete system-design reference: opening scripts, capacity math, API/data templates, component decision rules, reliability patterns, and trade-off language.",
+    "sections": [
+      {"id":"opening-script","title":"Opening Script","summary":"Start every system design round with these concrete questions.","items":["Users: consumer, creator, admin, internal operator, partner API, background worker?","Core actions: read, write, search, upload, subscribe, notify, rank, pay, moderate?","Scale: DAU/MAU, peak QPS, write QPS, read/write ratio, object size, retention, regions.","SLOs: p50/p95 latency, availability target, durability target, freshness target.","Consistency: can users see stale data? can duplicates happen? which operations need exactly-once user-visible behavior?","Scope cut: say what you will not design unless time remains, e.g. billing, ML ranking, admin tooling, analytics."]},
+      {"id":"capacity-math","title":"Capacity Math Cheats","summary":"Fast formulas to turn product scale into architecture pressure.","items":["QPS average = daily requests / 86,400. Peak QPS = average * 3 to 10.","Storage/day = writes/day * average object size * replication factor.","Bandwidth/sec = QPS * payload size. Use separate read and write bandwidth.","Cache memory = hot keys * average cached value size * overhead factor 1.2 to 2.","Partition count rough cut = max(storage / target shard size, peak QPS / target shard QPS).","Availability: 99.9% allows 43.8 min/month; 99.99% allows 4.38 min/month; 99.999% allows 26 sec/month."]},
+      {"id":"design-order","title":"Design Order","summary":"Do not start with infrastructure. Build from API and data outward.","items":["Define APIs: method, path, request fields, response fields, idempotency key if write.","Define data model: entities, primary keys, secondary indexes, retention, ownership.","Draw write path: validation, auth, id generation, storage, async fanout, cache invalidation.","Draw read path: cache lookup, DB/query/search, aggregation, pagination, response shaping.","Add components only when a requirement forces them: cache for read latency, queue for async work, CDN for static/global content, search index for text queries.","Stress path: hot key, duplicate request, downstream failure, regional outage, data backfill, abuse burst."]}
+    ],
+    "checklists": [
+      {"title":"Universal Board Checklist","items":["requirements", "scale math", "APIs", "data model", "read path", "write path", "cache story", "async story", "failure story", "trade-off summary"]},
+      {"title":"Common Interview Traps","items":["Kafka before write path", "cache without invalidation", "sharding without key", "no idempotency", "no pagination", "no backpressure", "no hot-key answer", "no data retention", "no observability"]}
+    ],
+    "resources": [
+      {"category":"Guide Pages","items":[
+        {"title":"Interview Strategy","slug":"interview-strategy","summary":"Minute-by-minute scripts and exact board structure."},
+        {"title":"Requirements and Estimation","slug":"requirements-estimation","summary":"Concrete scoping questions and scale formulas."},
+        {"title":"Core Components","slug":"core-components","summary":"Decision rules for caches, queues, CDNs, streams, search, and gateways."},
+        {"title":"Data and Storage","slug":"data-storage","summary":"Storage choices, schema patterns, indexes, sharding, and consistency."},
+        {"title":"Trade-offs and Reliability","slug":"tradeoffs-reliability","summary":"Failure-mode playbooks and senior trade-off language."},
+        {"title":"Practice Playbook","slug":"practice-playbook","summary":"Reusable templates for common system design prompts."}
+      ]}
+    ]
+  },
+  {
+    "slug": "interview-strategy",
+    "title": "System Design Interview Strategy",
+    "description": "A concrete timeline and script for running the system design round.",
+    "sections": [
+      {"id":"timeline","title":"45-Minute Timeline","summary":"Keep the round on rails.","items":["0-5 min: clarify users, features, non-goals, scale, SLOs, consistency.","5-10 min: APIs and data model. Do not draw services before entities.","10-20 min: simple high-level architecture with read and write paths.","20-32 min: deep dive one bottleneck: feed fanout, search, storage, cache invalidation, ranking, or reliability.","32-40 min: failure modes: retries, idempotency, backpressure, failover, data recovery, observability.","40-45 min: summarize requirements met, trade-offs, and next improvements."]},
+      {"id":"board-layout","title":"Board Layout","summary":"Use a predictable drawing layout so the interviewer can follow you.","items":["Top left: requirements and non-goals.","Top right: numbers: QPS, storage/day, peak multiplier, latency/SLO.","Middle: boxes for client, gateway, services, data stores, caches, queues, workers.","Bottom left: data model with keys and indexes.","Bottom right: failure modes and trade-offs.","Use arrows labeled with verbs: createPost, readFeed, invalidateCache, publishEvent."]},
+      {"id":"phrases","title":"Useful Phrases","summary":"Concrete lines that show senior judgment.","items":["'I will keep v1 simple and add this component only when the scale math requires it.'","'The key correctness risk here is duplicate writes, so I want an idempotency key.'","'This cache improves p95 reads, but I need an invalidation or TTL story.'","'This is eventually consistent; the user-visible stale window is acceptable because...'","'If this becomes a hot-key problem, I would split by [key] or add request coalescing.'","'The biggest unresolved trade-off is [latency vs consistency/cost/complexity].'"]}
+    ],
+    "checklists": [{"title":"Opening Questions","items":["who uses it", "top 3 actions", "read/write ratio", "peak scale", "latency target", "availability target", "freshness tolerance", "retention", "regions", "non-goals"]}],
+    "resources": []
+  },
+  {
+    "slug": "requirements-estimation",
+    "title": "Requirements and Estimation",
+    "description": "Concrete requirement prompts, formulas, and sizing shortcuts.",
+    "sections": [
+      {"id":"requirements","title":"Requirement Prompts","summary":"Ask questions that change the architecture.","items":["Feed/timeline: fanout on write or read? following count distribution? celebrity users? freshness?","Chat: one-to-one or groups? ordering guarantee? offline delivery? read receipts? media?","URL shortener: custom aliases? expiry? analytics? abusive links? redirect latency?","Search: exact match, prefix, typo tolerance, filters, ranking freshness, permissions?","File/video: upload size, resumable upload, transcoding, thumbnails, CDN, access control?","Payments/booking: idempotency, reservation timeout, double spend, audit log, reconciliation?"]},
+      {"id":"formulas","title":"Fast Formulas","summary":"Use approximate math aloud.","items":["DAU * actions/user/day = daily operations.","Daily operations / 86,400 = average QPS.","Average QPS * 5 = reasonable peak QPS unless prompt gives spikes.","Writes/day * object size = raw storage/day.","Raw storage * replication factor * retention days = storage footprint.","Read QPS * response size = outbound bandwidth.","Index size often 20-100% of raw data; call it out when storage is large."]},
+      {"id":"slo-cheats","title":"SLO Cheats","summary":"Translate quality targets into design choices.","items":["p95 < 100ms: cache, precompute, local region, avoid fanout on read.","p95 < 1s: DB plus cache/search is usually acceptable.","99.99% availability: multi-AZ, health checks, failover, graceful degradation.","Strong consistency: single writer/transactional DB/consensus cost; lower availability during partitions.","Eventual consistency: async queues, replicas, cache; explain stale window and reconciliation.","High durability: replication, backups, checksums, object storage, restore drills."]}
+    ],
+    "checklists": [{"title":"Numbers to Put on Board","items":["DAU", "read QPS", "write QPS", "peak QPS", "storage/day", "retention", "bandwidth", "latency target", "availability target"]}],
+    "resources": []
+  },
+  {
+    "slug": "core-components",
+    "title": "Core Components Cheat Sheet",
+    "description": "When to use common system components and what trade-off to mention.",
+    "sections": [
+      {"id":"component-decisions","title":"Component Decision Rules","summary":"Only add a component when it solves a named pressure.","items":["Load balancer: distribute traffic, health check instances, support rolling deploys.","API gateway: auth, rate limits, routing, request shaping, not business logic.","Cache: repeated reads, expensive computation, hot objects; mention TTL/invalidation.","Queue: absorb spikes, decouple slow work, retry safely; mention idempotent workers and DLQ.","Stream: durable ordered event log, replay, multiple consumers; mention partition key.","CDN: static/media/global reads; mention cache headers and purge path.","Search index: text/ranking/filter queries; mention async indexing and freshness delay.","Coordinator/lock: leader election or exclusive work; mention lease expiry and fencing tokens."]},
+      {"id":"cache-patterns","title":"Cache Patterns","summary":"Choose a cache strategy explicitly.","items":["Cache-aside: app checks cache, loads DB on miss, writes cache. Simple and common.","Write-through: write cache and DB together. Safer reads, higher write latency.","Write-behind: write cache/queue first, DB later. Fast but data-loss risk.","TTL only: acceptable for stale-tolerant data; simple but can stampede.","Invalidation: delete/update key on write; hard when many derived keys exist.","Stampede controls: jitter TTL, request coalescing, background refresh, single-flight lock."]},
+      {"id":"queue-patterns","title":"Queue and Worker Patterns","summary":"Queues add reliability concerns you must name.","items":["Use idempotency key per job to survive retries.","Use DLQ for poison messages after max attempts.","Use exponential backoff for transient downstream failures.","Use partition key for ordering per user/order/chat, not global ordering.","Use visibility timeout or leases so stuck workers release work.","Track lag, retry count, age of oldest message, and worker error rate."]}
+    ],
+    "checklists": [{"title":"For Every Box Say","items":["why it exists", "input", "output", "stateful or stateless", "scale axis", "failure mode", "metric to watch"]}],
+    "resources": []
+  },
+  {
+    "slug": "data-storage",
+    "title": "Data and Storage Cheat Sheet",
+    "description": "Concrete storage choices, keys, indexes, sharding, and consistency patterns.",
+    "sections": [
+      {"id":"storage-choice","title":"Storage Choice Rules","summary":"Pick storage from access pattern, not fashion.","items":["Relational DB: transactions, joins, constraints, payments, bookings, metadata.","Key-value store: get/put by key, sessions, counters, feature flags, simple cache-like data.","Document store: flexible nested objects, user profiles, product documents, low join need.","Wide-column store: huge write volume, time-series, event tables, predictable partition key.","Object storage: blobs, images, videos, logs, backups; store metadata separately.","Search engine: inverted index, ranking, filtering, typo/prefix; not source of truth.","Graph DB: relationship traversal depth matters and cannot be precomputed cheaply."]},
+      {"id":"keys-indexes","title":"Keys and Indexes","summary":"Name primary key and query indexes out loud.","items":["Primary key should match most common direct lookup: userId, postId, orderId, shortCode.","Composite index order matters: equality fields first, then range/sort field.","Feed table: partition by userId, sort by createdAt desc.","Chat messages: partition by conversationId, sort by messageSequence or createdAt.","Time-series: partition by entityId plus time bucket to avoid unbounded partitions.","Unique constraint: username, email, shortCode, idempotencyKey per user/order.","Secondary indexes speed reads but slow writes and add storage; mention write amplification."]},
+      {"id":"sharding-consistency","title":"Sharding and Consistency","summary":"Be precise about partition keys and stale data.","items":["Shard by userId when user-owned data dominates and cross-user queries are rare.","Shard by objectId for uniform object lookup; add indexes for owner queries.","Avoid hot partitions: celebrity user, global counter, trending hashtag, current timestamp bucket.","Use consistent hashing when nodes change often; use directory service when placement needs control.","Strong consistency: use transactions/single leader/quorum; cost is latency and failover complexity.","Eventual consistency: use async events, reconciliation jobs, versioning, and user-visible stale tolerance.","Conflict resolution: last-write-wins, version vector, server timestamp, manual review, or domain-specific merge."]}
+    ],
+    "checklists": [{"title":"Data Model Checklist","items":["entities", "primary keys", "secondary indexes", "write path", "read path", "retention", "shard key", "replication", "backup", "migration path"]}],
+    "resources": []
+  },
+  {
+    "slug": "tradeoffs-reliability",
+    "title": "Trade-offs and Reliability",
+    "description": "Failure-mode playbooks and trade-off language for senior system design rounds.",
+    "sections": [
+      {"id":"failure-modes","title":"Failure Mode Menu","summary":"Pick the relevant failures before the interviewer asks.","items":["Duplicate write: idempotency key, unique constraint, dedupe table.","Partial failure: transactional boundary, saga, compensating action, retry policy.","Queue backlog: autoscale workers, shed noncritical work, priority queues, backpressure.","Cache outage: bypass to DB with rate limits, degrade features, warm critical keys.","DB primary failure: replica promotion, write pause, read-only mode, RPO/RTO statement.","Hot key: key splitting, local cache, request coalescing, precompute, async fanout.","Thundering herd: jittered TTL, token bucket, single-flight, circuit breaker.","Data corruption: checksums, audit log, backups, restore drills, dual-write verification."]},
+      {"id":"reliability-patterns","title":"Reliability Patterns","summary":"Know the pattern and the risk it creates.","items":["Retry: handles transient failure; risk duplicate side effects.","Timeout: prevents resource exhaustion; risk false failure if too aggressive.","Circuit breaker: protects downstream; risk degraded user experience.","Bulkhead: isolates failures by pool/tenant/feature; risk underutilized capacity.","Rate limit: protects system and abuse; risk blocking legitimate spikes.","Graceful degradation: preserve core path while disabling recommendations, analytics, thumbnails, or notifications.","Outbox pattern: write DB row and event atomically, worker publishes later.","Saga: distributed workflow with compensating actions when transaction cannot span services."]},
+      {"id":"tradeoff-language","title":"Trade-off Language","summary":"Use explicit A versus B statements.","items":["Cache: lower latency and DB load versus stale reads and invalidation complexity.","Queue: smoother spikes and retries versus delayed processing and duplicate handling.","Sharding: higher capacity versus cross-shard query and operational complexity.","Replication: higher availability and read scale versus lag and failover complexity.","Precompute: faster reads versus slower writes and storage cost.","Fanout on write: fast reads versus expensive writes for high-fanout users.","Fanout on read: cheap writes versus slow reads for users following many accounts."]}
+    ],
+    "checklists": [{"title":"Senior Reliability Checklist","items":["timeouts", "retries", "idempotency", "backpressure", "DLQ", "circuit breaker", "failover", "observability", "runbook", "restore path"]}],
+    "resources": []
+  },
+  {
+    "slug": "practice-playbook",
+    "title": "System Design Practice Playbook",
+    "description": "Reusable templates for common system design prompts and timed practice.",
+    "sections": [
+      {"id":"prompt-templates","title":"Prompt Templates","summary":"Use these known decompositions during practice.","items":["URL shortener: encode/create shortCode, redirect read path, custom alias, expiry, analytics async.","News feed: follow graph, post write, fanout strategy, ranking, cache feed, celebrity handling.","Chat: conversation/message model, websocket gateway, ordering, offline queue, push notification.","Video upload: pre-signed URL, object storage, metadata DB, transcode queue, CDN, playback manifest.","Search: source DB, indexing pipeline, inverted index, ranking, filters, freshness delay.","Rate limiter: key choice, token bucket/leaky bucket, Redis or local counters, distributed consistency.","Booking/payment: reservation lock, idempotency, expiry, payment state machine, audit log."]},
+      {"id":"deep-dive-prompts","title":"Deep-Dive Prompts","summary":"Ask yourself these after drawing v1.","items":["What is the hottest key or endpoint?","Which operation must be strongly consistent?","What happens if this request is retried three times?","Which data can be stale and for how long?","What is the first bottleneck at 10x traffic?","What metric alerts before users complain?","How do we backfill or migrate this schema?","What is the cheapest graceful degradation mode?"]},
+      {"id":"practice-loop","title":"Practice Loop","summary":"A concrete 60-minute solo session.","items":["5 min: scope and numbers only.","10 min: APIs and data model.","15 min: read/write architecture.","15 min: one deep dive with trade-offs.","10 min: failure modes and observability.","5 min: record missed questions, bad assumptions, and one improved phrase."]}
+    ],
+    "checklists": [{"title":"Mock Scorecard","items":["requirements changed design", "numbers on board", "API/data before infra", "clear read/write path", "one deep dive", "failure modes", "trade-offs", "summary"]}],
+    "resources": []
+  }
+]

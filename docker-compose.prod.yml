@@ -1,0 +1,50 @@
+# Single-box production deploy. Three containers on a private network;
+# only the nginx-fronted frontend's port 80 is exposed. By default this
+# file pulls published Docker Hub images. Set ROUNDS_IMAGE_TAG or the
+# per-service image variables below to pin a release or use GHCR.
+#
+#   PB_ADMIN_EMAIL=ops@example.com PB_ADMIN_PASSWORD=<strong-password> \
+#     docker compose -f docker-compose.prod.yml up -d
+#
+# On fresh setup, migration 1700000500_bootstrap_admin.js creates the
+# first PocketBase admin from these env vars. If they are unset, no
+# admin is bootstrapped and you must run:
+#
+#   docker exec -it <pocketbase-container> /pb/pocketbase admin \
+#       create admin@example.com <password>
+
+services:
+  pocketbase:
+    image: ${ROUNDS_POCKETBASE_IMAGE:-keyurgolani/rounds-pocketbase:${ROUNDS_IMAGE_TAG:-latest}}
+    volumes:
+      - pb_data:/pb/pb_data
+    environment:
+      # No defaults in prod — set these explicitly in the deploy
+      # environment or skip admin bootstrap.
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-}
+      - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
+    restart: unless-stopped
+
+  runner:
+    image: ${ROUNDS_RUNNER_IMAGE:-keyurgolani/rounds-runner:${ROUNDS_IMAGE_TAG:-latest}}
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-}
+    restart: unless-stopped
+
+  frontend:
+    image: ${ROUNDS_FRONTEND_IMAGE:-keyurgolani/rounds-frontend:${ROUNDS_IMAGE_TAG:-latest}}
+    environment:
+      - VITE_DISABLE_SIGNUPS=${VITE_DISABLE_SIGNUPS:-false}
+      - VITE_OAUTH_GOOGLE_ENABLED=${VITE_OAUTH_GOOGLE_ENABLED:-false}
+      - VITE_OAUTH_GITHUB_ENABLED=${VITE_OAUTH_GITHUB_ENABLED:-false}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on:
+      - pocketbase
+      - runner
+    restart: unless-stopped
+
+volumes:
+  pb_data:
