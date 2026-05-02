@@ -36,6 +36,12 @@ const existingAnecdote = {
   notes: 'Some notes',
 };
 
+const duplicateSlugAnecdote = {
+  ...existingAnecdote,
+  id: '6',
+  title: 'API Test',
+};
+
 function renderNew(path = '/behavioral/anecdotes/new') {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -105,6 +111,21 @@ describe('AnecdoteEditorPage', () => {
     expect(navigateMock).toHaveBeenCalledWith(-1);
   });
 
+  it('blocks creating an anecdote when another title has the same slug', async () => {
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+      if (path.includes('behavioral-categories')) return Promise.resolve(cats);
+      if (path === '/api/behavioral') return Promise.resolve(questions);
+      if (path === '/api/anecdotes') return Promise.resolve([duplicateSlugAnecdote]);
+      return Promise.resolve([]);
+    });
+    renderNew();
+    await waitFor(() => screen.getByLabelText('Title'));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'API test' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save anecdote/i }));
+    expect(await screen.findByText(/already exists/i)).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it('?question=<slug> pre-selects question by matching slug to title', async () => {
     (api.get as unknown as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
       if (path.includes('behavioral-categories')) return Promise.resolve(cats);
@@ -150,6 +171,21 @@ describe('AnecdoteEditorPage', () => {
     await waitFor(() => expect(api.del).toHaveBeenCalled());
     expect((api.del as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('/api/anecdotes/5');
     expect(navigateMock).toHaveBeenCalledWith(-1);
+  });
+
+  it('blocks editing an anecdote to a title whose slug matches another anecdote', async () => {
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+      if (path.includes('behavioral-categories')) return Promise.resolve(cats);
+      if (path === '/api/behavioral') return Promise.resolve(questions);
+      if (path === '/api/anecdotes') return Promise.resolve([existingAnecdote, duplicateSlugAnecdote]);
+      return Promise.resolve([]);
+    });
+    renderNew('/behavioral/anecdotes/existing-anecdote/edit');
+    await waitFor(() => screen.getByDisplayValue('Existing anecdote'));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'API-test' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save anecdote/i }));
+    expect(await screen.findByText(/already exists/i)).toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
   });
 
   it('Cancel button navigates back without saving', async () => {

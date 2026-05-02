@@ -110,6 +110,7 @@ export function AnecdoteEditorPage() {
   const [mode, setMode] = useState<Mode>('both');
   const [categories, setCategories] = useState<BehavioralCategoryLite[]>([]);
   const [questions, setQuestions] = useState<BehavioralQuestionLite[]>([]);
+  const [anecdotes, setAnecdotes] = useState<Anecdote[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,13 +121,17 @@ export function AnecdoteEditorPage() {
       api.get<BehavioralQuestionLite[]>('/api/behavioral').catch(() => []),
       slug
         ? (async () => {
-            const anecdotes = await api.get<Anecdote[]>('/api/anecdotes').catch(() => []);
-            const byTitle = anecdotes.find((a) => slugify(a.title) === slug);
+            const all = await api.get<Anecdote[]>('/api/anecdotes').catch(() => []);
+            setAnecdotes(all);
+            const byTitle = all.find((a) => slugify(a.title) === slug);
             if (byTitle) return byTitle;
-            const byId = anecdotes.find((a) => a.id === slug);
+            const byId = all.find((a) => a.id === slug);
             return byId ?? null;
           })()
-        : Promise.resolve(null),
+        : api.get<Anecdote[]>('/api/anecdotes').then((all) => {
+            setAnecdotes(all);
+            return null;
+          }).catch(() => null),
     ]).then(([cats, qs, existing]) => {
       setCategories(cats ?? []);
       setQuestions(qs ?? []);
@@ -177,6 +182,14 @@ export function AnecdoteEditorPage() {
     e.preventDefault();
     if (!form.title.trim()) {
       setError('Title is required.');
+      return;
+    }
+    const titleSlug = slugify(form.title);
+    const duplicate = anecdotes.some(
+      (a) => a.id !== existingId && slugify(a.title) === titleSlug
+    );
+    if (duplicate) {
+      setError('An anecdote with this title already exists. Choose a different title.');
       return;
     }
     setSaving(true);
