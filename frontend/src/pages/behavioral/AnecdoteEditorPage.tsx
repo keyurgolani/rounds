@@ -106,6 +106,7 @@ export function AnecdoteEditorPage() {
   const isEdit = Boolean(slug);
 
   const [form, setForm] = useState({ ...empty });
+  const [existingId, setExistingId] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('both');
   const [categories, setCategories] = useState<BehavioralCategoryLite[]>([]);
   const [questions, setQuestions] = useState<BehavioralQuestionLite[]>([]);
@@ -117,11 +118,20 @@ export function AnecdoteEditorPage() {
     Promise.all([
       api.get<BehavioralCategoryLite[]>('/api/behavioral-categories').catch(() => []),
       api.get<BehavioralQuestionLite[]>('/api/behavioral').catch(() => []),
-      slug ? api.get<Anecdote>(`/api/anecdotes/${slug}`).catch(() => null) : Promise.resolve(null),
+      slug
+        ? (async () => {
+            const anecdotes = await api.get<Anecdote[]>('/api/anecdotes').catch(() => []);
+            const byTitle = anecdotes.find((a) => slugify(a.title) === slug);
+            if (byTitle) return byTitle;
+            const byId = anecdotes.find((a) => a.id === slug);
+            return byId ?? null;
+          })()
+        : Promise.resolve(null),
     ]).then(([cats, qs, existing]) => {
       setCategories(cats ?? []);
       setQuestions(qs ?? []);
       if (existing) {
+        setExistingId(existing.id);
         setForm({
           title: existing.title,
           description: existing.description ?? '',
@@ -183,8 +193,8 @@ export function AnecdoteEditorPage() {
         linked_question_ids: form.linked_question_ids,
         notes: form.notes,
       };
-      if (slug) {
-        await api.put<Anecdote>(`/api/anecdotes/${slug}`, body);
+      if (existingId) {
+        await api.put<Anecdote>(`/api/anecdotes/${existingId}`, body);
       } else {
         await api.post<Anecdote>('/api/anecdotes', body);
       }
@@ -201,11 +211,11 @@ export function AnecdoteEditorPage() {
   };
 
   const handleDelete = async () => {
-    if (!slug) return;
+    if (!existingId) return;
     if (!confirm('Delete this anecdote? This cannot be undone.')) return;
     setSaving(true);
     try {
-      await api.del(`/api/anecdotes/${slug}`);
+      await api.del(`/api/anecdotes/${existingId}`);
       navigate(-1);
     } catch (e) {
       setError(String(e));

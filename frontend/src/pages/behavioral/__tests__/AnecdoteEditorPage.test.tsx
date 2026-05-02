@@ -16,23 +16,23 @@ vi.mock('react-router-dom', async () => {
 });
 
 const cats = [
-  { id: 1, name: 'Ownership', color: '#7928ca', icon: '◆' },
-  { id: 2, name: 'Empathy', color: '#0072f5', icon: '○' },
+  { id: 'cat1', name: 'Ownership', color: '#7928ca', icon: '◆' },
+  { id: 'cat2', name: 'Empathy', color: '#0072f5', icon: '○' },
 ];
 const questions = [
-  { id: 10, title: 'Tell me about a conflict' },
-  { id: 11, title: 'Tell me about a failure' },
+  { id: 'q10', title: 'Tell me about a conflict' },
+  { id: 'q11', title: 'Tell me about a failure' },
 ];
 const existingAnecdote = {
-  id: 5,
+  id: '5',
   title: 'Existing anecdote',
   description: 'A description here',
   situation: '',
   task: '',
   action: '',
   result: '',
-  category_ids: [1],
-  linked_question_ids: [10],
+  category_ids: ['cat1'],
+  linked_question_ids: ['q10'],
   notes: 'Some notes',
 };
 
@@ -123,7 +123,7 @@ describe('AnecdoteEditorPage', () => {
     (api.get as unknown as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
       if (path.includes('behavioral-categories')) return Promise.resolve(cats);
       if (path === '/api/behavioral') return Promise.resolve(questions);
-      if (path.includes('/api/anecdotes/existing-anecdote')) return Promise.resolve(existingAnecdote);
+      if (path === '/api/anecdotes') return Promise.resolve([existingAnecdote]);
       return Promise.resolve([]);
     });
     renderNew('/behavioral/anecdotes/existing-anecdote/edit');
@@ -139,7 +139,7 @@ describe('AnecdoteEditorPage', () => {
     (api.get as unknown as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
       if (path.includes('behavioral-categories')) return Promise.resolve(cats);
       if (path === '/api/behavioral') return Promise.resolve(questions);
-      if (path.includes('/api/anecdotes/existing-anecdote')) return Promise.resolve(existingAnecdote);
+      if (path === '/api/anecdotes') return Promise.resolve([existingAnecdote]);
       return Promise.resolve([]);
     });
     (api.del as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
@@ -148,7 +148,7 @@ describe('AnecdoteEditorPage', () => {
     await waitFor(() => screen.getByDisplayValue('Existing anecdote'));
     fireEvent.click(screen.getByRole('button', { name: /Delete anecdote/i }));
     await waitFor(() => expect(api.del).toHaveBeenCalled());
-    expect((api.del as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('/api/anecdotes/existing-anecdote');
+    expect((api.del as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('/api/anecdotes/5');
     expect(navigateMock).toHaveBeenCalledWith(-1);
   });
 
