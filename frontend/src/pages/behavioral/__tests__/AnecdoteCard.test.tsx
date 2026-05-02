@@ -4,20 +4,20 @@ import { AnecdoteCard } from '../AnecdoteCard';
 import type { Anecdote, BehavioralCategoryLite } from '../types';
 
 const cats: BehavioralCategoryLite[] = [
-  { id: 1, name: 'Ownership', color: '#7928ca', icon: '◆' },
-  { id: 2, name: 'Empathy', color: '#0072f5', icon: '○' },
+  { id: 'cat1', name: 'Ownership', color: '#7928ca', icon: '◆' },
+  { id: 'cat2', name: 'Empathy', color: '#0072f5', icon: '○' },
 ];
 
 const a: Anecdote = {
-  id: 10,
+  id: 'anecdote10',
   title: 'Reorg conflict with marketing',
   description: '',
   situation: 'Mid-Q3 my team was asked to integrate with a marketing platform that was out of scope.',
   task: 'Resolve the disagreement without losing the relationship.',
   action: 'I scheduled a 1:1 with their lead and surfaced the constraints we both faced.',
   result: 'We landed on a phased plan; both teams shipped on time.',
-  category_ids: [1, 2],
-  linked_question_ids: [3, 4, 7],
+  category_ids: ['cat1', 'cat2'],
+  linked_question_ids: ['q3', 'q4', 'q7'],
   notes: '',
 };
 
@@ -51,7 +51,7 @@ describe('AnecdoteCard', () => {
     const onDelete = vi.fn();
     render(<AnecdoteCard anecdote={a} categories={cats} onEdit={onEdit} onDelete={onDelete} />);
     fireEvent.click(screen.getByRole('button', { name: /delete/i }));
-    expect(onDelete).toHaveBeenCalledWith(10);
+    expect(onDelete).toHaveBeenCalledWith('anecdote10');
     expect(onEdit).not.toHaveBeenCalled();
   });
 });

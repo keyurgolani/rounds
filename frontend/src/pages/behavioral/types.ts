@@ -1,26 +1,26 @@
 export interface Anecdote {
-  id: number;
+  id: string;
   title: string;
   description: string;
   situation: string;
   task: string;
   action: string;
   result: string;
-  category_ids: number[];
-  linked_question_ids: number[];
+  category_ids: string[];
+  linked_question_ids: string[];
   notes: string;
   created_at?: string;
   updated_at?: string;
 }
 
 export interface BehavioralCategoryLite {
-  id: number;
+  id: string;
   name: string;
   color: string;
   icon: string;
 }
 
 export interface BehavioralQuestionLite {
-  id: number;
+  id: string;
   title: string;
 }

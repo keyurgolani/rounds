@@ -18,10 +18,10 @@ vi.mock('../behavioral/MyAnecdotesPanel', () => ({
 }));
 
 const baseBQ = {
-  id: 1,
+  id: 'bq1',
   title: 'Tell me about a conflict',
   question_text: 'Describe a time you disagreed with a teammate.',
-  category_ids: [1],
+  category_ids: ['cat1'],
   star_guide: {
     situation: 'sit',
     task: 'tsk',

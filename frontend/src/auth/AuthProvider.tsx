@@ -29,6 +29,7 @@ export type User = {
   provider: AuthProvider;
   bio?: string;
   target?: string;
+  isDemo?: boolean;
   createdAt: string;
 };
 
@@ -64,8 +65,70 @@ function recordToUser(record: AuthRecord | null): User | null {
     provider: mappedProvider,
     bio: typeof r.bio === 'string' ? r.bio : '',
     target: typeof r.target === 'string' ? r.target : '',
+    isDemo: r.is_demo === true,
     createdAt: (r.created as string) ?? new Date().toISOString(),
   };
+}
+
+const DEMO_COLLECTIONS_IN_DELETE_ORDER = [
+  'todos',
+  'code_drafts',
+  'offers',
+  'user_preferences',
+  'user_progress',
+  'interview_rounds',
+  'applications',
+  'campaigns',
+  'anecdotes',
+];
+
+async function resetDemoUser(record: AuthRecord): Promise<void> {
+  if (!record?.id) return;
+  const userId = record.id;
+
+  for (const collection of DEMO_COLLECTIONS_IN_DELETE_ORDER) {
+    const rows = await pb.collection(collection).getFullList<{ id: string }>({
+      filter: `user = "${userId}"`,
+      fields: 'id',
+    });
+    await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));
+  }
+
+  const updated = await pb.collection('users').update(userId, {
+    name: 'Rounds Demo',
+    bio: 'Disposable hosted demo account. Changes reset on logout.',
+    target: 'Explore Rounds',
+    demo_run_used: false,
+    demo_evaluate_used: false,
+  });
+  pb.authStore.save(pb.authStore.token, updated);
+
+  clearDemoStorage(userId);
+}
+
+function clearDemoStorage(userId: string): void {
+  try {
+    const prefixes = [
+      `rounds.codeDraft.v1:${userId}:`,
+      `rounds.loginStreak.v1:${userId}`,
+    ];
+    const exact = new Set([
+      'rounds.currentCampaign.v1',
+      'rounds.migratedV1',
+      'rounds.practiceStatus.v1',
+      'rounds.tweaks.v1',
+      'rounds:last-activity-at',
+    ]);
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (!key) continue;
+      if (exact.has(key) || prefixes.some((prefix) => key.startsWith(prefix))) keys.push(key);
+    }
+    for (const key of keys) window.localStorage.removeItem(key);
+  } catch {
+    /* storage may be unavailable */
+  }
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -222,6 +285,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    const record = pb.authStore.record;
+    if (record && (record as unknown as { is_demo?: boolean }).is_demo === true) {
+      await resetDemoUser(record);
+    }
     pb.authStore.clear();
   }, []);
 

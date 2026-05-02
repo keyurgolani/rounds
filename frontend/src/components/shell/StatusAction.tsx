@@ -13,7 +13,7 @@ export default function StatusAction({
   compact = false,
 }: {
   kind: PracticeKind;
-  id: number;
+  id: number | string;
   compact?: boolean;
 }) {
   const [status, setStatus] = usePracticeStatus(kind, id, 'todo');

@@ -6,17 +6,17 @@ import { slugify } from '../../lib/slug';
 import type { Anecdote, BehavioralCategoryLite, BehavioralQuestionLite } from './types';
 
 interface MyAnecdotesPanelProps {
-  questionId: number;
-  questionCategoryIds: number[];
+  questionId: string;
+  questionCategoryIds: string[];
   categories: BehavioralCategoryLite[];
   questions: BehavioralQuestionLite[];
 }
 
-function categoryName(cats: BehavioralCategoryLite[], id: number): string {
+function categoryName(cats: BehavioralCategoryLite[], id: string): string {
   return cats.find((c) => c.id === id)?.name || '';
 }
 
-function categoryColor(cats: BehavioralCategoryLite[], id: number): string {
+function categoryColor(cats: BehavioralCategoryLite[], id: string): string {
   return cats.find((c) => c.id === id)?.color || '#808080';
 }
 
@@ -52,7 +52,7 @@ export function MyAnecdotesPanel({
 }: MyAnecdotesPanelProps) {
   const navigate = useNavigate();
   const [anecdotes, setAnecdotes] = useState<Anecdote[]>([]);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [dirty, setDirty] = useState<Anecdote | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);

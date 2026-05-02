@@ -4,6 +4,15 @@ Rounds is a self-hostable interview prep workspace for system design, coding, be
 
 Current release: **v1.0.0**
 
+Hosted demo: **https://rounds.keyurgolani.name**
+
+Demo login:
+
+- Email: `demo@rounds.keyurgolani.name`
+- Password: `RoundsDemo123!`
+
+The demo account is seeded on first PocketBase deployment, can run one custom coding snippet and one test-suite evaluation per session, and resets its profile, progress, drafts, applications, todos, preferences, and local caches when it logs out.
+
 ## Features
 
 - System design practice with question lists, API-backed cheat-sheet guides, diagrams, trade-off panels, and senior follow-up topics.
@@ -83,11 +92,12 @@ ROUNDS_DISABLE_SIGNUPS=true
 
 ## Migrations and Seed Data
 
-Fresh deployments run three migrations:
+Fresh deployments run four migrations:
 
 1. `1700000000_init_collections.js` creates the final schema.
 2. `1700000100_seed_data.js` loads all shared questions, categories, and guide cheat sheets.
 3. `1700000500_bootstrap_admin.js` optionally creates the first PocketBase admin from environment variables.
+4. `1700000600_demo_user.js` creates the hosted demo user and demo-run limiter fields.
 
 ## Verification
 

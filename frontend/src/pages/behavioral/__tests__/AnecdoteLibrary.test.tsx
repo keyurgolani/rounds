@@ -20,15 +20,15 @@ beforeEach(() => {
 });
 
 const cats: BehavioralCategoryLite[] = [
-  { id: 1, name: 'Ownership', color: '#7928ca', icon: '◆' },
-  { id: 2, name: 'Empathy', color: '#0072f5', icon: '○' },
+  { id: 'cat1', name: 'Ownership', color: '#7928ca', icon: '◆' },
+  { id: 'cat2', name: 'Empathy', color: '#0072f5', icon: '○' },
 ];
 const questions: BehavioralQuestionLite[] = [
-  { id: 10, title: 'Tell me about a conflict' },
+  { id: 'q10', title: 'Tell me about a conflict' },
 ];
 const anecdotes: Anecdote[] = [
-  { id: 1, title: 'Reorg story', description: '', situation: 'A',  task: '', action: '', result: '', category_ids: [1, 2], linked_question_ids: [10], notes: '' },
-  { id: 2, title: 'Failure story', description: '', situation: 'B', task: '', action: '', result: '', category_ids: [2], linked_question_ids: [], notes: '' },
+  { id: 'a1', title: 'Reorg story', description: '', situation: 'A',  task: '', action: '', result: '', category_ids: ['cat1', 'cat2'], linked_question_ids: ['q10'], notes: '' },
+  { id: 'a2', title: 'Failure story', description: '', situation: 'B', task: '', action: '', result: '', category_ids: ['cat2'], linked_question_ids: [], notes: '' },
 ];
 
 describe('AnecdoteLibrary', () => {
@@ -63,6 +63,6 @@ describe('AnecdoteLibrary', () => {
     render(<AnecdoteLibrary categories={cats} questions={questions} />);
     await waitFor(() => screen.getByText('Reorg story'));
     fireEvent.click(screen.getByRole('button', { name: /Reorg story/ }));
-    expect(navigateMock).toHaveBeenCalledWith('/behavioral/anecdotes/1/edit');
+    expect(navigateMock).toHaveBeenCalledWith('/behavioral/anecdotes/a1/edit');
   });
 });

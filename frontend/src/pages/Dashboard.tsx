@@ -13,13 +13,13 @@ import TodosWidget from '../components/dashboard/TodosWidget';
 import { effectiveStatus, useStatusMapVersion } from '../hooks/usePracticeStatus';
 import type { PracticeStatus } from '../components/shell/StatusDot';
 
-type SQ = { id: number; title: string; difficulty: string };
-type CQ = { id: number; title: string; difficulty: string };
-type BQ = { id: number; title: string };
+type SQ = { id: string; title: string; difficulty: string };
+type CQ = { id: string; title: string; difficulty: string };
+type BQ = { id: string; title: string };
 type App = { id: number; company: string; role: string; status: string; applied_date?: string; updated_at?: string; last_activity_at?: string };
 type Round = { id: number; application_id: number; round_type: string; date: string; interviewer: string; notes: string; result: string };
-type Anecdote = { id: number; title: string; situation: string; category_ids: number[]; linked_question_ids: number[]; updated_at?: string | null };
-type Cat = { id: number; name: string; color: string };
+type Anecdote = { id: string; title: string; situation: string; category_ids: string[]; linked_question_ids: string[]; updated_at?: string | null };
+type Cat = { id: string; name: string; color: string };
 
 function countBy(items: { _s: PracticeStatus }[], status: PracticeStatus) {
   return items.filter((item) => item._s === status).length;
@@ -132,10 +132,10 @@ export default function Dashboard() {
   }, [rounds]);
 
   const nextPractice = useMemo(() => {
-    const pick = <T extends { id: number; title: string; _s: PracticeStatus; difficulty?: string }>(
+    const pick = <T extends { id: string; title: string; _s: PracticeStatus; difficulty?: string }>(
       arr: T[],
       kind: string,
-      to: (id: number) => string,
+      to: (id: string) => string,
     ) => {
       const item = arr.find((q) => q._s === 'in-progress') ?? arr.find((q) => q._s === 'todo');
       if (!item) return null;

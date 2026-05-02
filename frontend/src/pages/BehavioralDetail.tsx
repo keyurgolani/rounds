@@ -14,7 +14,7 @@ import SectionNav, { type SectionNavItem } from '../components/shell/SectionNav'
 import { oneLineSummary } from '../lib/text';
 
 interface BC {
-  id: number;
+  id: string;
   name: string;
   description: string;
   color: string;
@@ -22,10 +22,10 @@ interface BC {
 }
 
 interface BQ {
-  id: number;
+  id: string;
   title: string;
   question_text: string;
-  category_ids: number[];
+  category_ids: string[];
   star_guide: {
     situation: string;
     task: string;
@@ -87,7 +87,7 @@ export default function BehavioralDetail() {
     Promise.all([
       api.get<BQ>(`/api/behavioral/${slug}`),
       api.get<BC[]>('/api/behavioral-categories'),
-      api.get<{ id: number; title: string }[]>('/api/behavioral'),
+      api.get<{ id: string; title: string }[]>('/api/behavioral'),
     ])
       .then(([question, cats, allQ]) => {
         setQ(question);
@@ -139,7 +139,7 @@ export default function BehavioralDetail() {
     );
   }
 
-  const getCat = (cid: number) => categories.find((c) => c.id === cid);
+  const getCat = (cid: string) => categories.find((c) => c.id === cid);
   const hasStar =
     !!(q.star_guide.situation || q.star_guide.task || q.star_guide.action || q.star_guide.result);
   const hasSample =

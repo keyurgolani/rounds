@@ -4,14 +4,14 @@ interface AnecdoteCardProps {
   anecdote: Anecdote;
   categories: BehavioralCategoryLite[];
   onEdit: (anecdote: Anecdote) => void;
-  onDelete?: (id: number) => void;
+  onDelete?: (id: string) => void;
 }
 
-function categoryName(categories: BehavioralCategoryLite[], id: number): string {
+function categoryName(categories: BehavioralCategoryLite[], id: string): string {
   return categories.find((c) => c.id === id)?.name || '';
 }
 
-function categoryColor(categories: BehavioralCategoryLite[], id: number): string {
+function categoryColor(categories: BehavioralCategoryLite[], id: string): string {
   return categories.find((c) => c.id === id)?.color || '#808080';
 }
 

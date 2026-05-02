@@ -20,60 +20,60 @@ beforeEach(() => {
 });
 
 const cats: BehavioralCategoryLite[] = [
-  { id: 1, name: 'Ownership', color: '#7928ca', icon: '◆' },
-  { id: 2, name: 'Empathy', color: '#0072f5', icon: '○' },
+  { id: 'cat1', name: 'Ownership', color: '#7928ca', icon: '◆' },
+  { id: 'cat2', name: 'Empathy', color: '#0072f5', icon: '○' },
 ];
 const questions: BehavioralQuestionLite[] = [
-  { id: 10, title: 'Tell me about a conflict' },
-  { id: 11, title: 'Tell me about a failure' },
+  { id: 'q10', title: 'Tell me about a conflict' },
+  { id: 'q11', title: 'Tell me about a failure' },
 ];
 const anecdotes: Anecdote[] = [
   {
-    id: 1,
+    id: 'a1',
     title: 'Linked story',
     description: '',
     situation: 'X situation',
     task: '',
     action: '',
     result: '',
-    category_ids: [2],
-    linked_question_ids: [10],
+    category_ids: ['cat2'],
+    linked_question_ids: ['q10'],
     notes: '',
     updated_at: '2026-04-18T00:00:00',
   },
   {
-    id: 2,
+    id: 'a2',
     title: 'Match candidate',
     description: '',
     situation: 'Y situation',
     task: '',
     action: '',
     result: '',
-    category_ids: [2],
+    category_ids: ['cat2'],
     linked_question_ids: [],
     notes: '',
     updated_at: '2026-04-17T00:00:00',
   },
   {
-    id: 3,
+    id: 'a3',
     title: 'Other story',
     description: '',
     situation: 'Z situation',
     task: '',
     action: '',
     result: '',
-    category_ids: [1],
+    category_ids: ['cat1'],
     linked_question_ids: [],
     notes: '',
     updated_at: '2026-04-16T00:00:00',
   },
 ];
 
-function renderPanel(questionId = 10) {
+function renderPanel(questionId = 'q10') {
   return render(
     <MyAnecdotesPanel
       questionId={questionId}
-      questionCategoryIds={[2]}
+      questionCategoryIds={['cat2']}
       categories={cats}
       questions={questions}
     />
@@ -115,7 +115,7 @@ describe('MyAnecdotesPanel', () => {
     (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
     (api.put as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       ...anecdotes[1],
-      linked_question_ids: [10],
+      linked_question_ids: ['q10'],
     });
     renderPanel();
     await waitFor(() => screen.getByDisplayValue('Linked story'));
@@ -123,8 +123,8 @@ describe('MyAnecdotesPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Match candidate/i }));
     await waitFor(() => expect(api.put).toHaveBeenCalled());
     const [path, body] = (api.put as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(path).toMatch(/\/api\/anecdotes\/2$/);
-    expect(body.linked_question_ids).toContain(10);
+    expect(path).toMatch(/\/api\/anecdotes\/a2$/);
+    expect(body.linked_question_ids).toContain('q10');
   });
 
   it('Unlink removes the current question from the selected anecdote', async () => {
@@ -138,7 +138,7 @@ describe('MyAnecdotesPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /unlink/i }));
     await waitFor(() => expect(api.put).toHaveBeenCalled());
     const body = (api.put as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1];
-    expect(body.linked_question_ids).not.toContain(10);
+    expect(body.linked_question_ids).not.toContain('q10');
   });
 
   it('New anecdote button navigates to new anecdote page with ?question=<slug>', async () => {
@@ -152,15 +152,15 @@ describe('MyAnecdotesPanel', () => {
   it('defaults to description mode when the selected anecdote has only description content', async () => {
     const descOnly: Anecdote[] = [
       {
-        id: 10,
+        id: 'a10',
         title: 'Desc only',
         description: 'A quick summary of what happened.',
         situation: '',
         task: '',
         action: '',
         result: '',
-        category_ids: [2],
-        linked_question_ids: [10],
+        category_ids: ['cat2'],
+        linked_question_ids: ['q10'],
         notes: '',
         updated_at: '2026-04-18T00:00:00',
       },

@@ -31,6 +31,20 @@ async function runnerRequest<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json();
 }
 
+async function consumeDemoRunnerAllowance(path: string): Promise<void> {
+  const record = pb.authStore.record as (Record<string, unknown> & { id: string }) | null;
+  if (!record || record.is_demo !== true) return;
+
+  const field = path === '/api/run' ? 'demo_run_used' : 'demo_evaluate_used';
+  const label = path === '/api/run' ? 'run a custom snippet' : 'evaluate test cases';
+  if (record[field] === true) {
+    throw new Error(`Demo users can only ${label} once. Log out to reset the demo account.`);
+  }
+
+  const updated = await pb.collection('users').update(record.id, { [field]: true });
+  pb.authStore.save(pb.authStore.token, updated);
+}
+
 // --- Record shape adapters -----------------------------------------------
 
 type AnyRecord = RecordModel & Record<string, unknown>;
@@ -561,6 +575,7 @@ function roundPayload(b: Body, userId: string, applicationId: string) {
 
 async function dispatchPost<T>(path: string, body: unknown): Promise<T> {
   if (path === '/api/run' || path === '/api/evaluate') {
+    await consumeDemoRunnerAllowance(path);
     return runnerRequest<T>(path, { method: 'POST', body: JSON.stringify(body) });
   }
 

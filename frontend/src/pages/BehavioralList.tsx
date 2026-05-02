@@ -26,15 +26,15 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 ];
 
 interface BQ {
-  id: number;
+  id: string;
   title: string;
   question_text: string;
-  category_ids: number[];
+  category_ids: string[];
   tags: string[];
 }
 
 interface BC {
-  id: number;
+  id: string;
   name: string;
   description: string;
   color: string;
@@ -43,14 +43,14 @@ interface BC {
 
 type DragState = {
   kind: 'question' | 'anecdote';
-  id: number;
+  id: string;
   fromX: number;
   fromY: number;
   x: number;
   y: number;
 };
 
-type DropTarget = { kind: 'question' | 'anecdote'; id: number };
+type DropTarget = { kind: 'question' | 'anecdote'; id: string };
 
 function findScrollAncestor(el: HTMLElement | null): HTMLElement | null {
   let cur = el?.parentElement ?? null;
@@ -68,7 +68,7 @@ export default function BehavioralList() {
   const [categories, setCategories] = useState<BC[]>([]);
   const [anecdotes, setAnecdotes] = useState<Anecdote[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeCat, setActiveCat] = useState<number | null>(null);
+  const [activeCat, setActiveCat] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('title-asc');
 
@@ -95,7 +95,7 @@ export default function BehavioralList() {
   }, [anecdotes]);
 
   const linkCountByQuestion = useMemo(() => {
-    const counts = new Map<number, number>();
+    const counts = new Map<string, number>();
     anecdotes.forEach((a) =>
       a.linked_question_ids.forEach((qid) => counts.set(qid, (counts.get(qid) ?? 0) + 1)),
     );
@@ -131,20 +131,20 @@ export default function BehavioralList() {
     return sorted;
   }, [questions, activeCat, query, sort, linkCountByQuestion]);
 
-  const isLinked = useCallback((qId: number, aId: number) => links.has(`q${qId}-a${aId}`), [
+  const isLinked = useCallback((qId: string, aId: string) => links.has(`q${qId}-a${aId}`), [
     links,
   ]);
   const linksFromQuestion = useCallback(
-    (qId: number) => anecdotes.filter((a) => isLinked(qId, a.id)),
+    (qId: string) => anecdotes.filter((a) => isLinked(qId, a.id)),
     [anecdotes, isLinked]
   );
   const linksFromAnecdote = useCallback(
-    (aId: number) => questions.filter((q) => isLinked(q.id, aId)),
+    (aId: string) => questions.filter((q) => isLinked(q.id, aId)),
     [questions, isLinked]
   );
 
   const toggleLink = useCallback(
-    async (qId: number, aId: number) => {
+    async (qId: string, aId: string) => {
       const anecdote = anecdotes.find((a) => a.id === aId);
       if (!anecdote) return;
       const linked = anecdote.linked_question_ids.includes(qId);
@@ -180,11 +180,11 @@ export default function BehavioralList() {
     [anecdotes]
   );
 
-  const questionRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const anecdoteRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const questionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const anecdoteRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const [hovered, setHovered] = useState<{ kind: 'question' | 'anecdote'; id: number } | null>(
+  const [hovered, setHovered] = useState<{ kind: 'question' | 'anecdote'; id: string } | null>(
     null
   );
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -220,14 +220,14 @@ export default function BehavioralList() {
   const hitTestCard = useCallback((clientX: number, clientY: number): DropTarget | null => {
     const test = (
       kind: 'question' | 'anecdote',
-      refs: Record<number, HTMLDivElement | null>
+      refs: Record<string, HTMLDivElement | null>
     ): DropTarget | null => {
       for (const key in refs) {
-        const el = refs[Number(key)];
+        const el = refs[key];
         if (!el) continue;
         const r = el.getBoundingClientRect();
         if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
-          return { kind, id: Number(key) };
+          return { kind, id: key };
         }
       }
       return null;
@@ -236,7 +236,7 @@ export default function BehavioralList() {
   }, []);
 
   const beginDrag = useCallback(
-    (kind: 'question' | 'anecdote', id: number, e: ReactPointerEvent<HTMLSpanElement>) => {
+    (kind: 'question' | 'anecdote', id: string, e: ReactPointerEvent<HTMLSpanElement>) => {
       e.preventDefault();
       e.stopPropagation();
       const el =
@@ -291,7 +291,7 @@ export default function BehavioralList() {
   }, [drag, hitTestCard, toggleLink]);
 
   const isLinkActive = useCallback(
-    (qId: number, aId: number) => {
+    (qId: string, aId: string) => {
       if (!hovered) return false;
       if (hovered.kind === 'question' && hovered.id === qId) return true;
       if (hovered.kind === 'anecdote' && hovered.id === aId) return true;
@@ -301,7 +301,7 @@ export default function BehavioralList() {
   );
 
   const isCardActive = useCallback(
-    (kind: 'question' | 'anecdote', id: number) => {
+    (kind: 'question' | 'anecdote', id: string) => {
       if (!hovered) return false;
       if (hovered.kind === kind && hovered.id === id) return true;
       if (hovered.kind === 'question' && kind === 'anecdote') return isLinked(hovered.id, id);
@@ -312,7 +312,7 @@ export default function BehavioralList() {
   );
 
   const isCardDimmed = useCallback(
-    (kind: 'question' | 'anecdote', id: number) => {
+    (kind: 'question' | 'anecdote', id: string) => {
       if (!hovered) return false;
       return !isCardActive(kind, id);
     },

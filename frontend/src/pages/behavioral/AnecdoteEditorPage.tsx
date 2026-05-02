@@ -93,8 +93,8 @@ const empty = {
   task: '',
   action: '',
   result: '',
-  category_ids: [] as number[],
-  linked_question_ids: [] as number[],
+  category_ids: [] as string[],
+  linked_question_ids: [] as string[],
   notes: '',
 };
 
@@ -115,12 +115,12 @@ export function AnecdoteEditorPage() {
 
   useEffect(() => {
     Promise.all([
-      api.get<BehavioralCategoryLite[]>('/api/behavioral-categories'),
-      api.get<BehavioralQuestionLite[]>('/api/behavioral'),
-      slug ? api.get<Anecdote>(`/api/anecdotes/${slug}`) : Promise.resolve(null),
+      api.get<BehavioralCategoryLite[]>('/api/behavioral-categories').catch(() => []),
+      api.get<BehavioralQuestionLite[]>('/api/behavioral').catch(() => []),
+      slug ? api.get<Anecdote>(`/api/anecdotes/${slug}`).catch(() => null) : Promise.resolve(null),
     ]).then(([cats, qs, existing]) => {
-      setCategories(cats);
-      setQuestions(qs);
+      setCategories(cats ?? []);
+      setQuestions(qs ?? []);
       if (existing) {
         setForm({
           title: existing.title,
@@ -134,8 +134,7 @@ export function AnecdoteEditorPage() {
           notes: existing.notes ?? '',
         });
       } else if (preQuestion) {
-        // preQuestion is a slug; resolve to numeric id via the questions list
-        const matched = (qs as BehavioralQuestionLite[]).find(
+        const matched = (qs ?? []).find(
           (q) => slugify(q.title) === slugify(preQuestion)
         );
         if (matched) {
@@ -146,7 +145,7 @@ export function AnecdoteEditorPage() {
     });
   }, [slug, preQuestion]);
 
-  const toggleCat = (cid: number) => {
+  const toggleCat = (cid: string) => {
     setForm((f) => ({
       ...f,
       category_ids: f.category_ids.includes(cid)
@@ -155,7 +154,7 @@ export function AnecdoteEditorPage() {
     }));
   };
 
-  const toggleQ = (qid: number) => {
+  const toggleQ = (qid: string) => {
     setForm((f) => ({
       ...f,
       linked_question_ids: f.linked_question_ids.includes(qid)
