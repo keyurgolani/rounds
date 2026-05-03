@@ -17,6 +17,7 @@ _DEFAULT_TEMPLATE = {
     ],
 }
 _DEFAULT_SHAPE = "tree_level_order"
+_SUPPORTED_OUTPUT_SHAPES = {"verbose", "tree_level_order"}
 
 
 def validate(entry: dict) -> list[str]:
@@ -28,6 +29,14 @@ def validate(entry: dict) -> list[str]:
     template = entry.get("node_template", _DEFAULT_TEMPLATE)
     if not isinstance(template.get("fields"), list) or not template.get("fields"):
         errors.append("node_template must declare at least one field")
+    if not isinstance(template.get("links"), list) or not template.get("links"):
+        errors.append("node_template must declare at least one link")
+    output_shape = entry.get("output_shape", "verbose")
+    if output_shape not in _SUPPORTED_OUTPUT_SHAPES:
+        errors.append(
+            f"unsupported output_shape {output_shape!r}; "
+            f"must be one of {sorted(_SUPPORTED_OUTPUT_SHAPES)}"
+        )
     return errors
 
 
@@ -36,6 +45,7 @@ def wrapper_snippet(entry: dict) -> str:
     params = entry["params"]
     template = entry.get("node_template", _DEFAULT_TEMPLATE)
     shape = entry.get("input_shape", _DEFAULT_SHAPE)
+    output_shape = entry.get("output_shape", "verbose")
 
     cls_code = emit_class(template)
     inflate_code = emit_inflate(template)
@@ -48,12 +58,15 @@ def wrapper_snippet(entry: dict) -> str:
 {inflate_code}
 {deflate_code}
 
+from collections import deque
+
 def _drive(input):
     fn = globals()[{name!r}]
     kwargs = dict(input)
     _node_params = {node_param_names!r}
     _shape = {shape!r}
     _template = {template!r}
+    _output_shape = {output_shape!r}
     for _name in _node_params:
         v = kwargs.get(_name)
         if v is None:
@@ -64,7 +77,7 @@ def _drive(input):
             kwargs[_name] = _inflate(_to_verbose(v, _shape, _template))
     out = fn(**kwargs)
     if isinstance(out, {template["name"]}) or out is None:
-        return _deflate(out)
+        return _to_shape(_deflate(out), _output_shape, _template)
     return out
 
 
@@ -96,4 +109,32 @@ def _to_verbose(values, shape, template):
                 queue.append((child_pos, child_id))
         return {{"nodes": nodes, "entry": 0}}
     raise ValueError(f"unsupported tree shape: {{shape}}")
+
+
+def _to_shape(verbose, output_shape, template):
+    if output_shape == "verbose":
+        return verbose
+    if output_shape == "tree_level_order":
+        if not verbose or verbose.get("entry") is None:
+            return []
+        f_name = template["fields"][0]["name"]
+        l_names = [link["name"] for link in template["links"]]
+        by_id = {{n["id"]: n for n in verbose["nodes"]}}
+        out = []
+        q = deque([verbose["entry"]])
+        while q:
+            cur = q.popleft()
+            if cur is None:
+                out.append(None)
+                continue
+            node = by_id[cur]
+            out.append(node["fields"][f_name])
+            for ln in l_names:
+                child = node["links"].get(ln)
+                q.append(child)
+        # LeetCode convention: trim trailing nulls.
+        while out and out[-1] is None:
+            out.pop()
+        return out
+    raise ValueError(f"unsupported output shape in tree driver: {{output_shape}}")
 """

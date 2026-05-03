@@ -10,6 +10,7 @@ _DEFAULT_TEMPLATE = {
     "links": [{"name": "neighbors", "arity": "list"}],
 }
 _DEFAULT_SHAPE = "graph_adjacency"
+_SUPPORTED_OUTPUT_SHAPES = {"verbose"}
 
 
 def validate(entry: dict) -> list[str]:
@@ -18,6 +19,17 @@ def validate(entry: dict) -> list[str]:
         errors.append("missing 'name'")
     if not isinstance(entry.get("params"), list):
         errors.append("missing 'params'")
+    template = entry.get("node_template", _DEFAULT_TEMPLATE)
+    if not isinstance(template.get("fields"), list) or not template.get("fields"):
+        errors.append("node_template must declare at least one field")
+    if not isinstance(template.get("links"), list) or not template.get("links"):
+        errors.append("node_template must declare at least one link")
+    output_shape = entry.get("output_shape", "verbose")
+    if output_shape not in _SUPPORTED_OUTPUT_SHAPES:
+        errors.append(
+            f"unsupported output_shape {output_shape!r}; "
+            f"must be one of {sorted(_SUPPORTED_OUTPUT_SHAPES)}"
+        )
     return errors
 
 
@@ -26,6 +38,7 @@ def wrapper_snippet(entry: dict) -> str:
     params = entry["params"]
     template = entry.get("node_template", _DEFAULT_TEMPLATE)
     shape = entry.get("input_shape", _DEFAULT_SHAPE)
+    output_shape = entry.get("output_shape", "verbose")
 
     cls_code = emit_class(template)
     inflate_code = emit_inflate(template)
@@ -44,6 +57,7 @@ def _drive(input):
     _node_params = {node_param_names!r}
     _shape = {shape!r}
     _template = {template!r}
+    _output_shape = {output_shape!r}
     for _name in _node_params:
         v = kwargs.get(_name)
         if v is None:
@@ -54,7 +68,7 @@ def _drive(input):
             kwargs[_name] = _inflate(_to_verbose(v, _shape, _template))
     out = fn(**kwargs)
     if isinstance(out, {template["name"]}) or out is None:
-        return _deflate(out)
+        return _to_shape(_deflate(out), _output_shape, _template)
     return out
 
 
@@ -74,4 +88,13 @@ def _to_verbose(adj, shape, template):
             nodes.append({{"id": i, "fields": {{f_name: val}}, "links": {{l_name: neighbor_ids}}}})
         return {{"nodes": nodes, "entry": 0 if nodes else None}}
     raise ValueError(f"unsupported graph shape: {{shape}}")
+
+
+def _to_shape(verbose, output_shape, template):
+    # Graph output shaping is intentionally minimal — graphs may contain
+    # cycles, so flat-array shorthand isn't well-defined. Future shapes
+    # can be added here as use cases emerge.
+    if output_shape == "verbose":
+        return verbose
+    raise ValueError(f"unsupported output shape in graph driver: {{output_shape}}")
 """

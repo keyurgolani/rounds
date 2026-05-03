@@ -16,11 +16,17 @@ Run from the repo root:
 
 Or directly:
     cd pocketbase/seeds && python -m builder.build
+
+Pass --no-smoke (or set ROUNDS_SMOKE=0) to skip the per-solution
+smoke step for faster iteration during authoring. The smoke step
+runs every in-scope problem's first Python solution through the
+live runner and validates against expected outputs.
 """
 from __future__ import annotations
 
 import importlib
 import json
+import os
 import pkgutil
 import sys
 from copy import deepcopy
@@ -77,6 +83,45 @@ def _invoke_reference(reference, test_input: Any) -> Any:
     return reference(test_input)
 
 
+def _smoke_run_python_solution(question, match_fn) -> list[str]:
+    """Run the first Python solution through the live runner for each
+    test case; return failure messages, empty list on success."""
+    payload = question.payload
+    entry = payload.get("entry")
+    if not entry or entry.get("kind") not in {"linked_list", "tree", "graph"}:
+        return []
+    solutions = payload.get("solutions") or []
+    if not solutions:
+        return []
+    py_code = (solutions[0].get("code") or {}).get("python")
+    if not py_code:
+        return []
+
+    sys.path.insert(0, str(BACKEND_DIR))
+    try:
+        from runner import run_one  # type: ignore
+    finally:
+        sys.path.pop(0)
+
+    failures: list[str] = []
+    title = payload.get("title", "<untitled>")
+    for idx, tc in enumerate(payload.get("test_cases") or []):
+        if idx in question.skip_validation_indices:
+            continue
+        outcome = run_one(py_code, "python", entry, tc.get("input"))
+        if outcome.error:
+            failures.append(f"  [{title}] smoke case {idx} ({tc.get('description', '')}): runner error: {outcome.error}")
+            continue
+        passed, err = match_fn(tc.get("expected"), outcome.return_value, tc.get("input"))
+        if not passed:
+            failures.append(
+                f"  [{title}] smoke case {idx} ({tc.get('description', '')}): "
+                f"solution returned {outcome.return_value!r}, "
+                f"expected {tc.get('expected')!r}" + (f" — matcher error: {err}" if err else "")
+            )
+    return failures
+
+
 def main() -> int:
     match = _load_matcher()
     sys.path.insert(0, str(SEEDS_DIR))
@@ -125,6 +170,16 @@ def main() -> int:
                     f"reference output={out!r} did not match expected={expected!r}"
                     + (f" — matcher error: {err}" if err else "")
                 )
+
+    smoke_enabled = (
+        "--no-smoke" not in sys.argv
+        and os.environ.get("ROUNDS_SMOKE", "1").lower() not in {"0", "false", "no", ""}
+    )
+    if smoke_enabled:
+        for q in QUESTIONS:
+            failures.extend(_smoke_run_python_solution(q, match))
+    else:
+        print("(smoke step skipped)")
 
     if failures:
         print(f"\nBuild aborted — {len(failures)} validation failure(s):")

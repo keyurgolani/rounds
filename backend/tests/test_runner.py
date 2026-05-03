@@ -62,3 +62,36 @@ def test_run_javascript_basic():
     outcome = run_one(code, "javascript", {"kind": "function", "name": "solve"}, {"a": 2, "b": 3})
     assert outcome.stdout.strip() == "js"
     assert outcome.return_value == 5
+
+
+def test_run_one_add_two_numbers_real_listnode():
+    """End-to-end: real ListNode chains in, flat array out."""
+    code = (
+        "def add_two_numbers(l1, l2):\n"
+        "    dummy = ListNode()\n"
+        "    tail = dummy\n"
+        "    carry = 0\n"
+        "    while l1 or l2 or carry:\n"
+        "        d1 = l1.val if l1 else 0\n"
+        "        d2 = l2.val if l2 else 0\n"
+        "        total = d1 + d2 + carry\n"
+        "        tail.next = ListNode(total % 10)\n"
+        "        tail = tail.next\n"
+        "        carry = total // 10\n"
+        "        l1 = l1.next if l1 else None\n"
+        "        l2 = l2.next if l2 else None\n"
+        "    return dummy.next\n"
+    )
+    entry = {
+        "kind": "linked_list",
+        "name": "add_two_numbers",
+        "params": [
+            {"name": "l1", "type": "node"},
+            {"name": "l2", "type": "node"},
+        ],
+        "input_shape": "linked_list_array",
+        "output_shape": "linked_list_array",
+    }
+    outcome = run_one(code, "python", entry, {"l1": [2, 4, 3], "l2": [5, 6, 4]})
+    assert outcome.error is None, outcome.error
+    assert outcome.return_value == [7, 0, 8]

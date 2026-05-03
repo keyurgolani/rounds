@@ -12,6 +12,7 @@ _DEFAULT_TEMPLATE = {
     "links": [{"name": "next", "arity": "single"}],
 }
 _DEFAULT_SHAPE = "linked_list_array"
+_SUPPORTED_OUTPUT_SHAPES = {"verbose", "linked_list_array"}
 
 
 def validate(entry: dict) -> list[str]:
@@ -25,6 +26,12 @@ def validate(entry: dict) -> list[str]:
         errors.append("node_template must declare at least one field")
     if not isinstance(template.get("links"), list) or not template.get("links"):
         errors.append("node_template must declare at least one link")
+    output_shape = entry.get("output_shape", "verbose")
+    if output_shape not in _SUPPORTED_OUTPUT_SHAPES:
+        errors.append(
+            f"unsupported output_shape {output_shape!r}; "
+            f"must be one of {sorted(_SUPPORTED_OUTPUT_SHAPES)}"
+        )
     return errors
 
 
@@ -33,6 +40,7 @@ def wrapper_snippet(entry: dict) -> str:
     params = entry["params"]
     template = entry.get("node_template", _DEFAULT_TEMPLATE)
     shape = entry.get("input_shape", _DEFAULT_SHAPE)
+    output_shape = entry.get("output_shape", "verbose")
 
     cls_code = emit_class(template)
     inflate_code = emit_inflate(template)
@@ -61,12 +69,34 @@ function _to_verbose(value, shape, template) {{
   throw new Error("shorthand shape not supported in linked_list runtime: " + shape);
 }}
 
+function _to_shape(verbose, outputShape, template) {{
+  if (outputShape === "verbose") return verbose;
+  if (outputShape === "linked_list_array") {{
+    if (!verbose || verbose.entry == null) return [];
+    const f = template.fields[0].name;
+    const l = template.links[0].name;
+    const byId = new Map(verbose.nodes.map(n => [n.id, n]));
+    const out = [];
+    const seen = new Set();
+    let cur = verbose.entry;
+    while (cur != null && !seen.has(cur)) {{
+      seen.add(cur);
+      const node = byId.get(cur);
+      out.push(node.fields[f]);
+      cur = node.links[l];
+    }}
+    return out;
+  }}
+  throw new Error("unsupported output shape in linked_list driver: " + outputShape);
+}}
+
 function _drive(input) {{
   const fn = eval({json.dumps(name)});
   const kwargs = {{...input}};
   const nodeParams = {json.dumps(node_param_names)};
   const shape = {json.dumps(shape)};
   const template = {json.dumps(template)};
+  const outputShape = {json.dumps(output_shape)};
   for (const p of nodeParams) {{
     const v = kwargs[p];
     if (v == null) continue;
@@ -77,7 +107,9 @@ function _drive(input) {{
     }}
   }}
   const out = fn(...Object.values(kwargs));
-  if (out instanceof {template["name"]} || out === null) return _deflate(out);
+  if (out instanceof {template["name"]} || out === null) {{
+    return _to_shape(_deflate(out), outputShape, template);
+  }}
   return out;
 }}
 """

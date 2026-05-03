@@ -114,6 +114,107 @@ def test_py_supports_random_pointer_template():
     assert out["nodes"][2]["links"]["random"] == 0
 
 
+ARRAY_OUT_ENTRY = {
+    "kind": "linked_list",
+    "name": "identity",
+    "params": [{"name": "head", "type": "node"}],
+    "returns": "node",
+    "output_shape": "linked_list_array",
+}
+
+
+def test_py_output_shape_linked_list_array_identity():
+    """Identity user fn: input array round-trips to the same array."""
+    code = (
+        "def identity(head):\n"
+        "    return head\n"
+    )
+    snippet = py_wrapper(ARRAY_OUT_ENTRY)
+    out = _run_py(code, snippet, {"head": [1, 2, 3]})
+    assert out == [1, 2, 3]
+
+
+def test_py_output_shape_linked_list_array_reverse():
+    """Reverse fn returns the reversed values directly as an array."""
+    code = (
+        "def identity(head):\n"
+        "    prev = None\n"
+        "    while head:\n"
+        "        nxt = head.next\n"
+        "        head.next = prev\n"
+        "        prev = head\n"
+        "        head = nxt\n"
+        "    return prev\n"
+    )
+    snippet = py_wrapper(ARRAY_OUT_ENTRY)
+    out = _run_py(code, snippet, {"head": [1, 2, 3]})
+    assert out == [3, 2, 1]
+
+
+def test_py_output_shape_linked_list_array_empty():
+    """User returns None for empty input -> empty array."""
+    code = (
+        "def identity(head):\n"
+        "    return head\n"
+    )
+    snippet = py_wrapper(ARRAY_OUT_ENTRY)
+    out = _run_py(code, snippet, {"head": []})
+    assert out == []
+
+
+def test_validate_rejects_unknown_output_shape():
+    bad = {**DEFAULT_ENTRY, "output_shape": "totally_made_up"}
+    errors = py_validate(bad)
+    assert any("output_shape" in e and "totally_made_up" in e for e in errors), errors
+
+
+def test_validate_accepts_known_output_shapes():
+    for shape in ("verbose", "linked_list_array"):
+        entry = {**DEFAULT_ENTRY, "output_shape": shape}
+        assert py_validate(entry) == []
+
+
+def test_js_validate_rejects_unknown_output_shape():
+    bad = {**DEFAULT_ENTRY, "output_shape": "totally_made_up"}
+    errors = js_validate(bad)
+    assert any("output_shape" in e and "totally_made_up" in e for e in errors), errors
+
+
+def test_js_validate_accepts_known_output_shapes():
+    for shape in ("verbose", "linked_list_array"):
+        entry = {**DEFAULT_ENTRY, "output_shape": shape}
+        assert js_validate(entry) == []
+
+
+def test_js_output_shape_linked_list_array_identity():
+    code = (
+        "function identity(head) { return head; }\n"
+    )
+    snippet = js_wrapper(ARRAY_OUT_ENTRY)
+    out = _run_js(code, snippet, {"head": [1, 2, 3]})
+    assert out == [1, 2, 3]
+
+
+def test_js_output_shape_linked_list_array_reverse():
+    code = (
+        "function identity(head) {\n"
+        "  let prev = null;\n"
+        "  while (head) { const n = head.next; head.next = prev; prev = head; head = n; }\n"
+        "  return prev;\n"
+        "}\n"
+    )
+    snippet = js_wrapper(ARRAY_OUT_ENTRY)
+    out = _run_js(code, snippet, {"head": [1, 2, 3]})
+    assert out == [3, 2, 1]
+
+
+def test_js_output_shape_linked_list_array_empty():
+    code = "function identity(head) { return head; }\n"
+    snippet = js_wrapper(ARRAY_OUT_ENTRY)
+    out = _run_js(code, snippet, {"head": []})
+    assert out == []
+
+
 def _walk_chain(verbose):
     """Walk a singly-linked verbose chain via 'next' links from entry."""
     if verbose.get("entry") is None:

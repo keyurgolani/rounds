@@ -5,7 +5,7 @@ import sys
 import tempfile
 
 from drivers.python.graph import validate as py_validate, wrapper_snippet as py_wrapper
-from drivers.javascript.graph import wrapper_snippet as js_wrapper
+from drivers.javascript.graph import validate as js_validate, wrapper_snippet as js_wrapper
 
 
 DEFAULT_ENTRY = {
@@ -46,6 +46,69 @@ def test_py_clones_graph():
     assert out["nodes"][0]["links"]["neighbors"] == [1]
     assert out["nodes"][1]["fields"] == {"val": 2}
     assert out["nodes"][1]["links"]["neighbors"] == [0]
+
+
+VERBOSE_OUT_ENTRY = {
+    "kind": "graph",
+    "name": "identity",
+    "params": [{"name": "node", "type": "node"}],
+    "returns": "node",
+    "output_shape": "verbose",
+}
+
+
+def test_py_graph_output_shape_verbose_explicit():
+    """Explicit output_shape='verbose' is the same as omitting it."""
+    snippet = py_wrapper(VERBOSE_OUT_ENTRY)
+    # Verify the wrapper compiles and references _output_shape.
+    assert "_output_shape" in snippet
+    assert "'verbose'" in snippet
+
+
+def test_py_graph_unsupported_output_shape_rejected():
+    """An unsupported output_shape is rejected by validate()."""
+    bad = {**DEFAULT_ENTRY, "output_shape": "bogus_shape"}
+    errors = py_validate(bad)
+    assert any("output_shape" in e and "bogus_shape" in e for e in errors), errors
+
+
+def test_py_graph_validate_accepts_verbose():
+    """validate() accepts explicit output_shape='verbose' and omitted (default)."""
+    for entry in (DEFAULT_ENTRY, {**DEFAULT_ENTRY, "output_shape": "verbose"}):
+        assert py_validate(entry) == []
+
+
+def test_js_graph_output_shape_verbose_explicit():
+    """JS snippet correctly embeds outputShape."""
+    from drivers.javascript.graph import wrapper_snippet
+    snippet = wrapper_snippet(VERBOSE_OUT_ENTRY)
+    assert "outputShape" in snippet
+    assert '"verbose"' in snippet
+
+
+def test_js_graph_unsupported_output_shape_rejected():
+    """An unsupported output_shape is rejected by JS driver's validate()."""
+    bad = {**DEFAULT_ENTRY, "output_shape": "bogus_shape"}
+    errors = js_validate(bad)
+    assert any("output_shape" in e and "bogus_shape" in e for e in errors), errors
+
+
+def test_js_graph_validate_accepts_verbose():
+    """JS validate() accepts explicit and omitted (default) output_shape."""
+    for entry in (DEFAULT_ENTRY, {**DEFAULT_ENTRY, "output_shape": "verbose"}):
+        assert js_validate(entry) == []
+
+
+def test_py_graph_validate_rejects_template_without_links():
+    bad = {**DEFAULT_ENTRY, "node_template": {"name": "G", "fields": [{"name": "val", "type": "int"}], "links": []}}
+    errors = py_validate(bad)
+    assert any("at least one link" in e for e in errors), errors
+
+
+def test_js_graph_validate_rejects_template_without_links():
+    bad = {**DEFAULT_ENTRY, "node_template": {"name": "G", "fields": [{"name": "val", "type": "int"}], "links": []}}
+    errors = js_validate(bad)
+    assert any("at least one link" in e for e in errors), errors
 
 
 def _run_py(user_code, snippet, input_value):

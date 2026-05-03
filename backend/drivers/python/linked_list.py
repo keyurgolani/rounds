@@ -14,6 +14,7 @@ _DEFAULT_TEMPLATE = {
     "links": [{"name": "next", "arity": "single"}],
 }
 _DEFAULT_SHAPE = "linked_list_array"
+_SUPPORTED_OUTPUT_SHAPES = {"verbose", "linked_list_array"}
 
 
 def validate(entry: dict) -> list[str]:
@@ -27,6 +28,12 @@ def validate(entry: dict) -> list[str]:
         errors.append("node_template must declare at least one field")
     if not isinstance(template.get("links"), list) or not template.get("links"):
         errors.append("node_template must declare at least one link")
+    output_shape = entry.get("output_shape", "verbose")
+    if output_shape not in _SUPPORTED_OUTPUT_SHAPES:
+        errors.append(
+            f"unsupported output_shape {output_shape!r}; "
+            f"must be one of {sorted(_SUPPORTED_OUTPUT_SHAPES)}"
+        )
     return errors
 
 
@@ -35,16 +42,13 @@ def wrapper_snippet(entry: dict) -> str:
     params = entry["params"]
     template = entry.get("node_template", _DEFAULT_TEMPLATE)
     shape = entry.get("input_shape", _DEFAULT_SHAPE)
+    output_shape = entry.get("output_shape", "verbose")
 
     inflate_code = emit_inflate(template)
     deflate_code = emit_deflate(template)
     cls_code = emit_class(template)
 
     node_param_names = [p["name"] for p in params if p.get("type") == "node"]
-    # Python-literal repr for embedding into Python source — JSON's
-    # true/false/null aren't valid Python tokens.
-    template_repr = repr(template)
-    shape_repr = repr(shape)
 
     return f"""
 {cls_code}
@@ -55,8 +59,9 @@ def _drive(input):
     fn = globals()[{name!r}]
     kwargs = dict(input)
     _node_params = {node_param_names!r}
-    _shape = {shape_repr}
-    _template = {template_repr}
+    _shape = {shape!r}
+    _template = {template!r}
+    _output_shape = {output_shape!r}
     for _name in _node_params:
         v = kwargs.get(_name)
         if v is None:
@@ -67,7 +72,8 @@ def _drive(input):
             kwargs[_name] = _inflate(_to_verbose(v, _shape, _template))
     out = fn(**kwargs)
     if isinstance(out, {template["name"]}) or out is None:
-        return _deflate(out)
+        verbose = _deflate(out)
+        return _to_shape(verbose, _output_shape, _template)
     return out
 
 
@@ -89,4 +95,27 @@ def _to_verbose(value, shape, template):
             "entry": 0,
         }}
     raise ValueError(f"shorthand shape not supported in linked_list driver runtime: {{shape}}")
+
+
+def _to_shape(verbose, output_shape, template):
+    # Forward transform: deflated verbose form -> requested output shape.
+    # 'verbose' is the backward-compatible pass-through.
+    if output_shape == "verbose":
+        return verbose
+    if output_shape == "linked_list_array":
+        if not verbose or verbose.get("entry") is None:
+            return []
+        f_name = template["fields"][0]["name"]
+        l_name = template["links"][0]["name"]
+        by_id = {{n["id"]: n for n in verbose["nodes"]}}
+        out = []
+        cur = verbose["entry"]
+        seen = set()
+        while cur is not None and cur not in seen:
+            seen.add(cur)
+            node = by_id[cur]
+            out.append(node["fields"][f_name])
+            cur = node["links"].get(l_name)
+        return out
+    raise ValueError(f"unsupported output shape in linked_list driver: {{output_shape}}")
 """
