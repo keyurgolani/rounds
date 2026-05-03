@@ -26740,6 +26740,150 @@
       "space_complexity": "O(n)"
     },
     {
+      "title": "Check Permutation",
+      "difficulty": "Easy",
+      "description": "Given two strings, decide whether one string is a permutation of the other. A permutation must contain exactly the same characters with exactly the same counts.",
+      "hints": [
+        "If the strings have different lengths, they cannot be permutations.",
+        "Sorting both strings makes equal character multisets line up at the same indices.",
+        "A character-count map gives O(n) time by incrementing for one string and decrementing for the other.",
+        "Be precise about spaces and case; this version treats every character literally."
+      ],
+      "constraints": [
+        "0 <= s1.length, s2.length <= 10^5",
+        "Characters are case-sensitive"
+      ],
+      "starter_code": {
+        "python": "def check_permutation(s1, s2):\n    # Your code here\n    pass",
+        "javascript": "function checkPermutation(s1, s2) {\n    // Your code here\n}",
+        "java": "public boolean checkPermutation(String s1, String s2) {\n    // Your code here\n    return false;\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(check_permutation(\"abcd\", \"bacd\"))",
+        "javascript": "// Test runner (read-only)\nconsole.log(checkPermutation(\"abcd\", \"bacd\"));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "s1": "abcd",
+            "s2": "bacd"
+          },
+          "expected": true,
+          "description": "Simple permutation",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "s1": "3563476",
+            "s2": "7334566"
+          },
+          "expected": true,
+          "description": "Repeated digits with same counts",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "s1": "abcd",
+            "s2": "d2cba"
+          },
+          "expected": false,
+          "description": "Extra different character",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "s1": "ba",
+            "s2": "Ab"
+          },
+          "expected": false,
+          "description": "Case-sensitive mismatch",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "s1": "anne",
+            "s2": "annea"
+          },
+          "expected": false,
+          "description": "Different lengths",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "s1": "",
+            "s2": ""
+          },
+          "expected": true,
+          "description": "Two empty strings",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "s1": "IAMLORDVOLDEMORT",
+            "s2": "TOMMARVOLORIDDLE"
+          },
+          "expected": true,
+          "description": "Same multiset with different order",
+          "tags": [
+            "tricky"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Character Counts",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(min(n, charset))",
+          "description": "Count characters in the first string, then subtract using the second. Any missing or overused character fails.",
+          "code": {
+            "python": "from collections import Counter\n\ndef check_permutation(s1, s2):\n    if len(s1) != len(s2):\n        return False\n    return Counter(s1) == Counter(s2)",
+            "javascript": "function checkPermutation(s1, s2) {\n    if (s1.length !== s2.length) return false;\n    const counts = new Map();\n    for (const ch of s1) counts.set(ch, (counts.get(ch) || 0) + 1);\n    for (const ch of s2) {\n        const next = (counts.get(ch) || 0) - 1;\n        if (next < 0) return false;\n        counts.set(ch, next);\n    }\n    return true;\n}"
+          }
+        },
+        {
+          "title": "Sort and Compare",
+          "time_complexity": "O(n log n)",
+          "space_complexity": "O(n)",
+          "description": "Sorting canonicalizes the order, so permutations become identical sorted strings.",
+          "code": {
+            "python": "def check_permutation(s1, s2):\n    return len(s1) == len(s2) and sorted(s1) == sorted(s2)"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Length mismatch is the cheapest rejection and avoids wasted work.",
+        "2. A permutation means equal character counts, not just the same set of characters.",
+        "3. Sorting is easy to explain but costs O(n log n). Counting is the optimal O(n) approach.",
+        "4. Edge cases are usually policy questions: case, whitespace, and Unicode normalization."
+      ],
+      "tips": [
+        "A set comparison is wrong: `aab` and `abb` have the same set but different counts.",
+        "Do not normalize case or strip spaces unless the interviewer explicitly asks for it.",
+        "For fixed ASCII, use an integer array instead of a hash map if you want deterministic constant space."
+      ],
+      "companies": [],
+      "topics": [
+        "String",
+        "Hash Table",
+        "Sorting"
+      ],
+      "time_complexity": "O(n)",
+      "space_complexity": "O(min(n, charset))"
+    },
+    {
       "title": "Climbing Stairs",
       "difficulty": "Easy",
       "description": "You are climbing a staircase. It takes `n` steps to reach the top.\n\nEach time you can either climb **1** or **2** steps. In how many distinct ways can you climb to the top?\n\n**Example 1:**\n- Input: `n = 2`\n- Output: `2`\n- Explanation: Two ways \u2014 `1 + 1`, `2`.\n\n**Example 2:**\n- Input: `n = 3`\n- Output: `3`\n- Explanation: Three ways \u2014 `1 + 1 + 1`, `1 + 2`, `2 + 1`.\n\n**Example 3:**\n- Input: `n = 5`\n- Output: `8`\n- Explanation: The count follows the Fibonacci sequence: 1, 2, 3, 5, 8, 13, ...",
@@ -69577,6 +69721,168 @@
       ],
       "time_complexity": "O(n)",
       "space_complexity": "O(n)"
+    },
+    {
+      "title": "Count Negatives in a Sorted Matrix",
+      "difficulty": "Easy",
+      "description": "Given a matrix sorted in non-increasing order across each row and each column, return the number of negative values.",
+      "hints": [
+        "Brute force checks every cell, which is O(R*C).",
+        "Because rows and columns are sorted descending, the bottom-left or top-right corner lets you eliminate a row or column each step.",
+        "From the bottom-left corner: if the value is negative, everything to its right in that row is also negative.",
+        "If the bottom-left value is non-negative, move right to find smaller values."
+      ],
+      "constraints": [
+        "0 <= matrix.length, matrix[0].length <= 10^4",
+        "Rows and columns are sorted in non-increasing order"
+      ],
+      "starter_code": {
+        "python": "def count_negatives(matrix):\n    # Your code here\n    pass",
+        "javascript": "function countNegatives(matrix) {\n    // Your code here\n}",
+        "java": "public int countNegatives(int[][] matrix) {\n    // Your code here\n    return 0;\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(count_negatives([[4,3,2,-1],[3,2,1,-1],[1,1,-1,-2],[-1,-1,-2,-3]]))",
+        "javascript": "// Test runner (read-only)",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "matrix": [
+              [
+                4,
+                3,
+                2,
+                -1
+              ],
+              [
+                3,
+                2,
+                1,
+                -1
+              ],
+              [
+                1,
+                1,
+                -1,
+                -2
+              ],
+              [
+                -1,
+                -1,
+                -2,
+                -3
+              ]
+            ]
+          },
+          "expected": 8,
+          "description": "Canonical sorted matrix",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "matrix": [
+              [
+                3,
+                2
+              ],
+              [
+                1,
+                0
+              ]
+            ]
+          },
+          "expected": 0,
+          "description": "No negatives",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "matrix": [
+              [
+                -1
+              ]
+            ]
+          },
+          "expected": 1,
+          "description": "Single negative",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "matrix": []
+          },
+          "expected": 0,
+          "description": "Empty matrix",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "matrix": [
+              [
+                5,
+                1,
+                -1
+              ],
+              [
+                4,
+                -1,
+                -2
+              ],
+              [
+                -1,
+                -2,
+                -3
+              ]
+            ]
+          },
+          "expected": 6,
+          "description": "Staircase boundary",
+          "tags": [
+            "tricky"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Staircase Walk",
+          "time_complexity": "O(R + C)",
+          "space_complexity": "O(1)",
+          "description": "Walk from the bottom-left corner and eliminate one row or column at each step.",
+          "code": {
+            "python": "def count_negatives(matrix):\n    if not matrix or not matrix[0]:\n        return 0\n    rows, cols = len(matrix), len(matrix[0])\n    r, c = rows - 1, 0\n    count = 0\n    while r >= 0 and c < cols:\n        if matrix[r][c] < 0:\n            count += cols - c\n            r -= 1\n        else:\n            c += 1\n    return count",
+            "javascript": "function countNegatives(matrix) {\n    if (!matrix.length || !matrix[0].length) return 0;\n    const rows = matrix.length, cols = matrix[0].length;\n    let r = rows - 1, c = 0, count = 0;\n    while (r >= 0 && c < cols) {\n        if (matrix[r][c] < 0) { count += cols - c; r--; }\n        else c++;\n    }\n    return count;\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Confirm both rows and columns are sorted descending.",
+        "2. Start at bottom-left, where moving right gets smaller and moving up gets larger.",
+        "3. If the current value is negative, count all cells to its right in that row and move up.",
+        "4. If it is non-negative, move right to find smaller values."
+      ],
+      "tips": [
+        "This is the same staircase idea as searching a sorted 2D matrix, but the action on a negative cell is to count a suffix.",
+        "Do not use this O(R+C) walk unless both dimensions are sorted; row-only sorting needs per-row binary search.",
+        "Handle empty input before reading `matrix[0]`."
+      ],
+      "companies": [],
+      "topics": [
+        "Matrix",
+        "Binary Search",
+        "Two Pointers"
+      ],
+      "time_complexity": "O(R + C)",
+      "space_complexity": "O(1)"
     },
     {
       "title": "Counting Bits",
@@ -120762,6 +121068,216 @@
       ],
       "time_complexity": "O(n)",
       "space_complexity": "O(n)"
+    },
+    {
+      "title": "Escape Maze With One Wall Removal",
+      "difficulty": "Hard",
+      "description": "Given a binary maze where `0` is open and `1` is a wall, return the shortest path length from the top-left cell to the bottom-right cell when you may remove at most one wall. Path length counts both the start and end cells.",
+      "hints": [
+        "Use BFS because every step has the same cost.",
+        "The state is not just `(row, col)`; it is `(row, col, removed_wall)` because reaching a cell with the wall break still available is better.",
+        "When moving into an open cell, keep the same wall-removal state.",
+        "When moving into a wall, proceed only if `removed_wall` is false, and mark it true for the next state.",
+        "Return the distance when the destination state is reached first."
+      ],
+      "constraints": [
+        "1 <= maze.length, maze[0].length <= 50",
+        "maze[0][0] == 0",
+        "maze[-1][-1] == 0"
+      ],
+      "starter_code": {
+        "python": "def shortest_escape_with_one_wall_removal(maze):\n    # Your code here\n    pass",
+        "javascript": "function shortestEscapeWithOneWallRemoval(maze) {\n    // Your code here\n}",
+        "java": "public int shortestEscapeWithOneWallRemoval(int[][] maze) {\n    // Your code here\n    return -1;\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(shortest_escape_with_one_wall_removal([[0,1,1,0],[0,0,0,1],[1,1,0,0],[1,1,1,0]]))",
+        "javascript": "// Test runner (read-only)",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "maze": [
+              [
+                0,
+                1,
+                1,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                1,
+                1,
+                0,
+                0
+              ],
+              [
+                1,
+                1,
+                1,
+                0
+              ]
+            ]
+          },
+          "expected": 7,
+          "description": "Must navigate around walls",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "maze": [
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
+                1,
+                1,
+                1,
+                1,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              [
+                0,
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ]
+          },
+          "expected": 11,
+          "description": "Long corridor sample",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "maze": [
+              [
+                0
+              ]
+            ]
+          },
+          "expected": 1,
+          "description": "Start is destination",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "maze": [
+              [
+                0,
+                1
+              ],
+              [
+                1,
+                0
+              ]
+            ]
+          },
+          "expected": 3,
+          "description": "Must remove one wall",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "maze": [
+              [
+                0,
+                0
+              ],
+              [
+                0,
+                0
+              ]
+            ]
+          },
+          "expected": 3,
+          "description": "No wall removal needed",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "BFS With Wall-Removal State",
+          "time_complexity": "O(R * C)",
+          "space_complexity": "O(R * C)",
+          "description": "Search over two layers per cell: one before using the wall removal and one after using it.",
+          "code": {
+            "python": "from collections import deque\n\ndef shortest_escape_with_one_wall_removal(maze):\n    rows, cols = len(maze), len(maze[0])\n    queue = deque([(0, 0, 0, 1)])\n    seen = {(0, 0, 0)}\n    while queue:\n        r, c, used, dist = queue.popleft()\n        if r == rows - 1 and c == cols - 1:\n            return dist\n        for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):\n            nr, nc = r + dr, c + dc\n            if not (0 <= nr < rows and 0 <= nc < cols):\n                continue\n            next_used = used + maze[nr][nc]\n            state = (nr, nc, next_used)\n            if next_used <= 1 and state not in seen:\n                seen.add(state)\n                queue.append((nr, nc, next_used, dist + 1))\n    return -1",
+            "javascript": "function shortestEscapeWithOneWallRemoval(maze) {\n    const rows = maze.length, cols = maze[0].length;\n    const queue = [[0, 0, 0, 1]];\n    const seen = new Set(['0,0,0']);\n    while (queue.length) {\n        const [r, c, used, dist] = queue.shift();\n        if (r === rows - 1 && c === cols - 1) return dist;\n        for (const [dr, dc] of [[1,0],[-1,0],[0,1],[0,-1]]) {\n            const nr = r + dr, nc = c + dc;\n            if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;\n            const nu = used + maze[nr][nc];\n            const key = `${nr},${nc},${nu}`;\n            if (nu <= 1 && !seen.has(key)) { seen.add(key); queue.push([nr, nc, nu, dist + 1]); }\n        }\n    }\n    return -1;\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Start with shortest path in a grid: BFS from the top-left cell.",
+        "2. Add the twist: reaching the same cell before breaking a wall is a different and better state than reaching it after breaking one.",
+        "3. Store visited states as `(row, col, used_break)` rather than just cells.",
+        "4. Expand four directions. Open cells keep the state; wall cells consume the one break if available.",
+        "5. The first destination state popped from BFS has the minimum path length."
+      ],
+      "tips": [
+        "Do not mark a cell globally visited; that incorrectly prunes paths that arrive with the wall break unused.",
+        "The path length counts cells, so initialize the start distance to 1.",
+        "An alternative is two BFS distance maps: from start and from end, then combine at each wall. The stateful BFS is shorter to code."
+      ],
+      "companies": [
+        "Google"
+      ],
+      "topics": [
+        "Matrix",
+        "Graph",
+        "BFS",
+        "Shortest Path"
+      ],
+      "time_complexity": "O(R * C)",
+      "space_complexity": "O(R * C)"
     },
     {
       "title": "Evaluate Reverse Polish Notation",
@@ -196680,6 +197196,128 @@
       "space_complexity": "O(n * k)"
     },
     {
+      "title": "Hamming Distance Between DNA Strands",
+      "difficulty": "Easy",
+      "description": "Given two equal-length DNA strands, return the number of positions where their nucleotides differ.",
+      "hints": [
+        "Compare the strands position by position.",
+        "Increment the count only when the characters differ.",
+        "The distance between identical strands is zero, including two empty strands.",
+        "The original Exercism exercise raises on unequal lengths; these app tests use equal-length strands."
+      ],
+      "constraints": [
+        "0 <= left.length = right.length <= 10^5"
+      ],
+      "starter_code": {
+        "python": "def hamming_distance(left, right):\n    # Your code here\n    pass",
+        "javascript": "function hammingDistance(left, right) {\n    // Your code here\n}",
+        "java": "public int hammingDistance(String left, String right) {\n    // Your code here\n    return 0;\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(hamming_distance(\"GATACA\", \"GCATAA\"))",
+        "javascript": "// Test runner (read-only)\nconsole.log(hammingDistance(\"GATACA\", \"GCATAA\"));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "left": "",
+            "right": ""
+          },
+          "expected": 0,
+          "description": "Empty strands",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "left": "A",
+            "right": "A"
+          },
+          "expected": 0,
+          "description": "Identical one-character strands",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "left": "A",
+            "right": "G"
+          },
+          "expected": 1,
+          "description": "Single mismatch",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "left": "AG",
+            "right": "CT"
+          },
+          "expected": 2,
+          "description": "Complete distance",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "left": "ACCAGGG",
+            "right": "ACTATGG"
+          },
+          "expected": 2,
+          "description": "Small distance in longer strands",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "left": "GATACA",
+            "right": "GCATAA"
+          },
+          "expected": 4,
+          "description": "Large distance",
+          "tags": [
+            "tricky"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Zip and Count Mismatches",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(1)",
+          "description": "Walk both strings together and count positions where the characters differ.",
+          "code": {
+            "python": "def hamming_distance(left, right):\n    return sum(a != b for a, b in zip(left, right))",
+            "javascript": "function hammingDistance(left, right) {\n    let count = 0;\n    for (let i = 0; i < left.length; i++) if (left[i] !== right[i]) count++;\n    return count;\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Confirm the equal-length precondition; otherwise the term Hamming distance is undefined.",
+        "2. Iterate through paired characters with an index or `zip`.",
+        "3. Count positions where the pair differs.",
+        "4. Return the count after scanning all positions."
+      ],
+      "tips": [
+        "If unequal lengths are allowed, validate before the loop and reject early.",
+        "Do not use set difference; repeated positions and order matter.",
+        "This DNA-strand exercise is different from the bitwise LeetCode Hamming Distance problem, although both count differing positions."
+      ],
+      "companies": [],
+      "topics": [
+        "String",
+        "Counting"
+      ],
+      "time_complexity": "O(n)",
+      "space_complexity": "O(1)"
+    },
+    {
       "title": "Hand of Straights",
       "difficulty": "Medium",
       "description": "Alice has a `hand` of cards, given as an array of integers. She wants to rearrange the cards into groups so that **each group is of size `groupSize`**, and **consists of `groupSize` consecutive cards**.\n\nGiven an integer array `hand` and an integer `groupSize`, return `true` if she can rearrange the cards, or `false` otherwise.\n\n**Example 1:**\n- Input: `hand = [1,2,3,6,2,3,4,7,8]`, `groupSize = 3`\n- Output: `true`\n- Explanation: Alice's hand can be rearranged as `[1,2,3]`, `[2,3,4]`, `[6,7,8]`.\n\n**Example 2:**\n- Input: `hand = [1,2,3,4,5]`, `groupSize = 4`\n- Output: `false`\n- Explanation: Alice's hand cannot be rearranged into groups of `4`.",
@@ -198648,6 +199286,201 @@
       "space_complexity": "O(n)"
     },
     {
+      "title": "Intcode Program Alarm",
+      "difficulty": "Medium",
+      "description": "Implement a tiny Intcode interpreter. Given `program`, process opcode `1` as addition, opcode `2` as multiplication, and opcode `99` as halt. Each arithmetic opcode reads two input positions and one output position from the next three cells. Return the final memory state.",
+      "hints": [
+        "Clone the input before mutating it so callers do not see side effects.",
+        "Treat the three parameters after opcode 1 or 2 as addresses, not immediate values.",
+        "Opcode 1 adds, opcode 2 multiplies, and opcode 99 halts.",
+        "The instruction pointer advances by 4 after opcode 1 or 2 and does not advance after halt.",
+        "Unknown opcodes should fail loudly in a real interpreter; these app tests use valid programs."
+      ],
+      "constraints": [
+        "1 <= program.length <= 10^5",
+        "program contains opcodes 1, 2, and 99 in valid positions"
+      ],
+      "starter_code": {
+        "python": "def run_intcode(program):\n    # Your code here\n    pass",
+        "javascript": "function runIntcode(program) {\n    // Your code here\n}",
+        "java": "public int[] runIntcode(int[] program) {\n    // Your code here\n    return new int[]{};\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(run_intcode([1, 0, 0, 0, 99]))",
+        "javascript": "// Test runner (read-only)\nconsole.log(runIntcode([1, 0, 0, 0, 99]));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "program": [
+              1,
+              0,
+              0,
+              0,
+              99
+            ]
+          },
+          "expected": [
+            2,
+            0,
+            0,
+            0,
+            99
+          ],
+          "description": "Source data 001",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "program": [
+              2,
+              3,
+              0,
+              3,
+              99
+            ]
+          },
+          "expected": [
+            2,
+            3,
+            0,
+            6,
+            99
+          ],
+          "description": "Multiplication",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "program": [
+              2,
+              4,
+              4,
+              5,
+              99,
+              0
+            ]
+          },
+          "expected": [
+            2,
+            4,
+            4,
+            5,
+            99,
+            9801
+          ],
+          "description": "Store near end",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "program": [
+              1,
+              1,
+              1,
+              4,
+              99,
+              5,
+              6,
+              0,
+              99
+            ]
+          },
+          "expected": [
+            30,
+            1,
+            1,
+            4,
+            2,
+            5,
+            6,
+            0,
+            99
+          ],
+          "description": "Multiple instructions",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "program": [
+              1,
+              9,
+              10,
+              3,
+              2,
+              3,
+              11,
+              0,
+              99,
+              30,
+              40,
+              50
+            ]
+          },
+          "expected": [
+            3500,
+            9,
+            10,
+            70,
+            2,
+            3,
+            11,
+            0,
+            99,
+            30,
+            40,
+            50
+          ],
+          "description": "Canonical full example",
+          "tags": [
+            "tricky"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Instruction Pointer Simulation",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(n)",
+          "description": "Copy memory, then step through opcodes until the halt instruction appears.",
+          "code": {
+            "python": "def run_intcode(program):\n    memory = program[:]\n    ip = 0\n    while memory[ip] != 99:\n        opcode, a, b, dest = memory[ip:ip + 4]\n        if opcode == 1:\n            memory[dest] = memory[a] + memory[b]\n        elif opcode == 2:\n            memory[dest] = memory[a] * memory[b]\n        else:\n            raise ValueError(f'unknown opcode {opcode}')\n        ip += 4\n    return memory",
+            "javascript": "function runIntcode(program) {\n    const memory = [...program];\n    for (let ip = 0; memory[ip] !== 99; ip += 4) {\n        const [opcode, a, b, dest] = memory.slice(ip, ip + 4);\n        if (opcode === 1) memory[dest] = memory[a] + memory[b];\n        else if (opcode === 2) memory[dest] = memory[a] * memory[b];\n        else throw new Error(`unknown opcode ${opcode}`);\n    }\n    return memory;\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Describe memory as a mutable array and clone it before running instructions.",
+        "2. Read `memory[ip]` as the opcode. Stop immediately on 99.",
+        "3. For opcodes 1 and 2, read `a`, `b`, and `dest` from the next three cells and treat them as addresses.",
+        "4. Write addition or multiplication into `memory[dest]`.",
+        "5. Move `ip` by four and repeat until halt."
+      ],
+      "tips": [
+        "The parameters are addresses. Reading them as raw values produces plausible but wrong answers.",
+        "The example `[1, 0, 0, 0, 99]` is the fastest way to check address-based writes.",
+        "Keep interpreter dispatch explicit. A small `if/elif` is easier to audit than clever arithmetic here.",
+        "A natural follow-up is adding parameter modes, input/output opcodes, or finding noun/verb values."
+      ],
+      "companies": [],
+      "topics": [
+        "Array",
+        "Simulation",
+        "Interpreter"
+      ],
+      "time_complexity": "O(n)",
+      "space_complexity": "O(n)"
+    },
+    {
       "title": "Interleaving String",
       "difficulty": "Medium",
       "description": "Given strings `s1`, `s2`, and `s3`, return `True` if `s3` is formed by an **interleaving** of `s1` and `s2`.\n\nAn interleaving of two strings `s` and `t` is a configuration where `s` and `t` are divided into non-empty substrings such that:\n- `s = s_1 + s_2 + ... + s_n`\n- `t = t_1 + t_2 + ... + t_m`\n- `|n - m| <= 1`\n- The interleaving is `s_1 + t_1 + s_2 + t_2 + ...` or `t_1 + s_1 + t_2 + s_2 + ...`\n\nThe order of characters within each of `s1` and `s2` must be preserved.\n\n**Example 1:**\n- Input: `s1 = \"aabcc\"`, `s2 = \"dbbca\"`, `s3 = \"aadbbcbcac\"`\n- Output: `True`\n- Explanation: One valid split is `\"aa\" + \"dbbc\" + \"bc\" + \"a\" + \"c\"` interleaving `(aa)(dbbc)(bc)(a)(c)`.\n\n**Example 2:**\n- Input: `s1 = \"aabcc\"`, `s2 = \"dbbca\"`, `s3 = \"aadbbbaccc\"`\n- Output: `False`\n- Explanation: No way to interleave `s1` and `s2` to get `s3`.",
@@ -199238,6 +200071,283 @@
       ],
       "time_complexity": "O(n)",
       "space_complexity": "O(h)"
+    },
+    {
+      "title": "Is Unique",
+      "difficulty": "Easy",
+      "description": "Given a string, determine whether all characters in the string are unique. Return `True` if no character appears more than once, otherwise return `False`.\n\nFollow-up: solve it without using an additional data structure.",
+      "hints": [
+        "The direct solution is to insert characters into a set and fail when you see a repeat.",
+        "If the character set is fixed ASCII, any string longer than 128 characters cannot be unique.",
+        "For ASCII input, a boolean array of length 128 gives O(1) bounded auxiliary space.",
+        "Without extra data structures, compare each pair or sort first; those trade time or mutation for space."
+      ],
+      "constraints": [
+        "0 <= s.length <= 10^5",
+        "Assume standard ASCII unless stated otherwise"
+      ],
+      "starter_code": {
+        "python": "def is_unique(s):\n    # Your code here\n    pass",
+        "javascript": "function isUnique(s) {\n    // Your code here\n}",
+        "java": "public boolean isUnique(String s) {\n    // Your code here\n    return false;\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(is_unique(\"abcd\"))",
+        "javascript": "// Test runner (read-only)\nconsole.log(isUnique(\"abcd\"));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "s": "abcd"
+          },
+          "expected": true,
+          "description": "All letters are unique",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "s": "acvklzckvnzxcvzlxcvkzxcvn"
+          },
+          "expected": false,
+          "description": "Repeated characters",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "s": ""
+          },
+          "expected": true,
+          "description": "Empty string has no duplicates",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "s": "a"
+          },
+          "expected": true,
+          "description": "Single character",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "s": "Aa"
+          },
+          "expected": true,
+          "description": "Case-sensitive characters",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "s": "abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+          },
+          "expected": true,
+          "description": "Long unique ASCII string",
+          "tags": [
+            "large"
+          ]
+        },
+        {
+          "input": {
+            "s": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "expected": false,
+          "description": "Longer than ASCII alphabet with repeats",
+          "tags": [
+            "large"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Seen Set",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(min(n, charset))",
+          "description": "Track each character as it appears. A second sighting proves the string is not unique.",
+          "code": {
+            "python": "def is_unique(s):\n    seen = set()\n    for ch in s:\n        if ch in seen:\n            return False\n        seen.add(ch)\n    return True",
+            "javascript": "function isUnique(s) {\n    const seen = new Set();\n    for (const ch of s) {\n        if (seen.has(ch)) return false;\n        seen.add(ch);\n    }\n    return true;\n}"
+          }
+        },
+        {
+          "title": "ASCII Boolean Lookup",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(1)",
+          "description": "If input is ASCII, short-circuit strings longer than 128 and use a fixed-size lookup table.",
+          "code": {
+            "python": "def is_unique(s):\n    if len(s) > 128:\n        return False\n    seen = [False] * 128\n    for ch in s:\n        idx = ord(ch)\n        if seen[idx]:\n            return False\n        seen[idx] = True\n    return True"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Clarify the character set. ASCII, Unicode, and case-insensitive variants change the bounds.",
+        "2. With a set, every repeat is detected when encountered, so the scan can return early.",
+        "3. With fixed ASCII, length greater than 128 is an immediate `False` by the pigeonhole principle.",
+        "4. For the no-extra-structure follow-up, discuss the O(n^2) pairwise scan or O(n log n) sort-and-scan option."
+      ],
+      "tips": [
+        "Do not claim O(1) space for a generic set unless the character set is explicitly bounded.",
+        "Ask whether uppercase and lowercase are distinct; this problem treats them as distinct.",
+        "The bit-vector version is a common follow-up for lowercase `a`-`z` only."
+      ],
+      "companies": [],
+      "topics": [
+        "String",
+        "Hash Set",
+        "Array"
+      ],
+      "time_complexity": "O(n)",
+      "space_complexity": "O(min(n, charset))"
+    },
+    {
+      "title": "ISBN-10 Verifier",
+      "difficulty": "Medium",
+      "description": "Verify whether a string is a valid ISBN-10. Ignore dashes. The first nine characters must be digits; the last character may be a digit or `X`, where `X` means 10. The weighted sum must be divisible by 11.",
+      "hints": [
+        "Remove dashes before validation; other punctuation is not ignored.",
+        "After cleanup, there must be exactly 10 characters.",
+        "Only the final character may be `X`, and it represents value 10.",
+        "Compute `sum(value * weight)` for weights 10 down to 1 and check modulo 11.",
+        "Reject bad length or invalid characters before calculating the checksum."
+      ],
+      "constraints": [
+        "0 <= isbn.length <= 32"
+      ],
+      "starter_code": {
+        "python": "def is_valid_isbn10(isbn):\n    # Your code here\n    pass",
+        "javascript": "function isValidIsbn10(isbn) {\n    // Your code here\n}",
+        "java": "public boolean isValidIsbn10(String isbn) {\n    // Your code here\n    return false;\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(is_valid_isbn10(\"3-598-21508-8\"))",
+        "javascript": "// Test runner (read-only)\nconsole.log(isValidIsbn10(\"3-598-21508-8\"));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "isbn": "3-598-21508-8"
+          },
+          "expected": true,
+          "description": "Valid ISBN with dashes",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "isbn": "3-598-21508-9"
+          },
+          "expected": false,
+          "description": "Invalid check digit",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "isbn": "3-598-21507-X"
+          },
+          "expected": true,
+          "description": "Valid X check digit",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "isbn": "3-598-21507-A"
+          },
+          "expected": false,
+          "description": "Invalid check digit character",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "isbn": "3-598-2X507-9"
+          },
+          "expected": false,
+          "description": "X before the check digit",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "isbn": "3598215088"
+          },
+          "expected": true,
+          "description": "Valid without dashes",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "isbn": "359821507"
+          },
+          "expected": false,
+          "description": "Too short",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "isbn": ""
+          },
+          "expected": false,
+          "description": "Empty input",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Normalize and Weighted Sum",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(n)",
+          "description": "Strip dashes, validate the normalized characters, then apply the ISBN-10 modulo rule.",
+          "code": {
+            "python": "def is_valid_isbn10(isbn):\n    chars = isbn.replace('-', '')\n    if len(chars) != 10:\n        return False\n    total = 0\n    for i, ch in enumerate(chars):\n        if ch == 'X' and i == 9:\n            value = 10\n        elif ch.isdigit():\n            value = int(ch)\n        else:\n            return False\n        total += value * (10 - i)\n    return total % 11 == 0",
+            "javascript": "function isValidIsbn10(isbn) {\n    const chars = isbn.replaceAll('-', '');\n    if (chars.length !== 10) return false;\n    let total = 0;\n    for (let i = 0; i < chars.length; i++) {\n        const ch = chars[i];\n        let value;\n        if (ch === 'X' && i === 9) value = 10;\n        else if (/^[0-9]$/.test(ch)) value = Number(ch);\n        else return false;\n        total += value * (10 - i);\n    }\n    return total % 11 === 0;\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Normalize only by removing dashes; keep every other character meaningful.",
+        "2. Reject the wrong length immediately.",
+        "3. Walk the 10 normalized characters with weights 10 down to 1.",
+        "4. Convert a final `X` to 10 and reject `X` anywhere else.",
+        "5. Return whether the weighted sum is divisible by 11."
+      ],
+      "tips": [
+        "The most common bug is allowing `X` anywhere instead of only in the final position.",
+        "A second common bug is stripping all non-digits; that incorrectly accepts inputs with letters or extra punctuation.",
+        "Use `3-598-21508-8` as a valid check and `3-598-21508-9` as the one-digit invalid check.",
+        "If asked about ISBN-13, say it uses a different 13-digit weighted checksum, so do not mix the rules."
+      ],
+      "companies": [],
+      "topics": [
+        "String",
+        "Math",
+        "Validation"
+      ],
+      "time_complexity": "O(n)",
+      "space_complexity": "O(n)"
     },
     {
       "title": "Jump Game",
@@ -235342,6 +236452,261 @@
       "space_complexity": "O(k)"
     },
     {
+      "title": "KMP Pattern Search",
+      "difficulty": "Medium",
+      "description": "Implement Knuth-Morris-Pratt substring search. Given `text` and `pattern`, return every start index where `pattern` appears in `text`.\n\nThe KMP prefix table lets you avoid re-checking characters after a partial match fails.",
+      "hints": [
+        "Start with the naive baseline: try matching the pattern at every text index, which can repeat work after partial matches fail.",
+        "Build `lps[i]`, the length of the longest proper prefix of `pattern[:i + 1]` that is also a suffix.",
+        "When a mismatch occurs after matching `j` characters, fall back to `lps[j - 1]` instead of restarting at zero.",
+        "After recording a match, fall back to `lps[j - 1]` so overlapping matches are included.",
+        "Keep the `text` pointer moving forward; only the `pattern` pointer jumps backward."
+      ],
+      "constraints": [
+        "0 <= text.length <= 10^5",
+        "0 <= pattern.length <= 10^5",
+        "Return an empty list when `pattern` is empty."
+      ],
+      "starter_code": {
+        "python": "def kmp_search(text, pattern):\n    # Your code here\n    pass",
+        "javascript": "function kmpSearch(text, pattern) {\n    // Your code here\n}",
+        "java": "public List<Integer> kmpSearch(String text, String pattern) {\n    // Your code here\n    return new ArrayList<>();\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(kmp_search(\"ababa\", \"aba\"))",
+        "javascript": "// Test runner (read-only)\nconsole.log(kmpSearch(\"ababa\", \"aba\"));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "text": "ababa",
+            "pattern": "aba"
+          },
+          "expected": [
+            0,
+            2
+          ],
+          "description": "Overlapping matches",
+          "tags": [
+            "basic",
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "text": "aaaaa",
+            "pattern": "aa"
+          },
+          "expected": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "description": "Dense overlap",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "text": "hello world",
+            "pattern": "world"
+          },
+          "expected": [
+            6
+          ],
+          "description": "Single match near the end",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "text": "abcdef",
+            "pattern": "gh"
+          },
+          "expected": [],
+          "description": "No match",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "text": "abc",
+            "pattern": ""
+          },
+          "expected": [],
+          "description": "Empty pattern",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "text": "",
+            "pattern": "a"
+          },
+          "expected": [],
+          "description": "Empty text",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "KMP Prefix Table",
+          "time_complexity": "O(n + m)",
+          "space_complexity": "O(m)",
+          "description": "Precompute fallback positions for the pattern, then scan the text once.",
+          "code": {
+            "python": "def kmp_search(text, pattern):\n    if not pattern:\n        return []\n    lps = [0] * len(pattern)\n    j = 0\n    for i in range(1, len(pattern)):\n        while j > 0 and pattern[i] != pattern[j]:\n            j = lps[j - 1]\n        if pattern[i] == pattern[j]:\n            j += 1\n            lps[i] = j\n    out = []\n    j = 0\n    for i, ch in enumerate(text):\n        while j > 0 and ch != pattern[j]:\n            j = lps[j - 1]\n        if ch == pattern[j]:\n            j += 1\n            if j == len(pattern):\n                out.append(i - j + 1)\n                j = lps[j - 1]\n    return out",
+            "javascript": "function kmpSearch(text, pattern) {\n    if (pattern.length === 0) return [];\n    const lps = Array(pattern.length).fill(0);\n    let j = 0;\n    for (let i = 1; i < pattern.length; i++) {\n        while (j > 0 && pattern[i] !== pattern[j]) j = lps[j - 1];\n        if (pattern[i] === pattern[j]) lps[i] = ++j;\n    }\n    const out = [];\n    j = 0;\n    for (let i = 0; i < text.length; i++) {\n        while (j > 0 && text[i] !== pattern[j]) j = lps[j - 1];\n        if (text[i] === pattern[j] && ++j === pattern.length) {\n            out.push(i - j + 1);\n            j = lps[j - 1];\n        }\n    }\n    return out;\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. State the naive baseline and why it repeats comparisons after a partial match.",
+        "2. Define the prefix table in plain language: where can the pattern resume if the current candidate fails?",
+        "3. Build `lps` with the same fallback idea used during the search.",
+        "4. Scan text once. On match, advance both logical pointers; on mismatch, move only the pattern pointer using `lps`.",
+        "5. After a full match, append `i - len(pattern) + 1` and fall back instead of clearing state, so overlaps work."
+      ],
+      "tips": [
+        "The overlap case `text=ababa`, `pattern=aba` catches the common reset-to-zero bug.",
+        "Use `aaaaa` / `aa` to test dense overlaps and `abcdef` / `gh` to test no-match behavior.",
+        "Define empty-pattern behavior before coding; this app expects an empty result.",
+        "Do not increment the text index inside a mismatch fallback loop; that skips potential matches.",
+        "If the interviewer asks where KMP is useful, cite streaming search, plagiarism checks, DNA/string matching, and log scanning."
+      ],
+      "companies": [],
+      "topics": [
+        "String",
+        "KMP",
+        "Pattern Matching"
+      ],
+      "time_complexity": "O(n + m)",
+      "space_complexity": "O(m)"
+    },
+    {
+      "title": "Knight Minimum Moves on Chessboard",
+      "difficulty": "Medium",
+      "description": "Given two squares `src` and `dest` on an 8x8 chessboard, numbered from `0` to `63`, return the minimum number of knight moves from `src` to `dest`. Square `0` is the top-left cell; square `63` is the bottom-right cell.",
+      "hints": [
+        "This is an unweighted shortest-path problem on a small graph, so BFS is the safest approach.",
+        "Convert each square number to `(row, col)` with `divmod(square, 8)`.",
+        "Generate the eight legal knight offsets and ignore moves that leave the board.",
+        "Return as soon as the destination is dequeued or discovered at the next distance."
+      ],
+      "constraints": [
+        "0 <= src, dest < 64"
+      ],
+      "starter_code": {
+        "python": "def knight_min_moves(src, dest):\n    # Your code here\n    pass",
+        "javascript": "function knightMinMoves(src, dest) {\n    // Your code here\n}",
+        "java": "public int knightMinMoves(int src, int dest) {\n    // Your code here\n    return 0;\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(knight_min_moves(19, 36))",
+        "javascript": "// Test runner (read-only)\nconsole.log(knightMinMoves(19, 36));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "src": 19,
+            "dest": 36
+          },
+          "expected": 1,
+          "description": "One-hop reachability",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "src": 0,
+            "dest": 1
+          },
+          "expected": 3,
+          "description": "Adjacent squares take three knight moves",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "src": 0,
+            "dest": 0
+          },
+          "expected": 0,
+          "description": "Already at destination",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "src": 0,
+            "dest": 63
+          },
+          "expected": 6,
+          "description": "Opposite corners",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "src": 7,
+            "dest": 56
+          },
+          "expected": 6,
+          "description": "Other opposite corners",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Breadth-First Search",
+          "time_complexity": "O(1)",
+          "space_complexity": "O(1)",
+          "description": "The board has only 64 nodes. BFS guarantees the first time we reach `dest` is the shortest path.",
+          "code": {
+            "python": "from collections import deque\n\ndef knight_min_moves(src, dest):\n    if src == dest:\n        return 0\n    moves = [(1, 2), (2, 1), (2, -1), (1, -2), (-1, -2), (-2, -1), (-2, 1), (-1, 2)]\n    sr, sc = divmod(src, 8)\n    dr, dc = divmod(dest, 8)\n    queue = deque([(sr, sc, 0)])\n    seen = {(sr, sc)}\n    while queue:\n        r, c, dist = queue.popleft()\n        for rr, cc in moves:\n            nr, nc = r + rr, c + cc\n            if not (0 <= nr < 8 and 0 <= nc < 8) or (nr, nc) in seen:\n                continue\n            if (nr, nc) == (dr, dc):\n                return dist + 1\n            seen.add((nr, nc))\n            queue.append((nr, nc, dist + 1))",
+            "javascript": "function knightMinMoves(src, dest) {\n    if (src === dest) return 0;\n    const moves = [[1,2],[2,1],[2,-1],[1,-2],[-1,-2],[-2,-1],[-2,1],[-1,2]];\n    const [sr, sc] = [Math.floor(src / 8), src % 8];\n    const [dr, dc] = [Math.floor(dest / 8), dest % 8];\n    const queue = [[sr, sc, 0]];\n    const seen = new Set([sr * 8 + sc]);\n    while (queue.length) {\n        const [r, c, dist] = queue.shift();\n        for (const [rr, cc] of moves) {\n            const nr = r + rr, nc = c + cc;\n            if (nr < 0 || nr >= 8 || nc < 0 || nc >= 8) continue;\n            if (nr === dr && nc === dc) return dist + 1;\n            const key = nr * 8 + nc;\n            if (seen.has(key)) continue;\n            seen.add(key);\n            queue.push([nr, nc, dist + 1]);\n        }\n    }\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Model each board square as a graph node with edges for legal knight moves.",
+        "2. Because each move has equal cost, use BFS rather than Dijkstra or a formula.",
+        "3. Convert square numbers to coordinates and generate legal neighbors with the eight offsets.",
+        "4. Track visited squares so the search does not cycle.",
+        "5. Return the BFS level when the destination is reached."
+      ],
+      "tips": [
+        "A formula solution exists, but BFS is simpler and less error-prone for an 8x8 board.",
+        "Check `src == dest` before enqueuing neighbors.",
+        "Be consistent about row/column numbering; `divmod(square, 8)` gives `(row, col)` for this numbering."
+      ],
+      "companies": [
+        "Google"
+      ],
+      "topics": [
+        "Graph",
+        "BFS",
+        "Shortest Path"
+      ],
+      "time_complexity": "O(1)",
+      "space_complexity": "O(1)"
+    },
+    {
       "title": "Koko Eating Bananas",
       "difficulty": "Medium",
       "description": "Koko loves to eat bananas. There are `n` piles of bananas, the i-th pile has `piles[i]` bananas. The guards have gone and will come back in `h` hours.\n\nKoko can decide her bananas-per-hour eating speed of `k`. Each hour, she chooses some pile of bananas and eats `k` bananas from that pile. If the pile has less than `k` bananas, she eats all of them instead and **will not eat any more bananas during that hour**.\n\nKoko likes to eat slowly but still wants to finish eating all the bananas before the guards return.\n\nReturn the **minimum integer** `k` such that she can eat all the bananas within `h` hours.\n\n**Example 1:**\n- Input: `piles = [3,6,7,11], h = 8`\n- Output: `4`\n\n**Example 2:**\n- Input: `piles = [30,11,23,4,20], h = 5`\n- Output: `30`\n- Explanation: With h equal to the number of piles, she must finish each pile in exactly one hour, so k must be at least `max(piles)`.\n\n**Example 3:**\n- Input: `piles = [30,11,23,4,20], h = 6`\n- Output: `23`",
@@ -266143,6 +267508,139 @@
       ],
       "time_complexity": "O(h + k)",
       "space_complexity": "O(h)"
+    },
+    {
+      "title": "Largest 24-Hour Time From Digits",
+      "difficulty": "Easy",
+      "description": "Given four digits, arrange all of them to make the latest valid 24-hour time in `HH:MM` format. If no valid time can be formed, return `NOT POSSIBLE`.",
+      "hints": [
+        "There are only 24 permutations, so brute force is both simple and optimal enough.",
+        "A time is valid when `0 <= hours < 24` and `0 <= minutes < 60`.",
+        "Compare valid times by total minutes since midnight.",
+        "Format the answer with leading zeroes for both hours and minutes."
+      ],
+      "constraints": [
+        "digits.length == 4",
+        "0 <= digits[i] <= 9"
+      ],
+      "starter_code": {
+        "python": "def largest_24_hour_time(digits):\n    # Your code here\n    pass",
+        "javascript": "function largest24HourTime(digits) {\n    // Your code here\n}",
+        "java": "public String largest24HourTime(int[] digits) {\n    // Your code here\n    return \"NOT POSSIBLE\";\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(largest_24_hour_time([1, 2, 3, 4]))",
+        "javascript": "// Test runner (read-only)\nconsole.log(largest24HourTime([1, 2, 3, 4]));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "digits": [
+              1,
+              2,
+              3,
+              4
+            ]
+          },
+          "expected": "23:41",
+          "description": "Several valid permutations",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "digits": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "expected": "00:00",
+          "description": "Midnight",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "digits": [
+              2,
+              4,
+              0,
+              0
+            ]
+          },
+          "expected": "20:40",
+          "description": "24 is not a valid hour",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "digits": [
+              5,
+              5,
+              5,
+              5
+            ]
+          },
+          "expected": "NOT POSSIBLE",
+          "description": "No valid hour",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "digits": [
+              0,
+              6,
+              0,
+              0
+            ]
+          },
+          "expected": "06:00",
+          "description": "Leading zero hour",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Enumerate All Permutations",
+          "time_complexity": "O(1)",
+          "space_complexity": "O(1)",
+          "description": "Try every ordering of the four digits and keep the valid time with the largest minute count.",
+          "code": {
+            "python": "from itertools import permutations\n\ndef largest_24_hour_time(digits):\n    best = -1\n    for a, b, c, d in permutations(digits):\n        hours = a * 10 + b\n        minutes = c * 10 + d\n        if hours < 24 and minutes < 60:\n            best = max(best, hours * 60 + minutes)\n    if best == -1:\n        return 'NOT POSSIBLE'\n    return f'{best // 60:02d}:{best % 60:02d}'",
+            "javascript": "function largest24HourTime(digits) {\n    let best = -1;\n    const perms = (arr) => arr.length <= 1 ? [arr] : arr.flatMap((v, i) => perms([...arr.slice(0, i), ...arr.slice(i + 1)]).map(p => [v, ...p]));\n    for (const [a, b, c, d] of perms(digits)) {\n        const h = a * 10 + b, m = c * 10 + d;\n        if (h < 24 && m < 60) best = Math.max(best, h * 60 + m);\n    }\n    return best === -1 ? 'NOT POSSIBLE' : String(Math.floor(best / 60)).padStart(2, '0') + ':' + String(best % 60).padStart(2, '0');\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Point out that four digits means at most 24 arrangements, so exhaustive search is clean.",
+        "2. For each ordering, split the first two digits into hours and the last two into minutes.",
+        "3. Reject invalid hours and minutes.",
+        "4. Track the maximum total minutes and format the final answer with leading zeroes."
+      ],
+      "tips": [
+        "Do not accept `24:00`; 24 is outside the valid hour range.",
+        "Duplicate digits can produce duplicate permutations. That is fine because the search space is constant.",
+        "Returning `6:00` instead of `06:00` is a formatting bug, not an algorithm bug."
+      ],
+      "companies": [],
+      "topics": [
+        "Array",
+        "Permutation",
+        "Brute Force"
+      ],
+      "time_complexity": "O(1)",
+      "space_complexity": "O(1)"
     },
     {
       "title": "Largest Rectangle in Histogram",
@@ -301046,6 +302544,158 @@
         "Dynamic Programming"
       ],
       "time_complexity": "O(n)",
+      "space_complexity": "O(1)"
+    },
+    {
+      "title": "Maximum Profitable Windows",
+      "difficulty": "Medium",
+      "description": "Given an array `stock_prices`, count how many contiguous windows are maximum profitable. A window is maximum profitable when either its first element or its last element is the maximum value inside that window.\n\nFor `stock_prices = [2, 3, 2]`, every window except `[2, 3, 2]` qualifies, so the answer is `5`.",
+      "hints": [
+        "Start from the definition: a window qualifies when the maximum appears at its left edge or right edge.",
+        "Brute force is enough to prove correctness: enumerate each `[left, right]` window, compute its maximum, then test both endpoints.",
+        "Single-element windows always qualify because their only value is both endpoints and the maximum.",
+        "For a stronger solution, split around the maximum element. Windows that cross the maximum but do not start or end there are the ones that fail.",
+        "Ties matter: if the maximum value appears at an endpoint, the window qualifies even when the same maximum appears inside the window."
+      ],
+      "constraints": [
+        "0 <= stock_prices.length <= 2000",
+        "0 <= stock_prices[i] <= 10^9"
+      ],
+      "starter_code": {
+        "python": "def max_profitable_window_count(stock_prices):\n    # Your code here\n    pass",
+        "javascript": "function maxProfitableWindowCount(stockPrices) {\n    // Your code here\n}",
+        "java": "public int maxProfitableWindowCount(int[] stockPrices) {\n    // Your code here\n    return 0;\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(max_profitable_window_count([2, 3, 2]))",
+        "javascript": "// Test runner (read-only)\nconsole.log(maxProfitableWindowCount([2, 3, 2]));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "stock_prices": [
+              2,
+              3,
+              2
+            ]
+          },
+          "expected": 5,
+          "description": "Source example",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "stock_prices": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          },
+          "expected": 15,
+          "description": "Strictly increasing",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "stock_prices": [
+              5,
+              4,
+              3,
+              2,
+              1
+            ]
+          },
+          "expected": 15,
+          "description": "Strictly decreasing",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "stock_prices": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              4,
+              3,
+              2,
+              1
+            ]
+          },
+          "expected": 29,
+          "description": "Source regression case",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "stock_prices": [
+              3,
+              2,
+              3
+            ]
+          },
+          "expected": 6,
+          "description": "Tied maxima at both ends",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "stock_prices": []
+          },
+          "expected": 0,
+          "description": "Empty input",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Enumerate Windows",
+          "time_complexity": "O(n^3)",
+          "space_complexity": "O(1)",
+          "description": "Check every contiguous window and count it if either endpoint equals that window's maximum value.",
+          "code": {
+            "python": "def max_profitable_window_count(stock_prices):\n    count = 0\n    for left in range(len(stock_prices)):\n        for right in range(left, len(stock_prices)):\n            window_max = max(stock_prices[left:right + 1])\n            if stock_prices[left] == window_max or stock_prices[right] == window_max:\n                count += 1\n    return count",
+            "javascript": "function maxProfitableWindowCount(stockPrices) {\n    let count = 0;\n    for (let left = 0; left < stockPrices.length; left++) {\n        for (let right = left; right < stockPrices.length; right++) {\n            const windowMax = Math.max(...stockPrices.slice(left, right + 1));\n            if (stockPrices[left] === windowMax || stockPrices[right] === windowMax) count++;\n        }\n    }\n    return count;\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Repeat the predicate in your own words: each subarray is valid if its maximum is visible from at least one endpoint.",
+        "2. Establish the exhaustive baseline: there are O(n^2) windows and each can be checked by scanning for its maximum.",
+        "3. Explain why every one-element window is valid and why monotonic arrays produce every possible window.",
+        "4. If asked to optimize, pivot to structure: choose the maximum, count windows ending or starting at it, then solve the left and right partitions.",
+        "5. Call out duplicate maxima before coding. `max == left` or `max == right` is the condition, not unique maximum at an endpoint."
+      ],
+      "tips": [
+        "Do not confuse this with maximum subarray sum; no values are accumulated.",
+        "Use very small examples while explaining: `[2, 3, 2]` has exactly one failing window, the full array.",
+        "The common off-by-one bug is excluding the right endpoint when slicing or scanning the window.",
+        "If constraints are large, precomputing range maximums can speed up the brute-force check, but it still leaves O(n^2) windows.",
+        "A monotonic stack can also count invalid windows by nearest-greater boundaries; mention it only if the interviewer pushes beyond divide-and-conquer."
+      ],
+      "companies": [],
+      "topics": [
+        "Array",
+        "Window",
+        "Divide and Conquer"
+      ],
+      "time_complexity": "O(n^3)",
       "space_complexity": "O(1)"
     },
     {
@@ -371658,6 +373308,143 @@
       "space_complexity": "O(1)"
     },
     {
+      "title": "Pangram Detector",
+      "difficulty": "Easy",
+      "description": "Return whether a sentence is a pangram: it must contain every letter from `a` through `z` at least once, case-insensitively. Ignore numbers, spaces, and punctuation.",
+      "hints": [
+        "Normalize to lowercase so `A` and `a` count as the same letter.",
+        "Track only alphabetic characters from `a` through `z`; ignore digits, spaces, underscores, and punctuation.",
+        "A set size of 26 is enough to prove the sentence is a pangram.",
+        "You can return early once all 26 letters have appeared."
+      ],
+      "constraints": [
+        "0 <= sentence.length <= 10^5"
+      ],
+      "starter_code": {
+        "python": "def is_pangram(sentence):\n    # Your code here\n    pass",
+        "javascript": "function isPangram(sentence) {\n    // Your code here\n}",
+        "java": "public boolean isPangram(String sentence) {\n    // Your code here\n    return false;\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(is_pangram(\"the quick brown fox jumps over the lazy dog\"))",
+        "javascript": "// Test runner (read-only)\nconsole.log(isPangram(\"the quick brown fox jumps over the lazy dog\"));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "sentence": ""
+          },
+          "expected": false,
+          "description": "Empty sentence",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "sentence": "abcdefghijklmnopqrstuvwxyz"
+          },
+          "expected": true,
+          "description": "Perfect lowercase pangram",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "sentence": "the quick brown fox jumps over the lazy dog"
+          },
+          "expected": true,
+          "description": "Classic pangram",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "sentence": "a quick movement of the enemy will jeopardize five gunboats"
+          },
+          "expected": false,
+          "description": "Missing x",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "sentence": "the_quick_brown_fox_jumps_over_the_lazy_dog"
+          },
+          "expected": true,
+          "description": "Underscores ignored",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "sentence": "the 1 quick brown fox jumps over the 2 lazy dogs"
+          },
+          "expected": true,
+          "description": "Numbers ignored",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "sentence": "7h3 qu1ck brown fox jumps ov3r 7h3 lazy dog"
+          },
+          "expected": false,
+          "description": "Numbers do not substitute for letters",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "sentence": "\"Five quacking Zephyrs jolt my wax bed.\""
+          },
+          "expected": true,
+          "description": "Mixed case and punctuation",
+          "tags": [
+            "tricky"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Letter Set",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(1)",
+          "description": "Collect normalized letters into a set and check whether all 26 letters appear.",
+          "code": {
+            "python": "def is_pangram(sentence):\n    letters = {ch for ch in sentence.lower() if 'a' <= ch <= 'z'}\n    return len(letters) == 26",
+            "javascript": "function isPangram(sentence) {\n    const letters = new Set();\n    for (const ch of sentence.toLowerCase()) {\n        if (ch >= 'a' && ch <= 'z') letters.add(ch);\n    }\n    return letters.size === 26;\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Lowercase the sentence to make matching case-insensitive.",
+        "2. Ignore non-letter characters instead of treating them as failures.",
+        "3. Track unique letters in a set.",
+        "4. Return true when the set has 26 letters; otherwise return false after the scan."
+      ],
+      "tips": [
+        "Do not use `isalnum`; digits should be ignored, not counted.",
+        "Numbers that look like letters, such as `7` for `t` or `3` for `e`, do not count.",
+        "If the interviewer asks about Unicode, clarify whether the alphabet is strictly English `a-z` or locale-aware.",
+        "An array of 26 booleans works just as well as a set and gives fixed O(1) space."
+      ],
+      "companies": [],
+      "topics": [
+        "String",
+        "Set"
+      ],
+      "time_complexity": "O(n)",
+      "space_complexity": "O(1)"
+    },
+    {
       "title": "Partition Equal Subset Sum",
       "difficulty": "Medium",
       "description": "Given an integer array `nums` containing only positive integers, return `true` if you can partition the array into two subsets such that the sum of the elements in both subsets is equal, otherwise return `false`.\n\n**Example 1:**\n- Input: `nums = [1,5,11,5]`\n- Output: `true`\n- Explanation: The array can be partitioned as `[1, 5, 5]` and `[11]`.\n\n**Example 2:**\n- Input: `nums = [1,2,3,5]`\n- Output: `false`\n- Explanation: The array cannot be partitioned into equal sum subsets.",
@@ -390817,6 +392604,375 @@
       "space_complexity": "O(1)"
     },
     {
+      "title": "RNA Transcription",
+      "difficulty": "Easy",
+      "description": "Given a DNA strand, return its RNA complement. Transcribe each nucleotide with these pairs: `G -> C`, `C -> G`, `T -> A`, and `A -> U`.",
+      "hints": [
+        "Use a small lookup table for the four nucleotide mappings; this avoids a branch per nucleotide.",
+        "Build a new string from left to right; do not mutate the input.",
+        "The output length should always equal the input length for valid DNA.",
+        "Decide how invalid nucleotides should behave before coding. These app tests use valid DNA strands, but the Exercism version raises on invalid input."
+      ],
+      "constraints": [
+        "0 <= dna.length <= 10^5",
+        "dna contains only A, C, G, and T"
+      ],
+      "starter_code": {
+        "python": "def to_rna(dna):\n    # Your code here\n    pass",
+        "javascript": "function toRna(dna) {\n    // Your code here\n}",
+        "java": "public String toRna(String dna) {\n    // Your code here\n    return \"\";\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(to_rna(\"ACGTGGTCTTAA\"))",
+        "javascript": "// Test runner (read-only)\nconsole.log(toRna(\"ACGTGGTCTTAA\"));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "dna": "C"
+          },
+          "expected": "G",
+          "description": "Cytosine to guanine",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "dna": "G"
+          },
+          "expected": "C",
+          "description": "Guanine to cytosine",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "dna": "T"
+          },
+          "expected": "A",
+          "description": "Thymine to adenine",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "dna": "A"
+          },
+          "expected": "U",
+          "description": "Adenine to uracil",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "dna": "ACGTGGTCTTAA"
+          },
+          "expected": "UGCACCAGAAUU",
+          "description": "Full Exercism sample",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "dna": ""
+          },
+          "expected": "",
+          "description": "Empty strand",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Lookup Table",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(n)",
+          "description": "Map each DNA nucleotide to its RNA complement and join the results.",
+          "code": {
+            "python": "def to_rna(dna):\n    pairs = {'G': 'C', 'C': 'G', 'T': 'A', 'A': 'U'}\n    return ''.join(pairs[ch] for ch in dna)",
+            "javascript": "function toRna(dna) {\n    const pairs = { G: 'C', C: 'G', T: 'A', A: 'U' };\n    return [...dna].map((ch) => pairs[ch]).join('');\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. State the nucleotide mapping table before writing code.",
+        "2. Explain that each character transforms independently, so a single pass is sufficient.",
+        "3. Append or map each complement into a new sequence.",
+        "4. Join the mapped characters and return the RNA strand."
+      ],
+      "tips": [
+        "This is a good place to mention input validation as a follow-up, not the core algorithm.",
+        "Do not reverse the string; transcription preserves order.",
+        "Use `ACGTGGTCTTAA -> UGCACCAGAAUU` as the full sanity check."
+      ],
+      "companies": [],
+      "topics": [
+        "String",
+        "Hash Table"
+      ],
+      "time_complexity": "O(n)",
+      "space_complexity": "O(n)"
+    },
+    {
+      "title": "Rocket Equation Fuel Sum",
+      "difficulty": "Easy",
+      "description": "Given module masses, compute total fuel. Fuel for one mass is `floor(mass / 3) - 2`.\n\nExamples: mass `12` needs `2` fuel, `14` needs `2`, `1969` needs `654`, and `100756` needs `33583`.",
+      "hints": [
+        "Transform each mass independently, then sum the results.",
+        "Use integer division, not floating-point rounding. In Python, `mass // 3 - 2` matches the rule.",
+        "This is part 1: do not include fuel for the added fuel yet.",
+        "Small masses can produce zero or negative values; follow the stated formula for each input case."
+      ],
+      "constraints": [
+        "0 <= masses.length <= 10^5",
+        "0 <= masses[i] <= 10^9"
+      ],
+      "starter_code": {
+        "python": "def rocket_fuel_sum(masses):\n    # Your code here\n    pass",
+        "javascript": "function rocketFuelSum(masses) {\n    // Your code here\n}",
+        "java": "public int rocketFuelSum(int[] masses) {\n    // Your code here\n    return 0;\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(rocket_fuel_sum([12, 14, 1969]))",
+        "javascript": "// Test runner (read-only)\nconsole.log(rocketFuelSum([12, 14, 1969]));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "masses": [
+              12
+            ]
+          },
+          "expected": 2,
+          "description": "Source data 001",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "masses": [
+              14
+            ]
+          },
+          "expected": 2,
+          "description": "Source example",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "masses": [
+              1969
+            ]
+          },
+          "expected": 654,
+          "description": "Large example",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "masses": [
+              100756
+            ]
+          },
+          "expected": 33583,
+          "description": "Largest source example",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "masses": [
+              12,
+              14,
+              1969,
+              100756
+            ]
+          },
+          "expected": 34241,
+          "description": "Multiple modules",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "masses": []
+          },
+          "expected": 0,
+          "description": "No modules",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Map and Sum",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(1)",
+          "description": "Apply the fuel formula to every mass and keep a running total.",
+          "code": {
+            "python": "def rocket_fuel_sum(masses):\n    return sum(m // 3 - 2 for m in masses)",
+            "javascript": "function rocketFuelSum(masses) {\n    return masses.reduce((sum, m) => sum + Math.floor(m / 3) - 2, 0);\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Restate the formula and confirm the input is a list of module masses, not a raw newline-separated file.",
+        "2. Apply integer division and subtraction to one mass first.",
+        "3. Map that helper across all masses and keep a running sum.",
+        "4. Explicitly separate this part from the recursive fuel-mass variant."
+      ],
+      "tips": [
+        "Part 1 is intentionally linear; do not recurse on the fuel mass.",
+        "Avoid `round(mass / 3)`: the puzzle requires floor division.",
+        "If adapting from the original Advent of Code prompt, parse input outside the solution and keep this function focused on computation."
+      ],
+      "companies": [],
+      "topics": [
+        "Array",
+        "Math"
+      ],
+      "time_complexity": "O(n)",
+      "space_complexity": "O(1)"
+    },
+    {
+      "title": "Rocket Equation Fuel Sum With Fuel Mass",
+      "difficulty": "Easy",
+      "description": "Given module masses, compute total fuel while also accounting for the fuel required by the added fuel. For each mass, repeatedly apply `floor(mass / 3) - 2` until the next value is zero or negative.\n\nExample: mass `1969` needs `654 + 216 + 70 + 21 + 5 = 966`.",
+      "hints": [
+        "Write a helper for one mass first, then sum that helper over all modules.",
+        "Each loop step uses the previous fuel value as the next mass.",
+        "Add a fuel value only if it is positive; stop when the formula returns zero or less.",
+        "This can be iterative or recursive, but iteration avoids recursion-depth concerns for large masses."
+      ],
+      "constraints": [
+        "0 <= masses.length <= 10^5",
+        "0 <= masses[i] <= 10^9"
+      ],
+      "starter_code": {
+        "python": "def rocket_fuel_sum_with_fuel_mass(masses):\n    # Your code here\n    pass",
+        "javascript": "function rocketFuelSumWithFuelMass(masses) {\n    // Your code here\n}",
+        "java": "public int rocketFuelSumWithFuelMass(int[] masses) {\n    // Your code here\n    return 0;\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(rocket_fuel_sum_with_fuel_mass([14, 1969]))",
+        "javascript": "// Test runner (read-only)\nconsole.log(rocketFuelSumWithFuelMass([14, 1969]));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "masses": [
+              14
+            ]
+          },
+          "expected": 2,
+          "description": "Source data 001",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "masses": [
+              1969
+            ]
+          },
+          "expected": 966,
+          "description": "Recursive source example",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "masses": [
+              100756
+            ]
+          },
+          "expected": 50346,
+          "description": "Large recursive example",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "masses": [
+              14,
+              1969,
+              100756
+            ]
+          },
+          "expected": 51314,
+          "description": "Multiple modules",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "masses": [
+              1,
+              2,
+              6
+            ]
+          },
+          "expected": 0,
+          "description": "No positive fuel",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Iterative Fuel Accumulation",
+          "time_complexity": "O(n log M)",
+          "space_complexity": "O(1)",
+          "description": "For each mass, repeatedly convert the current mass into fuel until the formula stops producing positive fuel.",
+          "code": {
+            "python": "def rocket_fuel_sum_with_fuel_mass(masses):\n    total = 0\n    for mass in masses:\n        fuel = mass // 3 - 2\n        while fuel > 0:\n            total += fuel\n            fuel = fuel // 3 - 2\n    return total",
+            "javascript": "function rocketFuelSumWithFuelMass(masses) {\n    let total = 0;\n    for (const mass of masses) {\n        let fuel = Math.floor(mass / 3) - 2;\n        while (fuel > 0) {\n            total += fuel;\n            fuel = Math.floor(fuel / 3) - 2;\n        }\n    }\n    return total;\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Solve one mass before thinking about the full list.",
+        "2. Compute the next fuel value, check if it is positive, then add it.",
+        "3. Feed that fuel value back into the formula until the sequence ends.",
+        "4. Sum each module's recursive fuel total in the outer loop."
+      ],
+      "tips": [
+        "The common bug is adding the final negative fuel value; guard before adding.",
+        "Use `14 -> 2`, `1969 -> 966`, and `100756 -> 50346` as quick sanity checks.",
+        "Do not mutate the `masses` array; the recurrence only needs a local `fuel` variable."
+      ],
+      "companies": [],
+      "topics": [
+        "Array",
+        "Math",
+        "Simulation"
+      ],
+      "time_complexity": "O(n log M)",
+      "space_complexity": "O(1)"
+    },
+    {
       "title": "Rotate Image",
       "difficulty": "Medium",
       "description": "You are given an `n x n` 2D `matrix` representing an image. Rotate the image by **90 degrees (clockwise)**.\n\nYou have to rotate the image **in-place**, which means you must modify the input 2D matrix directly. **Do not** allocate another 2D matrix and do the rotation. (For this test runner, return the rotated matrix.)\n\n**Example 1:**\n- Input: `matrix = [[1,2,3],[4,5,6],[7,8,9]]`\n- Output: `[[7,4,1],[8,5,2],[9,6,3]]`\n- Explanation: The top row `[1,2,3]` becomes the right column; the left column `[1,4,7]` becomes the top row reversed \u2192 `[7,4,1]`.\n\n**Example 2:**\n- Input: `matrix = [[5,1,9,11],[2,4,8,10],[13,3,6,7],[15,14,12,16]]`\n- Output: `[[15,13,2,5],[14,3,4,1],[12,6,8,9],[16,7,10,11]]`\n- Explanation: Each of the 4 concentric layers rotates independently; corners cycle in groups of 4.",
@@ -406567,6 +408723,184 @@
       ],
       "time_complexity": "O(m\u00b7n)",
       "space_complexity": "O(1)"
+    },
+    {
+      "title": "Stock Span",
+      "difficulty": "Medium",
+      "description": "Given daily stock `prices`, return the span for each day. A day's span is the number of consecutive days ending today where the price was less than or equal to today's price.\n\nFor `prices = [8, 6, 2, 4, 2, 5, 7]`, the spans are `[1, 1, 1, 2, 1, 4, 6]`.",
+      "hints": [
+        "Brute force scans backward from each day until it finds a greater price, which is O(n^2).",
+        "The useful question is: where is the nearest previous day with price greater than today's price?",
+        "Maintain a stack of indices whose prices are strictly greater than future spans can cross.",
+        "Pop while `prices[stack[-1]] <= prices[i]`; those days are covered by today's span and will never block a later higher price.",
+        "If the stack is empty, today's span reaches back to day 0; otherwise it starts after `stack[-1]`."
+      ],
+      "constraints": [
+        "0 <= prices.length <= 10^5",
+        "0 <= prices[i] <= 10^9"
+      ],
+      "starter_code": {
+        "python": "def stock_span(prices):\n    # Your code here\n    pass",
+        "javascript": "function stockSpan(prices) {\n    // Your code here\n}",
+        "java": "public int[] stockSpan(int[] prices) {\n    // Your code here\n    return new int[]{};\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(stock_span([8, 6, 2, 4, 2, 5, 7]))",
+        "javascript": "// Test runner (read-only)\nconsole.log(stockSpan([8, 6, 2, 4, 2, 5, 7]));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "prices": [
+              8,
+              6,
+              2,
+              4,
+              2,
+              5,
+              7
+            ]
+          },
+          "expected": [
+            1,
+            1,
+            1,
+            2,
+            1,
+            4,
+            6
+          ],
+          "description": "Standard example",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "prices": [
+              100,
+              60,
+              70,
+              65,
+              80,
+              85
+            ]
+          },
+          "expected": [
+            1,
+            1,
+            2,
+            1,
+            4,
+            5
+          ],
+          "description": "Classic stock span example",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "prices": [
+              10,
+              20,
+              30,
+              40
+            ]
+          },
+          "expected": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "description": "Strictly increasing",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "prices": [
+              40,
+              30,
+              20,
+              10
+            ]
+          },
+          "expected": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "description": "Strictly decreasing",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "prices": [
+              5,
+              5,
+              5
+            ]
+          },
+          "expected": [
+            1,
+            2,
+            3
+          ],
+          "description": "Equal prices count in the span",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "prices": []
+          },
+          "expected": [],
+          "description": "Empty input",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Monotonic Decreasing Stack",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(n)",
+          "description": "Keep indices of previous greater prices. Each index is pushed and popped at most once.",
+          "code": {
+            "python": "def stock_span(prices):\n    spans = []\n    stack = []\n    for i, price in enumerate(prices):\n        while stack and prices[stack[-1]] <= price:\n            stack.pop()\n        spans.append(i + 1 if not stack else i - stack[-1])\n        stack.append(i)\n    return spans",
+            "javascript": "function stockSpan(prices) {\n    const spans = [];\n    const stack = [];\n    for (let i = 0; i < prices.length; i++) {\n        while (stack.length && prices[stack[stack.length - 1]] <= prices[i]) stack.pop();\n        spans.push(stack.length === 0 ? i + 1 : i - stack[stack.length - 1]);\n        stack.push(i);\n    }\n    return spans;\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Define span as a consecutive block ending today; older non-consecutive lower prices do not count.",
+        "2. State the brute-force backward scan and its O(n^2) worst case.",
+        "3. Reframe the task as finding the nearest previous greater price for each day.",
+        "4. Use a decreasing stack of indices and pop smaller-or-equal prices before computing today's span.",
+        "5. Explain amortized O(n): every index is pushed once and popped once."
+      ],
+      "tips": [
+        "Use `<=` in the pop condition because equal prices are included in the span.",
+        "Store indices, not prices, because span length depends on distance.",
+        "This is the same monotonic-stack pattern as next greater element and daily temperatures, but the output is a distance backward."
+      ],
+      "companies": [],
+      "topics": [
+        "Array",
+        "Stack",
+        "Monotonic Stack"
+      ],
+      "time_complexity": "O(n)",
+      "space_complexity": "O(n)"
     },
     {
       "title": "String to Integer (atoi)",
@@ -457311,6 +459645,175 @@
       "space_complexity": "O(1)"
     },
     {
+      "title": "URLify",
+      "difficulty": "Easy",
+      "description": "Replace every space in the true portion of a character array with `%20`. The array has enough trailing space to hold the extra characters, and `true_length` gives the length before padding. Return the transformed string.",
+      "hints": [
+        "Only inspect the first `true_length` characters; trailing spaces are buffer, not content.",
+        "Count spaces in the true portion to know the final write index.",
+        "Work backward so moving characters does not overwrite data you still need to read.",
+        "When you see a space, write `0`, `2`, `%` backward into the destination positions."
+      ],
+      "constraints": [
+        "0 <= true_length <= chars.length",
+        "chars has enough trailing buffer for replacements"
+      ],
+      "starter_code": {
+        "python": "def urlify(chars, true_length):\n    # Your code here\n    pass",
+        "javascript": "function urlify(chars, trueLength) {\n    // Your code here\n}",
+        "java": "public String urlify(char[] chars, int trueLength) {\n    // Your code here\n    return \"\";\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(urlify(list(\"Mr John Smith    \"), 13))",
+        "javascript": "// Test runner (read-only)\nconsole.log(urlify(Array.from(\"Mr John Smith    \"), 13));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "chars": [
+              "M",
+              "r",
+              " ",
+              "J",
+              "o",
+              "h",
+              "n",
+              " ",
+              "S",
+              "m",
+              "i",
+              "t",
+              "h",
+              " ",
+              " ",
+              " ",
+              " "
+            ],
+            "true_length": 13
+          },
+          "expected": "Mr%20John%20Smith",
+          "description": "Classic example with two spaces",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "chars": [
+              "H",
+              "e",
+              "l",
+              "l",
+              "o",
+              "W",
+              "o",
+              "r",
+              "l",
+              "d"
+            ],
+            "true_length": 10
+          },
+          "expected": "HelloWorld",
+          "description": "No spaces",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "chars": [
+              "a",
+              " ",
+              "b",
+              " ",
+              " "
+            ],
+            "true_length": 3
+          },
+          "expected": "a%20b",
+          "description": "Single middle space",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "chars": [
+              " ",
+              "a",
+              " ",
+              " "
+            ],
+            "true_length": 2
+          },
+          "expected": "%20a",
+          "description": "Leading space in true content",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "chars": [
+              "a",
+              " ",
+              " ",
+              " "
+            ],
+            "true_length": 2
+          },
+          "expected": "a%20",
+          "description": "Trailing true-content space",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "chars": [],
+            "true_length": 0
+          },
+          "expected": "",
+          "description": "Empty input",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Backward In-Place Write",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(1)",
+          "description": "Use two pointers from the end: one reads true content, the other writes into the padded buffer.",
+          "code": {
+            "python": "def urlify(chars, true_length):\n    space_count = sum(1 for i in range(true_length) if chars[i] == ' ')\n    write = true_length + space_count * 2 - 1\n    for read in range(true_length - 1, -1, -1):\n        if chars[read] == ' ':\n            chars[write - 2:write + 1] = ['%', '2', '0']\n            write -= 3\n        else:\n            chars[write] = chars[read]\n            write -= 1\n    return ''.join(chars[:true_length + space_count * 2])",
+            "javascript": "function urlify(chars, trueLength) {\n    let spaces = 0;\n    for (let i = 0; i < trueLength; i++) if (chars[i] === ' ') spaces++;\n    let write = trueLength + spaces * 2 - 1;\n    for (let read = trueLength - 1; read >= 0; read--) {\n        if (chars[read] === ' ') {\n            chars[write--] = '0';\n            chars[write--] = '2';\n            chars[write--] = '%';\n        } else {\n            chars[write--] = chars[read];\n        }\n    }\n    return chars.slice(0, trueLength + spaces * 2).join('');\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Separate true content from buffer; `true_length` controls what must be transformed.",
+        "2. Count true-content spaces so the final output length is `true_length + 2 * spaces`.",
+        "3. Walk backward to avoid clobbering unread characters while expanding spaces.",
+        "4. Return only the transformed output length, not the original padded buffer."
+      ],
+      "tips": [
+        "Forward replacement is simple for immutable strings but misses the in-place intent.",
+        "Trailing spaces after `true_length` are not real spaces to encode; they are just capacity.",
+        "If the input language uses immutable strings, clarify whether returning a new string is acceptable."
+      ],
+      "companies": [],
+      "topics": [
+        "String",
+        "Two Pointers",
+        "Array"
+      ],
+      "time_complexity": "O(n)",
+      "space_complexity": "O(1)"
+    },
+    {
       "title": "Valid Anagram",
       "difficulty": "Easy",
       "description": "Given two strings `s` and `t`, return `true` if `t` is an anagram of `s`, and `false` otherwise.\n\nAn **anagram** is a word or phrase formed by rearranging the letters of a different word or phrase, typically using all the original letters exactly once.\n\n**Example 1:**\n- Input: `s = \"anagram\", t = \"nagaram\"`\n- Output: `true`\n\n**Example 2:**\n- Input: `s = \"rat\", t = \"car\"`\n- Output: `false`\n\n**Follow-up:** What if the inputs contain Unicode characters? How would you adapt your solution?",
@@ -460722,6 +463225,130 @@
       ],
       "time_complexity": "O(m \u00b7 n \u00b7 4 \u00b7 3^(L-1))",
       "space_complexity": "O(N) for the Trie, where N is total characters across all words"
+    },
+    {
+      "title": "Zigzag String Conversion",
+      "difficulty": "Medium",
+      "description": "Convert a string into a zigzag pattern with `num_rows`, then read the rows from top to bottom.\n\nFor `s = \"PAYPALISHIRING\"` and `num_rows = 3`, the rows read as `PAHNAPLSIIGYIR`.",
+      "hints": [
+        "First handle identity cases: one row or at least as many rows as characters returns the original string.",
+        "The simplest correct model is row simulation: append each character to the current row and move the row pointer down or up.",
+        "Flip direction at row `0` and row `num_rows - 1`; do the flip before the next pointer move.",
+        "The arithmetic cycle length is `2 * num_rows - 2`, but simulation is usually easier to code correctly in an interview.",
+        "Memory is O(n) because the output itself has n characters; the row array only adds O(num_rows) buckets."
+      ],
+      "constraints": [
+        "0 <= s.length <= 10^4",
+        "1 <= num_rows <= 10^4"
+      ],
+      "starter_code": {
+        "python": "def zigzag_convert(s, num_rows):\n    # Your code here\n    pass",
+        "javascript": "function zigzagConvert(s, numRows) {\n    // Your code here\n}",
+        "java": "public String zigzagConvert(String s, int numRows) {\n    // Your code here\n    return \"\";\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(zigzag_convert(\"PAYPALISHIRING\", 3))",
+        "javascript": "// Test runner (read-only)\nconsole.log(zigzagConvert(\"PAYPALISHIRING\", 3));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "s": "PAYPALISHIRING",
+            "num_rows": 3
+          },
+          "expected": "PAHNAPLSIIGYIR",
+          "description": "Three rows",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "s": "PAYPALISHIRING",
+            "num_rows": 4
+          },
+          "expected": "PINALSIGYAHRPI",
+          "description": "Four rows",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "s": "A",
+            "num_rows": 1
+          },
+          "expected": "A",
+          "description": "Single character",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "s": "AB",
+            "num_rows": 1
+          },
+          "expected": "AB",
+          "description": "Single row",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "s": "AB",
+            "num_rows": 5
+          },
+          "expected": "AB",
+          "description": "Rows exceed length",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Row Simulation",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(n)",
+          "description": "Append each character to the current row and flip direction at the top and bottom rows.",
+          "code": {
+            "python": "def zigzag_convert(s, num_rows):\n    if num_rows == 1 or num_rows >= len(s):\n        return s\n    rows = [''] * num_rows\n    row, step = 0, 1\n    for ch in s:\n        rows[row] += ch\n        if row == 0:\n            step = 1\n        elif row == num_rows - 1:\n            step = -1\n        row += step\n    return ''.join(rows)",
+            "javascript": "function zigzagConvert(s, numRows) {\n    if (numRows === 1 || numRows >= s.length) return s;\n    const rows = Array.from({ length: numRows }, () => '');\n    let row = 0, step = 1;\n    for (const ch of s) {\n        rows[row] += ch;\n        if (row === 0) step = 1;\n        else if (row === numRows - 1) step = -1;\n        row += step;\n    }\n    return rows.join('');\n}"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Draw the `PAYPALISHIRING` example for 3 rows so the row order is visible.",
+        "2. State the identity cases up front to avoid pointer logic that breaks on `num_rows == 1`.",
+        "3. Maintain `row` and `step`; append each character to `rows[row]`.",
+        "4. At the first and last rows, flip `step` so the next character moves in the opposite direction.",
+        "5. Join rows in order. The zigzag geometry is only an intermediate representation; the output is row-major."
+      ],
+      "tips": [
+        "The most common bug is updating `row` before checking whether you are at a boundary.",
+        "Avoid a 2D grid full of blanks; row buckets produce the same output without wasted space.",
+        "For `num_rows = 2`, the direction flips every character. Include this as a mental test case.",
+        "If asked for a math-only version, use cycle length `2r - 2` and collect vertical plus diagonal positions per row."
+      ],
+      "companies": [
+        "Adobe",
+        "Amazon",
+        "Apple",
+        "Bloomberg",
+        "Meta",
+        "Google",
+        "Microsoft",
+        "PayPal"
+      ],
+      "topics": [
+        "String",
+        "Simulation"
+      ],
+      "time_complexity": "O(n)",
+      "space_complexity": "O(n)"
     }
   ]
 }
