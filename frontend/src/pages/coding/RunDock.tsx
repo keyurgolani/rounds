@@ -3,6 +3,9 @@ import React, { useState, useRef, useCallback, ReactNode, useEffect } from 'reac
 interface RunDockProps {
   /** Console pane content — usually <ConsoleTab result={...} />. */
   children: ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  hasOutput: boolean;
   /** Right-aligned action slot (e.g. last-run timing). */
   rightActions?: ReactNode;
 }
@@ -14,7 +17,7 @@ const DEFAULT_HEIGHT = 180;
 // Console-only bottom dock. Cases + Result moved to the right sidebar
 // (see RightDock); this strip just holds stdout/stderr below the editor
 // and is drag-resizable so users can pull it up when output is long.
-export function RunDock({ children, rightActions }: RunDockProps) {
+export function RunDock({ children, open, onOpenChange, hasOutput, rightActions }: RunDockProps) {
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const dragStartY = useRef<number | null>(null);
   const startHeight = useRef(height);
@@ -50,43 +53,82 @@ export function RunDock({ children, rightActions }: RunDockProps) {
     <div
       data-testid="run-dock"
       style={{
-        height,
+        height: open ? height : 36,
         display: 'flex',
         flexDirection: 'column',
         background: 'var(--paper)',
         borderTop: '1px solid var(--border)',
+        overflow: 'hidden',
+        transition: 'height 180ms cubic-bezier(0.22, 0.8, 0.36, 1)',
       }}
     >
-      <div
-        role="separator"
-        aria-orientation="horizontal"
-        onMouseDown={onDragStart}
-        style={{
-          height: 6,
-          cursor: 'ns-resize',
-          background: 'transparent',
-          flexShrink: 0,
-        }}
-      />
+      {open && (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          onMouseDown={onDragStart}
+          style={{
+            height: 6,
+            cursor: 'ns-resize',
+            background: 'transparent',
+            flexShrink: 0,
+          }}
+        />
+      )}
       <div
         className="flex items-center justify-between"
         style={{
-          padding: '6px 12px',
-          borderBottom: '1px solid var(--border)',
+          minHeight: 36,
+          padding: '6px 10px 6px 12px',
+          borderBottom: open ? '1px solid var(--border)' : 0,
           flexShrink: 0,
         }}
       >
-        <span
+        <button
+          type="button"
+          onClick={() => onOpenChange(!open)}
+          disabled={!hasOutput && !open}
           className="mono uppercase"
-          style={{ fontSize: 9.5, color: 'var(--text-4)', letterSpacing: '0.12em' }}
+          style={{
+            fontSize: 9.5,
+            color: open ? 'var(--text-3)' : 'var(--text-4)',
+            letterSpacing: '0.12em',
+            background: 'transparent',
+            border: 0,
+            padding: 0,
+            cursor: hasOutput || open ? 'pointer' : 'default',
+          }}
         >
-          Console
-        </span>
-        <div className="flex items-center gap-2">{rightActions}</div>
+          Console{!open && hasOutput ? ' · output ready' : ''}
+        </button>
+        <div className="flex items-center gap-2">
+          {rightActions}
+          {open && (
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              style={{
+                border: 0,
+                borderRadius: 999,
+                background: 'var(--bg-sunken)',
+                color: 'var(--text-3)',
+                boxShadow: 'inset 0 0 0 1px var(--border)',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 500,
+                padding: '4px 9px',
+              }}
+            >
+              Collapse
+            </button>
+          )}
+        </div>
       </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: 12, minHeight: 0 }}>
-        {children}
-      </div>
+      {open && (
+        <div style={{ flex: 1, overflow: 'auto', padding: 12, minHeight: 0 }}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }

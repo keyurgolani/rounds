@@ -16,6 +16,7 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronUp,
   Copy,
   Download,
@@ -128,6 +129,8 @@ export default function CodingDetail() {
   const [lastRunInput, setLastRunInput] = useState<unknown>(undefined);
   const [evalResults, setEvalResults] = useState<CodeEvaluateResult | undefined>();
   const [leftPanel, setLeftPanel] = useState<LeftPanel>('hints');
+  const [leftPanelOpen, setLeftPanelOpen] = useState(false);
+  const [consoleOpen, setConsoleOpen] = useState(false);
   const [sideTab, setSideTab] = useState<SideTab>('tests');
   const [showSolution, setShowSolution] = useState(-1);
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
@@ -161,6 +164,7 @@ export default function CodingDetail() {
     if (!q) return;
     setRunResult(undefined);
     setEvalResults(undefined);
+    setConsoleOpen(false);
   }, [lang, q]);
 
   // Load draft in priority order: PocketBase (source of truth) → local
@@ -272,12 +276,21 @@ export default function CodingDetail() {
     return () => window.removeEventListener('keydown', onKey);
   }, [mobileSheet]);
 
+  const hasConsoleOutput = Boolean(
+    runResult && (runResult.stdout || runResult.stderr || runResult.truncated)
+  );
+
+  useEffect(() => {
+    if (hasConsoleOutput) setConsoleOpen(true);
+  }, [hasConsoleOutput]);
+
   const handleRun = useCallback(
     async (input: Record<string, unknown>) => {
       if (!q || !code.trim()) return;
       setLastRunInput(input);
       setRunning(true);
       setRunResult(undefined);
+      setConsoleOpen(false);
       // Pop the Results sheet so the user sees output animate in.
       // Skip in focus mode — the right aside is unmounted and the
       // mobile dock is hidden, so leaving the dead state would
@@ -416,7 +429,7 @@ export default function CodingDetail() {
           aria-hidden="true"
         />
 
-        {!focus && (
+        {!focus && (leftPanelOpen || mobileSheet === 'problem') && (
           <aside
             className="flex-shrink-0 flex flex-col w-full coding-side-left"
             style={{
@@ -424,6 +437,7 @@ export default function CodingDetail() {
               borderBottom: '1px solid var(--border)',
               background: 'var(--bg)',
               maxHeight: '38vh',
+              animation: leftPanelOpen ? 'codingHelpPanelIn 180ms cubic-bezier(0.22, 0.8, 0.36, 1)' : undefined,
             }}
           >
           <SheetHeader title="Problem" onClose={() => setMobileSheet(null)} />
@@ -517,6 +531,25 @@ export default function CodingDetail() {
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={() => setLeftPanelOpen(false)}
+              aria-label="Hide hints and solutions panel"
+              title="Hide panel"
+              className="hidden lg:inline-flex items-center justify-center ml-auto mr-2 self-center"
+              style={{
+                width: 28,
+                height: 28,
+                border: 0,
+                borderRadius: 999,
+                background: 'var(--bg-sunken)',
+                color: 'var(--text-3)',
+                boxShadow: 'inset 0 0 0 1px var(--border)',
+                cursor: 'pointer',
+              }}
+            >
+              <ChevronLeft size={14} strokeWidth={1.9} />
+            </button>
           </div>
 
           <div
@@ -703,7 +736,7 @@ export default function CodingDetail() {
           </aside>
         )}
 
-        {!focus && (
+        {!focus && leftPanelOpen && (
           <Resizer
             onResize={(dx) =>
               setLeftWidth((w) => Math.max(260, Math.min(720, w + dx)))
@@ -732,6 +765,27 @@ export default function CodingDetail() {
               }}
             >
               <div className="px-4 py-3 space-y-3">
+                {!leftPanelOpen && (
+                  <button
+                    type="button"
+                    onClick={() => setLeftPanelOpen(true)}
+                    aria-label="Open hints and solutions panel"
+                    className="hidden lg:inline-flex items-center gap-1.5"
+                    style={{
+                      padding: '5px 10px',
+                      border: 0,
+                      borderRadius: 999,
+                      background: 'var(--accent-soft)',
+                      color: 'var(--accent)',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <FileText size={12} strokeWidth={1.8} />
+                    Help: hints and solutions
+                  </button>
+                )}
                 <BlockMarkdown
                   text={q.description}
                   style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}
@@ -1026,7 +1080,11 @@ export default function CodingDetail() {
         </section>
 
         {!focus && (
-          <RunDock>
+          <RunDock
+            open={consoleOpen}
+            onOpenChange={setConsoleOpen}
+            hasOutput={hasConsoleOutput}
+          >
             <ConsoleTab result={runResult} />
           </RunDock>
         )}

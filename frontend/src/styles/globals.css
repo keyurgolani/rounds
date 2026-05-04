@@ -713,6 +713,17 @@ html {
     animation: fadeUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
 
+  @keyframes codingHelpPanelIn {
+    from {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
