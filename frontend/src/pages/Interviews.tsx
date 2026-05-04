@@ -141,8 +141,8 @@ export default function Interviews() {
               <Link
                 to="/interviews/new"
                 style={{
-                  padding: '8px 14px',
-                  borderRadius: 'var(--radius)',
+                  padding: '6px 14px',
+                  borderRadius: 8,
                   border: 0,
                   background: 'var(--accent)',
                   color: 'var(--bg-elev)',

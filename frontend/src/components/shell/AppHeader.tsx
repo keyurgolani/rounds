@@ -1,6 +1,19 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Maximize2, Minimize2, Command } from 'lucide-react';
 import { useCommandCenter } from '../../command-center/CommandCenterProvider';
+import InlineMarkdown from './InlineMarkdown';
+import { usePlatform } from '../../hooks/usePlatform';
+
+// Shared base for the two chrome chip buttons. Each button spreads
+// this and adds the properties that differ (size, padding, font).
+const CHROME_BTN_BASE: CSSProperties = {
+  height: 24,
+  border: 0,
+  borderRadius: 5,
+  background: 'transparent',
+  color: 'var(--text-2)',
+  cursor: 'pointer',
+};
 
 const STORAGE_KEY = 'rounds:header-minimal';
 
@@ -8,7 +21,7 @@ type Props = {
   title: string;
   description?: string;
   eyebrow?: ReactNode;
-  // Rendered in the expanded (full-mode) header. The 124px row gives
+  // Rendered in the expanded (full-mode) header. The expanded row gives
   // these enough breathing room for full-size pill controls, dropdowns,
   // or a compact widget like StreakCard.
   actions?: ReactNode;
@@ -76,58 +89,19 @@ export default function AppHeader({
     );
   }
 
-  return (
-    <header
-      style={{
-        flexShrink: 0,
-        borderBottom: '1px solid var(--border)',
-        background: 'var(--bg)',
-        padding: minimal ? '8px 20px' : '18px 24px 16px',
-        height: minimal ? 44 : 124,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-      }}
-    >
-      {!minimal && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            minHeight: 22,
-          }}
-        >
-          <div
-            style={{
-              minWidth: 0,
-              flex: 1,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontSize: 12,
-              color: 'var(--text-3)',
-            }}
-          >
-            {eyebrow}
-          </div>
-          <ActionSlot
-            actions={actions}
-            compactActions={compactActions}
-            minimal={false}
-            manual={manual}
-            toggleManual={toggleManual}
-            onOpenCC={cc.open}
-          />
-        </div>
-      )}
-
-      <div
+  if (minimal) {
+    // Minimal (focus / mobile) mode — single tight row.
+    return (
+      <header
         style={{
+          flexShrink: 0,
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--bg)',
+          padding: '8px 20px',
+          height: 44,
           display: 'flex',
           alignItems: 'center',
           gap: 12,
-          flex: minimal ? 1 : undefined,
         }}
       >
         <h1
@@ -135,8 +109,8 @@ export default function AppHeader({
           title={typeof title === 'string' ? title : undefined}
           style={{
             margin: 0,
-            fontSize: minimal ? 16 : 'clamp(26px, 5vw, 34px)',
-            lineHeight: minimal ? 1.1 : 1.05,
+            fontSize: 16,
+            lineHeight: 1.1,
             fontWeight: 400,
             minWidth: 0,
             flex: 1,
@@ -147,110 +121,211 @@ export default function AppHeader({
         >
           {title}
         </h1>
-        {minimal && (
-          <ActionSlot
-            actions={actions}
-            compactActions={compactActions}
-            minimal={true}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            flexShrink: 0,
+          }}
+        >
+          {compactActions ?? actions}
+          <ChromeButtons
             manual={manual}
             toggleManual={toggleManual}
             onOpenCC={cc.open}
+            align="center"
           />
-        )}
-      </div>
+        </div>
+      </header>
+    );
+  }
 
-      {!minimal && description && (
-        <p
+  // Expanded mode — left text column flexes; actions sit in the
+  // middle-right; chrome (collapse + ⌘K) is stacked vertically on the
+  // far right edge.
+  return (
+    <header
+      style={{
+        flexShrink: 0,
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg)',
+        padding: '14px 20px',
+        minHeight: 124,
+        display: 'flex',
+        alignItems: 'stretch',
+        gap: 14,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          gap: 4,
+          minWidth: 0,
+          flex: 1,
+        }}
+      >
+        {eyebrow && (
+          <div
+            style={{
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 12,
+              color: 'var(--text-3)',
+            }}
+          >
+            {eyebrow}
+          </div>
+        )}
+        <h1
+          className="display-italic"
+          title={typeof title === 'string' ? title : undefined}
           style={{
             margin: 0,
-            color: 'var(--text-3)',
-            fontSize: 13.5,
-            maxWidth: 720,
-            lineHeight: 1.5,
+            fontSize: 'clamp(24px, 4.4vw, 32px)',
+            lineHeight: 1.1,
+            fontWeight: 400,
+            minWidth: 0,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}
-          title={description}
         >
-          {description}
-        </p>
+          {title}
+        </h1>
+        {description && (
+          <div
+            title={description}
+            style={{
+              margin: 0,
+              color: 'var(--text-3)',
+              fontSize: 13,
+              lineHeight: 1.45,
+              display: '-webkit-box',
+              WebkitBoxOrient: 'vertical',
+              // Three lines is enough to surface the salient framing of
+              // long problem prompts without starving the editor below
+              // of vertical space. Anything longer lives in the body.
+              WebkitLineClamp: 3,
+              overflow: 'hidden',
+            }}
+          >
+            <InlineMarkdown text={description} as="span" />
+          </div>
+        )}
+      </div>
+      {actions && (
+        <div
+          style={{
+            display: 'flex',
+            // Center action payloads at their natural height so a
+            // 30px-tall pill doesn't get stretched to fill the
+            // ~124px expanded header. Widgets that *want* to fill
+            // the height (e.g. StreakCard `compact="header"`) opt
+            // in via their own `height: '100%'`.
+            alignItems: 'center',
+            flexShrink: 0,
+          }}
+        >
+          {actions}
+        </div>
       )}
+      <ChromeButtons
+        manual={manual}
+        toggleManual={toggleManual}
+        onOpenCC={cc.open}
+        align="start"
+      />
     </header>
   );
 }
 
-function ActionSlot({
-  actions,
-  compactActions,
-  minimal,
+function ChromeButtons({
   manual,
   toggleManual,
   onOpenCC,
+  align,
 }: {
-  actions?: ReactNode;
-  compactActions?: ReactNode;
-  minimal: boolean;
   manual: boolean;
   toggleManual: () => void;
   onOpenCC: () => void;
+  align: 'start' | 'center';
 }) {
-  // When we're in minimal mode, prefer the slim `compactActions` slot so
-  // pages can swap in a single-glyph control (e.g. StatusAction with
-  // compact=true) instead of a full pill. Falls back to `actions` so
-  // legacy call sites that don't yet supply a compact variant keep
-  // working.
-  const slot = minimal ? (compactActions ?? actions) : actions;
+  const { modifierSymbol, modifierLabel, isMac } = usePlatform();
+  const hint = `Command Center (${modifierLabel}+K)`;
+
+  // Matched-pair chip: both buttons share one outlined container,
+  // divided by a hairline. Pinned to the top in expanded mode
+  // (`align: 'start'`) so it stays out of the way of vertically-
+  // centered actions; centered in the 44px minimal-mode row.
   return (
     <div
+      role="toolbar"
+      aria-label="Header controls"
       style={{
-        display: 'flex',
+        alignSelf: align === 'start' ? 'flex-start' : 'center',
+        display: 'inline-flex',
         alignItems: 'center',
-        gap: 6,
+        padding: 3,
+        borderRadius: 8,
+        background: 'var(--bg-sunken)',
+        boxShadow: 'inset 0 0 0 1px var(--border)',
         flexShrink: 0,
       }}
     >
-      {slot}
       <button
         type="button"
         onClick={toggleManual}
         aria-label={manual ? 'Expand header' : 'Focus mode (minimize header)'}
         title={manual ? 'Expand header' : 'Focus mode'}
-        className="inline-flex items-center justify-center"
+        className="app-header-chrome-btn inline-flex items-center justify-center"
         style={{
-          width: 28,
-          height: 28,
-          borderRadius: 6,
-          border: 0,
-          background: 'transparent',
-          color: 'var(--text-3)',
-          cursor: 'pointer',
+          ...CHROME_BTN_BASE,
+          width: 24,
+          padding: 0,
         }}
       >
         {manual ? (
-          <Maximize2 size={14} strokeWidth={1.7} />
+          <Maximize2 size={13} strokeWidth={1.7} />
         ) : (
-          <Minimize2 size={14} strokeWidth={1.7} />
+          <Minimize2 size={13} strokeWidth={1.7} />
         )}
       </button>
+      <span
+        aria-hidden="true"
+        style={{
+          width: 1,
+          height: 14,
+          background: 'var(--border-strong)',
+          margin: '0 2px',
+          flexShrink: 0,
+        }}
+      />
       <button
         type="button"
         onClick={onOpenCC}
-        aria-label="Open Command Center (⌘K)"
-        title="Command Center (⌘K)"
-        className="inline-flex items-center gap-1.5"
+        aria-label={`Open ${hint}`}
+        title={hint}
+        className="app-header-chrome-btn inline-flex items-center"
         style={{
-          padding: '5px 10px',
-          borderRadius: 6,
-          border: '1px solid var(--border)',
-          background: 'var(--bg-sunken)',
-          color: 'var(--text-2)',
-          fontSize: 12,
-          cursor: 'pointer',
+          ...CHROME_BTN_BASE,
+          padding: '0 8px',
+          gap: 5,
+          fontSize: 11.5,
+          whiteSpace: 'nowrap',
         }}
       >
-        <Command size={12} strokeWidth={1.8} />
-        <span className="hidden sm:inline">K</span>
+        {/* Command renders heavier than Maximize2/Minimize2, so size 12 reads optically equal to size 13 on the icon-only button. */}
+        {isMac ? (
+          <Command size={12} strokeWidth={1.8} />
+        ) : (
+          <span style={{ fontWeight: 500, letterSpacing: 0.2 }}>{modifierSymbol}</span>
+        )}
+        <span>K</span>
       </button>
     </div>
   );

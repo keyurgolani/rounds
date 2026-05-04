@@ -14,7 +14,11 @@ export function CommandCenter() {
   useEffect(() => {
     if (!cc.isOpen) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
+      // Skip if a child handler already handled Escape (e.g. closing a
+      // popover, dismissing autocomplete, or the form's own cancel).
+      // Without this guard the global handler stacks on top of the
+      // child handler and ends up calling cc.back() one step too far.
+      if (e.key === 'Escape' && !e.defaultPrevented) {
         e.preventDefault();
         cc.back();
       }

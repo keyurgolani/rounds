@@ -66,14 +66,14 @@ export default function PracticeStatusControl({
   }
 
   // Existing 3-pill behavior preserved as-is below this point.
-  const pad = size === 'sm' ? '5px 9px' : '6px 11px';
+  const pad = size === 'sm' ? '4px 9px' : '5px 11px';
   const fs = size === 'sm' ? 11 : 12;
   return (
     <div
       className="inline-flex gap-0.5"
       style={{
         padding: 3,
-        borderRadius: 999,
+        borderRadius: 8,
         background: 'var(--bg-sunken)',
         boxShadow: 'inset 0 0 0 1px var(--border)',
       }}
@@ -89,7 +89,7 @@ export default function PracticeStatusControl({
             style={{
               padding: pad,
               border: 0,
-              borderRadius: 999,
+              borderRadius: 5,
               background: on ? 'var(--bg-elev)' : 'transparent',
               boxShadow: on ? '0 1px 2px rgba(24,22,19,0.08)' : 'none',
               color: on ? o.color : 'var(--text-3)',

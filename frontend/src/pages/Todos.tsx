@@ -8,6 +8,7 @@ import MentionText from '../todos/MentionText';
 import TodoForm, { type TodoFormValue } from '../todos/TodoForm';
 import { useCampaign } from '../campaign/CampaignContext';
 import type { Mention } from '../lib/mentions';
+import { usePlatform } from '../hooks/usePlatform';
 
 export interface Todo {
   id: string;
@@ -69,6 +70,7 @@ function priorityRank(p: string): number {
 
 export default function Todos() {
   const { currentId, currentCampaign } = useCampaign();
+  const { modifierSymbol } = usePlatform();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -259,7 +261,7 @@ export default function Todos() {
             className="card p-8 text-center"
             style={{ color: 'var(--text-3)', fontSize: 13 }}
           >
-            No todos yet. Hit <span className="mono">⌘K</span> anywhere to capture one.
+            No todos yet. Hit <span className="mono">{modifierSymbol === '⌘' ? '⌘K' : 'Ctrl+K'}</span> anywhere to capture one.
           </div>
         )}
 

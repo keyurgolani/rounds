@@ -86,7 +86,7 @@ export function CasesTab({ entry, samples, running, onRun }: CasesTabProps) {
   const isEdited = edits[selected] !== undefined;
 
   return (
-    <div className="flex flex-col h-full gap-3">
+    <div className="flex flex-col gap-3">
       {samples.length > 0 && (
         <div className="flex flex-wrap gap-1.5 flex-shrink-0">
           {samples.map((_, i) => (
@@ -115,7 +115,7 @@ export function CasesTab({ entry, samples, running, onRun }: CasesTabProps) {
         </div>
       )}
 
-      <div className="flex flex-col flex-1 min-h-0 gap-1.5 overflow-auto">
+      <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between flex-shrink-0">
           <div className="eyebrow">Input</div>
           {isEdited && (

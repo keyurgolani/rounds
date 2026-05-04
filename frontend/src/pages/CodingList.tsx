@@ -9,7 +9,13 @@ import Select from '../components/shell/Select';
 import { effectiveStatus } from '../hooks/usePracticeStatus';
 import { useInfiniteList } from '../hooks/useInfiniteList';
 
-type SortKey = 'title-asc' | 'title-desc' | 'difficulty-easy' | 'difficulty-hard';
+type SortKey =
+  | 'title-asc'
+  | 'title-desc'
+  | 'difficulty-easy'
+  | 'difficulty-hard'
+  | 'recent'
+  | 'oldest';
 
 const DIFFICULTY_RANK: Record<string, number> = { Easy: 0, Medium: 1, Hard: 2 };
 
@@ -18,7 +24,11 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'title-desc', label: 'Title (Z–A)' },
   { value: 'difficulty-easy', label: 'Difficulty (Easy first)' },
   { value: 'difficulty-hard', label: 'Difficulty (Hard first)' },
+  { value: 'recent', label: 'Recently updated' },
+  { value: 'oldest', label: 'Oldest first' },
 ];
+
+const ALL_OPTION = '__all__';
 
 interface CQ {
   id: number;
@@ -47,6 +57,8 @@ export default function CodingList() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [difficulty, setDifficulty] = useState<string | null>(null);
+  const [topic, setTopic] = useState<string>(ALL_OPTION);
+  const [company, setCompany] = useState<string>(ALL_OPTION);
   const [sort, setSort] = useState<SortKey>('title-asc');
 
   useEffect(() => {
@@ -56,9 +68,25 @@ export default function CodingList() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Aggregated facets — derived from the loaded list so filter dropdowns
+  // only ever offer real values. Sorted alphabetically; long lists are
+  // expected (e.g. 30+ topics) so the dropdown handles its own scroll.
+  const allTopics = useMemo(() => {
+    const set = new Set<string>();
+    for (const q of questions) for (const t of q.topics ?? []) set.add(t);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [questions]);
+  const allCompanies = useMemo(() => {
+    const set = new Set<string>();
+    for (const q of questions) for (const c of q.companies ?? []) set.add(c);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [questions]);
+
   const filtered = useMemo(() => {
     const matches = questions.filter((q) => {
       if (difficulty && q.difficulty !== difficulty) return false;
+      if (topic !== ALL_OPTION && !(q.topics ?? []).includes(topic)) return false;
+      if (company !== ALL_OPTION && !(q.companies ?? []).includes(company)) return false;
       if (query.trim()) {
         const s = query.trim().toLowerCase();
         const blob = `${q.title} ${q.topics.join(' ')} ${q.companies.join(' ')}`.toLowerCase();
@@ -77,13 +105,20 @@ export default function CodingList() {
         case 'difficulty-hard':
           return (DIFFICULTY_RANK[b.difficulty] ?? -1) - (DIFFICULTY_RANK[a.difficulty] ?? -1) ||
             a.title.localeCompare(b.title);
+        case 'recent':
+          // Items without an updated_at sink to the bottom.
+          return (b.updated_at ?? '').localeCompare(a.updated_at ?? '') ||
+            a.title.localeCompare(b.title);
+        case 'oldest':
+          return (a.updated_at ?? '￿').localeCompare(b.updated_at ?? '￿') ||
+            a.title.localeCompare(b.title);
         case 'title-asc':
         default:
           return a.title.localeCompare(b.title);
       }
     });
     return sorted;
-  }, [questions, difficulty, query, sort]);
+  }, [questions, difficulty, topic, company, query, sort]);
 
   const { slice, sentinelRef, hasMore } = useInfiniteList(filtered, { initial: 30, step: 30 });
 
@@ -140,6 +175,32 @@ export default function CodingList() {
               </button>
             ))}
           </div>
+          {allTopics.length > 0 && (
+            <div style={{ minWidth: 160 }}>
+              <Select
+                value={topic}
+                onChange={setTopic}
+                options={[
+                  { value: ALL_OPTION, label: 'All topics' },
+                  ...allTopics.map((t) => ({ value: t, label: t })),
+                ]}
+                ariaLabel="Topic"
+              />
+            </div>
+          )}
+          {allCompanies.length > 0 && (
+            <div style={{ minWidth: 160 }}>
+              <Select
+                value={company}
+                onChange={setCompany}
+                options={[
+                  { value: ALL_OPTION, label: 'All companies' },
+                  ...allCompanies.map((c) => ({ value: c, label: c })),
+                ]}
+                ariaLabel="Company"
+              />
+            </div>
+          )}
           <div style={{ minWidth: 200 }}>
             <Select<SortKey>
               value={sort}

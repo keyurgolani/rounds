@@ -11,7 +11,6 @@ import StatusAction from '../components/shell/StatusAction';
 import BackLink from '../components/shell/BackLink';
 import BottomSheet from '../components/shell/BottomSheet';
 import SectionNav, { type SectionNavItem } from '../components/shell/SectionNav';
-import { oneLineSummary } from '../lib/text';
 
 interface BC {
   id: string;
@@ -323,7 +322,7 @@ export default function BehavioralDetail() {
     <div className="h-full flex flex-col">
       <AppHeader
         title={q.title}
-        description={oneLineSummary(q.question_text)}
+        description={q.question_text}
         eyebrow={
           <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
             <BackLink to="/behavioral/questions" />

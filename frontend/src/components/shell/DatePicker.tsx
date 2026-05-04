@@ -72,7 +72,12 @@ export default function DatePicker({
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && open) setOpen(false);
+      if (e.key === 'Escape' && open) {
+        // preventDefault so the surrounding chrome (CommandCenter, modal)
+        // doesn't ALSO interpret Escape and dismiss its own layer.
+        e.preventDefault();
+        setOpen(false);
+      }
     }
     document.addEventListener('mousedown', onDocClick);
     document.addEventListener('keydown', onKey);

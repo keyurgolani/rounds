@@ -143,7 +143,7 @@ export default function CampaignDetail() {
                   type="button"
                   onClick={() => setCurrent(campaign.id)}
                   className="inline-flex items-center gap-1.5"
-                  style={secondaryBtn}
+                  style={{ ...secondaryBtn, padding: '6px 14px', borderRadius: 8 }}
                 >
                   Switch to this workspace
                 </button>

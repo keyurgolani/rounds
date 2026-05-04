@@ -446,6 +446,7 @@
     font-family: inherit;
     cursor: pointer;
   }
+
   input,
   textarea,
   select {
@@ -502,6 +503,20 @@
   .card-hover:hover {
     box-shadow: var(--shadow-card-hover);
     transform: translateY(-1px);
+  }
+
+  /* Chrome chip buttons in AppHeader — hover and focus-ring inset.
+     Base focus-visible color/width comes from the global rule in
+     @layer base; we just tighten the offset so the ring stays
+     inside the chip's 3px padding. */
+  .app-header-chrome-btn {
+    transition: background 120ms ease;
+  }
+  .app-header-chrome-btn:hover {
+    background: var(--border);
+  }
+  .app-header-chrome-btn:focus-visible {
+    outline-offset: 1px;
   }
 
   .pill {
@@ -703,11 +718,15 @@ html {
   }
 
   /* CodingDetail side panels: stack full-width on mobile; on lg+ pin to
-     the user-resized pixel width carried in --side-width. */
+     the user-resized pixel width carried in --side-width. The min() cap
+     at 26vw ensures sidebars shrink with the viewport so the editor is
+     never starved on smaller laptop screens; min-width keeps them
+     usable at small breakpoints. */
   @media (min-width: 1024px) {
     .coding-side-left,
     .coding-side-right {
-      width: var(--side-width, 440px) !important;
+      width: min(var(--side-width, 440px), 26vw) !important;
+      min-width: 240px;
       max-height: none !important;
     }
     .coding-side-left {

@@ -28,6 +28,7 @@ import { initials, useAuth } from '../auth/AuthProvider';
 import CampaignPill from '../campaign/CampaignPill';
 import { CommandCenterProvider } from '../command-center/CommandCenterProvider';
 import { CommandCenter } from '../command-center/CommandCenter';
+import { usePlatform } from '../hooks/usePlatform';
 
 type NavDef = {
   path: string;
@@ -639,6 +640,7 @@ function TopBar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
+  const { modifierSymbol } = usePlatform();
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -764,7 +766,7 @@ function TopBar() {
       <div className="ml-auto flex items-center gap-3">
         <CampaignPill compact align="right" showRole={false} />
         <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>
-          ⌘K
+          {modifierSymbol === '⌘' ? '⌘K' : 'Ctrl K'}
         </span>
         {user && (
           <div ref={menuRef} style={{ position: 'relative' }}>

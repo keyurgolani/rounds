@@ -20,11 +20,15 @@ function contextLine(current: number, longest: number, activeToday: boolean): st
   return 'Show up once a day. That is the whole trick.';
 }
 
-// `compact` produces a slim horizontal strip suitable for an
-// AppHeader actions slot — number + 7-day beads on a single line, no
-// card chrome, no context line, fits inside the 124px expanded
-// header.
-export default function StreakCard({ compact = false }: { compact?: boolean } = {}) {
+// Three modes:
+//  - 'pill' (compact pill button) — for minimal/mobile headers and any
+//    place where space is at a premium.
+//  - 'header' — fills the height of the expanded AppHeader (≈ 96px) with
+//    a richer layout: bigger number, labeled day beads, longest run.
+//  - false — full editorial card for in-page placement.
+export default function StreakCard(
+  { compact = false }: { compact?: boolean | 'header' } = {},
+) {
   const { current, longest, activeToday, last7, last30 } = useLoginStreak();
   const [expanded, setExpanded] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -47,6 +51,136 @@ export default function StreakCard({ compact = false }: { compact?: boolean } = 
 
   // Index within last7 of today (last element).
   const todayIdx = 6;
+
+  if (compact === 'header') {
+    return (
+      <div ref={ref} style={{ position: 'relative', height: '100%' }}>
+        <button
+          type="button"
+          className="inline-flex items-center gap-4"
+          aria-expanded={expanded}
+          aria-label={`Open month streak view. Current streak: ${current} ${current === 1 ? 'day' : 'days'}, longest ${longest}`}
+          title={`Streak: ${current} ${current === 1 ? 'day' : 'days'} · longest ${longest}`}
+          onClick={() => setExpanded((v) => !v)}
+          style={{
+            height: '100%',
+            padding: '10px 18px',
+            border: 0,
+            borderRadius: 'var(--radius-lg)',
+            background: 'var(--bg-elev)',
+            boxShadow: expanded
+              ? 'inset 0 0 0 1px var(--accent), var(--shadow-card)'
+              : 'var(--shadow-card)',
+            cursor: 'pointer',
+            textAlign: 'left',
+          }}
+        >
+          <span className="inline-flex flex-col items-start" style={{ minWidth: 0 }}>
+            <span
+              className="eyebrow"
+              style={{ marginBottom: 2, fontSize: 9.5, letterSpacing: '0.14em' }}
+            >
+              Streak
+            </span>
+            <span className="inline-flex items-baseline gap-2">
+              <Flame
+                size={16}
+                strokeWidth={1.8}
+                style={{ color: current > 0 ? 'var(--accent)' : 'var(--text-4)' }}
+              />
+              <span
+                className="display-italic"
+                style={{
+                  fontSize: 30,
+                  fontWeight: 400,
+                  lineHeight: 1,
+                  color: current > 0 ? 'var(--text)' : 'var(--text-4)',
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                {current}
+              </span>
+              <span
+                className="mono uppercase"
+                style={{
+                  fontSize: 9.5,
+                  color: 'var(--text-4)',
+                  letterSpacing: '0.12em',
+                }}
+              >
+                {current === 1 ? 'day' : 'days'}
+              </span>
+            </span>
+          </span>
+          <span
+            aria-label={`Last 7 days: ${last7.map((b) => (b ? 'active' : 'idle')).join(', ')}`}
+            className="inline-flex items-center gap-1.5"
+            style={{
+              borderLeft: '1px solid var(--border)',
+              paddingLeft: 14,
+              alignSelf: 'stretch',
+            }}
+          >
+            {last7.map((active, i) => {
+              const isToday = i === todayIdx;
+              return (
+                <span
+                  key={i}
+                  className="flex flex-col items-center gap-1"
+                  style={{ width: 14 }}
+                >
+                  <span
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: 999,
+                      background: active ? 'var(--accent)' : 'transparent',
+                      boxShadow: active
+                        ? isToday
+                          ? '0 0 0 2.5px var(--accent-soft)'
+                          : 'none'
+                        : 'inset 0 0 0 1px var(--border-strong)',
+                    }}
+                  />
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: 8.5,
+                      color: isToday ? 'var(--accent)' : 'var(--text-4)',
+                      letterSpacing: '0.06em',
+                      fontWeight: isToday ? 600 : 400,
+                    }}
+                  >
+                    {dayLetter(i, todayIdx)}
+                  </span>
+                </span>
+              );
+            })}
+          </span>
+          <span
+            className="mono uppercase"
+            style={{
+              fontSize: 9,
+              color: 'var(--text-4)',
+              letterSpacing: '0.1em',
+              alignSelf: 'flex-end',
+              paddingBottom: 2,
+            }}
+          >
+            Best · {longest}
+          </span>
+        </button>
+        {expanded && (
+          <MonthView
+            current={current}
+            longest={longest}
+            activeToday={activeToday}
+            cells={last30}
+          />
+        )}
+      </div>
+    );
+  }
 
   if (compact) {
     return (

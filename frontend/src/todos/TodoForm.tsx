@@ -19,6 +19,7 @@ import {
   splitBody,
   type Mention,
 } from '../lib/mentions';
+import { usePlatform } from '../hooks/usePlatform';
 
 export type Priority = 'low' | 'normal' | 'high';
 
@@ -52,6 +53,7 @@ export default function TodoForm({
   campaignMissing,
   submitLabel = 'Save',
 }: TodoFormProps) {
+  const { modifierSymbol } = usePlatform();
   const [body, setBody] = useState(initial?.body ?? '');
   const [dueDate, setDueDate] = useState(initial?.due_date ?? '');
   const [priority, setPriority] = useState<Priority>(initial?.priority ?? 'normal');
@@ -348,7 +350,7 @@ export default function TodoForm({
       )}
       <div className="flex items-center justify-between mt-3">
         <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-4)' }}>
-          ⌘↵ to save
+          {modifierSymbol === '⌘' ? '⌘↵' : 'Ctrl+↵'} to save
         </span>
         <div className="flex items-center gap-2">
           {onDelete && (

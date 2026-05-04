@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import { useCampaign } from '../../campaign/CampaignContext';
 import MentionText from '../../todos/MentionText';
 import type { Todo } from '../../pages/Todos';
+import { usePlatform } from '../../hooks/usePlatform';
 
 // A compact "top 5 active todos" card for the dashboard. Overdue
 // first, then soonest due, then high priority. Clicking through takes
@@ -14,6 +15,7 @@ export default function TodosWidget() {
   const { currentId } = useCampaign();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
+  const { modifierSymbol } = usePlatform();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,7 +94,7 @@ export default function TodosWidget() {
             padding: '8px 0',
           }}
         >
-          All clear. Hit ⌘K to capture a new one.
+          All clear. Hit {modifierSymbol === '⌘' ? '⌘K' : 'Ctrl+K'} to capture a new one.
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">

@@ -20,6 +20,9 @@ import {
   Copy,
   Download,
   FileText,
+  Maximize2,
+  Minimize2,
+  Play,
   Terminal,
   WrapText,
   X,
@@ -29,7 +32,7 @@ import DifficultyPill from '../components/shell/DifficultyPill';
 import StatusAction from '../components/shell/StatusAction';
 import BackLink from '../components/shell/BackLink';
 import InlineMarkdown from '../components/shell/InlineMarkdown';
-import { oneLineSummary } from '../lib/text';
+import BlockMarkdown from '../components/shell/BlockMarkdown';
 import { useTheme } from '../theme/ThemeProvider';
 import { useAuth } from '../auth/AuthProvider';
 import { loadLocal, saveLocal } from '../lib/codeDraft';
@@ -74,6 +77,43 @@ type LeftPanel = 'solutions' | 'hints';
 // on demand. `null` = no sheet open (user is writing code).
 type MobileSheet = 'problem' | 'results' | null;
 
+const EDITOR_FOCUS_STORAGE_KEY = 'rounds:editor-focus';
+
+// Editor focus mode — hides the left/right asides + bottom Console
+// so the Monaco editor claims the whole flex row. Mirrors the
+// useMinimalHeader pattern in AppHeader.tsx (localStorage-backed,
+// no mobile auto-trigger because the Focus button is desktop-only).
+function useEditorFocus() {
+  const [focus, setFocus] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem(EDITOR_FOCUS_STORAGE_KEY) === 'true';
+  });
+
+  const toggle = useCallback(() => {
+    setFocus((f) => {
+      const next = !f;
+      window.localStorage.setItem(EDITOR_FOCUS_STORAGE_KEY, String(next));
+      return next;
+    });
+  }, []);
+
+  // Esc exits focus when active. No-op when inactive — pressing Esc
+  // on a normal coding page should not toggle anything.
+  useEffect(() => {
+    if (!focus) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setFocus(false);
+        window.localStorage.setItem(EDITOR_FOCUS_STORAGE_KEY, 'false');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focus]);
+
+  return { focus, toggle };
+}
+
 export default function CodingDetail() {
   const { slug } = useParams<{ slug: string }>();
   const { theme } = useTheme();
@@ -95,6 +135,7 @@ export default function CodingDetail() {
   const [rightWidth, setRightWidth] = useState(440);
   const [wordWrap, setWordWrap] = useState<'on' | 'off'>('off');
   const [copied, setCopied] = useState(false);
+  const { focus, toggle: toggleFocus } = useEditorFocus();
 
   // Refs for the 10-second backend sync — avoids re-creating the interval on every keystroke.
   const codeRef = useRef(code);
@@ -238,7 +279,10 @@ export default function CodingDetail() {
       setRunning(true);
       setRunResult(undefined);
       // Pop the Results sheet so the user sees output animate in.
-      setMobileSheet('results');
+      // Skip in focus mode — the right aside is unmounted and the
+      // mobile dock is hidden, so leaving the dead state would
+      // also confuse the Esc handler when exiting focus.
+      if (!focus) setMobileSheet('results');
       try {
         const res = await api.post<CodeRunResult>('/api/run', {
           code,
@@ -262,7 +306,7 @@ export default function CodingDetail() {
         setRunning(false);
       }
     },
-    [q, code, lang]
+    [q, code, lang, focus]
   );
 
   const handleEvaluate = useCallback(
@@ -270,7 +314,8 @@ export default function CodingDetail() {
       if (!q || !code.trim()) return;
       setSideTab('tests');
       setRunning(true);
-      setMobileSheet('results');
+      // See handleRun above — skip the mobile-sheet pop in focus mode.
+      if (!focus) setMobileSheet('results');
       try {
         const res = await api.post<CodeEvaluateResult>('/api/evaluate', {
           code,
@@ -296,7 +341,7 @@ export default function CodingDetail() {
         setRunning(false);
       }
     },
-    [q, code, lang]
+    [q, code, lang, focus]
   );
 
   if (loading) {
@@ -321,7 +366,7 @@ export default function CodingDetail() {
     <div className="h-full flex flex-col relative">
       <AppHeader
         title={q.title}
-        description={oneLineSummary(q.description)}
+        description={q.description}
         eyebrow={
           <span
             style={{
@@ -371,20 +416,16 @@ export default function CodingDetail() {
           aria-hidden="true"
         />
 
-        {/* Left sidebar — description + Solutions/Hints.
-            Desktop: pinned to the user-resized width on the left.
-            Mobile: the CSS in globals.css turns this aside into a
-            slide-up bottom sheet; the drag handle + close button are
-            rendered `lg:hidden` via SheetHeader. */}
-        <aside
-          className="flex-shrink-0 flex flex-col w-full coding-side-left"
-          style={{
-            ['--side-width' as string]: `${leftWidth}px`,
-            borderBottom: '1px solid var(--border)',
-            background: 'var(--bg)',
-            maxHeight: '38vh',
-          }}
-        >
+        {!focus && (
+          <aside
+            className="flex-shrink-0 flex flex-col w-full coding-side-left"
+            style={{
+              ['--side-width' as string]: `${leftWidth}px`,
+              borderBottom: '1px solid var(--border)',
+              background: 'var(--bg)',
+              maxHeight: '38vh',
+            }}
+          >
           <SheetHeader title="Problem" onClose={() => setMobileSheet(null)} />
           {/* Mobile-only: description + constraints. On desktop these
               live in the horizontal bar above the editor (see below);
@@ -394,8 +435,7 @@ export default function CodingDetail() {
             className="lg:hidden flex-shrink-0 px-4 sm:px-5 pt-4 pb-3 space-y-3"
             style={{ borderBottom: '1px solid var(--border)' }}
           >
-            <InlineMarkdown
-              as="div"
+            <BlockMarkdown
               text={q.description}
               style={{
                 fontSize: 13.5,
@@ -660,13 +700,16 @@ export default function CodingDetail() {
               )}
             </div>
           </div>
-        </aside>
+          </aside>
+        )}
 
-        <Resizer
-          onResize={(dx) =>
-            setLeftWidth((w) => Math.max(260, Math.min(720, w + dx)))
-          }
-        />
+        {!focus && (
+          <Resizer
+            onResize={(dx) =>
+              setLeftWidth((w) => Math.max(260, Math.min(720, w + dx)))
+            }
+          />
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
         {/* Monaco editor — always visible on mobile (the sheet-over-
@@ -676,41 +719,43 @@ export default function CodingDetail() {
         <section className="coding-editor flex-1 min-w-0 lg:min-h-0 flex flex-col" style={{ flex: 1, minHeight: 0 }}>
           {/* Desktop-only problem-detail bar above the editor. Capped
               at ~28vh and scrolled internally so a long description
-              never starves the editor of vertical space. */}
-          <div
-            className="hidden lg:block flex-shrink-0"
-            style={{
-              background: 'var(--bg)',
-              borderBottom: '1px solid var(--border)',
-              maxHeight: '28vh',
-              overflow: 'auto',
-            }}
-          >
-            <div className="px-4 py-3 space-y-3">
-              <InlineMarkdown
-                as="div"
-                text={q.description}
-                style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}
-              />
-              {q.constraints.length > 0 && (
-                <div>
-                  <h3 className="eyebrow mb-1">Constraints</h3>
-                  <ul className="space-y-0.5">
-                    {q.constraints.map((c, i) => (
-                      <li
-                        key={i}
-                        className="flex items-start gap-1.5"
-                        style={{ fontSize: 12, color: 'var(--text-3)' }}
-                      >
-                        <span style={{ color: 'var(--text-4)' }}>•</span>
-                        <InlineMarkdown text={c} className="break-words" />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              never starves the editor of vertical space. Hidden in
+              focus mode along with the side panels. */}
+          {!focus && (
+            <div
+              className="hidden lg:block flex-shrink-0"
+              style={{
+                background: 'var(--bg)',
+                borderBottom: '1px solid var(--border)',
+                maxHeight: '28vh',
+                overflow: 'auto',
+              }}
+            >
+              <div className="px-4 py-3 space-y-3">
+                <BlockMarkdown
+                  text={q.description}
+                  style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}
+                />
+                {q.constraints.length > 0 && (
+                  <div>
+                    <h3 className="eyebrow mb-1">Constraints</h3>
+                    <ul className="space-y-0.5">
+                      {q.constraints.map((c, i) => (
+                        <li
+                          key={i}
+                          className="flex items-start gap-1.5"
+                          style={{ fontSize: 12, color: 'var(--text-3)' }}
+                        >
+                          <span style={{ color: 'var(--text-4)' }}>•</span>
+                          <InlineMarkdown text={c} className="break-words" />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex-1 min-h-0 relative" style={{ background: 'var(--bg-sunken)' }}>
             {/* Desktop: floating language + wrap + copy toolbar at top-right. */}
@@ -730,7 +775,6 @@ export default function CodingDetail() {
                 ariaLabel="Language"
                 fullWidth={false}
                 align="right"
-                style={{ minWidth: 116 }}
               />
               <button
                 type="button"
@@ -783,6 +827,76 @@ export default function CodingDetail() {
               >
                 {copied ? <Check size={14} strokeWidth={2} /> : <Copy size={14} strokeWidth={1.8} />}
               </button>
+              <button
+                type="button"
+                onClick={toggleFocus}
+                aria-label={focus ? 'Exit focus mode' : 'Focus mode (hide panels)'}
+                aria-pressed={focus}
+                title={focus ? 'Exit focus mode' : 'Focus mode'}
+                style={{
+                  width: 30,
+                  height: 30,
+                  border: 0,
+                  borderRadius: 6,
+                  background: focus ? 'var(--accent-soft)' : 'var(--bg-elev)',
+                  color: focus ? 'var(--accent)' : 'var(--text-3)',
+                  boxShadow: 'inset 0 0 0 1px var(--border-strong)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {focus ? (
+                  <Minimize2 size={14} strokeWidth={1.8} />
+                ) : (
+                  <Maximize2 size={14} strokeWidth={1.8} />
+                )}
+              </button>
+              {focus && (
+                <button
+                  type="button"
+                  onClick={() => handleEvaluate()}
+                  disabled={running || (q?.test_cases.length ?? 0) === 0}
+                  aria-label={
+                    evalResults
+                      ? `Run all tests. Last run: ${evalResults.passed} of ${evalResults.passed + evalResults.failed} passed.`
+                      : 'Run all tests'
+                  }
+                  className="inline-flex items-center gap-1.5"
+                  style={{
+                    padding: '5px 12px',
+                    height: 30,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    background: 'var(--ink)',
+                    color: 'var(--paper)',
+                    border: 0,
+                    borderRadius: 999,
+                    cursor: running ? 'wait' : 'pointer',
+                    opacity: running ? 0.6 : 1,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <Play size={10} strokeWidth={1.9} />
+                  {running
+                    ? 'Running…'
+                    : evalResults
+                      ? (
+                          <span
+                            style={{
+                              color:
+                                evalResults.failed === 0
+                                  ? 'var(--status-pass)'
+                                  : 'var(--status-fail)',
+                            }}
+                          >
+                            {evalResults.passed}/{evalResults.passed + evalResults.failed}
+                          </span>
+                        )
+                      : `Run all (${q?.test_cases.length ?? 0})`}
+                </button>
+              )}
             </div>
 
             <Editor
@@ -911,40 +1025,46 @@ export default function CodingDetail() {
           </div>
         </section>
 
-        <RunDock>
-          <ConsoleTab result={runResult} />
-        </RunDock>
+        {!focus && (
+          <RunDock>
+            <ConsoleTab result={runResult} />
+          </RunDock>
+        )}
         </div>
 
-        <Resizer
-          onResize={(dx) =>
-            setRightWidth((w) => Math.max(280, Math.min(720, w - dx)))
-          }
-        />
-
-        <aside
-          className="flex-shrink-0 flex flex-col w-full coding-side-right"
-          style={{
-            ['--side-width' as string]: `${rightWidth}px`,
-            borderTop: '1px solid var(--border)',
-            background: 'var(--bg)',
-            maxHeight: '38vh',
-          }}
-        >
-          <SheetHeader title="Run" onClose={() => setMobileSheet(null)} />
-          <RightDock
-            activeTab={sideTab}
-            onTabChange={setSideTab}
-            entry={q.entry}
-            testCases={q.test_cases}
-            running={running}
-            onRun={(input) => handleRun(input as Record<string, unknown>)}
-            onEvaluate={(filter) => handleEvaluate(filter)}
-            runResult={runResult}
-            runInput={lastRunInput}
-            evalResult={evalResults}
+        {!focus && (
+          <Resizer
+            onResize={(dx) =>
+              setRightWidth((w) => Math.max(280, Math.min(720, w - dx)))
+            }
           />
-        </aside>
+        )}
+
+        {!focus && (
+          <aside
+            className="flex-shrink-0 flex flex-col w-full coding-side-right"
+            style={{
+              ['--side-width' as string]: `${rightWidth}px`,
+              borderTop: '1px solid var(--border)',
+              background: 'var(--bg)',
+              maxHeight: '38vh',
+            }}
+          >
+            <SheetHeader title="Run" onClose={() => setMobileSheet(null)} />
+            <RightDock
+              activeTab={sideTab}
+              onTabChange={setSideTab}
+              entry={q.entry}
+              testCases={q.test_cases}
+              running={running}
+              onRun={(input) => handleRun(input as Record<string, unknown>)}
+              onEvaluate={(filter) => handleEvaluate(filter)}
+              runResult={runResult}
+              runInput={lastRunInput}
+              evalResult={evalResults}
+            />
+          </aside>
+        )}
       </div>
 
       {/* Mobile-only bottom dock. Two buttons to summon the Problem

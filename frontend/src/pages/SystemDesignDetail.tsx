@@ -22,9 +22,9 @@ import StatusAction from '../components/shell/StatusAction';
 import BackLink from '../components/shell/BackLink';
 import BottomSheet from '../components/shell/BottomSheet';
 import InlineMarkdown from '../components/shell/InlineMarkdown';
+import BlockMarkdown from '../components/shell/BlockMarkdown';
 import SectionNav, { type SectionNavItem } from '../components/shell/SectionNav';
 import Zoomable from '../components/shell/Zoomable';
-import { oneLineSummary } from '../lib/text';
 
 interface SDQ {
   id: number;
@@ -242,7 +242,7 @@ export default function SystemDesignDetail() {
     <div className="h-full flex flex-col">
       <AppHeader
         title={q.title}
-        description={oneLineSummary(q.description)}
+        description={q.description}
         eyebrow={
           <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
             <BackLink to="/system-design/questions" />
@@ -260,17 +260,14 @@ export default function SystemDesignDetail() {
               <section>
                 <SectionHeading id="prompt">Prompt</SectionHeading>
                 <AnimatedCard className="card" style={{ padding: 24 }}>
-                  <p
+                  <BlockMarkdown
+                    text={q.description}
                     style={{
-                      margin: 0,
                       color: 'var(--text-2)',
                       fontSize: 14.5,
                       lineHeight: 1.65,
-                      whiteSpace: 'pre-wrap',
                     }}
-                  >
-                    {q.description}
-                  </p>
+                  />
                 </AnimatedCard>
               </section>
             )}

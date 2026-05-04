@@ -105,7 +105,7 @@ export default function Applications() {
             title="Applications"
             description="Every company you're pursuing, from wishlist to offer. Track rounds, interviewers, and outcomes in one place."
             actions={
-              <Link to="/applications/new" className="inline-flex items-center gap-1.5" style={primaryBtn}>
+              <Link to="/applications/new" className="inline-flex items-center gap-1.5" style={{ ...primaryBtn, padding: '6px 14px', borderRadius: 8 }}>
                 <Plus size={13} strokeWidth={1.8} />
                 New application
               </Link>

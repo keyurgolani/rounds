@@ -323,8 +323,8 @@ const textareaStyle: React.CSSProperties = {
 };
 
 const secondaryBtn: React.CSSProperties = {
-  padding: '8px 14px',
-  borderRadius: 'var(--radius)',
+  padding: '6px 14px',
+  borderRadius: 8,
   border: '1px solid var(--border)',
   background: 'transparent',
   color: 'var(--text-2)',

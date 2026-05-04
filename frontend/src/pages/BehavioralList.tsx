@@ -71,6 +71,8 @@ export default function BehavioralList() {
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('title-asc');
+  const [tagFilter, setTagFilter] = useState<string>('__all__');
+  const [linkedFilter, setLinkedFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
 
   useEffect(() => {
     Promise.all([
@@ -102,9 +104,18 @@ export default function BehavioralList() {
     return counts;
   }, [anecdotes]);
 
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const q of questions) for (const t of q.tags ?? []) set.add(t);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [questions]);
+
   const filtered = useMemo(() => {
     const matches = questions.filter((q) => {
       if (activeCat && !q.category_ids.includes(activeCat)) return false;
+      if (tagFilter !== '__all__' && !(q.tags ?? []).includes(tagFilter)) return false;
+      if (linkedFilter === 'linked' && (linkCountByQuestion.get(q.id) ?? 0) === 0) return false;
+      if (linkedFilter === 'unlinked' && (linkCountByQuestion.get(q.id) ?? 0) > 0) return false;
       if (query.trim()) {
         const s = query.trim().toLowerCase();
         const blob = `${q.title} ${q.question_text} ${(q.tags ?? []).join(' ')}`.toLowerCase();
@@ -129,7 +140,7 @@ export default function BehavioralList() {
       }
     });
     return sorted;
-  }, [questions, activeCat, query, sort, linkCountByQuestion]);
+  }, [questions, activeCat, query, sort, tagFilter, linkedFilter, linkCountByQuestion]);
 
   const isLinked = useCallback((qId: string, aId: string) => links.has(`q${qId}-a${aId}`), [
     links,
@@ -372,6 +383,31 @@ export default function BehavioralList() {
               outline: 'none',
             }}
           />
+          {allTags.length > 0 && (
+            <div style={{ minWidth: 140 }}>
+              <Select
+                value={tagFilter}
+                onChange={setTagFilter}
+                options={[
+                  { value: '__all__', label: 'All tags' },
+                  ...allTags.map((t) => ({ value: t, label: t })),
+                ]}
+                ariaLabel="Tag"
+              />
+            </div>
+          )}
+          <div style={{ minWidth: 140 }}>
+            <Select<'all' | 'linked' | 'unlinked'>
+              value={linkedFilter}
+              onChange={setLinkedFilter}
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'linked', label: 'Has anecdote' },
+                { value: 'unlinked', label: 'Needs anecdote' },
+              ]}
+              ariaLabel="Link status"
+            />
+          </div>
           <div style={{ minWidth: 200 }}>
             <Select<SortKey>
               value={sort}
