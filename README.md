@@ -16,7 +16,7 @@ The demo account is seeded on first PocketBase deployment, can run one custom co
 ## Features
 
 - System design practice with question lists, API-backed cheat-sheet guides, diagrams, trade-off panels, and senior follow-up topics.
-- Coding practice with Monaco editor, local drafts, custom runs, full-suite evaluation, and structured problem metadata.
+- Coding practice with Monaco editor, local drafts, focus mode, custom runs, full-suite evaluation, curated runnable question sets, and structured problem metadata.
 - Behavioral prep with competency-tagged questions, STAR story guidance, personal anecdotes, and question-to-story linking.
 - Application tracking with companies, roles, statuses, rounds, offers, campaign context, and todos.
 - Command center, theme controls, streak tracking, and dashboard widgets for day-to-day prep.
@@ -95,7 +95,7 @@ ROUNDS_DISABLE_SIGNUPS=true
 Fresh deployments run four migrations:
 
 1. `1700000000_init_collections.js` creates the final schema.
-2. `1700000100_seed_data.js` loads all shared questions, categories, and guide cheat sheets.
+2. `1700000100_seed_data.js` loads all shared questions, categories, coding question sets, and guide cheat sheets.
 3. `1700000500_bootstrap_admin.js` optionally creates the first PocketBase admin from environment variables.
 4. `1700000600_demo_user.js` creates the hosted demo user and demo-run limiter fields.
 

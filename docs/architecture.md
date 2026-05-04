@@ -123,8 +123,9 @@ PocketBase files live in `pocketbase/`.
 Migrations:
 
 - `1700000000_init_collections.js`: final schema.
-- `1700000100_seed_data.js`: shared questions, categories, and guide cheat sheets.
+- `1700000100_seed_data.js`: shared questions, categories, coding question sets, and guide cheat sheets.
 - `1700000500_bootstrap_admin.js`: optional first admin bootstrap from environment variables.
+- `1700000600_demo_user.js`: hosted demo user and usage limiter fields.
 
 Hooks:
 

@@ -99,6 +99,20 @@ Guide UI is shared across tracks. Prefer this flow:
 
 Guide pages should contain synthesized internal prep knowledge, not external resource-link catalogs.
 
+## Adding Coding Questions
+
+Coding question seed data is authored through the builder pipeline rather than by editing generated JSON directly.
+
+1. Add a question module under `pocketbase/seeds/builder/questions/`.
+2. Define the canonical PocketBase payload, including `entry`, `test_cases`, starter code, hints, thought process, tips, and conservative metadata.
+3. Add a Python reference implementation and register it with `register(...)` from `pocketbase/seeds/builder/registry.py`.
+4. Run `python -m pocketbase.seeds.builder.build` from the repository root.
+5. Commit both the authored module and the regenerated `pocketbase/seeds/more_coding.json`.
+
+The builder imports every question module, validates references against the same backend matchers used at runtime, smoke-runs node-aware Python solutions for linked-list, tree, and graph entries, and rewrites the consolidated seed file consumed by `1700000100_seed_data.js`.
+
+Use the `entry` contract in `pocketbase/seeds/builder/registry.py` for runner-backed problems. Function problems use `kind: "function"`; data-structure problems can use `linked_list`, `tree`, or `graph` so Python and JavaScript submissions receive real node objects while tests stay in readable shorthand forms.
+
 ## Adding Command Center Widgets
 
 1. Create a view in `frontend/src/command-center/views/`.
