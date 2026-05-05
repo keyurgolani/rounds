@@ -7,14 +7,14 @@ optimal version uses an explicit stack and stops the moment count == k,
 giving O(h + k) time and O(h) space — strictly better than a full
 traversal when k is small.
 
-Input is a LeetCode level-order list (with `null` for missing nodes)
-plus a 1-indexed integer k. Output is the kth-smallest node value.
+Reference tests store the tree as a raw level-order array plus a
+1-indexed integer k. User code receives a TreeNode root directly.
 """
 from builder.registry import register
 
 
 def _build(level):
-    """Deserialize LeetCode level-order list (with None for missing) to a tree."""
+    """Build a tree dict from the raw level-order test array."""
     if not level:
         return None
     nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
@@ -53,8 +53,6 @@ PAYLOAD = {
     "description": (
         "Given the `root` of a binary search tree (BST) and an integer `k`, return the **kth smallest** "
         "value (1-indexed) among all node values in the tree.\n\n"
-        "The input tree is given in LeetCode level-order serialization where `null` denotes a missing "
-        "child.\n\n"
         "**Example 1:**\n"
         "- Input: `root = [3,1,4,null,2]`, `k = 1`\n"
         "- Output: `1`\n"
@@ -340,6 +338,15 @@ PAYLOAD = {
     "topics": ["Tree", "Depth-First Search", "Binary Search Tree", "Binary Tree", "Stack"],
     "time_complexity": "O(h + k)",
     "space_complexity": "O(h)",
+    "entry": {
+        "kind": "tree",
+        "name": "kth_smallest",
+        "params": [
+            {"name": "root", "type": "node"},
+            {"name": "k", "type": "int"},
+        ],
+        "input_shape": "tree_level_order",
+    },
 }
 
 

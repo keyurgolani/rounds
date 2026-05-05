@@ -640,7 +640,18 @@
     {
       "title": "Balanced Binary Tree",
       "difficulty": "Easy",
-      "description": "Given the `root` of a binary tree, determine if it is **height-balanced**: for every node in the tree, the heights of its left and right subtrees differ by at most 1.\n\nThe input uses LeetCode level-order serialization where `null` denotes a missing child. The empty tree is considered balanced.\n\n**Example 1:**\n```\nTree:    3\n        / \\\n       9  20\n          / \\\n         15  7\n```\n- Input: `root = [3, 9, 20, null, null, 15, 7]`\n- Output: `true`\n- Explanation: At every node the two subtree heights differ by at most 1.\n\n**Example 2:**\n```\nTree:        1\n            / \\\n           2   2\n          / \\\n         3   3\n        / \\\n       4   4\n```\n- Input: `root = [1, 2, 2, 3, 3, null, null, 4, 4]`\n- Output: `false`\n- Explanation: The left subtree of the root has height 3 while the right subtree has height 1 \u2014 they differ by 2.",
+      "entry": {
+        "kind": "tree",
+        "name": "is_balanced",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          }
+        ],
+        "input_shape": "tree_level_order"
+      },
+      "description": "Given the `root` of a binary tree, determine if it is **height-balanced**: for every node in the tree, the heights of its left and right subtrees differ by at most 1.\n\nYou are given `root` as a `TreeNode` object (or `None` for an empty tree). Work with the node's `left` and `right` pointers directly. The empty tree is considered balanced.\n\n**Example 1:**\n```\nTree:    3\n        / \\\n       9  20\n          / \\\n         15  7\n```\n- Input: `root` is the tree shown above\n- Output: `true`\n- Explanation: At every node the two subtree heights differ by at most 1.\n\n**Example 2:**\n```\nTree:        1\n            / \\\n           2   2\n          / \\\n         3   3\n        / \\\n       4   4\n```\n- Input: `root` is the tree shown above\n- Output: `false`\n- Explanation: The left subtree of the root has height 3 while the right subtree has height 1 \u2014 they differ by 2.",
       "hints": [
         "Definition is recursive \u2014 but the obvious translation `is_balanced(L) && is_balanced(R) && |h(L)-h(R)| <= 1` re-walks each subtree to compute height. That's O(n log n) on a balanced tree and O(n\u00b2) on a skewed one. Can you do better?",
         "Fold the two questions ('how tall am I?' and 'am I balanced?') into a single post-order return: compute the child heights first, then decide.",
@@ -654,14 +665,14 @@
         "The tree may be highly skewed \u2014 recursion depth can reach the node count."
       ],
       "starter_code": {
-        "python": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\ndef is_balanced(root):\n    # `root` is a LeetCode-style level-order list with None for missing children.\n    # Return True if the tree is height-balanced, else False.\n    # Your code here\n    pass",
-        "javascript": "// Definition for a binary tree node.\n// function TreeNode(val, left, right) {\n//     this.val = (val === undefined ? 0 : val);\n//     this.left = (left === undefined ? null : left);\n//     this.right = (right === undefined ? null : right);\n// }\nfunction isBalanced(root) {\n    // `root` is a level-order array with null for missing children.\n    // Your code here\n}",
-        "java": "/**\n * Definition for a binary tree node.\n * public class TreeNode {\n *     int val;\n *     TreeNode left;\n *     TreeNode right;\n *     TreeNode() {}\n *     TreeNode(int val) { this.val = val; }\n *     TreeNode(int val, TreeNode left, TreeNode right) {\n *         this.val = val;\n *         this.left = left;\n *         this.right = right;\n *     }\n * }\n */\npublic boolean isBalanced(java.util.List<Integer> root) {\n    // `root` is a level-order list with null for missing children.\n    // Your code here\n    return false;\n}"
+        "python": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\ndef is_balanced(root):\n    # `root` is a TreeNode or None.\n    # Return True if the tree is height-balanced, else False.\n    # Your code here\n    pass",
+        "javascript": "// Definition for a binary tree node.\n// function TreeNode(val, left, right) {\n//     this.val = (val === undefined ? 0 : val);\n//     this.left = (left === undefined ? null : left);\n//     this.right = (right === undefined ? null : right);\n// }\nfunction isBalanced(root) {\n    // `root` is a TreeNode or null.\n    // Your code here\n}",
+        "java": "/**\n * Definition for a binary tree node.\n * public class TreeNode {\n *     int val;\n *     TreeNode left;\n *     TreeNode right;\n *     TreeNode() {}\n *     TreeNode(int val) { this.val = val; }\n *     TreeNode(int val, TreeNode left, TreeNode right) {\n *         this.val = val;\n *         this.left = left;\n *         this.right = right;\n *     }\n * }\n */\npublic boolean isBalanced(TreeNode root) {\n    // `root` is a TreeNode or null.\n    // Your code here\n    return false;\n}"
       },
       "boilerplate_code": {
-        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    cases = [\n        [3, 9, 20, None, None, 15, 7],\n        [1, 2, 2, 3, 3, None, None, 4, 4],\n        [],\n    ]\n    for c in cases:\n        print(f\"is_balanced({c}) = {is_balanced(c)}\")",
-        "javascript": "// Test runner (read-only)\n[[3, 9, 20, null, null, 15, 7], [1, 2, 2, 3, 3, null, null, 4, 4], []].forEach(c =>\n    console.log(`isBalanced =`, isBalanced(c))\n);",
-        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        System.out.println(s.isBalanced(java.util.Arrays.asList(3, 9, 20, null, null, 15, 7)));\n        System.out.println(s.isBalanced(java.util.Arrays.asList(1, 2, 2, 3, 3, null, null, 4, 4)));\n    }\n}"
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    balanced = TreeNode(3, TreeNode(9), TreeNode(20, TreeNode(15), TreeNode(7)))\n    unbalanced = TreeNode(1, TreeNode(2, TreeNode(3, TreeNode(4), TreeNode(4)), TreeNode(3)), TreeNode(2))\n    print(is_balanced(balanced))\n    print(is_balanced(unbalanced))\n    print(is_balanced(None))",
+        "javascript": "// Test runner (read-only)\nconst balanced = { val: 3, left: { val: 9, left: null, right: null },\n                   right: { val: 20, left: { val: 15, left: null, right: null },\n                                      right: { val: 7, left: null, right: null } } };\nconst unbalanced = { val: 1, left: { val: 2, left: { val: 3, left: { val: 4, left: null, right: null }, right: { val: 4, left: null, right: null } }, right: { val: 3, left: null, right: null } }, right: { val: 2, left: null, right: null } };\nconsole.log(isBalanced(balanced));\nconsole.log(isBalanced(unbalanced));\nconsole.log(isBalanced(null));",
+        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        TreeNode balanced = new TreeNode(3, new TreeNode(9), new TreeNode(20, new TreeNode(15), new TreeNode(7)));\n        TreeNode unbalanced = new TreeNode(1, new TreeNode(2, new TreeNode(3, new TreeNode(4), new TreeNode(4)), new TreeNode(3)), new TreeNode(2));\n        System.out.println(s.isBalanced(balanced));\n        System.out.println(s.isBalanced(unbalanced));\n    }\n}"
       },
       "test_cases": [
         {
@@ -855,9 +866,9 @@
           "space_complexity": "O(h) recursion stack \u2014 O(log n) balanced, O(n) skewed",
           "description": "Single post-order traversal. Each call returns the height of its subtree, or `-1` to signal that an imbalance was detected somewhere below. The parent short-circuits as soon as a child returns `-1`. Each node is visited exactly once, so the total work is O(n) \u2014 the trick that beats the naive O(n log n) / O(n\u00b2) recompute.",
           "code": {
-            "python": "def is_balanced(root):\n    node = _from_level(root)\n    def check(n):\n        if n is None:\n            return 0\n        lh = check(n.left)\n        if lh == -1:\n            return -1\n        rh = check(n.right)\n        if rh == -1:\n            return -1\n        if abs(lh - rh) > 1:\n            return -1\n        return 1 + max(lh, rh)\n    return check(node) != -1",
-            "javascript": "function isBalanced(root) {\n    const node = fromLevel(root);\n    const check = (n) => {\n        if (n === null) return 0;\n        const lh = check(n.left);\n        if (lh === -1) return -1;\n        const rh = check(n.right);\n        if (rh === -1) return -1;\n        if (Math.abs(lh - rh) > 1) return -1;\n        return 1 + Math.max(lh, rh);\n    };\n    return check(node) !== -1;\n}",
-            "java": "public boolean isBalanced(java.util.List<Integer> root) {\n    TreeNode node = fromLevel(root);\n    return check(node) != -1;\n}\nprivate int check(TreeNode n) {\n    if (n == null) return 0;\n    int lh = check(n.left);\n    if (lh == -1) return -1;\n    int rh = check(n.right);\n    if (rh == -1) return -1;\n    if (Math.abs(lh - rh) > 1) return -1;\n    return 1 + Math.max(lh, rh);\n}"
+            "python": "def is_balanced(root):\n    def check(n):\n        if n is None:\n            return 0\n        lh = check(n.left)\n        if lh == -1:\n            return -1\n        rh = check(n.right)\n        if rh == -1:\n            return -1\n        if abs(lh - rh) > 1:\n            return -1\n        return 1 + max(lh, rh)\n    return check(root) != -1",
+            "javascript": "function isBalanced(root) {\n    const check = (n) => {\n        if (n === null) return 0;\n        const lh = check(n.left);\n        if (lh === -1) return -1;\n        const rh = check(n.right);\n        if (rh === -1) return -1;\n        if (Math.abs(lh - rh) > 1) return -1;\n        return 1 + Math.max(lh, rh);\n    };\n    return check(root) !== -1;\n}",
+            "java": "public boolean isBalanced(TreeNode root) {\n    return check(root) != -1;\n}\nprivate int check(TreeNode n) {\n    if (n == null) return 0;\n    int lh = check(n.left);\n    if (lh == -1) return -1;\n    int rh = check(n.right);\n    if (rh == -1) return -1;\n    if (Math.abs(lh - rh) > 1) return -1;\n    return 1 + Math.max(lh, rh);\n}"
           }
         },
         {
@@ -866,9 +877,9 @@
           "space_complexity": "O(h)",
           "description": "Direct translation of the definition: a tree is balanced iff `|h(L) - h(R)| <= 1` AND both subtrees are themselves balanced. The pitfall is that `height(n)` is called at every node, and each call re-walks the subtree \u2014 so each node is touched once per ancestor on its path to the root. For balanced trees that's O(log n) ancestors \u2192 O(n log n) total; for a degenerate skewed tree it's O(n\u00b2).",
           "code": {
-            "python": "def is_balanced(root):\n    node = _from_level(root)\n    def height(n):\n        if n is None:\n            return 0\n        return 1 + max(height(n.left), height(n.right))\n    def check(n):\n        if n is None:\n            return True\n        if abs(height(n.left) - height(n.right)) > 1:\n            return False\n        return check(n.left) and check(n.right)\n    return check(node)",
-            "javascript": "function isBalanced(root) {\n    const node = fromLevel(root);\n    const height = (n) => n === null ? 0 : 1 + Math.max(height(n.left), height(n.right));\n    const check = (n) => {\n        if (n === null) return true;\n        if (Math.abs(height(n.left) - height(n.right)) > 1) return false;\n        return check(n.left) && check(n.right);\n    };\n    return check(node);\n}",
-            "java": "public boolean isBalanced(java.util.List<Integer> root) {\n    TreeNode node = fromLevel(root);\n    return check(node);\n}\nprivate int height(TreeNode n) {\n    if (n == null) return 0;\n    return 1 + Math.max(height(n.left), height(n.right));\n}\nprivate boolean check(TreeNode n) {\n    if (n == null) return true;\n    if (Math.abs(height(n.left) - height(n.right)) > 1) return false;\n    return check(n.left) && check(n.right);\n}"
+            "python": "def is_balanced(root):\n    def height(n):\n        if n is None:\n            return 0\n        return 1 + max(height(n.left), height(n.right))\n    def check(n):\n        if n is None:\n            return True\n        if abs(height(n.left) - height(n.right)) > 1:\n            return False\n        return check(n.left) and check(n.right)\n    return check(root)",
+            "javascript": "function isBalanced(root) {\n    const height = (n) => n === null ? 0 : 1 + Math.max(height(n.left), height(n.right));\n    const check = (n) => {\n        if (n === null) return true;\n        if (Math.abs(height(n.left) - height(n.right)) > 1) return false;\n        return check(n.left) && check(n.right);\n    };\n    return check(root);\n}",
+            "java": "public boolean isBalanced(TreeNode root) {\n    return check(root);\n}\nprivate int height(TreeNode n) {\n    if (n == null) return 0;\n    return 1 + Math.max(height(n.left), height(n.right));\n}\nprivate boolean check(TreeNode n) {\n    if (n == null) return true;\n    if (Math.abs(height(n.left) - height(n.right)) > 1) return false;\n    return check(n.left) && check(n.right);\n}"
           }
         }
       ],
@@ -25093,7 +25104,7 @@
     {
       "title": "Binary Tree Inorder Traversal",
       "difficulty": "Easy",
-      "description": "Given the `root` of a binary tree, return the **inorder traversal** of its nodes' values.\n\nInorder visits a node *between* its left and right subtrees: traverse left, visit root, traverse right. For a binary search tree, this yields the values in sorted order \u2014 a fact worth mentioning.\n\nThe input uses LeetCode level-order serialization where `null` denotes a missing child. The output is a flat list of integers in visit order.\n\n**Example 1:**\n- Input: `root = [1,null,2,3]`\n- Output: `[1,3,2]`\n- Explanation:\n```\n   1\n    \\\n     2\n    /\n   3\n```\nVisit left of 1 (none), visit 1, recurse right into 2 \u2192 visit left of 2 which is 3 \u2192 visit 2 \u2192 no right.\n\n**Example 2:**\n- Input: `root = [4,2,6,1,3,5,7]`\n- Output: `[1,2,3,4,5,6,7]`\n- Explanation: This is a balanced BST, so inorder produces sorted output.",
+      "description": "Given the `root` of a binary tree, return the **inorder traversal** of its nodes' values.\n\nInorder visits a node *between* its left and right subtrees: traverse left, visit root, traverse right. For a binary search tree, this yields the values in sorted order \u2014 a fact worth mentioning.\n\nThe function receives the `TreeNode root` directly and returns a flat list of integers in visit order.\n\n**Example 1:**\n- Input: the tree shown below\n- Output: `[1,3,2]`\n- Explanation:\n```\n   1\n    \\\n     2\n    /\n   3\n```\nVisit left of 1 (none), visit 1, recurse right into 2 \u2192 visit left of 2 which is 3 \u2192 visit 2 \u2192 no right.\n\n**Example 2:**\n- Input: a balanced BST with root `4`, children `2` and `6`, and leaves `1,3,5,7`\n- Output: `[1,2,3,4,5,6,7]`\n- Explanation: This is a balanced BST, so inorder produces sorted output.",
       "hints": [
         "The recursive definition writes itself: `inorder(left) ++ [root.val] ++ inorder(right)`. Three lines, base case `None \u2192 []`.",
         "Iterative version with an explicit stack: walk left as far as possible pushing every node, then pop, record, and pivot to the popped node's right child. Repeat until both stack and current pointer are empty.",
@@ -25111,7 +25122,7 @@
         "java": "/**\n * Definition for a binary tree node.\n * public class TreeNode {\n *     int val;\n *     TreeNode left;\n *     TreeNode right;\n *     TreeNode() {}\n *     TreeNode(int val) { this.val = val; }\n *     TreeNode(int val, TreeNode left, TreeNode right) {\n *         this.val = val;\n *         this.left = left;\n *         this.right = right;\n *     }\n * }\n */\npublic List<Integer> inorderTraversal(TreeNode root) {\n    // Your code here\n    return new ArrayList<>();\n}"
       },
       "boilerplate_code": {
-        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    # Build [1, null, 2, 3]:  1\n    #                          \\\n    #                           2\n    #                          /\n    #                         3\n    root = TreeNode(1, None, TreeNode(2, TreeNode(3)))\n    print(inorder_traversal(root))  # [1, 3, 2]",
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    # Build a small tree manually:  1\n    #                              \\\n    #                               2\n    #                              /\n    #                             3\n    root = TreeNode(1, None, TreeNode(2, TreeNode(3)))\n    print(inorder_traversal(root))  # [1, 3, 2]",
         "javascript": "// Test runner (read-only)\nconst root = { val: 1, left: null,\n    right: { val: 2, left: { val: 3, left: null, right: null }, right: null } };\nconsole.log(inorderTraversal(root));  // [1, 3, 2]",
         "java": "// Test runner (read-only)\nimport java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        TreeNode root = new TreeNode(1, null, new TreeNode(2, new TreeNode(3), null));\n        System.out.println(s.inorderTraversal(root));  // [1, 3, 2]\n    }\n}"
       },
@@ -25154,7 +25165,7 @@
             3,
             2
           ],
-          "description": "Classic LeetCode example \u2014 note the `null` left child of root",
+          "description": "Classic LeetCode example shape \u2014 right child with a left subtree",
           "tags": [
             "basic"
           ]
@@ -25380,12 +25391,23 @@
         "Binary Tree"
       ],
       "time_complexity": "O(n)",
-      "space_complexity": "O(h)"
+      "space_complexity": "O(h)",
+      "entry": {
+        "kind": "tree",
+        "name": "inorder_traversal",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          }
+        ],
+        "input_shape": "tree_level_order"
+      }
     },
     {
       "title": "Binary Tree Level Order Traversal",
       "difficulty": "Medium",
-      "description": "Given the `root` of a binary tree, return its **level order traversal** \u2014 that is, the values of the nodes grouped by depth, with each level's values listed left-to-right.\n\nTrees are encoded as level-order lists with `null` for missing children (LeetCode style). The output is a list of lists; each inner list is one level.\n\n**Example 1:**\n```\nTree:    3\n        / \\\n       9  20\n          / \\\n         15  7\n```\n- Input: `root = [3, 9, 20, null, null, 15, 7]`\n- Output: `[[3], [9, 20], [15, 7]]`\n\n**Example 2:**\n- Input: `root = [1]`\n- Output: `[[1]]`\n\nAn empty tree returns `[]` (no levels at all).",
+      "description": "Given the `root` of a binary tree, return its **level order traversal** \u2014 that is, the values of the nodes grouped by depth, with each level's values listed left-to-right.\n\nThe output is a list of lists; each inner list is one level.\n\n**Example 1:**\n```\nTree:    3\n        / \\\n       9  20\n          / \\\n         15  7\n```\n- Input: `root` points to the tree shown above\n- Output: `[[3], [9, 20], [15, 7]]`\n\n**Example 2:**\n- Input: `root` points to a single node with value `1`\n- Output: `[[1]]`\n\nAn empty tree returns `[]` (no levels at all).",
       "hints": [
         "BFS is the natural fit. Use a queue and process the tree level-by-level \u2014 but you need a way to tell *where one level ends and the next begins*.",
         "The canonical trick: at the start of each outer loop iteration, snapshot `size = len(queue)`. Drain exactly that many nodes (they form one level), enqueue their children, then loop. The snapshot freezes the level boundary before children get added.",
@@ -25398,14 +25420,14 @@
         "-1000 <= Node.val <= 1000"
       ],
       "starter_code": {
-        "python": "# `root` is a LeetCode-style level-order list with None for missing children.\n# Return a list of lists; each inner list is one level, left-to-right.\ndef level_order(root):\n    # Your code here\n    pass",
-        "javascript": "// `root` is a level-order array with null for missing children.\n// Return an array of arrays; each inner array is one level, left-to-right.\nfunction levelOrder(root) {\n    // Your code here\n}",
-        "java": "// `root` is a level-order list with null for missing children.\n// Return List<List<Integer>>; each inner list is one level.\npublic List<List<Integer>> levelOrder(List<Integer> root) {\n    // Your code here\n    return new ArrayList<>();\n}"
+        "python": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n# Return a list of lists; each inner list is one level, left-to-right.\ndef level_order(root):\n    # Your code here\n    pass",
+        "javascript": "// Definition for a binary tree node.\n// function TreeNode(val, left, right) {\n//     this.val = (val === undefined ? 0 : val);\n//     this.left = (left === undefined ? null : left);\n//     this.right = (right === undefined ? null : right);\n// }\n// Return an array of arrays; each inner array is one level, left-to-right.\nfunction levelOrder(root) {\n    // Your code here\n}",
+        "java": "/**\n * Definition for a binary tree node.\n * public class TreeNode {\n *     int val;\n *     TreeNode left;\n *     TreeNode right;\n *     TreeNode() {}\n *     TreeNode(int val) { this.val = val; }\n *     TreeNode(int val, TreeNode left, TreeNode right) {\n *         this.val = val;\n *         this.left = left;\n *         this.right = right;\n *     }\n * }\n */\n// Return List<List<Integer>>; each inner list is one level.\npublic List<List<Integer>> levelOrder(TreeNode root) {\n    // Your code here\n    return new ArrayList<>();\n}"
       },
       "boilerplate_code": {
-        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    cases = [[3, 9, 20, None, None, 15, 7], [1], []]\n    for c in cases:\n        print(f\"level_order({c}) = {level_order(c)}\")",
-        "javascript": "// Test runner (read-only)\n[[3, 9, 20, null, null, 15, 7], [1], []].forEach(c =>\n    console.log('levelOrder =', JSON.stringify(levelOrder(c)))\n);",
-        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        System.out.println(s.levelOrder(java.util.Arrays.asList(3, 9, 20, null, null, 15, 7)));\n    }\n}"
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    root = TreeNode(3, TreeNode(9), TreeNode(20, TreeNode(15), TreeNode(7)))\n    print(level_order(root))\n    print(level_order(None))",
+        "javascript": "// Test runner (read-only)\nconst root = new TreeNode(3, new TreeNode(9), new TreeNode(20, new TreeNode(15), new TreeNode(7)));\nconsole.log(JSON.stringify(levelOrder(root)));\nconsole.log(JSON.stringify(levelOrder(null)));",
+        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        TreeNode root = new TreeNode(3, new TreeNode(9), new TreeNode(20, new TreeNode(15), new TreeNode(7)));\n        System.out.println(s.levelOrder(root));\n    }\n}"
       },
       "test_cases": [
         {
@@ -25772,9 +25794,9 @@
           "space_complexity": "O(w) \u2014 width of the widest level (up to n/2 for a complete tree)",
           "description": "Standard BFS: enqueue the root, then on each outer iteration snapshot `size = len(queue)`. Pop exactly `size` nodes \u2014 those are the current level \u2014 collecting their values into a fresh sublist while enqueueing their non-null children for the next level. Append the sublist to the result. Visits every node once.",
           "code": {
-            "python": "from collections import deque\n\ndef level_order(root):\n    node = _from_level(root)\n    if node is None:\n        return []\n    result = []\n    q = deque([node])\n    while q:\n        size = len(q)\n        level = []\n        for _ in range(size):\n            n = q.popleft()\n            level.append(n.val)\n            if n.left:  q.append(n.left)\n            if n.right: q.append(n.right)\n        result.append(level)\n    return result",
-            "javascript": "function levelOrder(root) {\n    const node = fromLevel(root);\n    if (!node) return [];\n    const result = [];\n    let q = [node];\n    while (q.length) {\n        const next = [];\n        const level = [];\n        for (const n of q) {\n            level.push(n.val);\n            if (n.left)  next.push(n.left);\n            if (n.right) next.push(n.right);\n        }\n        result.push(level);\n        q = next;\n    }\n    return result;\n}",
-            "java": "public List<List<Integer>> levelOrder(List<Integer> root) {\n    TreeNode node = fromLevel(root);\n    List<List<Integer>> result = new ArrayList<>();\n    if (node == null) return result;\n    Deque<TreeNode> q = new ArrayDeque<>();\n    q.offer(node);\n    while (!q.isEmpty()) {\n        int size = q.size();\n        List<Integer> level = new ArrayList<>(size);\n        for (int i = 0; i < size; i++) {\n            TreeNode n = q.poll();\n            level.add(n.val);\n            if (n.left  != null) q.offer(n.left);\n            if (n.right != null) q.offer(n.right);\n        }\n        result.add(level);\n    }\n    return result;\n}"
+            "python": "from collections import deque\n\ndef level_order(root):\n    if root is None:\n        return []\n    result = []\n    q = deque([root])\n    while q:\n        size = len(q)\n        level = []\n        for _ in range(size):\n            n = q.popleft()\n            level.append(n.val)\n            if n.left:  q.append(n.left)\n            if n.right: q.append(n.right)\n        result.append(level)\n    return result",
+            "javascript": "function levelOrder(root) {\n    if (!root) return [];\n    const result = [];\n    let q = [root];\n    while (q.length) {\n        const next = [];\n        const level = [];\n        for (const n of q) {\n            level.push(n.val);\n            if (n.left)  next.push(n.left);\n            if (n.right) next.push(n.right);\n        }\n        result.push(level);\n        q = next;\n    }\n    return result;\n}",
+            "java": "public List<List<Integer>> levelOrder(TreeNode root) {\n    List<List<Integer>> result = new ArrayList<>();\n    if (root == null) return result;\n    Deque<TreeNode> q = new ArrayDeque<>();\n    q.offer(root);\n    while (!q.isEmpty()) {\n        int size = q.size();\n        List<Integer> level = new ArrayList<>(size);\n        for (int i = 0; i < size; i++) {\n            TreeNode n = q.poll();\n            level.add(n.val);\n            if (n.left  != null) q.offer(n.left);\n            if (n.right != null) q.offer(n.right);\n        }\n        result.add(level);\n    }\n    return result;\n}"
           }
         },
         {
@@ -25783,9 +25805,9 @@
           "space_complexity": "O(h) recursion stack \u2014 O(log n) balanced, O(n) skewed",
           "description": "Walk the tree DFS pre-order, carrying the current `depth`. On the way down, if `depth == len(result)` we've reached a new level \u2014 append a fresh sublist. Then append the node's value to `result[depth]` and recurse into left and right (in that order, so values land left-to-right). No queue needed; recursion depth = tree height.",
           "code": {
-            "python": "def level_order(root):\n    node = _from_level(root)\n    result = []\n    def go(n, depth):\n        if n is None:\n            return\n        if depth == len(result):\n            result.append([])\n        result[depth].append(n.val)\n        go(n.left, depth + 1)\n        go(n.right, depth + 1)\n    go(node, 0)\n    return result",
-            "javascript": "function levelOrder(root) {\n    const node = fromLevel(root);\n    const result = [];\n    const go = (n, depth) => {\n        if (n === null) return;\n        if (depth === result.length) result.push([]);\n        result[depth].push(n.val);\n        go(n.left,  depth + 1);\n        go(n.right, depth + 1);\n    };\n    go(node, 0);\n    return result;\n}",
-            "java": "public List<List<Integer>> levelOrder(List<Integer> root) {\n    TreeNode node = fromLevel(root);\n    List<List<Integer>> result = new ArrayList<>();\n    dfs(node, 0, result);\n    return result;\n}\nprivate void dfs(TreeNode n, int depth, List<List<Integer>> result) {\n    if (n == null) return;\n    if (depth == result.size()) result.add(new ArrayList<>());\n    result.get(depth).add(n.val);\n    dfs(n.left,  depth + 1, result);\n    dfs(n.right, depth + 1, result);\n}"
+            "python": "def level_order(root):\n    result = []\n    def go(n, depth):\n        if n is None:\n            return\n        if depth == len(result):\n            result.append([])\n        result[depth].append(n.val)\n        go(n.left, depth + 1)\n        go(n.right, depth + 1)\n    go(root, 0)\n    return result",
+            "javascript": "function levelOrder(root) {\n    const result = [];\n    const go = (n, depth) => {\n        if (n === null) return;\n        if (depth === result.length) result.push([]);\n        result[depth].push(n.val);\n        go(n.left,  depth + 1);\n        go(n.right, depth + 1);\n    };\n    go(root, 0);\n    return result;\n}",
+            "java": "public List<List<Integer>> levelOrder(TreeNode root) {\n    List<List<Integer>> result = new ArrayList<>();\n    dfs(root, 0, result);\n    return result;\n}\nprivate void dfs(TreeNode n, int depth, List<List<Integer>> result) {\n    if (n == null) return;\n    if (depth == result.size()) result.add(new ArrayList<>());\n    result.get(depth).add(n.val);\n    dfs(n.left,  depth + 1, result);\n    dfs(n.right, depth + 1, result);\n}"
           }
         }
       ],
@@ -25821,12 +25843,23 @@
         "Queue"
       ],
       "time_complexity": "O(n)",
-      "space_complexity": "O(n)"
+      "space_complexity": "O(n)",
+      "entry": {
+        "kind": "tree",
+        "name": "level_order",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          }
+        ],
+        "input_shape": "tree_level_order"
+      }
     },
     {
       "title": "Binary Tree Maximum Path Sum",
       "difficulty": "Hard",
-      "description": "A **path** in a binary tree is a sequence of nodes where each pair of adjacent nodes is connected by an edge. A node may appear in the path **at most once**, and the path does **not** need to pass through the root.\n\nThe **path sum** is the sum of the node values along the path.\n\nGiven the `root` of a binary tree, return the **maximum path sum** of any non-empty path.\n\nTrees are encoded as LeetCode level-order lists with `null` for missing children.\n\n**Example 1:**\n```\nTree:    1\n        / \\\n       2   3\n```\n- Input: `root = [1,2,3]`\n- Output: `6`\n- Explanation: the optimal path is `2 -> 1 -> 3`, summing to `2 + 1 + 3 = 6`.\n\n**Example 2:**\n```\nTree:    -10\n         /  \\\n        9   20\n            / \\\n           15  7\n```\n- Input: `root = [-10,9,20,null,null,15,7]`\n- Output: `42`\n- Explanation: the optimal path is `15 -> 20 -> 7`, summing to `15 + 20 + 7 = 42`. The root `-10` is skipped because including it would lower the total.",
+      "description": "A **path** in a binary tree is a sequence of nodes where each pair of adjacent nodes is connected by an edge. A node may appear in the path **at most once**, and the path does **not** need to pass through the root.\n\nThe **path sum** is the sum of the node values along the path.\n\nGiven the `root` of a binary tree, return the **maximum path sum** of any non-empty path.\n\n**Example 1:**\n```\nTree:    1\n        / \\\n       2   3\n```\n- Input: `root = [1,2,3]`\n- Output: `6`\n- Explanation: the optimal path is `2 -> 1 -> 3`, summing to `2 + 1 + 3 = 6`.\n\n**Example 2:**\n```\nTree:    -10\n         /  \\\n        9   20\n            / \\\n           15  7\n```\n- Input: `root = [-10,9,20,null,null,15,7]`\n- Output: `42`\n- Explanation: the optimal path is `15 -> 20 -> 7`, summing to `15 + 20 + 7 = 42`. The root `-10` is skipped because including it would lower the total.",
       "hints": [
         "DFS each node and return the **maximum gain** a path starting at that node and going **down** one side can contribute: `node.val + max(0, max(leftGain, rightGain))`. The `max(0, ...)` is what lets you discard a negative branch.",
         "Update a **global maximum** at every node with the value of a path that **bends at this node**: `node.val + max(0, leftGain) + max(0, rightGain)`. This is the only place you combine both sides.",
@@ -25840,9 +25873,9 @@
         "Negative node values are allowed; the path must contain at least one node."
       ],
       "starter_code": {
-        "python": "# `root` is a LeetCode-style level-order list with None for missing children.\n# Return the maximum path sum (any non-empty path) as an int.\n#\n# Hint: a recursive helper that returns the max downward gain from a node\n# while updating a shared `best` (e.g. `best = [-float('inf')]`) is the cleanest pattern.\ndef max_path_sum(root):\n    # Your code here\n    pass",
-        "javascript": "// `root` is a level-order array with null for missing children.\n// Return the maximum path sum as a number.\n//\n// Hint: capture a `best` variable in a closure, recurse and return\n// the max downward gain from each node while updating `best`.\nfunction maxPathSum(root) {\n    // Your code here\n}",
-        "java": "// `root` is a level-order list with null for missing children.\n// Return the maximum path sum as an int.\n//\n// Hint: an instance field `int best = Integer.MIN_VALUE` lets a recursive\n// helper update a shared maximum while returning each subtree's max gain upward.\npublic int maxPathSum(java.util.List<Integer> root) {\n    // Your code here\n    return 0;\n}"
+        "python": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n# Return the maximum path sum (any non-empty path) as an int.\n#\n# Hint: a recursive helper that returns the max downward gain from a node\n# while updating a shared `best` (e.g. `best = [-float('inf')]`) is the cleanest pattern.\ndef max_path_sum(root):\n    # Your code here\n    pass",
+        "javascript": "// Definition for a binary tree node.\n// function TreeNode(val, left, right) {\n//     this.val = (val === undefined ? 0 : val);\n//     this.left = (left === undefined ? null : left);\n//     this.right = (right === undefined ? null : right);\n// }\n// Return the maximum path sum as a number.\n//\n// Hint: capture a `best` variable in a closure, recurse and return\n// the max downward gain from each node while updating `best`.\nfunction maxPathSum(root) {\n    // Your code here\n}",
+        "java": "/**\n * Definition for a binary tree node.\n * public class TreeNode {\n *     int val;\n *     TreeNode left;\n *     TreeNode right;\n *     TreeNode() {}\n *     TreeNode(int val) { this.val = val; }\n *     TreeNode(int val, TreeNode left, TreeNode right) {\n *         this.val = val;\n *         this.left = left;\n *         this.right = right;\n *     }\n * }\n */\n// Return the maximum path sum as an int.\n//\n// Hint: an instance field `int best = Integer.MIN_VALUE` lets a recursive\n// helper update a shared maximum while returning each subtree's max gain upward.\npublic int maxPathSum(TreeNode root) {\n    // Your code here\n    return 0;\n}"
       },
       "boilerplate_code": {
         "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    cases = [[1, 2, 3], [-10, 9, 20, None, None, 15, 7], [-3], [1]]\n    for c in cases:\n        print(f\"max_path_sum({c}) = {max_path_sum(c)}\")",
@@ -26045,8 +26078,8 @@
           "space_complexity": "O(h) recursion stack \u2014 O(log n) balanced, O(n) skewed",
           "description": "A single post-order DFS. The helper returns the **maximum gain** a path can earn by starting at the current node and descending into **one** subtree: `node.val + max(0, max(leftGain, rightGain))`. The `max(0, ...)` clamps negative branches to zero \u2014 extending into a negative branch is never better than stopping.\n\nIndependently, while computing that gain, update a shared `best` with the value of a path that **bends at this node** (uses both children): `node.val + max(0, leftGain) + max(0, rightGain)`. This is the only place both subtrees are combined, since a path through an ancestor can extend only one side.\n\nInitialise `best` to `-infinity` so all-negative trees return their largest single node.",
           "code": {
-            "python": "def max_path_sum(root):\n    node = _from_level(root)\n    best = [float('-inf')]\n    def gain(n):\n        if n is None:\n            return 0\n        l = max(0, gain(n.left))\n        r = max(0, gain(n.right))\n        bend = n.val + l + r\n        if bend > best[0]:\n            best[0] = bend\n        return n.val + max(l, r)\n    gain(node)\n    return best[0]",
-            "javascript": "function maxPathSum(root) {\n    const node = fromLevel(root);\n    let best = -Infinity;\n    const gain = (n) => {\n        if (n === null) return 0;\n        const l = Math.max(0, gain(n.left));\n        const r = Math.max(0, gain(n.right));\n        const bend = n.val + l + r;\n        if (bend > best) best = bend;\n        return n.val + Math.max(l, r);\n    };\n    gain(node);\n    return best;\n}",
+            "python": "def max_path_sum(root):\n    best = [float('-inf')]\n    def gain(n):\n        if n is None:\n            return 0\n        l = max(0, gain(n.left))\n        r = max(0, gain(n.right))\n        bend = n.val + l + r\n        if bend > best[0]:\n            best[0] = bend\n        return n.val + max(l, r)\n    gain(root)\n    return best[0]",
+            "javascript": "function maxPathSum(root) {\n    let best = -Infinity;\n    const gain = (n) => {\n        if (n === null) return 0;\n        const l = Math.max(0, gain(n.left));\n        const r = Math.max(0, gain(n.right));\n        const bend = n.val + l + r;\n        if (bend > best) best = bend;\n        return n.val + Math.max(l, r);\n    };\n    gain(root);\n    return best;\n}",
             "java": "class Solution {\n    private int best = Integer.MIN_VALUE;\n    public int maxPathSum(TreeNode root) {\n        gain(root);\n        return best;\n    }\n    private int gain(TreeNode n) {\n        if (n == null) return 0;\n        int l = Math.max(0, gain(n.left));\n        int r = Math.max(0, gain(n.right));\n        int bend = n.val + l + r;\n        if (bend > best) best = bend;\n        return n.val + Math.max(l, r);\n    }\n}"
           }
         },
@@ -26056,8 +26089,8 @@
           "space_complexity": "O(h)",
           "description": "For each node, treat it as the **bend point** of the path and explore every downward path into the left subtree and every downward path into the right subtree, summing all combinations. Recompute the per-node 'best downward path' at each visited node. Correct but redundant \u2014 the same subtree work happens from every ancestor. Useful as a contrast to motivate the one-pass optimal version: collapsing 'find best downward path' and 'update bent-path max' into a single post-order recursion drops the cost to O(n).",
           "code": {
-            "python": "def max_path_sum(root):\n    node = _from_level(root)\n    best = [float('-inf')]\n    def best_down(n):\n        if n is None:\n            return 0\n        l = max(0, best_down(n.left))\n        r = max(0, best_down(n.right))\n        return n.val + max(l, r)\n    def visit(n):\n        if n is None:\n            return\n        l = max(0, best_down(n.left))\n        r = max(0, best_down(n.right))\n        bend = n.val + l + r\n        if bend > best[0]:\n            best[0] = bend\n        visit(n.left)\n        visit(n.right)\n    visit(node)\n    return best[0]",
-            "javascript": "function maxPathSum(root) {\n    const node = fromLevel(root);\n    let best = -Infinity;\n    const bestDown = (n) => {\n        if (n === null) return 0;\n        const l = Math.max(0, bestDown(n.left));\n        const r = Math.max(0, bestDown(n.right));\n        return n.val + Math.max(l, r);\n    };\n    const visit = (n) => {\n        if (n === null) return;\n        const l = Math.max(0, bestDown(n.left));\n        const r = Math.max(0, bestDown(n.right));\n        const bend = n.val + l + r;\n        if (bend > best) best = bend;\n        visit(n.left);\n        visit(n.right);\n    };\n    visit(node);\n    return best;\n}",
+            "python": "def max_path_sum(root):\n    best = [float('-inf')]\n    def best_down(n):\n        if n is None:\n            return 0\n        l = max(0, best_down(n.left))\n        r = max(0, best_down(n.right))\n        return n.val + max(l, r)\n    def visit(n):\n        if n is None:\n            return\n        l = max(0, best_down(n.left))\n        r = max(0, best_down(n.right))\n        bend = n.val + l + r\n        if bend > best[0]:\n            best[0] = bend\n        visit(n.left)\n        visit(n.right)\n    visit(root)\n    return best[0]",
+            "javascript": "function maxPathSum(root) {\n    let best = -Infinity;\n    const bestDown = (n) => {\n        if (n === null) return 0;\n        const l = Math.max(0, bestDown(n.left));\n        const r = Math.max(0, bestDown(n.right));\n        return n.val + Math.max(l, r);\n    };\n    const visit = (n) => {\n        if (n === null) return;\n        const l = Math.max(0, bestDown(n.left));\n        const r = Math.max(0, bestDown(n.right));\n        const bend = n.val + l + r;\n        if (bend > best) best = bend;\n        visit(n.left);\n        visit(n.right);\n    };\n    visit(root);\n    return best;\n}",
             "java": "class Solution {\n    private int best = Integer.MIN_VALUE;\n    public int maxPathSum(TreeNode root) {\n        visit(root);\n        return best;\n    }\n    private int bestDown(TreeNode n) {\n        if (n == null) return 0;\n        int l = Math.max(0, bestDown(n.left));\n        int r = Math.max(0, bestDown(n.right));\n        return n.val + Math.max(l, r);\n    }\n    private void visit(TreeNode n) {\n        if (n == null) return;\n        int l = Math.max(0, bestDown(n.left));\n        int r = Math.max(0, bestDown(n.right));\n        int bend = n.val + l + r;\n        if (bend > best) best = bend;\n        visit(n.left);\n        visit(n.right);\n    }\n}"
           }
         }
@@ -26096,7 +26129,18 @@
         "Dynamic Programming"
       ],
       "time_complexity": "O(n)",
-      "space_complexity": "O(h)"
+      "space_complexity": "O(h)",
+      "entry": {
+        "kind": "tree",
+        "name": "max_path_sum",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          }
+        ],
+        "input_shape": "tree_level_order"
+      }
     },
     {
       "title": "Burst Balloons",
@@ -27078,7 +27122,7 @@
     {
       "title": "Clone Graph",
       "difficulty": "Medium",
-      "description": "Given a reference of a node in a **connected** undirected graph, return a **deep copy** (clone) of the graph.\n\nEach node in the graph contains a value (`int`) and a list (`List[Node]`) of its neighbors.\n\n**Test format (this judge):** the graph is provided as an **adjacency list**: `adjList[i]` is the list of neighbors of the node with value `i + 1` (nodes are 1-indexed). Your function takes the adjacency list of the input graph and returns the adjacency list of the **cloned** graph. For a correct deep copy, the returned adjacency list equals the input.\n\n**Example 1:**\n- Input: `adjList = [[2,4],[1,3],[2,4],[1,3]]`\n- Output: `[[2,4],[1,3],[2,4],[1,3]]`\n- Explanation: A 4-cycle. Node 1's neighbors are 2 and 4. Node 2's are 1 and 3. Etc.\n\n**Example 2:**\n- Input: `adjList = [[]]`\n- Output: `[[]]`\n- Explanation: A single node with no neighbors.\n\n**Example 3:**\n- Input: `adjList = []`\n- Output: `[]`\n- Explanation: The empty graph \u2014 no node passed in.",
+      "description": "Given a reference to a node in a **connected** undirected graph, return a **deep copy** (clone) of the graph.\n\nEach node in the graph contains a value (`int`) and a list (`List[Node]`) of its neighbors.\n\nYou receive `node` as a `Node` object (or `None`/`null` for an empty graph). Return the cloned `Node` object (or `None`/`null`).\n\n**Example 1:**\n- A 4-cycle: Node 1's neighbors are 2 and 4. Node 2's are 1 and 3, etc.\n- Output: a deep copy with the same structure but different object identities.\n\n**Example 2:**\n- A single node with no neighbors.\n- Output: a new single node with no neighbors.\n\n**Example 3:**\n- Empty graph (`node = None`).\n- Output: `None`.",
       "hints": [
         "The graph has cycles. A naive recursive clone (`clone(node) = Node(node.val, [clone(n) for n in node.neighbors])`) recurses forever.",
         "Break the cycle with a hash map: `old_to_new[original_node] = cloned_node`. Before recursing into a neighbor, check the map \u2014 if the neighbor is already cloned, reuse it.",
@@ -27092,21 +27136,33 @@
         "The graph is connected and undirected; there are no self-loops or repeated edges."
       ],
       "starter_code": {
-        "python": "# Definition for a Node.\n# class Node:\n#     def __init__(self, val=0, neighbors=None):\n#         self.val = val\n#         self.neighbors = neighbors if neighbors is not None else []\n\ndef clone_graph(adj_list):\n    # Build the input graph from adj_list, deep-copy it,\n    # then return the adjacency list of the clone.\n    # Your code here\n    pass",
-        "javascript": "// Definition for a Node.\n// function Node(val, neighbors) {\n//     this.val = val === undefined ? 0 : val;\n//     this.neighbors = neighbors === undefined ? [] : neighbors;\n// }\n\nfunction cloneGraph(adjList) {\n    // Your code here\n}",
-        "java": "// Definition for a Node.\n// class Node {\n//     public int val;\n//     public List<Node> neighbors;\n//     public Node(int _val) { val = _val; neighbors = new ArrayList<>(); }\n// }\n\npublic List<List<Integer>> cloneGraph(List<List<Integer>> adjList) {\n    // Your code here\n    return new ArrayList<>();\n}"
+        "python": "# class Node:\n#     def __init__(self, val=0, neighbors=None):\n#         self.val = val\n#         self.neighbors = neighbors if neighbors is not None else []\n\ndef clone_graph(node):\n    # node is a Node (or None for an empty graph).\n    # Return a deep-copied Node (or None).\n    pass",
+        "javascript": "// class Node {\n//   constructor(val, neighbors) {\n//     this.val = val === undefined ? 0 : val;\n//     this.neighbors = neighbors === undefined ? [] : neighbors;\n//   }\n// }\n\nfunction cloneGraph(node) {\n    // node is a Node (or null for an empty graph).\n    // Return a deep-copied Node (or null).\n}",
+        "java": "// class Node {\n//     public int val;\n//     public List<Node> neighbors;\n//     public Node(int _val) { val = _val; neighbors = new ArrayList<>(); }\n// }\n\npublic Node cloneGraph(Node node) {\n    // Your code here\n    return null;\n}"
       },
       "boilerplate_code": {
-        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    cases = [[[2,4],[1,3],[2,4],[1,3]], [[]], []]\n    for adj in cases:\n        print(f\"clone_graph({adj}) = {clone_graph(adj)}\")",
-        "javascript": "// Test runner (read-only)\n[[[2,4],[1,3],[2,4],[1,3]], [[]], []].forEach(adj =>\n    console.log(`cloneGraph =`, cloneGraph(adj))\n);",
-        "java": "// Test runner (read-only)\nimport java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        List<List<Integer>> adj = Arrays.asList(\n            Arrays.asList(2,4), Arrays.asList(1,3),\n            Arrays.asList(2,4), Arrays.asList(1,3)\n        );\n        System.out.println(s.cloneGraph(adj));\n    }\n}"
+        "python": "# Test runner (read-only)\nclass Node:\n    def __init__(self, val=0, neighbors=None):\n        self.val = val\n        self.neighbors = neighbors if neighbors is not None else []\n\ndef _build(adj):\n    if not adj: return None\n    keys = list(adj.keys())\n    nodes = {int(k): Node(int(k)) for k in keys}\n    for k, nbrs in adj.items():\n        nodes[int(k)].neighbors = [nodes[n] for n in nbrs]\n    return nodes[int(keys[0])]\n\nif __name__ == \"__main__\":\n    cases = [{'1':[2,4],'2':[1,3],'3':[2,4],'4':[1,3]}, {'1':[]}, {}]\n    for adj in cases:\n        result = clone_graph(_build(adj))\n        print(f\"clone_graph({adj}) -> cloned\")",
+        "javascript": "// Test runner (read-only)\nclass Node { constructor(val, neighbors) { this.val = val; this.neighbors = neighbors || []; } }\nfunction _build(adj) {\n    const keys = Object.keys(adj);\n    if (!keys.length) return null;\n    const nodes = {};\n    keys.forEach(k => nodes[k] = new Node(parseInt(k)));\n    keys.forEach(k => nodes[k].neighbors = adj[k].map(n => nodes[n]));\n    return nodes[keys[0]];\n}\n[{'1':[2,4],'2':[1,3],'3':[2,4],'4':[1,3]}, {'1':[]}, {}].forEach(adj =>\n    console.log('cloneGraph -> cloned:', !!cloneGraph(_build(adj)))\n);",
+        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        // Java is display-only in this harness.\n    }\n}"
+      },
+      "entry": {
+        "kind": "graph",
+        "name": "clone_graph",
+        "params": [
+          {
+            "name": "node",
+            "type": "node"
+          }
+        ],
+        "input_shape": "graph_adjacency",
+        "output_shape": "graph_adjacency"
       },
       "test_cases": [
         {
           "input": {
-            "adj_list": []
+            "node": {}
           },
-          "expected": [],
+          "expected": {},
           "description": "Empty graph \u2014 no node to clone",
           "tags": [
             "edge"
@@ -27114,13 +27170,13 @@
         },
         {
           "input": {
-            "adj_list": [
-              []
-            ]
+            "node": {
+              "1": []
+            }
           },
-          "expected": [
-            []
-          ],
+          "expected": {
+            "1": []
+          },
           "description": "Single node, no neighbors",
           "tags": [
             "edge"
@@ -27128,23 +27184,23 @@
         },
         {
           "input": {
-            "adj_list": [
-              [
+            "node": {
+              "1": [
                 2
               ],
-              [
+              "2": [
                 1
               ]
-            ]
+            }
           },
-          "expected": [
-            [
+          "expected": {
+            "1": [
               2
             ],
-            [
+            "2": [
               1
             ]
-          ],
+          },
           "description": "Two nodes connected by a single edge",
           "tags": [
             "basic"
@@ -27152,43 +27208,43 @@
         },
         {
           "input": {
-            "adj_list": [
-              [
+            "node": {
+              "1": [
                 2,
                 4
               ],
-              [
+              "2": [
                 1,
                 3
               ],
-              [
+              "3": [
                 2,
                 4
               ],
-              [
+              "4": [
                 1,
                 3
               ]
+            }
+          },
+          "expected": {
+            "1": [
+              2,
+              4
+            ],
+            "2": [
+              1,
+              3
+            ],
+            "3": [
+              2,
+              4
+            ],
+            "4": [
+              1,
+              3
             ]
           },
-          "expected": [
-            [
-              2,
-              4
-            ],
-            [
-              1,
-              3
-            ],
-            [
-              2,
-              4
-            ],
-            [
-              1,
-              3
-            ]
-          ],
           "description": "Classic LC example \u2014 4-cycle",
           "tags": [
             "basic"
@@ -27196,47 +27252,47 @@
         },
         {
           "input": {
-            "adj_list": [
-              [
+            "node": {
+              "1": [
                 2,
                 3,
                 4,
                 5
               ],
-              [
+              "2": [
                 1
               ],
-              [
+              "3": [
                 1
               ],
-              [
+              "4": [
                 1
               ],
-              [
+              "5": [
                 1
               ]
-            ]
+            }
           },
-          "expected": [
-            [
+          "expected": {
+            "1": [
               2,
               3,
               4,
               5
             ],
-            [
+            "2": [
               1
             ],
-            [
+            "3": [
               1
             ],
-            [
+            "4": [
               1
             ],
-            [
+            "5": [
               1
             ]
-          ],
+          },
           "description": "Star graph \u2014 node 1 in the center, 4 leaves",
           "tags": [
             "basic"
@@ -27244,47 +27300,47 @@
         },
         {
           "input": {
-            "adj_list": [
-              [
+            "node": {
+              "1": [
                 2
               ],
-              [
+              "2": [
                 1,
                 3
               ],
-              [
+              "3": [
                 2,
                 4
               ],
-              [
+              "4": [
                 3,
                 5
               ],
-              [
+              "5": [
                 4
               ]
-            ]
+            }
           },
-          "expected": [
-            [
+          "expected": {
+            "1": [
               2
             ],
-            [
+            "2": [
               1,
               3
             ],
-            [
+            "3": [
               2,
               4
             ],
-            [
+            "4": [
               3,
               5
             ],
-            [
+            "5": [
               4
             ]
-          ],
+          },
           "description": "Chain (path graph) of 5 nodes",
           "tags": [
             "tricky"
@@ -27292,51 +27348,51 @@
         },
         {
           "input": {
-            "adj_list": [
-              [
+            "node": {
+              "1": [
                 2,
                 3,
                 4
               ],
-              [
+              "2": [
                 1,
                 3,
                 4
               ],
-              [
+              "3": [
                 1,
                 2,
                 4
               ],
-              [
+              "4": [
                 1,
                 2,
                 3
               ]
-            ]
+            }
           },
-          "expected": [
-            [
+          "expected": {
+            "1": [
               2,
               3,
               4
             ],
-            [
+            "2": [
               1,
               3,
               4
             ],
-            [
+            "3": [
               1,
               2,
               4
             ],
-            [
+            "4": [
               1,
               2,
               3
             ]
-          ],
+          },
           "description": "Fully connected K4 \u2014 every pair adjacent",
           "tags": [
             "tricky"
@@ -27344,71 +27400,71 @@
         },
         {
           "input": {
-            "adj_list": [
-              [
+            "node": {
+              "1": [
                 4,
                 5,
                 6
               ],
-              [
+              "2": [
                 4,
                 5,
                 6
               ],
-              [
+              "3": [
                 4,
                 5,
                 6
               ],
-              [
+              "4": [
                 1,
                 2,
                 3
               ],
-              [
+              "5": [
                 1,
                 2,
                 3
               ],
-              [
+              "6": [
                 1,
                 2,
                 3
               ]
+            }
+          },
+          "expected": {
+            "1": [
+              4,
+              5,
+              6
+            ],
+            "2": [
+              4,
+              5,
+              6
+            ],
+            "3": [
+              4,
+              5,
+              6
+            ],
+            "4": [
+              1,
+              2,
+              3
+            ],
+            "5": [
+              1,
+              2,
+              3
+            ],
+            "6": [
+              1,
+              2,
+              3
             ]
           },
-          "expected": [
-            [
-              4,
-              5,
-              6
-            ],
-            [
-              4,
-              5,
-              6
-            ],
-            [
-              4,
-              5,
-              6
-            ],
-            [
-              1,
-              2,
-              3
-            ],
-            [
-              1,
-              2,
-              3
-            ],
-            [
-              1,
-              2,
-              3
-            ]
-          ],
           "description": "Complete bipartite K3,3",
           "tags": [
             "tricky"
@@ -27416,31 +27472,31 @@
         },
         {
           "input": {
-            "adj_list": [
-              [
+            "node": {
+              "1": [
                 2
               ],
-              [
+              "2": [
                 1,
                 3
               ],
-              [
+              "3": [
                 2
               ]
-            ]
+            }
           },
-          "expected": [
-            [
+          "expected": {
+            "1": [
               2
             ],
-            [
+            "2": [
               1,
               3
             ],
-            [
+            "3": [
               2
             ]
-          ],
+          },
           "description": "Three-node path \u2014 minimal branching chain",
           "tags": [
             "basic"
@@ -27452,11 +27508,11 @@
           "title": "DFS Recursion with HashMap (Optimal)",
           "time_complexity": "O(V + E)",
           "space_complexity": "O(V)",
-          "description": "Maintain `old_to_new`: a map from original node \u2192 cloned node. To clone a node: if it's already in the map, return the stored clone (this breaks cycles). Otherwise, create the clone, store it in the map *immediately*, then recursively clone each neighbor and append the result to the clone's neighbor list. The 'create-and-store-first' ordering is what makes the recursion terminate.",
+          "description": "Maintain `old_to_new`: a map from original node -> cloned node. To clone a node: if it's already in the map, return the stored clone (this breaks cycles). Otherwise, create the clone, store it in the map *immediately*, then recursively clone each neighbor and append the result to the clone's neighbor list. The 'create-and-store-first' ordering is what makes the recursion terminate.",
           "code": {
-            "python": "class Node:\n    def __init__(self, val=0, neighbors=None):\n        self.val = val\n        self.neighbors = neighbors if neighbors is not None else []\n\ndef clone_graph_node(node):\n    if node is None:\n        return None\n    old_to_new = {}\n\n    def dfs(n):\n        if n in old_to_new:\n            return old_to_new[n]\n        clone = Node(n.val)\n        old_to_new[n] = clone           # store BEFORE recursing\n        for nei in n.neighbors:\n            clone.neighbors.append(dfs(nei))\n        return clone\n\n    return dfs(node)",
-            "javascript": "// class Node { constructor(val, neighbors) { this.val = val; this.neighbors = neighbors || []; } }\nfunction cloneGraphNode(node) {\n    if (!node) return null;\n    const oldToNew = new Map();\n    const dfs = (n) => {\n        if (oldToNew.has(n)) return oldToNew.get(n);\n        const clone = new Node(n.val, []);\n        oldToNew.set(n, clone);\n        for (const nei of n.neighbors) clone.neighbors.push(dfs(nei));\n        return clone;\n    };\n    return dfs(node);\n}",
-            "java": "public Node cloneGraph(Node node) {\n    if (node == null) return null;\n    Map<Node, Node> oldToNew = new HashMap<>();\n    return dfs(node, oldToNew);\n}\nprivate Node dfs(Node n, Map<Node, Node> map) {\n    if (map.containsKey(n)) return map.get(n);\n    Node clone = new Node(n.val);\n    map.put(n, clone);              // store BEFORE recursing\n    for (Node nei : n.neighbors) clone.neighbors.add(dfs(nei, map));\n    return clone;\n}"
+            "python": "def clone_graph(node):\n    if node is None:\n        return None\n    old_to_new = {}\n\n    def dfs(n):\n        if n in old_to_new:\n            return old_to_new[n]\n        clone = Node(n.val)\n        old_to_new[n] = clone\n        for nei in n.neighbors:\n            clone.neighbors.append(dfs(nei))\n        return clone\n\n    return dfs(node)",
+            "javascript": "function cloneGraph(node) {\n    if (!node) return null;\n    const oldToNew = new Map();\n    const dfs = (n) => {\n        if (oldToNew.has(n)) return oldToNew.get(n);\n        const clone = new Node(n.val, []);\n        oldToNew.set(n, clone);\n        for (const nei of n.neighbors) clone.neighbors.push(dfs(nei));\n        return clone;\n    };\n    return dfs(node);\n}",
+            "java": "public Node cloneGraph(Node node) {\n    if (node == null) return null;\n    Map<Node, Node> oldToNew = new HashMap<>();\n    return dfs(node, oldToNew);\n}\nprivate Node dfs(Node n, Map<Node, Node> map) {\n    if (map.containsKey(n)) return map.get(n);\n    Node clone = new Node(n.val);\n    map.put(n, clone);\n    for (Node nei : n.neighbors) clone.neighbors.add(dfs(nei, map));\n    return clone;\n}"
           }
         },
         {
@@ -27465,23 +27521,22 @@
           "space_complexity": "O(V)",
           "description": "Same map, no recursion. Clone the start node, push the original onto a queue. While the queue is non-empty: pop an original `cur`; for each neighbor of `cur`, if it's not yet cloned, clone it, store it in the map, and enqueue it; then append the clone of the neighbor to `map[cur].neighbors`. Avoids Python's recursion limit on long chains and is the safer default in interview code.",
           "code": {
-            "python": "from collections import deque\n\nclass Node:\n    def __init__(self, val=0, neighbors=None):\n        self.val = val\n        self.neighbors = neighbors if neighbors is not None else []\n\ndef clone_graph_node(node):\n    if node is None:\n        return None\n    old_to_new = {node: Node(node.val)}\n    q = deque([node])\n    while q:\n        cur = q.popleft()\n        for nei in cur.neighbors:\n            if nei not in old_to_new:\n                old_to_new[nei] = Node(nei.val)\n                q.append(nei)\n            old_to_new[cur].neighbors.append(old_to_new[nei])\n    return old_to_new[node]",
-            "javascript": "function cloneGraphNode(node) {\n    if (!node) return null;\n    const map = new Map();\n    map.set(node, new Node(node.val, []));\n    const q = [node];\n    while (q.length) {\n        const cur = q.shift();\n        for (const nei of cur.neighbors) {\n            if (!map.has(nei)) {\n                map.set(nei, new Node(nei.val, []));\n                q.push(nei);\n            }\n            map.get(cur).neighbors.push(map.get(nei));\n        }\n    }\n    return map.get(node);\n}",
+            "python": "def clone_graph(node):\n    if node is None:\n        return None\n    old_to_new = {node: Node(node.val)}\n    q = deque([node])\n    while q:\n        cur = q.popleft()\n        for nei in cur.neighbors:\n            if nei not in old_to_new:\n                old_to_new[nei] = Node(nei.val)\n                q.append(nei)\n            old_to_new[cur].neighbors.append(old_to_new[nei])\n    return old_to_new[node]",
+            "javascript": "function cloneGraph(node) {\n    if (!node) return null;\n    const map = new Map();\n    map.set(node, new Node(node.val, []));\n    const q = [node];\n    while (q.length) {\n        const cur = q.shift();\n        for (const nei of cur.neighbors) {\n            if (!map.has(nei)) {\n                map.set(nei, new Node(nei.val, []));\n                q.push(nei);\n            }\n            map.get(cur).neighbors.push(map.get(nei));\n        }\n    }\n    return map.get(node);\n}",
             "java": "public Node cloneGraph(Node node) {\n    if (node == null) return null;\n    Map<Node, Node> map = new HashMap<>();\n    map.put(node, new Node(node.val));\n    Deque<Node> q = new ArrayDeque<>();\n    q.offer(node);\n    while (!q.isEmpty()) {\n        Node cur = q.poll();\n        for (Node nei : cur.neighbors) {\n            if (!map.containsKey(nei)) {\n                map.put(nei, new Node(nei.val));\n                q.offer(nei);\n            }\n            map.get(cur).neighbors.add(map.get(nei));\n        }\n    }\n    return map.get(node);\n}"
           }
         }
       ],
       "thought_process": [
         "1. Recognise the trap: cycles. A naive recursive clone (`Node(val, [clone(n) for n in neighbors])`) recurses forever on the smallest 2-node cycle.",
-        "2. The fix is the standard 'deep copy with shared structure' trick: a hash map from original \u2192 clone. Same idea as 'Copy List with Random Pointer'.",
+        "2. The fix is the standard 'deep copy with shared structure' trick: a hash map from original -> clone. Same idea as 'Copy List with Random Pointer'.",
         "3. Ordering is the load-bearing detail: create the clone and store it in the map BEFORE walking neighbors. If you recurse first, you re-enter the same node before its map entry exists.",
         "4. DFS is the cleanest write-up; BFS avoids recursion-depth issues on long chains and is the safer choice on systems with low stack limits.",
         "5. Edge cases: null/empty graph (return null/None), single node with no neighbors (one map entry, no recursion), self-loops (problem rules them out, but if allowed: handled correctly because the map check fires before re-recursion).",
-        "6. Complexity: each node is cloned once, each edge is walked twice (from each endpoint) \u2192 O(V + E). Map holds V entries \u2192 O(V) space."
+        "6. Complexity: each node is cloned once, each edge is walked twice (from each endpoint) -> O(V + E). Map holds V entries -> O(V) space."
       ],
       "tips": [
         "Insert the clone into the map *before* recursing into neighbors. Forgetting this is the #1 way to write infinite-recursion code on this problem.",
-        "On the LC harness the input arrives as an adjacency list and the output is checked the same way \u2014 but inside your function you're operating on real Node objects. Don't confuse the two representations.",
         "DFS vs BFS: same complexity, same correctness. Pick BFS when the graph might be a long chain (Python recursion limit ~1000) or when the interviewer asks for an iterative solution.",
         "Closely related: 'Copy List with Random Pointer' (LC 138) \u2014 same hash-map trick on a linked list with arbitrary back-references. Mention it if asked for variants.",
         "Variant \u2014 'Clone Binary Tree with Random Pointer' (LC 1485) and 'Clone N-ary Tree' (LC 1490) reuse the exact pattern. The skill transfers; the data structure changes.",
@@ -72263,7 +72318,7 @@
     {
       "title": "Diameter of Binary Tree",
       "difficulty": "Easy",
-      "description": "Given the `root` of a binary tree, return the **length of the diameter** of the tree.\n\nThe diameter is the **length of the longest path between any two nodes** in the tree. This path may or may not pass through the root.\n\nThe **length** of a path is the **number of edges** between its endpoints (so a single node has diameter `0`, two connected nodes have diameter `1`).\n\nTrees are encoded as level-order lists with `null` for missing children (LeetCode style).\n\n**Example 1:**\n```\nTree:    1\n        / \\\n       2   3\n      / \\\n     4   5\n```\n- Input: `root = [1, 2, 3, 4, 5]`\n- Output: `3`\n- Explanation: the longest path is `4 -> 2 -> 1 -> 3` (or `5 -> 2 -> 1 -> 3`), which has **3 edges**.\n\n**Example 2:**\n```\nTree:    1\n        /\n       2\n```\n- Input: `root = [1, 2]`\n- Output: `1`\n- Explanation: the only path of nonzero length is `2 -> 1`, which has **1 edge**.\n\nEmpty tree returns `0`.",
+      "description": "Given the `root` of a binary tree, return the **length of the diameter** of the tree.\n\nThe diameter is the **length of the longest path between any two nodes** in the tree. This path may or may not pass through the root.\n\nThe **length** of a path is the **number of edges** between its endpoints (so a single node has diameter `0`, two connected nodes have diameter `1`).\n\n**Example 1:**\n```\nTree:    1\n        / \\\n       2   3\n      / \\\n     4   5\n```\n- Input: `root` is the tree shown above\n- Output: `3`\n- Explanation: the longest path is `4 -> 2 -> 1 -> 3` (or `5 -> 2 -> 1 -> 3`), which has **3 edges**.\n\n**Example 2:**\n```\nTree:    1\n        /\n       2\n```\n- Input: `root` is the tree shown above\n- Output: `1`\n- Explanation: the only path of nonzero length is `2 -> 1`, which has **1 edge**.\n\nEmpty tree returns `0`.",
       "hints": [
         "The longest path through a node `n` has length `height(n.left) + height(n.right)` (in edges) \u2014 because you climb to `n` from one subtree and descend into the other.",
         "Walk every node and track the maximum of that quantity across all nodes. The overall diameter is the best `left_height + right_height` seen anywhere in the tree.",
@@ -72277,14 +72332,14 @@
         "The diameter is measured in **edges**, not nodes."
       ],
       "starter_code": {
-        "python": "# `root` is a LeetCode-style level-order list with None for missing children.\n# Return the diameter (number of edges on the longest path) as an int.\n#\n# Hint: a class with `self.best = 0` (or a list cell) lets a recursive helper\n# update a shared maximum while returning each subtree's height upward.\ndef diameter_of_binary_tree(root):\n    # Your code here\n    pass",
-        "javascript": "// `root` is a level-order array with null for missing children.\n// Return the diameter (number of edges on the longest path) as a number.\n//\n// Hint: capture a `best` variable in a closure (or use an outer `let best = 0`)\n// and have the recursive helper update it while returning the subtree height.\nfunction diameterOfBinaryTree(root) {\n    // Your code here\n}",
-        "java": "// `root` is a level-order list with null for missing children.\n// Return the diameter (number of edges on the longest path) as an int.\n//\n// Hint: an instance field `int best = 0` lets a recursive helper\n// update a shared maximum while returning each subtree's height upward.\npublic int diameterOfBinaryTree(java.util.List<Integer> root) {\n    // Your code here\n    return 0;\n}"
+        "python": "# `root` is a TreeNode (or None).\n# Return the diameter (number of edges on the longest path) as an int.\n#\n# Hint: a class with `self.best = 0` (or a list cell) lets a recursive helper\n# update a shared maximum while returning each subtree's height upward.\ndef diameter_of_binary_tree(root):\n    # Your code here\n    pass",
+        "javascript": "// `root` is a TreeNode (or null).\n// Return the diameter (number of edges on the longest path) as a number.\n//\n// Hint: capture a `best` variable in a closure (or use an outer `let best = 0`)\n// and have the recursive helper update it while returning the subtree height.\nfunction diameterOfBinaryTree(root) {\n    // Your code here\n}",
+        "java": "// `root` is a TreeNode (or null).\n// Return the diameter (number of edges on the longest path) as an int.\n//\n// Hint: an instance field `int best = 0` lets a recursive helper\n// update a shared maximum while returning each subtree's height upward.\npublic int diameterOfBinaryTree(TreeNode root) {\n    // Your code here\n    return 0;\n}"
       },
       "boilerplate_code": {
-        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    cases = [[1, 2, 3, 4, 5], [1, 2], [], [1]]\n    for c in cases:\n        print(f\"diameter_of_binary_tree({c}) = {diameter_of_binary_tree(c)}\")",
-        "javascript": "// Test runner (read-only)\n[[1, 2, 3, 4, 5], [1, 2], [], [1]].forEach(c =>\n    console.log(`diameter =`, diameterOfBinaryTree(c))\n);",
-        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        System.out.println(s.diameterOfBinaryTree(java.util.Arrays.asList(1, 2, 3, 4, 5)));\n    }\n}"
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    # The platform supplies TreeNode roots when running submissions.\n    pass",
+        "javascript": "// Test runner (read-only)\n// The platform supplies TreeNode roots when running submissions.",
+        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        // The platform supplies TreeNode roots when running submissions.\n    }\n}"
       },
       "test_cases": [
         {
@@ -72496,8 +72551,8 @@
           "space_complexity": "O(h) recursion stack \u2014 O(log n) balanced, O(n) skewed",
           "description": "A single post-order DFS. The helper returns the **height** of the subtree it just walked. While computing that height, it also updates a shared `best` with `left_height + right_height` \u2014 the length (in edges) of the longest path that bends at the current node. Each node is visited exactly once, so total work is O(n).",
           "code": {
-            "python": "def diameter_of_binary_tree(root):\n    node = _from_level(root)\n    best = [0]\n    def height(n):\n        if n is None:\n            return 0\n        l = height(n.left)\n        r = height(n.right)\n        if l + r > best[0]:\n            best[0] = l + r\n        return 1 + max(l, r)\n    height(node)\n    return best[0]",
-            "javascript": "function diameterOfBinaryTree(root) {\n    const node = fromLevel(root);\n    let best = 0;\n    const height = (n) => {\n        if (n === null) return 0;\n        const l = height(n.left);\n        const r = height(n.right);\n        if (l + r > best) best = l + r;\n        return 1 + Math.max(l, r);\n    };\n    height(node);\n    return best;\n}",
+            "python": "def diameter_of_binary_tree(root):\n    best = [0]\n    def height(n):\n        if n is None:\n            return 0\n        l = height(n.left)\n        r = height(n.right)\n        if l + r > best[0]:\n            best[0] = l + r\n        return 1 + max(l, r)\n    height(root)\n    return best[0]",
+            "javascript": "function diameterOfBinaryTree(root) {\n    let best = 0;\n    const height = (n) => {\n        if (n === null) return 0;\n        const l = height(n.left);\n        const r = height(n.right);\n        if (l + r > best) best = l + r;\n        return 1 + Math.max(l, r);\n    };\n    height(root);\n    return best;\n}",
             "java": "class Solution {\n    private int best = 0;\n    public int diameterOfBinaryTree(TreeNode root) {\n        height(root);\n        return best;\n    }\n    private int height(TreeNode n) {\n        if (n == null) return 0;\n        int l = height(n.left);\n        int r = height(n.right);\n        if (l + r > best) best = l + r;\n        return 1 + Math.max(l, r);\n    }\n}"
           }
         },
@@ -72507,8 +72562,8 @@
           "space_complexity": "O(h)",
           "description": "Walk every node; at each one, compute `height(left) + height(right)` from scratch and track the max. Correct but quadratic \u2014 `height` re-traverses the same subtrees from every ancestor. Worth knowing as a baseline so you can articulate why the optimal version (one DFS that returns height **and** updates the max) is asymptotically better.",
           "code": {
-            "python": "def diameter_of_binary_tree(root):\n    node = _from_level(root)\n    def height(n):\n        if n is None:\n            return 0\n        return 1 + max(height(n.left), height(n.right))\n    best = 0\n    def visit(n):\n        nonlocal best\n        if n is None:\n            return\n        local = height(n.left) + height(n.right)\n        if local > best:\n            best = local\n        visit(n.left)\n        visit(n.right)\n    visit(node)\n    return best",
-            "javascript": "function diameterOfBinaryTree(root) {\n    const node = fromLevel(root);\n    const height = (n) => n === null ? 0 : 1 + Math.max(height(n.left), height(n.right));\n    let best = 0;\n    const visit = (n) => {\n        if (n === null) return;\n        const local = height(n.left) + height(n.right);\n        if (local > best) best = local;\n        visit(n.left);\n        visit(n.right);\n    };\n    visit(node);\n    return best;\n}",
+            "python": "def diameter_of_binary_tree(root):\n    def height(n):\n        if n is None:\n            return 0\n        return 1 + max(height(n.left), height(n.right))\n    best = 0\n    def visit(n):\n        nonlocal best\n        if n is None:\n            return\n        local = height(n.left) + height(n.right)\n        if local > best:\n            best = local\n        visit(n.left)\n        visit(n.right)\n    visit(root)\n    return best",
+            "javascript": "function diameterOfBinaryTree(root) {\n    const height = (n) => n === null ? 0 : 1 + Math.max(height(n.left), height(n.right));\n    let best = 0;\n    const visit = (n) => {\n        if (n === null) return;\n        const local = height(n.left) + height(n.right);\n        if (local > best) best = local;\n        visit(n.left);\n        visit(n.right);\n    };\n    visit(root);\n    return best;\n}",
             "java": "class Solution {\n    public int diameterOfBinaryTree(TreeNode root) {\n        if (root == null) return 0;\n        int local = height(root.left) + height(root.right);\n        int leftBest  = diameterOfBinaryTree(root.left);\n        int rightBest = diameterOfBinaryTree(root.right);\n        return Math.max(local, Math.max(leftBest, rightBest));\n    }\n    private int height(TreeNode n) {\n        if (n == null) return 0;\n        return 1 + Math.max(height(n.left), height(n.right));\n    }\n}"
           }
         }
@@ -72544,7 +72599,18 @@
         "Recursion"
       ],
       "time_complexity": "O(n)",
-      "space_complexity": "O(h)"
+      "space_complexity": "O(h)",
+      "entry": {
+        "kind": "tree",
+        "name": "diameter_of_binary_tree",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          }
+        ],
+        "input_shape": "tree_level_order"
+      }
     },
     {
       "title": "Distinct Subsequences",
@@ -199771,7 +199837,7 @@
     {
       "title": "Invert Binary Tree",
       "difficulty": "Easy",
-      "description": "Given the `root` of a binary tree, **invert** the tree (mirror it left-to-right) and return its root.\n\nThe input/output use LeetCode level-order serialization where `null` denotes a missing child.\n\n**Example 1:**\n- Input: `root = [4,2,7,1,3,6,9]`\n- Output: `[4,7,2,9,6,3,1]`\n- Explanation:\n```\n       4                4\n      / \\              / \\\n     2   7    -->     7   2\n    / \\ / \\          / \\ / \\\n   1  3 6  9         9  6 3  1\n```\n\n**Example 2:**\n- Input: `root = [2,1,3]`\n- Output: `[2,3,1]`\n- Explanation:\n```\n     2            2\n    / \\          / \\\n   1   3   -->  3   1\n```",
+      "description": "Given the `root` of a binary tree, **invert** the tree (mirror it left-to-right) and return its root.\n\nExamples below show trees as LeetCode level-order arrays where `null` denotes a missing child; your function receives the `root` TreeNode and returns the inverted root.\n\n**Example 1:**\n- Input: `root = [4,2,7,1,3,6,9]`\n- Output: `[4,7,2,9,6,3,1]`\n- Explanation:\n```\n       4                4\n      / \\              / \\\n     2   7    -->     7   2\n    / \\ / \\          / \\ / \\\n   1  3 6  9         9  6 3  1\n```\n\n**Example 2:**\n- Input: `root = [2,1,3]`\n- Output: `[2,3,1]`\n- Explanation:\n```\n     2            2\n    / \\          / \\\n   1   3   -->  3   1\n```",
       "hints": [
         "Recursion writes itself: invert the left subtree, invert the right subtree, then swap the two pointers.",
         "Order doesn't matter \u2014 you can swap *before* recursing or *after*. Both work because each call only touches its own subtree.",
@@ -199785,13 +199851,13 @@
       ],
       "starter_code": {
         "python": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\ndef invert_tree(root):\n    # Your code here\n    pass",
-        "javascript": "// Definition for a binary tree node.\n// function TreeNode(val, left, right) {\n//     this.val = (val === undefined ? 0 : val);\n//     this.left = (left === undefined ? null : left);\n//     this.right = (right === undefined ? null : right);\n// }\nfunction invertTree(root) {\n    // Your code here\n}",
-        "java": "/**\n * Definition for a binary tree node.\n * public class TreeNode {\n *     int val;\n *     TreeNode left;\n *     TreeNode right;\n *     TreeNode() {}\n *     TreeNode(int val) { this.val = val; }\n *     TreeNode(int val, TreeNode left, TreeNode right) {\n *         this.val = val;\n *         this.left = left;\n *         this.right = right;\n *     }\n * }\n */\npublic TreeNode invertTree(TreeNode root) {\n    // Your code here\n    return root;\n}"
+        "javascript": "// Definition for a binary tree node.\n// function TreeNode(val, left, right) {\n//     this.val = (val === undefined ? 0 : val);\n//     this.left = (left === undefined ? null : left);\n//     this.right = (right === undefined ? null : right);\n// }\nfunction invert_tree(root) {\n    // Your code here\n}",
+        "java": "/**\n * Definition for a binary tree node.\n * public class TreeNode {\n *     int val;\n *     TreeNode left;\n *     TreeNode right;\n *     TreeNode() {}\n *     TreeNode(int val) { this.val = val; }\n *     TreeNode(int val, TreeNode left, TreeNode right) {\n *         this.val = val;\n *         this.left = left;\n *         this.right = right;\n *     }\n * }\n */\npublic TreeNode invert_tree(TreeNode root) {\n    // Your code here\n    return root;\n}"
       },
       "boilerplate_code": {
         "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    # Build a small tree manually for a smoke test:  4\n    #                                              / \\\n    #                                             2   7\n    root = TreeNode(4, TreeNode(2), TreeNode(7))\n    inverted = invert_tree(root)\n    print(inverted.val, inverted.left.val, inverted.right.val)  # 4 7 2",
-        "javascript": "// Test runner (read-only)\nconst root = { val: 4, left: { val: 2, left: null, right: null },\n                       right: { val: 7, left: null, right: null } };\nconst inv = invertTree(root);\nconsole.log(inv.val, inv.left.val, inv.right.val);  // 4 7 2",
-        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        TreeNode root = new TreeNode(4, new TreeNode(2), new TreeNode(7));\n        TreeNode inv = s.invertTree(root);\n        System.out.println(inv.val + \" \" + inv.left.val + \" \" + inv.right.val);\n    }\n}"
+        "javascript": "// Test runner (read-only)\nconst root = { val: 4, left: { val: 2, left: null, right: null },\n                       right: { val: 7, left: null, right: null } };\nconst inv = invert_tree(root);\nconsole.log(inv.val, inv.left.val, inv.right.val);  // 4 7 2",
+        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        TreeNode root = new TreeNode(4, new TreeNode(2), new TreeNode(7));\n        TreeNode inv = s.invert_tree(root);\n        System.out.println(inv.val + \" \" + inv.left.val + \" \" + inv.right.val);\n    }\n}"
       },
       "test_cases": [
         {
@@ -200041,8 +200107,8 @@
           "description": "Recurse into the left and right subtrees, then swap the two child pointers. Five lines. `h` is the tree height \u2014 `O(log n)` for balanced trees, `O(n)` worst case (skewed).",
           "code": {
             "python": "def invert_tree(root):\n    if root is None:\n        return None\n    left = invert_tree(root.left)\n    right = invert_tree(root.right)\n    root.left, root.right = right, left\n    return root",
-            "javascript": "function invertTree(root) {\n    if (root === null) return null;\n    const left = invertTree(root.left);\n    const right = invertTree(root.right);\n    root.left = right;\n    root.right = left;\n    return root;\n}",
-            "java": "public TreeNode invertTree(TreeNode root) {\n    if (root == null) return null;\n    TreeNode left = invertTree(root.left);\n    TreeNode right = invertTree(root.right);\n    root.left = right;\n    root.right = left;\n    return root;\n}"
+            "javascript": "function invert_tree(root) {\n    if (root === null) return null;\n    const left = invert_tree(root.left);\n    const right = invert_tree(root.right);\n    root.left = right;\n    root.right = left;\n    return root;\n}",
+            "java": "public TreeNode invert_tree(TreeNode root) {\n    if (root == null) return null;\n    TreeNode left = invert_tree(root.left);\n    TreeNode right = invert_tree(root.right);\n    root.left = right;\n    root.right = left;\n    return root;\n}"
           }
         },
         {
@@ -200052,8 +200118,8 @@
           "description": "Walk the tree level-by-level. For each node popped from the queue, swap its left and right pointers, then enqueue both children (skipping null). `w` is the maximum width of the tree, which can be up to `n/2` for the bottom level of a complete tree.",
           "code": {
             "python": "from collections import deque\n\ndef invert_tree(root):\n    if root is None:\n        return None\n    q = deque([root])\n    while q:\n        node = q.popleft()\n        node.left, node.right = node.right, node.left\n        if node.left:\n            q.append(node.left)\n        if node.right:\n            q.append(node.right)\n    return root",
-            "javascript": "function invertTree(root) {\n    if (root === null) return null;\n    const q = [root];\n    while (q.length) {\n        const node = q.shift();\n        [node.left, node.right] = [node.right, node.left];\n        if (node.left) q.push(node.left);\n        if (node.right) q.push(node.right);\n    }\n    return root;\n}",
-            "java": "public TreeNode invertTree(TreeNode root) {\n    if (root == null) return null;\n    Deque<TreeNode> q = new ArrayDeque<>();\n    q.offer(root);\n    while (!q.isEmpty()) {\n        TreeNode node = q.poll();\n        TreeNode tmp = node.left;\n        node.left = node.right;\n        node.right = tmp;\n        if (node.left != null) q.offer(node.left);\n        if (node.right != null) q.offer(node.right);\n    }\n    return root;\n}"
+            "javascript": "function invert_tree(root) {\n    if (root === null) return null;\n    const q = [root];\n    while (q.length) {\n        const node = q.shift();\n        [node.left, node.right] = [node.right, node.left];\n        if (node.left) q.push(node.left);\n        if (node.right) q.push(node.right);\n    }\n    return root;\n}",
+            "java": "public TreeNode invert_tree(TreeNode root) {\n    if (root == null) return null;\n    Deque<TreeNode> q = new ArrayDeque<>();\n    q.offer(root);\n    while (!q.isEmpty()) {\n        TreeNode node = q.poll();\n        TreeNode tmp = node.left;\n        node.left = node.right;\n        node.right = tmp;\n        if (node.left != null) q.offer(node.left);\n        if (node.right != null) q.offer(node.right);\n    }\n    return root;\n}"
           }
         }
       ],
@@ -200087,7 +200153,19 @@
         "Binary Tree"
       ],
       "time_complexity": "O(n)",
-      "space_complexity": "O(h)"
+      "space_complexity": "O(h)",
+      "entry": {
+        "kind": "tree",
+        "name": "invert_tree",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          }
+        ],
+        "input_shape": "tree_level_order",
+        "output_shape": "tree_level_order"
+      }
     },
     {
       "title": "Is Unique",
@@ -267235,7 +267313,7 @@
     {
       "title": "Kth Smallest Element in a BST",
       "difficulty": "Medium",
-      "description": "Given the `root` of a binary search tree (BST) and an integer `k`, return the **kth smallest** value (1-indexed) among all node values in the tree.\n\nThe input tree is given in LeetCode level-order serialization where `null` denotes a missing child.\n\n**Example 1:**\n- Input: `root = [3,1,4,null,2]`, `k = 1`\n- Output: `1`\n- Explanation:\n```\n       3\n      / \\\n     1   4\n      \\\n       2\n```\nIn-order traversal yields `[1, 2, 3, 4]`. The 1st smallest is `1`.\n\n**Example 2:**\n- Input: `root = [5,3,6,2,4,null,null,1]`, `k = 3`\n- Output: `3`\n- Explanation:\n```\n         5\n        / \\\n       3   6\n      / \\\n     2   4\n    /\n   1\n```\nIn-order traversal yields `[1, 2, 3, 4, 5, 6]`. The 3rd smallest is `3`.",
+      "description": "Given the `root` of a binary search tree (BST) and an integer `k`, return the **kth smallest** value (1-indexed) among all node values in the tree.\n\n**Example 1:**\n- Input: `root = [3,1,4,null,2]`, `k = 1`\n- Output: `1`\n- Explanation:\n```\n       3\n      / \\\n     1   4\n      \\\n       2\n```\nIn-order traversal yields `[1, 2, 3, 4]`. The 1st smallest is `1`.\n\n**Example 2:**\n- Input: `root = [5,3,6,2,4,null,null,1]`, `k = 3`\n- Output: `3`\n- Explanation:\n```\n         5\n        / \\\n       3   6\n      / \\\n     2   4\n    /\n   1\n```\nIn-order traversal yields `[1, 2, 3, 4, 5, 6]`. The 3rd smallest is `3`.",
       "hints": [
         "The defining property of a BST: an **in-order traversal** (left, root, right) visits nodes in strictly ascending order. So the kth value emitted by an in-order walk is the answer.",
         "The naive approach: do a full in-order traversal into a list, return `list[k-1]`. Works in `O(n)` time and `O(n)` space \u2014 fine but not optimal.",
@@ -267524,7 +267602,22 @@
         "Stack"
       ],
       "time_complexity": "O(h + k)",
-      "space_complexity": "O(h)"
+      "space_complexity": "O(h)",
+      "entry": {
+        "kind": "tree",
+        "name": "kth_smallest",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          },
+          {
+            "name": "k",
+            "type": "int"
+          }
+        ],
+        "input_shape": "tree_level_order"
+      }
     },
     {
       "title": "Largest 24-Hour Time From Digits",
@@ -267865,7 +267958,7 @@
     {
       "title": "Lowest Common Ancestor of a Binary Tree",
       "difficulty": "Medium",
-      "description": "Given the `root` of a binary tree (not necessarily a BST) and two node values `p` and `q`, return the **value** of their lowest common ancestor (LCA).\n\nThe LCA of `p` and `q` is the **deepest** node in the tree that has both `p` and `q` as descendants (where a node is allowed to be a descendant of itself).\n\nThe input uses LeetCode level-order serialization where `null` denotes a missing child. All values in the tree are unique, and both `p` and `q` are guaranteed to exist in the tree.\n\n**Example 1:**\n- Input: `root = [3,5,1,6,2,0,8,null,null,7,4]`, `p = 5`, `q = 1`\n- Output: `3`\n- Explanation: The LCA of nodes `5` and `1` is `3`.\n```\n         3\n        / \\\n       5   1\n      / \\ / \\\n     6  2 0  8\n       / \\\n      7   4\n```\n\n**Example 2:**\n- Input: `root = [3,5,1,6,2,0,8,null,null,7,4]`, `p = 5`, `q = 4`\n- Output: `5`\n- Explanation: A node can be a descendant of itself \u2014 `5` is an ancestor of `4` and of itself, so the LCA is `5`.",
+      "description": "Given the `root` of a binary tree (not necessarily a BST) and two node values `p` and `q`, return the **value** of their lowest common ancestor (LCA).\n\nThe LCA of `p` and `q` is the **deepest** node in the tree that has both `p` and `q` as descendants (where a node is allowed to be a descendant of itself).\n\nAll values in the tree are unique, and both `p` and `q` are guaranteed to exist in the tree.\n\n**Example 1:**\n- Input: `root = [3,5,1,6,2,0,8,null,null,7,4]`, `p = 5`, `q = 1`\n- Output: `3`\n- Explanation: The LCA of nodes `5` and `1` is `3`.\n```\n         3\n        / \\\n       5   1\n      / \\ / \\\n     6  2 0  8\n       / \\\n      7   4\n```\n\n**Example 2:**\n- Input: `root = [3,5,1,6,2,0,8,null,null,7,4]`, `p = 5`, `q = 4`\n- Output: `5`\n- Explanation: A node can be a descendant of itself \u2014 `5` is an ancestor of `4` and of itself, so the LCA is `5`.",
       "hints": [
         "Post-order recursion is the elegant solution: at each node, recurse left and right, then decide based on what came back.",
         "Base cases: if the current node is `None`, return `None`. If the current node matches `p` or `q`, return the current node \u2014 no need to look deeper on this path.",
@@ -268193,17 +268286,36 @@
         "Binary Tree"
       ],
       "time_complexity": "O(n)",
-      "space_complexity": "O(h)"
+      "space_complexity": "O(h)",
+      "entry": {
+        "kind": "tree",
+        "name": "lowest_common_ancestor",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          },
+          {
+            "name": "p",
+            "type": "int"
+          },
+          {
+            "name": "q",
+            "type": "int"
+          }
+        ],
+        "input_shape": "tree_level_order"
+      }
     },
     {
       "title": "Lowest Common Ancestor of a BST",
       "difficulty": "Easy",
-      "description": "Given a **binary search tree** (BST) and two values `p` and `q` that exist in the tree, return the **lowest common ancestor** (LCA) of the two nodes. The LCA is defined as the *lowest* node in the tree that has both `p` and `q` as descendants (where a node is allowed to be a descendant of itself).\n\nThe input/output use LeetCode level-order serialization where `null` denotes a missing child.\n\n**Example 1:**\n- Input: `root = [6,2,8,0,4,7,9,null,null,3,5]`, `p = 2`, `q = 8`\n- Output: `6`\n- Explanation:\n```\n         6              <- LCA(2, 8) = 6\n        / \\\n       2   8\n      / \\ / \\\n     0  4 7  9\n       / \\\n      3   5\n```\n  `2` is in the left subtree of `6` and `8` is in the right subtree, so `6` is the split point.\n\n**Example 2:**\n- Input: `root = [6,2,8,0,4,7,9,null,null,3,5]`, `p = 2`, `q = 4`\n- Output: `2`\n- Explanation: a node may be a descendant of itself \u2014 `4` lies in the left subtree of `2`, so the LCA is `2` itself.\n```\n         6\n        / \\\n       2   8         <- LCA(2, 4) = 2 (one is the ancestor of the other)\n      / \\\n     0  4\n       / \\\n      3   5\n```",
+      "description": "Given a **binary search tree** (BST) and two values `p` and `q` that exist in the tree, return the **lowest common ancestor** (LCA) of the two nodes. The LCA is defined as the *lowest* node in the tree that has both `p` and `q` as descendants (where a node is allowed to be a descendant of itself).\n\n**Example 1:**\n- Input: `root = [6,2,8,0,4,7,9,null,null,3,5]`, `p = 2`, `q = 8`\n- Output: `6`\n- Explanation:\n```\n         6              <- LCA(2, 8) = 6\n        / \\\n       2   8\n      / \\ / \\\n     0  4 7  9\n       / \\\n      3   5\n```\n  `2` is in the left subtree of `6` and `8` is in the right subtree, so `6` is the split point.\n\n**Example 2:**\n- Input: `root = [6,2,8,0,4,7,9,null,null,3,5]`, `p = 2`, `q = 4`\n- Output: `2`\n- Explanation: a node may be a descendant of itself \u2014 `4` lies in the left subtree of `2`, so the LCA is `2` itself.\n```\n         6\n        / \\\n       2   8         <- LCA(2, 4) = 2 (one is the ancestor of the other)\n      / \\\n     0  4\n       / \\\n      3   5\n```",
       "hints": [
         "Use the BST invariant: every value in the left subtree is less than the node, and every value in the right subtree is greater. The two target values either *split* at some node or one is an ancestor of the other.",
         "If both `p` and `q` are **less than** the current node's value, the LCA must be in the left subtree \u2014 descend left.",
         "If both `p` and `q` are **greater than** the current node's value, the LCA must be in the right subtree \u2014 descend right.",
-        "Otherwise (`p` and `q` straddle the current value, or one equals it), the current node *is* the LCA \u2014 return it immediately.",
+        "Otherwise (`p` and `q` straddle the current value, or one equals it), the current node *is* the LCA \u2014 return its value immediately.",
         "Iterative beats recursive here: the descent is tail-recursive, so a `while` loop gives `O(1)` auxiliary space versus `O(h)` for the call stack. Both are `O(h)` time."
       ],
       "constraints": [
@@ -268212,14 +268324,14 @@
         "Both `p` and `q` exist in the BST and `p != q`."
       ],
       "starter_code": {
-        "python": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\ndef lowest_common_ancestor(root, p, q):\n    # Your code here. Return the LCA node (or its value).\n    pass",
-        "javascript": "// Definition for a binary tree node.\n// function TreeNode(val, left, right) {\n//     this.val = (val === undefined ? 0 : val);\n//     this.left = (left === undefined ? null : left);\n//     this.right = (right === undefined ? null : right);\n// }\nfunction lowestCommonAncestor(root, p, q) {\n    // Your code here. Return the LCA node.\n}",
-        "java": "/**\n * Definition for a binary tree node.\n * public class TreeNode {\n *     int val;\n *     TreeNode left;\n *     TreeNode right;\n *     TreeNode(int x) { val = x; }\n * }\n */\npublic TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n    // Your code here\n    return null;\n}"
+        "python": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\ndef lowest_common_ancestor(root, p, q):\n    # Return the integer value of the LCA.\n    pass",
+        "javascript": "// Definition for a binary tree node.\n// function TreeNode(val, left, right) {\n//     this.val = (val === undefined ? 0 : val);\n//     this.left = (left === undefined ? null : left);\n//     this.right = (right === undefined ? null : right);\n// }\nfunction lowestCommonAncestor(root, p, q) {\n    // Return the integer value of the LCA.\n}",
+        "java": "/**\n * Definition for a binary tree node.\n * public class TreeNode {\n *     int val;\n *     TreeNode left;\n *     TreeNode right;\n *     TreeNode(int x) { val = x; }\n * }\n */\npublic int lowestCommonAncestor(TreeNode root, int p, int q) {\n    // Return the integer value of the LCA.\n    return -1;\n}"
       },
       "boilerplate_code": {
-        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    #         6\n    #        / \\\n    #       2   8\n    root = TreeNode(6, TreeNode(2), TreeNode(8))\n    p, q = root.left, root.right\n    lca = lowest_common_ancestor(root, p, q)\n    print(lca.val)  # 6",
-        "javascript": "// Test runner (read-only)\nconst root = { val: 6,\n    left:  { val: 2, left: null, right: null },\n    right: { val: 8, left: null, right: null } };\nconst lca = lowestCommonAncestor(root, root.left, root.right);\nconsole.log(lca.val);  // 6",
-        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        TreeNode root = new TreeNode(6);\n        root.left = new TreeNode(2);\n        root.right = new TreeNode(8);\n        TreeNode lca = s.lowestCommonAncestor(root, root.left, root.right);\n        System.out.println(lca.val);  // 6\n    }\n}"
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    #         6\n    #        / \\\n    #       2   8\n    root = TreeNode(6, TreeNode(2), TreeNode(8))\n    print(lowest_common_ancestor(root, 2, 8))  # 6",
+        "javascript": "// Test runner (read-only)\nconst root = { val: 6,\n    left:  { val: 2, left: null, right: null },\n    right: { val: 8, left: null, right: null } };\nconsole.log(lowestCommonAncestor(root, 2, 8));  // 6",
+        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        TreeNode root = new TreeNode(6);\n        root.left = new TreeNode(2);\n        root.right = new TreeNode(8);\n        System.out.println(s.lowestCommonAncestor(root, 2, 8));  // 6\n    }\n}"
       },
       "test_cases": [
         {
@@ -268496,9 +268608,9 @@
           "space_complexity": "O(1)",
           "description": "Walk down from the root. At each node, if both `p` and `q` are smaller, descend left; if both are larger, descend right; otherwise we've found the split point \u2014 that's the LCA. No recursion stack, so auxiliary space is `O(1)`. `h` is the tree height: `O(log n)` balanced, `O(n)` worst case.",
           "code": {
-            "python": "def lowest_common_ancestor(root, p, q):\n    pv, qv = p.val, q.val\n    cur = root\n    while cur is not None:\n        if pv < cur.val and qv < cur.val:\n            cur = cur.left\n        elif pv > cur.val and qv > cur.val:\n            cur = cur.right\n        else:\n            return cur\n    return None",
-            "javascript": "function lowestCommonAncestor(root, p, q) {\n    let cur = root;\n    while (cur !== null) {\n        if (p.val < cur.val && q.val < cur.val) {\n            cur = cur.left;\n        } else if (p.val > cur.val && q.val > cur.val) {\n            cur = cur.right;\n        } else {\n            return cur;\n        }\n    }\n    return null;\n}",
-            "java": "public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n    TreeNode cur = root;\n    while (cur != null) {\n        if (p.val < cur.val && q.val < cur.val) {\n            cur = cur.left;\n        } else if (p.val > cur.val && q.val > cur.val) {\n            cur = cur.right;\n        } else {\n            return cur;\n        }\n    }\n    return null;\n}"
+            "python": "def lowest_common_ancestor(root, p, q):\n    cur = root\n    while cur is not None:\n        if p < cur.val and q < cur.val:\n            cur = cur.left\n        elif p > cur.val and q > cur.val:\n            cur = cur.right\n        else:\n            return cur.val\n    return None",
+            "javascript": "function lowestCommonAncestor(root, p, q) {\n    let cur = root;\n    while (cur !== null) {\n        if (p < cur.val && q < cur.val) {\n            cur = cur.left;\n        } else if (p > cur.val && q > cur.val) {\n            cur = cur.right;\n        } else {\n            return cur.val;\n        }\n    }\n    return null;\n}",
+            "java": "public int lowestCommonAncestor(TreeNode root, int p, int q) {\n    TreeNode cur = root;\n    while (cur != null) {\n        if (p < cur.val && q < cur.val) {\n            cur = cur.left;\n        } else if (p > cur.val && q > cur.val) {\n            cur = cur.right;\n        } else {\n            return cur.val;\n        }\n    }\n    return -1;\n}"
           }
         },
         {
@@ -268507,9 +268619,9 @@
           "space_complexity": "O(h)",
           "description": "Same idea expressed recursively: if both values are smaller than the current node, recurse left; if both larger, recurse right; otherwise the current node is the split point. The extra `O(h)` space is the recursion stack. Slightly cleaner code but strictly worse on memory than the iterative version.",
           "code": {
-            "python": "def lowest_common_ancestor(root, p, q):\n    if p.val < root.val and q.val < root.val:\n        return lowest_common_ancestor(root.left, p, q)\n    if p.val > root.val and q.val > root.val:\n        return lowest_common_ancestor(root.right, p, q)\n    return root",
-            "javascript": "function lowestCommonAncestor(root, p, q) {\n    if (p.val < root.val && q.val < root.val) {\n        return lowestCommonAncestor(root.left, p, q);\n    }\n    if (p.val > root.val && q.val > root.val) {\n        return lowestCommonAncestor(root.right, p, q);\n    }\n    return root;\n}",
-            "java": "public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n    if (p.val < root.val && q.val < root.val) {\n        return lowestCommonAncestor(root.left, p, q);\n    }\n    if (p.val > root.val && q.val > root.val) {\n        return lowestCommonAncestor(root.right, p, q);\n    }\n    return root;\n}"
+            "python": "def lowest_common_ancestor(root, p, q):\n    if p < root.val and q < root.val:\n        return lowest_common_ancestor(root.left, p, q)\n    if p > root.val and q > root.val:\n        return lowest_common_ancestor(root.right, p, q)\n    return root.val",
+            "javascript": "function lowestCommonAncestor(root, p, q) {\n    if (p < root.val && q < root.val) {\n        return lowestCommonAncestor(root.left, p, q);\n    }\n    if (p > root.val && q > root.val) {\n        return lowestCommonAncestor(root.right, p, q);\n    }\n    return root.val;\n}",
+            "java": "public int lowestCommonAncestor(TreeNode root, int p, int q) {\n    if (p < root.val && q < root.val) {\n        return lowestCommonAncestor(root.left, p, q);\n    }\n    if (p > root.val && q > root.val) {\n        return lowestCommonAncestor(root.right, p, q);\n    }\n    return root.val;\n}"
           }
         }
       ],
@@ -268518,7 +268630,7 @@
         "2. The general LCA problem (LC 236) needs a post-order DFS \u2014 but this is a BST, and that extra structure is the whole hint.",
         "3. BST property: at any node `n`, everything in `left(n)` is `< n.val`, everything in `right(n)` is `> n.val`. So `p` and `q` end up in the same subtree only when both are `< n.val` or both are `> n.val`.",
         "4. Therefore the LCA is exactly the first node where `p` and `q` are *not* both on the same side \u2014 i.e., they straddle the value, or one of them equals it.",
-        "5. Implementation: descend from root, comparing both target values to the current node. Three cases: both smaller (go left), both larger (go right), otherwise return current.",
+        "5. Implementation: descend from root, comparing both target values to the current node. Three cases: both smaller (go left), both larger (go right), otherwise return the current value.",
         "6. Iterative is preferable to recursive: same `O(h)` time, but `O(1)` extra space instead of `O(h)` for the call stack. The descent is tail-recursive, so the iterative form is mechanical.",
         "7. Worst-case height for a skewed BST is `O(n)`, so the bound is `O(h)` (`O(log n)` balanced, `O(n)` skewed) \u2014 be precise about this in the interview."
       ],
@@ -268545,7 +268657,26 @@
         "Binary Tree"
       ],
       "time_complexity": "O(h)",
-      "space_complexity": "O(1)"
+      "space_complexity": "O(1)",
+      "entry": {
+        "kind": "tree",
+        "name": "lowest_common_ancestor",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          },
+          {
+            "name": "p",
+            "type": "int"
+          },
+          {
+            "name": "q",
+            "type": "int"
+          }
+        ],
+        "input_shape": "tree_level_order"
+      }
     },
     {
       "title": "Letter Combinations of a Phone Number",
@@ -302074,7 +302205,7 @@
     {
       "title": "Maximum Depth of Binary Tree",
       "difficulty": "Easy",
-      "description": "Given the `root` of a binary tree, return its **maximum depth** \u2014 the number of nodes on the longest path from the root down to the farthest leaf.\n\nTrees are encoded as level-order lists with `null` for missing children (LeetCode style).\n\n**Example 1:**\n```\nTree:    3\n        / \\\n       9  20\n          / \\\n         15  7\n```\n- Input: `root = [3, 9, 20, null, null, 15, 7]`\n- Output: `3`\n\n**Example 2:**\n- Input: `root = [1, null, 2]`\n- Output: `2`\n\nEmpty tree returns `0`.",
+      "description": "Given the `root` of a binary tree, return its **maximum depth** \u2014 the number of nodes on the longest path from the root down to the farthest leaf.\n\n**Example 1:**\n```\nTree:    3\n        / \\\n       9  20\n          / \\\n         15  7\n```\n- Input: `root = TreeNode(3)` with children shown above\n- Output: `3`\n\n**Example 2:**\n- Input: a root node `1` with right child `2`\n- Output: `2`\n\nEmpty tree returns `0`.",
       "hints": [
         "Recursive definition: depth of an empty tree is 0; otherwise `1 + max(depth(left), depth(right))`. Three lines once you see it.",
         "Iterative BFS: walk level by level with a queue; the answer is the number of levels you process.",
@@ -302088,14 +302219,14 @@
         "Tree may be highly skewed \u2014 a left- or right-only chain of 10\u2074 nodes is allowed."
       ],
       "starter_code": {
-        "python": "def max_depth(root):\n    # `root` is a LeetCode-style level-order list with None for missing children.\n    # Your code here\n    pass",
-        "javascript": "function maxDepth(root) {\n    // `root` is a level-order array with null for missing children.\n    // Your code here\n}",
-        "java": "public int maxDepth(List<Integer> root) {\n    // `root` is a level-order list with null for missing children.\n    // Your code here\n    return 0;\n}"
+        "python": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\ndef max_depth(root):\n    # Your code here\n    pass",
+        "javascript": "// Definition for a binary tree node.\n// function TreeNode(val, left, right) {\n//     this.val = (val === undefined ? 0 : val);\n//     this.left = (left === undefined ? null : left);\n//     this.right = (right === undefined ? null : right);\n// }\nfunction maxDepth(root) {\n    // Your code here\n}",
+        "java": "/**\n * Definition for a binary tree node.\n * public class TreeNode {\n *     int val;\n *     TreeNode left;\n *     TreeNode right;\n *     TreeNode() {}\n *     TreeNode(int val) { this.val = val; }\n *     TreeNode(int val, TreeNode left, TreeNode right) {\n *         this.val = val;\n *         this.left = left;\n *         this.right = right;\n *     }\n * }\n */\npublic int maxDepth(TreeNode root) {\n    // Your code here\n    return 0;\n}"
       },
       "boilerplate_code": {
-        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    cases = [[3, 9, 20, None, None, 15, 7], [1, None, 2], []]\n    for c in cases:\n        print(f\"max_depth({c}) = {max_depth(c)}\")",
-        "javascript": "// Test runner (read-only)\n[[3, 9, 20, null, null, 15, 7], [1, null, 2], []].forEach(c =>\n    console.log(`maxDepth =`, maxDepth(c))\n);",
-        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        System.out.println(s.maxDepth(java.util.Arrays.asList(3, 9, 20, null, null, 15, 7)));\n    }\n}"
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    root = TreeNode(3, TreeNode(9), TreeNode(20, TreeNode(15), TreeNode(7)))\n    print(max_depth(root))  # 3",
+        "javascript": "// Test runner (read-only)\nconst root = { val: 3, left: { val: 9, left: null, right: null },\n                       right: { val: 20, left: { val: 15, left: null, right: null },\n                                         right: { val: 7, left: null, right: null } } };\nconsole.log(maxDepth(root));  // 3",
+        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        TreeNode root = new TreeNode(3, new TreeNode(9), new TreeNode(20, new TreeNode(15), new TreeNode(7)));\n        System.out.println(s.maxDepth(root));\n    }\n}"
       },
       "test_cases": [
         {
@@ -302223,7 +302354,7 @@
             ]
           },
           "expected": 4,
-          "description": "Mixed-shape tree with nulls inside the level-order list",
+          "description": "Mixed-shape tree with missing internal children",
           "tags": [
             "tricky"
           ]
@@ -302304,9 +302435,9 @@
           "space_complexity": "O(h) recursion stack \u2014 O(log n) balanced, O(n) skewed",
           "description": "Direct translation of the recursive definition: empty tree has depth 0; otherwise 1 + max of the two children's depths. Visits each node exactly once. Three lines of body.",
           "code": {
-            "python": "def max_depth(root):\n    node = _from_level(root)\n    def go(n):\n        if n is None:\n            return 0\n        return 1 + max(go(n.left), go(n.right))\n    return go(node)",
-            "javascript": "function maxDepth(root) {\n    const node = fromLevel(root);\n    const go = (n) => n === null ? 0 : 1 + Math.max(go(n.left), go(n.right));\n    return go(node);\n}",
-            "java": "public int maxDepth(List<Integer> root) {\n    TreeNode node = fromLevel(root);\n    return depth(node);\n}\nprivate int depth(TreeNode n) {\n    if (n == null) return 0;\n    return 1 + Math.max(depth(n.left), depth(n.right));\n}"
+            "python": "def max_depth(root):\n    def go(n):\n        if n is None:\n            return 0\n        return 1 + max(go(n.left), go(n.right))\n    return go(root)",
+            "javascript": "function maxDepth(root) {\n    const go = (n) => n === null ? 0 : 1 + Math.max(go(n.left), go(n.right));\n    return go(root);\n}",
+            "java": "public int maxDepth(TreeNode root) {\n    return depth(root);\n}\nprivate int depth(TreeNode n) {\n    if (n == null) return 0;\n    return 1 + Math.max(depth(n.left), depth(n.right));\n}"
           }
         },
         {
@@ -302315,8 +302446,8 @@
           "space_complexity": "O(w) \u2014 width of the widest level (up to n/2 for a complete tree)",
           "description": "Walk the tree level by level using a queue. For each level, drain exactly the nodes currently in the queue and enqueue their non-null children. Increment a level counter each time you complete a level. Avoids recursion entirely \u2014 safer on deep skewed trees.",
           "code": {
-            "python": "def max_depth(root):\n    node = _from_level(root)\n    if node is None:\n        return 0\n    from collections import deque\n    q = deque([node])\n    levels = 0\n    while q:\n        for _ in range(len(q)):\n            n = q.popleft()\n            if n.left:  q.append(n.left)\n            if n.right: q.append(n.right)\n        levels += 1\n    return levels",
-            "javascript": "function maxDepth(root) {\n    const node = fromLevel(root);\n    if (!node) return 0;\n    let q = [node], levels = 0;\n    while (q.length) {\n        const next = [];\n        for (const n of q) {\n            if (n.left) next.push(n.left);\n            if (n.right) next.push(n.right);\n        }\n        q = next;\n        levels += 1;\n    }\n    return levels;\n}"
+            "python": "def max_depth(root):\n    if root is None:\n        return 0\n    from collections import deque\n    q = deque([root])\n    levels = 0\n    while q:\n        for _ in range(len(q)):\n            n = q.popleft()\n            if n.left:  q.append(n.left)\n            if n.right: q.append(n.right)\n        levels += 1\n    return levels",
+            "javascript": "function maxDepth(root) {\n    if (!root) return 0;\n    let q = [root], levels = 0;\n    while (q.length) {\n        const next = [];\n        for (const n of q) {\n            if (n.left) next.push(n.left);\n            if (n.right) next.push(n.right);\n        }\n        q = next;\n        levels += 1;\n    }\n    return levels;\n}"
           }
         },
         {
@@ -302325,7 +302456,7 @@
           "space_complexity": "O(h)",
           "description": "Push `(node, depth)` pairs onto an explicit stack. Track the maximum depth observed. Useful when recursion limits are a concern but you prefer DFS over BFS (e.g., to keep memory bounded on a wide complete tree).",
           "code": {
-            "python": "def max_depth(root):\n    node = _from_level(root)\n    if node is None:\n        return 0\n    stack = [(node, 1)]\n    best = 0\n    while stack:\n        n, d = stack.pop()\n        if d > best: best = d\n        if n.left:  stack.append((n.left,  d + 1))\n        if n.right: stack.append((n.right, d + 1))\n    return best"
+            "python": "def max_depth(root):\n    if root is None:\n        return 0\n    stack = [(root, 1)]\n    best = 0\n    while stack:\n        n, d = stack.pop()\n        if d > best: best = d\n        if n.left:  stack.append((n.left,  d + 1))\n        if n.right: stack.append((n.right, d + 1))\n    return best"
           }
         }
       ],
@@ -302359,7 +302490,18 @@
         "Recursion"
       ],
       "time_complexity": "O(n)",
-      "space_complexity": "O(h)"
+      "space_complexity": "O(h)",
+      "entry": {
+        "kind": "tree",
+        "name": "max_depth",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          }
+        ],
+        "input_shape": "tree_level_order"
+      }
     },
     {
       "title": "Maximum Product Subarray",
@@ -411775,7 +411917,7 @@
     {
       "title": "Subtree of Another Tree",
       "difficulty": "Easy",
-      "description": "Given the roots of two binary trees `root` and `subRoot`, return `true` if there is a subtree of `root` with the same structure and node values as `subRoot`, and `false` otherwise.\n\nA subtree of a binary tree `tree` is a tree consisting of a node in `tree` and all of this node's descendants. The tree `tree` could also be considered a subtree of itself.\n\nThe input/output use LeetCode level-order serialization where `null` denotes a missing child.\n\n**Example 1:**\n- Input: `root = [3,4,5,1,2]`, `subRoot = [4,1,2]`\n- Output: `true`\n- Explanation:\n```\n      root              subRoot\n       3                   4\n      / \\                 / \\\n     4   5               1   2\n    / \\\n   1   2\n```\nThe subtree rooted at the left child of `root` matches `subRoot` exactly.\n\n**Example 2:**\n- Input: `root = [3,4,5,1,2,null,null,null,null,0]`, `subRoot = [4,1,2]`\n- Output: `false`\n- Explanation:\n```\n         root             subRoot\n          3                  4\n         / \\                / \\\n        4   5              1   2\n       / \\\n      1   2\n         /\n        0\n```\nThe candidate match has an extra node `0`, so the structures differ.",
+      "description": "Given the roots of two binary trees `root` and `subRoot`, return `true` if there is a subtree of `root` with the same structure and node values as `subRoot`, and `false` otherwise.\n\nA subtree of a binary tree `tree` is a tree consisting of a node in `tree` and all of this node's descendants. The tree `tree` could also be considered a subtree of itself.\n\n**Example 1:**\n- Input: `root = [3,4,5,1,2]`, `subRoot = [4,1,2]`\n- Output: `true`\n- Explanation:\n```\n      root              subRoot\n       3                   4\n      / \\                 / \\\n     4   5               1   2\n    / \\\n   1   2\n```\nThe subtree rooted at the left child of `root` matches `subRoot` exactly.\n\n**Example 2:**\n- Input: `root = [3,4,5,1,2,null,null,null,null,0]`, `subRoot = [4,1,2]`\n- Output: `false`\n- Explanation:\n```\n         root             subRoot\n          3                  4\n         / \\                / \\\n        4   5              1   2\n       / \\\n      1   2\n         /\n        0\n```\nThe candidate match has an extra node `0`, so the structures differ.",
       "hints": [
         "The natural decomposition: walk every node of `root`; at each one ask 'is the subtree rooted here *identical* to `subRoot`?'. That sub-question is the classic `isSameTree` recursion.",
         "`isSameTree(a, b)` \u2014 both null \u2192 true; one null \u2192 false; values differ \u2192 false; otherwise recurse on both pairs of children. Keep this helper as a separate function \u2014 it'll be reused in many tree problems.",
@@ -412151,7 +412293,22 @@
         "Hash Function"
       ],
       "time_complexity": "O(m * n)",
-      "space_complexity": "O(max(h_root, h_sub))"
+      "space_complexity": "O(max(h_root, h_sub))",
+      "entry": {
+        "kind": "tree",
+        "name": "is_subtree",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          },
+          {
+            "name": "subRoot",
+            "type": "node"
+          }
+        ],
+        "input_shape": "tree_level_order"
+      }
     },
     {
       "title": "Sum of Two Integers",
@@ -412905,7 +413062,7 @@
     {
       "title": "Symmetric Tree",
       "difficulty": "Easy",
-      "description": "Given the `root` of a binary tree, check whether it is a **mirror of itself** \u2014 i.e., **symmetric** around its centre.\n\nThe input uses LeetCode level-order serialization where `null` denotes a missing child.\n\n**Example 1:**\n- Input: `root = [1,2,2,3,4,4,3]`\n- Output: `true`\n- Explanation: The left and right subtrees are mirror images of each other.\n```\n         1\n        / \\\n       2   2\n      / \\ / \\\n     3  4 4  3\n```\n\n**Example 2:**\n- Input: `root = [1,2,2,null,3,null,3]`\n- Output: `false`\n- Explanation: Both `3`s sit on the *right* side of their respective parents \u2014 that's a translation, not a reflection.\n```\n         1\n        / \\\n       2   2\n        \\   \\\n         3   3\n```",
+      "description": "Given the `root` of a binary tree, check whether it is a **mirror of itself** \u2014 i.e., **symmetric** around its centre.\n\n**Example 1:**\n- Input: `root = [1,2,2,3,4,4,3]`\n- Output: `true`\n- Explanation: The left and right subtrees are mirror images of each other.\n```\n         1\n        / \\\n       2   2\n      / \\ / \\\n     3  4 4  3\n```\n\n**Example 2:**\n- Input: `root = [1,2,2,null,3,null,3]`\n- Output: `false`\n- Explanation: Both `3`s sit on the *right* side of their respective parents \u2014 that's a translation, not a reflection.\n```\n         1\n        / \\\n       2   2\n        \\   \\\n         3   3\n```",
       "hints": [
         "A tree is symmetric iff its left and right subtrees are *mirror images* of each other. Reduce the problem from one tree to a paired check on two subtrees.",
         "Define `mirror(a, b)`: True iff `a.val == b.val` AND `mirror(a.left, b.right)` AND `mirror(a.right, b.left)`. Note the *crossed* recursion \u2014 left pairs with right.",
@@ -412916,7 +413073,7 @@
       "constraints": [
         "The number of nodes in the tree is in the range `[0, 1000]`.",
         "-100 <= Node.val <= 100",
-        "Input is a valid LeetCode level-order serialization."
+        "`root` is either `null` or the root of a valid binary tree."
       ],
       "starter_code": {
         "python": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\ndef is_symmetric(root):\n    # Your code here\n    pass",
@@ -413183,7 +413340,18 @@
         "Binary Tree"
       ],
       "time_complexity": "O(n)",
-      "space_complexity": "O(h)"
+      "space_complexity": "O(h)",
+      "entry": {
+        "kind": "tree",
+        "name": "is_symmetric",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          }
+        ],
+        "input_shape": "tree_level_order"
+      }
     },
     {
       "title": "Target Sum",
@@ -461361,7 +461529,7 @@
     {
       "title": "Validate Binary Search Tree",
       "difficulty": "Medium",
-      "description": "Given the `root` of a binary tree, determine if it is a **valid binary search tree (BST)**.\n\nA valid BST is defined as follows:\n- The left subtree of a node contains only nodes with keys **strictly less than** the node's key.\n- The right subtree of a node contains only nodes with keys **strictly greater than** the node's key.\n- Both the left and right subtrees must also be binary search trees.\n\nThe input uses LeetCode level-order serialization where `null` denotes a missing child.\n\n**Example 1:**\n- Input: `root = [2,1,3]`\n- Output: `true`\n- Explanation:\n```\n     2\n    / \\\n   1   3\n```\n  Every left descendant is `< 2` and every right descendant is `> 2`.\n\n**Example 2:**\n- Input: `root = [5,1,4,null,null,3,6]`\n- Output: `false`\n- Explanation:\n```\n       5\n      / \\\n     1   4\n        / \\\n       3   6\n```\n  The node with value `4` is in the right subtree of `5`, which is fine \u2014 but its left child `3` is also in the right subtree of `5`, and `3 < 5` violates the BST property. The local parent-child checks (`3 < 4` and `6 > 4`) all pass, but the *global* invariant fails.",
+      "description": "Given the `root` of a binary tree, determine if it is a **valid binary search tree (BST)**.\n\nA valid BST is defined as follows:\n- The left subtree of a node contains only nodes with keys **strictly less than** the node's key.\n- The right subtree of a node contains only nodes with keys **strictly greater than** the node's key.\n- Both the left and right subtrees must also be binary search trees.\n\n**Example 1:**\n- Input: `root = [2,1,3]`\n- Output: `true`\n- Explanation:\n```\n     2\n    / \\\n   1   3\n```\n  Every left descendant is `< 2` and every right descendant is `> 2`.\n\n**Example 2:**\n- Input: `root = [5,1,4,null,null,3,6]`\n- Output: `false`\n- Explanation:\n```\n       5\n      / \\\n     1   4\n        / \\\n       3   6\n```\n  The node with value `4` is in the right subtree of `5`, which is fine \u2014 but its left child `3` is also in the right subtree of `5`, and `3 < 5` violates the BST property. The local parent-child checks (`3 < 4` and `6 > 4`) all pass, but the *global* invariant fails.",
       "hints": [
         "The BST property is GLOBAL, not local. Just checking `left.val < node.val < right.val` at each node is wrong \u2014 every node in the left subtree must be < node, not just the immediate left child.",
         "Recurse with bounds: each node receives a `(low, high)` window it must lie strictly inside. Going left tightens the upper bound to `node.val`; going right tightens the lower bound to `node.val`.",
@@ -461634,7 +461802,18 @@
         "Binary Tree"
       ],
       "time_complexity": "O(n)",
-      "space_complexity": "O(h)"
+      "space_complexity": "O(h)",
+      "entry": {
+        "kind": "tree",
+        "name": "is_valid_bst",
+        "params": [
+          {
+            "name": "root",
+            "type": "node"
+          }
+        ],
+        "input_shape": "tree_level_order"
+      }
     },
     {
       "title": "Walls and Gates",

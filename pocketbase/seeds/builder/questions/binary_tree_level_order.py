@@ -10,8 +10,8 @@ DFS that carries the current depth and appends into `result[depth]` —
 the recursion implicitly handles the level grouping with no queue at
 all.
 
-Input/output use LeetCode level-order with `null` for missing nodes.
-The reference returns a `list[list[int]]`.
+The user-facing function receives a `TreeNode` root and returns a
+`list[list[int]]`.
 """
 from collections import deque
 
@@ -40,7 +40,6 @@ PAYLOAD = {
     "description": (
         "Given the `root` of a binary tree, return its **level order traversal** — that is, the values "
         "of the nodes grouped by depth, with each level's values listed left-to-right.\n\n"
-        "Trees are encoded as level-order lists with `null` for missing children (LeetCode style). "
         "The output is a list of lists; each inner list is one level.\n\n"
         "**Example 1:**\n"
         "```\n"
@@ -50,10 +49,10 @@ PAYLOAD = {
         "          / \\\n"
         "         15  7\n"
         "```\n"
-        "- Input: `root = [3, 9, 20, null, null, 15, 7]`\n"
+        "- Input: `root` points to the tree shown above\n"
         "- Output: `[[3], [9, 20], [15, 7]]`\n\n"
         "**Example 2:**\n"
-        "- Input: `root = [1]`\n"
+        "- Input: `root` points to a single node with value `1`\n"
         "- Output: `[[1]]`\n\n"
         "An empty tree returns `[]` (no levels at all)."
     ),
@@ -76,23 +75,47 @@ PAYLOAD = {
     ],
     "starter_code": {
         "python": (
-            "# `root` is a LeetCode-style level-order list with None for missing children.\n"
+            "# Definition for a binary tree node.\n"
+            "# class TreeNode:\n"
+            "#     def __init__(self, val=0, left=None, right=None):\n"
+            "#         self.val = val\n"
+            "#         self.left = left\n"
+            "#         self.right = right\n"
             "# Return a list of lists; each inner list is one level, left-to-right.\n"
             "def level_order(root):\n"
             "    # Your code here\n"
             "    pass"
         ),
         "javascript": (
-            "// `root` is a level-order array with null for missing children.\n"
+            "// Definition for a binary tree node.\n"
+            "// function TreeNode(val, left, right) {\n"
+            "//     this.val = (val === undefined ? 0 : val);\n"
+            "//     this.left = (left === undefined ? null : left);\n"
+            "//     this.right = (right === undefined ? null : right);\n"
+            "// }\n"
             "// Return an array of arrays; each inner array is one level, left-to-right.\n"
             "function levelOrder(root) {\n"
             "    // Your code here\n"
             "}"
         ),
         "java": (
-            "// `root` is a level-order list with null for missing children.\n"
+            "/**\n"
+            " * Definition for a binary tree node.\n"
+            " * public class TreeNode {\n"
+            " *     int val;\n"
+            " *     TreeNode left;\n"
+            " *     TreeNode right;\n"
+            " *     TreeNode() {}\n"
+            " *     TreeNode(int val) { this.val = val; }\n"
+            " *     TreeNode(int val, TreeNode left, TreeNode right) {\n"
+            " *         this.val = val;\n"
+            " *         this.left = left;\n"
+            " *         this.right = right;\n"
+            " *     }\n"
+            " * }\n"
+            " */\n"
             "// Return List<List<Integer>>; each inner list is one level.\n"
-            "public List<List<Integer>> levelOrder(List<Integer> root) {\n"
+            "public List<List<Integer>> levelOrder(TreeNode root) {\n"
             "    // Your code here\n"
             "    return new ArrayList<>();\n"
             "}"
@@ -102,22 +125,23 @@ PAYLOAD = {
         "python": (
             "# Test runner (read-only)\n"
             "if __name__ == \"__main__\":\n"
-            "    cases = [[3, 9, 20, None, None, 15, 7], [1], []]\n"
-            "    for c in cases:\n"
-            "        print(f\"level_order({c}) = {level_order(c)}\")"
+            "    root = TreeNode(3, TreeNode(9), TreeNode(20, TreeNode(15), TreeNode(7)))\n"
+            "    print(level_order(root))\n"
+            "    print(level_order(None))"
         ),
         "javascript": (
             "// Test runner (read-only)\n"
-            "[[3, 9, 20, null, null, 15, 7], [1], []].forEach(c =>\n"
-            "    console.log('levelOrder =', JSON.stringify(levelOrder(c)))\n"
-            ");"
+            "const root = new TreeNode(3, new TreeNode(9), new TreeNode(20, new TreeNode(15), new TreeNode(7)));\n"
+            "console.log(JSON.stringify(levelOrder(root)));\n"
+            "console.log(JSON.stringify(levelOrder(null)));"
         ),
         "java": (
             "// Test runner (read-only)\n"
             "public class Main {\n"
             "    public static void main(String[] args) {\n"
             "        Solution s = new Solution();\n"
-            "        System.out.println(s.levelOrder(java.util.Arrays.asList(3, 9, 20, null, null, 15, 7)));\n"
+            "        TreeNode root = new TreeNode(3, new TreeNode(9), new TreeNode(20, new TreeNode(15), new TreeNode(7)));\n"
+            "        System.out.println(s.levelOrder(root));\n"
             "    }\n"
             "}"
         ),
@@ -175,11 +199,10 @@ PAYLOAD = {
                     "from collections import deque\n"
                     "\n"
                     "def level_order(root):\n"
-                    "    node = _from_level(root)\n"
-                    "    if node is None:\n"
+                    "    if root is None:\n"
                     "        return []\n"
                     "    result = []\n"
-                    "    q = deque([node])\n"
+                    "    q = deque([root])\n"
                     "    while q:\n"
                     "        size = len(q)\n"
                     "        level = []\n"
@@ -193,10 +216,9 @@ PAYLOAD = {
                 ),
                 "javascript": (
                     "function levelOrder(root) {\n"
-                    "    const node = fromLevel(root);\n"
-                    "    if (!node) return [];\n"
+                    "    if (!root) return [];\n"
                     "    const result = [];\n"
-                    "    let q = [node];\n"
+                    "    let q = [root];\n"
                     "    while (q.length) {\n"
                     "        const next = [];\n"
                     "        const level = [];\n"
@@ -212,12 +234,11 @@ PAYLOAD = {
                     "}"
                 ),
                 "java": (
-                    "public List<List<Integer>> levelOrder(List<Integer> root) {\n"
-                    "    TreeNode node = fromLevel(root);\n"
+                    "public List<List<Integer>> levelOrder(TreeNode root) {\n"
                     "    List<List<Integer>> result = new ArrayList<>();\n"
-                    "    if (node == null) return result;\n"
+                    "    if (root == null) return result;\n"
                     "    Deque<TreeNode> q = new ArrayDeque<>();\n"
-                    "    q.offer(node);\n"
+                    "    q.offer(root);\n"
                     "    while (!q.isEmpty()) {\n"
                     "        int size = q.size();\n"
                     "        List<Integer> level = new ArrayList<>(size);\n"
@@ -247,7 +268,6 @@ PAYLOAD = {
             "code": {
                 "python": (
                     "def level_order(root):\n"
-                    "    node = _from_level(root)\n"
                     "    result = []\n"
                     "    def go(n, depth):\n"
                     "        if n is None:\n"
@@ -257,12 +277,11 @@ PAYLOAD = {
                     "        result[depth].append(n.val)\n"
                     "        go(n.left, depth + 1)\n"
                     "        go(n.right, depth + 1)\n"
-                    "    go(node, 0)\n"
+                    "    go(root, 0)\n"
                     "    return result"
                 ),
                 "javascript": (
                     "function levelOrder(root) {\n"
-                    "    const node = fromLevel(root);\n"
                     "    const result = [];\n"
                     "    const go = (n, depth) => {\n"
                     "        if (n === null) return;\n"
@@ -271,15 +290,14 @@ PAYLOAD = {
                     "        go(n.left,  depth + 1);\n"
                     "        go(n.right, depth + 1);\n"
                     "    };\n"
-                    "    go(node, 0);\n"
+                    "    go(root, 0);\n"
                     "    return result;\n"
                     "}"
                 ),
                 "java": (
-                    "public List<List<Integer>> levelOrder(List<Integer> root) {\n"
-                    "    TreeNode node = fromLevel(root);\n"
+                    "public List<List<Integer>> levelOrder(TreeNode root) {\n"
                     "    List<List<Integer>> result = new ArrayList<>();\n"
-                    "    dfs(node, 0, result);\n"
+                    "    dfs(root, 0, result);\n"
                     "    return result;\n"
                     "}\n"
                     "private void dfs(TreeNode n, int depth, List<List<Integer>> result) {\n"
@@ -329,6 +347,14 @@ PAYLOAD = {
     "topics": ["Tree", "Breadth-First Search", "Binary Tree", "Queue"],
     "time_complexity": "O(n)",
     "space_complexity": "O(n)",
+    "entry": {
+        "kind": "tree",
+        "name": "level_order",
+        "params": [
+            {"name": "root", "type": "node"},
+        ],
+        "input_shape": "tree_level_order",
+    },
 }
 
 

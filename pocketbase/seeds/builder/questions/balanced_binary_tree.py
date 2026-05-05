@@ -11,13 +11,11 @@ return: a node returns its height, or a sentinel (-1) signalling 'an
 unbalanced subtree was found below me, propagate failure'. One pass,
 O(n) time, O(h) stack.
 """
-from collections import deque
-
 from builder.registry import register
 
 
 def _build(level):
-    """Deserialize LeetCode level-order list (with None for missing) to a tree."""
+    """Build a validation tree from raw level-order shorthand."""
     if not level:
         return None
     nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
@@ -50,11 +48,17 @@ def _check(node):
 PAYLOAD = {
     "title": "Balanced Binary Tree",
     "difficulty": "Easy",
+    "entry": {
+        "kind": "tree",
+        "name": "is_balanced",
+        "params": [{"name": "root", "type": "node"}],
+        "input_shape": "tree_level_order",
+    },
     "description": (
         "Given the `root` of a binary tree, determine if it is **height-balanced**: for every node in the "
         "tree, the heights of its left and right subtrees differ by at most 1.\n\n"
-        "The input uses LeetCode level-order serialization where `null` denotes a missing child. The empty "
-        "tree is considered balanced.\n\n"
+        "You are given `root` as a `TreeNode` object (or `None` for an empty tree). Work with the node's "
+        "`left` and `right` pointers directly. The empty tree is considered balanced.\n\n"
         "**Example 1:**\n"
         "```\n"
         "Tree:    3\n"
@@ -63,7 +67,7 @@ PAYLOAD = {
         "          / \\\n"
         "         15  7\n"
         "```\n"
-        "- Input: `root = [3, 9, 20, null, null, 15, 7]`\n"
+        "- Input: `root` is the tree shown above\n"
         "- Output: `true`\n"
         "- Explanation: At every node the two subtree heights differ by at most 1.\n\n"
         "**Example 2:**\n"
@@ -76,7 +80,7 @@ PAYLOAD = {
         "        / \\\n"
         "       4   4\n"
         "```\n"
-        "- Input: `root = [1, 2, 2, 3, 3, null, null, 4, 4]`\n"
+        "- Input: `root` is the tree shown above\n"
         "- Output: `false`\n"
         "- Explanation: The left subtree of the root has height 3 while the right subtree has height 1 — "
         "they differ by 2."
@@ -108,7 +112,7 @@ PAYLOAD = {
             "#         self.left = left\n"
             "#         self.right = right\n"
             "def is_balanced(root):\n"
-            "    # `root` is a LeetCode-style level-order list with None for missing children.\n"
+            "    # `root` is a TreeNode or None.\n"
             "    # Return True if the tree is height-balanced, else False.\n"
             "    # Your code here\n"
             "    pass"
@@ -121,7 +125,7 @@ PAYLOAD = {
             "//     this.right = (right === undefined ? null : right);\n"
             "// }\n"
             "function isBalanced(root) {\n"
-            "    // `root` is a level-order array with null for missing children.\n"
+            "    // `root` is a TreeNode or null.\n"
             "    // Your code here\n"
             "}"
         ),
@@ -141,8 +145,8 @@ PAYLOAD = {
             " *     }\n"
             " * }\n"
             " */\n"
-            "public boolean isBalanced(java.util.List<Integer> root) {\n"
-            "    // `root` is a level-order list with null for missing children.\n"
+            "public boolean isBalanced(TreeNode root) {\n"
+            "    // `root` is a TreeNode or null.\n"
             "    // Your code here\n"
             "    return false;\n"
             "}"
@@ -152,27 +156,31 @@ PAYLOAD = {
         "python": (
             "# Test runner (read-only)\n"
             "if __name__ == \"__main__\":\n"
-            "    cases = [\n"
-            "        [3, 9, 20, None, None, 15, 7],\n"
-            "        [1, 2, 2, 3, 3, None, None, 4, 4],\n"
-            "        [],\n"
-            "    ]\n"
-            "    for c in cases:\n"
-            "        print(f\"is_balanced({c}) = {is_balanced(c)}\")"
+            "    balanced = TreeNode(3, TreeNode(9), TreeNode(20, TreeNode(15), TreeNode(7)))\n"
+            "    unbalanced = TreeNode(1, TreeNode(2, TreeNode(3, TreeNode(4), TreeNode(4)), TreeNode(3)), TreeNode(2))\n"
+            "    print(is_balanced(balanced))\n"
+            "    print(is_balanced(unbalanced))\n"
+            "    print(is_balanced(None))"
         ),
         "javascript": (
             "// Test runner (read-only)\n"
-            "[[3, 9, 20, null, null, 15, 7], [1, 2, 2, 3, 3, null, null, 4, 4], []].forEach(c =>\n"
-            "    console.log(`isBalanced =`, isBalanced(c))\n"
-            ");"
+            "const balanced = { val: 3, left: { val: 9, left: null, right: null },\n"
+            "                   right: { val: 20, left: { val: 15, left: null, right: null },\n"
+            "                                      right: { val: 7, left: null, right: null } } };\n"
+            "const unbalanced = { val: 1, left: { val: 2, left: { val: 3, left: { val: 4, left: null, right: null }, right: { val: 4, left: null, right: null } }, right: { val: 3, left: null, right: null } }, right: { val: 2, left: null, right: null } };\n"
+            "console.log(isBalanced(balanced));\n"
+            "console.log(isBalanced(unbalanced));\n"
+            "console.log(isBalanced(null));"
         ),
         "java": (
             "// Test runner (read-only)\n"
             "public class Main {\n"
             "    public static void main(String[] args) {\n"
             "        Solution s = new Solution();\n"
-            "        System.out.println(s.isBalanced(java.util.Arrays.asList(3, 9, 20, null, null, 15, 7)));\n"
-            "        System.out.println(s.isBalanced(java.util.Arrays.asList(1, 2, 2, 3, 3, null, null, 4, 4)));\n"
+            "        TreeNode balanced = new TreeNode(3, new TreeNode(9), new TreeNode(20, new TreeNode(15), new TreeNode(7)));\n"
+            "        TreeNode unbalanced = new TreeNode(1, new TreeNode(2, new TreeNode(3, new TreeNode(4), new TreeNode(4)), new TreeNode(3)), new TreeNode(2));\n"
+            "        System.out.println(s.isBalanced(balanced));\n"
+            "        System.out.println(s.isBalanced(unbalanced));\n"
             "    }\n"
             "}"
         ),
@@ -222,7 +230,6 @@ PAYLOAD = {
             "code": {
                 "python": (
                     "def is_balanced(root):\n"
-                    "    node = _from_level(root)\n"
                     "    def check(n):\n"
                     "        if n is None:\n"
                     "            return 0\n"
@@ -235,11 +242,10 @@ PAYLOAD = {
                     "        if abs(lh - rh) > 1:\n"
                     "            return -1\n"
                     "        return 1 + max(lh, rh)\n"
-                    "    return check(node) != -1"
+                    "    return check(root) != -1"
                 ),
                 "javascript": (
                     "function isBalanced(root) {\n"
-                    "    const node = fromLevel(root);\n"
                     "    const check = (n) => {\n"
                     "        if (n === null) return 0;\n"
                     "        const lh = check(n.left);\n"
@@ -249,13 +255,12 @@ PAYLOAD = {
                     "        if (Math.abs(lh - rh) > 1) return -1;\n"
                     "        return 1 + Math.max(lh, rh);\n"
                     "    };\n"
-                    "    return check(node) !== -1;\n"
+                    "    return check(root) !== -1;\n"
                     "}"
                 ),
                 "java": (
-                    "public boolean isBalanced(java.util.List<Integer> root) {\n"
-                    "    TreeNode node = fromLevel(root);\n"
-                    "    return check(node) != -1;\n"
+                    "public boolean isBalanced(TreeNode root) {\n"
+                    "    return check(root) != -1;\n"
                     "}\n"
                     "private int check(TreeNode n) {\n"
                     "    if (n == null) return 0;\n"
@@ -283,7 +288,6 @@ PAYLOAD = {
             "code": {
                 "python": (
                     "def is_balanced(root):\n"
-                    "    node = _from_level(root)\n"
                     "    def height(n):\n"
                     "        if n is None:\n"
                     "            return 0\n"
@@ -294,24 +298,22 @@ PAYLOAD = {
                     "        if abs(height(n.left) - height(n.right)) > 1:\n"
                     "            return False\n"
                     "        return check(n.left) and check(n.right)\n"
-                    "    return check(node)"
+                    "    return check(root)"
                 ),
                 "javascript": (
                     "function isBalanced(root) {\n"
-                    "    const node = fromLevel(root);\n"
                     "    const height = (n) => n === null ? 0 : 1 + Math.max(height(n.left), height(n.right));\n"
                     "    const check = (n) => {\n"
                     "        if (n === null) return true;\n"
                     "        if (Math.abs(height(n.left) - height(n.right)) > 1) return false;\n"
                     "        return check(n.left) && check(n.right);\n"
                     "    };\n"
-                    "    return check(node);\n"
+                    "    return check(root);\n"
                     "}"
                 ),
                 "java": (
-                    "public boolean isBalanced(java.util.List<Integer> root) {\n"
-                    "    TreeNode node = fromLevel(root);\n"
-                    "    return check(node);\n"
+                    "public boolean isBalanced(TreeNode root) {\n"
+                    "    return check(root);\n"
                     "}\n"
                     "private int height(TreeNode n) {\n"
                     "    if (n == null) return 0;\n"
@@ -360,30 +362,8 @@ PAYLOAD = {
 }
 
 
-class _TreeNode:
-    def __init__(self, val=0, left=None, right=None):
-        self.val, self.left, self.right = val, left, right
-
-
-def _from_level(arr):
-    if not arr:
-        return None
-    root = _TreeNode(arr[0])
-    q = deque([root])
-    i = 1
-    while q and i < len(arr):
-        n = q.popleft()
-        if i < len(arr) and arr[i] is not None:
-            n.left = _TreeNode(arr[i]); q.append(n.left)
-        i += 1
-        if i < len(arr) and arr[i] is not None:
-            n.right = _TreeNode(arr[i]); q.append(n.right)
-        i += 1
-    return root
-
-
 def REFERENCE(root):
-    """Take a level-order list, return True iff the tree is height-balanced."""
+    """Accept raw level-order shorthand arrays for build validation."""
     tree = _build(root)
     return _check(tree) != -1
 

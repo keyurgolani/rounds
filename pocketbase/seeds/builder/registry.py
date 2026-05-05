@@ -68,7 +68,7 @@ must replay the op sequence itself — this mirrors how
 #   Per-kind supported output shapes:
 #     linked_list: {"verbose", "linked_list_array"}
 #     tree:        {"verbose", "tree_level_order"}
-#     graph:       {"verbose"}
+#     graph:       {"verbose", "graph_adjacency"}
 #
 # node_template (optional; kind-specific default)
 #   Customizes the generated Node class injected into the user's sandbox.

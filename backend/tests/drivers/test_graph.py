@@ -65,6 +65,16 @@ def test_py_graph_output_shape_verbose_explicit():
     assert "'verbose'" in snippet
 
 
+def test_py_graph_output_shape_adjacency():
+    entry = {**DEFAULT_ENTRY, "output_shape": "graph_adjacency"}
+    code = "def cloneGraph(node):\n    return node\n"
+    snippet = py_wrapper(entry)
+
+    out = _run_py(code, snippet, {"node": {"1": [2], "2": [1]}})
+
+    assert out == {"1": [2], "2": [1]}
+
+
 def test_py_graph_unsupported_output_shape_rejected():
     """An unsupported output_shape is rejected by validate()."""
     bad = {**DEFAULT_ENTRY, "output_shape": "bogus_shape"}
@@ -76,6 +86,10 @@ def test_py_graph_validate_accepts_verbose():
     """validate() accepts explicit output_shape='verbose' and omitted (default)."""
     for entry in (DEFAULT_ENTRY, {**DEFAULT_ENTRY, "output_shape": "verbose"}):
         assert py_validate(entry) == []
+
+
+def test_py_graph_validate_accepts_adjacency():
+    assert py_validate({**DEFAULT_ENTRY, "output_shape": "graph_adjacency"}) == []
 
 
 def test_js_graph_output_shape_verbose_explicit():

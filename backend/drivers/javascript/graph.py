@@ -12,7 +12,7 @@ _DEFAULT_TEMPLATE = {
     "links": [{"name": "neighbors", "arity": "list"}],
 }
 _DEFAULT_SHAPE = "graph_adjacency"
-_SUPPORTED_OUTPUT_SHAPES = {"verbose"}
+_SUPPORTED_OUTPUT_SHAPES = {"verbose", "graph_adjacency"}
 
 
 def validate(entry: dict) -> list[str]:
@@ -73,10 +73,20 @@ function _to_verbose(adj, shape, template) {{
 }}
 
 function _to_shape(verbose, outputShape, template) {{
-  // Graph output shaping is intentionally minimal — graphs may contain
-  // cycles, so flat-array shorthand isn't well-defined. Future shapes
-  // can be added here as use cases emerge.
   if (outputShape === "verbose") return verbose;
+  if (outputShape === "graph_adjacency") {{
+    const f = template.fields[0].name;
+    const l = template.links[0].name;
+    const byId = new Map((verbose.nodes || []).map(n => [n.id, n]));
+    const out = {{}};
+    for (const node of (verbose.nodes || [])) {{
+      const key = String(node.fields[f]);
+      out[key] = (node.links[l] || [])
+        .filter(id => byId.has(id))
+        .map(id => byId.get(id).fields[f]);
+    }}
+    return out;
+  }}
   throw new Error("unsupported output shape in graph driver: " + outputShape);
 }}
 

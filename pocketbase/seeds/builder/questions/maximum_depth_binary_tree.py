@@ -15,7 +15,6 @@ PAYLOAD = {
     "description": (
         "Given the `root` of a binary tree, return its **maximum depth** — the number of nodes on the "
         "longest path from the root down to the farthest leaf.\n\n"
-        "Trees are encoded as level-order lists with `null` for missing children (LeetCode style).\n\n"
         "**Example 1:**\n"
         "```\n"
         "Tree:    3\n"
@@ -24,10 +23,10 @@ PAYLOAD = {
         "          / \\\n"
         "         15  7\n"
         "```\n"
-        "- Input: `root = [3, 9, 20, null, null, 15, 7]`\n"
+        "- Input: `root = TreeNode(3)` with children shown above\n"
         "- Output: `3`\n\n"
         "**Example 2:**\n"
-        "- Input: `root = [1, null, 2]`\n"
+        "- Input: a root node `1` with right child `2`\n"
         "- Output: `2`\n\n"
         "Empty tree returns `0`."
     ),
@@ -47,30 +46,71 @@ PAYLOAD = {
         "Tree may be highly skewed — a left- or right-only chain of 10⁴ nodes is allowed.",
     ],
     "starter_code": {
-        "python": "def max_depth(root):\n    # `root` is a LeetCode-style level-order list with None for missing children.\n    # Your code here\n    pass",
-        "javascript": "function maxDepth(root) {\n    // `root` is a level-order array with null for missing children.\n    // Your code here\n}",
-        "java": "public int maxDepth(List<Integer> root) {\n    // `root` is a level-order list with null for missing children.\n    // Your code here\n    return 0;\n}",
+        "python": (
+            "# Definition for a binary tree node.\n"
+            "# class TreeNode:\n"
+            "#     def __init__(self, val=0, left=None, right=None):\n"
+            "#         self.val = val\n"
+            "#         self.left = left\n"
+            "#         self.right = right\n"
+            "def max_depth(root):\n"
+            "    # Your code here\n"
+            "    pass"
+        ),
+        "javascript": (
+            "// Definition for a binary tree node.\n"
+            "// function TreeNode(val, left, right) {\n"
+            "//     this.val = (val === undefined ? 0 : val);\n"
+            "//     this.left = (left === undefined ? null : left);\n"
+            "//     this.right = (right === undefined ? null : right);\n"
+            "// }\n"
+            "function maxDepth(root) {\n"
+            "    // Your code here\n"
+            "}"
+        ),
+        "java": (
+            "/**\n"
+            " * Definition for a binary tree node.\n"
+            " * public class TreeNode {\n"
+            " *     int val;\n"
+            " *     TreeNode left;\n"
+            " *     TreeNode right;\n"
+            " *     TreeNode() {}\n"
+            " *     TreeNode(int val) { this.val = val; }\n"
+            " *     TreeNode(int val, TreeNode left, TreeNode right) {\n"
+            " *         this.val = val;\n"
+            " *         this.left = left;\n"
+            " *         this.right = right;\n"
+            " *     }\n"
+            " * }\n"
+            " */\n"
+            "public int maxDepth(TreeNode root) {\n"
+            "    // Your code here\n"
+            "    return 0;\n"
+            "}"
+        ),
     },
     "boilerplate_code": {
         "python": (
             "# Test runner (read-only)\n"
             "if __name__ == \"__main__\":\n"
-            "    cases = [[3, 9, 20, None, None, 15, 7], [1, None, 2], []]\n"
-            "    for c in cases:\n"
-            "        print(f\"max_depth({c}) = {max_depth(c)}\")"
+            "    root = TreeNode(3, TreeNode(9), TreeNode(20, TreeNode(15), TreeNode(7)))\n"
+            "    print(max_depth(root))  # 3"
         ),
         "javascript": (
             "// Test runner (read-only)\n"
-            "[[3, 9, 20, null, null, 15, 7], [1, null, 2], []].forEach(c =>\n"
-            "    console.log(`maxDepth =`, maxDepth(c))\n"
-            ");"
+            "const root = { val: 3, left: { val: 9, left: null, right: null },\n"
+            "                       right: { val: 20, left: { val: 15, left: null, right: null },\n"
+            "                                         right: { val: 7, left: null, right: null } } };\n"
+            "console.log(maxDepth(root));  // 3"
         ),
         "java": (
             "// Test runner (read-only)\n"
             "public class Main {\n"
             "    public static void main(String[] args) {\n"
             "        Solution s = new Solution();\n"
-            "        System.out.println(s.maxDepth(java.util.Arrays.asList(3, 9, 20, null, null, 15, 7)));\n"
+            "        TreeNode root = new TreeNode(3, new TreeNode(9), new TreeNode(20, new TreeNode(15), new TreeNode(7)));\n"
+            "        System.out.println(s.maxDepth(root));\n"
             "    }\n"
             "}"
         ),
@@ -92,7 +132,7 @@ PAYLOAD = {
          "description": "Asymmetric with scattered nulls; deepest leaf reached via 1→2→5→7",
          "tags": ["tricky"]},
         {"input": {"root": [5, 4, 8, 11, None, 13, 4, 7, 2, None, None, None, 1]}, "expected": 4,
-         "description": "Mixed-shape tree with nulls inside the level-order list",
+         "description": "Mixed-shape tree with missing internal children",
          "tags": ["tricky"]},
         {"input": {"root": list(range(1, 11))}, "expected": 4,
          "description": "Complete tree of 10 nodes → depth 4 (ceil(log2(11)))",
@@ -117,24 +157,21 @@ PAYLOAD = {
             "code": {
                 "python": (
                     "def max_depth(root):\n"
-                    "    node = _from_level(root)\n"
                     "    def go(n):\n"
                     "        if n is None:\n"
                     "            return 0\n"
                     "        return 1 + max(go(n.left), go(n.right))\n"
-                    "    return go(node)"
+                    "    return go(root)"
                 ),
                 "javascript": (
                     "function maxDepth(root) {\n"
-                    "    const node = fromLevel(root);\n"
                     "    const go = (n) => n === null ? 0 : 1 + Math.max(go(n.left), go(n.right));\n"
-                    "    return go(node);\n"
+                    "    return go(root);\n"
                     "}"
                 ),
                 "java": (
-                    "public int maxDepth(List<Integer> root) {\n"
-                    "    TreeNode node = fromLevel(root);\n"
-                    "    return depth(node);\n"
+                    "public int maxDepth(TreeNode root) {\n"
+                    "    return depth(root);\n"
                     "}\n"
                     "private int depth(TreeNode n) {\n"
                     "    if (n == null) return 0;\n"
@@ -155,11 +192,10 @@ PAYLOAD = {
             "code": {
                 "python": (
                     "def max_depth(root):\n"
-                    "    node = _from_level(root)\n"
-                    "    if node is None:\n"
+                    "    if root is None:\n"
                     "        return 0\n"
                     "    from collections import deque\n"
-                    "    q = deque([node])\n"
+                    "    q = deque([root])\n"
                     "    levels = 0\n"
                     "    while q:\n"
                     "        for _ in range(len(q)):\n"
@@ -171,9 +207,8 @@ PAYLOAD = {
                 ),
                 "javascript": (
                     "function maxDepth(root) {\n"
-                    "    const node = fromLevel(root);\n"
-                    "    if (!node) return 0;\n"
-                    "    let q = [node], levels = 0;\n"
+                    "    if (!root) return 0;\n"
+                    "    let q = [root], levels = 0;\n"
                     "    while (q.length) {\n"
                     "        const next = [];\n"
                     "        for (const n of q) {\n"
@@ -200,10 +235,9 @@ PAYLOAD = {
             "code": {
                 "python": (
                     "def max_depth(root):\n"
-                    "    node = _from_level(root)\n"
-                    "    if node is None:\n"
+                    "    if root is None:\n"
                     "        return 0\n"
-                    "    stack = [(node, 1)]\n"
+                    "    stack = [(root, 1)]\n"
                     "    best = 0\n"
                     "    while stack:\n"
                     "        n, d = stack.pop()\n"
@@ -239,6 +273,12 @@ PAYLOAD = {
     "topics": ["Tree", "DFS", "BFS", "Recursion"],
     "time_complexity": "O(n)",
     "space_complexity": "O(h)",
+    "entry": {
+        "kind": "tree",
+        "name": "max_depth",
+        "params": [{"name": "root", "type": "node"}],
+        "input_shape": "tree_level_order",
+    },
 }
 
 

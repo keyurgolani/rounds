@@ -6,15 +6,15 @@ current node's value. If both are smaller, go left; both larger, go
 right; otherwise the current node is the split point — and therefore
 the LCA.
 
-Inputs use LeetCode level-order with `null` for missing nodes; `p` and
-`q` are passed as values (not node references) for serialization
-sanity. The reference returns the LCA's value as an int.
+The user receives the BST root as a `TreeNode`; `p` and `q` are integer
+node values. The reference accepts raw level-order arrays and returns the
+LCA's value as an int.
 """
 from builder.registry import register
 
 
 def _build(level):
-    """Deserialize LeetCode level-order list (with None for missing) to a tree."""
+    """Build an internal tree dict from a raw level-order list."""
     if not level:
         return None
     nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
@@ -49,7 +49,6 @@ PAYLOAD = {
         "**lowest common ancestor** (LCA) of the two nodes. The LCA is defined as the *lowest* node in the "
         "tree that has both `p` and `q` as descendants (where a node is allowed to be a descendant of "
         "itself).\n\n"
-        "The input/output use LeetCode level-order serialization where `null` denotes a missing child.\n\n"
         "**Example 1:**\n"
         "- Input: `root = [6,2,8,0,4,7,9,null,null,3,5]`, `p = 2`, `q = 8`\n"
         "- Output: `6`\n"
@@ -88,7 +87,7 @@ PAYLOAD = {
         "If both `p` and `q` are **greater than** the current node's value, the LCA must be in the right "
         "subtree — descend right.",
         "Otherwise (`p` and `q` straddle the current value, or one equals it), the current node *is* the "
-        "LCA — return it immediately.",
+        "LCA — return its value immediately.",
         "Iterative beats recursive here: the descent is tail-recursive, so a `while` loop gives `O(1)` "
         "auxiliary space versus `O(h)` for the call stack. Both are `O(h)` time.",
     ],
@@ -106,7 +105,7 @@ PAYLOAD = {
             "#         self.left = left\n"
             "#         self.right = right\n"
             "def lowest_common_ancestor(root, p, q):\n"
-            "    # Your code here. Return the LCA node (or its value).\n"
+            "    # Return the integer value of the LCA.\n"
             "    pass"
         ),
         "javascript": (
@@ -117,7 +116,7 @@ PAYLOAD = {
             "//     this.right = (right === undefined ? null : right);\n"
             "// }\n"
             "function lowestCommonAncestor(root, p, q) {\n"
-            "    // Your code here. Return the LCA node.\n"
+            "    // Return the integer value of the LCA.\n"
             "}"
         ),
         "java": (
@@ -130,9 +129,9 @@ PAYLOAD = {
             " *     TreeNode(int x) { val = x; }\n"
             " * }\n"
             " */\n"
-            "public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n"
-            "    // Your code here\n"
-            "    return null;\n"
+            "public int lowestCommonAncestor(TreeNode root, int p, int q) {\n"
+            "    // Return the integer value of the LCA.\n"
+            "    return -1;\n"
             "}"
         ),
     },
@@ -144,17 +143,14 @@ PAYLOAD = {
             "    #        / \\\n"
             "    #       2   8\n"
             "    root = TreeNode(6, TreeNode(2), TreeNode(8))\n"
-            "    p, q = root.left, root.right\n"
-            "    lca = lowest_common_ancestor(root, p, q)\n"
-            "    print(lca.val)  # 6"
+            "    print(lowest_common_ancestor(root, 2, 8))  # 6"
         ),
         "javascript": (
             "// Test runner (read-only)\n"
             "const root = { val: 6,\n"
             "    left:  { val: 2, left: null, right: null },\n"
             "    right: { val: 8, left: null, right: null } };\n"
-            "const lca = lowestCommonAncestor(root, root.left, root.right);\n"
-            "console.log(lca.val);  // 6"
+            "console.log(lowestCommonAncestor(root, 2, 8));  // 6"
         ),
         "java": (
             "// Test runner (read-only)\n"
@@ -164,8 +160,7 @@ PAYLOAD = {
             "        TreeNode root = new TreeNode(6);\n"
             "        root.left = new TreeNode(2);\n"
             "        root.right = new TreeNode(8);\n"
-            "        TreeNode lca = s.lowestCommonAncestor(root, root.left, root.right);\n"
-            "        System.out.println(lca.val);  // 6\n"
+            "        System.out.println(s.lowestCommonAncestor(root, 2, 8));  // 6\n"
             "    }\n"
             "}"
         ),
@@ -214,45 +209,44 @@ PAYLOAD = {
             "code": {
                 "python": (
                     "def lowest_common_ancestor(root, p, q):\n"
-                    "    pv, qv = p.val, q.val\n"
                     "    cur = root\n"
                     "    while cur is not None:\n"
-                    "        if pv < cur.val and qv < cur.val:\n"
+                    "        if p < cur.val and q < cur.val:\n"
                     "            cur = cur.left\n"
-                    "        elif pv > cur.val and qv > cur.val:\n"
+                    "        elif p > cur.val and q > cur.val:\n"
                     "            cur = cur.right\n"
                     "        else:\n"
-                    "            return cur\n"
+                    "            return cur.val\n"
                     "    return None"
                 ),
                 "javascript": (
                     "function lowestCommonAncestor(root, p, q) {\n"
                     "    let cur = root;\n"
                     "    while (cur !== null) {\n"
-                    "        if (p.val < cur.val && q.val < cur.val) {\n"
+                    "        if (p < cur.val && q < cur.val) {\n"
                     "            cur = cur.left;\n"
-                    "        } else if (p.val > cur.val && q.val > cur.val) {\n"
+                    "        } else if (p > cur.val && q > cur.val) {\n"
                     "            cur = cur.right;\n"
                     "        } else {\n"
-                    "            return cur;\n"
+                    "            return cur.val;\n"
                     "        }\n"
                     "    }\n"
                     "    return null;\n"
                     "}"
                 ),
                 "java": (
-                    "public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n"
+                    "public int lowestCommonAncestor(TreeNode root, int p, int q) {\n"
                     "    TreeNode cur = root;\n"
                     "    while (cur != null) {\n"
-                    "        if (p.val < cur.val && q.val < cur.val) {\n"
+                    "        if (p < cur.val && q < cur.val) {\n"
                     "            cur = cur.left;\n"
-                    "        } else if (p.val > cur.val && q.val > cur.val) {\n"
+                    "        } else if (p > cur.val && q > cur.val) {\n"
                     "            cur = cur.right;\n"
                     "        } else {\n"
-                    "            return cur;\n"
+                    "            return cur.val;\n"
                     "        }\n"
                     "    }\n"
-                    "    return null;\n"
+                    "    return -1;\n"
                     "}"
                 ),
             },
@@ -270,32 +264,32 @@ PAYLOAD = {
             "code": {
                 "python": (
                     "def lowest_common_ancestor(root, p, q):\n"
-                    "    if p.val < root.val and q.val < root.val:\n"
+                    "    if p < root.val and q < root.val:\n"
                     "        return lowest_common_ancestor(root.left, p, q)\n"
-                    "    if p.val > root.val and q.val > root.val:\n"
+                    "    if p > root.val and q > root.val:\n"
                     "        return lowest_common_ancestor(root.right, p, q)\n"
-                    "    return root"
+                    "    return root.val"
                 ),
                 "javascript": (
                     "function lowestCommonAncestor(root, p, q) {\n"
-                    "    if (p.val < root.val && q.val < root.val) {\n"
+                    "    if (p < root.val && q < root.val) {\n"
                     "        return lowestCommonAncestor(root.left, p, q);\n"
                     "    }\n"
-                    "    if (p.val > root.val && q.val > root.val) {\n"
+                    "    if (p > root.val && q > root.val) {\n"
                     "        return lowestCommonAncestor(root.right, p, q);\n"
                     "    }\n"
-                    "    return root;\n"
+                    "    return root.val;\n"
                     "}"
                 ),
                 "java": (
-                    "public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n"
-                    "    if (p.val < root.val && q.val < root.val) {\n"
+                    "public int lowestCommonAncestor(TreeNode root, int p, int q) {\n"
+                    "    if (p < root.val && q < root.val) {\n"
                     "        return lowestCommonAncestor(root.left, p, q);\n"
                     "    }\n"
-                    "    if (p.val > root.val && q.val > root.val) {\n"
+                    "    if (p > root.val && q > root.val) {\n"
                     "        return lowestCommonAncestor(root.right, p, q);\n"
                     "    }\n"
-                    "    return root;\n"
+                    "    return root.val;\n"
                     "}"
                 ),
             },
@@ -312,7 +306,7 @@ PAYLOAD = {
         "4. Therefore the LCA is exactly the first node where `p` and `q` are *not* both on the same side "
         "— i.e., they straddle the value, or one of them equals it.",
         "5. Implementation: descend from root, comparing both target values to the current node. Three "
-        "cases: both smaller (go left), both larger (go right), otherwise return current.",
+        "cases: both smaller (go left), both larger (go right), otherwise return the current value.",
         "6. Iterative is preferable to recursive: same `O(h)` time, but `O(1)` extra space instead of "
         "`O(h)` for the call stack. The descent is tail-recursive, so the iterative form is mechanical.",
         "7. Worst-case height for a skewed BST is `O(n)`, so the bound is `O(h)` (`O(log n)` balanced, "
@@ -337,6 +331,16 @@ PAYLOAD = {
     "topics": ["Tree", "Binary Search Tree", "Depth-First Search", "Binary Tree"],
     "time_complexity": "O(h)",
     "space_complexity": "O(1)",
+    "entry": {
+        "kind": "tree",
+        "name": "lowest_common_ancestor",
+        "params": [
+            {"name": "root", "type": "node"},
+            {"name": "p", "type": "int"},
+            {"name": "q", "type": "int"},
+        ],
+        "input_shape": "tree_level_order",
+    },
 }
 
 

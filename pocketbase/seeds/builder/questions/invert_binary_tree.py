@@ -4,8 +4,8 @@ LeetCode 226. The 'Max Howell could not solve on a whiteboard, so
 Google didn't hire him' problem. Five-line recursion; useful as a
 warm-up to confirm the candidate can write tree code without panic.
 
-Input/output use LeetCode level-order with `null` for missing nodes,
-which lines up with how most folks have already memorised the format.
+Examples use LeetCode level-order with `null` for missing nodes, which
+lines up with how most folks have already memorised the format.
 """
 from collections import deque
 
@@ -62,7 +62,8 @@ PAYLOAD = {
     "description": (
         "Given the `root` of a binary tree, **invert** the tree (mirror it left-to-right) and return its "
         "root.\n\n"
-        "The input/output use LeetCode level-order serialization where `null` denotes a missing child.\n\n"
+        "Examples below show trees as LeetCode level-order arrays where `null` denotes a missing child; "
+        "your function receives the `root` TreeNode and returns the inverted root.\n\n"
         "**Example 1:**\n"
         "- Input: `root = [4,2,7,1,3,6,9]`\n"
         "- Output: `[4,7,2,9,6,3,1]`\n"
@@ -114,7 +115,7 @@ PAYLOAD = {
             "//     this.left = (left === undefined ? null : left);\n"
             "//     this.right = (right === undefined ? null : right);\n"
             "// }\n"
-            "function invertTree(root) {\n"
+            "function invert_tree(root) {\n"
             "    // Your code here\n"
             "}"
         ),
@@ -134,7 +135,7 @@ PAYLOAD = {
             " *     }\n"
             " * }\n"
             " */\n"
-            "public TreeNode invertTree(TreeNode root) {\n"
+            "public TreeNode invert_tree(TreeNode root) {\n"
             "    // Your code here\n"
             "    return root;\n"
             "}"
@@ -155,7 +156,7 @@ PAYLOAD = {
             "// Test runner (read-only)\n"
             "const root = { val: 4, left: { val: 2, left: null, right: null },\n"
             "                       right: { val: 7, left: null, right: null } };\n"
-            "const inv = invertTree(root);\n"
+            "const inv = invert_tree(root);\n"
             "console.log(inv.val, inv.left.val, inv.right.val);  // 4 7 2"
         ),
         "java": (
@@ -164,7 +165,7 @@ PAYLOAD = {
             "    public static void main(String[] args) {\n"
             "        Solution s = new Solution();\n"
             "        TreeNode root = new TreeNode(4, new TreeNode(2), new TreeNode(7));\n"
-            "        TreeNode inv = s.invertTree(root);\n"
+            "        TreeNode inv = s.invert_tree(root);\n"
             "        System.out.println(inv.val + \" \" + inv.left.val + \" \" + inv.right.val);\n"
             "    }\n"
             "}"
@@ -219,20 +220,20 @@ PAYLOAD = {
                     "    return root"
                 ),
                 "javascript": (
-                    "function invertTree(root) {\n"
+                    "function invert_tree(root) {\n"
                     "    if (root === null) return null;\n"
-                    "    const left = invertTree(root.left);\n"
-                    "    const right = invertTree(root.right);\n"
+                    "    const left = invert_tree(root.left);\n"
+                    "    const right = invert_tree(root.right);\n"
                     "    root.left = right;\n"
                     "    root.right = left;\n"
                     "    return root;\n"
                     "}"
                 ),
                 "java": (
-                    "public TreeNode invertTree(TreeNode root) {\n"
+                    "public TreeNode invert_tree(TreeNode root) {\n"
                     "    if (root == null) return null;\n"
-                    "    TreeNode left = invertTree(root.left);\n"
-                    "    TreeNode right = invertTree(root.right);\n"
+                    "    TreeNode left = invert_tree(root.left);\n"
+                    "    TreeNode right = invert_tree(root.right);\n"
                     "    root.left = right;\n"
                     "    root.right = left;\n"
                     "    return root;\n"
@@ -267,7 +268,7 @@ PAYLOAD = {
                     "    return root"
                 ),
                 "javascript": (
-                    "function invertTree(root) {\n"
+                    "function invert_tree(root) {\n"
                     "    if (root === null) return null;\n"
                     "    const q = [root];\n"
                     "    while (q.length) {\n"
@@ -280,7 +281,7 @@ PAYLOAD = {
                     "}"
                 ),
                 "java": (
-                    "public TreeNode invertTree(TreeNode root) {\n"
+                    "public TreeNode invert_tree(TreeNode root) {\n"
                     "    if (root == null) return null;\n"
                     "    Deque<TreeNode> q = new ArrayDeque<>();\n"
                     "    q.offer(root);\n"
@@ -318,6 +319,13 @@ PAYLOAD = {
     "topics": ["Tree", "Depth-First Search", "Breadth-First Search", "Binary Tree"],
     "time_complexity": "O(n)",
     "space_complexity": "O(h)",
+    "entry": {
+        "kind": "tree",
+        "name": "invert_tree",
+        "params": [{"name": "root", "type": "node"}],
+        "input_shape": "tree_level_order",
+        "output_shape": "tree_level_order",
+    },
 }
 
 

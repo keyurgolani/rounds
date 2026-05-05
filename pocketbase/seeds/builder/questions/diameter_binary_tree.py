@@ -6,8 +6,7 @@ that turns at this node). Returning the height upward while updating a
 side-effect maximum keeps the whole thing O(n). Naive solution recomputes
 height at every node — O(n^2) — and is a useful contrast.
 
-Input is a LeetCode level-order list with `null` for missing children;
-output is the diameter measured in *edges*.
+Input is the binary tree root; output is the diameter measured in *edges*.
 """
 from builder.registry import register
 
@@ -21,7 +20,6 @@ PAYLOAD = {
         "This path may or may not pass through the root.\n\n"
         "The **length** of a path is the **number of edges** between its endpoints (so a single "
         "node has diameter `0`, two connected nodes have diameter `1`).\n\n"
-        "Trees are encoded as level-order lists with `null` for missing children (LeetCode style).\n\n"
         "**Example 1:**\n"
         "```\n"
         "Tree:    1\n"
@@ -30,7 +28,7 @@ PAYLOAD = {
         "      / \\\n"
         "     4   5\n"
         "```\n"
-        "- Input: `root = [1, 2, 3, 4, 5]`\n"
+        "- Input: `root` is the tree shown above\n"
         "- Output: `3`\n"
         "- Explanation: the longest path is `4 -> 2 -> 1 -> 3` (or `5 -> 2 -> 1 -> 3`), which has "
         "**3 edges**.\n\n"
@@ -40,7 +38,7 @@ PAYLOAD = {
         "        /\n"
         "       2\n"
         "```\n"
-        "- Input: `root = [1, 2]`\n"
+        "- Input: `root` is the tree shown above\n"
         "- Output: `1`\n"
         "- Explanation: the only path of nonzero length is `2 -> 1`, which has **1 edge**.\n\n"
         "Empty tree returns `0`."
@@ -66,7 +64,7 @@ PAYLOAD = {
     ],
     "starter_code": {
         "python": (
-            "# `root` is a LeetCode-style level-order list with None for missing children.\n"
+            "# `root` is a TreeNode (or None).\n"
             "# Return the diameter (number of edges on the longest path) as an int.\n"
             "#\n"
             "# Hint: a class with `self.best = 0` (or a list cell) lets a recursive helper\n"
@@ -76,7 +74,7 @@ PAYLOAD = {
             "    pass"
         ),
         "javascript": (
-            "// `root` is a level-order array with null for missing children.\n"
+            "// `root` is a TreeNode (or null).\n"
             "// Return the diameter (number of edges on the longest path) as a number.\n"
             "//\n"
             "// Hint: capture a `best` variable in a closure (or use an outer `let best = 0`)\n"
@@ -86,12 +84,12 @@ PAYLOAD = {
             "}"
         ),
         "java": (
-            "// `root` is a level-order list with null for missing children.\n"
+            "// `root` is a TreeNode (or null).\n"
             "// Return the diameter (number of edges on the longest path) as an int.\n"
             "//\n"
             "// Hint: an instance field `int best = 0` lets a recursive helper\n"
             "// update a shared maximum while returning each subtree's height upward.\n"
-            "public int diameterOfBinaryTree(java.util.List<Integer> root) {\n"
+            "public int diameterOfBinaryTree(TreeNode root) {\n"
             "    // Your code here\n"
             "    return 0;\n"
             "}"
@@ -101,22 +99,18 @@ PAYLOAD = {
         "python": (
             "# Test runner (read-only)\n"
             "if __name__ == \"__main__\":\n"
-            "    cases = [[1, 2, 3, 4, 5], [1, 2], [], [1]]\n"
-            "    for c in cases:\n"
-            "        print(f\"diameter_of_binary_tree({c}) = {diameter_of_binary_tree(c)}\")"
+            "    # The platform supplies TreeNode roots when running submissions.\n"
+            "    pass"
         ),
         "javascript": (
             "// Test runner (read-only)\n"
-            "[[1, 2, 3, 4, 5], [1, 2], [], [1]].forEach(c =>\n"
-            "    console.log(`diameter =`, diameterOfBinaryTree(c))\n"
-            ");"
+            "// The platform supplies TreeNode roots when running submissions."
         ),
         "java": (
             "// Test runner (read-only)\n"
             "public class Main {\n"
             "    public static void main(String[] args) {\n"
-            "        Solution s = new Solution();\n"
-            "        System.out.println(s.diameterOfBinaryTree(java.util.Arrays.asList(1, 2, 3, 4, 5)));\n"
+            "        // The platform supplies TreeNode roots when running submissions.\n"
             "    }\n"
             "}"
         ),
@@ -165,7 +159,6 @@ PAYLOAD = {
             "code": {
                 "python": (
                     "def diameter_of_binary_tree(root):\n"
-                    "    node = _from_level(root)\n"
                     "    best = [0]\n"
                     "    def height(n):\n"
                     "        if n is None:\n"
@@ -175,12 +168,11 @@ PAYLOAD = {
                     "        if l + r > best[0]:\n"
                     "            best[0] = l + r\n"
                     "        return 1 + max(l, r)\n"
-                    "    height(node)\n"
+                    "    height(root)\n"
                     "    return best[0]"
                 ),
                 "javascript": (
                     "function diameterOfBinaryTree(root) {\n"
-                    "    const node = fromLevel(root);\n"
                     "    let best = 0;\n"
                     "    const height = (n) => {\n"
                     "        if (n === null) return 0;\n"
@@ -189,7 +181,7 @@ PAYLOAD = {
                     "        if (l + r > best) best = l + r;\n"
                     "        return 1 + Math.max(l, r);\n"
                     "    };\n"
-                    "    height(node);\n"
+                    "    height(root);\n"
                     "    return best;\n"
                     "}"
                 ),
@@ -224,7 +216,6 @@ PAYLOAD = {
             "code": {
                 "python": (
                     "def diameter_of_binary_tree(root):\n"
-                    "    node = _from_level(root)\n"
                     "    def height(n):\n"
                     "        if n is None:\n"
                     "            return 0\n"
@@ -239,12 +230,11 @@ PAYLOAD = {
                     "            best = local\n"
                     "        visit(n.left)\n"
                     "        visit(n.right)\n"
-                    "    visit(node)\n"
+                    "    visit(root)\n"
                     "    return best"
                 ),
                 "javascript": (
                     "function diameterOfBinaryTree(root) {\n"
-                    "    const node = fromLevel(root);\n"
                     "    const height = (n) => n === null ? 0 : 1 + Math.max(height(n.left), height(n.right));\n"
                     "    let best = 0;\n"
                     "    const visit = (n) => {\n"
@@ -254,7 +244,7 @@ PAYLOAD = {
                     "        visit(n.left);\n"
                     "        visit(n.right);\n"
                     "    };\n"
-                    "    visit(node);\n"
+                    "    visit(root);\n"
                     "    return best;\n"
                     "}"
                 ),
@@ -309,6 +299,14 @@ PAYLOAD = {
     "topics": ["Tree", "Depth-First Search", "Binary Tree", "Recursion"],
     "time_complexity": "O(n)",
     "space_complexity": "O(h)",
+    "entry": {
+        "kind": "tree",
+        "name": "diameter_of_binary_tree",
+        "params": [
+            {"name": "root", "type": "node"},
+        ],
+        "input_shape": "tree_level_order",
+    },
 }
 
 

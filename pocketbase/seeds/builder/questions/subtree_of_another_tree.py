@@ -57,7 +57,6 @@ PAYLOAD = {
         "`root` with the same structure and node values as `subRoot`, and `false` otherwise.\n\n"
         "A subtree of a binary tree `tree` is a tree consisting of a node in `tree` and all of this node's "
         "descendants. The tree `tree` could also be considered a subtree of itself.\n\n"
-        "The input/output use LeetCode level-order serialization where `null` denotes a missing child.\n\n"
         "**Example 1:**\n"
         "- Input: `root = [3,4,5,1,2]`, `subRoot = [4,1,2]`\n"
         "- Output: `true`\n"
@@ -341,6 +340,15 @@ PAYLOAD = {
     "topics": ["Tree", "Depth-First Search", "Binary Tree", "String Matching", "Hash Function"],
     "time_complexity": "O(m * n)",
     "space_complexity": "O(max(h_root, h_sub))",
+    "entry": {
+        "kind": "tree",
+        "name": "is_subtree",
+        "params": [
+            {"name": "root", "type": "node"},
+            {"name": "subRoot", "type": "node"},
+        ],
+        "input_shape": "tree_level_order",
+    },
 }
 
 

@@ -6,16 +6,14 @@ mirrors right-of-B, and right-of-A mirrors left-of-B. A clean check
 that the candidate has internalised *why* the recursion in LC 100
 works rather than memorising the literal pattern.
 
-Input is a single LeetCode level-order list with `null` for missing
-nodes; the reference returns a bool.
+The user-facing function receives a TreeNode root; the build-time
+reference still accepts raw array fixtures and returns a bool.
 """
-from collections import deque
-
 from builder.registry import register
 
 
 def _build(level):
-    """Deserialize LeetCode level-order list (with None for missing) to a tree."""
+    """Build an internal dict tree from the raw array fixtures."""
     if not level:
         return None
     nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
@@ -46,7 +44,6 @@ PAYLOAD = {
     "description": (
         "Given the `root` of a binary tree, check whether it is a **mirror of itself** — i.e., "
         "**symmetric** around its centre.\n\n"
-        "The input uses LeetCode level-order serialization where `null` denotes a missing child.\n\n"
         "**Example 1:**\n"
         "- Input: `root = [1,2,2,3,4,4,3]`\n"
         "- Output: `true`\n"
@@ -86,7 +83,7 @@ PAYLOAD = {
     "constraints": [
         "The number of nodes in the tree is in the range `[0, 1000]`.",
         "-100 <= Node.val <= 100",
-        "Input is a valid LeetCode level-order serialization.",
+        "`root` is either `null` or the root of a valid binary tree.",
     ],
     "starter_code": {
         "python": (
@@ -367,11 +364,19 @@ PAYLOAD = {
     "topics": ["Tree", "Depth-First Search", "Breadth-First Search", "Binary Tree"],
     "time_complexity": "O(n)",
     "space_complexity": "O(h)",
+    "entry": {
+        "kind": "tree",
+        "name": "is_symmetric",
+        "params": [
+            {"name": "root", "type": "node"},
+        ],
+        "input_shape": "tree_level_order",
+    },
 }
 
 
 def REFERENCE(root):
-    """Take a LeetCode level-order list, return whether the tree is symmetric."""
+    """Take the raw array fixture and return whether the tree is symmetric."""
     tree = _build(root)
     if tree is None:
         return True

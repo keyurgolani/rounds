@@ -12,8 +12,7 @@ max(0, rightGain)`; the value returned upward is `node.val + max(0,
 max(leftGain, rightGain))`, because a path going through an ancestor can
 only extend one side.
 
-Input is a LeetCode level-order list with `null` for missing children;
-output is an int (the maximum path sum).
+Input is the binary tree root; output is an int (the maximum path sum).
 """
 from builder.registry import register
 
@@ -27,7 +26,6 @@ PAYLOAD = {
         "**not** need to pass through the root.\n\n"
         "The **path sum** is the sum of the node values along the path.\n\n"
         "Given the `root` of a binary tree, return the **maximum path sum** of any non-empty path.\n\n"
-        "Trees are encoded as LeetCode level-order lists with `null` for missing children.\n\n"
         "**Example 1:**\n"
         "```\n"
         "Tree:    1\n"
@@ -70,7 +68,12 @@ PAYLOAD = {
     ],
     "starter_code": {
         "python": (
-            "# `root` is a LeetCode-style level-order list with None for missing children.\n"
+            "# Definition for a binary tree node.\n"
+            "# class TreeNode:\n"
+            "#     def __init__(self, val=0, left=None, right=None):\n"
+            "#         self.val = val\n"
+            "#         self.left = left\n"
+            "#         self.right = right\n"
             "# Return the maximum path sum (any non-empty path) as an int.\n"
             "#\n"
             "# Hint: a recursive helper that returns the max downward gain from a node\n"
@@ -80,7 +83,12 @@ PAYLOAD = {
             "    pass"
         ),
         "javascript": (
-            "// `root` is a level-order array with null for missing children.\n"
+            "// Definition for a binary tree node.\n"
+            "// function TreeNode(val, left, right) {\n"
+            "//     this.val = (val === undefined ? 0 : val);\n"
+            "//     this.left = (left === undefined ? null : left);\n"
+            "//     this.right = (right === undefined ? null : right);\n"
+            "// }\n"
             "// Return the maximum path sum as a number.\n"
             "//\n"
             "// Hint: capture a `best` variable in a closure, recurse and return\n"
@@ -90,12 +98,26 @@ PAYLOAD = {
             "}"
         ),
         "java": (
-            "// `root` is a level-order list with null for missing children.\n"
+            "/**\n"
+            " * Definition for a binary tree node.\n"
+            " * public class TreeNode {\n"
+            " *     int val;\n"
+            " *     TreeNode left;\n"
+            " *     TreeNode right;\n"
+            " *     TreeNode() {}\n"
+            " *     TreeNode(int val) { this.val = val; }\n"
+            " *     TreeNode(int val, TreeNode left, TreeNode right) {\n"
+            " *         this.val = val;\n"
+            " *         this.left = left;\n"
+            " *         this.right = right;\n"
+            " *     }\n"
+            " * }\n"
+            " */\n"
             "// Return the maximum path sum as an int.\n"
             "//\n"
             "// Hint: an instance field `int best = Integer.MIN_VALUE` lets a recursive\n"
             "// helper update a shared maximum while returning each subtree's max gain upward.\n"
-            "public int maxPathSum(java.util.List<Integer> root) {\n"
+            "public int maxPathSum(TreeNode root) {\n"
             "    // Your code here\n"
             "    return 0;\n"
             "}"
@@ -180,7 +202,6 @@ PAYLOAD = {
             "code": {
                 "python": (
                     "def max_path_sum(root):\n"
-                    "    node = _from_level(root)\n"
                     "    best = [float('-inf')]\n"
                     "    def gain(n):\n"
                     "        if n is None:\n"
@@ -191,12 +212,11 @@ PAYLOAD = {
                     "        if bend > best[0]:\n"
                     "            best[0] = bend\n"
                     "        return n.val + max(l, r)\n"
-                    "    gain(node)\n"
+                    "    gain(root)\n"
                     "    return best[0]"
                 ),
                 "javascript": (
                     "function maxPathSum(root) {\n"
-                    "    const node = fromLevel(root);\n"
                     "    let best = -Infinity;\n"
                     "    const gain = (n) => {\n"
                     "        if (n === null) return 0;\n"
@@ -206,7 +226,7 @@ PAYLOAD = {
                     "        if (bend > best) best = bend;\n"
                     "        return n.val + Math.max(l, r);\n"
                     "    };\n"
-                    "    gain(node);\n"
+                    "    gain(root);\n"
                     "    return best;\n"
                     "}"
                 ),
@@ -245,7 +265,6 @@ PAYLOAD = {
             "code": {
                 "python": (
                     "def max_path_sum(root):\n"
-                    "    node = _from_level(root)\n"
                     "    best = [float('-inf')]\n"
                     "    def best_down(n):\n"
                     "        if n is None:\n"
@@ -263,12 +282,11 @@ PAYLOAD = {
                     "            best[0] = bend\n"
                     "        visit(n.left)\n"
                     "        visit(n.right)\n"
-                    "    visit(node)\n"
+                    "    visit(root)\n"
                     "    return best[0]"
                 ),
                 "javascript": (
                     "function maxPathSum(root) {\n"
-                    "    const node = fromLevel(root);\n"
                     "    let best = -Infinity;\n"
                     "    const bestDown = (n) => {\n"
                     "        if (n === null) return 0;\n"
@@ -285,7 +303,7 @@ PAYLOAD = {
                     "        visit(n.left);\n"
                     "        visit(n.right);\n"
                     "    };\n"
-                    "    visit(node);\n"
+                    "    visit(root);\n"
                     "    return best;\n"
                     "}"
                 ),
@@ -357,6 +375,12 @@ PAYLOAD = {
     "topics": ["Tree", "Depth-First Search", "Binary Tree", "Recursion", "Dynamic Programming"],
     "time_complexity": "O(n)",
     "space_complexity": "O(h)",
+    "entry": {
+        "kind": "tree",
+        "name": "max_path_sum",
+        "params": [{"name": "root", "type": "node"}],
+        "input_shape": "tree_level_order",
+    },
 }
 
 

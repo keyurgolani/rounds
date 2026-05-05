@@ -5,8 +5,8 @@ question. Trivial in three lines of recursion; the interesting follow-ups
 are the explicit-stack iterative version and Morris traversal (O(1) extra
 space, mutates pointers temporarily).
 
-Input/output use LeetCode level-order with `null` for missing nodes for
-the tree, and a flat list of ints for the visit order.
+The user function receives the `TreeNode root` directly and returns a flat
+list of ints for the visit order.
 """
 from builder.registry import register
 
@@ -42,10 +42,9 @@ PAYLOAD = {
         "Given the `root` of a binary tree, return the **inorder traversal** of its nodes' values.\n\n"
         "Inorder visits a node *between* its left and right subtrees: traverse left, visit root, traverse "
         "right. For a binary search tree, this yields the values in sorted order — a fact worth mentioning.\n\n"
-        "The input uses LeetCode level-order serialization where `null` denotes a missing child. The output "
-        "is a flat list of integers in visit order.\n\n"
+        "The function receives the `TreeNode root` directly and returns a flat list of integers in visit order.\n\n"
         "**Example 1:**\n"
-        "- Input: `root = [1,null,2,3]`\n"
+        "- Input: the tree shown below\n"
         "- Output: `[1,3,2]`\n"
         "- Explanation:\n"
         "```\n"
@@ -58,7 +57,7 @@ PAYLOAD = {
         "Visit left of 1 (none), visit 1, recurse right into 2 → visit left of 2 which is 3 → "
         "visit 2 → no right.\n\n"
         "**Example 2:**\n"
-        "- Input: `root = [4,2,6,1,3,5,7]`\n"
+        "- Input: a balanced BST with root `4`, children `2` and `6`, and leaves `1,3,5,7`\n"
         "- Output: `[1,2,3,4,5,6,7]`\n"
         "- Explanation: This is a balanced BST, so inorder produces sorted output."
     ),
@@ -128,11 +127,11 @@ PAYLOAD = {
         "python": (
             "# Test runner (read-only)\n"
             "if __name__ == \"__main__\":\n"
-            "    # Build [1, null, 2, 3]:  1\n"
-            "    #                          \\\n"
-            "    #                           2\n"
-            "    #                          /\n"
-            "    #                         3\n"
+            "    # Build a small tree manually:  1\n"
+            "    #                              \\\n"
+            "    #                               2\n"
+            "    #                              /\n"
+            "    #                             3\n"
             "    root = TreeNode(1, None, TreeNode(2, TreeNode(3)))\n"
             "    print(inorder_traversal(root))  # [1, 3, 2]"
         ),
@@ -160,7 +159,7 @@ PAYLOAD = {
         {"input": {"root": [1]}, "expected": [1],
          "description": "Single node — visit produces just the root", "tags": ["edge"]},
         {"input": {"root": [1, None, 2, 3]}, "expected": [1, 3, 2],
-         "description": "Classic LeetCode example — note the `null` left child of root", "tags": ["basic"]},
+         "description": "Classic LeetCode example shape — right child with a left subtree", "tags": ["basic"]},
         {"input": {"root": [1, 2]}, "expected": [2, 1],
          "description": "Two-node tree, only left child — leaf visited before root", "tags": ["basic"]},
         {"input": {"root": [1, None, 2]}, "expected": [1, 2],
@@ -393,6 +392,12 @@ PAYLOAD = {
     "topics": ["Stack", "Tree", "Depth-First Search", "Binary Tree"],
     "time_complexity": "O(n)",
     "space_complexity": "O(h)",
+    "entry": {
+        "kind": "tree",
+        "name": "inorder_traversal",
+        "params": [{"name": "root", "type": "node"}],
+        "input_shape": "tree_level_order",
+    },
 }
 
 

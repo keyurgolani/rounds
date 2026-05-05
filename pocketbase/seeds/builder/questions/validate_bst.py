@@ -5,7 +5,6 @@ The trap: candidates who only check `node.left.val < node.val < node.right.val`
 locally and miss that the BST property is a *global* invariant — every node
 in the entire left subtree must be smaller, not just the immediate child.
 
-Input/output use LeetCode level-order with `null` for missing nodes.
 The reference returns a bool.
 """
 from builder.registry import register
@@ -45,7 +44,6 @@ PAYLOAD = {
         "- The left subtree of a node contains only nodes with keys **strictly less than** the node's key.\n"
         "- The right subtree of a node contains only nodes with keys **strictly greater than** the node's key.\n"
         "- Both the left and right subtrees must also be binary search trees.\n\n"
-        "The input uses LeetCode level-order serialization where `null` denotes a missing child.\n\n"
         "**Example 1:**\n"
         "- Input: `root = [2,1,3]`\n"
         "- Output: `true`\n"
@@ -312,6 +310,14 @@ PAYLOAD = {
     "topics": ["Tree", "Depth-First Search", "Binary Search Tree", "Binary Tree"],
     "time_complexity": "O(n)",
     "space_complexity": "O(h)",
+    "entry": {
+        "kind": "tree",
+        "name": "is_valid_bst",
+        "params": [
+            {"name": "root", "type": "node"},
+        ],
+        "input_shape": "tree_level_order",
+    },
 }
 
 

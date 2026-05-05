@@ -10,7 +10,7 @@ _DEFAULT_TEMPLATE = {
     "links": [{"name": "neighbors", "arity": "list"}],
 }
 _DEFAULT_SHAPE = "graph_adjacency"
-_SUPPORTED_OUTPUT_SHAPES = {"verbose"}
+_SUPPORTED_OUTPUT_SHAPES = {"verbose", "graph_adjacency"}
 
 
 def validate(entry: dict) -> list[str]:
@@ -91,10 +91,16 @@ def _to_verbose(adj, shape, template):
 
 
 def _to_shape(verbose, output_shape, template):
-    # Graph output shaping is intentionally minimal — graphs may contain
-    # cycles, so flat-array shorthand isn't well-defined. Future shapes
-    # can be added here as use cases emerge.
     if output_shape == "verbose":
         return verbose
+    if output_shape == "graph_adjacency":
+        f_name = template["fields"][0]["name"]
+        l_name = template["links"][0]["name"]
+        by_id = {{n["id"]: n for n in verbose.get("nodes", [])}}
+        out = {{}}
+        for node in verbose.get("nodes", []):
+            key = str(node["fields"][f_name])
+            out[key] = [by_id[nid]["fields"][f_name] for nid in node["links"].get(l_name, []) if nid in by_id]
+        return out
     raise ValueError(f"unsupported output shape in graph driver: {{output_shape}}")
 """

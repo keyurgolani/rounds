@@ -4,9 +4,8 @@ LeetCode 236. Classic recursion question. The trick is realising that
 when both subtrees of a node return non-null, the current node is the
 LCA — no extra bookkeeping needed.
 
-Input/output use LeetCode level-order with `null` for missing nodes.
-The reference returns the integer value of the LCA (not a node object)
-so it serializes cleanly through JSON.
+The user function receives a TreeNode root directly and returns the
+integer value of the LCA (not a node object).
 """
 from collections import deque
 
@@ -50,7 +49,6 @@ PAYLOAD = {
         "return the **value** of their lowest common ancestor (LCA).\n\n"
         "The LCA of `p` and `q` is the **deepest** node in the tree that has both `p` and `q` as descendants "
         "(where a node is allowed to be a descendant of itself).\n\n"
-        "The input uses LeetCode level-order serialization where `null` denotes a missing child. "
         "All values in the tree are unique, and both `p` and `q` are guaranteed to exist in the tree.\n\n"
         "**Example 1:**\n"
         "- Input: `root = [3,5,1,6,2,0,8,null,null,7,4]`, `p = 5`, `q = 1`\n"
@@ -344,6 +342,16 @@ PAYLOAD = {
     "topics": ["Tree", "Depth-First Search", "Binary Tree"],
     "time_complexity": "O(n)",
     "space_complexity": "O(h)",
+    "entry": {
+        "kind": "tree",
+        "name": "lowest_common_ancestor",
+        "params": [
+            {"name": "root", "type": "node"},
+            {"name": "p", "type": "int"},
+            {"name": "q", "type": "int"},
+        ],
+        "input_shape": "tree_level_order",
+    },
 }
 
 
