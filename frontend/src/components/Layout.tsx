@@ -20,6 +20,7 @@ import {
   CalendarGlyph,
   CodeGlyph,
   DashGlyph,
+  ResumeGlyph,
   SystemGlyph,
   TodoGlyph,
 } from './shell/Glyphs';
@@ -88,6 +89,7 @@ const trackingNav: NavDef[] = [
   { path: '/applications', label: 'Applications', glyph: AppsGlyph },
   { path: '/interviews', label: 'Interviews', glyph: CalendarGlyph },
   { path: '/todos', label: 'Todos', glyph: TodoGlyph },
+  { path: '/resumes', label: 'Resumes', glyph: ResumeGlyph },
 ];
 
 export default function Layout() {

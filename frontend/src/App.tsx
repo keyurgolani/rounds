@@ -24,6 +24,9 @@ import Campaigns from './pages/Campaigns';
 import CampaignDetail from './pages/CampaignDetail';
 import Todos from './pages/Todos';
 import RoundDetail from './pages/RoundDetail';
+import ResumesList from './pages/ResumesList';
+import ResumeStudio from './pages/ResumeStudio';
+import PublicResume from './pages/PublicResume';
 import { CampaignProvider } from './campaign/CampaignContext';
 
 export default function App() {
@@ -31,6 +34,7 @@ export default function App() {
     <Routes>
       <Route path="login" element={<Login />} />
       <Route path="signup" element={<Signup />} />
+      <Route path="r/:token" element={<PublicResume />} />
 
       <Route
         element={
@@ -70,6 +74,8 @@ export default function App() {
         <Route path="campaigns" element={<Campaigns />} />
         <Route path="campaigns/:slug" element={<CampaignDetail />} />
         <Route path="todos" element={<Todos />} />
+        <Route path="resumes" element={<ResumesList />} />
+        <Route path="resumes/:slug" element={<ResumeStudio />} />
         <Route path="profile" element={<Profile />} />
         <Route path="settings" element={<Settings />} />
       </Route>

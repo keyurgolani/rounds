@@ -19,6 +19,7 @@ The demo account is seeded on first PocketBase deployment, can run one custom co
 - Coding practice with Monaco editor, local drafts, focus mode, custom runs, full-suite evaluation, curated runnable question sets, and structured problem metadata.
 - Behavioral prep with competency-tagged questions, STAR story guidance, personal anecdotes, and question-to-story linking.
 - Application tracking with companies, roles, statuses, rounds, offers, campaign context, and todos.
+- Resume Studio with four templates, per-section editors, drag-and-drop reordering, JD-aware tailoring, ATS scoring, version history, AI bullet rewrites, server-rendered PDFs, exports to DOCX / HTML / Markdown / plain text / JSON Resume, and public share links.
 - Command center, theme controls, streak tracking, and dashboard widgets for day-to-day prep.
 
 ## Stack
@@ -36,7 +37,8 @@ The demo account is seeded on first PocketBase deployment, can run one custom co
 ```text
 .
 ├── frontend/              React + Vite SPA, production nginx config
-├── backend/               FastAPI code runner
+├── backend/               FastAPI code runner + AI/PDF/share routers
+├── backend/pdf_renderer/  Node + Puppeteer sidecar for high-fidelity PDFs
 ├── pocketbase/            PocketBase image, migrations, hooks, seeds
 ├── docs/                  Deployment notes
 ├── k8s/                   Kustomize manifests
@@ -92,12 +94,15 @@ ROUNDS_DISABLE_SIGNUPS=true
 
 ## Migrations and Seed Data
 
-Fresh deployments run four migrations:
+Fresh deployments run these migrations in order:
 
 1. `1700000000_init_collections.js` creates the final schema.
 2. `1700000100_seed_data.js` loads all shared questions, categories, coding question sets, and guide cheat sheets.
 3. `1700000500_bootstrap_admin.js` optionally creates the first PocketBase admin from environment variables.
 4. `1700000600_demo_user.js` creates the hosted demo user and demo-run limiter fields.
+5. `1700000700_resume_studio.js` adds resume, resume version, and bullet-library collections.
+6. `1700000800_ai_providers.js` adds the per-user AI provider credential collection (keys stored encrypted at rest).
+7. `1700000900_share_links_resume_rel.js` extends `share_links` with a relation to resumes for public read-only views.
 
 ## Verification
 
@@ -120,7 +125,9 @@ See `.env.example` and `frontend/.env.example` for the complete list.
 | `RUNNER_PORT` | Dev runner host port |
 | `FRONTEND_PORT` | Dev frontend host port |
 | `CORS_ALLOW_ORIGINS` | Runner CORS origins |
-| `PB_ADMIN_EMAIL`, `PB_ADMIN_PASSWORD` | Optional PocketBase admin bootstrap |
+| `PB_ADMIN_EMAIL`, `PB_ADMIN_PASSWORD` | PocketBase admin bootstrap; also used by the runner's public-share endpoint to bypass owner rules |
+| `PDF_RENDERER_URL` | Internal URL of the headless-Chromium PDF renderer (defaults to the sidecar service) |
+| `AI_KEY_SECRET` | Symmetric secret used to encrypt user-supplied AI provider keys at rest |
 | `VITE_POCKETBASE_URL` | Browser PocketBase base URL; blank means same-origin |
 | `VITE_API_PROXY_TARGET` | Vite dev runner proxy target |
 | `VITE_POCKETBASE_PROXY_TARGET` | Vite dev PocketBase proxy target |

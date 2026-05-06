@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Sparkles, X } from 'lucide-react';
 import { api } from '../../api/client';
 import { slugify } from '../../lib/slug';
 import AppHeader from '../../components/shell/AppHeader';
 import PageShell from '../../components/shell/PageShell';
+import { createBullet } from '../../features/resume/api';
 import type { Anecdote, BehavioralCategoryLite, BehavioralQuestionLite } from './types';
 
 type Mode = 'description' | 'star' | 'both';
@@ -254,6 +256,19 @@ export function AnecdoteEditorPage() {
           eyebrow={isEdit ? 'Behavioral · Edit anecdote' : 'Behavioral · New anecdote'}
           title={isEdit ? 'Edit anecdote' : 'New anecdote'}
           description="Capture the story once. Pull it back up whenever an interviewer prompts for it."
+          chromeActions={
+            isEdit && existingId ? (
+              <SaveAsBulletButton
+                anecdoteId={existingId}
+                seedText={
+                  form.result?.trim() ||
+                  form.action?.trim() ||
+                  form.description?.trim() ||
+                  form.title.trim()
+                }
+              />
+            ) : undefined
+          }
         />
       }
     >
@@ -414,5 +429,241 @@ export function AnecdoteEditorPage() {
         </div>
       </form>
     </PageShell>
+  );
+}
+
+// "Save as bullet" lifts a one-line achievement out of an anecdote
+// into the global Bullet Library so it can be reused across resumes
+// and variants. The seed text comes from the anecdote's "Result" (or
+// the next best STAR field), and the user can edit before saving so
+// the bullet reads as a finished resume line, not a raw STAR sentence.
+function SaveAsBulletButton({
+  anecdoteId,
+  seedText,
+}: {
+  anecdoteId: string;
+  seedText: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(seedText);
+  const [tagsRaw, setTagsRaw] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  const onOpen = () => {
+    setText(seedText);
+    setTagsRaw('');
+    setError(null);
+    setOpen(true);
+  };
+
+  const onSave = async () => {
+    if (!text.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await createBullet({
+        text: text.trim(),
+        tags: tagsRaw
+          .split(',')
+          .map((t) => t.trim().toLowerCase())
+          .filter(Boolean),
+        source_anecdote_id: anecdoteId,
+      });
+      setOpen(false);
+      setSavedAt(Date.now());
+      window.setTimeout(() => setSavedAt(null), 2400);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="inline-flex items-center gap-1.5"
+        style={{
+          padding: '8px 12px',
+          borderRadius: 'var(--radius)',
+          border: 0,
+          background: 'transparent',
+          boxShadow: 'inset 0 0 0 1px var(--border-strong)',
+          color: 'var(--text-2)',
+          fontSize: 12.5,
+          fontWeight: 500,
+          cursor: 'pointer',
+        }}
+        title="Save a one-line bullet from this anecdote into the Bullet Library"
+      >
+        <Sparkles size={13} strokeWidth={1.7} />
+        Save as bullet
+        {savedAt !== null && (
+          <span
+            style={{
+              marginLeft: 4,
+              fontSize: 10,
+              color: 'var(--forest)',
+              letterSpacing: '0.04em',
+            }}
+          >
+            saved
+          </span>
+        )}
+      </button>
+      {open && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Save bullet"
+          onClick={() => setOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            zIndex: 60,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="card"
+            style={{ width: '100%', maxWidth: 520, padding: 0, display: 'flex', flexDirection: 'column' }}
+          >
+            <div
+              className="flex items-center justify-between"
+              style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}
+            >
+              <div>
+                <div className="eyebrow" style={{ fontSize: 9.5, marginBottom: 2 }}>
+                  Bullet library
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>Save as bullet</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Close"
+                style={{
+                  background: 'transparent',
+                  border: 0,
+                  padding: 4,
+                  borderRadius: 6,
+                  boxShadow: 'inset 0 0 0 1px var(--border)',
+                  color: 'var(--text-2)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                }}
+              >
+                <X size={14} strokeWidth={1.8} />
+              </button>
+            </div>
+            <div
+              style={{
+                padding: 16,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+              }}
+            >
+              <label className="flex flex-col gap-1.5">
+                <span className="eyebrow" style={{ fontSize: 9.5 }}>
+                  Bullet
+                </span>
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  rows={3}
+                  placeholder="A one-line achievement, e.g. Reduced p99 latency 40% by sharding the order pipeline."
+                  style={{
+                    padding: '8px 10px',
+                    background: 'var(--bg-elev)',
+                    boxShadow: 'inset 0 0 0 1px var(--border-strong)',
+                    borderRadius: 'var(--radius)',
+                    border: 0,
+                    fontSize: 12.5,
+                    color: 'var(--text)',
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                    lineHeight: 1.45,
+                    resize: 'vertical',
+                  }}
+                />
+                <span style={{ fontSize: 10.5, color: 'var(--text-4)' }}>
+                  Seeded from this anecdote's Result. Trim it to a resume-ready line and add
+                  metrics where you can.
+                </span>
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="eyebrow" style={{ fontSize: 9.5 }}>
+                  Tags (optional)
+                </span>
+                <input
+                  value={tagsRaw}
+                  onChange={(e) => setTagsRaw(e.target.value)}
+                  placeholder="e.g. leadership, infrastructure, scaling"
+                  style={{
+                    padding: '8px 10px',
+                    background: 'var(--bg-elev)',
+                    boxShadow: 'inset 0 0 0 1px var(--border-strong)',
+                    borderRadius: 'var(--radius)',
+                    border: 0,
+                    fontSize: 12.5,
+                    color: 'var(--text)',
+                    outline: 'none',
+                  }}
+                />
+              </label>
+              {error && (
+                <div role="alert" style={{ fontSize: 11.5, color: 'var(--plum)' }}>
+                  {error}
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={saving || !text.trim()}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 'var(--radius)',
+                    border: 0,
+                    background: 'var(--accent)',
+                    color: 'var(--bg-elev)',
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    cursor: saving || !text.trim() ? 'not-allowed' : 'pointer',
+                    opacity: saving || !text.trim() ? 0.6 : 1,
+                  }}
+                >
+                  {saving ? 'Saving…' : 'Save bullet'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'transparent',
+                    border: 0,
+                    color: 'var(--text-3)',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

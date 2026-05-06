@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Briefcase, Calendar, CalendarPlus, ExternalLink, FileText } from 'lucide-react';
+import { Briefcase, Calendar, CalendarPlus, ExternalLink, FileText, Wand2 } from 'lucide-react';
 import { api } from '../api/client';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
 import BackLink from '../components/shell/BackLink';
 import InlineMarkdown from '../components/shell/InlineMarkdown';
 import OfferPanel, { type Offer } from '../components/shell/OfferPanel';
+import { listResumes } from '../features/resume/api';
 
 type Application = {
   id: number;
@@ -134,15 +135,18 @@ export default function ApplicationDetail() {
             title={app.role}
             description={`Everything you've captured about ${app.company} — status, role detail, prepped rounds, and the notes you want near you before the next conversation.`}
             chromeActions={
-              <button
-                type="button"
-                onClick={() => navigate(`/interviews/new?applicationId=${app.id}`)}
-                className="inline-flex items-center gap-1.5"
-                style={primaryBtn}
-              >
-                <CalendarPlus size={14} strokeWidth={1.7} />
-                Schedule a round
-              </button>
+              <div className="flex items-center gap-1.5">
+                <TailorButton applicationId={String(app.id)} />
+                <button
+                  type="button"
+                  onClick={() => navigate(`/interviews/new?applicationId=${app.id}`)}
+                  className="inline-flex items-center gap-1.5"
+                  style={primaryBtn}
+                >
+                  <CalendarPlus size={14} strokeWidth={1.7} />
+                  Schedule a round
+                </button>
+              </div>
             }
           />
         </>
@@ -444,6 +448,125 @@ export default function ApplicationDetail() {
         </aside>
       </div>
     </PageShell>
+  );
+}
+
+// Tailor entry: hands the user off to the Studio with the picked
+// master resume + this Application pre-anchored. We keep the picker
+// inline (no modal) — most users have a small number of resumes, and
+// a dropdown is faster than a multi-step dialog.
+function TailorButton({ applicationId }: { applicationId: string }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [resumes, setResumes] = useState<{ id: string; slug: string; name: string }[]>(
+    [],
+  );
+  const [loading, setLoading] = useState(false);
+
+  const onClick = async () => {
+    if (!open) {
+      setLoading(true);
+      try {
+        const items = await listResumes();
+        if (items.length === 0) {
+          // No master to tailor — drop them on the Resumes page so
+          // they can create one.
+          navigate('/resumes');
+          return;
+        }
+        if (items.length === 1) {
+          // Only one — skip the menu entirely.
+          navigate(`/resumes/${items[0].slug}?app=${applicationId}&tab=tailor`);
+          return;
+        }
+        setResumes(items.map((r) => ({ id: r.id, slug: r.slug, name: r.name })));
+        setOpen(true);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={loading}
+        className="inline-flex items-center gap-1.5"
+        style={{
+          padding: '8px 12px',
+          borderRadius: 'var(--radius)',
+          border: 0,
+          background: 'transparent',
+          boxShadow: 'inset 0 0 0 1px var(--border-strong)',
+          color: 'var(--text-2)',
+          fontSize: 12.5,
+          fontWeight: 500,
+          cursor: loading ? 'wait' : 'pointer',
+        }}
+        title="Rewrite a resume to match this job description"
+      >
+        <Wand2 size={13} strokeWidth={1.7} />
+        Tailor resume
+      </button>
+      {open && (
+        <div
+          role="menu"
+          onMouseLeave={() => setOpen(false)}
+          className="card"
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: 'calc(100% + 4px)',
+            minWidth: 240,
+            padding: 4,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            zIndex: 10,
+          }}
+        >
+          <div
+            className="eyebrow"
+            style={{ fontSize: 9, padding: '6px 10px 4px', color: 'var(--text-4)' }}
+          >
+            Pick a master resume
+          </div>
+          {resumes.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                navigate(`/resumes/${r.slug}?app=${applicationId}&tab=tailor`);
+              }}
+              style={{
+                textAlign: 'left',
+                background: 'transparent',
+                border: 0,
+                padding: '7px 10px',
+                borderRadius: 4,
+                cursor: 'pointer',
+                color: 'var(--text)',
+                fontSize: 12.5,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--bg-sunken)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              {r.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

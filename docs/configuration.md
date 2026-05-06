@@ -47,8 +47,12 @@ ROUNDS_RUNNER_IMAGE=ghcr.io/keyurgolani/rounds-runner:latest
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `CORS_ALLOW_ORIGINS` | `*` in dev | Comma-separated allowed frontend origins for FastAPI CORS. |
+| `PDF_RENDERER_URL` | `http://pdf-renderer:4000` | Internal URL the runner forwards `/api/pdf/render` requests to. The sidecar is not exposed to the host. |
+| `POCKETBASE_URL` | `http://pocketbase:8090` | Internal URL the runner uses for the public-share endpoint and AI provider credential lookups. |
+| `AI_KEY_SECRET` | dev placeholder | Symmetric secret used to encrypt user-supplied AI provider API keys at rest. **Set a strong value in production**; rotating it invalidates every stored key. |
+| `PB_ADMIN_EMAIL`, `PB_ADMIN_PASSWORD` | see PocketBase admin bootstrap | Used by the runner's share endpoint to obtain a cached admin token so public-share reads can bypass per-user owner rules. |
 
-Use `*` only for local development. In production, set this to your deployed origin, such as `https://rounds.example.com`.
+Use `*` only for local development. In production, set `CORS_ALLOW_ORIGINS` to your deployed origin, such as `https://rounds.example.com`.
 
 ## Frontend Build And Proxy
 
@@ -102,6 +106,7 @@ HTTP_PORT=80
 CORS_ALLOW_ORIGINS=https://rounds.example.com
 PB_ADMIN_EMAIL=admin@example.com
 PB_ADMIN_PASSWORD=<strong-password>
+AI_KEY_SECRET=<long-random-secret>
 VITE_POCKETBASE_URL=
 VITE_DISABLE_SIGNUPS=true
 ROUNDS_DISABLE_SIGNUPS=true

@@ -18,7 +18,10 @@ const CHROME_BTN_BASE: CSSProperties = {
 const STORAGE_KEY = 'rounds:header-minimal';
 
 type Props = {
-  title: string;
+  // String for plain titles; ReactNode for inline-edit affordances etc.
+  // The browser tooltip (`<el title=…>`) is only set when this is a
+  // string to avoid stringifying React children.
+  title: string | ReactNode;
   description?: string;
   eyebrow?: ReactNode;
   // Rendered in the expanded (full-mode) header. The expanded row gives

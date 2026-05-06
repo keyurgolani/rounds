@@ -24,6 +24,24 @@ services:
       - ./backend:/app
     environment:
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-*}
+      - PDF_RENDERER_URL=${PDF_RENDERER_URL:-http://pdf-renderer:4000}
+      - POCKETBASE_URL=${POCKETBASE_INTERNAL_URL:-http://pocketbase:8090}
+      - AI_KEY_SECRET=${AI_KEY_SECRET:-rounds-dev-key-DO-NOT-USE-IN-PROD}
+      # Used by the public-share endpoint to bypass PB owner rules
+      # via a cached admin token. Defaults match the bootstrap admin.
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-admin@local.dev}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-changemenowplz}
+    depends_on:
+      - pdf-renderer
+      - pocketbase
+    restart: unless-stopped
+
+  pdf-renderer:
+    build: ./backend/pdf_renderer
+    # Internal-only — the runner forwards /api/pdf/render here. No host
+    # port mapping; access from the host is via the runner.
+    expose:
+      - "4000"
     restart: unless-stopped
 
   frontend:

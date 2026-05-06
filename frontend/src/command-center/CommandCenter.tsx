@@ -55,6 +55,7 @@ export function CommandCenter() {
         alignItems: 'flex-start',
         justifyContent: 'center',
         paddingTop: 80,
+        paddingBottom: 80,
         zIndex: 100,
       }}
     >
@@ -65,7 +66,9 @@ export function CommandCenter() {
         className="card"
         style={{
           width: 'min(640px, calc(100vw - 32px))',
-          maxHeight: 'calc(100vh - 80px)',
+          // Leave the same 80px breathing room at the bottom as the
+          // backdrop's paddingTop above.
+          maxHeight: 'calc(100vh - 160px)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',

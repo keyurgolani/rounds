@@ -133,3 +133,24 @@ export function CalendarGlyph({ size = 18 }: GlyphProps) {
     </svg>
   );
 }
+
+export function ResumeGlyph({ size = 18 }: GlyphProps) {
+  return (
+    <svg viewBox="0 0 18 18" fill="none" width={size} height={size} aria-hidden="true">
+      <path
+        d="M4.5 2.5H11L13.5 5V15C13.5 15.55 13.05 16 12.5 16H4.5C3.95 16 3.5 15.55 3.5 15V3.5C3.5 2.95 3.95 2.5 4.5 2.5Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M11 2.5V5H13.5" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <circle cx="6.5" cy="8" r="1.2" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M9 7.5H11.5M5.5 11H11.5M5.5 13H10"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}

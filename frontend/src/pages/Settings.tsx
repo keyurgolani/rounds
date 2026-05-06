@@ -4,6 +4,7 @@ import PageShell from '../components/shell/PageShell';
 import { useTheme, type Tweaks } from '../theme/ThemeProvider';
 import { useAuth } from '../auth/AuthProvider';
 import { pocketbaseEnabled } from '../lib/pocketbase';
+import AISection from '../settings/AISection';
 import DataSection from '../settings/DataSection';
 import { APP_VERSION } from '../version';
 
@@ -290,6 +291,8 @@ export default function Settings() {
             </Row>
           </div>
         </Card>
+
+        <AISection />
 
         <DataSection />
       </div>

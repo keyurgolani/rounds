@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Calendar, CheckCircle2, X } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle2, Plus, X } from 'lucide-react';
 import { api } from '../api/client';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
@@ -7,6 +7,7 @@ import Select from '../components/shell/Select';
 import MentionText from '../todos/MentionText';
 import TodoForm, { type TodoFormValue } from '../todos/TodoForm';
 import { useCampaign } from '../campaign/CampaignContext';
+import { useCommandCenter } from '../command-center/CommandCenterProvider';
 import type { Mention } from '../lib/mentions';
 import { usePlatform } from '../hooks/usePlatform';
 import { usePersistedState } from '../hooks/usePersistedState';
@@ -72,6 +73,7 @@ function priorityRank(p: string): number {
 export default function Todos() {
   const { currentId, currentCampaign } = useCampaign();
   const { modifierSymbol } = usePlatform();
+  const cc = useCommandCenter();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +175,27 @@ export default function Todos() {
             eyebrow="Track · Quick capture"
             title="Todos"
             description="Quick notes and follow-ups with @-mentions to questions, categories, applications, rounds, anecdotes, and campaigns."
+            chromeActions={
+              <button
+                type="button"
+                onClick={() => cc.openView('add-todo')}
+                className="inline-flex items-center gap-1.5"
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 8,
+                  border: 0,
+                  background: 'var(--accent)',
+                  color: 'var(--bg-elev)',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+                title={`Add a new todo (${modifierSymbol === '⌘' ? '⌘K' : 'Ctrl+K'})`}
+              >
+                <Plus size={13} strokeWidth={1.8} />
+                Add todo
+              </button>
+            }
           />
           {hasData && (
             <div

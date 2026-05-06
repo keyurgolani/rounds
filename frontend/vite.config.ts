@@ -24,6 +24,9 @@ const proxy = {
   '/api/run': { target: RUNNER_TARGET, changeOrigin: true },
   '/api/evaluate': { target: RUNNER_TARGET, changeOrigin: true },
   '/api/execute': { target: RUNNER_TARGET, changeOrigin: true },
+  '/api/pdf': { target: RUNNER_TARGET, changeOrigin: true },
+  '/api/ai': { target: RUNNER_TARGET, changeOrigin: true },
+  '/api/share': { target: RUNNER_TARGET, changeOrigin: true },
   '/api': { target: POCKETBASE_TARGET, changeOrigin: true, ws: true },
   '/_': { target: POCKETBASE_TARGET, changeOrigin: true },
 };
