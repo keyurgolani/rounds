@@ -137,7 +137,7 @@ export default function CampaignDetail() {
               campaign.description ||
               'Practice progress, applications, interviews, offers, and todos all scope to this campaign.'
             }
-            actions={
+            chromeActions={
               !isCurrent && (
                 <button
                   type="button"

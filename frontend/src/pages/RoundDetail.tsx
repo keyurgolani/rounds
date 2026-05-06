@@ -146,7 +146,7 @@ export default function RoundDetail() {
                 ? `${app.role} at ${app.company}. Track prep, capture questions asked, and record the outcome.`
                 : 'Capture prep, questions asked, and the outcome of this round.'
             }
-            actions={
+            chromeActions={
               app && (
                 <button
                   type="button"

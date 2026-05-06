@@ -28,8 +28,13 @@ type Props = {
   // Rendered in the minimal (44px) header in place of `actions`. Pages
   // that have a chunky `actions` payload should pass a slimmed-down
   // glyph here so focus mode stays a single tight row. Falls back to
-  // `actions` when not provided so existing call sites stay valid.
+  // `chromeActions` when not provided.
   compactActions?: ReactNode;
+  // Rendered inline with ChromeButtons (collapse + ⌘K chip) in both
+  // expanded and minimal mode. Use this for status toggles, "+ New"
+  // buttons, and other compact actions that belong in the chrome area.
+  // Only `actions` (e.g. StreakCard) should use the full-height area.
+  chromeActions?: ReactNode;
 };
 
 function readManual(): boolean {
@@ -67,6 +72,7 @@ export default function AppHeader({
   eyebrow,
   actions,
   compactActions,
+  chromeActions,
 }: Props) {
   const cc = useCommandCenter();
   const { minimal, manual, toggleManual } = useMinimalHeader();
@@ -79,13 +85,14 @@ export default function AppHeader({
     import.meta.env.DEV &&
     minimal &&
     actions !== undefined &&
-    compactActions === undefined
+    compactActions === undefined &&
+    chromeActions === undefined
   ) {
     // eslint-disable-next-line no-console
     console.warn(
-      'AppHeader: `actions` rendered in minimal mode without `compactActions`. ' +
+      'AppHeader: `actions` rendered in minimal mode without `compactActions` or `chromeActions`. ' +
         'Pages with non-trivial actions should provide a slim `compactActions` ' +
-        'variant for focus-mode and mobile.',
+        'variant or use `chromeActions` for focus-mode and mobile.',
     );
   }
 
@@ -129,7 +136,7 @@ export default function AppHeader({
             flexShrink: 0,
           }}
         >
-          {compactActions ?? actions}
+          {compactActions ?? chromeActions ?? actions}
           <ChromeButtons
             manual={manual}
             toggleManual={toggleManual}
@@ -207,10 +214,10 @@ export default function AppHeader({
               lineHeight: 1.45,
               display: '-webkit-box',
               WebkitBoxOrient: 'vertical',
-              // Three lines is enough to surface the salient framing of
-              // long problem prompts without starving the editor below
-              // of vertical space. Anything longer lives in the body.
-              WebkitLineClamp: 3,
+              // Two lines is enough for the one-line summary
+              // of the question prompt without starving the
+              // content below of vertical space.
+              WebkitLineClamp: 2,
               overflow: 'hidden',
             }}
           >
@@ -234,12 +241,21 @@ export default function AppHeader({
           {actions}
         </div>
       )}
-      <ChromeButtons
-        manual={manual}
-        toggleManual={toggleManual}
-        onOpenCC={cc.open}
-        align="start"
-      />
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 8,
+          flexShrink: 0,
+        }}
+      >
+        {chromeActions}
+        <ChromeButtons
+          manual={manual}
+          toggleManual={toggleManual}
+          onOpenCC={cc.open}
+        />
+      </div>
     </header>
   );
 }
@@ -253,7 +269,7 @@ function ChromeButtons({
   manual: boolean;
   toggleManual: () => void;
   onOpenCC: () => void;
-  align: 'start' | 'center';
+  align?: 'start' | 'center';
 }) {
   const { modifierSymbol, modifierLabel, isMac } = usePlatform();
   const hint = `Command Center (${modifierLabel}+K)`;
@@ -267,7 +283,7 @@ function ChromeButtons({
       role="toolbar"
       aria-label="Header controls"
       style={{
-        alignSelf: align === 'start' ? 'flex-start' : 'center',
+        alignSelf: align === 'center' ? 'center' : undefined,
         display: 'inline-flex',
         alignItems: 'center',
         padding: 3,

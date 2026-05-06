@@ -42,7 +42,7 @@ export default function Campaigns() {
       <AppHeader
         title="Campaigns"
         description="One workspace per job hunt."
-        actions={
+        chromeActions={
           <button
             type="button"
             onClick={() => setCreating(true)}

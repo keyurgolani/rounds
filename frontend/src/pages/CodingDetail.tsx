@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { api } from '../api/client';
+import { oneLineSummary } from '../lib/text';
 import { RunDock } from './coding/RunDock';
 import { RightDock, type SideTab } from './coding/RightDock';
 import { ConsoleTab } from './coding/ConsoleTab';
@@ -379,7 +380,7 @@ export default function CodingDetail() {
     <div className="h-full flex flex-col relative">
       <AppHeader
         title={q.title}
-        description={q.description}
+        description={oneLineSummary(q.description)}
         eyebrow={
           <span
             style={{
@@ -406,7 +407,7 @@ export default function CodingDetail() {
             ))}
           </span>
         }
-        actions={<StatusAction kind="coding" id={q.id} />}
+        chromeActions={<StatusAction kind="coding" id={q.id} />}
         compactActions={<StatusAction kind="coding" id={q.id} compact />}
       />
 

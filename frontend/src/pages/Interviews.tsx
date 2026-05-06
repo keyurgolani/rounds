@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
 import Select from '../components/shell/Select';
+import { usePersistedState } from '../hooks/usePersistedState';
 
 type App = { id: number; company: string; role: string; status: string };
 type Round = {
@@ -53,8 +54,8 @@ export default function Interviews() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
-  const [sort, setSort] = useState<SortKey>('date-asc');
+  const [typeFilter, setTypeFilter] = usePersistedState<string | null>('rounds.interviews.typeFilter', null);
+  const [sort, setSort] = usePersistedState<SortKey>('rounds.interviews.sort', 'date-asc');
 
   useEffect(() => {
     async function load() {
@@ -137,23 +138,23 @@ export default function Interviews() {
             eyebrow="Track · Schedule"
             title="Interviews"
             description="Your upcoming rounds and past debriefs. Each round can link to the questions you expect, the anecdotes you'll use, and the notes you wrote afterward."
-            actions={
-              <Link
-                to="/interviews/new"
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: 8,
-                  border: 0,
-                  background: 'var(--accent)',
-                  color: 'var(--bg-elev)',
-                  fontSize: 12.5,
-                  fontWeight: 500,
-                  textDecoration: 'none',
-                }}
-              >
-                + Schedule round
-              </Link>
-            }
+              chromeActions={
+                <Link
+                  to="/interviews/new"
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 8,
+                    border: 0,
+                    background: 'var(--accent)',
+                    color: 'var(--bg-elev)',
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    textDecoration: 'none',
+                  }}
+                >
+                  + Schedule round
+                </Link>
+              }
           />
           {hasData && (
             <div

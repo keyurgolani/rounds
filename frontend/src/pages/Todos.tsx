@@ -9,6 +9,7 @@ import TodoForm, { type TodoFormValue } from '../todos/TodoForm';
 import { useCampaign } from '../campaign/CampaignContext';
 import type { Mention } from '../lib/mentions';
 import { usePlatform } from '../hooks/usePlatform';
+import { usePersistedState } from '../hooks/usePersistedState';
 
 export interface Todo {
   id: string;
@@ -76,8 +77,8 @@ export default function Todos() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Todo | null>(null);
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<PriorityFilter>('all');
-  const [sort, setSort] = useState<SortKey>('due-asc');
+  const [filter, setFilter] = usePersistedState<PriorityFilter>('rounds.todos.filter', 'all');
+  const [sort, setSort] = usePersistedState<SortKey>('rounds.todos.sort', 'due-asc');
 
   const load = useCallback(async () => {
     setLoading(true);

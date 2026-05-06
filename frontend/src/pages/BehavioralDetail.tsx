@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowRight, BookOpen, Check, X } from 'lucide-react';
 import { api } from '../api/client';
+import { oneLineSummary } from '../lib/text';
 import { AnimatedCard } from '../components/visual/AnimatedCard';
 import { Skeleton } from '../components/visual/Skeleton';
 import { MyAnecdotesPanel } from './behavioral/MyAnecdotesPanel';
@@ -322,7 +323,7 @@ export default function BehavioralDetail() {
     <div className="h-full flex flex-col">
       <AppHeader
         title={q.title}
-        description={q.question_text}
+        description={oneLineSummary(q.question_text)}
         eyebrow={
           <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
             <BackLink to="/behavioral/questions" />
@@ -341,7 +342,7 @@ export default function BehavioralDetail() {
             ))}
           </span>
         }
-        actions={<StatusAction kind="behavioral" id={q.id} />}
+        chromeActions={<StatusAction kind="behavioral" id={q.id} />}
         compactActions={<StatusAction kind="behavioral" id={q.id} compact />}
       />
 

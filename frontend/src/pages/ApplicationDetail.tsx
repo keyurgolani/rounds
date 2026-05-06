@@ -133,7 +133,7 @@ export default function ApplicationDetail() {
             eyebrow={`Track · Application · ${app.company}`}
             title={app.role}
             description={`Everything you've captured about ${app.company} — status, role detail, prepped rounds, and the notes you want near you before the next conversation.`}
-            actions={
+            chromeActions={
               <button
                 type="button"
                 onClick={() => navigate(`/interviews/new?applicationId=${app.id}`)}

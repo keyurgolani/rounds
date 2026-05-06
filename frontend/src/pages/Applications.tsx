@@ -6,6 +6,7 @@ import { slugify } from '../lib/slug';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
 import Select from '../components/shell/Select';
+import { usePersistedState } from '../hooks/usePersistedState';
 
 type App = {
   id: number;
@@ -47,8 +48,8 @@ export default function Applications() {
   const [apps, setApps] = useState<App[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [sort, setSort] = useState<SortKey>('recent-desc');
+  const [statusFilter, setStatusFilter] = usePersistedState<string | null>('rounds.apps.statusFilter', null);
+  const [sort, setSort] = usePersistedState<SortKey>('rounds.apps.sort', 'recent-desc');
 
   useEffect(() => {
     api
@@ -104,7 +105,7 @@ export default function Applications() {
             eyebrow="Track · Pipeline"
             title="Applications"
             description="Every company you're pursuing, from wishlist to offer. Track rounds, interviewers, and outcomes in one place."
-            actions={
+            chromeActions={
               <Link to="/applications/new" className="inline-flex items-center gap-1.5" style={{ ...primaryBtn, padding: '6px 14px', borderRadius: 8 }}>
                 <Plus size={13} strokeWidth={1.8} />
                 New application

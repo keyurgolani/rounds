@@ -8,6 +8,7 @@ import StatusDot from '../components/shell/StatusDot';
 import Select from '../components/shell/Select';
 import { effectiveStatus } from '../hooks/usePracticeStatus';
 import { useInfiniteList } from '../hooks/useInfiniteList';
+import { usePersistedState } from '../hooks/usePersistedState';
 
 type SortKey =
   | 'title-asc'
@@ -43,9 +44,9 @@ export default function SystemDesignList() {
   const [questions, setQuestions] = useState<SDQ[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  const [difficulty, setDifficulty] = useState<string | null>(null);
-  const [tag, setTag] = useState<string>(ALL_OPTION);
-  const [sort, setSort] = useState<SortKey>('title-asc');
+  const [difficulty, setDifficulty] = usePersistedState<string | null>('rounds.sd.difficulty', null);
+  const [tag, setTag] = usePersistedState<string>('rounds.sd.tag', ALL_OPTION);
+  const [sort, setSort] = usePersistedState<SortKey>('rounds.sd.sort', 'title-asc');
 
   useEffect(() => {
     api

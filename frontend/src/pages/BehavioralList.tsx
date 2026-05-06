@@ -15,6 +15,7 @@ import Select from '../components/shell/Select';
 import { LinkableCard } from './behavioral/LinkableCard';
 import { ConnectorOverlay, type Connector, type Endpoint } from './behavioral/ConnectorOverlay';
 import type { Anecdote } from './behavioral/types';
+import { usePersistedState } from '../hooks/usePersistedState';
 
 type SortKey = 'title-asc' | 'title-desc' | 'links-desc' | 'links-asc';
 
@@ -68,11 +69,11 @@ export default function BehavioralList() {
   const [categories, setCategories] = useState<BC[]>([]);
   const [anecdotes, setAnecdotes] = useState<Anecdote[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeCat, setActiveCat] = useState<string | null>(null);
+  const [activeCat, setActiveCat] = usePersistedState<string | null>('rounds.behavioral.activeCat', null);
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortKey>('title-asc');
-  const [tagFilter, setTagFilter] = useState<string>('__all__');
-  const [linkedFilter, setLinkedFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
+  const [sort, setSort] = usePersistedState<SortKey>('rounds.behavioral.sort', 'title-asc');
+  const [tagFilter, setTagFilter] = usePersistedState<string>('rounds.behavioral.tagFilter', '__all__');
+  const [linkedFilter, setLinkedFilter] = usePersistedState<'all' | 'linked' | 'unlinked'>('rounds.behavioral.linkedFilter', 'all');
 
   useEffect(() => {
     Promise.all([

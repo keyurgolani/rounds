@@ -19,7 +19,7 @@ export default function Settings() {
           eyebrow="Account · Preferences"
           title="Settings"
           description="Tune the look and feel of Rounds — theme, accent, fonts, corners, density, and more."
-          actions={
+          chromeActions={
             <button
               type="button"
               onClick={t.reset}

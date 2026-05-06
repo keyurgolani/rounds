@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
+import { oneLineSummary } from '../lib/text';
 import { ArchitectureDiagram } from '../components/visual/ArchitectureDiagram';
 import { FlowchartDiagram } from '../components/visual/FlowchartDiagram';
 import { ERDiagram } from '../components/visual/ERDiagram';
@@ -242,14 +243,14 @@ export default function SystemDesignDetail() {
     <div className="h-full flex flex-col">
       <AppHeader
         title={q.title}
-        description={q.description}
+        description={oneLineSummary(q.description)}
         eyebrow={
           <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
             <BackLink to="/system-design/questions" />
             <DifficultyPill level={q.difficulty} />
           </span>
         }
-        actions={<StatusAction kind="system" id={q.id} />}
+        chromeActions={<StatusAction kind="system" id={q.id} />}
         compactActions={<StatusAction kind="system" id={q.id} compact />}
       />
 

@@ -8,6 +8,7 @@ import StatusDot from '../components/shell/StatusDot';
 import Select from '../components/shell/Select';
 import { effectiveStatus } from '../hooks/usePracticeStatus';
 import { useInfiniteList } from '../hooks/useInfiniteList';
+import { usePersistedState } from '../hooks/usePersistedState';
 
 type SortKey =
   | 'title-asc'
@@ -56,10 +57,10 @@ export default function CodingList() {
   const [questions, setQuestions] = useState<CQ[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  const [difficulty, setDifficulty] = useState<string | null>(null);
-  const [topic, setTopic] = useState<string>(ALL_OPTION);
-  const [company, setCompany] = useState<string>(ALL_OPTION);
-  const [sort, setSort] = useState<SortKey>('title-asc');
+  const [difficulty, setDifficulty] = usePersistedState<string | null>('rounds.coding.difficulty', null);
+  const [topic, setTopic] = usePersistedState<string>('rounds.coding.topic', ALL_OPTION);
+  const [company, setCompany] = usePersistedState<string>('rounds.coding.company', ALL_OPTION);
+  const [sort, setSort] = usePersistedState<SortKey>('rounds.coding.sort', 'title-asc');
 
   useEffect(() => {
     api
