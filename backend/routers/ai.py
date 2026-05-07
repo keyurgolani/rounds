@@ -139,6 +139,24 @@ def _friendly_error(err: Exception) -> tuple[str, str]:
     return ("unknown", short or "Unknown provider error.")
 
 
+def _status_for_kind(kind: str) -> int:
+    """Map a friendly-error kind to an HTTP status the frontend can
+    surface verbatim. We deliberately avoid 502: Cloudflare replaces
+    origin 502 responses with its own HTML error page, swallowing our
+    JSON ``detail`` and leaving the user with an opaque "Bad gateway"
+    message instead of the actionable text from ``_friendly_error``.
+    """
+    if kind in ("auth", "quota", "model_not_found"):
+        # The user's provider config is the failing component — surface
+        # as a 4xx so the UI can route it to the settings flow.
+        return 400
+    if kind == "rate_limit":
+        return 429
+    # network / timeout / unknown — upstream is unavailable. 503 is the
+    # closest semantic match and Cloudflare passes it through.
+    return 503
+
+
 # -----------------------------------------------------------------------------
 #                                Pydantic models
 # -----------------------------------------------------------------------------
@@ -390,7 +408,7 @@ async def test_provider(
         except HTTPException:
             raise
         except Exception as err:  # noqa: BLE001
-            raise HTTPException(status_code=502, detail=f"Provider error: {err}") from err
+            raise HTTPException(status_code=503, detail=f"Provider error: {err}") from err
 
     try:
         text = await _call_complete(
@@ -406,8 +424,8 @@ async def test_provider(
         raise
     except Exception as err:  # noqa: BLE001
         _log.warning("provider test failed: %s", err)
-        _, msg = _friendly_error(err)
-        raise HTTPException(status_code=502, detail=msg) from err
+        kind_, msg = _friendly_error(err)
+        raise HTTPException(status_code=_status_for_kind(kind_), detail=msg) from err
     return {"ok": True, "model": model, "reply": text}
 
 
@@ -428,7 +446,7 @@ async def refresh_models(
     except HTTPException:
         raise
     except Exception as err:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"Provider error: {err}") from err
+        raise HTTPException(status_code=503, detail=f"Provider error: {err}") from err
 
     await pb_patch(
         user["token"],
@@ -747,7 +765,7 @@ async def _fetch_models(kind: str, api_key: str, base_url: str) -> list[str]:
         resp = await client.get(url, headers=headers)
     if resp.status_code != 200:
         raise HTTPException(
-            status_code=502,
+            status_code=503,
             detail=f"Provider rejected the model list ({resp.status_code}): {resp.text[:300]}",
         )
     body = resp.json()
@@ -1073,13 +1091,13 @@ async def tailor_resume(request: Request, body: TailorRequest) -> dict[str, Any]
         )
     except Exception as err:  # noqa: BLE001
         _log.warning("tailor failed: %s", err)
-        _, msg = _friendly_error(err)
-        raise HTTPException(status_code=502, detail=msg) from err
+        kind_, msg = _friendly_error(err)
+        raise HTTPException(status_code=_status_for_kind(kind_), detail=msg) from err
 
     parsed = _safe_json(text)
     if not parsed:
         raise HTTPException(
-            status_code=502,
+            status_code=503,
             detail="The provider didn't return valid JSON. Try a different model or shorten the JD.",
         )
     # Make sure ids on existing entries are preserved if the model dropped them.
@@ -1160,13 +1178,13 @@ async def import_resume(request: Request, body: ImportRequest) -> dict[str, Any]
         )
     except Exception as err:  # noqa: BLE001
         _log.warning("import failed: %s", err)
-        _, msg = _friendly_error(err)
-        raise HTTPException(status_code=502, detail=msg) from err
+        kind_, msg = _friendly_error(err)
+        raise HTTPException(status_code=_status_for_kind(kind_), detail=msg) from err
 
     parsed = _safe_json(text)
     if not parsed:
         raise HTTPException(
-            status_code=502,
+            status_code=503,
             detail="The provider didn't return valid JSON. Try a different model or shorten the input.",
         )
     _stamp_ids(parsed)
