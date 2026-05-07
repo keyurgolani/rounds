@@ -277,21 +277,22 @@ PAYLOAD = {
                     "}"
                 ),
                 "python": (
-                    "from sortedcontainers import SortedDict\n"
+                    "from bisect import bisect_right\n"
                     "from collections import defaultdict\n\n"
                     "class TimeMap:\n"
                     "    def __init__(self):\n"
-                    "        self.store = defaultdict(SortedDict)\n"
+                    "        self.times = defaultdict(list)\n"
+                    "        self.values = defaultdict(list)\n"
                     "    def set(self, key, value, timestamp):\n"
-                    "        self.store[key][timestamp] = value\n"
+                    "        self.times[key].append(timestamp)\n"
+                    "        self.values[key].append(value)\n"
                     "    def get(self, key, timestamp):\n"
-                    "        if key not in self.store:\n"
+                    "        if key not in self.times:\n"
                     "            return \"\"\n"
-                    "        sd = self.store[key]\n"
-                    "        idx = sd.bisect_right(timestamp) - 1\n"
+                    "        idx = bisect_right(self.times[key], timestamp) - 1\n"
                     "        if idx < 0:\n"
                     "            return \"\"\n"
-                    "        return sd.values()[idx]"
+                    "        return self.values[key][idx]"
                 ),
             },
         },

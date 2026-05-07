@@ -71,7 +71,7 @@ def _drive(input):
         v = kwargs.get(_name)
         if v is None:
             continue
-        if _shape == "verbose":
+        if _shape == "verbose" or isinstance(v, dict) and 'nodes' in v:
             kwargs[_name] = _inflate(v)
         else:
             kwargs[_name] = _inflate(_to_verbose(v, _shape, _template))

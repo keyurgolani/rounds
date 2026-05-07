@@ -125,11 +125,11 @@ function _drive(input) {{
   for (const p of nodeParams) {{
     const v = kwargs[p];
     if (v == null) continue;
-    if (shape === "verbose") {{
-      kwargs[p] = _inflate(v);
-    }} else {{
-      kwargs[p] = _inflate(_to_verbose(v, shape, template));
-    }}
+     if (shape === "verbose" || (v && typeof v === "object" && "nodes" in v)) {{
+       kwargs[p] = _inflate(v);
+     }} else {{
+       kwargs[p] = _inflate(_to_verbose(v, shape, template));
+     }}
   }}
   const out = fn(...Object.values(kwargs));
   if (out instanceof {template["name"]} || out === null) {{

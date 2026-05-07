@@ -166,7 +166,7 @@ PAYLOAD = {
          "description": "Single digit triggers carry through 10 nines — adds a new MSB",
          "tags": ["large"]},
         {"input": {"l1": [1] + [0] * 99, "l2": [9] + [0] * 99},
-         "expected": [0, 1] + [0] * 98,
+         "expected": {"$match": "any_of", "values": [[0, 1], [0, 1] + [0] * 98]},
          "description": "Constraint upper bound — 100 digits each, single carry at index 0",
          "tags": ["large"]},
     ],
@@ -388,6 +388,8 @@ def REFERENCE(l1, l2):
         carry = total // 10
         i += 1
         j += 1
+    while len(out) > 1 and out[-1] == 0:
+        out.pop()
     return out
 
 

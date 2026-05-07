@@ -245,6 +245,7 @@ PAYLOAD = {
             ),
             "code": {
                 "python": (
+                    "from collections import deque\n\n"
                     "def clone_graph(node):\n"
                     "    if node is None:\n"
                     "        return None\n"
