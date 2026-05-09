@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { CasesTab } from './CasesTab';
 import { ResultTab } from './ResultTab';
 import { TestCasesTab } from './TestCasesTab';
+import { HintsTab } from './HintsTab';
+import { SolutionsTab, type SolutionEntry } from './SolutionsTab';
 import type {
   TestCase,
   CodeRunResult,
@@ -10,7 +12,7 @@ import type {
   Entry,
 } from './types';
 
-export type SideTab = 'tests' | 'run';
+export type SideTab = 'tests' | 'run' | 'hints' | 'solutions';
 
 interface RightDockProps {
   activeTab: SideTab;
@@ -23,6 +25,12 @@ interface RightDockProps {
   runResult?: CodeRunResult;
   runInput?: unknown;
   evalResult?: CodeEvaluateResult;
+  hints: string[];
+  tips: string[];
+  thoughtProcess: string[];
+  solutions: SolutionEntry[];
+  language: string;
+  onLoadSolutionIntoEditor: (code: string) => void;
   /** Optional header slot rendered above the tab strip — used for the
       mobile sheet drag handle / close button injected by CodingDetail. */
   headerSlot?: ReactNode;
@@ -31,6 +39,8 @@ interface RightDockProps {
 const TABS: { key: SideTab; label: string }[] = [
   { key: 'tests', label: 'Test Cases' },
   { key: 'run', label: 'Run' },
+  { key: 'hints', label: 'Hints' },
+  { key: 'solutions', label: 'Solutions' },
 ];
 
 export function RightDock({
@@ -44,6 +54,12 @@ export function RightDock({
   runResult,
   runInput,
   evalResult,
+  hints,
+  tips,
+  thoughtProcess,
+  solutions,
+  language,
+  onLoadSolutionIntoEditor,
   headerSlot,
 }: RightDockProps) {
   return (
@@ -57,6 +73,7 @@ export function RightDock({
           borderBottom: '1px solid var(--border)',
           flexShrink: 0,
           background: 'var(--bg)',
+          overflowX: 'auto',
         }}
       >
         {TABS.map(({ key, label }) => {
@@ -70,7 +87,7 @@ export function RightDock({
               onClick={() => onTabChange(key)}
               style={{
                 position: 'relative',
-                padding: '10px 16px',
+                padding: '10px 14px',
                 fontSize: 12,
                 fontWeight: active ? 600 : 500,
                 background: 'transparent',
@@ -80,6 +97,7 @@ export function RightDock({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 6,
+                whiteSpace: 'nowrap',
                 transition: 'color 140ms',
               }}
             >
@@ -136,6 +154,20 @@ export function RightDock({
             runResult={runResult}
             runInput={runInput}
           />
+        )}
+        {activeTab === 'hints' && (
+          <div style={{ flex: 1, overflow: 'auto', padding: 12, minHeight: 0 }}>
+            <HintsTab hints={hints} tips={tips} thoughtProcess={thoughtProcess} />
+          </div>
+        )}
+        {activeTab === 'solutions' && (
+          <div style={{ flex: 1, overflow: 'auto', padding: 12, minHeight: 0 }}>
+            <SolutionsTab
+              solutions={solutions}
+              language={language}
+              onLoadIntoEditor={onLoadSolutionIntoEditor}
+            />
+          </div>
         )}
       </div>
     </div>

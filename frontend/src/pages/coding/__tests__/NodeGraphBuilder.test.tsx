@@ -10,6 +10,21 @@ const linkedListTemplate: NodeTemplate = {
   links: [{ name: 'next', arity: 'single' }],
 };
 
+const treeTemplate: NodeTemplate = {
+  name: 'TreeNode',
+  fields: [{ name: 'val', type: 'int' }],
+  links: [
+    { name: 'left', arity: 'single' },
+    { name: 'right', arity: 'single' },
+  ],
+};
+
+const graphTemplate: NodeTemplate = {
+  name: 'Node',
+  fields: [{ name: 'val', type: 'int' }],
+  links: [{ name: 'neighbors', arity: 'list' }],
+};
+
 function chain(values: number[]): VerboseGraph {
   if (values.length === 0) return { nodes: [], entry: null };
   return {
@@ -22,8 +37,20 @@ function chain(values: number[]): VerboseGraph {
   };
 }
 
-describe('NodeGraphBuilder chain mode', () => {
-  it('renders existing chain in order with arrows', () => {
+function tree123(): VerboseGraph {
+  // Root id=0 (val 1) with left=id=1 (val 2), right=id=2 (val 3).
+  return {
+    nodes: [
+      { id: 0, fields: { val: 1 }, links: { left: 1, right: 2 } },
+      { id: 1, fields: { val: 2 }, links: { left: null, right: null } },
+      { id: 2, fields: { val: 3 }, links: { left: null, right: null } },
+    ],
+    entry: 0,
+  };
+}
+
+describe('NodeGraphBuilder chain mode (ChainCanvas)', () => {
+  it('renders existing chain values in order', () => {
     render(
       <NodeGraphBuilder
         template={linkedListTemplate}
@@ -32,11 +59,12 @@ describe('NodeGraphBuilder chain mode', () => {
         onChange={vi.fn()}
       />,
     );
-    expect((screen.getByLabelText('Node 1 val') as HTMLInputElement).value).toBe('1');
-    expect((screen.getByLabelText('Node 3 val') as HTMLInputElement).value).toBe('3');
+    expect(screen.getByTestId('chain-text-0').textContent).toBe('1');
+    expect(screen.getByTestId('chain-text-1').textContent).toBe('2');
+    expect(screen.getByTestId('chain-text-2').textContent).toBe('3');
   });
 
-  it('appending a node grows the chain and re-wires the tail link', () => {
+  it('appending a node grows the chain and re-wires the previous tail', () => {
     const onChange = vi.fn();
     render(
       <NodeGraphBuilder
@@ -46,10 +74,9 @@ describe('NodeGraphBuilder chain mode', () => {
         onChange={onChange}
       />,
     );
-    fireEvent.click(screen.getByLabelText('Append node'));
+    fireEvent.click(screen.getByTestId('chain-append'));
     const next = onChange.mock.calls[0][0] as VerboseGraph;
     expect(next.nodes.length).toBe(3);
-    // The previous tail (id=1) now points at the new node.
     const tail = next.nodes.find((n) => n.id === 1)!;
     expect(typeof tail.links.next).toBe('number');
   });
@@ -64,11 +91,12 @@ describe('NodeGraphBuilder chain mode', () => {
         onChange={onChange}
       />,
     );
-    fireEvent.click(screen.getByLabelText('Remove node 2'));
+    // Hover reveals the remove handle.
+    fireEvent.mouseEnter(screen.getByTestId('chain-text-1').parentElement!);
+    fireEvent.click(screen.getByTestId('chain-remove-1'));
     const next = onChange.mock.calls[0][0] as VerboseGraph;
     expect(next.nodes.map((n) => n.fields.val).sort()).toEqual([1, 3]);
     const head = next.nodes.find((n) => n.id === 0)!;
-    // Head now points at id=2 (which holds val=3).
     expect(head.links.next).toBe(2);
   });
 
@@ -82,260 +110,258 @@ describe('NodeGraphBuilder chain mode', () => {
         onChange={onChange}
       />,
     );
-    fireEvent.change(screen.getByLabelText('Node 1 val'), { target: { value: '42' } });
+    fireEvent.click(screen.getByTestId('chain-text-0'));
+    fireEvent.change(screen.getByTestId('chain-input-0'), { target: { value: '7' } });
     const next = onChange.mock.calls[0][0] as VerboseGraph;
-    const updated = next.nodes.find((n) => n.id === 0)!;
-    expect(updated.fields.val).toBe(42);
+    expect(next.nodes.find((n) => n.id === 0)!.fields.val).toBe(7);
   });
 });
 
-const treeTemplate: NodeTemplate = {
-  name: 'TreeNode',
-  fields: [{ name: 'val', type: 'int' }],
-  links: [
-    { name: 'left', arity: 'single' },
-    { name: 'right', arity: 'single' },
-  ],
-};
-
-function tree(level: (number | null)[]): VerboseGraph {
-  const nodes: VerboseGraph['nodes'] = [];
-  const idForPos: Record<number, number> = {};
-  for (let pos = 0; pos < level.length; pos++) {
-    if (level[pos] === null) continue;
-    idForPos[pos] = nodes.length;
-    nodes.push({
-      id: nodes.length,
-      fields: { val: level[pos] as number },
-      links: { left: null, right: null },
-    });
-  }
-  if (idForPos[0] === undefined) return { nodes: [], entry: null };
-  const queue: [number, number][] = [[0, idForPos[0]]];
-  let cursor = 1;
-  while (queue.length > 0 && cursor < level.length) {
-    const next = queue.shift()!;
-    const parentId = next[1];
-    for (const ln of ['left', 'right']) {
-      if (cursor >= level.length) break;
-      const childPos = cursor++;
-      if (level[childPos] === null) continue;
-      const childId = idForPos[childPos];
-      nodes[parentId].links[ln] = childId;
-      queue.push([childPos, childId]);
-    }
-  }
-  return { nodes, entry: 0 };
-}
-
-describe('NodeGraphBuilder tree mode', () => {
-  it('renders existing tree with node value inputs', () => {
-    render(
-      <NodeGraphBuilder
-        template={treeTemplate}
-        layout="tree"
-        value={tree([1, 2, 3, null, 5])}
-        onChange={vi.fn()}
-      />,
-    );
-    expect((screen.getByLabelText('Node 0 val') as HTMLInputElement).value).toBe('1');
-    expect((screen.getByLabelText('Node 1 val') as HTMLInputElement).value).toBe('2');
-    expect((screen.getByLabelText('Node 2 val') as HTMLInputElement).value).toBe('3');
-    expect((screen.getByLabelText('Node 3 val') as HTMLInputElement).value).toBe('5');
-  });
-
+describe('NodeGraphBuilder tree mode (TreeCanvas)', () => {
   it('shows Add root button for empty tree', () => {
-    const onChange = vi.fn();
     render(
       <NodeGraphBuilder
         template={treeTemplate}
         layout="tree"
         value={{ nodes: [], entry: null }}
-        onChange={onChange}
-      />,
-    );
-    fireEvent.click(screen.getByLabelText('Add root node'));
-    const next = onChange.mock.calls[0][0] as VerboseGraph;
-    expect(next.nodes.length).toBe(1);
-    expect(next.entry).toBe(0);
-  });
-
-  it('shows Add left/right child buttons for leaf nodes', () => {
-    render(
-      <NodeGraphBuilder
-        template={treeTemplate}
-        layout="tree"
-        value={tree([1])}
         onChange={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText('Add left child')).toBeTruthy();
-    expect(screen.getByLabelText('Add right child')).toBeTruthy();
+    expect(screen.getByTestId('tree-add-root')).toBeTruthy();
   });
 
-  it('adding a left child creates a new node and links it', () => {
+  it('renders existing tree node values', () => {
+    render(
+      <NodeGraphBuilder
+        template={treeTemplate}
+        layout="tree"
+        value={tree123()}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('tree-text-0').textContent).toBe('1');
+    expect(screen.getByTestId('tree-text-1').textContent).toBe('2');
+    expect(screen.getByTestId('tree-text-2').textContent).toBe('3');
+  });
+
+  it('shows empty add-child slots under leaf nodes', () => {
+    render(
+      <NodeGraphBuilder
+        template={treeTemplate}
+        layout="tree"
+        value={tree123()}
+        onChange={vi.fn()}
+      />,
+    );
+    // id=1 (leaf at val=2) should have empty left + right slots.
+    expect(screen.getByTestId('tree-slot-1-left')).toBeTruthy();
+    expect(screen.getByTestId('tree-slot-1-right')).toBeTruthy();
+  });
+
+  it('clicking an empty slot adds a child and links it', () => {
     const onChange = vi.fn();
     render(
       <NodeGraphBuilder
         template={treeTemplate}
         layout="tree"
-        value={tree([1])}
+        value={tree123()}
         onChange={onChange}
       />,
     );
-    fireEvent.click(screen.getByLabelText('Add left child'));
+    fireEvent.click(screen.getByTestId('tree-slot-1-left'));
     const next = onChange.mock.calls[0][0] as VerboseGraph;
-    expect(next.nodes.length).toBe(2);
+    expect(next.nodes.length).toBe(4);
+    const parent = next.nodes.find((n) => n.id === 1)!;
+    expect(typeof parent.links.left).toBe('number');
+  });
+
+  it('removing a subtree drops descendants and clears the parent link', () => {
+    // Build root with a 2-deep left subtree so we can verify descendants
+    // get pruned, not just the targeted node.
+    const value: VerboseGraph = {
+      nodes: [
+        { id: 0, fields: { val: 1 }, links: { left: 1, right: null } },
+        { id: 1, fields: { val: 2 }, links: { left: 3, right: null } },
+        { id: 3, fields: { val: 4 }, links: { left: null, right: null } },
+      ],
+      entry: 0,
+    };
+    const onChange = vi.fn();
+    render(
+      <NodeGraphBuilder template={treeTemplate} layout="tree" value={value} onChange={onChange} />,
+    );
+    fireEvent.mouseEnter(screen.getByTestId('tree-text-1').parentElement!);
+    fireEvent.click(screen.getByTestId('tree-remove-1'));
+    const next = onChange.mock.calls[0][0] as VerboseGraph;
+    expect(next.nodes.map((n) => n.id).sort()).toEqual([0]);
     const root = next.nodes.find((n) => n.id === 0)!;
-    expect(root.links.left).toBe(1);
-  });
-
-  it('removing a node removes its entire subtree', () => {
-    const onChange = vi.fn();
-    render(
-      <NodeGraphBuilder
-        template={treeTemplate}
-        layout="tree"
-        value={tree([1, 2, 3])}
-        onChange={onChange}
-      />,
-    );
-    fireEvent.click(screen.getByLabelText('Remove node 1'));
-    const next = onChange.mock.calls[0][0] as VerboseGraph;
-    const vals = next.nodes.map((n) => n.fields.val).sort();
-    expect(vals).toEqual([1, 3]);
+    expect(root.links.left).toBe(null);
   });
 
   it('editing a field updates the value', () => {
     const onChange = vi.fn();
     render(
-      <NodeGraphBuilder
-        template={treeTemplate}
-        layout="tree"
-        value={tree([1, 2, 3])}
-        onChange={onChange}
-      />,
+      <NodeGraphBuilder template={treeTemplate} layout="tree" value={tree123()} onChange={onChange} />,
     );
-    fireEvent.change(screen.getByLabelText('Node 0 val'), { target: { value: '42' } });
+    fireEvent.click(screen.getByTestId('tree-text-0'));
+    fireEvent.change(screen.getByTestId('tree-input-0'), { target: { value: '9' } });
     const next = onChange.mock.calls[0][0] as VerboseGraph;
-    const root = next.nodes.find((n) => n.id === 0)!;
-    expect(root.fields.val).toBe(42);
+    expect(next.nodes.find((n) => n.id === 0)!.fields.val).toBe(9);
   });
 });
 
-const graphTemplate: NodeTemplate = {
-  name: 'Node',
-  fields: [{ name: 'val', type: 'int' }],
-  links: [{ name: 'neighbors', arity: 'list' }],
-};
+describe('NodeGraphBuilder graph mode (GraphCanvas)', () => {
+  function graph(values: number[][], edges: [number, number][]): VerboseGraph {
+    const nodes = values.map(([id, val]) => ({
+      id,
+      fields: { val },
+      links: { neighbors: edges.flatMap(([a, b]) => (a === id ? [b] : b === id ? [a] : [])) },
+    }));
+    return { nodes, entry: nodes.length > 0 ? nodes[0].id : null };
+  }
 
-function graph(adj: Record<number, number[]>): VerboseGraph {
-  const keys = Object.keys(adj).map(Number);
-  if (keys.length === 0) return { nodes: [], entry: null };
-  const nodes = keys.map((k, i) => ({
-    id: i,
-    fields: { val: k },
-    links: {
-      neighbors: adj[k]
-        .map((n) => keys.indexOf(n))
-        .filter((id) => id !== -1),
-    },
-  }));
-  return { nodes, entry: 0 };
-}
-
-describe('NodeGraphBuilder graph mode', () => {
-  it('renders existing nodes with neighbor pills', () => {
-    render(
-      <NodeGraphBuilder
-        template={graphTemplate}
-        layout="general"
-        value={graph({ 1: [2, 3], 2: [1], 3: [1] })}
-        onChange={vi.fn()}
-      />,
-    );
-    expect((screen.getByLabelText('Node 0 val') as HTMLInputElement).value).toBe('1');
-    expect((screen.getByLabelText('Node 1 val') as HTMLInputElement).value).toBe('2');
-    expect(screen.getByLabelText('Remove neighbor 1')).toBeTruthy();
-    expect(screen.getByLabelText('Remove neighbor 2')).toBeTruthy();
-  });
-
-  it('shows Add node button for empty graph', () => {
-    const onChange = vi.fn();
+  it('shows Add first node button for empty graph', () => {
     render(
       <NodeGraphBuilder
         template={graphTemplate}
         layout="general"
         value={{ nodes: [], entry: null }}
-        onChange={onChange}
+        onChange={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByLabelText('Add node'));
-    const next = onChange.mock.calls[0][0] as VerboseGraph;
-    expect(next.nodes.length).toBe(1);
+    expect(screen.getByTestId('graph-add-first')).toBeTruthy();
   });
 
-  it('adds a node to a non-empty graph', () => {
+  it('renders existing nodes with their values', () => {
+    render(
+      <NodeGraphBuilder
+        template={graphTemplate}
+        layout="general"
+        value={graph(
+          [
+            [0, 7],
+            [1, 8],
+          ],
+          [[0, 1]],
+        )}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('graph-text-0').textContent).toBe('7');
+    expect(screen.getByTestId('graph-text-1').textContent).toBe('8');
+  });
+
+  it('Add node toolbar grows the graph', () => {
     const onChange = vi.fn();
     render(
       <NodeGraphBuilder
         template={graphTemplate}
         layout="general"
-        value={graph({ 1: [] })}
+        value={graph(
+          [
+            [0, 1],
+            [1, 2],
+          ],
+          [],
+        )}
         onChange={onChange}
       />,
     );
-    fireEvent.click(screen.getByLabelText('Add node'));
+    fireEvent.click(screen.getByTitle('Add node'));
     const next = onChange.mock.calls[0][0] as VerboseGraph;
-    expect(next.nodes.length).toBe(2);
+    expect(next.nodes.length).toBe(3);
   });
 
-  it('removing a node cleans up neighbor references', () => {
+  it('removing a node strips it from neighbor lists too', () => {
     const onChange = vi.fn();
     render(
       <NodeGraphBuilder
         template={graphTemplate}
         layout="general"
-        value={graph({ 1: [2], 2: [1] })}
+        value={graph(
+          [
+            [0, 1],
+            [1, 2],
+            [2, 3],
+          ],
+          [
+            [0, 1],
+            [0, 2],
+          ],
+        )}
         onChange={onChange}
       />,
     );
-    fireEvent.click(screen.getByLabelText('Remove node 1'));
+    fireEvent.mouseEnter(screen.getByTestId('graph-node-2'));
+    fireEvent.click(screen.getByTestId('graph-remove-2'));
     const next = onChange.mock.calls[0][0] as VerboseGraph;
-    expect(next.nodes.length).toBe(1);
-    const remaining = next.nodes[0];
-    expect(remaining.links.neighbors).toEqual([]);
+    expect(next.nodes.find((n) => n.id === 2)).toBeUndefined();
+    const a = next.nodes.find((n) => n.id === 0)!;
+    expect(a.links.neighbors).not.toContain(2);
   });
 
-  it('removing a neighbor severs the edge', () => {
+  it('clicking two nodes toggles an edge between them', () => {
     const onChange = vi.fn();
     render(
       <NodeGraphBuilder
         template={graphTemplate}
         layout="general"
-        value={graph({ 1: [2], 2: [1] })}
+        value={graph(
+          [
+            [0, 1],
+            [1, 2],
+          ],
+          [],
+        )}
         onChange={onChange}
       />,
     );
-    fireEvent.click(screen.getByLabelText('Remove neighbor 1'));
+    // Click the circles (not the text — text has stopPropagation).
+    fireEvent.click(screen.getByTestId('graph-circle-0'));
+    fireEvent.click(screen.getByTestId('graph-circle-1'));
     const next = onChange.mock.calls[0][0] as VerboseGraph;
-    const node0 = next.nodes.find((n) => n.id === 0)!;
-    expect(node0.links.neighbors).toEqual([]);
+    const a = next.nodes.find((n) => n.id === 0)!;
+    const b = next.nodes.find((n) => n.id === 1)!;
+    expect(a.links.neighbors).toContain(1);
+    expect(b.links.neighbors).toContain(0);
   });
 
-  it('editing a field updates the value', () => {
+  it('clicking an existing edge again removes it', () => {
     const onChange = vi.fn();
     render(
       <NodeGraphBuilder
         template={graphTemplate}
         layout="general"
-        value={graph({ 1: [], 2: [] })}
+        value={graph(
+          [
+            [0, 1],
+            [1, 2],
+          ],
+          [[0, 1]],
+        )}
         onChange={onChange}
       />,
     );
-    fireEvent.change(screen.getByLabelText('Node 0 val'), { target: { value: '99' } });
+    fireEvent.click(screen.getByTestId('graph-circle-0'));
+    fireEvent.click(screen.getByTestId('graph-circle-1'));
     const next = onChange.mock.calls[0][0] as VerboseGraph;
-    const node = next.nodes.find((n) => n.id === 0)!;
-    expect(node.fields.val).toBe(99);
+    const a = next.nodes.find((n) => n.id === 0)!;
+    expect(a.links.neighbors).not.toContain(1);
+  });
+
+  it('editing a node value updates the field', () => {
+    const onChange = vi.fn();
+    render(
+      <NodeGraphBuilder
+        template={graphTemplate}
+        layout="general"
+        value={graph([[0, 1]], [])}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('graph-text-0'));
+    fireEvent.change(screen.getByTestId('graph-input-0'), { target: { value: '5' } });
+    const next = onChange.mock.calls[0][0] as VerboseGraph;
+    expect(next.nodes.find((n) => n.id === 0)!.fields.val).toBe(5);
   });
 });

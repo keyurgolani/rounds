@@ -20,13 +20,8 @@ import type {
   Entry,
 } from './coding/types';
 import {
-  ArrowRight,
   Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronUp,
   Copy,
-  Download,
   FileText,
   Maximize2,
   Minimize2,
@@ -79,7 +74,6 @@ const LANGUAGES = [
   { key: 'java', label: 'Java', monaco: 'java' },
 ];
 
-type LeftPanel = 'solutions' | 'hints';
 // Mobile lives in "editor-first" mode: the editor owns the whole
 // viewport and the two side panels become bottom sheets that slide up
 // on demand. `null` = no sheet open (user is writing code).
@@ -135,13 +129,9 @@ export default function CodingDetail() {
   const [runResult, setRunResult] = useState<CodeRunResult | undefined>();
   const [lastRunInput, setLastRunInput] = useState<unknown>(undefined);
   const [evalResults, setEvalResults] = useState<CodeEvaluateResult | undefined>();
-  const [leftPanel, setLeftPanel] = useState<LeftPanel>('hints');
-  const [leftPanelOpen, setLeftPanelOpen] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [sideTab, setSideTab] = useState<SideTab>('tests');
-  const [showSolution, setShowSolution] = useState(-1);
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
-  const [leftWidth, setLeftWidth] = useState(440);
   const [rightWidth, setRightWidth] = useState(440);
   const [wordWrap, setWordWrap] = useState<'on' | 'off'>('off');
   const [copied, setCopied] = useState(false);
@@ -439,25 +429,23 @@ export default function CodingDetail() {
           aria-hidden="true"
         />
 
-        {!focus && (leftPanelOpen || mobileSheet === 'problem') && (
+        {/* Mobile-only Problem sheet. Carries description + constraints
+            because the mobile editor is full-screen (the desktop above-
+            editor description bar is hidden on mobile). Hints + Solutions
+            live in the right-dock tabs now, not here. */}
+        {mobileSheet === 'problem' && (
           <aside
-            className="flex-shrink-0 flex flex-col w-full coding-side-left"
+            className="flex-shrink-0 flex flex-col w-full coding-side-left lg:hidden"
             style={{
-              ['--side-width' as string]: `${leftWidth}px`,
               borderBottom: '1px solid var(--border)',
               background: 'var(--bg)',
               maxHeight: '38vh',
-              animation: leftPanelOpen ? 'codingHelpPanelIn 180ms cubic-bezier(0.22, 0.8, 0.36, 1)' : undefined,
             }}
           >
           <SheetHeader title="Problem" onClose={() => setMobileSheet(null)} />
-          {/* Mobile-only: description + constraints. On desktop these
-              live in the horizontal bar above the editor (see below);
-              on mobile the editor is full-screen so they stay inside
-              the Problem sheet. */}
           <div
-            className="lg:hidden flex-shrink-0 px-4 sm:px-5 pt-4 pb-3 space-y-3"
-            style={{ borderBottom: '1px solid var(--border)' }}
+            className="flex-1 overflow-y-auto px-4 sm:px-5 pt-4 pb-3 space-y-3"
+            style={{ overscrollBehavior: 'contain' }}
           >
             <BlockMarkdown
               text={q.description}
@@ -486,272 +474,7 @@ export default function CodingDetail() {
             )}
           </div>
 
-          {/* Solutions | Hints tab strip — same underline-active
-              treatment as the right sidebar's Test Cases / Run tabs. */}
-          <div
-            role="tablist"
-            aria-label="Problem help"
-            className="flex flex-shrink-0"
-            style={{
-              borderBottom: '1px solid var(--border)',
-              background: 'var(--bg)',
-            }}
-          >
-            {(
-              [
-                { key: 'hints', label: 'Hints' },
-                { key: 'solutions', label: 'Solutions' },
-              ] as { key: LeftPanel; label: string }[]
-            ).map((p) => {
-              const active = leftPanel === p.key;
-              return (
-                <button
-                  key={p.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setLeftPanel(p.key)}
-                  style={{
-                    position: 'relative',
-                    padding: '10px 16px',
-                    fontSize: 12,
-                    fontWeight: active ? 600 : 500,
-                    background: 'transparent',
-                    color: active ? 'var(--text)' : 'var(--text-4)',
-                    border: 0,
-                    cursor: 'pointer',
-                    transition: 'color 140ms',
-                  }}
-                >
-                  {p.label}
-                  {active && (
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        position: 'absolute',
-                        left: 12,
-                        right: 12,
-                        bottom: -1,
-                        height: 2,
-                        background: 'var(--accent)',
-                        borderRadius: '2px 2px 0 0',
-                      }}
-                    />
-                  )}
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => setLeftPanelOpen(false)}
-              aria-label="Hide hints and solutions panel"
-              title="Hide panel"
-              className="hidden lg:inline-flex items-center justify-center ml-auto mr-2 self-center"
-              style={{
-                width: 28,
-                height: 28,
-                border: 0,
-                borderRadius: 999,
-                background: 'var(--bg-sunken)',
-                color: 'var(--text-3)',
-                boxShadow: 'inset 0 0 0 1px var(--border)',
-                cursor: 'pointer',
-              }}
-            >
-              <ChevronLeft size={14} strokeWidth={1.9} />
-            </button>
-          </div>
-
-          <div
-            className="overflow-y-auto p-4 sm:p-5 flex-1 min-h-0"
-            style={{ overscrollBehavior: 'contain' }}
-          >
-            <div>
-              {leftPanel === 'solutions' && (
-                <div className="space-y-2">
-                  {q.solutions.map((sol, i) => {
-                    const hasCodeForLang = Boolean(sol.code[lang]);
-                    return (
-                      <div key={i} className="card overflow-hidden">
-                        <div
-                          className="p-3 flex items-center justify-between gap-2"
-                          style={{ background: 'transparent' }}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setShowSolution(showSolution === i ? -1 : i)}
-                            className="flex-1 min-w-0 text-left"
-                            style={{ background: 'transparent', border: 0, cursor: 'pointer', padding: 0 }}
-                          >
-                            <div style={{ fontSize: 13, fontWeight: 500 }}>{sol.title}</div>
-                            <div
-                              className="mono"
-                              style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 2 }}
-                            >
-                              {sol.time_complexity} · {sol.space_complexity}
-                            </div>
-                          </button>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            {hasCodeForLang && (
-                              <button
-                                type="button"
-                                title={`Load into editor (${lang})`}
-                                aria-label={`Load solution into editor in ${lang}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const next = sol.code[lang];
-                                  if (
-                                    code.trim() !== '' &&
-                                    code !== starterRef.current &&
-                                    !confirm('Replace current editor contents with this solution?')
-                                  ) {
-                                    return;
-                                  }
-                                  setCode(next);
-                                }}
-                                className="inline-flex items-center gap-1"
-                                style={{
-                                  padding: '5px 10px',
-                                  borderRadius: 999,
-                                  border: 0,
-                                  background: 'var(--accent-soft)',
-                                  color: 'var(--accent)',
-                                  fontSize: 11,
-                                  fontWeight: 500,
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                <Download size={11} strokeWidth={1.9} />
-                                Load
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              aria-label={showSolution === i ? 'Collapse solution' : 'Expand solution'}
-                              onClick={() => setShowSolution(showSolution === i ? -1 : i)}
-                              style={{
-                                padding: 4,
-                                border: 0,
-                                background: 'transparent',
-                                color: 'var(--text-3)',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                              }}
-                            >
-                              {showSolution === i ? (
-                                <ChevronUp size={14} strokeWidth={1.7} />
-                              ) : (
-                                <ChevronDown size={14} strokeWidth={1.7} />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                        {showSolution === i && (
-                          <div className="px-3 pb-3 space-y-2">
-                            <InlineMarkdown
-                              as="p"
-                              text={sol.description}
-                              style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}
-                            />
-                            {sol.code[lang] && (
-                              <pre
-                                className="mono"
-                                style={{
-                                  fontSize: 11.5,
-                                  background: 'var(--bg-sunken)',
-                                  borderRadius: 6,
-                                  padding: 10,
-                                  color: 'var(--text-2)',
-                                  overflowX: 'auto',
-                                }}
-                              >
-                                {sol.code[lang]}
-                              </pre>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {leftPanel === 'hints' && (
-                <div className="space-y-3">
-                  {q.hints.map((hint, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <span
-                        className="mono"
-                        style={{ fontSize: 11, color: 'var(--accent)', marginTop: 1 }}
-                      >
-                        {i + 1}.
-                      </span>
-                      <InlineMarkdown
-                        text={hint}
-                        style={{ fontSize: 12, color: 'var(--text-2)' }}
-                      />
-                    </div>
-                  ))}
-                  {q.tips.length > 0 && (
-                    <>
-                      <div
-                        className="pt-2"
-                        style={{ borderTop: '1px solid var(--border)' }}
-                      >
-                        <span className="eyebrow">Tips</span>
-                      </div>
-                      {q.tips.map((tip, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <ArrowRight
-                            size={12}
-                            strokeWidth={1.8}
-                            style={{ color: 'var(--ochre)', flexShrink: 0, marginTop: 3 }}
-                          />
-                          <InlineMarkdown
-                            text={tip}
-                            style={{ fontSize: 12, color: 'var(--text-2)' }}
-                          />
-                        </div>
-                      ))}
-                    </>
-                  )}
-                  {q.thought_process.length > 0 && (
-                    <>
-                      <div
-                        className="pt-2"
-                        style={{ borderTop: '1px solid var(--border)' }}
-                      >
-                        <span className="eyebrow">Thought process</span>
-                      </div>
-                      {q.thought_process.map((step, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <span
-                            className="mono"
-                            style={{ fontSize: 11, color: 'var(--text-4)' }}
-                          >
-                            {i + 1}.
-                          </span>
-                          <InlineMarkdown
-                            text={step}
-                            style={{ fontSize: 12, color: 'var(--text-2)' }}
-                          />
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
           </aside>
-        )}
-
-        {!focus && leftPanelOpen && (
-          <Resizer
-            onResize={(dx) =>
-              setLeftWidth((w) => Math.max(260, Math.min(720, w + dx)))
-            }
-          />
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
@@ -775,27 +498,6 @@ export default function CodingDetail() {
               }}
             >
               <div className="px-4 py-3 space-y-3">
-                {!leftPanelOpen && (
-                  <button
-                    type="button"
-                    onClick={() => setLeftPanelOpen(true)}
-                    aria-label="Open hints and solutions panel"
-                    className="hidden lg:inline-flex items-center gap-1.5"
-                    style={{
-                      padding: '5px 10px',
-                      border: 0,
-                      borderRadius: 999,
-                      background: 'var(--accent-soft)',
-                      color: 'var(--accent)',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <FileText size={12} strokeWidth={1.8} />
-                    Help: hints and solutions
-                  </button>
-                )}
                 <BlockMarkdown
                   text={q.description}
                   style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}
@@ -1130,6 +832,21 @@ export default function CodingDetail() {
               runResult={runResult}
               runInput={lastRunInput}
               evalResult={evalResults}
+              hints={q.hints}
+              tips={q.tips}
+              thoughtProcess={q.thought_process}
+              solutions={q.solutions}
+              language={lang}
+              onLoadSolutionIntoEditor={(next) => {
+                if (
+                  code.trim() !== '' &&
+                  code !== starterRef.current &&
+                  !confirm('Replace current editor contents with this solution?')
+                ) {
+                  return;
+                }
+                setCode(next);
+              }}
             />
           </aside>
         )}
