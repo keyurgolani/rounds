@@ -20,6 +20,10 @@ import { LinkableCard } from './behavioral/LinkableCard';
 import { ConnectorOverlay, type Connector, type Endpoint } from './behavioral/ConnectorOverlay';
 import type { Anecdote } from './behavioral/types';
 import { usePersistedState } from '../hooks/usePersistedState';
+import { effectiveStatus, useStatusMapVersion } from '../hooks/usePracticeStatus';
+import PracticeStatusFilter, {
+  type PracticeStatusFilterValue,
+} from '../components/shell/PracticeStatusFilter';
 
 type SortKey = 'title-asc' | 'title-desc' | 'links-desc' | 'links-asc';
 
@@ -78,6 +82,11 @@ export default function BehavioralList() {
   const [sort, setSort] = usePersistedState<SortKey>('rounds.behavioral.sort', 'title-asc');
   const [tagFilter, setTagFilter] = usePersistedState<string>('rounds.behavioral.tagFilter', '__all__');
   const [linkedFilter, setLinkedFilter] = usePersistedState<'all' | 'linked' | 'unlinked'>('rounds.behavioral.linkedFilter', 'all');
+  const [statusFilter, setStatusFilter] = usePersistedState<PracticeStatusFilterValue>(
+    'rounds.behavioral.statusFilter',
+    'all',
+  );
+  const statusVersion = useStatusMapVersion();
 
   useEffect(() => {
     Promise.all([
@@ -121,6 +130,7 @@ export default function BehavioralList() {
       if (tagFilter !== '__all__' && !(q.tags ?? []).includes(tagFilter)) return false;
       if (linkedFilter === 'linked' && (linkCountByQuestion.get(q.id) ?? 0) === 0) return false;
       if (linkedFilter === 'unlinked' && (linkCountByQuestion.get(q.id) ?? 0) > 0) return false;
+      if (statusFilter !== 'all' && effectiveStatus('behavioral', q.id) !== statusFilter) return false;
       if (query.trim()) {
         const s = query.trim().toLowerCase();
         const blob = `${q.title} ${q.question_text} ${(q.tags ?? []).join(' ')}`.toLowerCase();
@@ -145,7 +155,8 @@ export default function BehavioralList() {
       }
     });
     return sorted;
-  }, [questions, activeCat, query, sort, tagFilter, linkedFilter, linkCountByQuestion]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questions, activeCat, query, sort, tagFilter, linkedFilter, linkCountByQuestion, statusFilter, statusVersion]);
 
   const isLinked = useCallback((qId: string, aId: string) => links.has(`q${qId}-a${aId}`), [
     links,
@@ -364,6 +375,12 @@ export default function BehavioralList() {
         eyebrow="Track 03 · Behavioral"
         title="Behavioral"
         description="Not questions to memorize — stories to own. Drag a question onto an anecdote (or the reverse) to link them. Hover to see the web."
+        chromeActions={
+          <PracticeStatusFilter value={statusFilter} onChange={setStatusFilter} />
+        }
+        compactActions={
+          <PracticeStatusFilter value={statusFilter} onChange={setStatusFilter} compact />
+        }
       />
 
       <div

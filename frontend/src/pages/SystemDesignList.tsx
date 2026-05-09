@@ -6,9 +6,12 @@ import AppHeader from '../components/shell/AppHeader';
 import DifficultyPill from '../components/shell/DifficultyPill';
 import StatusDot from '../components/shell/StatusDot';
 import Select from '../components/shell/Select';
-import { effectiveStatus } from '../hooks/usePracticeStatus';
+import { effectiveStatus, useStatusMapVersion } from '../hooks/usePracticeStatus';
 import { useInfiniteList } from '../hooks/useInfiniteList';
 import { usePersistedState } from '../hooks/usePersistedState';
+import PracticeStatusFilter, {
+  type PracticeStatusFilterValue,
+} from '../components/shell/PracticeStatusFilter';
 
 type SortKey =
   | 'title-asc'
@@ -47,6 +50,11 @@ export default function SystemDesignList() {
   const [difficulty, setDifficulty] = usePersistedState<string | null>('rounds.sd.difficulty', null);
   const [tag, setTag] = usePersistedState<string>('rounds.sd.tag', ALL_OPTION);
   const [sort, setSort] = usePersistedState<SortKey>('rounds.sd.sort', 'title-asc');
+  const [statusFilter, setStatusFilter] = usePersistedState<PracticeStatusFilterValue>(
+    'rounds.sd.statusFilter',
+    'all',
+  );
+  const statusVersion = useStatusMapVersion();
 
   useEffect(() => {
     listSystemDesignQuestions<SDQ>()
@@ -64,6 +72,7 @@ export default function SystemDesignList() {
     const matches = questions.filter((q) => {
       if (difficulty && q.difficulty !== difficulty) return false;
       if (tag !== ALL_OPTION && !(q.tags ?? []).includes(tag)) return false;
+      if (statusFilter !== 'all' && effectiveStatus('system', q.id) !== statusFilter) return false;
       if (query.trim()) {
         const s = query.trim().toLowerCase();
         const blob = `${q.title} ${(q.tags ?? []).join(' ')} ${q.description ?? ''}`.toLowerCase();
@@ -94,7 +103,8 @@ export default function SystemDesignList() {
       }
     });
     return sorted;
-  }, [questions, difficulty, tag, query, sort]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questions, difficulty, tag, query, sort, statusFilter, statusVersion]);
 
   const { slice, sentinelRef, hasMore } = useInfiniteList(filtered, { initial: 18, step: 18 });
 
@@ -104,6 +114,12 @@ export default function SystemDesignList() {
         eyebrow="Track 01 · System Design"
         title="System Design"
         description="Designing at scale is practice, not talent. Walk the same ground until the tradeoffs come naturally."
+        chromeActions={
+          <PracticeStatusFilter value={statusFilter} onChange={setStatusFilter} />
+        }
+        compactActions={
+          <PracticeStatusFilter value={statusFilter} onChange={setStatusFilter} compact />
+        }
       />
 
       <div

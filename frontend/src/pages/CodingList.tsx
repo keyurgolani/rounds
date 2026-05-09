@@ -6,9 +6,12 @@ import AppHeader from '../components/shell/AppHeader';
 import DifficultyPill from '../components/shell/DifficultyPill';
 import StatusDot from '../components/shell/StatusDot';
 import Select from '../components/shell/Select';
-import { effectiveStatus } from '../hooks/usePracticeStatus';
+import { effectiveStatus, useStatusMapVersion } from '../hooks/usePracticeStatus';
 import { useInfiniteList } from '../hooks/useInfiniteList';
 import { usePersistedState } from '../hooks/usePersistedState';
+import PracticeStatusFilter, {
+  type PracticeStatusFilterValue,
+} from '../components/shell/PracticeStatusFilter';
 
 type SortKey =
   | 'title-asc'
@@ -61,6 +64,13 @@ export default function CodingList() {
   const [topic, setTopic] = usePersistedState<string>('rounds.coding.topic', ALL_OPTION);
   const [company, setCompany] = usePersistedState<string>('rounds.coding.company', ALL_OPTION);
   const [sort, setSort] = usePersistedState<SortKey>('rounds.coding.sort', 'title-asc');
+  const [statusFilter, setStatusFilter] = usePersistedState<PracticeStatusFilterValue>(
+    'rounds.coding.statusFilter',
+    'all',
+  );
+  // Subscribe to the global status map so the list reflows when the user
+  // changes a question's status from elsewhere (detail page, command center).
+  const statusVersion = useStatusMapVersion();
 
   useEffect(() => {
     listCodingQuestions<CQ>()
@@ -87,6 +97,7 @@ export default function CodingList() {
       if (difficulty && q.difficulty !== difficulty) return false;
       if (topic !== ALL_OPTION && !(q.topics ?? []).includes(topic)) return false;
       if (company !== ALL_OPTION && !(q.companies ?? []).includes(company)) return false;
+      if (statusFilter !== 'all' && effectiveStatus('coding', q.id) !== statusFilter) return false;
       if (query.trim()) {
         const s = query.trim().toLowerCase();
         const blob = `${q.title} ${q.topics.join(' ')} ${q.companies.join(' ')}`.toLowerCase();
@@ -118,7 +129,11 @@ export default function CodingList() {
       }
     });
     return sorted;
-  }, [questions, difficulty, topic, company, query, sort]);
+    // statusVersion is intentional: status changes from elsewhere bump the
+    // version counter and re-trigger filtering even though `effectiveStatus`
+    // reads from a module-level cache rather than React state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questions, difficulty, topic, company, query, sort, statusFilter, statusVersion]);
 
   const { slice, sentinelRef, hasMore } = useInfiniteList(filtered, { initial: 30, step: 30 });
 
@@ -128,6 +143,12 @@ export default function CodingList() {
         eyebrow="Track 02 · Coding"
         title="Coding"
         description="Algorithms and data structures, one problem at a time. Start with the pattern, then sharpen the implementation."
+        chromeActions={
+          <PracticeStatusFilter value={statusFilter} onChange={setStatusFilter} />
+        }
+        compactActions={
+          <PracticeStatusFilter value={statusFilter} onChange={setStatusFilter} compact />
+        }
       />
 
       <div
