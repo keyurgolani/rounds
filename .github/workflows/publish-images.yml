@@ -34,6 +34,10 @@ jobs:
             image: runner
             context: ./backend
             dockerfile: ./backend/Dockerfile
+          - service: pdf-renderer
+            image: pdf-renderer
+            context: ./backend/pdf_renderer
+            dockerfile: ./backend/pdf_renderer/Dockerfile
 
     steps:
       - uses: actions/checkout@v4
