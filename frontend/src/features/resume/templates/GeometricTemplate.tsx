@@ -28,22 +28,27 @@ export default function GeometricTemplate({ data, design }: Props) {
   return (
     <A4Page marginMm={marginMm} fontFamily={fontFamily} fontSize={fontSize} bulletStyle={design?.bulletStyle}>
       <div style={{ position: 'relative' }}>
-        {/* Diagonal corner wedge — sits behind the header content */}
+        {/* Corner wedge — sized so it stays a true *corner* accent and
+            never overlaps the header text. The previous version was
+            220px tall: the title text rendered on top of the wedge in
+            the same accent color, giving zero visual contrast. Now the
+            wedge is small (≈42px visible triangle) and the title uses
+            a dark neutral that reads against any background. */}
         <div
           aria-hidden
           style={{
             position: 'absolute',
-            top: -marginMm * 4,
-            left: -marginMm * 4,
-            width: 220,
-            height: 220,
+            top: -marginMm * 3,
+            left: -marginMm * 3,
+            width: 100,
+            height: 100,
             background: accent,
             clipPath: 'polygon(0 0, 100% 0, 0 100%)',
-            opacity: 0.92,
+            opacity: 0.95,
             zIndex: 0,
           }}
         />
-        <header style={{ position: 'relative', zIndex: 1, marginBottom: 18, paddingTop: 24 }}>
+        <header style={{ position: 'relative', zIndex: 1, marginBottom: 18 }}>
           <div
             style={{
               fontSize: 28,
@@ -56,7 +61,7 @@ export default function GeometricTemplate({ data, design }: Props) {
             {p.fullName || 'Your name'}
           </div>
           {p.title && (
-            <div style={{ fontSize: 13, color: accent, marginTop: 3, fontWeight: 600 }}>
+            <div style={{ fontSize: 13, color: '#444', marginTop: 3, fontWeight: 600 }}>
               {p.title}
             </div>
           )}
