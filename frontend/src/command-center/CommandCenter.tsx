@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, X, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useCommandCenter } from './CommandCenterProvider';
 import { registry, type CommandView } from './registry';
 
@@ -136,6 +137,7 @@ function ModalHeader({ inView, viewLabel }: { inView: boolean; viewLabel?: strin
 
 function Hub({ query, onQueryChange }: { query: string; onQueryChange: (q: string) => void }) {
   const cc = useCommandCenter();
+  const navigate = useNavigate();
   const q = query.trim().toLowerCase();
   const filtered = useMemo(
     () =>
@@ -161,6 +163,17 @@ function Hub({ query, onQueryChange }: { query: string; onQueryChange: (q: strin
     if (selected >= filtered.length) setSelected(filtered.length - 1);
   }, [filtered.length, selected]);
 
+  // Activate an entry: inline views open into the modal; `run` entries
+  // fire immediately. Provider auto-closes on the resulting route
+  // change, so `run` callbacks don't need to call `close()` themselves.
+  const activate = (view: CommandView) => {
+    if (view.run) {
+      void view.run({ navigate, close: cc.close });
+    } else {
+      cc.openView(view.id);
+    }
+  };
+
   function handleInputKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (filtered.length === 0) return;
     if (e.key === 'ArrowDown') {
@@ -174,7 +187,7 @@ function Hub({ query, onQueryChange }: { query: string; onQueryChange: (q: strin
       // is empty (so users can still type spaces in their search).
       e.preventDefault();
       const view = filtered[selected];
-      if (view) cc.openView(view.id);
+      if (view) activate(view);
     } else if (e.key === 'Home') {
       e.preventDefault();
       setSelected(0);
@@ -228,7 +241,7 @@ function Hub({ query, onQueryChange }: { query: string; onQueryChange: (q: strin
               view={v}
               selected={i === selected}
               onHover={() => setSelected(i)}
-              onClick={() => cc.openView(v.id)}
+              onClick={() => activate(v)}
               buttonRef={(el) => {
                 itemRefs.current[i] = el;
               }}
@@ -298,7 +311,7 @@ function HubButton({
 
 function ViewBody({ view }: { view?: CommandView }) {
   const cc = useCommandCenter();
-  if (!view) {
+  if (!view || !view.Component) {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-4)', fontSize: 12.5 }}>
         View not found.
