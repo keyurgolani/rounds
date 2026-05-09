@@ -73,27 +73,11 @@ const defaults: Tweaks = {
   glassShadow: 50,
 };
 
-type LegacyTweaks = Omit<Partial<Tweaks>, 'cardTreatment'> & {
-  cardTreatment?: CardTreatment | 'glass';
-};
-
-function normalizeTweaks(input: LegacyTweaks): Tweaks {
-  const { cardTreatment, ...rest } = input;
-  const next = { ...defaults, ...rest };
-  if (cardTreatment === 'glass') {
-    next.cardTreatment = 'layered';
-    if (input.glassTransparency === undefined) next.glassTransparency = 40;
-  } else if (cardTreatment) {
-    next.cardTreatment = cardTreatment;
-  }
-  return next;
-}
-
 function load(): Tweaks {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaults;
-    return normalizeTweaks(JSON.parse(raw) as LegacyTweaks);
+    return { ...defaults, ...(JSON.parse(raw) as Partial<Tweaks>) };
   } catch {
     return defaults;
   }
@@ -154,12 +138,7 @@ function dbToTweaks(row: Partial<DbPrefs>): Partial<Tweaks> {
   if (row.type_variant) out.typeVariant = row.type_variant as DisplayType;
   if (row.density) out.density = row.density as Density;
   if (row.nav_style) out.navStyle = row.nav_style as NavStyle;
-  if (row.card_treatment === 'glass') {
-    out.cardTreatment = 'layered';
-    if (typeof row.glass_transparency !== 'number') out.glassTransparency = 40;
-  } else if (row.card_treatment) {
-    out.cardTreatment = row.card_treatment as CardTreatment;
-  }
+  if (row.card_treatment) out.cardTreatment = row.card_treatment as CardTreatment;
   if (row.sans_font) out.sansFont = row.sans_font as SansFont;
   if (row.radius) out.radius = row.radius as CornerRadius;
   if (row.shadow) out.shadow = row.shadow as Shadow;

@@ -83,42 +83,52 @@ def _invoke_reference(reference, test_input: Any) -> Any:
     return reference(test_input)
 
 
-def _smoke_run_python_solution(question, match_fn) -> list[str]:
-    """Run the first Python solution through the live runner for each
-    test case; return failure messages, empty list on success."""
+def _smoke_run_python_solution(question, match_fn, run_one) -> list[str]:
+    """Exercise EVERY published Python solution against EVERY test case
+    through the live runner subprocess. This catches: shape-conversion
+    bugs in the runtime drivers (the kind we hit during the verbose-only
+    migration), drift between a question's REFERENCE oracle and its
+    published solutions, syntax errors in solution snippets, and
+    matcher mismatches between build-time and runtime.
+
+    Returns a list of failure strings; empty on full pass."""
     payload = question.payload
     entry = payload.get("entry")
-    if not entry or entry.get("kind") not in {"linked_list", "tree", "graph"}:
+    if not entry:
         return []
     solutions = payload.get("solutions") or []
     if not solutions:
         return []
-    py_code = (solutions[0].get("code") or {}).get("python")
-    if not py_code:
+    test_cases = payload.get("test_cases") or []
+    if not test_cases:
         return []
-
-    sys.path.insert(0, str(BACKEND_DIR))
-    try:
-        from runner import run_one  # type: ignore
-    finally:
-        sys.path.pop(0)
 
     failures: list[str] = []
     title = payload.get("title", "<untitled>")
-    for idx, tc in enumerate(payload.get("test_cases") or []):
-        if idx in question.skip_validation_indices:
+
+    for sol_idx, sol in enumerate(solutions):
+        py_code = (sol.get("code") or {}).get("python")
+        if not py_code:
             continue
-        outcome = run_one(py_code, "python", entry, tc.get("input"))
-        if outcome.error:
-            failures.append(f"  [{title}] smoke case {idx} ({tc.get('description', '')}): runner error: {outcome.error}")
-            continue
-        passed, err = match_fn(tc.get("expected"), outcome.return_value, tc.get("input"))
-        if not passed:
-            failures.append(
-                f"  [{title}] smoke case {idx} ({tc.get('description', '')}): "
-                f"solution returned {outcome.return_value!r}, "
-                f"expected {tc.get('expected')!r}" + (f" — matcher error: {err}" if err else "")
-            )
+        sol_label = sol.get("title") or f"solution #{sol_idx}"
+        for tc_idx, tc in enumerate(test_cases):
+            if tc_idx in question.skip_validation_indices:
+                continue
+            outcome = run_one(py_code, "python", entry, tc.get("input"))
+            if outcome.error:
+                failures.append(
+                    f"  [{title}] [{sol_label}] case {tc_idx} ({tc.get('description', '')}): "
+                    f"runner error: {outcome.error}"
+                )
+                continue
+            passed, err = match_fn(tc.get("expected"), outcome.return_value, tc.get("input"))
+            if not passed:
+                failures.append(
+                    f"  [{title}] [{sol_label}] case {tc_idx} ({tc.get('description', '')}): "
+                    f"solution returned {outcome.return_value!r}, "
+                    f"expected {tc.get('expected')!r}"
+                    + (f" — matcher error: {err}" if err else "")
+                )
     return failures
 
 
@@ -176,8 +186,33 @@ def main() -> int:
         and os.environ.get("ROUNDS_SMOKE", "1").lower() not in {"0", "false", "no", ""}
     )
     if smoke_enabled:
-        for q in QUESTIONS:
-            failures.extend(_smoke_run_python_solution(q, match))
+        # Smoke runs every (solution × test case) for every question
+        # through the live runner subprocess. Each invocation forks a
+        # Python (or Node) interpreter, so without a worker pool the
+        # full sweep is dominated by interpreter startup. Parallelism
+        # below is bounded by CPU count so the build doesn't hog the
+        # box on dev laptops; override with ROUNDS_SMOKE_WORKERS.
+        sys.path.insert(0, str(BACKEND_DIR))
+        try:
+            from runner import run_one  # type: ignore
+        finally:
+            sys.path.pop(0)
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        try:
+            workers = int(os.environ.get("ROUNDS_SMOKE_WORKERS", "0")) or (os.cpu_count() or 4)
+        except ValueError:
+            workers = os.cpu_count() or 4
+        workers = max(1, min(workers, 32))
+
+        print(f"Smoke testing every solution × every test case ({workers} workers)…")
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for fail_list in pool.map(
+                lambda q: _smoke_run_python_solution(q, match, run_one),
+                QUESTIONS,
+            ):
+                failures.extend(fail_list)
     else:
         print("(smoke step skipped)")
 

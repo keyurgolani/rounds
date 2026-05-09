@@ -114,7 +114,6 @@ function clearDemoStorage(userId: string): void {
     ];
     const exact = new Set([
       'rounds.currentCampaign.v1',
-      'rounds.migratedV1',
       'rounds.practiceStatus.v1',
       'rounds.tweaks.v1',
       'rounds:last-activity-at',

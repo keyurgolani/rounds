@@ -36,6 +36,7 @@ import {
   type ProviderInput,
   type ProviderKind,
 } from '../features/resume/ai/client';
+import { endpointsForKind, type EndpointPreset } from './aiProviderEndpoints';
 
 const KINDS: { id: ProviderKind; label: string; needsBaseUrl: boolean; example: string }[] = [
   { id: 'anthropic', label: 'Anthropic', needsBaseUrl: false, example: 'sk-ant-…' },
@@ -660,6 +661,23 @@ function ProviderForm({
                 : 'https://api.example.com/v1'
             }
           />
+          <EndpointPresets
+            presets={endpointsForKind(draft.kind)}
+            currentBaseUrl={draft.base_url}
+            onPick={(preset) =>
+              onChange({
+                ...draft,
+                base_url: preset.base_url,
+                // Only overwrite the label if it's still the auto-generated
+                // default for this kind — don't clobber a label the user
+                // typed in by hand.
+                label:
+                  draft.label === '' || draft.label === labelFromKind(draft.kind)
+                    ? preset.label
+                    : draft.label,
+              })
+            }
+          />
         </Field>
       )}
 
@@ -711,6 +729,55 @@ function ProviderForm({
 // ---------------------------------------------------------------------------
 //                                Primitives
 // ---------------------------------------------------------------------------
+
+function EndpointPresets({
+  presets,
+  currentBaseUrl,
+  onPick,
+}: {
+  presets: EndpointPreset[];
+  currentBaseUrl: string;
+  onPick: (p: EndpointPreset) => void;
+}) {
+  if (presets.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <span
+        className="eyebrow"
+        style={{ fontSize: 9, color: 'var(--text-4)', marginTop: 2 }}
+      >
+        Quick fill
+      </span>
+      <div className="flex flex-wrap gap-1.5">
+        {presets.map((p) => {
+          const active = currentBaseUrl.trim() === p.base_url;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onPick(p)}
+              title={p.hint ?? p.base_url}
+              style={{
+                padding: '4px 8px',
+                border: 0,
+                borderRadius: 999,
+                background: active ? 'var(--accent)' : 'var(--bg-sunken)',
+                color: active ? 'var(--bg-elev)' : 'var(--text-2)',
+                boxShadow: active ? 'none' : 'inset 0 0 0 1px var(--border)',
+                fontSize: 10.5,
+                fontWeight: 500,
+                cursor: 'pointer',
+                lineHeight: 1.3,
+              }}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function Field({
   label,

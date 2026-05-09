@@ -7,13 +7,11 @@ import {
 } from '../CommandCenterProvider';
 import { CommandCenter } from '../CommandCenter';
 
-vi.mock('../../api/client', () => ({
-  api: {
-    get: vi.fn().mockResolvedValue([]),
-    post: vi.fn().mockResolvedValue({ id: 'tod123' }),
-    put: vi.fn().mockResolvedValue({ id: 'tod123' }),
-    del: vi.fn().mockResolvedValue(undefined),
-  },
+vi.mock('../../todos/api', () => ({
+  listTodos: vi.fn().mockResolvedValue([]),
+  createTodo: vi.fn().mockResolvedValue({ id: 'tod123' }),
+  updateTodo: vi.fn().mockResolvedValue({ id: 'tod123' }),
+  deleteTodo: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../campaign/CampaignContext', () => ({

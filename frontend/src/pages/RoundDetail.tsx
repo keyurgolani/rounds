@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Calendar, CircleDot, User, Briefcase } from 'lucide-react';
-import { api } from '../api/client';
+import { getApplication } from '../applications/api';
 import { pb } from '../lib/pocketbase';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
@@ -65,7 +65,7 @@ export default function RoundDetail() {
         setRound(r);
         if (r.application_id) {
           try {
-            const a = await api.get<Application>(`/api/applications/${r.application_id}`);
+            const a = await getApplication(r.application_id);
             setApp(a);
           } catch {
             setApp(null);

@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import secrets
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Literal
 
@@ -45,6 +46,16 @@ from app.pb_auth import POCKETBASE_URL, current_user, pb_get, pb_patch, pb_post
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 _log = logging.getLogger(__name__)
+
+
+def _request_id() -> str:
+    """Short opaque id for correlating a user-facing error with server logs.
+
+    The id is logged alongside the full traceback and echoed in the
+    user-visible error message (or SSE error event) so a support
+    interaction can pivot from "I saw error abc123" to the matching
+    log line in seconds."""
+    return secrets.token_hex(4)
 
 ProviderKind = Literal[
     "anthropic", "openai", "openai-compatible", "anthropic-compatible"
@@ -250,7 +261,7 @@ class EnhanceProjectsRequest(BaseModel):
 def _provider_out(row: dict[str, Any]) -> ProviderOut:
     return ProviderOut(
         id=row.get("id") or "",
-        kind=row.get("kind") or "anthropic",
+        kind=row.get("kind") or "provider",
         label=row.get("label") or "",
         base_url=row.get("base_url") or "",
         has_key=bool(row.get("encrypted_key")),
@@ -388,7 +399,7 @@ async def test_provider(
     api_key = decrypt(row.get("encrypted_key") or "", row.get("key_iv") or "")
     if not api_key:
         raise HTTPException(status_code=400, detail="No API key on file for this provider.")
-    kind = row.get("kind") or "anthropic"
+    kind = row.get("kind") or "provider"
     base_url = row.get("base_url") or ""
 
     # Pick the cheapest reasonable model. For the test we ask the model
@@ -408,7 +419,12 @@ async def test_provider(
         except HTTPException:
             raise
         except Exception as err:  # noqa: BLE001
-            raise HTTPException(status_code=503, detail=f"Provider error: {err}") from err
+            rid = _request_id()
+            _log.exception("provider test: model refresh failed [rid=%s]", rid)
+            raise HTTPException(
+                status_code=503,
+                detail=f"Provider error: {err} (request id: {rid})",
+            ) from err
 
     try:
         text = await _call_complete(
@@ -423,9 +439,13 @@ async def test_provider(
     except HTTPException:
         raise
     except Exception as err:  # noqa: BLE001
-        _log.warning("provider test failed: %s", err)
+        rid = _request_id()
+        _log.exception("provider test failed [rid=%s]", rid)
         kind_, msg = _friendly_error(err)
-        raise HTTPException(status_code=_status_for_kind(kind_), detail=msg) from err
+        raise HTTPException(
+            status_code=_status_for_kind(kind_),
+            detail=f"{msg} (request id: {rid})",
+        ) from err
     return {"ok": True, "model": model, "reply": text}
 
 
@@ -438,7 +458,7 @@ async def refresh_models(
     api_key = decrypt(row.get("encrypted_key") or "", row.get("key_iv") or "")
     if not api_key:
         raise HTTPException(status_code=400, detail="No API key on file for this provider.")
-    kind = row.get("kind") or "anthropic"
+    kind = row.get("kind") or "provider"
     base_url = row.get("base_url") or ""
 
     try:
@@ -446,7 +466,12 @@ async def refresh_models(
     except HTTPException:
         raise
     except Exception as err:  # noqa: BLE001
-        raise HTTPException(status_code=503, detail=f"Provider error: {err}") from err
+        rid = _request_id()
+        _log.exception("refresh-models failed [rid=%s]", rid)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Provider error: {err} (request id: {rid})",
+        ) from err
 
     await pb_patch(
         user["token"],
@@ -524,7 +549,7 @@ async def _active_text_config(user: dict) -> dict[str, Any]:
             detail="No API key on file for the selected text provider.",
         )
     return {
-        "kind": provider.get("kind") or "anthropic",
+        "kind": provider.get("kind") or "provider",
         "model": settings["text_model"],
         "api_key": api_key,
         "base_url": provider.get("base_url") or "",
@@ -947,8 +972,8 @@ async def _fetch_paper_text(url: str) -> str | None:
                 text = " ".join(s.strip() for s in p.parts if s.strip())
                 return text.strip() or None
             return (r.text or "").strip() or None
-    except Exception as err:  # noqa: BLE001
-        _log.warning("paper fetch failed for %s: %s", url, err)
+    except Exception:  # noqa: BLE001
+        _log.exception("paper fetch failed for %s", url)
         return None
 
 
@@ -977,6 +1002,7 @@ async def improve(request: Request, body: ImproveRequest) -> StreamingResponse:
                 "missing_keywords": rule.missing_keywords,
             }
         except Exception:  # noqa: BLE001
+            _log.exception("rule-based ATS scoring failed during improve; degrading without it")
             ats_payload = None
     if isinstance(body.ats, dict):
         ats_payload = {**(ats_payload or {}), **body.ats}
@@ -1016,10 +1042,11 @@ async def improve(request: Request, body: ImproveRequest) -> StreamingResponse:
                 yield f"data: {json.dumps({'delta': chunk})}\n\n".encode("utf-8")
             yield b"data: {\"done\": true}\n\n"
         except Exception as err:  # noqa: BLE001
-            _log.exception("improve stream failed")
+            rid = _request_id()
+            _log.exception("improve stream failed [rid=%s]", rid)
             kind_, msg = _friendly_error(err)
             yield (
-                f"data: {json.dumps({'error': msg, 'error_kind': kind_})}\n\n"
+                f"data: {json.dumps({'error': msg, 'error_kind': kind_, 'request_id': rid})}\n\n"
             ).encode("utf-8")
 
     return StreamingResponse(gen(), media_type="text/event-stream")
@@ -1090,9 +1117,13 @@ async def tailor_resume(request: Request, body: TailorRequest) -> dict[str, Any]
             max_tokens=6000,
         )
     except Exception as err:  # noqa: BLE001
-        _log.warning("tailor failed: %s", err)
+        rid = _request_id()
+        _log.exception("tailor failed [rid=%s]", rid)
         kind_, msg = _friendly_error(err)
-        raise HTTPException(status_code=_status_for_kind(kind_), detail=msg) from err
+        raise HTTPException(
+            status_code=_status_for_kind(kind_),
+            detail=f"{msg} (request id: {rid})",
+        ) from err
 
     parsed = _safe_json(text)
     if not parsed:
@@ -1150,10 +1181,11 @@ async def cover_letter(
                 yield f"data: {json.dumps({'delta': chunk})}\n\n".encode("utf-8")
             yield b"data: {\"done\": true}\n\n"
         except Exception as err:  # noqa: BLE001
-            _log.exception("cover-letter stream failed")
+            rid = _request_id()
+            _log.exception("cover-letter stream failed [rid=%s]", rid)
             kind_, msg = _friendly_error(err)
             yield (
-                f"data: {json.dumps({'error': msg, 'error_kind': kind_})}\n\n"
+                f"data: {json.dumps({'error': msg, 'error_kind': kind_, 'request_id': rid})}\n\n"
             ).encode("utf-8")
 
     return StreamingResponse(gen(), media_type="text/event-stream")
@@ -1177,9 +1209,13 @@ async def import_resume(request: Request, body: ImportRequest) -> dict[str, Any]
             max_tokens=4000,
         )
     except Exception as err:  # noqa: BLE001
-        _log.warning("import failed: %s", err)
+        rid = _request_id()
+        _log.exception("import failed [rid=%s]", rid)
         kind_, msg = _friendly_error(err)
-        raise HTTPException(status_code=_status_for_kind(kind_), detail=msg) from err
+        raise HTTPException(
+            status_code=_status_for_kind(kind_),
+            detail=f"{msg} (request id: {rid})",
+        ) from err
 
     parsed = _safe_json(text)
     if not parsed:
@@ -1401,15 +1437,17 @@ async def ats_ai(request: Request, body: ATSRequest) -> dict[str, Any]:
             max_tokens=1400,
         )
     except Exception as err:  # noqa: BLE001
-        _log.warning("AI scoring failed: %s", err)
+        rid = _request_id()
+        _log.exception("AI ATS scoring failed [rid=%s]", rid)
         kind_, msg = _friendly_error(err)
         return {
             "ai_score": None,
             "ai": None,
             "ai_status": "error",
-            "ai_error": msg,
+            "ai_error": f"{msg} (request id: {rid})",
             "ai_error_kind": kind_,
             "ai_suggestions": [],
+            "ai_request_id": rid,
         }
 
     ai_obj = _normalize_keys(_safe_json(text) or {})
@@ -1543,7 +1581,7 @@ async def _gh_default_branch(
         if r.status_code == 200:
             return r.json().get("default_branch") or "main"
     except Exception:  # noqa: BLE001
-        pass
+        _log.debug("gh default branch lookup failed for %s/%s", owner, repo, exc_info=True)
     return "main"
 
 
@@ -1560,6 +1598,7 @@ async def _gh_list_markdown(
             return []
         tree = r.json().get("tree") or []
     except Exception:  # noqa: BLE001
+        _log.debug("gh tree fetch failed for %s/%s@%s", owner, repo, branch, exc_info=True)
         return []
 
     paths: list[str] = []
@@ -1608,7 +1647,7 @@ async def _gh_fetch_raw(
             text = r.text or ""
             return text[:_MAX_DOC_CHARS] if text else None
     except Exception:  # noqa: BLE001
-        pass
+        _log.debug("gh raw fetch failed for %s/%s/%s", owner, repo, path, exc_info=True)
     return None
 
 
@@ -1626,8 +1665,8 @@ async def _summarize_doc(
             messages=[{"role": "user", "content": user_prompt}],
             max_tokens=900,
         )
-    except Exception as err:  # noqa: BLE001
-        _log.warning("doc summarizer failed for %s: %s", path, err)
+    except Exception:  # noqa: BLE001
+        _log.exception("doc summarizer failed for %s", path)
         return None
     parsed = _safe_json(text)
     if not isinstance(parsed, dict):
@@ -1652,8 +1691,8 @@ async def _aggregate_project(
             messages=[{"role": "user", "content": user_prompt[:30000]}],
             max_tokens=900,
         )
-    except Exception as err:  # noqa: BLE001
-        _log.warning("project aggregator failed: %s", err)
+    except Exception:  # noqa: BLE001
+        _log.exception("project aggregator failed")
         return {"description": "", "highlights": []}
     parsed = _safe_json(text)
     if not isinstance(parsed, dict):

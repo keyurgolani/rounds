@@ -1,8 +1,8 @@
 """Python linked_list driver — generic node primitive over chain layout.
 
-Default node_template: {val} + {next}. Default input_shape: linked_list_array.
-For variants (doubly-linked, random pointer), declare node_template + input_shape
-on the entry."""
+Inputs MUST arrive in canonical verbose form. Legacy `linked_list_array`
+shorthand is a build-time authoring convenience (see
+pocketbase/seeds/builder/_shorthand.py) and is rejected at runtime."""
 from __future__ import annotations
 
 from drivers.python._node_codegen import emit_class, emit_inflate, emit_deflate
@@ -13,7 +13,6 @@ _DEFAULT_TEMPLATE = {
     "fields": [{"name": "val", "type": "int"}],
     "links": [{"name": "next", "arity": "single"}],
 }
-_DEFAULT_SHAPE = "linked_list_array"
 _SUPPORTED_OUTPUT_SHAPES = {"verbose", "linked_list_array"}
 
 
@@ -28,6 +27,12 @@ def validate(entry: dict) -> list[str]:
         errors.append("node_template must declare at least one field")
     if not isinstance(template.get("links"), list) or not template.get("links"):
         errors.append("node_template must declare at least one link")
+    input_shape = entry.get("input_shape", "verbose")
+    if input_shape != "verbose":
+        errors.append(
+            f"unsupported input_shape {input_shape!r}; linked_list inputs must be authored "
+            f"as verbose JSON (use builder._shorthand.linked_list_to_verbose at build time)"
+        )
     output_shape = entry.get("output_shape", "verbose")
     if output_shape not in _SUPPORTED_OUTPUT_SHAPES:
         errors.append(
@@ -41,7 +46,6 @@ def wrapper_snippet(entry: dict) -> str:
     name = entry["name"]
     params = entry["params"]
     template = entry.get("node_template", _DEFAULT_TEMPLATE)
-    shape = entry.get("input_shape", _DEFAULT_SHAPE)
     output_shape = entry.get("output_shape", "verbose")
 
     inflate_code = emit_inflate(template)
@@ -59,17 +63,18 @@ def _drive(input):
     fn = globals()[{name!r}]
     kwargs = dict(input)
     _node_params = {node_param_names!r}
-    _shape = {shape!r}
     _template = {template!r}
     _output_shape = {output_shape!r}
     for _name in _node_params:
         v = kwargs.get(_name)
         if v is None:
             continue
-        if _shape == "verbose" or isinstance(v, dict) and 'nodes' in v:
-            kwargs[_name] = _inflate(v)
-        else:
-            kwargs[_name] = _inflate(_to_verbose(v, _shape, _template))
+        if not (isinstance(v, dict) and 'nodes' in v and 'entry' in v):
+            raise TypeError(
+                "linked_list driver expected verbose JSON {{'nodes': [...], 'entry': id}} "
+                "for param " + repr(_name) + "; got " + type(v).__name__
+            )
+        kwargs[_name] = _inflate(v)
     out = fn(**kwargs)
     if isinstance(out, {template["name"]}) or out is None:
         verbose = _deflate(out)
@@ -77,29 +82,7 @@ def _drive(input):
     return out
 
 
-def _to_verbose(value, shape, template):
-    # Inline shorthand interpreter — the wrapper subprocess doesn't
-    # have drivers/_shorthand.py on its path, so we inline just the
-    # shape this kind cares about. Variants beyond this default ship
-    # input_shape='verbose' and pass verbose JSON directly.
-    if shape == "linked_list_array":
-        if not value: return {{"nodes": [], "entry": None}}
-        f_name = template["fields"][0]["name"]
-        l_name = template["links"][0]["name"]
-        return {{
-            "nodes": [
-                {{"id": i, "fields": {{f_name: v}},
-                  "links": {{l_name: i + 1 if i + 1 < len(value) else None}}}}
-                for i, v in enumerate(value)
-            ],
-            "entry": 0,
-        }}
-    raise ValueError(f"shorthand shape not supported in linked_list driver runtime: {{shape}}")
-
-
 def _to_shape(verbose, output_shape, template):
-    # Forward transform: deflated verbose form -> requested output shape.
-    # 'verbose' is the backward-compatible pass-through.
     if output_shape == "verbose":
         return verbose
     if output_shape == "linked_list_array":

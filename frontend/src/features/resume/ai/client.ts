@@ -6,7 +6,7 @@
 // auth token as a Bearer header; the runner validates it on every
 // request.
 
-import { pb } from '../../../lib/pocketbase';
+import { runnerJSON, runnerSSE, type RunnerInit } from '../../../lib/runnerFetch';
 import type { ResumeData } from '../types';
 
 export type ProviderKind =
@@ -72,33 +72,8 @@ export type ATSAIResponse = {
   ai_suggestions: string[];
 };
 
-function authHeaders(): HeadersInit {
-  const token = pb.authStore.token;
-  if (!token) throw new Error('Not authenticated.');
-  return { Authorization: `Bearer ${token}` };
-}
-
-async function jsonRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(path, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders(),
-      ...(init.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    let detail = text;
-    try {
-      const j = JSON.parse(text) as { detail?: string };
-      if (j.detail) detail = j.detail;
-    } catch {
-      /* keep raw */
-    }
-    throw new Error(`AI ${res.status}: ${detail}`);
-  }
-  return (await res.json()) as T;
+function jsonRequest<T>(path: string, init: RunnerInit = {}): Promise<T> {
+  return runnerJSON<T>(path, { errorPrefix: 'AI', ...init });
 }
 
 // --- providers ----------------------------------------------------------
@@ -291,75 +266,25 @@ export type CoverLetterInput = {
   job_title?: string;
 };
 
-export async function coverLetterStream(
+export function coverLetterStream(
   input: CoverLetterInput,
   handlers: ImproveStreamHandlers,
 ): Promise<void> {
-  let res: Response;
-  try {
-    res = await fetch('/api/ai/cover-letter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({
-        data: input.data,
-        job_description: input.job_description,
-        tone: input.tone ?? 'professional',
-        target_company: input.target_company ?? '',
-        job_title: input.job_title ?? '',
-      }),
-      signal: handlers.signal,
-    });
-  } catch (err) {
-    handlers.onError?.(err as Error);
-    return;
-  }
-  if (!res.ok || !res.body) {
-    const detail = await res.text().catch(() => res.statusText);
-    handlers.onError?.(new Error(`AI ${res.status}: ${detail}`));
-    return;
-  }
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let idx: number;
-      while ((idx = buffer.indexOf('\n\n')) >= 0) {
-        const event = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
-        for (const line of event.split('\n')) {
-          if (!line.startsWith('data:')) continue;
-          const payload = line.slice(5).trim();
-          if (!payload) continue;
-          try {
-            const obj = JSON.parse(payload) as {
-              delta?: string;
-              done?: boolean;
-              error?: string;
-            };
-            if (obj.error) {
-              handlers.onError?.(new Error(obj.error));
-              return;
-            }
-            if (obj.delta) handlers.onDelta(obj.delta);
-            if (obj.done) {
-              handlers.onDone?.();
-              return;
-            }
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-    }
-    handlers.onDone?.();
-  } catch (err) {
-    if ((err as Error).name === 'AbortError') return;
-    handlers.onError?.(err as Error);
-  }
+  return runnerSSE('/api/ai/cover-letter', {
+    method: 'POST',
+    body: {
+      data: input.data,
+      job_description: input.job_description,
+      tone: input.tone ?? 'professional',
+      target_company: input.target_company ?? '',
+      job_title: input.job_title ?? '',
+    },
+    signal: handlers.signal,
+    errorPrefix: 'AI',
+    onDelta: handlers.onDelta,
+    onDone: handlers.onDone,
+    onError: handlers.onError,
+  });
 }
 
 export type ImproveStreamInput = {
@@ -371,77 +296,24 @@ export type ImproveStreamInput = {
   field?: string;
 };
 
-export async function improveStream(
+export function improveStream(
   input: ImproveStreamInput,
   handlers: ImproveStreamHandlers,
 ): Promise<void> {
-  let res: Response;
-  try {
-    res = await fetch('/api/ai/improve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({
-        text: input.text,
-        style: input.style,
-        context: input.context,
-        resume: input.resume,
-        ats: input.ats,
-        field: input.field,
-      }),
-      signal: handlers.signal,
-    });
-  } catch (err) {
-    handlers.onError?.(err as Error);
-    return;
-  }
-
-  if (!res.ok || !res.body) {
-    const detail = await res.text().catch(() => res.statusText);
-    handlers.onError?.(new Error(`AI ${res.status}: ${detail}`));
-    return;
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let idx: number;
-      while ((idx = buffer.indexOf('\n\n')) >= 0) {
-        const event = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
-        for (const line of event.split('\n')) {
-          if (!line.startsWith('data:')) continue;
-          const payload = line.slice(5).trim();
-          if (!payload) continue;
-          try {
-            const obj = JSON.parse(payload) as {
-              delta?: string;
-              done?: boolean;
-              error?: string;
-            };
-            if (obj.error) {
-              handlers.onError?.(new Error(obj.error));
-              return;
-            }
-            if (obj.delta) handlers.onDelta(obj.delta);
-            if (obj.done) {
-              handlers.onDone?.();
-              return;
-            }
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-    }
-    handlers.onDone?.();
-  } catch (err) {
-    if ((err as Error).name === 'AbortError') return;
-    handlers.onError?.(err as Error);
-  }
+  return runnerSSE('/api/ai/improve', {
+    method: 'POST',
+    body: {
+      text: input.text,
+      style: input.style,
+      context: input.context,
+      resume: input.resume,
+      ats: input.ats,
+      field: input.field,
+    },
+    signal: handlers.signal,
+    errorPrefix: 'AI',
+    onDelta: handlers.onDelta,
+    onDone: handlers.onDone,
+    onError: handlers.onError,
+  });
 }

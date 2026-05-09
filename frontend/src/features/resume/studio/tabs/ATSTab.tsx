@@ -18,7 +18,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, ChevronDown, Sparkles } from 'lucide-react';
-import { api } from '../../../../api/client';
+import { listApplications } from '../../../../applications/api';
 import { usePersistedState } from '../../../../hooks/usePersistedState';
 import type { Resume, ResumeData } from '../../types';
 import {
@@ -229,8 +229,7 @@ export default function ATSTab({ data, resume }: Props) {
 
   useEffect(() => {
     setAppsLoading(true);
-    api
-      .get<AppRow[]>('/api/applications')
+    listApplications()
       .then(setApps)
       .catch(() => setApps([]))
       .finally(() => setAppsLoading(false));

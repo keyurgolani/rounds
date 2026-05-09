@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api/client';
+import { listApplications, listRounds } from '../applications/api';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
 import Select from '../components/shell/Select';
 import { usePersistedState } from '../hooks/usePersistedState';
 
-type App = { id: number; company: string; role: string; status: string };
+type App = { id: string; company: string; role: string; status: string };
 type Round = {
-  id: number;
-  application_id: number;
+  id: string;
+  application_id: string;
   round_type: string;
   date: string;
   interviewer: string;
@@ -60,12 +60,10 @@ export default function Interviews() {
   useEffect(() => {
     async function load() {
       try {
-        const appList = await api.get<App[]>('/api/applications').catch(() => []);
+        const appList = await listApplications().catch(() => [] as App[]);
         setApps(appList);
         const perApp = await Promise.all(
-          appList.map((a) =>
-            api.get<Round[]>(`/api/applications/${a.id}/rounds`).catch(() => []),
-          ),
+          appList.map((a) => listRounds(a.id).catch(() => [] as Round[])),
         );
         setRounds(perApp.flat());
       } finally {

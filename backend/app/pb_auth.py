@@ -19,6 +19,7 @@ only a couple endpoints are involved and httpx is already a dep.
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 import httpx
@@ -116,10 +117,6 @@ async def pb_patch(token: str, path: str, body: dict[str, Any]) -> Any:
 #
 # Credentials come from the same env vars the bootstrap migration
 # uses, so a fresh dev stack works out of the box.
-
-import os
-import time
-
 
 _ADMIN_EMAIL = os.environ.get("PB_ADMIN_EMAIL", "admin@local.dev")
 _ADMIN_PASSWORD = os.environ.get("PB_ADMIN_PASSWORD", "changemenowplz")

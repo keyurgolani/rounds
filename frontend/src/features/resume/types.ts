@@ -118,6 +118,26 @@ export type TemplateConfig = {
   showPhoto?: boolean;
   showIcons?: boolean;
   divider?: 'none' | 'line' | 'block';
+  // Bullet marker for highlight lists in experience / projects entries.
+  // `disc` is the default and matches the legacy look. The CSS that
+  // renders these lives in `RESUME_PAGE_CSS` (templates/parts.tsx).
+  bulletStyle?:
+    | 'disc'
+    | 'circle'
+    | 'square'
+    | 'dash'
+    | 'arrow'
+    | 'arrow-long'
+    | 'chevron'
+    | 'triangle'
+    | 'check'
+    | 'diamond'
+    | 'star'
+    | 'star-outline'
+    | 'plus'
+    | 'asterisk'
+    | 'dot'
+    | 'none';
 };
 
 export type Resume = {

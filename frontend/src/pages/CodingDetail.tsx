@@ -1,7 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
-import { api } from '../api/client';
+import { getCodingQuestion } from '../content/api';
+import {
+  deleteCodeDraft,
+  listCodeDrafts,
+  upsertCodeDraft,
+} from '../lib/codeDraftsApi';
+import { evaluateCode, runCode } from './coding/runnerApi';
 import { oneLineSummary } from '../lib/text';
 import { RunDock } from './coding/RunDock';
 import { RightDock, type SideTab } from './coding/RightDock';
@@ -152,8 +158,7 @@ export default function CodingDetail() {
 
   useEffect(() => {
     if (!slug) return;
-    api
-      .get<CQ>(`/api/coding/${slug}`)
+    getCodingQuestion<CQ>(slug)
       .then((data) => {
         setQ(data);
       })
@@ -184,11 +189,11 @@ export default function CodingDetail() {
 
       if (campaignId) {
         try {
-          const rows = await api.get<
-            { id: string; question: string; language: string; code: string }[]
-          >(
-            `/api/code-drafts?campaign=${campaignId}&question=${encodeURIComponent(String(q.id))}&language=${encodeURIComponent(lang)}`,
-          );
+          const rows = await listCodeDrafts({
+            campaign_id: campaignId,
+            question: String(q.id),
+            language: lang,
+          });
           if (rows.length > 0) {
             chosen = rows[0].code;
             draftId = rows[0].id;
@@ -226,6 +231,10 @@ export default function CodingDetail() {
   useEffect(() => {
     if (!q) return;
     if (!campaignId) return;
+    // Capture the narrowed type so the nested `flush` closure doesn't
+    // lose it through control-flow analysis.
+    const cid = campaignId;
+    const qid = q.id;
 
     async function flush() {
       const last = lastSyncedRef.current;
@@ -237,14 +246,14 @@ export default function CodingDetail() {
       try {
         if (code === starter) {
           if (last.draftId) {
-            await api.del(`/api/code-drafts/${last.draftId}`);
+            await deleteCodeDraft(last.draftId);
             lastSyncedRef.current = { ...last, code, draftId: null };
           }
           return;
         }
-        const saved = await api.post<{ id: string }>(`/api/code-drafts`, {
-          campaign_id: campaignId,
-          question: String(q!.id),
+        const saved = await upsertCodeDraft({
+          campaign_id: cid,
+          question: String(qid),
           language: last.lang,
           code,
         });
@@ -298,7 +307,7 @@ export default function CodingDetail() {
       // also confuse the Esc handler when exiting focus.
       if (!focus) setMobileSheet('results');
       try {
-        const res = await api.post<CodeRunResult>('/api/run', {
+        const res = await runCode({
           code,
           language: lang === 'javascript' ? 'javascript' : lang,
           entry: q.entry,
@@ -331,7 +340,7 @@ export default function CodingDetail() {
       // See handleRun above — skip the mobile-sheet pop in focus mode.
       if (!focus) setMobileSheet('results');
       try {
-        const res = await api.post<CodeEvaluateResult>('/api/evaluate', {
+        const res = await evaluateCode({
           code,
           language: lang === 'javascript' ? 'javascript' : lang,
           entry: q.entry,

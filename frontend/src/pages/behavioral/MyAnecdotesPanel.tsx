@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Plus, Star } from 'lucide-react';
-import { api } from '../../api/client';
+import { listAnecdotes, updateAnecdote } from './anecdotesApi';
 import { slugify } from '../../lib/slug';
 import type { Anecdote, BehavioralCategoryLite, BehavioralQuestionLite } from './types';
 
@@ -62,8 +62,7 @@ export function MyAnecdotesPanel({
   const [mode, setMode] = useState<'description' | 'star' | 'both'>('both');
 
   useEffect(() => {
-    api
-      .get<Anecdote[]>('/api/anecdotes')
+    listAnecdotes()
       .then((list) => {
         setAnecdotes(list);
         const linked = list.find((a) => a.linked_question_ids.includes(questionId));
@@ -103,7 +102,7 @@ export function MyAnecdotesPanel({
   const persist = useDebouncedCallback(async (a: Anecdote) => {
     setSaving(true);
     try {
-      const saved = await api.put<Anecdote>(`/api/anecdotes/${a.id}`, {
+      const saved = await updateAnecdote(a.id, {
         title: a.title,
         description: a.description,
         situation: a.situation,
@@ -132,7 +131,7 @@ export function MyAnecdotesPanel({
   async function linkAnecdote(a: Anecdote) {
     setLibrarianOpen(false);
     setQuery('');
-    const updated = await api.put<Anecdote>(`/api/anecdotes/${a.id}`, {
+    const updated = await updateAnecdote(a.id, {
       title: a.title,
       description: a.description,
       situation: a.situation,
@@ -149,7 +148,7 @@ export function MyAnecdotesPanel({
 
   async function unlinkSelected() {
     if (!selected) return;
-    const updated = await api.put<Anecdote>(`/api/anecdotes/${selected.id}`, {
+    const updated = await updateAnecdote(selected.id, {
       title: selected.title,
       description: selected.description,
       situation: selected.situation,

@@ -21,8 +21,11 @@
 //   That covers the common case (one variant per Application). A many-to-many
 //   join table would be over-design for v1; the existing `applications.resume_variant`
 //   text field can also be populated with the primary variant id when useful.
-// - `resume_share_*` rules are owner-only here. Phase 7 will refactor them
-//   so anonymous reads work for `/r/:token` viewers.
+// - `resume_share_*` rules start owner-only here. The 1700001000 migration
+//   loosens read access on `resume_share_links` so `/r/:token` viewers
+//   can resolve a link by passing `?token=…` (defense-in-depth — the
+//   FastAPI admin-proxy in `share.py` is still where view tracking and
+//   payload assembly live).
 
 migrate(
   (db) => {
@@ -220,9 +223,10 @@ migrate(
     dao.saveCollection(aiSettings);
 
     // ---- resume_share_links -----------------------------------------
-    // Public read for `/r/:token` is deferred to Phase 7; v1 keeps owner
-    // rules. The token itself is unguessable enough to be safe to expose
-    // once the rule loosens.
+    // Owner-only here; 1700001000_resume_share_public_read.js relaxes
+    // viewRule + listRule to also match by `?token=` query param. The
+    // token itself is an unguessable random string, so a row that's
+    // indexed by it is safe to expose to anyone holding the URL.
     const shareLinks = new Collection({
       name: "resume_share_links",
       type: "base",

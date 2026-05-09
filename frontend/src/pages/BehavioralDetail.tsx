@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowRight, BookOpen, Check, X } from 'lucide-react';
-import { api } from '../api/client';
+import {
+  getBehavioralQuestion,
+  listBehavioralCategories,
+  listBehavioralQuestions,
+} from '../content/api';
 import { oneLineSummary } from '../lib/text';
 import { AnimatedCard } from '../components/visual/AnimatedCard';
 import { Skeleton } from '../components/visual/Skeleton';
@@ -85,9 +89,9 @@ export default function BehavioralDetail() {
   useEffect(() => {
     if (!slug) return;
     Promise.all([
-      api.get<BQ>(`/api/behavioral/${slug}`),
-      api.get<BC[]>('/api/behavioral-categories'),
-      api.get<{ id: string; title: string }[]>('/api/behavioral'),
+      getBehavioralQuestion<BQ>(slug),
+      listBehavioralCategories<BC>(),
+      listBehavioralQuestions<{ id: string; title: string }>(),
     ])
       .then(([question, cats, allQ]) => {
         setQ(question);

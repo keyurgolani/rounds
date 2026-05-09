@@ -1,11 +1,11 @@
 /// <reference path="../pb_data/types.d.ts" />
 
-// Phase 7: public share links can target either a master resume or a
-// tailored variant. The original schema made `variant` required, which
-// forced users to tailor before they could share. We add a parallel
-// `resume` relation and relax `variant` so the app can choose. Both
-// are optional at the schema level; the share router requires exactly
-// one to be set.
+// Schema update: public share links can target either a master resume
+// or a tailored variant. The original schema made `variant` required,
+// which forced users to tailor before they could share. We add a
+// parallel `resume` relation and relax `variant` so the app can choose.
+// Both are optional at the schema level; the share router requires
+// exactly one to be set.
 
 migrate(
   (db) => {

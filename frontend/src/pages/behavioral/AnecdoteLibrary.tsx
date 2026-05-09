@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../api/client';
+import { deleteAnecdote, listAnecdotes } from './anecdotesApi';
 import { AnecdoteCard } from './AnecdoteCard';
 import { CategoryIcon } from '../../components/shell/CategoryIcon';
 import { Skeleton } from '../../components/visual/Skeleton';
@@ -18,7 +18,7 @@ export function AnecdoteLibrary({ categories, questions: _questions }: AnecdoteL
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get<Anecdote[]>('/api/anecdotes')
+    listAnecdotes()
       .then(setAnecdotes)
       .finally(() => setLoading(false));
   }, []);
@@ -31,7 +31,7 @@ export function AnecdoteLibrary({ categories, questions: _questions }: AnecdoteL
   const handleCardDelete = async (id: string) => {
     if (!confirm('Delete this anecdote? This cannot be undone.')) return;
     try {
-      await api.del(`/api/anecdotes/${id}`);
+      await deleteAnecdote(id);
       setAnecdotes((prev) => prev.filter((a) => a.id !== id));
     } catch (e) {
       alert(String(e));

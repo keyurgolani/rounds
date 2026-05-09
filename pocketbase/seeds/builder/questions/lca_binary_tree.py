@@ -11,22 +11,7 @@ from collections import deque
 
 from builder.registry import register
 
-
-def _build(level):
-    """Deserialize LeetCode level-order list (with None for missing) to a tree."""
-    if not level:
-        return None
-    nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
-    kids = nodes[1:][::-1]
-    for node in nodes:
-        if node is None:
-            continue
-        if kids:
-            node["left"] = kids.pop()
-        if kids:
-            node["right"] = kids.pop()
-    return nodes[0]
-
+from builder._shorthand import level_order_to_verbose, inflate_tree
 
 def _lca(node, p, q):
     """Return the LCA node (dict) of values p and q, or None."""
@@ -39,7 +24,6 @@ def _lca(node, p, q):
     if left and right:
         return node
     return left if left else right
-
 
 PAYLOAD = {
     "title": "Lowest Common Ancestor of a Binary Tree",
@@ -151,39 +135,39 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": [3, 5, 1, 6, 2, 0, 8, None, None, 7, 4], "p": 5, "q": 1}, "expected": 3,
+        {"input": {"root": level_order_to_verbose([3, 5, 1, 6, 2, 0, 8, None, None, 7, 4]), "p": 5, "q": 1}, "expected": 3,
          "description": "Classic LeetCode example — p and q in opposite subtrees, LCA is the root",
          "tags": ["basic"]},
-        {"input": {"root": [3, 5, 1, 6, 2, 0, 8, None, None, 7, 4], "p": 5, "q": 4}, "expected": 5,
+        {"input": {"root": level_order_to_verbose([3, 5, 1, 6, 2, 0, 8, None, None, 7, 4]), "p": 5, "q": 4}, "expected": 5,
          "description": "Ancestor case — p (5) is itself the ancestor of q (4)",
          "tags": ["tricky"]},
-        {"input": {"root": [1, 2], "p": 1, "q": 2}, "expected": 1,
+        {"input": {"root": level_order_to_verbose([1, 2]), "p": 1, "q": 2}, "expected": 1,
          "description": "Two-node tree — root is the ancestor of its only child",
          "tags": ["edge"]},
-        {"input": {"root": [1, 2, None, 3, None, 4], "p": 3, "q": 4}, "expected": 3,
+        {"input": {"root": level_order_to_verbose([1, 2, None, 3, None, 4]), "p": 3, "q": 4}, "expected": 3,
          "description": "Left-only chain — LCA is the upper of the two nodes (3 is ancestor of 4)",
          "tags": ["edge"]},
-        {"input": {"root": [1, None, 2, None, 3, None, 4], "p": 2, "q": 4}, "expected": 2,
+        {"input": {"root": level_order_to_verbose([1, None, 2, None, 3, None, 4]), "p": 2, "q": 4}, "expected": 2,
          "description": "Right-only chain — LCA is the upper of the two nodes (2 is ancestor of 4)",
          "tags": ["edge"]},
-        {"input": {"root": [3, 5, 1, 6, 2, 0, 8, None, None, 7, 4], "p": 6, "q": 8}, "expected": 3,
+        {"input": {"root": level_order_to_verbose([3, 5, 1, 6, 2, 0, 8, None, None, 7, 4]), "p": 6, "q": 8}, "expected": 3,
          "description": "Deep leaves in opposite subtrees — LCA is the root",
          "tags": ["basic"]},
-        {"input": {"root": [3, 5, 1, 6, 2, 0, 8, None, None, 7, 4], "p": 7, "q": 4}, "expected": 2,
+        {"input": {"root": level_order_to_verbose([3, 5, 1, 6, 2, 0, 8, None, None, 7, 4]), "p": 7, "q": 4}, "expected": 2,
          "description": "Cousins-only case — both leaves share the same parent (2)",
          "tags": ["basic"]},
-        {"input": {"root": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], "p": 8, "q": 15},
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]), "p": 8, "q": 15},
          "expected": 1,
          "description": "Deeper full tree — leaves at opposite ends, LCA is the root",
          "tags": ["basic"]},
-        {"input": {"root": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], "p": 8, "q": 11},
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]), "p": 8, "q": 11},
          "expected": 2,
          "description": "Deeper full tree — both leaves under node 2",
          "tags": ["basic"]},
-        {"input": {"root": [10, 5, 15, 3, 7, None, 18, 1, None, None, 9], "p": 1, "q": 9}, "expected": 5,
+        {"input": {"root": level_order_to_verbose([10, 5, 15, 3, 7, None, 18, 1, None, None, 9]), "p": 1, "q": 9}, "expected": 5,
          "description": "Lopsided tree — LCA is an internal node with both targets in its subtree",
          "tags": ["tricky"]},
-        {"input": {"root": [1, 2, 3], "p": 2, "q": 3}, "expected": 1,
+        {"input": {"root": level_order_to_verbose([1, 2, 3]), "p": 2, "q": 3}, "expected": 1,
          "description": "Three-node tree — siblings under root",
          "tags": ["edge"]},
     ],
@@ -350,16 +334,13 @@ PAYLOAD = {
             {"name": "p", "type": "int"},
             {"name": "q", "type": "int"},
         ],
-        "input_shape": "tree_level_order",
     },
 }
 
-
 def REFERENCE(root, p, q):
     """Build the tree, find the LCA node, return its integer value."""
-    tree = _build(root)
+    tree = inflate_tree(root)
     ancestor = _lca(tree, p, q)
     return ancestor["val"]
-
 
 register(PAYLOAD, REFERENCE)

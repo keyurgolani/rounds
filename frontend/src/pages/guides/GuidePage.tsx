@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { api } from '../../api/client';
 import AppHeader from '../../components/shell/AppHeader';
 import BackLink from '../../components/shell/BackLink';
 import type { SectionNavItem } from '../../components/shell/SectionNav';
@@ -29,8 +28,8 @@ export default function GuidePage({ track = 'system-design' }: { track?: GuideTr
     setError(null);
     setGuide(null);
 
-    api
-      .get<GuideRecord>(slug ? `${config.apiBase}/${slug}` : config.apiBase)
+    config
+      .fetch<GuideRecord>(slug)
       .then((record) => {
         if (isActive) setGuide(record);
       })
@@ -44,7 +43,7 @@ export default function GuidePage({ track = 'system-design' }: { track?: GuideTr
     return () => {
       isActive = false;
     };
-  }, [config.apiBase, slug]);
+  }, [config, slug]);
 
   const sectionItems = useMemo<SectionNavItem[]>(() => {
     if (!guide) return [];

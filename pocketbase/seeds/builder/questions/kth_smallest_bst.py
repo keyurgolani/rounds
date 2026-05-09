@@ -12,22 +12,7 @@ Reference tests store the tree as a raw level-order array plus a
 """
 from builder.registry import register
 
-
-def _build(level):
-    """Build a tree dict from the raw level-order test array."""
-    if not level:
-        return None
-    nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
-    kids = nodes[1:][::-1]
-    for node in nodes:
-        if node is None:
-            continue
-        if kids:
-            node["left"] = kids.pop()
-        if kids:
-            node["right"] = kids.pop()
-    return nodes[0]
-
+from builder._shorthand import level_order_to_verbose, inflate_tree
 
 def _kth_smallest(root, k):
     """Iterative in-order traversal that early-stops when the kth node is popped."""
@@ -45,7 +30,6 @@ def _kth_smallest(root, k):
         node = node["right"]
     # Should not be reached for valid 1 <= k <= n.
     return -1
-
 
 PAYLOAD = {
     "title": "Kth Smallest Element in a BST",
@@ -176,27 +160,27 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": [3, 1, 4, None, 2], "k": 1}, "expected": 1,
+        {"input": {"root": level_order_to_verbose([3, 1, 4, None, 2]), "k": 1}, "expected": 1,
          "description": "Classic example, k=1 → minimum value", "tags": ["basic"]},
-        {"input": {"root": [3, 1, 4, None, 2], "k": 2}, "expected": 2,
+        {"input": {"root": level_order_to_verbose([3, 1, 4, None, 2]), "k": 2}, "expected": 2,
          "description": "Same tree, k=2 → second smallest is the in-order successor of the leftmost", "tags": ["basic"]},
-        {"input": {"root": [5, 3, 6, 2, 4, None, None, 1], "k": 3}, "expected": 3,
+        {"input": {"root": level_order_to_verbose([5, 3, 6, 2, 4, None, None, 1]), "k": 3}, "expected": 3,
          "description": "Classic LeetCode example, k=3 → middle of in-order [1,2,3,4,5,6]", "tags": ["basic"]},
-        {"input": {"root": [1], "k": 1}, "expected": 1,
+        {"input": {"root": level_order_to_verbose([1]), "k": 1}, "expected": 1,
          "description": "Single-node tree, k=1 → only value", "tags": ["edge"]},
-        {"input": {"root": [5, 4, None, 3, None, 2, None, 1], "k": 3}, "expected": 3,
+        {"input": {"root": level_order_to_verbose([5, 4, None, 3, None, 2, None, 1]), "k": 3}, "expected": 3,
          "description": "Left-only chain (BST descending into left children), k=mid", "tags": ["tricky"]},
-        {"input": {"root": [1, None, 2, None, 3, None, 4, None, 5], "k": 3}, "expected": 3,
+        {"input": {"root": level_order_to_verbose([1, None, 2, None, 3, None, 4, None, 5]), "k": 3}, "expected": 3,
          "description": "Right-only chain (BST ascending into right children), k=mid", "tags": ["tricky"]},
-        {"input": {"root": [4, 2, 6, 1, 3, 5, 7], "k": 4}, "expected": 4,
+        {"input": {"root": level_order_to_verbose([4, 2, 6, 1, 3, 5, 7]), "k": 4}, "expected": 4,
          "description": "Perfectly balanced BST of 7 nodes, k=4 → root value (median)", "tags": ["basic"]},
-        {"input": {"root": [4, 2, 6, 1, 3, 5, 7], "k": 1}, "expected": 1,
+        {"input": {"root": level_order_to_verbose([4, 2, 6, 1, 3, 5, 7]), "k": 1}, "expected": 1,
          "description": "Balanced BST, k=1 → leftmost leaf (overall minimum)", "tags": ["edge"]},
-        {"input": {"root": [4, 2, 6, 1, 3, 5, 7], "k": 7}, "expected": 7,
+        {"input": {"root": level_order_to_verbose([4, 2, 6, 1, 3, 5, 7]), "k": 7}, "expected": 7,
          "description": "Balanced BST, k=n → rightmost leaf (overall maximum)", "tags": ["edge"]},
-        {"input": {"root": [5, 3, 6, 2, 4, None, None, 1], "k": 1}, "expected": 1,
+        {"input": {"root": level_order_to_verbose([5, 3, 6, 2, 4, None, None, 1]), "k": 1}, "expected": 1,
          "description": "Lopsided BST, k=1 → deepest left descendant", "tags": ["tricky"]},
-        {"input": {"root": [5, 3, 6, 2, 4, None, None, 1], "k": 6}, "expected": 6,
+        {"input": {"root": level_order_to_verbose([5, 3, 6, 2, 4, None, None, 1]), "k": 6}, "expected": 6,
          "description": "Lopsided BST, k=n → rightmost node", "tags": ["edge"]},
     ],
     "solutions": [
@@ -345,15 +329,12 @@ PAYLOAD = {
             {"name": "root", "type": "node"},
             {"name": "k", "type": "int"},
         ],
-        "input_shape": "tree_level_order",
     },
 }
 
-
 def REFERENCE(root, k):
     """Build the BST from the level-order list and return the kth-smallest value."""
-    tree = _build(root)
+    tree = inflate_tree(root)
     return _kth_smallest(tree, k)
-
 
 register(PAYLOAD, REFERENCE)

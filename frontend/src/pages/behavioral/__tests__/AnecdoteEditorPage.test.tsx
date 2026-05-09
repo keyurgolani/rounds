@@ -2,11 +2,37 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { AnecdoteEditorPage } from '../AnecdoteEditorPage';
-import { api } from '../../../api/client';
+import {
+  listBehavioralCategories,
+  listBehavioralQuestions,
+} from '../../../content/api';
+import {
+  createAnecdote,
+  deleteAnecdote,
+  listAnecdotes,
+  updateAnecdote,
+} from '../anecdotesApi';
 import { CommandCenterProvider } from '../../../command-center/CommandCenterProvider';
 
-vi.mock('../../../api/client', () => ({
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
+vi.mock('../../../content/api', () => ({
+  listBehavioralCategories: vi.fn(),
+  listBehavioralQuestions: vi.fn(),
+  getBehavioralQuestion: vi.fn(),
+  listSystemDesignQuestions: vi.fn(),
+  getSystemDesignQuestion: vi.fn(),
+  listCodingQuestions: vi.fn(),
+  getCodingQuestion: vi.fn(),
+  getSystemDesignGuide: vi.fn(),
+  getCodingGuide: vi.fn(),
+  getBehavioralGuide: vi.fn(),
+}));
+
+vi.mock('../anecdotesApi', () => ({
+  listAnecdotes: vi.fn(),
+  createAnecdote: vi.fn(),
+  updateAnecdote: vi.fn(),
+  deleteAnecdote: vi.fn(),
+  getAnecdote: vi.fn(),
 }));
 
 const navigateMock = vi.fn();
@@ -55,14 +81,27 @@ function renderNew(path = '/behavioral/anecdotes/new') {
   );
 }
 
+const listCategoriesMock = listBehavioralCategories as unknown as ReturnType<typeof vi.fn>;
+const listQuestionsMock = listBehavioralQuestions as unknown as ReturnType<typeof vi.fn>;
+const listAnecdotesMock = listAnecdotes as unknown as ReturnType<typeof vi.fn>;
+const createAnecdoteMock = createAnecdote as unknown as ReturnType<typeof vi.fn>;
+const updateAnecdoteMock = updateAnecdote as unknown as ReturnType<typeof vi.fn>;
+const deleteAnecdoteMock = deleteAnecdote as unknown as ReturnType<typeof vi.fn>;
+
 beforeEach(() => {
   navigateMock.mockClear();
   vi.clearAllMocks();
 });
 
+function mockContent(anecdotes: typeof cats[number][] | unknown[] = []) {
+  listCategoriesMock.mockResolvedValue(cats);
+  listQuestionsMock.mockResolvedValue(questions);
+  listAnecdotesMock.mockResolvedValue(anecdotes);
+}
+
 describe('AnecdoteEditorPage', () => {
   it('renders Both mode by default on /new (Description + STAR both visible)', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    mockContent([]);
     renderNew();
     await waitFor(() => screen.getByLabelText('Title'));
     expect(screen.getByLabelText('Description')).toBeInTheDocument();
@@ -73,7 +112,7 @@ describe('AnecdoteEditorPage', () => {
   });
 
   it('toggling to STAR-only shows S/T/A/R fields and hides Description', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    mockContent([]);
     renderNew();
     await waitFor(() => screen.getByLabelText('Title'));
     fireEvent.click(screen.getByRole('button', { name: /^STAR$/i }));
@@ -85,7 +124,7 @@ describe('AnecdoteEditorPage', () => {
   });
 
   it('toggling to Description-only hides STAR fields', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    mockContent([]);
     renderNew();
     await waitFor(() => screen.getByLabelText('Title'));
     fireEvent.click(screen.getByRole('button', { name: /^Description$/i }));
@@ -93,10 +132,10 @@ describe('AnecdoteEditorPage', () => {
     expect(screen.queryByLabelText('Situation')).not.toBeInTheDocument();
   });
 
-  it('entering a title + description and submitting POSTs to /api/anecdotes', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-    (api.post as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: 99, title: 'My story', description: 'Free-form text', situation: '', task: '',
+  it('entering a title + description and submitting calls createAnecdote', async () => {
+    mockContent([]);
+    createAnecdoteMock.mockResolvedValue({
+      id: '99', title: 'My story', description: 'Free-form text', situation: '', task: '',
       action: '', result: '', category_ids: [], linked_question_ids: [], notes: '',
     });
     renderNew();
@@ -104,96 +143,68 @@ describe('AnecdoteEditorPage', () => {
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'My story' } });
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Free-form text' } });
     fireEvent.click(screen.getByRole('button', { name: /Save anecdote/i }));
-    await waitFor(() => expect(api.post).toHaveBeenCalled());
-    const [path, body] = (api.post as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(path).toBe('/api/anecdotes');
+    await waitFor(() => expect(createAnecdoteMock).toHaveBeenCalled());
+    const [body] = createAnecdoteMock.mock.calls[0];
     expect(body).toMatchObject({ title: 'My story', description: 'Free-form text' });
     expect(navigateMock).toHaveBeenCalledWith(-1);
   });
 
   it('blocks creating an anecdote when another title has the same slug', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path.includes('behavioral-categories')) return Promise.resolve(cats);
-      if (path === '/api/behavioral') return Promise.resolve(questions);
-      if (path === '/api/anecdotes') return Promise.resolve([duplicateSlugAnecdote]);
-      return Promise.resolve([]);
-    });
+    mockContent([duplicateSlugAnecdote]);
     renderNew();
     await waitFor(() => screen.getByLabelText('Title'));
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'API test' } });
     fireEvent.click(screen.getByRole('button', { name: /Save anecdote/i }));
     expect(await screen.findByText(/already exists/i)).toBeInTheDocument();
-    expect(api.post).not.toHaveBeenCalled();
+    expect(createAnecdoteMock).not.toHaveBeenCalled();
   });
 
   it('?question=<slug> pre-selects question by matching slug to title', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path.includes('behavioral-categories')) return Promise.resolve(cats);
-      if (path.includes('behavioral')) return Promise.resolve(questions);
-      return Promise.resolve([]);
-    });
+    mockContent([]);
     renderNew('/behavioral/anecdotes/new?question=tell-me-about-a-conflict');
     await waitFor(() => screen.getByLabelText('Title'));
-    // The question pill for id=10 should be toggled (active)
     const conflictBtn = screen.getByRole('button', { name: /Tell me about a conflict/i });
-    // Active style means it has the darker bg; just verify it exists and is a button
     expect(conflictBtn).toBeInTheDocument();
   });
 
   it('in edit mode, pre-fills from fetched anecdote', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path.includes('behavioral-categories')) return Promise.resolve(cats);
-      if (path === '/api/behavioral') return Promise.resolve(questions);
-      if (path === '/api/anecdotes') return Promise.resolve([existingAnecdote]);
-      return Promise.resolve([]);
-    });
+    mockContent([existingAnecdote]);
     renderNew('/behavioral/anecdotes/existing-anecdote/edit');
     await waitFor(() => screen.getByDisplayValue('Existing anecdote'));
     expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Existing anecdote');
-    // description mode because description is non-empty and STAR fields are empty
     expect(screen.getByLabelText('Description')).toBeInTheDocument();
     expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe('A description here');
     expect((screen.getByLabelText('Notes') as HTMLTextAreaElement).value).toBe('Some notes');
   });
 
-  it('Delete button in edit mode calls DELETE and navigates back', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path.includes('behavioral-categories')) return Promise.resolve(cats);
-      if (path === '/api/behavioral') return Promise.resolve(questions);
-      if (path === '/api/anecdotes') return Promise.resolve([existingAnecdote]);
-      return Promise.resolve([]);
-    });
-    (api.del as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  it('Delete button in edit mode calls deleteAnecdote and navigates back', async () => {
+    mockContent([existingAnecdote]);
+    deleteAnecdoteMock.mockResolvedValue(undefined);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderNew('/behavioral/anecdotes/existing-anecdote/edit');
     await waitFor(() => screen.getByDisplayValue('Existing anecdote'));
     fireEvent.click(screen.getByRole('button', { name: /Delete anecdote/i }));
-    await waitFor(() => expect(api.del).toHaveBeenCalled());
-    expect((api.del as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('/api/anecdotes/5');
+    await waitFor(() => expect(deleteAnecdoteMock).toHaveBeenCalled());
+    expect(deleteAnecdoteMock.mock.calls[0][0]).toBe('5');
     expect(navigateMock).toHaveBeenCalledWith(-1);
   });
 
   it('blocks editing an anecdote to a title whose slug matches another anecdote', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path.includes('behavioral-categories')) return Promise.resolve(cats);
-      if (path === '/api/behavioral') return Promise.resolve(questions);
-      if (path === '/api/anecdotes') return Promise.resolve([existingAnecdote, duplicateSlugAnecdote]);
-      return Promise.resolve([]);
-    });
+    mockContent([existingAnecdote, duplicateSlugAnecdote]);
     renderNew('/behavioral/anecdotes/existing-anecdote/edit');
     await waitFor(() => screen.getByDisplayValue('Existing anecdote'));
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'API-test' } });
     fireEvent.click(screen.getByRole('button', { name: /Save anecdote/i }));
     expect(await screen.findByText(/already exists/i)).toBeInTheDocument();
-    expect(api.put).not.toHaveBeenCalled();
+    expect(updateAnecdoteMock).not.toHaveBeenCalled();
   });
 
   it('Cancel button navigates back without saving', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    mockContent([]);
     renderNew();
     await waitFor(() => screen.getByLabelText('Title'));
     fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }));
     expect(navigateMock).toHaveBeenCalledWith(-1);
-    expect(api.post).not.toHaveBeenCalled();
+    expect(createAnecdoteMock).not.toHaveBeenCalled();
   });
 });

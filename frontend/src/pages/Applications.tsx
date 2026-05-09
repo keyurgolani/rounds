@@ -1,22 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, CalendarPlus, Plus } from 'lucide-react';
-import { api } from '../api/client';
+import { listApplications, type Application } from '../applications/api';
 import { slugify } from '../lib/slug';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
 import Select from '../components/shell/Select';
 import { usePersistedState } from '../hooks/usePersistedState';
 
-type App = {
-  id: number;
-  company: string;
-  role: string;
-  status: string;
-  applied_date: string;
-  notes: string;
-  url: string;
-};
+type App = Application;
 
 const statuses = [
   { key: 'Wishlist', color: 'var(--text-3)' },
@@ -52,8 +44,7 @@ export default function Applications() {
   const [sort, setSort] = usePersistedState<SortKey>('rounds.apps.sort', 'recent-desc');
 
   useEffect(() => {
-    api
-      .get<App[]>('/api/applications')
+    listApplications()
       .then(setApps)
       .finally(() => setLoading(false));
   }, []);
@@ -71,10 +62,7 @@ export default function Applications() {
       return true;
     });
     const sorted = [...matches];
-    const updatedKey = (a: App) =>
-      ((a as App & { last_activity_at?: string; updated_at?: string }).last_activity_at ??
-        (a as App & { updated_at?: string }).updated_at ??
-        '');
+    const updatedKey = (a: App) => a.last_activity_at ?? a.updated_at ?? '';
     sorted.sort((a, b) => {
       switch (sort) {
         case 'recent-asc':

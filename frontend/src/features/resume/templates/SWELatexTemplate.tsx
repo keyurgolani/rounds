@@ -18,6 +18,9 @@ export default function SWELatexTemplate({ data, design }: Props) {
     "'CMU Serif', 'Latin Modern Roman', 'Source Serif Pro', 'Georgia', 'Times New Roman', serif";
   const fontSize = design?.typography?.body?.size ?? 10.5;
   const marginMm = (design?.spacing?.margin ?? 12) | 0;
+  // Default is pure black (LaTeX look). User-picked accent tints
+  // section heads + the rule beneath them; everything else stays b/w.
+  const accent = design?.colors?.primary ?? '#000';
 
   const p = data.personalInfo;
   const meta = joinNonEmpty([
@@ -30,7 +33,7 @@ export default function SWELatexTemplate({ data, design }: Props) {
   ]);
 
   return (
-    <A4Page marginMm={marginMm} fontFamily={fontFamily} fontSize={fontSize} color="#000">
+    <A4Page marginMm={marginMm} fontFamily={fontFamily} fontSize={fontSize} color="#000" bulletStyle={design?.bulletStyle}>
       <header style={{ textAlign: 'center', marginBottom: 8 }}>
         <div
           style={{
@@ -51,13 +54,13 @@ export default function SWELatexTemplate({ data, design }: Props) {
       </header>
 
       {p.summary && (
-        <Section title="Summary">
+        <Section title="Summary" accent={accent}>
           <p style={{ margin: 0, textAlign: 'justify' }}>{p.summary}</p>
         </Section>
       )}
 
       {data.education.length > 0 && (
-        <Section title="Education">
+        <Section title="Education" accent={accent}>
           {data.education.map((ed) => (
             <Entry
               key={ed.id}
@@ -72,7 +75,7 @@ export default function SWELatexTemplate({ data, design }: Props) {
       )}
 
       {data.experience.length > 0 && (
-        <Section title="Experience">
+        <Section title="Experience" accent={accent}>
           {data.experience.map((e) => (
             <Entry
               key={e.id}
@@ -88,7 +91,7 @@ export default function SWELatexTemplate({ data, design }: Props) {
       )}
 
       {data.projects.length > 0 && (
-        <Section title="Projects">
+        <Section title="Projects" accent={accent}>
           {data.projects.map((pr) => (
             <Entry
               key={pr.id}
@@ -109,7 +112,7 @@ export default function SWELatexTemplate({ data, design }: Props) {
       )}
 
       {data.skills.length > 0 && (
-        <Section title="Technical Skills">
+        <Section title="Technical Skills" accent={accent}>
           {data.skills.map((sk) => (
             <div key={sk.id} style={{ marginBottom: 2 }}>
               <span style={{ fontWeight: 700 }}>{sk.category}:</span>{' '}
@@ -120,7 +123,7 @@ export default function SWELatexTemplate({ data, design }: Props) {
       )}
 
       {data.publications.length > 0 && (
-        <Section title="Publications">
+        <Section title="Publications" accent={accent}>
           {data.publications.map((pb) => (
             <div key={pb.id} style={{ marginBottom: 4 }}>
               <div style={{ fontWeight: 700 }}>{pb.title}</div>
@@ -134,7 +137,7 @@ export default function SWELatexTemplate({ data, design }: Props) {
       )}
 
       {data.profiles.length > 0 && (
-        <Section title="Profiles">
+        <Section title="Profiles" accent={accent}>
           {data.profiles.map((pf) => (
             <div key={pf.id} style={{ marginBottom: 2 }}>
               <span style={{ fontWeight: 700 }}>{pf.network}:</span>{' '}
@@ -147,7 +150,15 @@ export default function SWELatexTemplate({ data, design }: Props) {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  accent,
+  children,
+}: {
+  title: string;
+  accent: string;
+  children: React.ReactNode;
+}) {
   return (
     <section style={{ marginBottom: 10 }}>
       <h2
@@ -156,9 +167,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
           fontWeight: 700,
           letterSpacing: '0.18em',
           textTransform: 'uppercase',
+          color: accent,
           margin: '0 0 3px 0',
           paddingBottom: 1,
-          borderBottom: '0.6px solid #000',
+          borderBottom: `0.6px solid ${accent}`,
         }}
       >
         {title}

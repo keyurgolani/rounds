@@ -17,22 +17,7 @@ from collections import deque
 
 from builder.registry import register
 
-
-def _build(level):
-    """Deserialize LeetCode level-order list (with None for missing) to a tree."""
-    if not level:
-        return None
-    nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
-    kids = nodes[1:][::-1]
-    for node in nodes:
-        if node is None:
-            continue
-        if kids:
-            node["left"] = kids.pop()
-        if kids:
-            node["right"] = kids.pop()
-    return nodes[0]
-
+from builder._shorthand import level_order_to_verbose, inflate_tree
 
 PAYLOAD = {
     "title": "Binary Tree Level Order Traversal",
@@ -147,38 +132,38 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": []}, "expected": [],
+        {"input": {"root": level_order_to_verbose([])}, "expected": [],
          "description": "Empty tree → empty list of levels", "tags": ["edge"]},
-        {"input": {"root": [1]}, "expected": [[1]],
+        {"input": {"root": level_order_to_verbose([1])}, "expected": [[1]],
          "description": "Single node → one level with one value", "tags": ["edge"]},
-        {"input": {"root": [3, 9, 20, None, None, 15, 7]}, "expected": [[3], [9, 20], [15, 7]],
+        {"input": {"root": level_order_to_verbose([3, 9, 20, None, None, 15, 7])}, "expected": [[3], [9, 20], [15, 7]],
          "description": "Classic LeetCode example — three levels, missing children at level 2",
          "tags": ["basic"]},
-        {"input": {"root": [1, 2, None, 3, None, 4, None, 5]},
+        {"input": {"root": level_order_to_verbose([1, 2, None, 3, None, 4, None, 5])},
          "expected": [[1], [2], [3], [4], [5]],
          "description": "Left-only chain — each level holds exactly one node", "tags": ["edge"]},
-        {"input": {"root": [1, None, 2, None, 3, None, 4, None, 5]},
+        {"input": {"root": level_order_to_verbose([1, None, 2, None, 3, None, 4, None, 5])},
          "expected": [[1], [2], [3], [4], [5]],
          "description": "Right-only chain — each level holds exactly one node", "tags": ["edge"]},
-        {"input": {"root": [1, 2, 3, 4, 5, 6, 7]},
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5, 6, 7])},
          "expected": [[1], [2, 3], [4, 5, 6, 7]],
          "description": "Perfect binary tree of 7 nodes — three full levels", "tags": ["basic"]},
-        {"input": {"root": [1, 2, 3, 4, None, None, 5, 6, None, None, 7]},
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, None, None, 5, 6, None, None, 7])},
          "expected": [[1], [2, 3], [4, 5], [6, 7]],
          "description": "Tree with scattered nulls — left/right children skip around at each level",
          "tags": ["tricky"]},
-        {"input": {"root": [1, 2, 3, 4, 5, None, 6, None, None, 7]},
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5, None, 6, None, None, 7])},
          "expected": [[1], [2, 3], [4, 5, 6], [7]],
          "description": "Asymmetric tree — deepest leaf reached via 1→2→5→7 only",
          "tags": ["tricky"]},
-        {"input": {"root": [5, 4, 8, 11, None, 13, 4, 7, 2, None, None, None, 1]},
+        {"input": {"root": level_order_to_verbose([5, 4, 8, 11, None, 13, 4, 7, 2, None, None, None, 1])},
          "expected": [[5], [4, 8], [11, 13, 4], [7, 2, 1]],
          "description": "Mixed-shape tree with interior nulls — order at each level must be left-to-right",
          "tags": ["tricky"]},
-        {"input": {"root": [0, -1, 1, -2, None, None, 2]},
+        {"input": {"root": level_order_to_verbose([0, -1, 1, -2, None, None, 2])},
          "expected": [[0], [-1, 1], [-2, 2]],
          "description": "Negative and zero values are preserved exactly", "tags": ["edge"]},
-        {"input": {"root": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]},
+        {"input": {"root": level_order_to_verbose([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150])},
          "expected": [[10], [20, 30], [40, 50, 60, 70], [80, 90, 100, 110, 120, 130, 140, 150]],
          "description": "Perfect 4-level tree of 15 nodes — wide bottom level",
          "tags": ["large"]},
@@ -353,36 +338,12 @@ PAYLOAD = {
         "params": [
             {"name": "root", "type": "node"},
         ],
-        "input_shape": "tree_level_order",
     },
 }
 
-
-class _TreeNode:
-    def __init__(self, val=0, left=None, right=None):
-        self.val, self.left, self.right = val, left, right
-
-
-def _from_level(arr):
-    if not arr:
-        return None
-    root = _TreeNode(arr[0])
-    q = deque([root])
-    i = 1
-    while q and i < len(arr):
-        n = q.popleft()
-        if i < len(arr) and arr[i] is not None:
-            n.left = _TreeNode(arr[i]); q.append(n.left)
-        i += 1
-        if i < len(arr) and arr[i] is not None:
-            n.right = _TreeNode(arr[i]); q.append(n.right)
-        i += 1
-    return root
-
-
 def REFERENCE(root):
     """Take a level-order list, return list-of-lists level-order traversal."""
-    node = _from_level(root)
+    node = inflate_tree(root)
     if node is None:
         return []
     result = []
@@ -399,6 +360,5 @@ def REFERENCE(root):
                 q.append(n.right)
         result.append(level)
     return result
-
 
 register(PAYLOAD, REFERENCE)

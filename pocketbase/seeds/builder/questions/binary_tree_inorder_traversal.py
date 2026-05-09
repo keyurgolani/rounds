@@ -10,22 +10,7 @@ list of ints for the visit order.
 """
 from builder.registry import register
 
-
-def _build(level):
-    """Deserialize LeetCode level-order list (with None for missing) to a tree."""
-    if not level:
-        return None
-    nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
-    kids = nodes[1:][::-1]
-    for node in nodes:
-        if node is None:
-            continue
-        if kids:
-            node["left"] = kids.pop()
-        if kids:
-            node["right"] = kids.pop()
-    return nodes[0]
-
+from builder._shorthand import level_order_to_verbose, inflate_tree
 
 def _inorder(node, out):
     if node is None:
@@ -33,7 +18,6 @@ def _inorder(node, out):
     _inorder(node["left"], out)
     out.append(node["val"])
     _inorder(node["right"], out)
-
 
 PAYLOAD = {
     "title": "Binary Tree Inorder Traversal",
@@ -154,25 +138,25 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": []}, "expected": [],
+        {"input": {"root": level_order_to_verbose([])}, "expected": [],
          "description": "Empty tree — empty traversal", "tags": ["edge"]},
-        {"input": {"root": [1]}, "expected": [1],
+        {"input": {"root": level_order_to_verbose([1])}, "expected": [1],
          "description": "Single node — visit produces just the root", "tags": ["edge"]},
-        {"input": {"root": [1, None, 2, 3]}, "expected": [1, 3, 2],
+        {"input": {"root": level_order_to_verbose([1, None, 2, 3])}, "expected": [1, 3, 2],
          "description": "Classic LeetCode example shape — right child with a left subtree", "tags": ["basic"]},
-        {"input": {"root": [1, 2]}, "expected": [2, 1],
+        {"input": {"root": level_order_to_verbose([1, 2])}, "expected": [2, 1],
          "description": "Two-node tree, only left child — leaf visited before root", "tags": ["basic"]},
-        {"input": {"root": [1, None, 2]}, "expected": [1, 2],
+        {"input": {"root": level_order_to_verbose([1, None, 2])}, "expected": [1, 2],
          "description": "Two-node tree, only right child — root visited before leaf", "tags": ["basic"]},
-        {"input": {"root": [4, 2, 6, 1, 3, 5, 7]}, "expected": [1, 2, 3, 4, 5, 6, 7],
+        {"input": {"root": level_order_to_verbose([4, 2, 6, 1, 3, 5, 7])}, "expected": [1, 2, 3, 4, 5, 6, 7],
          "description": "Balanced BST — inorder is the sorted sequence", "tags": ["basic"]},
-        {"input": {"root": [5, 4, None, 3, None, 2, None, 1]}, "expected": [1, 2, 3, 4, 5],
+        {"input": {"root": level_order_to_verbose([5, 4, None, 3, None, 2, None, 1])}, "expected": [1, 2, 3, 4, 5],
          "description": "Left-only chain (skewed) — leaves first, root last", "tags": ["tricky"]},
-        {"input": {"root": [1, None, 2, None, 3, None, 4, None, 5]}, "expected": [1, 2, 3, 4, 5],
+        {"input": {"root": level_order_to_verbose([1, None, 2, None, 3, None, 4, None, 5])}, "expected": [1, 2, 3, 4, 5],
          "description": "Right-only chain (skewed) — root first, leaves last", "tags": ["tricky"]},
-        {"input": {"root": [3, 1, 4, None, 2]}, "expected": [1, 2, 3, 4],
+        {"input": {"root": level_order_to_verbose([3, 1, 4, None, 2])}, "expected": [1, 2, 3, 4],
          "description": "BST with interior null — sorted output sanity-checks the traversal", "tags": ["tricky"]},
-        {"input": {"root": [0, -3, 9, -10, None, 5]}, "expected": [-10, -3, 0, 5, 9],
+        {"input": {"root": level_order_to_verbose([0, -3, 9, -10, None, 5])}, "expected": [-10, -3, 0, 5, 9],
          "description": "Negative values and an interior null", "tags": ["tricky"]},
     ],
     "solutions": [
@@ -396,17 +380,14 @@ PAYLOAD = {
         "kind": "tree",
         "name": "inorder_traversal",
         "params": [{"name": "root", "type": "node"}],
-        "input_shape": "tree_level_order",
     },
 }
 
-
 def REFERENCE(root):
     """Take a level-order list, return the inorder traversal as a flat list of ints."""
-    tree = _build(root)
+    tree = inflate_tree(root)
     out = []
     _inorder(tree, out)
     return out
-
 
 register(PAYLOAD, REFERENCE)

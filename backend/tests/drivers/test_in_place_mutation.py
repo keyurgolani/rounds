@@ -32,6 +32,33 @@ def test_js_wrapper_returns_mutated_arg():
     assert out == ["o", "l", "l", "e", "h"]
 
 
+def test_js_wrapper_binds_dict_args_in_declaration_order_when_params_given():
+    """Regression for the Object.values()-by-insertion bug — same as the
+    function driver. With params declared, the input dict's key order
+    must NOT change which arg goes where."""
+    code = (
+        "function sortByDelta(arr, delta) {\n"
+        "  arr.sort((a, b) => (a + delta) - (b + delta));\n"
+        "}\n"
+    )
+    entry = {
+        "kind": "in_place_mutation",
+        "name": "sortByDelta",
+        "mutates": "arr",
+        "params": [
+            {"name": "arr", "type": "int[]"},
+            {"name": "delta", "type": "int"},
+        ],
+    }
+    snippet = js_wrapper(entry)
+    # Reverse insertion order — Object.values would call
+    # sortByDelta(7, [3, 1, 2]) which swaps the param slots and crashes
+    # (or silently sorts wrong). Declaration order calls
+    # sortByDelta([3, 1, 2], 7) which sorts ascending -> [1, 2, 3].
+    out = _run_js(code, snippet, {"delta": 7, "arr": [3, 1, 2]})
+    assert out == [1, 2, 3]
+
+
 def _run_py(user_code, snippet, input_value):
     wrapper = f"""
 import json, sys

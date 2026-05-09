@@ -135,6 +135,7 @@ export default function ResumesList() {
                   type="button"
                   onClick={() => fileRef.current?.click()}
                   disabled={importing !== null}
+                  data-scoring-glow={importing ? 'true' : undefined}
                   className="inline-flex items-center gap-1.5"
                   style={{
                     padding: '6px 12px',

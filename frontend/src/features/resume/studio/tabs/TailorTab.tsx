@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Sparkles, Wand2 } from 'lucide-react';
-import { api } from '../../../../api/client';
+import { listApplications } from '../../../../applications/api';
 import { usePersistedState } from '../../../../hooks/usePersistedState';
 import type { Resume, ResumeData } from '../../types';
 import { tailorResume } from '../../ai/client';
@@ -87,8 +87,7 @@ export default function TailorTab({ data, resume, setData }: Props) {
 
   useEffect(() => {
     setAppsLoading(true);
-    api
-      .get<AppRow[]>('/api/applications')
+    listApplications()
       .then(setApps)
       .catch(() => setApps([]))
       .finally(() => setAppsLoading(false));

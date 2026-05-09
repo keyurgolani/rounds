@@ -1,42 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Award, CheckCircle2, Clock, History, Pencil, XCircle } from 'lucide-react';
-import { api } from '../../api/client';
+import {
+  createOffer,
+  getOffer,
+  updateOffer,
+  type Offer,
+  type OfferStatus,
+  type OfferTerms,
+  type TrailEntry,
+  type VisaOption,
+} from '../../applications/api';
 import DatePicker from './DatePicker';
 import Select from './Select';
 
-export type OfferStatus = 'pending' | 'accepted' | 'declined' | 'expired';
-export type VisaOption = 'yes' | 'no' | 'n/a';
-
-export interface OfferTerms {
-  base_salary: number | null;
-  equity_type: string;
-  equity_amount: string;
-  equity_vest_schedule: string;
-  sign_on: number | null;
-  annual_bonus_target_pct: number | null;
-  relocation: string;
-  visa_sponsorship: VisaOption;
-  remote_policy: string;
-  pto: string;
-  decision_deadline: string;
-  letter_url: string;
-}
-
-export interface TrailEntry {
-  timestamp: string;
-  author_note: string;
-  snapshot: OfferTerms;
-}
-
-export interface Offer extends OfferTerms {
-  id: string;
-  application_id: string;
-  status: OfferStatus;
-  notes: string;
-  trail: TrailEntry[];
-  created_at?: string;
-  updated_at?: string;
-}
+export type { Offer, OfferStatus, OfferTerms, TrailEntry, VisaOption };
 
 const FROZEN: OfferStatus[] = ['accepted', 'declined', 'expired'];
 
@@ -92,8 +69,7 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
   useEffect(() => {
     let cancel = false;
     setLoading(true);
-    api
-      .get<Offer | null>(`/api/applications/${applicationId}/offer`)
+    getOffer(applicationId)
       .then((o) => {
         if (cancel) return;
         setOffer(o);
@@ -111,11 +87,11 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicationId]);
 
-  async function createOffer() {
+  async function createNewOffer() {
     setSaving(true);
     setError(null);
     try {
-      const created = await api.post<Offer>(`/api/applications/${applicationId}/offer`, {
+      const created = await createOffer(applicationId, {
         ...EMPTY_TERMS,
         status: 'pending',
         notes: '',
@@ -153,7 +129,7 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
     }
 
     try {
-      const saved = await api.put<Offer>(`/api/applications/${applicationId}/offer`, merged);
+      const saved = await updateOffer(offer.id, applicationId, merged);
       setOffer(saved);
       onOfferChange?.(saved);
       setEditing(false);
@@ -199,7 +175,7 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
         </p>
         <button
           type="button"
-          onClick={createOffer}
+          onClick={createNewOffer}
           disabled={saving}
           className="inline-flex items-center gap-1.5"
           style={{

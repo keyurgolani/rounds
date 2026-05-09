@@ -10,7 +10,7 @@ Input is the binary tree root; output is the diameter measured in *edges*.
 """
 from builder.registry import register
 
-
+from builder._shorthand import level_order_to_verbose, inflate_tree
 PAYLOAD = {
     "title": "Diameter of Binary Tree",
     "difficulty": "Easy",
@@ -116,32 +116,32 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": []}, "expected": 0,
+        {"input": {"root": level_order_to_verbose([])}, "expected": 0,
          "description": "Empty tree → diameter 0", "tags": ["edge"]},
-        {"input": {"root": [1]}, "expected": 0,
+        {"input": {"root": level_order_to_verbose([1])}, "expected": 0,
          "description": "Single node — no edges → diameter 0", "tags": ["edge"]},
-        {"input": {"root": [1, 2]}, "expected": 1,
+        {"input": {"root": level_order_to_verbose([1, 2])}, "expected": 1,
          "description": "Two nodes — one edge → diameter 1", "tags": ["edge"]},
-        {"input": {"root": [1, 2, 3, 4, 5]}, "expected": 3,
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5])}, "expected": 3,
          "description": "Classic LeetCode example — path 4→2→1→3 has 3 edges", "tags": ["basic"]},
-        {"input": {"root": [1, 2, None, 3, None, 4, None, 5]}, "expected": 4,
+        {"input": {"root": level_order_to_verbose([1, 2, None, 3, None, 4, None, 5])}, "expected": 4,
          "description": "Left-skewed chain of 5 nodes → 4 edges", "tags": ["edge"]},
-        {"input": {"root": [1, None, 2, None, 3, None, 4, None, 5]}, "expected": 4,
+        {"input": {"root": level_order_to_verbose([1, None, 2, None, 3, None, 4, None, 5])}, "expected": 4,
          "description": "Right-skewed chain of 5 nodes → 4 edges", "tags": ["edge"]},
-        {"input": {"root": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]}, "expected": 6,
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])}, "expected": 6,
          "description": "Perfect balanced tree of depth 4 (15 nodes) → 6 edges (3 down + 3 up through root)",
          "tags": ["basic"]},
-        {"input": {"root": [1, 2, 3, 4, 5, None, None, 6, None, None, 7, 8]}, "expected": 5,
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5, None, None, 6, None, None, 7, 8])}, "expected": 5,
          "description": "Diameter does not pass through root — longest path lives inside the left subtree "
                         "(6→4→2→5→7 or similar)",
          "tags": ["tricky"]},
-        {"input": {"root": [1, 2, 3, None, 4, None, 5, 6, None, None, 7]}, "expected": 6,
+        {"input": {"root": level_order_to_verbose([1, 2, 3, None, 4, None, 5, 6, None, None, 7])}, "expected": 6,
          "description": "Tree with nulls scattered — longest path crosses root via deepest leaves on each side",
          "tags": ["tricky"]},
-        {"input": {"root": [1, 2, 3, 4, 5, 6, 7]}, "expected": 4,
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5, 6, 7])}, "expected": 4,
          "description": "Perfect binary tree of depth 3 (7 nodes) → 4 edges through the root",
          "tags": ["basic"]},
-        {"input": {"root": [0, -1, 1, -2, None, None, 2, -3, None, None, 3]}, "expected": 6,
+        {"input": {"root": level_order_to_verbose([0, -1, 1, -2, None, None, 2, -3, None, None, 3])}, "expected": 6,
          "description": "Negative values don't affect structure; deep left + deep right through root → 6 edges",
          "tags": ["tricky"]},
     ],
@@ -305,37 +305,12 @@ PAYLOAD = {
         "params": [
             {"name": "root", "type": "node"},
         ],
-        "input_shape": "tree_level_order",
     },
 }
 
-
-class _TreeNode:
-    def __init__(self, val=0, left=None, right=None):
-        self.val, self.left, self.right = val, left, right
-
-
-def _from_level(arr):
-    from collections import deque
-    if not arr:
-        return None
-    root = _TreeNode(arr[0])
-    q = deque([root])
-    i = 1
-    while q and i < len(arr):
-        n = q.popleft()
-        if i < len(arr) and arr[i] is not None:
-            n.left = _TreeNode(arr[i]); q.append(n.left)
-        i += 1
-        if i < len(arr) and arr[i] is not None:
-            n.right = _TreeNode(arr[i]); q.append(n.right)
-        i += 1
-    return root
-
-
 def REFERENCE(root):
     """Return the diameter of the tree (number of edges on the longest path)."""
-    node = _from_level(root)
+    node = inflate_tree(root)
     best = [0]
 
     def height(n):
@@ -349,6 +324,5 @@ def REFERENCE(root):
 
     height(node)
     return best[0]
-
 
 register(PAYLOAD, REFERENCE)

@@ -8,7 +8,11 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api/client';
+import {
+  listBehavioralCategories,
+  listBehavioralQuestions,
+} from '../content/api';
+import { listAnecdotes, updateAnecdote } from './behavioral/anecdotesApi';
 import { slugify } from '../lib/slug';
 import AppHeader from '../components/shell/AppHeader';
 import Select from '../components/shell/Select';
@@ -77,9 +81,9 @@ export default function BehavioralList() {
 
   useEffect(() => {
     Promise.all([
-      api.get<BQ[]>('/api/behavioral'),
-      api.get<BC[]>('/api/behavioral-categories'),
-      api.get<Anecdote[]>('/api/anecdotes'),
+      listBehavioralQuestions<BQ>(),
+      listBehavioralCategories<BC>(),
+      listAnecdotes(),
     ])
       .then(([qs, cats, ans]) => {
         setQuestions(qs);
@@ -168,7 +172,7 @@ export default function BehavioralList() {
         prev.map((a) => (a.id === aId ? { ...a, linked_question_ids: updated } : a))
       );
       try {
-        const saved = await api.put<Anecdote>(`/api/anecdotes/${aId}`, {
+        const saved = await updateAnecdote(aId, {
           title: anecdote.title,
           description: anecdote.description,
           situation: anecdote.situation,

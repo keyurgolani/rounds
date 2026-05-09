@@ -11,13 +11,19 @@ import type { ReactNode } from 'react';
 // export wrapper, so what you see on screen is what prints in PDF
 // (Puppeteer) and what opens in a browser-printed standalone file.
 //
-// Two effects:
+// Three effects:
 //   1. Entries (data-page-block) and section headings get
 //      `break-inside: avoid` / `break-after: avoid` so the user agent
 //      pagination at print time never splits a bullet list across an
 //      A4 page boundary mid-entry.
 //   2. The screen-only `[data-page-overlay]` strip is hidden during
 //      print — the overlay belongs only to the editor, not the export.
+//   3. Re-enable disc bullets inside the page. Tailwind's Preflight
+//      base layer resets `ul { list-style: none }` globally, so without
+//      this every template's bullet list rendered as bare lines. The
+//      templates use `margin-left: 16-18px; padding: 0` on each `<ul>`,
+//      which is enough room for an outside-positioned disc to render
+//      visibly in that left margin.
 export const RESUME_PAGE_CSS = `
   [data-resume-page] [data-page-block] {
     break-inside: avoid;
@@ -31,6 +37,32 @@ export const RESUME_PAGE_CSS = `
     break-after: avoid;
     page-break-after: avoid;
   }
+  [data-resume-page] ul {
+    list-style: disc outside;
+  }
+  [data-resume-page] li {
+    display: list-item;
+  }
+  /* User-configurable bullet styles via TemplateConfig.bulletStyle.
+     A4Page renders the chosen value as data-bullet-style on the
+     article. Marker box uses 'outside' positioning so existing
+     templates (margin-left 16-18px, padding 0) keep working: the
+     disc/glyph renders in that left-margin gap. */
+  [data-resume-page][data-bullet-style="circle"] ul { list-style-type: circle; }
+  [data-resume-page][data-bullet-style="square"] ul { list-style-type: square; }
+  [data-resume-page][data-bullet-style="dash"]   ul { list-style-type: '–  '; }
+  [data-resume-page][data-bullet-style="arrow"]  ul { list-style-type: '›  '; }
+  [data-resume-page][data-bullet-style="arrow-long"] ul { list-style-type: '→  '; }
+  [data-resume-page][data-bullet-style="chevron"] ul { list-style-type: '»  '; }
+  [data-resume-page][data-bullet-style="triangle"] ul { list-style-type: '▸  '; }
+  [data-resume-page][data-bullet-style="check"]  ul { list-style-type: '✓  '; }
+  [data-resume-page][data-bullet-style="diamond"] ul { list-style-type: '◆  '; }
+  [data-resume-page][data-bullet-style="star"]   ul { list-style-type: '★  '; }
+  [data-resume-page][data-bullet-style="star-outline"] ul { list-style-type: '☆  '; }
+  [data-resume-page][data-bullet-style="plus"]   ul { list-style-type: '+  '; }
+  [data-resume-page][data-bullet-style="asterisk"] ul { list-style-type: '∗  '; }
+  [data-resume-page][data-bullet-style="dot"]    ul { list-style-type: '·  '; }
+  [data-resume-page][data-bullet-style="none"]   ul { list-style: none; }
   @media print {
     [data-page-overlay] { display: none !important; }
   }
@@ -86,6 +118,7 @@ export function A4Page({
   color = '#111',
   fontFamily,
   fontSize = 11,
+  bulletStyle,
 }: {
   children: ReactNode;
   marginMm?: number;
@@ -93,10 +126,28 @@ export function A4Page({
   color?: string;
   fontFamily?: string;
   fontSize?: number;
+  bulletStyle?:
+    | 'disc'
+    | 'circle'
+    | 'square'
+    | 'dash'
+    | 'arrow'
+    | 'arrow-long'
+    | 'chevron'
+    | 'triangle'
+    | 'check'
+    | 'diamond'
+    | 'star'
+    | 'star-outline'
+    | 'plus'
+    | 'asterisk'
+    | 'dot'
+    | 'none';
 }) {
   return (
     <article
       data-resume-page
+      data-bullet-style={bulletStyle}
       style={{
         width: '210mm',
         minHeight: '297mm',

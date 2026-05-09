@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
-import { api } from '../../api/client';
 import { useCampaign } from '../../campaign/CampaignContext';
 import { useCommandCenter } from '../CommandCenterProvider';
 import TodoForm, { type TodoFormValue } from '../../todos/TodoForm';
+import { createTodo } from '../../todos/api';
 
 export default function AddTodoView({ onComplete }: { onComplete: () => void }) {
   const { currentId, currentCampaign } = useCampaign();
@@ -13,7 +13,7 @@ export default function AddTodoView({ onComplete }: { onComplete: () => void }) 
       // Mirror the create call signature used in todos/FAB.tsx so the
       // Command Center's "Add todo" produces an identical record.
       if (!currentId) throw new Error('Pick an active campaign first.');
-      await api.post('/api/todos', {
+      await createTodo({
         campaign_id: currentId,
         body: value.body,
         mentions: value.mentions,

@@ -4,32 +4,20 @@ LeetCode 226. The 'Max Howell could not solve on a whiteboard, so
 Google didn't hire him' problem. Five-line recursion; useful as a
 warm-up to confirm the candidate can write tree code without panic.
 
-Examples use LeetCode level-order with `null` for missing nodes, which
-lines up with how most folks have already memorised the format.
+Test inputs are authored as LeetCode-style level-order arrays (the
+familiar `[1, null, 2, 3]` shape) and converted to canonical verbose
+JSON at build time via `level_order_to_verbose`. The runtime drivers
+only accept verbose form, so any test case that escapes this layer in
+shorthand fails fast.
 """
 from collections import deque
 
 from builder.registry import register
-
-
-def _build(level):
-    """Deserialize LeetCode level-order list (with None for missing) to a tree."""
-    if not level:
-        return None
-    nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
-    kids = nodes[1:][::-1]
-    for node in nodes:
-        if node is None:
-            continue
-        if kids:
-            node["left"] = kids.pop()
-        if kids:
-            node["right"] = kids.pop()
-    return nodes[0]
+from builder._shorthand import level_order_to_verbose, inflate_tree
 
 
 def _serialize(root):
-    """Serialize tree back to LeetCode level-order list with None for missing.
+    """Serialize tree-of-dicts back to LeetCode level-order list with None for missing.
 
     Trailing None entries are stripped (LeetCode convention)."""
     if root is None:
@@ -172,31 +160,33 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": []}, "expected": [],
+        {"input": {"root": level_order_to_verbose([])}, "expected": [],
          "description": "Empty tree — nothing to invert", "tags": ["edge"]},
-        {"input": {"root": [1]}, "expected": [1],
+        {"input": {"root": level_order_to_verbose([1])}, "expected": [1],
          "description": "Single node — invert is identity", "tags": ["edge"]},
-        {"input": {"root": [1, 2]}, "expected": [1, None, 2],
+        {"input": {"root": level_order_to_verbose([1, 2])}, "expected": [1, None, 2],
          "description": "Two-node tree, only left child — becomes only-right", "tags": ["edge"]},
-        {"input": {"root": [1, None, 2]}, "expected": [1, 2],
+        {"input": {"root": level_order_to_verbose([1, None, 2])}, "expected": [1, 2],
          "description": "Two-node tree, only right child — becomes only-left", "tags": ["edge"]},
-        {"input": {"root": [4, 2, 7, 1, 3, 6, 9]}, "expected": [4, 7, 2, 9, 6, 3, 1],
+        {"input": {"root": level_order_to_verbose([4, 2, 7, 1, 3, 6, 9])},
+         "expected": [4, 7, 2, 9, 6, 3, 1],
          "description": "Classic LeetCode example — full balanced tree", "tags": ["basic"]},
-        {"input": {"root": [2, 1, 3]}, "expected": [2, 3, 1],
+        {"input": {"root": level_order_to_verbose([2, 1, 3])}, "expected": [2, 3, 1],
          "description": "Three-node BST flipped to mirror BST", "tags": ["basic"]},
-        {"input": {"root": [1, 2, 3, 4, 5, 6, 7]}, "expected": [1, 3, 2, 7, 6, 5, 4],
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5, 6, 7])},
+         "expected": [1, 3, 2, 7, 6, 5, 4],
          "description": "Perfect binary tree, depth 3", "tags": ["basic"]},
-        {"input": {"root": [1, 2, None, 3, None, 4, None, 5]},
+        {"input": {"root": level_order_to_verbose([1, 2, None, 3, None, 4, None, 5])},
          "expected": [1, None, 2, None, 3, None, 4, None, 5],
          "description": "Left-skewed chain becomes right-skewed chain", "tags": ["tricky"]},
-        {"input": {"root": [1, None, 2, None, 3, None, 4, None, 5]},
+        {"input": {"root": level_order_to_verbose([1, None, 2, None, 3, None, 4, None, 5])},
          "expected": [1, 2, None, 3, None, 4, None, 5],
          "description": "Right-skewed chain becomes left-skewed chain", "tags": ["tricky"]},
-        {"input": {"root": [5, 3, 8, 1, 4, None, 9]},
+        {"input": {"root": level_order_to_verbose([5, 3, 8, 1, 4, None, 9])},
          "expected": [5, 8, 3, 9, None, 4, 1],
          "description": "Lopsided tree with a missing internal child — nulls must be placed correctly",
          "tags": ["tricky"]},
-        {"input": {"root": [0, -1, 1, -2, None, None, 2]},
+        {"input": {"root": level_order_to_verbose([0, -1, 1, -2, None, None, 2])},
          "expected": [0, 1, -1, 2, None, None, -2],
          "description": "Negative values and interior null", "tags": ["tricky"]},
     ],
@@ -323,15 +313,14 @@ PAYLOAD = {
         "kind": "tree",
         "name": "invert_tree",
         "params": [{"name": "root", "type": "node"}],
-        "input_shape": "tree_level_order",
         "output_shape": "tree_level_order",
     },
 }
 
 
 def REFERENCE(root):
-    """Take a level-order list, invert the tree, return the level-order list."""
-    tree = _build(root)
+    """Take a verbose tree dict, invert it, return the level-order list."""
+    tree = inflate_tree(root)
     inverted = _invert(tree)
     return _serialize(inverted)
 

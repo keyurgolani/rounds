@@ -1,39 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Briefcase, Calendar, CalendarPlus, ExternalLink, FileText, Wand2 } from 'lucide-react';
-import { api } from '../api/client';
+import {
+  getApplication,
+  listRounds,
+  updateApplication,
+  type Application,
+  type InterviewRound as Round,
+} from '../applications/api';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
 import BackLink from '../components/shell/BackLink';
 import InlineMarkdown from '../components/shell/InlineMarkdown';
 import OfferPanel, { type Offer } from '../components/shell/OfferPanel';
 import { listResumes } from '../features/resume/api';
-
-type Application = {
-  id: number;
-  company: string;
-  role: string;
-  status: string;
-  applied_date: string;
-  notes: string;
-  resume_variant: string;
-  url: string;
-  job_description: string;
-  campaign?: string;
-  last_activity_at?: string;
-  created_at?: string;
-  updated_at?: string;
-};
-
-type Round = {
-  id: number;
-  application_id: number;
-  round_type: string;
-  date: string;
-  interviewer: string;
-  notes: string;
-  result: string;
-};
 
 const STATUS_OPTIONS = ['Wishlist', 'Applied', 'Interviewing', 'Offer', 'Rejected'];
 
@@ -57,8 +37,8 @@ export default function ApplicationDetail() {
   useEffect(() => {
     if (!slug) return;
     Promise.all([
-      api.get<Application>(`/api/applications/${slug}`),
-      api.get<Round[]>(`/api/applications/${slug}/rounds`).catch(() => []),
+      getApplication(slug),
+      listRounds(slug).catch(() => [] as Round[]),
     ])
       .then(([a, rs]) => {
         setApp(a);
@@ -103,7 +83,7 @@ export default function ApplicationDetail() {
     setSaving(true);
     setStatus(next);
     try {
-      const saved = await api.put<Application>(`/api/applications/${app.id}`, {
+      const saved = await updateApplication(app.id, {
         company: app.company,
         role: app.role,
         status: next,
@@ -112,7 +92,7 @@ export default function ApplicationDetail() {
         resume_variant: app.resume_variant,
         url: app.url,
         job_description: app.job_description,
-        campaign_id: app.campaign ?? '',
+        campaign_id: app.campaign_id ?? '',
         last_activity_at: new Date().toISOString(),
       });
       setApp(saved);

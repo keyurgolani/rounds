@@ -5,7 +5,7 @@ import { RawModeToggle } from './builders/RawModeToggle';
 import { ParamField } from './builders/ParamField';
 import { OpsBuilder } from './builders/OpsBuilder';
 import { NodeGraphBuilder, type Layout } from './builders/NodeGraphBuilder';
-import { toVerbose } from './builders/shorthand';
+import { asVerbose } from './builders/shorthand';
 
 interface CasesTabProps {
   entry: Entry;
@@ -43,12 +43,6 @@ function layoutFor(kind: 'linked_list' | 'tree' | 'graph'): Layout {
   if (kind === 'linked_list') return 'chain';
   if (kind === 'tree') return 'tree';
   return 'general';
-}
-
-function defaultShape(kind: 'linked_list' | 'tree' | 'graph'): string {
-  if (kind === 'linked_list') return 'linked_list_array';
-  if (kind === 'tree') return 'tree_level_order';
-  return 'graph_adjacency';
 }
 
 export function CasesTab({ entry, samples, running, onRun }: CasesTabProps) {
@@ -215,7 +209,6 @@ function KindForm({
   if (entry.kind === 'linked_list' || entry.kind === 'tree' || entry.kind === 'graph') {
     const tmpl = entry.node_template ?? defaultNodeTemplate(entry.kind);
     const layout = layoutFor(entry.kind);
-    const shape = entry.input_shape ?? defaultShape(entry.kind);
     const nodeParams = entry.params.filter((p) => p.type === 'node');
     const otherParams = entry.params.filter((p) => p.type !== 'node');
     const obj =
@@ -225,16 +218,7 @@ function KindForm({
     return (
       <div className="flex flex-col gap-2">
         {nodeParams.map((p) => {
-          const raw = obj[p.name];
-          let verbose;
-          try {
-            verbose =
-              raw && typeof raw === 'object' && 'nodes' in (raw as object)
-                ? (raw as Parameters<typeof toVerbose>[0])
-                : toVerbose(raw, shape as Parameters<typeof toVerbose>[1], tmpl);
-          } catch {
-            verbose = { nodes: [], entry: null };
-          }
+          const verbose = asVerbose(obj[p.name], tmpl);
           return (
             <div key={p.name} className="flex flex-col gap-1">
               <label

@@ -89,9 +89,18 @@ def test_run_one_add_two_numbers_real_listnode():
             {"name": "l1", "type": "node"},
             {"name": "l2", "type": "node"},
         ],
-        "input_shape": "linked_list_array",
         "output_shape": "linked_list_array",
     }
-    outcome = run_one(code, "python", entry, {"l1": [2, 4, 3], "l2": [5, 6, 4]})
+
+    def _list(values):
+        return {
+            "nodes": [
+                {"id": i, "fields": {"val": v}, "links": {"next": (i + 1) if i + 1 < len(values) else None}}
+                for i, v in enumerate(values)
+            ],
+            "entry": 0 if values else None,
+        }
+
+    outcome = run_one(code, "python", entry, {"l1": _list([2, 4, 3]), "l2": _list([5, 6, 4])})
     assert outcome.error is None, outcome.error
     assert outcome.return_value == [7, 0, 8]

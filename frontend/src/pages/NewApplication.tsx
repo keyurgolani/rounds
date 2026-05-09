@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api } from '../api/client';
+import { createApplication } from '../applications/api';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
 import BackLink from '../components/shell/BackLink';
@@ -51,7 +51,7 @@ export default function NewApplication() {
     setSaving(true);
     setError(null);
     try {
-      await api.post('/api/applications', { ...form, campaign_id: campaignId });
+      await createApplication({ ...form, campaign_id: campaignId });
       navigate('/applications');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save');

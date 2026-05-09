@@ -2,11 +2,20 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import SystemDesignDetail from '../SystemDesignDetail';
-import { api } from '../../api/client';
+import { getSystemDesignQuestion } from '../../content/api';
 import { CommandCenterProvider } from '../../command-center/CommandCenterProvider';
 
-vi.mock('../../api/client', () => ({
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
+vi.mock('../../content/api', () => ({
+  getSystemDesignQuestion: vi.fn(),
+  listSystemDesignQuestions: vi.fn(),
+  getCodingQuestion: vi.fn(),
+  listCodingQuestions: vi.fn(),
+  getBehavioralQuestion: vi.fn(),
+  listBehavioralQuestions: vi.fn(),
+  listBehavioralCategories: vi.fn(),
+  getSystemDesignGuide: vi.fn(),
+  getCodingGuide: vi.fn(),
+  getBehavioralGuide: vi.fn(),
 }));
 
 vi.mock('../../hooks/usePracticeStatus', () => ({
@@ -53,7 +62,7 @@ function renderAt(url: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(baseSDQ);
+  (getSystemDesignQuestion as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(baseSDQ);
 });
 
 describe('SystemDesignDetail — single-scroll layout', () => {
@@ -107,7 +116,7 @@ describe('SystemDesignDetail — conditional sections', () => {
   });
 
   it('shows the Senior topics section when data is present', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (getSystemDesignQuestion as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       ...baseSDQ,
       senior_topics: [
         { title: 'Caching strategies', summary: 's', bullets: ['b'], callout: null },

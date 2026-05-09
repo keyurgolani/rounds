@@ -2,10 +2,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AnecdoteLibrary } from '../AnecdoteLibrary';
 import type { Anecdote, BehavioralCategoryLite, BehavioralQuestionLite } from '../types';
-import { api } from '../../../api/client';
+import { listAnecdotes } from '../anecdotesApi';
 
-vi.mock('../../../api/client', () => ({
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
+vi.mock('../anecdotesApi', () => ({
+  listAnecdotes: vi.fn(),
+  createAnecdote: vi.fn(),
+  updateAnecdote: vi.fn(),
+  deleteAnecdote: vi.fn(),
+  getAnecdote: vi.fn(),
 }));
 
 const navigateMock = vi.fn();
@@ -33,7 +37,7 @@ const anecdotes: Anecdote[] = [
 
 describe('AnecdoteLibrary', () => {
   it('fetches anecdotes on mount and renders cards', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    (listAnecdotes as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
     render(<AnecdoteLibrary categories={cats} questions={questions} />);
     await waitFor(() => {
       expect(screen.getByText('Reorg story')).toBeInTheDocument();
@@ -42,7 +46,7 @@ describe('AnecdoteLibrary', () => {
   });
 
   it('filters by category chip', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    (listAnecdotes as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
     render(<AnecdoteLibrary categories={cats} questions={questions} />);
     await waitFor(() => screen.getByText('Reorg story'));
     fireEvent.click(screen.getByRole('button', { name: /^Ownership/ }));
@@ -51,15 +55,15 @@ describe('AnecdoteLibrary', () => {
   });
 
   it('clicking + New anecdote navigates to /behavioral/anecdotes/new', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (listAnecdotes as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
     render(<AnecdoteLibrary categories={cats} questions={questions} />);
-    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    await waitFor(() => expect(listAnecdotes).toHaveBeenCalled());
     fireEvent.click(screen.getByRole('button', { name: /\+ New anecdote/i }));
     expect(navigateMock).toHaveBeenCalledWith('/behavioral/anecdotes/new');
   });
 
   it('clicking edit on an AnecdoteCard navigates to /:id/edit', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    (listAnecdotes as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
     render(<AnecdoteLibrary categories={cats} questions={questions} />);
     await waitFor(() => screen.getByText('Reorg story'));
     fireEvent.click(screen.getByRole('button', { name: /Reorg story/ }));

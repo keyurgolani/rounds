@@ -80,25 +80,6 @@ export default function AppHeader({
   const cc = useCommandCenter();
   const { minimal, manual, toggleManual } = useMinimalHeader();
 
-  // Dev-only nudge: a chunky `actions` payload doesn't compress gracefully
-  // into the 44px minimal-mode row. Pages should pass a slim `compactActions`
-  // alongside any non-trivial `actions`. The fallback in ActionSlot keeps the
-  // page from breaking, but the layout will be ugly. Silent in production.
-  if (
-    import.meta.env.DEV &&
-    minimal &&
-    actions !== undefined &&
-    compactActions === undefined &&
-    chromeActions === undefined
-  ) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      'AppHeader: `actions` rendered in minimal mode without `compactActions` or `chromeActions`. ' +
-        'Pages with non-trivial actions should provide a slim `compactActions` ' +
-        'variant or use `chromeActions` for focus-mode and mobile.',
-    );
-  }
-
   if (minimal) {
     // Minimal (focus / mobile) mode — single tight row.
     return (

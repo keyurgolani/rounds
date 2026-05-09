@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../api/client';
+import { createRound, listApplications } from '../applications/api';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
 import BackLink from '../components/shell/BackLink';
 import DatePicker from '../components/shell/DatePicker';
 import Select from '../components/shell/Select';
 
-type App = { id: number; company: string; role: string; status: string };
+type App = { id: string; company: string; role: string; status: string };
 
 const roundTypes = [
   { key: 'phone', label: 'Phone / recruiter screen' },
@@ -20,7 +20,7 @@ const roundTypes = [
 export default function ScheduleRound() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const preselectId = Number(searchParams.get('applicationId')) || 0;
+  const preselectId = searchParams.get('applicationId') ?? '';
   const [apps, setApps] = useState<App[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
@@ -35,8 +35,7 @@ export default function ScheduleRound() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .get<App[]>('/api/applications')
+    listApplications()
       .then((xs) => {
         setApps(xs);
         if (xs.length > 0) {
@@ -59,8 +58,7 @@ export default function ScheduleRound() {
     setError(null);
     try {
       const when = [form.date, form.time].filter(Boolean).join(' ').trim();
-      await api.post(`/api/applications/${form.application_id}/rounds`, {
-        application_id: form.application_id,
+      await createRound(form.application_id, {
         round_type: roundTypes.find((r) => r.key === form.round_type)?.label ?? form.round_type,
         date: when,
         interviewer: form.interviewer,
@@ -120,10 +118,10 @@ export default function ScheduleRound() {
               </div>
             ) : (
               <Select
-                value={String(form.application_id)}
-                onChange={(v) => setForm({ ...form, application_id: Number(v) })}
+                value={form.application_id}
+                onChange={(v) => setForm({ ...form, application_id: v })}
                 options={apps.map((a) => ({
-                  value: String(a.id),
+                  value: a.id,
                   label: `${a.company} — ${a.role}`,
                 }))}
                 ariaLabel="Application"

@@ -1,14 +1,18 @@
 // Public read-only renderer for /r/:token. Fetches via the FastAPI
 // share endpoint (which uses an admin-cached token to bypass PB
-// owner rules), then renders the resume with the same template
-// registry the editor uses — so what the recipient sees matches what
-// the user designs.
+// owner rules), then renders the resume inside the same `ZoomablePage`
+// component the studio PreviewDialog uses — so what the recipient
+// sees matches what the user designs, with the same zoom + fit + page-
+// break markers and a "read-only" header bar.
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { fetchPublicResume, type PublicResumePayload } from '../features/resume/share/client';
-import { ResumePageStyles } from '../features/resume/templates/parts';
-import { templateById } from '../features/resume/templates/registry';
+import { Eye } from 'lucide-react';
+import {
+  fetchPublicResume,
+  type PublicResumePayload,
+} from '../features/resume/share/client';
+import ZoomablePage from '../features/resume/ZoomablePage';
 
 export default function PublicResume() {
   const { token } = useParams<{ token: string }>();
@@ -39,7 +43,14 @@ export default function PublicResume() {
           <div className="eyebrow" style={{ fontSize: 9.5, marginBottom: 8 }}>
             Public resume
           </div>
-          <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6, color: 'var(--plum)' }}>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 500,
+              marginBottom: 6,
+              color: 'var(--plum)',
+            }}
+          >
             Couldn't load this share
           </div>
           <p style={{ margin: 0, fontSize: 12, color: 'var(--text-3)', lineHeight: 1.55 }}>
@@ -50,33 +61,42 @@ export default function PublicResume() {
     );
   }
 
-  const Template = templateById(payload.template_id).component;
-
+  // Full-viewport column: the ZoomablePage owns its toolbar + scroll
+  // area and fills the remaining height via flex.
   return (
     <div
       style={{
-        minHeight: '100vh',
-        background: 'var(--bg-sunken)',
-        padding: '24px 16px',
+        position: 'fixed',
+        inset: 0,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        gap: 16,
+        background: 'var(--bg)',
       }}
     >
-      <ResumePageStyles />
-      <div
-        className="mono"
-        style={{
-          fontSize: 10.5,
-          color: 'var(--text-4)',
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-        }}
-      >
-        Shared resume {payload.kind === 'variant' ? '(variant)' : ''} · read-only
-      </div>
-      <Template data={payload.data} design={payload.design} />
+      <ZoomablePage
+        data={payload.data}
+        templateId={payload.template_id}
+        design={payload.design}
+        toolbarLabel={`Shared ${payload.kind === 'variant' ? 'variant' : 'resume'} · read-only`}
+        toolbarActions={
+          <span
+            className="inline-flex items-center gap-1.5"
+            title="This view is shared via a public link"
+            style={{
+              padding: '6px 10px',
+              borderRadius: 8,
+              background: 'var(--bg-sunken)',
+              color: 'var(--text-3)',
+              boxShadow: 'inset 0 0 0 1px var(--border)',
+              fontSize: 11,
+              fontWeight: 500,
+            }}
+          >
+            <Eye size={12} strokeWidth={1.8} />
+            Read-only
+          </span>
+        }
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api/client';
+import { listCodingQuestions } from '../content/api';
 import { slugify } from '../lib/slug';
 import AppHeader from '../components/shell/AppHeader';
 import DifficultyPill from '../components/shell/DifficultyPill';
@@ -63,8 +63,7 @@ export default function CodingList() {
   const [sort, setSort] = usePersistedState<SortKey>('rounds.coding.sort', 'title-asc');
 
   useEffect(() => {
-    api
-      .get<CQ[]>('/api/coding')
+    listCodingQuestions<CQ>()
       .then(setQuestions)
       .finally(() => setLoading(false));
   }, []);

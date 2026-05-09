@@ -8,7 +8,7 @@ BFS or an explicit stack).
 """
 from builder.registry import register
 
-
+from builder._shorthand import level_order_to_verbose, inflate_tree
 PAYLOAD = {
     "title": "Maximum Depth of Binary Tree",
     "difficulty": "Easy",
@@ -116,32 +116,32 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": []}, "expected": 0,
+        {"input": {"root": level_order_to_verbose([])}, "expected": 0,
          "description": "Empty tree → depth 0", "tags": ["edge"]},
-        {"input": {"root": [1]}, "expected": 1,
+        {"input": {"root": level_order_to_verbose([1])}, "expected": 1,
          "description": "Single node → depth 1 (not 0)", "tags": ["edge"]},
-        {"input": {"root": [1, 2, None, 3]}, "expected": 3,
+        {"input": {"root": level_order_to_verbose([1, 2, None, 3])}, "expected": 3,
          "description": "Left-only chain of length 3", "tags": ["edge"]},
-        {"input": {"root": [1, None, 2, None, 3]}, "expected": 3,
+        {"input": {"root": level_order_to_verbose([1, None, 2, None, 3])}, "expected": 3,
          "description": "Right-only chain of length 3", "tags": ["edge"]},
-        {"input": {"root": [1, 2, 3]}, "expected": 2,
+        {"input": {"root": level_order_to_verbose([1, 2, 3])}, "expected": 2,
          "description": "Perfectly balanced 3-node tree", "tags": ["basic"]},
-        {"input": {"root": [3, 9, 20, None, None, 15, 7]}, "expected": 3,
+        {"input": {"root": level_order_to_verbose([3, 9, 20, None, None, 15, 7])}, "expected": 3,
          "description": "Classic LeetCode example", "tags": ["basic"]},
-        {"input": {"root": [1, 2, 3, 4, 5, None, 6, None, None, 7]}, "expected": 4,
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5, None, 6, None, None, 7])}, "expected": 4,
          "description": "Asymmetric with scattered nulls; deepest leaf reached via 1→2→5→7",
          "tags": ["tricky"]},
-        {"input": {"root": [5, 4, 8, 11, None, 13, 4, 7, 2, None, None, None, 1]}, "expected": 4,
+        {"input": {"root": level_order_to_verbose([5, 4, 8, 11, None, 13, 4, 7, 2, None, None, None, 1])}, "expected": 4,
          "description": "Mixed-shape tree with missing internal children",
          "tags": ["tricky"]},
-        {"input": {"root": list(range(1, 11))}, "expected": 4,
+        {"input": {"root": level_order_to_verbose(list(range(1, 11)))}, "expected": 4,
          "description": "Complete tree of 10 nodes → depth 4 (ceil(log2(11)))",
          "tags": ["basic"]},
-        {"input": {"root": [1, 2, None, 3, None, 4, None, 5, None, 6, None, 7, None, 8, None, 9, None, 10]},
+        {"input": {"root": level_order_to_verbose([1, 2, None, 3, None, 4, None, 5, None, 6, None, 7, None, 8, None, 9, None, 10])},
          "expected": 10,
          "description": "Left-only chain of 10 nodes — recursion-depth stress",
          "tags": ["large"]},
-        {"input": {"root": [0, -1, 1, -2, None, None, 2]}, "expected": 3,
+        {"input": {"root": level_order_to_verbose([0, -1, 1, -2, None, None, 2])}, "expected": 3,
          "description": "Negative and zero values don't affect depth — only structure does",
          "tags": ["edge"]},
     ],
@@ -277,36 +277,11 @@ PAYLOAD = {
         "kind": "tree",
         "name": "max_depth",
         "params": [{"name": "root", "type": "node"}],
-        "input_shape": "tree_level_order",
     },
 }
 
-
-class _TreeNode:
-    def __init__(self, val=0, left=None, right=None):
-        self.val, self.left, self.right = val, left, right
-
-
-def _from_level(arr):
-    from collections import deque
-    if not arr:
-        return None
-    root = _TreeNode(arr[0])
-    q = deque([root])
-    i = 1
-    while q and i < len(arr):
-        n = q.popleft()
-        if i < len(arr) and arr[i] is not None:
-            n.left = _TreeNode(arr[i]); q.append(n.left)
-        i += 1
-        if i < len(arr) and arr[i] is not None:
-            n.right = _TreeNode(arr[i]); q.append(n.right)
-        i += 1
-    return root
-
-
 def REFERENCE(root):
-    node = _from_level(root)
+    node = inflate_tree(root)
 
     def go(n):
         if n is None:
@@ -314,6 +289,5 @@ def REFERENCE(root):
         return 1 + max(go(n.left), go(n.right))
 
     return go(node)
-
 
 register(PAYLOAD, REFERENCE)

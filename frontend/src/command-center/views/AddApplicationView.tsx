@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { api } from '../../api/client';
+import { createApplication } from '../../applications/api';
 import { useCampaign } from '../../campaign/CampaignContext';
 import DatePicker from '../../components/shell/DatePicker';
 import Select from '../../components/shell/Select';
@@ -46,7 +46,7 @@ export default function AddApplicationView({ onComplete }: { onComplete: () => v
     setSaving(true);
     setError(null);
     try {
-      await api.post('/api/applications', { ...form, campaign_id: campaignId });
+      await createApplication({ ...form, campaign_id: campaignId });
       window.dispatchEvent(new CustomEvent('rounds:applications-changed'));
       onComplete();
     } catch (err) {

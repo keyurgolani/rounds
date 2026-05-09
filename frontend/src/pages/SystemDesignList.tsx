@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api/client';
+import { listSystemDesignQuestions } from '../content/api';
 import { slugify } from '../lib/slug';
 import AppHeader from '../components/shell/AppHeader';
 import DifficultyPill from '../components/shell/DifficultyPill';
@@ -49,8 +49,7 @@ export default function SystemDesignList() {
   const [sort, setSort] = usePersistedState<SortKey>('rounds.sd.sort', 'title-asc');
 
   useEffect(() => {
-    api
-      .get<SDQ[]>('/api/system-design')
+    listSystemDesignQuestions<SDQ>()
       .then(setQuestions)
       .finally(() => setLoading(false));
   }, []);

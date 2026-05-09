@@ -11,22 +11,7 @@ reference still accepts raw array fixtures and returns a bool.
 """
 from builder.registry import register
 
-
-def _build(level):
-    """Build an internal dict tree from the raw array fixtures."""
-    if not level:
-        return None
-    nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
-    kids = nodes[1:][::-1]
-    for node in nodes:
-        if node is None:
-            continue
-        if kids:
-            node["left"] = kids.pop()
-        if kids:
-            node["right"] = kids.pop()
-    return nodes[0]
-
+from builder._shorthand import level_order_to_verbose, inflate_tree
 
 def _is_mirror(a, b):
     if a is None and b is None:
@@ -36,7 +21,6 @@ def _is_mirror(a, b):
     if a["val"] != b["val"]:
         return False
     return _is_mirror(a["left"], b["right"]) and _is_mirror(a["right"], b["left"])
-
 
 PAYLOAD = {
     "title": "Symmetric Tree",
@@ -172,36 +156,36 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": []}, "expected": True,
+        {"input": {"root": level_order_to_verbose([])}, "expected": True,
          "description": "Empty tree — vacuously symmetric", "tags": ["edge"]},
-        {"input": {"root": [1]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1])}, "expected": True,
          "description": "Single node — trivially symmetric", "tags": ["edge"]},
-        {"input": {"root": [1, 2, 2]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1, 2, 2])}, "expected": True,
          "description": "Two children with equal values — symmetric", "tags": ["basic"]},
-        {"input": {"root": [1, 2, 3]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([1, 2, 3])}, "expected": False,
          "description": "Two children with different values — asymmetric at the top",
          "tags": ["basic"]},
-        {"input": {"root": [1, 2, 2, 3, 4, 4, 3]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1, 2, 2, 3, 4, 4, 3])}, "expected": True,
          "description": "Classic LeetCode example — fully symmetric four-leaf tree",
          "tags": ["basic"]},
-        {"input": {"root": [1, 2, 2, None, 3, None, 3]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([1, 2, 2, None, 3, None, 3])}, "expected": False,
          "description": "Classic LeetCode counter-example — both 3s are right children, a "
                         "translation rather than a reflection",
          "tags": ["tricky"]},
-        {"input": {"root": [1, 2, 2, 3, 4, 4, 3, 5, 6, 7, 8, 8, 7, 6, 5]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1, 2, 2, 3, 4, 4, 3, 5, 6, 7, 8, 8, 7, 6, 5])}, "expected": True,
          "description": "Perfect symmetric tree of depth 4", "tags": ["basic"]},
-        {"input": {"root": [1, 2, 2, 3, 4, 4, 5]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([1, 2, 2, 3, 4, 4, 5])}, "expected": False,
          "description": "Mirror shape but one corresponding leaf value differs", "tags": ["tricky"]},
-        {"input": {"root": [1, 2]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([1, 2])}, "expected": False,
          "description": "Only-left subtree — no right side to mirror", "tags": ["edge"]},
-        {"input": {"root": [1, 2, 2, None, 3, 3, None]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1, 2, 2, None, 3, 3, None])}, "expected": True,
          "description": "Mirror shape with a single null at corresponding mirrored positions — "
                         "asymmetric *within* a child but symmetric *across* the root",
          "tags": ["tricky"]},
-        {"input": {"root": [1, 2, 2, 3, None, None, 3]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1, 2, 2, 3, None, None, 3])}, "expected": True,
          "description": "Outer leaves present, inner positions null on both sides — symmetric",
          "tags": ["tricky"]},
-        {"input": {"root": [1, 2, 2, 3, None, 3, None]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([1, 2, 2, 3, None, 3, None])}, "expected": False,
          "description": "Same node values on each side, but the nulls land at non-mirrored "
                         "positions — structural mismatch",
          "tags": ["tricky"]},
@@ -370,17 +354,14 @@ PAYLOAD = {
         "params": [
             {"name": "root", "type": "node"},
         ],
-        "input_shape": "tree_level_order",
     },
 }
 
-
 def REFERENCE(root):
     """Take the raw array fixture and return whether the tree is symmetric."""
-    tree = _build(root)
+    tree = inflate_tree(root)
     if tree is None:
         return True
     return _is_mirror(tree["left"], tree["right"])
-
 
 register(PAYLOAD, REFERENCE)

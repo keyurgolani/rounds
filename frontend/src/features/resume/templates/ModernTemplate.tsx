@@ -26,7 +26,7 @@ export default function ModernTemplate({ data, design }: Props) {
   ]);
 
   return (
-    <A4Page marginMm={marginMm} fontFamily={fontFamily} fontSize={fontSize}>
+    <A4Page marginMm={marginMm} fontFamily={fontFamily} fontSize={fontSize} bulletStyle={design?.bulletStyle}>
       <header style={{ marginBottom: 14, borderBottom: `2px solid ${accent}`, paddingBottom: 8 }}>
         <div
           style={{

@@ -46,18 +46,19 @@ must replay the op sequence itself — this mirrors how
 #   and the returned node is deflated back to verbose form for matching.
 #   Example: [{"name": "l1", "type": "node"}, {"name": "l2", "type": "node"}]
 #
-# input_shape (optional; kind-specific default)
-#   Controls how each test-case `input` value is decoded before being
-#   passed to the driver.
-#   - "linked_list_array"  (default for "linked_list"): flat digit/value
-#     array, e.g. [2, 4, 3] builds a 3-node chain 2→4→3.
-#   - "tree_level_order"   (default for "tree"): BFS-level array,
-#     e.g. [1, 2, 3, None, None, 4] follows LeetCode level-order encoding.
-#   - "graph_adjacency"    (default for "graph"): adjacency dict keyed by
-#     string node values, e.g. {"1": [2, 3], "2": [1], "3": [1]}.
-#   - "verbose": the test-case input is already in the canonical
-#     {"nodes": [...], "entry": id} form — no transformation is applied.
-#   For "function" / "class_ops" kinds this field is not used.
+# input_shape (optional)
+#   Runtime drivers accept ONLY verbose form
+#       {"nodes": [{"id": int, "fields": {...}, "links": {...}}], "entry": id|None}
+#   The default and only allowed value is "verbose"; specifying anything
+#   else (e.g. "tree_level_order") fails build-time validation.
+#
+#   Test-case authors should not write verbose JSON by hand: import the
+#   build-time helpers from `builder._shorthand` —
+#       level_order_to_verbose([4, 2, 7, 1, 3, 6, 9])
+#       linked_list_to_verbose([2, 4, 3])
+#       adj_to_verbose({"1": [2], "2": [1]})
+#   — and call them inline in `test_cases`. The helpers convert at build
+#   time; the seed JSON ultimately stores canonical verbose dicts.
 #
 # output_shape (optional; default "verbose")
 #   Controls how the user's returned node (or chain) is reshaped before
@@ -84,10 +85,23 @@ must replay the op sequence itself — this mirrors how
 #
 # NOTE ON TEST CASES
 # ------------------
-# The test-case `input` and `expected` values stay in the readable
-# shorthand form (e.g. flat arrays for linked lists, level-order arrays
-# for trees). The driver round-trips through verbose internally; problem
-# authors never need to write verbose JSON by hand.
+# Wrap each node-typed test-case input value with the appropriate
+# build-time helper from `builder._shorthand`:
+#     test_cases = [
+#         {"input": {"l1": linked_list_to_verbose([2, 4, 3]),
+#                    "l2": linked_list_to_verbose([5, 6, 4])},
+#          "expected": [7, 0, 8]},
+#         ...
+#     ]
+# The helper produces canonical verbose JSON; the seed file stores it
+# verbatim, the runtime driver inflates it into real Node instances
+# before the user function runs, and any test case that escapes this
+# layer with a legacy shape is rejected at runtime.
+#
+# `expected` for node-returning solutions still lives in the readable
+# output_shape (e.g. a flat array for linked_list, a level-order array
+# for tree, an adjacency dict for graph) — the driver's `_to_shape`
+# converts the deflated user output to that shape before matching.
 #
 # WORKED EXAMPLE — add_two_numbers
 # ---------------------------------
@@ -98,13 +112,14 @@ must replay the op sequence itself — this mirrors how
 #         {"name": "l1", "type": "node"},
 #         {"name": "l2", "type": "node"},
 #     ],
-#     "input_shape": "linked_list_array",
 #     "output_shape": "linked_list_array",
 # }
 #
-# The runtime inflates l1=[2,4,3] and l2=[5,6,4] into real ListNode
-# chains, calls add_two_numbers(l1, l2), deflates the returned chain,
-# and reshapes to a flat array [7,0,8] before matching against expected.
+# Each test case authors `l1=linked_list_to_verbose([2,4,3])` and
+# `l2=linked_list_to_verbose([5,6,4])`. At runtime the driver inflates
+# both verbose dicts into real ListNode chains, calls
+# add_two_numbers(l1, l2), deflates the returned chain, and reshapes to
+# a flat array [7,0,8] before matching against expected.
 # --------------------------------------------------------------------------
 """
 from __future__ import annotations

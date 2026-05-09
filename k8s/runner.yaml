@@ -2,6 +2,23 @@
 # Code runner — stateless, safe to scale horizontally. Each pod
 # subprocess-executes user code in-process, so RAM and CPU limits
 # matter more than request handling concurrency.
+#
+# Required configuration BEFORE applying this file:
+#
+#   1. Create the secret with AI key + PB admin creds (one-time):
+#
+#      kubectl -n rounds create secret generic rounds-runner-secrets \
+#        --from-literal=AI_KEY_SECRET="$(openssl rand -hex 32)" \
+#        --from-literal=PB_ADMIN_EMAIL="ops@example.com" \
+#        --from-literal=PB_ADMIN_PASSWORD="$(openssl rand -base64 32)"
+#
+#   2. (Optional) edit CORS_ALLOW_ORIGINS below if the app is reached
+#      from cross-origin domains.
+#
+# The runner refuses to start when AI_KEY_SECRET is unset or matches
+# the dev placeholder, so a misconfigured rollout fails closed (the
+# pod will CrashLoopBackOff with a clear stderr message instead of
+# silently encrypting user keys with a public secret).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -34,8 +51,19 @@ spec:
             - name: http
               containerPort: 8000
           env:
+            # Non-secret service plumbing — internal cluster DNS.
+            - name: POCKETBASE_URL
+              value: "http://pocketbase:8090"
+            - name: PDF_RENDERER_URL
+              value: "http://pdf-renderer:4000"
             - name: CORS_ALLOW_ORIGINS
               value: ""
+          envFrom:
+            # AI_KEY_SECRET, PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD live here.
+            # See the comment block at the top of this file for how
+            # to provision the secret on first deploy.
+            - secretRef:
+                name: rounds-runner-secrets
           readinessProbe:
             httpGet:
               path: /health

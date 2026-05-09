@@ -8,14 +8,24 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api } from '../api/client';
+import {
+  createCampaign as apiCreateCampaign,
+  getUserPreferences,
+  listCampaigns,
+  updateCampaign as apiUpdateCampaign,
+  upsertUserPreferences,
+} from './api';
 import { useAuth } from '../auth/AuthProvider';
-import type { Campaign, UserPreferences } from './types';
-import { runOneTimeMigration } from './bootstrap';
+import type { Campaign } from './types';
 import {
   hydrateCampaignProgress,
   setActiveCampaignForStatus,
 } from '../hooks/usePracticeStatus';
+import {
+  deleteUserProgress,
+  listUserProgress,
+} from '../hooks/progressApi';
+import { deleteCodeDraft, listCodeDrafts } from '../lib/codeDraftsApi';
 
 interface CampaignContextValue {
   campaigns: Campaign[];
@@ -81,9 +91,7 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
       // the same workspace.
       (async () => {
         try {
-          await api.put<UserPreferences>('/api/user-preferences', {
-            current_campaign_id: id ?? '',
-          });
+          await upsertUserPreferences({ current_campaign_id: id ?? '' });
         } catch {
           /* noop — localStorage still wins for this tab */
         }
@@ -94,7 +102,7 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     if (!user) return;
-    const list = await api.get<Campaign[]>('/api/campaigns');
+    const list = await listCampaigns();
     setCampaigns(list);
   }, [user]);
 
@@ -116,10 +124,10 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        let list = await api.get<Campaign[]>('/api/campaigns');
+        let list = await listCampaigns();
 
         if (list.length === 0) {
-          const created = await api.post<Campaign>('/api/campaigns', {
+          const created = await apiCreateCampaign({
             name: 'Default',
             slug: 'default',
             status: 'active',
@@ -141,7 +149,7 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
         let next = currentId;
         if (!next || !list.some((c) => c.id === next)) {
           try {
-            const pref = await api.get<UserPreferences | null>('/api/user-preferences');
+            const pref = await getUserPreferences();
             const prefId = pref?.current_campaign_id;
             if (prefId && list.some((c) => c.id === prefId)) next = prefId;
           } catch {
@@ -155,10 +163,6 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setCurrentIdState(next);
         persistCurrent(next);
-
-        // One-time sweep of localStorage into PB, scoped to the default
-        // campaign. Safe to re-run (flag prevents double-sweep).
-        await runOneTimeMigration(user.id, defaultCampaign.id);
 
         if (cancelled) return;
         bootstrappedRef.current = user.id;
@@ -178,7 +182,7 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
       const name = (input.name ?? '').trim() || 'New campaign';
       const baseSlug = slugify(input.slug ?? name);
       const slug = await ensureUniqueSlug(baseSlug, campaigns);
-      const created = await api.post<Campaign>('/api/campaigns', {
+      const created = await apiCreateCampaign({
         ...input,
         name,
         slug,
@@ -198,7 +202,7 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
       const existing = campaigns.find((c) => c.id === id);
       if (!existing) throw new Error('Campaign not found');
       const merged = { ...existing, ...patch };
-      const saved = await api.put<Campaign>(`/api/campaigns/${id}`, merged);
+      const saved = await apiUpdateCampaign(id, merged);
       setCampaigns((prev) => prev.map((c) => (c.id === id ? saved : c)));
       return saved;
     },
@@ -217,12 +221,12 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
     // batch deletes — fetch and delete in parallel. Small per-campaign
     // volume keeps this cheap.
     const [progress, drafts] = await Promise.all([
-      api.get<{ id: string }[]>(`/api/user-progress?campaign=${id}`),
-      api.get<{ id: string }[]>(`/api/code-drafts?campaign=${id}`),
+      listUserProgress(id),
+      listCodeDrafts({ campaign_id: id }),
     ]);
     await Promise.all([
-      ...progress.map((p) => api.del(`/api/user-progress/${p.id}`)),
-      ...drafts.map((d) => api.del(`/api/code-drafts/${d.id}`)),
+      ...progress.map((p) => deleteUserProgress(p.id)),
+      ...drafts.map((d) => deleteCodeDraft(d.id)),
     ]);
   }, []);
 

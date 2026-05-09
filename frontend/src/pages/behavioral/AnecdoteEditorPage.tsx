@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Sparkles, X } from 'lucide-react';
-import { api } from '../../api/client';
+import {
+  listBehavioralCategories,
+  listBehavioralQuestions,
+} from '../../content/api';
+import {
+  createAnecdote,
+  deleteAnecdote,
+  listAnecdotes,
+  updateAnecdote,
+} from './anecdotesApi';
 import { slugify } from '../../lib/slug';
 import AppHeader from '../../components/shell/AppHeader';
 import PageShell from '../../components/shell/PageShell';
@@ -119,18 +128,18 @@ export function AnecdoteEditorPage() {
 
   useEffect(() => {
     Promise.all([
-      api.get<BehavioralCategoryLite[]>('/api/behavioral-categories').catch(() => []),
-      api.get<BehavioralQuestionLite[]>('/api/behavioral').catch(() => []),
+      listBehavioralCategories<BehavioralCategoryLite>().catch(() => []),
+      listBehavioralQuestions<BehavioralQuestionLite>().catch(() => []),
       slug
         ? (async () => {
-            const all = await api.get<Anecdote[]>('/api/anecdotes').catch(() => []);
+            const all = await listAnecdotes().catch(() => [] as Anecdote[]);
             setAnecdotes(all);
             const byTitle = all.find((a) => slugify(a.title) === slug);
             if (byTitle) return byTitle;
             const byId = all.find((a) => a.id === slug);
             return byId ?? null;
           })()
-        : api.get<Anecdote[]>('/api/anecdotes').then((all) => {
+        : listAnecdotes().then((all) => {
             setAnecdotes(all);
             return null;
           }).catch(() => null),
@@ -209,9 +218,9 @@ export function AnecdoteEditorPage() {
         notes: form.notes,
       };
       if (existingId) {
-        await api.put<Anecdote>(`/api/anecdotes/${existingId}`, body);
+        await updateAnecdote(existingId, body);
       } else {
-        await api.post<Anecdote>('/api/anecdotes', body);
+        await createAnecdote(body);
       }
       navigate(-1);
     } catch (e) {
@@ -230,7 +239,7 @@ export function AnecdoteEditorPage() {
     if (!confirm('Delete this anecdote? This cannot be undone.')) return;
     setSaving(true);
     try {
-      await api.del(`/api/anecdotes/${existingId}`);
+      await deleteAnecdote(existingId);
       navigate(-1);
     } catch (e) {
       setError(String(e));

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../api/client';
+import { getSystemDesignQuestion } from '../content/api';
 import { oneLineSummary } from '../lib/text';
 import { ArchitectureDiagram } from '../components/visual/ArchitectureDiagram';
 import { FlowchartDiagram } from '../components/visual/FlowchartDiagram';
@@ -90,8 +90,7 @@ export default function SystemDesignDetail() {
 
   useEffect(() => {
     if (!slug) return;
-    api
-      .get<SDQ>(`/api/system-design/${slug}`)
+    getSystemDesignQuestion<SDQ>(slug)
       .then(setQ)
       .finally(() => setLoading(false));
   }, [slug]);

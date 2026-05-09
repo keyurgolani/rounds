@@ -12,22 +12,7 @@ from collections import deque
 
 from builder.registry import register
 
-
-def _build(level):
-    """Deserialize LeetCode level-order list (with None for missing) to a tree."""
-    if not level:
-        return None
-    nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
-    kids = nodes[1:][::-1]
-    for node in nodes:
-        if node is None:
-            continue
-        if kids:
-            node["left"] = kids.pop()
-        if kids:
-            node["right"] = kids.pop()
-    return nodes[0]
-
+from builder._shorthand import level_order_to_verbose, inflate_tree
 
 def _same(a, b):
     if a is None and b is None:
@@ -38,7 +23,6 @@ def _same(a, b):
         return False
     return _same(a["left"], b["left"]) and _same(a["right"], b["right"])
 
-
 def _is_subtree(root, sub):
     if sub is None:
         return True
@@ -47,7 +31,6 @@ def _is_subtree(root, sub):
     if _same(root, sub):
         return True
     return _is_subtree(root["left"], sub) or _is_subtree(root["right"], sub)
-
 
 PAYLOAD = {
     "title": "Subtree of Another Tree",
@@ -183,38 +166,38 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": [3, 4, 5, 1, 2], "subRoot": [4, 1, 2]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([3, 4, 5, 1, 2]), "subRoot": level_order_to_verbose([4, 1, 2])}, "expected": True,
          "description": "Classic LeetCode example — subRoot equals the left subtree of root", "tags": ["basic"]},
-        {"input": {"root": [3, 4, 5, 1, 2, None, None, None, None, 0], "subRoot": [4, 1, 2]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([3, 4, 5, 1, 2, None, None, None, None, 0]), "subRoot": level_order_to_verbose([4, 1, 2])}, "expected": False,
          "description": "Candidate match has an extra leaf — structure differs", "tags": ["basic"]},
-        {"input": {"root": [1, 1], "subRoot": [1]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1, 1]), "subRoot": level_order_to_verbose([1])}, "expected": True,
          "description": "subRoot is a single leaf — matches any leaf in root", "tags": ["edge"]},
-        {"input": {"root": [1, 2, 3], "subRoot": [1, 2, 3]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1, 2, 3]), "subRoot": level_order_to_verbose([1, 2, 3])}, "expected": True,
          "description": "subRoot equals root — a tree is a subtree of itself", "tags": ["basic"]},
-        {"input": {"root": [], "subRoot": [1]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([]), "subRoot": level_order_to_verbose([1])}, "expected": False,
          "description": "Empty root with non-empty subRoot — cannot match", "tags": ["edge"]},
-        {"input": {"root": [1, 2, 3, 4, 5, 6, 7], "subRoot": [2, 4, 5]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5, 6, 7]), "subRoot": level_order_to_verbose([2, 4, 5])}, "expected": True,
          "description": "subRoot is the entire left subtree of a perfect tree", "tags": ["basic"]},
-        {"input": {"root": [1, 2, 3, 4, 5, 6, 7], "subRoot": [2, 4]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5, 6, 7]), "subRoot": level_order_to_verbose([2, 4])}, "expected": False,
          "description": "Same root value but subRoot is missing the right child — structures differ",
          "tags": ["tricky"]},
-        {"input": {"root": [10, 4, 6, 30, None, None, None, None, 20], "subRoot": [4, 30]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([10, 4, 6, 30, None, None, None, None, 20]), "subRoot": level_order_to_verbose([4, 30])}, "expected": False,
          "description": "subRoot's 30 is a left child but root's 30 has its own left child 20 — mismatch deeper",
          "tags": ["tricky"]},
-        {"input": {"root": [1, 2, 3, None, 4, None, None, None, 5], "subRoot": [2, None, 4, None, 5]},
+        {"input": {"root": level_order_to_verbose([1, 2, 3, None, 4, None, None, None, 5]), "subRoot": level_order_to_verbose([2, None, 4, None, 5])},
          "expected": True,
          "description": "subRoot is a deep right-leaning chain inside root", "tags": ["tricky"]},
-        {"input": {"root": [12], "subRoot": [1, None, 2]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([12]), "subRoot": level_order_to_verbose([1, None, 2])}, "expected": False,
          "description": "Sentinel-discrimination case — naive serialization '12' would falsely match without "
                         "null sentinels",
          "tags": ["tricky"]},
-        {"input": {"root": [-1, -2, -3, -4, -5], "subRoot": [-2, -4, -5]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([-1, -2, -3, -4, -5]), "subRoot": level_order_to_verbose([-2, -4, -5])}, "expected": True,
          "description": "Negative values — algorithm must compare values, not just absolute values",
          "tags": ["tricky"]},
-        {"input": {"root": list(range(1, 16)), "subRoot": [3, 6, 7, 12, 13, 14, 15]}, "expected": True,
+        {"input": {"root": level_order_to_verbose(list(range(1, 16))), "subRoot": level_order_to_verbose([3, 6, 7, 12, 13, 14, 15])}, "expected": True,
          "description": "Larger root (perfect tree of 15 nodes) — subRoot is the right subtree",
          "tags": ["large"]},
-        {"input": {"root": list(range(1, 16)), "subRoot": [3, 6, 7]}, "expected": False,
+        {"input": {"root": level_order_to_verbose(list(range(1, 16))), "subRoot": level_order_to_verbose([3, 6, 7])}, "expected": False,
          "description": "Larger root — subRoot has the right values but root's subtree at 3 has more descendants",
          "tags": ["large"]},
     ],
@@ -347,14 +330,11 @@ PAYLOAD = {
             {"name": "root", "type": "node"},
             {"name": "subRoot", "type": "node"},
         ],
-        "input_shape": "tree_level_order",
     },
 }
 
-
 def REFERENCE(root, subRoot):
     """Take two level-order lists, return whether subRoot is a subtree of root."""
-    return _is_subtree(_build(root), _build(subRoot))
-
+    return _is_subtree(inflate_tree(root), inflate_tree(subRoot))
 
 register(PAYLOAD, REFERENCE)

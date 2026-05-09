@@ -21,10 +21,34 @@ const ACCENT_PRESETS: { key: string; hex: string }[] = [
   { key: 'ink', hex: '#0f172a' },
 ];
 
+// Human label + a sample glyph that previews the marker exactly as the
+// resume CSS will render it. Kept in sync with the rules in
+// templates/parts.tsx → RESUME_PAGE_CSS.
+type BulletStyle = NonNullable<TemplateConfig['bulletStyle']>;
+const BULLET_PRESETS: { key: BulletStyle; label: string; glyph: string }[] = [
+  { key: 'disc', label: 'Disc', glyph: '•' },
+  { key: 'circle', label: 'Circle', glyph: '◦' },
+  { key: 'square', label: 'Square', glyph: '▪' },
+  { key: 'dot', label: 'Dot', glyph: '·' },
+  { key: 'dash', label: 'Dash', glyph: '–' },
+  { key: 'arrow', label: 'Arrow', glyph: '›' },
+  { key: 'arrow-long', label: 'Arrow long', glyph: '→' },
+  { key: 'chevron', label: 'Chevron', glyph: '»' },
+  { key: 'triangle', label: 'Triangle', glyph: '▸' },
+  { key: 'check', label: 'Check', glyph: '✓' },
+  { key: 'star', label: 'Star', glyph: '★' },
+  { key: 'star-outline', label: 'Star outline', glyph: '☆' },
+  { key: 'diamond', label: 'Diamond', glyph: '◆' },
+  { key: 'plus', label: 'Plus', glyph: '+' },
+  { key: 'asterisk', label: 'Asterisk', glyph: '∗' },
+  { key: 'none', label: 'None', glyph: '—' },
+];
+
 export default function DesignSidebar({ design, setDesign }: Props) {
   const margin = design.spacing?.margin ?? 14;
   const fontSize = design.typography?.body?.size ?? 10.5;
   const accent = design.colors?.primary;
+  const bullet = design.bulletStyle ?? 'disc';
 
   const setMargin = (mm: number) =>
     setDesign((prev) => ({ ...prev, spacing: { ...prev.spacing, margin: mm } }));
@@ -35,6 +59,8 @@ export default function DesignSidebar({ design, setDesign }: Props) {
     }));
   const setAccent = (hex: string | undefined) =>
     setDesign((prev) => ({ ...prev, colors: { ...prev.colors, primary: hex } }));
+  const setBullet = (next: BulletStyle) =>
+    setDesign((prev) => ({ ...prev, bulletStyle: next }));
 
   return (
     <div className="flex flex-col gap-4">
@@ -92,7 +118,70 @@ export default function DesignSidebar({ design, setDesign }: Props) {
           aria-label="Page margin"
         />
       </Section>
+
+      <Section title="Bullet style" hint="Marker for highlight lists in experience and projects.">
+        <div className="flex flex-wrap gap-1.5">
+          {BULLET_PRESETS.map((b) => (
+            <BulletChip
+              key={b.key}
+              label={b.label}
+              glyph={b.glyph}
+              active={bullet === b.key}
+              onClick={() => setBullet(b.key)}
+            />
+          ))}
+        </div>
+      </Section>
     </div>
+  );
+}
+
+function BulletChip({
+  label,
+  glyph,
+  active,
+  onClick,
+}: {
+  label: string;
+  glyph: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Bullet ${label}`}
+      aria-pressed={active}
+      title={label}
+      className="inline-flex items-center gap-1.5"
+      style={{
+        padding: '6px 10px',
+        borderRadius: 8,
+        background: active ? 'var(--ink)' : 'transparent',
+        color: active ? 'var(--paper)' : 'var(--text-2)',
+        boxShadow: active
+          ? '0 0 0 2px var(--accent)'
+          : 'inset 0 0 0 1px var(--border-strong)',
+        border: 0,
+        fontSize: 11.5,
+        fontWeight: 500,
+        cursor: 'pointer',
+      }}
+    >
+      <span
+        style={{
+          display: 'inline-block',
+          width: 12,
+          textAlign: 'center',
+          fontSize: 13,
+          lineHeight: 1,
+        }}
+      >
+        {glyph}
+      </span>
+      {label}
+    </button>
   );
 }
 

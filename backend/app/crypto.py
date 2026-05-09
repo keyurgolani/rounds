@@ -1,12 +1,15 @@
 """AES-GCM encryption for stored AI provider keys.
 
 The master secret comes from the ``AI_KEY_SECRET`` env var. We derive
-a 32-byte key from it via SHA-256 so users can paste anything (a hex
-string, a passphrase, etc.) and we still get a valid AES-256 key.
+a 32-byte key from it via SHA-256 so the operator can paste anything
+(a hex string, a passphrase, etc.) and we still get a valid AES-256 key.
 
-If the env var is missing we fall back to a deterministic dev secret —
-that's fine for local development but emits a warning so it's obvious
-the deployment forgot to set the variable.
+The variable is REQUIRED. There is no production fallback — calls to
+``encrypt`` / ``decrypt`` raise ``RuntimeError`` when ``AI_KEY_SECRET``
+is unset. Dev environments (``docker-compose.yml``) set it to the
+``_DEV_SECRET`` placeholder explicitly; this module recognises that
+literal value and logs a one-time warning so a misconfigured prod that
+somehow set the placeholder also gets a loud signal.
 """
 from __future__ import annotations
 
@@ -26,15 +29,22 @@ _DEV_SECRET = "rounds-dev-key-DO-NOT-USE-IN-PROD"
 
 
 def _master_key() -> bytes:
-    raw = os.environ.get("AI_KEY_SECRET")
+    raw = os.environ.get("AI_KEY_SECRET", "")
     if not raw:
-        if not getattr(_master_key, "_warned", False):
-            _logger.warning(
-                "AI_KEY_SECRET not set — using a dev-only fallback. Stored AI "
-                "keys will NOT be portable across environments."
-            )
-            _master_key._warned = True  # type: ignore[attr-defined]
-        raw = _DEV_SECRET
+        raise RuntimeError(
+            "AI_KEY_SECRET is not set. Generate one with "
+            "`openssl rand -hex 32` and pass it to the runner via env. "
+            "There is no production fallback — refusing to AES-GCM-wrap "
+            "user keys with a default secret."
+        )
+    if raw == _DEV_SECRET and not getattr(_master_key, "_warned", False):
+        _logger.warning(
+            "AI_KEY_SECRET is the dev placeholder (%r). This is fine for "
+            "local development but stored AI keys are not portable to any "
+            "other environment using a different value.",
+            _DEV_SECRET,
+        )
+        _master_key._warned = True  # type: ignore[attr-defined]
     return hashlib.sha256(raw.encode("utf-8")).digest()
 
 

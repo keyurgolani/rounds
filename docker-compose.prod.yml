@@ -1,14 +1,33 @@
-# Single-box production deploy. Three containers on a private network;
+# Single-box production deploy. Four containers on a private network;
 # only the nginx-fronted frontend's port 80 is exposed. By default this
 # file pulls published Docker Hub images. Set ROUNDS_IMAGE_TAG or the
 # per-service image variables below to pin a release or use GHCR.
 #
 #   PB_ADMIN_EMAIL=ops@example.com PB_ADMIN_PASSWORD=<strong-password> \
+#     AI_KEY_SECRET=<random-32-byte-hex> \
 #     docker compose -f docker-compose.prod.yml up -d
 #
-# On fresh setup, migration 1700000500_bootstrap_admin.js creates the
-# first PocketBase admin from these env vars. If they are unset, no
-# admin is bootstrapped and you must run:
+# REQUIRED env vars (no defaults — `${VAR:-}` will leave them blank and
+# the runner will refuse to start):
+#
+#   AI_KEY_SECRET        — 32+ byte secret used to AES-GCM-wrap user AI
+#                          provider keys at rest. Generate once with
+#                          `openssl rand -hex 32` and never rotate
+#                          without re-encrypting the ai_providers rows.
+#   PB_ADMIN_EMAIL       — first PocketBase admin (created by migration
+#                          1700000500_bootstrap_admin.js on fresh
+#                          setup; also used by the share router to mint
+#                          a cached admin token for public viewer reads).
+#   PB_ADMIN_PASSWORD    — password for the above.
+#
+# OPTIONAL env vars:
+#
+#   CORS_ALLOW_ORIGINS   — comma-separated origins for the runner's
+#                          CORS header. Empty => same-origin only.
+#   ROUNDS_DISABLE_SIGNUPS — "true" disables PB-side signup creation
+#                          and hides the signup form on the frontend.
+#
+# If admin creds are unset, no admin is bootstrapped and you must run:
 #
 #   docker exec -it <pocketbase-container> /pb/pocketbase admin \
 #       create admin@example.com <password>
@@ -26,11 +45,33 @@ services:
       - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
     restart: unless-stopped
 
+  pdf-renderer:
+    image: ${ROUNDS_PDF_RENDERER_IMAGE:-keyurgolani/rounds-pdf-renderer:${ROUNDS_IMAGE_TAG:-latest}}
+    # Internal-only — only the runner reaches it via the docker network.
+    # No host port mapping.
+    restart: unless-stopped
+
   runner:
     image: ${ROUNDS_RUNNER_IMAGE:-keyurgolani/rounds-runner:${ROUNDS_IMAGE_TAG:-latest}}
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-}
+      # Internal service URLs — match the docker-compose service names.
+      - POCKETBASE_URL=${POCKETBASE_INTERNAL_URL:-http://pocketbase:8090}
+      - PDF_RENDERER_URL=${PDF_RENDERER_URL:-http://pdf-renderer:4000}
+      # Required: AES-GCM key for ai_providers.encrypted_key. Empty here
+      # so a misconfigured deploy fails closed (the runner refuses to
+      # start when AI_KEY_SECRET is unset in any non-dev environment).
+      - AI_KEY_SECRET=${AI_KEY_SECRET:-}
+      # Reused for the share router's cached admin token. Defaulting
+      # blank means public-share viewing will 502 until creds are set —
+      # that's the right failure mode (loud) vs. silent admin login
+      # against the dev placeholder credentials.
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-}
+    depends_on:
+      - pocketbase
+      - pdf-renderer
     restart: unless-stopped
 
   frontend:

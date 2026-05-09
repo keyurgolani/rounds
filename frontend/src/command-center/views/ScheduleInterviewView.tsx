@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../api/client';
+import { createRound, listApplications } from '../../applications/api';
 import { useCampaign } from '../../campaign/CampaignContext';
 import DatePicker from '../../components/shell/DatePicker';
 import Select from '../../components/shell/Select';
 
-type App = { id: number; company: string; role: string; status: string };
+type App = { id: string; company: string; role: string; status: string };
 
 const roundTypes = [
   { key: 'phone', label: 'Phone / recruiter screen' },
@@ -23,19 +23,17 @@ export default function ScheduleInterviewView({ onComplete }: { onComplete: () =
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const url = currentId ? `/api/applications?campaign=${currentId}` : '/api/applications';
-    api
-      .get<App[]>(url)
+    listApplications(currentId ?? undefined)
       .then((list) => {
         setApps(list);
-        setForm((current) => ({ ...current, application_id: current.application_id || String(list[0]?.id ?? '') }));
+        setForm((current) => ({ ...current, application_id: current.application_id || (list[0]?.id ?? '') }));
       })
       .finally(() => setLoading(false));
   }, [currentId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const appId = Number(form.application_id);
+    const appId = form.application_id;
     if (!appId) {
       setError('Pick an application first.');
       return;
@@ -44,8 +42,7 @@ export default function ScheduleInterviewView({ onComplete }: { onComplete: () =
     setError(null);
     try {
       const when = [form.date, form.time].filter(Boolean).join(' ').trim();
-      await api.post(`/api/applications/${appId}/rounds`, {
-        application_id: appId,
+      await createRound(appId, {
         round_type: roundTypes.find((round) => round.key === form.round_type)?.label ?? form.round_type,
         date: when,
         interviewer: form.interviewer,
@@ -76,7 +73,7 @@ export default function ScheduleInterviewView({ onComplete }: { onComplete: () =
         ) : apps.length === 0 ? (
           <div className="card p-3" style={{ background: 'var(--bg-sunken)', color: 'var(--text-3)', fontSize: 12.5 }}>Create an application first, then schedule its rounds here.</div>
         ) : (
-          <Select value={form.application_id} onChange={(application_id) => setForm({ ...form, application_id })} options={apps.map((app) => ({ value: String(app.id), label: `${app.company} - ${app.role}`, sub: app.status }))} ariaLabel="Application" />
+          <Select value={form.application_id} onChange={(application_id) => setForm({ ...form, application_id })} options={apps.map((app) => ({ value: app.id, label: `${app.company} - ${app.role}`, sub: app.status }))} ariaLabel="Application" />
         )}
       </label>
       <label className="grid gap-1.5">

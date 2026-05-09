@@ -13,22 +13,7 @@ O(n) time, O(h) stack.
 """
 from builder.registry import register
 
-
-def _build(level):
-    """Build a validation tree from raw level-order shorthand."""
-    if not level:
-        return None
-    nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
-    kids = nodes[1:][::-1]
-    for node in nodes:
-        if node is None:
-            continue
-        if kids:
-            node["left"] = kids.pop()
-        if kids:
-            node["right"] = kids.pop()
-    return nodes[0]
-
+from builder._shorthand import level_order_to_verbose, inflate_tree
 
 def _check(node):
     """Post-order: return height, or -1 if the subtree rooted here is unbalanced."""
@@ -44,7 +29,6 @@ def _check(node):
         return -1
     return 1 + max(lh, rh)
 
-
 PAYLOAD = {
     "title": "Balanced Binary Tree",
     "difficulty": "Easy",
@@ -52,7 +36,6 @@ PAYLOAD = {
         "kind": "tree",
         "name": "is_balanced",
         "params": [{"name": "root", "type": "node"}],
-        "input_shape": "tree_level_order",
     },
     "description": (
         "Given the `root` of a binary tree, determine if it is **height-balanced**: for every node in the "
@@ -186,33 +169,33 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": []}, "expected": True,
+        {"input": {"root": level_order_to_verbose([])}, "expected": True,
          "description": "Empty tree is balanced by definition", "tags": ["edge"]},
-        {"input": {"root": [1]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1])}, "expected": True,
          "description": "Single node — both subtrees empty, heights differ by 0", "tags": ["edge"]},
-        {"input": {"root": [1, 2, 3]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1, 2, 3])}, "expected": True,
          "description": "Perfect 3-node tree — left and right are leaves", "tags": ["basic"]},
-        {"input": {"root": [1, 2, 3, 4, 5, 6, 7]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1, 2, 3, 4, 5, 6, 7])}, "expected": True,
          "description": "Perfect 7-node tree of depth 3 — fully balanced", "tags": ["basic"]},
-        {"input": {"root": [3, 9, 20, None, None, 15, 7]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([3, 9, 20, None, None, 15, 7])}, "expected": True,
          "description": "Classic LeetCode example — balanced", "tags": ["basic"]},
-        {"input": {"root": [1, 2, None, 3]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([1, 2, None, 3])}, "expected": False,
          "description": "Left-skewed chain of length 3 — root has heights 2 vs 0",
          "tags": ["basic"]},
-        {"input": {"root": [1, 2, 2, 3, 3, None, None, 4, 4]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([1, 2, 2, 3, 3, None, None, 4, 4])}, "expected": False,
          "description": "Classic LeetCode unbalanced example — left subtree taller by 2",
          "tags": ["basic"]},
-        {"input": {"root": [1, 2, 2, 3, None, None, 3, 4, None, None, 4]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([1, 2, 2, 3, None, None, 3, 4, None, None, 4])}, "expected": False,
          "description": "Imbalance on one side only — outer leaves 4 push left and right too deep",
          "tags": ["tricky"]},
-        {"input": {"root": [1, 2, 2, 3, 3, None, None, 4, 4]},
+        {"input": {"root": level_order_to_verbose([1, 2, 2, 3, 3, None, None, 4, 4])},
          "expected": False,
          "description": "Subtle deep imbalance — extra layer only on one side of one subtree",
          "tags": ["tricky"]},
-        {"input": {"root": [1, None, 2, None, 3]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([1, None, 2, None, 3])}, "expected": False,
          "description": "Right-skewed chain of length 3 — symmetric failure of the left-skew case",
          "tags": ["edge"]},
-        {"input": {"root": [1, 2, 2, 3, 3, 3, 3]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1, 2, 2, 3, 3, 3, 3])}, "expected": True,
          "description": "Complete tree of depth 3 with duplicate values — balanced",
          "tags": ["basic"]},
     ],
@@ -361,11 +344,9 @@ PAYLOAD = {
     "space_complexity": "O(h)",
 }
 
-
 def REFERENCE(root):
     """Accept raw level-order shorthand arrays for build validation."""
-    tree = _build(root)
+    tree = inflate_tree(root)
     return _check(tree) != -1
-
 
 register(PAYLOAD, REFERENCE)

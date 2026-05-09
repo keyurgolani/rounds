@@ -16,7 +16,7 @@ Input is the binary tree root; output is an int (the maximum path sum).
 """
 from builder.registry import register
 
-
+from builder._shorthand import level_order_to_verbose, inflate_tree
 PAYLOAD = {
     "title": "Binary Tree Maximum Path Sum",
     "difficulty": "Hard",
@@ -148,37 +148,37 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": [1]}, "expected": 1,
+        {"input": {"root": level_order_to_verbose([1])}, "expected": 1,
          "description": "Single node — path is just that node", "tags": ["edge"]},
-        {"input": {"root": [-3]}, "expected": -3,
+        {"input": {"root": level_order_to_verbose([-3])}, "expected": -3,
          "description": "Single negative node — path must contain at least one node, so answer is -3",
          "tags": ["edge"]},
-        {"input": {"root": [1, 2, 3]}, "expected": 6,
+        {"input": {"root": level_order_to_verbose([1, 2, 3])}, "expected": 6,
          "description": "Classic small example — path 2→1→3 sums to 6", "tags": ["basic"]},
-        {"input": {"root": [-10, 9, 20, None, None, 15, 7]}, "expected": 42,
+        {"input": {"root": level_order_to_verbose([-10, 9, 20, None, None, 15, 7])}, "expected": 42,
          "description": "Classic LeetCode example — path 15→20→7 = 42; root -10 is skipped",
          "tags": ["basic"]},
-        {"input": {"root": [-2, -1, -3]}, "expected": -1,
+        {"input": {"root": level_order_to_verbose([-2, -1, -3])}, "expected": -1,
          "description": "All-negative tree — best is the single largest node (-1)",
          "tags": ["tricky"]},
-        {"input": {"root": [1, 2, None, 3, None, 4, None, 5]}, "expected": 15,
+        {"input": {"root": level_order_to_verbose([1, 2, None, 3, None, 4, None, 5])}, "expected": 15,
          "description": "Left-skewed positive chain of 5 → take the whole chain = 1+2+3+4+5 = 15",
          "tags": ["basic"]},
-        {"input": {"root": [-1, 2, 3, -4, 5, -6, 7]}, "expected": 16,
+        {"input": {"root": level_order_to_verbose([-1, 2, 3, -4, 5, -6, 7])}, "expected": 16,
          "description": "Mixed signs — best path bends at root: 5→2→-1→3→7 = 16 (negative branches "
                         "-4 and -6 are skipped)",
          "tags": ["tricky"]},
-        {"input": {"root": [5, 4, 8, 11, None, 13, 4, 7, 2, None, None, None, 1]}, "expected": 48,
+        {"input": {"root": level_order_to_verbose([5, 4, 8, 11, None, 13, 4, 7, 2, None, None, None, 1])}, "expected": 48,
          "description": "Deep imbalance — path 7→11→4→5→8→13 = 48",
          "tags": ["tricky"]},
-        {"input": {"root": [10, 2, 10, 20, 1, None, -25, None, None, None, None, 3, 4]}, "expected": 42,
+        {"input": {"root": level_order_to_verbose([10, 2, 10, 20, 1, None, -25, None, None, None, None, 3, 4])}, "expected": 42,
          "description": "Best path does NOT pass through root — 20→2→10→1 = 33? Actually 20→2→10 = 32, "
                         "best is 20+2+10+10 = 42 going through root",
          "tags": ["tricky"]},
-        {"input": {"root": [2, -1, -2]}, "expected": 2,
+        {"input": {"root": level_order_to_verbose([2, -1, -2])}, "expected": 2,
          "description": "Root positive, both children negative — best is just the root alone",
          "tags": ["tricky"]},
-        {"input": {"root": [-3, 1, 2, -1, None, None, 3]}, "expected": 5,
+        {"input": {"root": level_order_to_verbose([-3, 1, 2, -1, None, None, 3])}, "expected": 5,
          "description": "Best path lives in a subtree, root not on it — path 1→-3→2→3 = 3? "
                         "Actually best non-root path 3+2 = 5 (or 1 alone = 1); answer is 5",
          "tags": ["tricky"]},
@@ -379,37 +379,12 @@ PAYLOAD = {
         "kind": "tree",
         "name": "max_path_sum",
         "params": [{"name": "root", "type": "node"}],
-        "input_shape": "tree_level_order",
     },
 }
 
-
-class _TreeNode:
-    def __init__(self, val=0, left=None, right=None):
-        self.val, self.left, self.right = val, left, right
-
-
-def _from_level(arr):
-    from collections import deque
-    if not arr:
-        return None
-    root = _TreeNode(arr[0])
-    q = deque([root])
-    i = 1
-    while q and i < len(arr):
-        n = q.popleft()
-        if i < len(arr) and arr[i] is not None:
-            n.left = _TreeNode(arr[i]); q.append(n.left)
-        i += 1
-        if i < len(arr) and arr[i] is not None:
-            n.right = _TreeNode(arr[i]); q.append(n.right)
-        i += 1
-    return root
-
-
 def REFERENCE(root):
     """Return the maximum path sum over any non-empty path in the tree."""
-    node = _from_level(root)
+    node = inflate_tree(root)
     best = [float("-inf")]
 
     def gain(n):
@@ -424,6 +399,5 @@ def REFERENCE(root):
 
     gain(node)
     return best[0]
-
 
 register(PAYLOAD, REFERENCE)

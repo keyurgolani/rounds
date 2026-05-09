@@ -16,6 +16,20 @@ DEFAULT_ENTRY = {
 }
 
 
+# ---- inline test helpers (the runtime drivers no longer accept shorthand) ----
+
+def _list_to_verbose(values):
+    if not values:
+        return {"nodes": [], "entry": None}
+    return {
+        "nodes": [
+            {"id": i, "fields": {"val": v}, "links": {"next": (i + 1) if i + 1 < len(values) else None}}
+            for i, v in enumerate(values)
+        ],
+        "entry": 0,
+    }
+
+
 def test_validate_requires_name_and_params():
     errs = py_validate({"kind": "linked_list"})
     assert any("'name'" in e for e in errs)
@@ -38,9 +52,7 @@ def test_py_reverses_singly_linked_list():
         "    return prev\n"
     )
     snippet = py_wrapper(DEFAULT_ENTRY)
-    out = _run_py(code, snippet, {"head": [1, 2, 3]})
-    # The driver returns verbose form; flatten back to array for assertion.
-    # head value sequence walking via 'next' links gives [3, 2, 1].
+    out = _run_py(code, snippet, {"head": _list_to_verbose([1, 2, 3])})
     assert _walk_chain(out) == [3, 2, 1]
 
 
@@ -58,7 +70,7 @@ def test_js_reverses_singly_linked_list():
         "}\n"
     )
     snippet = js_wrapper(DEFAULT_ENTRY)
-    out = _run_js(code, snippet, {"head": [1, 2, 3]})
+    out = _run_js(code, snippet, {"head": _list_to_verbose([1, 2, 3])})
     assert _walk_chain(out) == [3, 2, 1]
 
 
@@ -77,7 +89,6 @@ def test_py_supports_random_pointer_template():
                 {"name": "random", "arity": "single", "nullable": True},
             ],
         },
-        "input_shape": "verbose",
     }
     code = (
         "def copyRandomList(head):\n"
@@ -104,7 +115,6 @@ def test_py_supports_random_pointer_template():
     }
     snippet = py_wrapper(entry)
     out = _run_py(code, snippet, {"head": verbose})
-    # Compare verbose round-trip — same structure regardless of node identity.
     assert out["entry"] == 0
     assert len(out["nodes"]) == 3
     assert out["nodes"][0]["fields"] == {"val": 7}
@@ -112,6 +122,27 @@ def test_py_supports_random_pointer_template():
     assert out["nodes"][2]["fields"] == {"val": 11}
     assert out["nodes"][1]["links"]["random"] == 0
     assert out["nodes"][2]["links"]["random"] == 0
+
+
+def test_py_runtime_rejects_legacy_array_shape():
+    """A flat array reaching the linked_list driver at runtime must be rejected."""
+    code = "def reverseList(head):\n    return head\n"
+    snippet = py_wrapper(DEFAULT_ENTRY)
+    err = _run_py_expect_error(code, snippet, {"head": [1, 2, 3]})
+    assert "verbose JSON" in err and "linked_list driver" in err, err
+
+
+def test_validate_rejects_legacy_input_shape():
+    """An entry with input_shape='linked_list_array' is rejected at build time."""
+    bad = {**DEFAULT_ENTRY, "input_shape": "linked_list_array"}
+    errors = py_validate(bad)
+    assert any("input_shape" in e and "linked_list_array" in e for e in errors), errors
+
+
+def test_js_validate_rejects_legacy_input_shape():
+    bad = {**DEFAULT_ENTRY, "input_shape": "linked_list_array"}
+    errors = js_validate(bad)
+    assert any("input_shape" in e and "linked_list_array" in e for e in errors), errors
 
 
 ARRAY_OUT_ENTRY = {
@@ -124,18 +155,16 @@ ARRAY_OUT_ENTRY = {
 
 
 def test_py_output_shape_linked_list_array_identity():
-    """Identity user fn: input array round-trips to the same array."""
     code = (
         "def identity(head):\n"
         "    return head\n"
     )
     snippet = py_wrapper(ARRAY_OUT_ENTRY)
-    out = _run_py(code, snippet, {"head": [1, 2, 3]})
+    out = _run_py(code, snippet, {"head": _list_to_verbose([1, 2, 3])})
     assert out == [1, 2, 3]
 
 
 def test_py_output_shape_linked_list_array_reverse():
-    """Reverse fn returns the reversed values directly as an array."""
     code = (
         "def identity(head):\n"
         "    prev = None\n"
@@ -147,18 +176,17 @@ def test_py_output_shape_linked_list_array_reverse():
         "    return prev\n"
     )
     snippet = py_wrapper(ARRAY_OUT_ENTRY)
-    out = _run_py(code, snippet, {"head": [1, 2, 3]})
+    out = _run_py(code, snippet, {"head": _list_to_verbose([1, 2, 3])})
     assert out == [3, 2, 1]
 
 
 def test_py_output_shape_linked_list_array_empty():
-    """User returns None for empty input -> empty array."""
     code = (
         "def identity(head):\n"
         "    return head\n"
     )
     snippet = py_wrapper(ARRAY_OUT_ENTRY)
-    out = _run_py(code, snippet, {"head": []})
+    out = _run_py(code, snippet, {"head": _list_to_verbose([])})
     assert out == []
 
 
@@ -191,7 +219,7 @@ def test_js_output_shape_linked_list_array_identity():
         "function identity(head) { return head; }\n"
     )
     snippet = js_wrapper(ARRAY_OUT_ENTRY)
-    out = _run_js(code, snippet, {"head": [1, 2, 3]})
+    out = _run_js(code, snippet, {"head": _list_to_verbose([1, 2, 3])})
     assert out == [1, 2, 3]
 
 
@@ -204,19 +232,25 @@ def test_js_output_shape_linked_list_array_reverse():
         "}\n"
     )
     snippet = js_wrapper(ARRAY_OUT_ENTRY)
-    out = _run_js(code, snippet, {"head": [1, 2, 3]})
+    out = _run_js(code, snippet, {"head": _list_to_verbose([1, 2, 3])})
     assert out == [3, 2, 1]
 
 
 def test_js_output_shape_linked_list_array_empty():
     code = "function identity(head) { return head; }\n"
     snippet = js_wrapper(ARRAY_OUT_ENTRY)
-    out = _run_js(code, snippet, {"head": []})
+    out = _run_js(code, snippet, {"head": _list_to_verbose([])})
     assert out == []
 
 
+def test_js_runtime_rejects_legacy_array_shape():
+    code = "function reverseList(head) { return head; }\n"
+    snippet = js_wrapper(DEFAULT_ENTRY)
+    err = _run_js_expect_error(code, snippet, {"head": [1, 2, 3]})
+    assert "verbose JSON" in err and "linked_list driver" in err, err
+
+
 def _walk_chain(verbose):
-    """Walk a singly-linked verbose chain via 'next' links from entry."""
     if verbose.get("entry") is None:
         return []
     by_id = {n["id"]: n for n in verbose["nodes"]}
@@ -248,6 +282,24 @@ print(json.dumps(_drive(json.loads(sys.argv[1]))))
         os.unlink(path)
 
 
+def _run_py_expect_error(user_code, snippet, input_value):
+    wrapper = f"""
+import json, sys
+{user_code}
+{snippet}
+print(json.dumps(_drive(json.loads(sys.argv[1]))))
+"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(wrapper); path = f.name
+    try:
+        res = subprocess.run([sys.executable, path, json.dumps(input_value)],
+                             capture_output=True, text=True, timeout=5)
+        assert res.returncode != 0, f"expected error, got success: {res.stdout!r}"
+        return res.stderr
+    finally:
+        os.unlink(path)
+
+
 def _run_js(user_code, snippet, input_value):
     wrapper = f"""
 {user_code}
@@ -262,5 +314,22 @@ console.log(JSON.stringify(_drive(JSON.parse(process.argv[2]))));
         if res.returncode != 0:
             raise AssertionError(f"non-zero exit: {res.stderr}")
         return json.loads(res.stdout.strip().split("\n")[-1])
+    finally:
+        os.unlink(path)
+
+
+def _run_js_expect_error(user_code, snippet, input_value):
+    wrapper = f"""
+{user_code}
+{snippet}
+console.log(JSON.stringify(_drive(JSON.parse(process.argv[2]))));
+"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".js", delete=False) as f:
+        f.write(wrapper); path = f.name
+    try:
+        res = subprocess.run(["node", path, json.dumps(input_value)],
+                             capture_output=True, text=True, timeout=5)
+        assert res.returncode != 0, f"expected error, got success: {res.stdout!r}"
+        return res.stderr
     finally:
         os.unlink(path)

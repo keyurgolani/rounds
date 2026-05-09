@@ -2,11 +2,24 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import BehavioralDetail from '../BehavioralDetail';
-import { api } from '../../api/client';
+import {
+  getBehavioralQuestion,
+  listBehavioralCategories,
+  listBehavioralQuestions,
+} from '../../content/api';
 import { CommandCenterProvider } from '../../command-center/CommandCenterProvider';
 
-vi.mock('../../api/client', () => ({
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
+vi.mock('../../content/api', () => ({
+  getBehavioralQuestion: vi.fn(),
+  listBehavioralCategories: vi.fn(),
+  listBehavioralQuestions: vi.fn(),
+  getSystemDesignQuestion: vi.fn(),
+  listSystemDesignQuestions: vi.fn(),
+  getCodingQuestion: vi.fn(),
+  listCodingQuestions: vi.fn(),
+  getSystemDesignGuide: vi.fn(),
+  getCodingGuide: vi.fn(),
+  getBehavioralGuide: vi.fn(),
 }));
 
 vi.mock('../../hooks/usePracticeStatus', () => ({
@@ -57,12 +70,9 @@ function renderAt(url: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (api.get as unknown as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-    if (path.startsWith('/api/behavioral/')) return Promise.resolve(baseBQ);
-    if (path === '/api/behavioral-categories') return Promise.resolve([]);
-    if (path === '/api/behavioral') return Promise.resolve([]);
-    return Promise.resolve(null);
-  });
+  (getBehavioralQuestion as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(baseBQ);
+  (listBehavioralCategories as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+  (listBehavioralQuestions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 });
 
 describe('BehavioralDetail — single-scroll layout', () => {

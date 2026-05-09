@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, Award, Calendar, ChevronRight, Clock } from 'lucide-react';
-import { api } from '../../api/client';
+import {
+  getOffer,
+  listApplications,
+  listRounds,
+  type Offer,
+} from '../../applications/api';
 import { useCampaign } from '../../campaign/CampaignContext';
-import type { Todo } from '../../pages/Todos';
+import { listTodos, type Todo } from '../../todos/api';
 import { splitBody } from '../../lib/mentions';
 
 function todoSummary(t: Todo): string {
@@ -19,7 +24,6 @@ interface RawApp {
   role: string;
   status: string;
   last_activity_at?: string;
-  campaign?: string;
   updated_at?: string;
 }
 
@@ -30,12 +34,7 @@ interface RawRound {
   scheduled_status?: string;
 }
 
-interface RawOffer {
-  id: string;
-  application_id: string;
-  status: 'pending' | 'accepted' | 'declined' | 'expired';
-  decision_deadline: string;
-}
+type RawOffer = Pick<Offer, 'id' | 'application_id' | 'status' | 'decision_deadline'>;
 
 // Thresholds live on the client — cheap to compute, easy to tweak.
 const STALE_APP_DAYS = 10;
@@ -53,10 +52,9 @@ export default function AtRiskSection() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const campaignQs = currentId ? `?campaign=${currentId}` : '';
       const [todosResp, appsResp] = await Promise.all([
-        api.get<Todo[]>(`/api/todos${campaignQs}`).catch(() => [] as Todo[]),
-        api.get<RawApp[]>(`/api/applications${campaignQs}`).catch(() => [] as RawApp[]),
+        listTodos(currentId ?? undefined).catch(() => [] as Todo[]),
+        listApplications(currentId ?? undefined).catch(() => [] as RawApp[]),
       ]);
 
       setTodos(todosResp);
@@ -65,23 +63,11 @@ export default function AtRiskSection() {
       // Rounds and offers are per-application; fetch them in parallel
       // so the dashboard lands quickly even with a dozen apps in flight.
       const [roundsLists, offersPerApp] = await Promise.all([
-        Promise.all(
-          appsResp.map((a) =>
-            api.get<RawRound[]>(`/api/applications/${a.id}/rounds`).catch(() => []),
-          ),
-        ),
-        Promise.all(
-          appsResp.map((a) =>
-            api.get<RawOffer | null>(`/api/applications/${a.id}/offer`).catch(() => null),
-          ),
-        ),
+        Promise.all(appsResp.map((a) => listRounds(a.id).catch(() => [] as RawRound[]))),
+        Promise.all(appsResp.map((a) => getOffer(a.id).catch(() => null))),
       ]);
       setRounds(roundsLists.flat());
-      setOffers(
-        offersPerApp
-          .map((o, i) => (o ? { ...o, application_id: appsResp[i].id } : null))
-          .filter((o): o is RawOffer => !!o),
-      );
+      setOffers(offersPerApp.filter((o): o is Offer => !!o));
     } finally {
       setLoading(false);
     }

@@ -1,8 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, FolderInput, Upload } from 'lucide-react';
-import { api } from '../api/client';
+import {
+  createApplication,
+  createOffer,
+  createRound,
+  getOffer,
+  listApplications,
+  listRounds,
+  type ApplicationInput,
+  type InterviewRoundInput,
+  type OfferInput,
+} from '../applications/api';
+import { createCampaign as apiCreateCampaign } from '../campaign/api';
 import { useCampaign } from '../campaign/CampaignContext';
 import type { Campaign } from '../campaign/types';
+import {
+  createUserProgress,
+  listUserProgress,
+  type UserProgressInput,
+} from '../hooks/progressApi';
+import {
+  listCodeDrafts,
+  upsertCodeDraft,
+  type CodeDraftInput,
+} from '../lib/codeDraftsApi';
+import { createTodo, listTodos, type TodoInput } from '../todos/api';
+import { listAnecdotes } from '../pages/behavioral/anecdotesApi';
 
 interface OfferSnapshot extends Record<string, unknown> {
   id: string;
@@ -317,23 +340,22 @@ export default function DataSection() {
 }
 
 async function buildBundle(campaign: Campaign): Promise<Bundle> {
-  const qs = `?campaign=${campaign.id}`;
   const [todos, progress, drafts, apps, anecdotes] = await Promise.all([
-    api.get<TodoSnapshot[]>(`/api/todos${qs}`).catch(() => []),
-    api.get<ProgressSnapshot[]>(`/api/user-progress${qs}`).catch(() => []),
-    api.get<DraftSnapshot[]>(`/api/code-drafts${qs}`).catch(() => []),
-    api.get<ApplicationSnapshot[]>(`/api/applications${qs}`).catch(() => []),
-    api.get<{ id: string; title: string }[]>('/api/anecdotes').catch(() => []),
+    listTodos(campaign.id).catch(() => []),
+    listUserProgress(campaign.id).catch(() => []),
+    listCodeDrafts({ campaign_id: campaign.id }).catch(() => []),
+    listApplications(campaign.id).catch(() => []),
+    listAnecdotes().catch(() => []),
   ]);
 
   // Attach per-application rounds and offer.
   const appsFull: ApplicationSnapshot[] = [];
   for (const app of apps) {
     const [rounds, offer] = await Promise.all([
-      api.get<RoundSnapshot[]>(`/api/applications/${app.id}/rounds`).catch(() => []),
-      api.get<OfferSnapshot | null>(`/api/applications/${app.id}/offer`).catch(() => null),
+      listRounds(app.id).catch(() => []),
+      getOffer(app.id).catch(() => null),
     ]);
-    appsFull.push({ ...app, rounds, offer });
+    appsFull.push({ ...app, rounds: rounds as RoundSnapshot[], offer: offer as OfferSnapshot | null });
   }
 
   const referencedSlugs = new Set<string>();
@@ -355,9 +377,9 @@ async function buildBundle(campaign: Campaign): Promise<Bundle> {
     exported_at: new Date().toISOString(),
     campaign,
     applications: appsFull,
-    todos,
-    user_progress: progress,
-    code_drafts: drafts,
+    todos: todos as TodoSnapshot[],
+    user_progress: progress as ProgressSnapshot[],
+    code_drafts: drafts as DraftSnapshot[],
     anecdotes_referenced,
   };
 }
@@ -370,7 +392,7 @@ async function importBundle(
   const slug = await resolveImportSlug(baseSlug, existing);
   const name = (bundle.campaign?.name ?? 'Imported campaign') + ' (imported)';
 
-  const created = await api.post<Campaign>('/api/campaigns', {
+  const created = await apiCreateCampaign({
     ...bundle.campaign,
     name,
     slug,
@@ -387,7 +409,7 @@ async function importBundle(
     delete payload.rounds;
     delete payload.offer;
     delete payload.campaign;
-    const newApp = await api.post<{ id: string }>('/api/applications', payload);
+    const newApp = await createApplication(payload as ApplicationInput);
     appIdMap.set(app.id, newApp.id);
 
     for (const round of app.rounds ?? []) {
@@ -395,14 +417,14 @@ async function importBundle(
       delete rp.id;
       delete rp.application_id;
       delete rp.application;
-      await api.post(`/api/applications/${newApp.id}/rounds`, rp);
+      await createRound(newApp.id, rp as InterviewRoundInput);
     }
     if (app.offer) {
       const op: Record<string, unknown> = { ...app.offer };
       delete op.id;
       delete op.application_id;
       delete op.application;
-      await api.post(`/api/applications/${newApp.id}/offer`, op);
+      await createOffer(newApp.id, op as OfferInput);
     }
   }
 
@@ -419,19 +441,19 @@ async function importBundle(
         return mapped ? { ...m, slug: mapped } : m;
       });
     }
-    await api.post('/api/todos', payload);
+    await createTodo(payload as unknown as TodoInput);
   }
 
   for (const p of bundle.user_progress ?? []) {
     const payload: Record<string, unknown> = { ...p, campaign_id: created.id };
     delete payload.id;
-    await api.post('/api/user-progress', payload);
+    await createUserProgress(payload as unknown as UserProgressInput);
   }
 
   for (const d of bundle.code_drafts ?? []) {
     const payload: Record<string, unknown> = { ...d, campaign_id: created.id };
     delete payload.id;
-    await api.post('/api/code-drafts', payload);
+    await upsertCodeDraft(payload as unknown as CodeDraftInput);
   }
 
   // Anecdote references — count ones we cannot resolve against the
@@ -439,7 +461,7 @@ async function importBundle(
   // import; the library is intentionally campaign-independent.
   let droppedAnecdotes = 0;
   try {
-    const userAnecdotes = await api.get<{ title: string }[]>('/api/anecdotes');
+    const userAnecdotes = await listAnecdotes();
     const known = new Set(userAnecdotes.map((a) => slugify(a.title)));
     for (const ref of bundle.anecdotes_referenced ?? []) {
       if (!known.has(ref.slug)) droppedAnecdotes += 1;

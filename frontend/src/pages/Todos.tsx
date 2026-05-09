@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Calendar, CheckCircle2, Plus, X } from 'lucide-react';
-import { api } from '../api/client';
+import { deleteTodo, listTodos, updateTodo, type Todo } from '../todos/api';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
 import Select from '../components/shell/Select';
@@ -8,21 +8,10 @@ import MentionText from '../todos/MentionText';
 import TodoForm, { type TodoFormValue } from '../todos/TodoForm';
 import { useCampaign } from '../campaign/CampaignContext';
 import { useCommandCenter } from '../command-center/CommandCenterProvider';
-import type { Mention } from '../lib/mentions';
 import { usePlatform } from '../hooks/usePlatform';
 import { usePersistedState } from '../hooks/usePersistedState';
 
-export interface Todo {
-  id: string;
-  campaign_id: string;
-  body: string;
-  mentions: Mention[];
-  due_date: string;
-  priority: 'low' | 'normal' | 'high';
-  completed_at: string;
-  created_at?: string;
-  updated_at?: string;
-}
+export type { Todo } from '../todos/api';
 
 type Section = 'overdue' | 'today' | 'week' | 'later' | 'no-due' | 'completed';
 
@@ -86,8 +75,7 @@ export default function Todos() {
     setLoading(true);
     setError(null);
     try {
-      const url = currentId ? `/api/todos?campaign=${currentId}` : '/api/todos';
-      const list = await api.get<Todo[]>(url);
+      const list = await listTodos(currentId ?? undefined);
       setTodos(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load todos.');
@@ -112,11 +100,7 @@ export default function Todos() {
     );
     setTodos(optimistic);
     try {
-      await api.put(`/api/todos/${todo.id}`, {
-        ...todo,
-        campaign_id: todo.campaign_id,
-        completed_at: nextCompletedAt,
-      });
+      await updateTodo(todo.id, { ...todo, completed_at: nextCompletedAt });
     } catch {
       setTodos(todos); // revert
     }
@@ -131,10 +115,7 @@ export default function Todos() {
       due_date: value.due_date,
       priority: value.priority,
     };
-    await api.put(`/api/todos/${editing.id}`, {
-      ...updated,
-      campaign_id: editing.campaign_id,
-    });
+    await updateTodo(editing.id, updated);
     setTodos((prev) => prev.map((t) => (t.id === editing.id ? updated : t)));
     setEditing(null);
     window.dispatchEvent(new CustomEvent('rounds:todos-changed'));
@@ -143,7 +124,7 @@ export default function Todos() {
   async function deleteEdit() {
     if (!editing) return;
     const id = editing.id;
-    await api.del(`/api/todos/${id}`);
+    await deleteTodo(id);
     setTodos((prev) => prev.filter((t) => t.id !== id));
     setEditing(null);
     window.dispatchEvent(new CustomEvent('rounds:todos-changed'));

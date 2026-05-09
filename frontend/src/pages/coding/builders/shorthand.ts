@@ -13,92 +13,6 @@ export interface VerboseGraph {
   entry: number | null;
 }
 
-export type Shape =
-  | 'linked_list_array'
-  | 'tree_level_order'
-  | 'graph_adjacency'
-  | 'verbose';
-
-export function toVerbose(
-  value: unknown,
-  shape: Shape,
-  template: NodeTemplate,
-): VerboseGraph {
-  if (shape === 'verbose') return value as VerboseGraph;
-  if (shape === 'linked_list_array') return linkedListArray(value as unknown[], template);
-  if (shape === 'tree_level_order') return treeLevelOrder(value as unknown[], template);
-  if (shape === 'graph_adjacency')
-    return graphAdjacency(value as Record<string, unknown[]>, template);
-  throw new Error(`Unsupported shape: ${shape}`);
-}
-
-function linkedListArray(values: unknown[], t: NodeTemplate): VerboseGraph {
-  if (!values || values.length === 0) return { nodes: [], entry: null };
-  const f = t.fields[0].name;
-  const l = t.links[0].name;
-  return {
-    nodes: values.map((v, i) => ({
-      id: i,
-      fields: { [f]: v },
-      links: { [l]: i + 1 < values.length ? i + 1 : null },
-    })),
-    entry: 0,
-  };
-}
-
-function treeLevelOrder(values: unknown[], t: NodeTemplate): VerboseGraph {
-  if (!values || values.length === 0) return { nodes: [], entry: null };
-  const f = t.fields[0].name;
-  const linkNames = t.links.map((x) => x.name);
-  if (linkNames.length !== 2) {
-    throw new Error('tree_level_order requires exactly 2 links');
-  }
-  const nodes: VerboseNode[] = [];
-  const idForPos: Record<number, number> = {};
-  for (let pos = 0; pos < values.length; pos++) {
-    if (values[pos] === null) continue;
-    idForPos[pos] = nodes.length;
-    const linkInit: Record<string, NodeRef> = {};
-    for (const ln of linkNames) linkInit[ln] = null;
-    nodes.push({ id: nodes.length, fields: { [f]: values[pos] }, links: linkInit });
-  }
-  if (idForPos[0] === undefined) return { nodes: [], entry: null };
-  const queue: [number, number][] = [[0, idForPos[0]]];
-  let cursor = 1;
-  while (queue.length > 0 && cursor < values.length) {
-    const next = queue.shift()!;
-    const parentId = next[1];
-    for (const ln of linkNames) {
-      if (cursor >= values.length) break;
-      const childPos = cursor++;
-      if (values[childPos] === null) continue;
-      const childId = idForPos[childPos];
-      nodes[parentId].links[ln] = childId;
-      queue.push([childPos, childId]);
-    }
-  }
-  return { nodes, entry: 0 };
-}
-
-function graphAdjacency(adj: Record<string, unknown[]>, t: NodeTemplate): VerboseGraph {
-  const f = t.fields[0].name;
-  const l = t.links[0].name;
-  const keys = Object.keys(adj);
-  const idForKey: Record<string, number> = {};
-  keys.forEach((k, i) => {
-    idForKey[k] = i;
-  });
-  const nodes: VerboseNode[] = keys.map((k, i) => {
-    const parsed = parseInt(k, 10);
-    const val: unknown = Number.isNaN(parsed) ? k : parsed;
-    const neighborIds = adj[k]
-      .filter((n) => idForKey[String(n)] !== undefined)
-      .map((n) => idForKey[String(n)]);
-    return { id: i, fields: { [f]: val }, links: { [l]: neighborIds } };
-  });
-  return { nodes, entry: nodes.length > 0 ? 0 : null };
-}
-
 /** Walk a singly-linked verbose graph, returning the field values in order. */
 export function fromVerboseChain(
   v: VerboseGraph,
@@ -152,4 +66,29 @@ export function fromVerboseLevelOrder(
   }
   while (out.length > 0 && out[out.length - 1] === null) out.pop();
   return out;
+}
+
+/**
+ * Type-narrow an unknown value to `VerboseGraph`.
+ *
+ * Previously this module also accepted shorthand inputs (level-order
+ * arrays, adjacency dicts, flat lists) and converted them. That path is
+ * gone — node-typed test inputs MUST now arrive as canonical verbose
+ * JSON (the seed builder converts authoring shorthand at build time via
+ * `pocketbase/seeds/builder/_shorthand.py`). If a test case shows up
+ * with a legacy shape, this guard returns an empty graph and the editor
+ * surfaces it as such, which is what we want — fail loudly instead of
+ * silently re-shaping.
+ */
+export function asVerbose(value: unknown, _template: NodeTemplate): VerboseGraph {
+  if (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    'nodes' in value &&
+    'entry' in value
+  ) {
+    return value as VerboseGraph;
+  }
+  return { nodes: [], entry: null };
 }

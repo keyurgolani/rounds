@@ -13,6 +13,7 @@ with `ListNode` end-to-end."""
 from builder.registry import register
 
 
+from builder._shorthand import linked_list_to_verbose, inflate_list
 PAYLOAD = {
     "title": "Add Two Numbers",
     "difficulty": "Medium",
@@ -129,43 +130,43 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"l1": [2, 4, 3], "l2": [5, 6, 4]},
+        {"input": {"l1": linked_list_to_verbose([2, 4, 3]), "l2": linked_list_to_verbose([5, 6, 4])},
          "expected": [7, 0, 8],
          "description": "LeetCode canonical — 342 + 465 = 807",
          "tags": ["basic"]},
-        {"input": {"l1": [0], "l2": [0]},
+        {"input": {"l1": linked_list_to_verbose([0]), "l2": linked_list_to_verbose([0])},
          "expected": [0],
          "description": "Both zero — single-digit result",
          "tags": ["edge"]},
-        {"input": {"l1": [9, 9, 9, 9, 9, 9, 9], "l2": [9, 9, 9, 9]},
+        {"input": {"l1": linked_list_to_verbose([9, 9, 9, 9, 9, 9, 9]), "l2": linked_list_to_verbose([9, 9, 9, 9])},
          "expected": [8, 9, 9, 9, 0, 0, 0, 1],
          "description": "Different lengths + cascading carry — 9999999 + 9999 = 10009998",
          "tags": ["tricky"]},
-        {"input": {"l1": [1, 8], "l2": [0]},
+        {"input": {"l1": linked_list_to_verbose([1, 8]), "l2": linked_list_to_verbose([0])},
          "expected": [1, 8],
          "description": "Adding zero — result equals the non-zero operand",
          "tags": ["edge"]},
-        {"input": {"l1": [5], "l2": [5]},
+        {"input": {"l1": linked_list_to_verbose([5]), "l2": linked_list_to_verbose([5])},
          "expected": [0, 1],
          "description": "Single-digit final carry — 5 + 5 = 10",
          "tags": ["edge"]},
-        {"input": {"l1": [1], "l2": [9, 9, 9]},
+        {"input": {"l1": linked_list_to_verbose([1]), "l2": linked_list_to_verbose([9, 9, 9])},
          "expected": [0, 0, 0, 1],
          "description": "Tiny + huge with cascading carry — 1 + 999 = 1000",
          "tags": ["tricky"]},
-        {"input": {"l1": [2, 4], "l2": [5, 6, 4]},
+        {"input": {"l1": linked_list_to_verbose([2, 4]), "l2": linked_list_to_verbose([5, 6, 4])},
          "expected": [7, 0, 5],
          "description": "Different lengths, no final carry — 42 + 465 = 507",
          "tags": ["basic"]},
-        {"input": {"l1": [0, 0, 1], "l2": [0, 0, 1]},
+        {"input": {"l1": linked_list_to_verbose([0, 0, 1]), "l2": linked_list_to_verbose([0, 0, 1])},
          "expected": [0, 0, 2],
          "description": "Interior zeros preserved — 100 + 100 = 200",
          "tags": ["tricky"]},
-        {"input": {"l1": [9], "l2": [1, 9, 9, 9, 9, 9, 9, 9, 9, 9]},
+        {"input": {"l1": linked_list_to_verbose([9]), "l2": linked_list_to_verbose([1, 9, 9, 9, 9, 9, 9, 9, 9, 9])},
          "expected": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
          "description": "Single digit triggers carry through 10 nines — adds a new MSB",
          "tags": ["large"]},
-        {"input": {"l1": [1] + [0] * 99, "l2": [9] + [0] * 99},
+        {"input": {"l1": linked_list_to_verbose([1] + [0] * 99), "l2": linked_list_to_verbose([9] + [0] * 99)},
          "expected": {"$match": "any_of", "values": [[0, 1], [0, 1] + [0] * 98]},
          "description": "Constraint upper bound — 100 digits each, single carry at index 0",
          "tags": ["large"]},
@@ -366,23 +367,25 @@ PAYLOAD = {
             {"name": "l1", "type": "node"},
             {"name": "l2", "type": "node"},
         ],
-        "input_shape": "linked_list_array",
         "output_shape": "linked_list_array",
     },
 }
 
 
 def REFERENCE(l1, l2):
-    # Build-time oracle: operates on the array form of the test-case
-    # input. The user-visible runtime form (real ListNode chains) is
-    # produced by the linked_list driver, which inflates these arrays
-    # before invoking the user code and deflates the returned chain.
+    # Inflate the verbose chains the test cases now carry into flat digit
+    # arrays. The user-visible runtime form (real ListNode chains) is
+    # produced by the linked_list driver, which inflates the same
+    # verbose JSON before invoking the user code and deflates the
+    # returned chain to a flat array for matching.
+    a = inflate_list(l1)
+    b = inflate_list(l2)
     out = []
     i = j = 0
     carry = 0
-    while i < len(l1) or j < len(l2) or carry:
-        d1 = l1[i] if i < len(l1) else 0
-        d2 = l2[j] if j < len(l2) else 0
+    while i < len(a) or j < len(b) or carry:
+        d1 = a[i] if i < len(a) else 0
+        d2 = b[j] if j < len(b) else 0
         total = d1 + d2 + carry
         out.append(total % 10)
         carry = total // 10

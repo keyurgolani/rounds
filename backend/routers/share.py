@@ -196,7 +196,9 @@ async def public_read(token: str, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="Share link points nowhere.")
 
     # Best-effort view tracking. Failures here shouldn't block the
-    # viewer — we log and move on.
+    # viewer, but we want the full traceback in logs so a broken
+    # admin token / missing `resume_share_views` collection / PB outage
+    # doesn't silently drop view counts on the floor.
     try:
         ip = request.client.host if request.client else ""
         ua = request.headers.get("user-agent", "")[:300]
@@ -210,8 +212,8 @@ async def public_read(token: str, request: Request) -> dict[str, Any]:
                 "viewed_at": _utc_now_iso(),
             },
         )
-    except Exception as err:  # noqa: BLE001
-        _log.warning("view tracking failed: %s", err)
+    except Exception:  # noqa: BLE001
+        _log.exception("view tracking failed for share link %s", link["id"])
 
     return out
 

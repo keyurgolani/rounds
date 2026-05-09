@@ -25,7 +25,7 @@ export default function ClassicTemplate({ data, design }: Props) {
   ]);
 
   return (
-    <A4Page marginMm={marginMm} fontFamily={fontFamily} fontSize={fontSize}>
+    <A4Page marginMm={marginMm} fontFamily={fontFamily} fontSize={fontSize} bulletStyle={design?.bulletStyle}>
       <header style={{ textAlign: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '0.02em' }}>
           {p.fullName || 'Your name'}

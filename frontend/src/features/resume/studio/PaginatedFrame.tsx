@@ -54,11 +54,23 @@ export default function PaginatedFrame({ children }: Props) {
       // 2) Forward pass: any block whose [top, bottom] crosses a page
       // boundary gets pushed down to land at the start of the next
       // page. Subsequent blocks reflow naturally.
-      const articleTop = article.getBoundingClientRect().top;
+      //
+      // PreviewDialog wraps this whole frame in a `transform: scale(zoom)`
+      // ancestor, which makes `getBoundingClientRect()` return post-
+      // transform pixels. Comparing those against the unscaled
+      // PAGE_HEIGHT_PX constant would make the gap drift with zoom.
+      // The article itself is `width: 210mm` (unscaled by definition),
+      // so the ratio of its visual width to `offsetWidth` (which
+      // ignores transforms) is exactly the cumulative scale — divide
+      // every visual measurement by it before doing layout math.
+      const articleRect = article.getBoundingClientRect();
+      const articleTop = articleRect.top;
+      const scale =
+        article.offsetWidth > 0 ? articleRect.width / article.offsetWidth : 1;
       for (const block of blocks) {
         const rect = block.getBoundingClientRect();
-        const offsetTop = rect.top - articleTop;
-        const height = rect.height;
+        const offsetTop = (rect.top - articleTop) / scale;
+        const height = rect.height / scale;
         // Skip blocks too tall to fit on any single page — the print
         // layer will break them anyway; pushing helps no one.
         if (height < 1 || height >= PAGE_HEIGHT_PX - BOUNDARY_TOLERANCE) continue;

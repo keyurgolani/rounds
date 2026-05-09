@@ -1,7 +1,7 @@
 // Thin wrapper around /api/share. Authed endpoints carry a Bearer
 // PocketBase token; the by-token public read is anonymous.
 
-import { pb } from '../../../lib/pocketbase';
+import { runnerJSON } from '../../../lib/runnerFetch';
 import type { ResumeData, TemplateConfig } from '../types';
 
 export type ShareLink = {
@@ -21,38 +21,10 @@ export type PublicResumePayload = {
   kind: 'resume' | 'variant';
 };
 
-function authHeaders(): HeadersInit {
-  const token = pb.authStore.token;
-  if (!token) throw new Error('Not authenticated.');
-  return { Authorization: `Bearer ${token}` };
-}
-
-async function send<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(path, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    let detail = text;
-    try {
-      const j = JSON.parse(text) as { detail?: string };
-      if (j.detail) detail = j.detail;
-    } catch {
-      /* keep raw */
-    }
-    throw new Error(`Share ${res.status}: ${detail}`);
-  }
-  return (await res.json()) as T;
-}
-
 export function listShareLinks(): Promise<ShareLink[]> {
-  return send<ShareLink[]>('/api/share', {
+  return runnerJSON<ShareLink[]>('/api/share', {
     method: 'GET',
-    headers: authHeaders(),
+    errorPrefix: 'Share',
   });
 }
 
@@ -60,25 +32,28 @@ export function createShareLink(input: {
   resume_id?: string;
   variant_id?: string;
 }): Promise<ShareLink> {
-  return send<ShareLink>('/api/share', {
+  return runnerJSON<ShareLink>('/api/share', {
     method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({
+    body: {
       resume_id: input.resume_id ?? null,
       variant_id: input.variant_id ?? null,
-    }),
+    },
+    errorPrefix: 'Share',
   });
 }
 
 export function deleteShareLink(id: string): Promise<{ ok: boolean }> {
-  return send(`/api/share/${id}`, { method: 'DELETE', headers: authHeaders() });
+  return runnerJSON(`/api/share/${id}`, {
+    method: 'DELETE',
+    errorPrefix: 'Share',
+  });
 }
 
 export function fetchPublicResume(token: string): Promise<PublicResumePayload> {
-  // Public — no auth header.
-  return send<PublicResumePayload>(`/api/share/by-token/${encodeURIComponent(token)}`, {
-    method: 'GET',
-  });
+  return runnerJSON<PublicResumePayload>(
+    `/api/share/by-token/${encodeURIComponent(token)}`,
+    { method: 'GET', auth: 'none', errorPrefix: 'Share' },
+  );
 }
 
 export function buildShareUrl(token: string): string {

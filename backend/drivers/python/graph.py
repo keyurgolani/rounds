@@ -1,4 +1,8 @@
-"""Python graph driver — generic node primitive over general layout."""
+"""Python graph driver — generic node primitive over general layout.
+
+Inputs MUST arrive in canonical verbose form. Legacy `graph_adjacency`
+shorthand is a build-time authoring convenience (see
+pocketbase/seeds/builder/_shorthand.py) and is rejected at runtime."""
 from __future__ import annotations
 
 from drivers.python._node_codegen import emit_class, emit_inflate, emit_deflate
@@ -9,7 +13,6 @@ _DEFAULT_TEMPLATE = {
     "fields": [{"name": "val", "type": "int"}],
     "links": [{"name": "neighbors", "arity": "list"}],
 }
-_DEFAULT_SHAPE = "graph_adjacency"
 _SUPPORTED_OUTPUT_SHAPES = {"verbose", "graph_adjacency"}
 
 
@@ -24,6 +27,12 @@ def validate(entry: dict) -> list[str]:
         errors.append("node_template must declare at least one field")
     if not isinstance(template.get("links"), list) or not template.get("links"):
         errors.append("node_template must declare at least one link")
+    input_shape = entry.get("input_shape", "verbose")
+    if input_shape != "verbose":
+        errors.append(
+            f"unsupported input_shape {input_shape!r}; graph inputs must be authored as "
+            f"verbose JSON (use builder._shorthand.adj_to_verbose at build time)"
+        )
     output_shape = entry.get("output_shape", "verbose")
     if output_shape not in _SUPPORTED_OUTPUT_SHAPES:
         errors.append(
@@ -37,7 +46,6 @@ def wrapper_snippet(entry: dict) -> str:
     name = entry["name"]
     params = entry["params"]
     template = entry.get("node_template", _DEFAULT_TEMPLATE)
-    shape = entry.get("input_shape", _DEFAULT_SHAPE)
     output_shape = entry.get("output_shape", "verbose")
 
     cls_code = emit_class(template)
@@ -55,39 +63,22 @@ def _drive(input):
     fn = globals()[{name!r}]
     kwargs = dict(input)
     _node_params = {node_param_names!r}
-    _shape = {shape!r}
     _template = {template!r}
     _output_shape = {output_shape!r}
     for _name in _node_params:
         v = kwargs.get(_name)
         if v is None:
             continue
-        if _shape == "verbose" or isinstance(v, dict) and 'nodes' in v:
-            kwargs[_name] = _inflate(v)
-        else:
-            kwargs[_name] = _inflate(_to_verbose(v, _shape, _template))
+        if not (isinstance(v, dict) and 'nodes' in v and 'entry' in v):
+            raise TypeError(
+                "graph driver expected verbose JSON {{'nodes': [...], 'entry': id}} "
+                "for param " + repr(_name) + "; got " + type(v).__name__
+            )
+        kwargs[_name] = _inflate(v)
     out = fn(**kwargs)
     if isinstance(out, {template["name"]}) or out is None:
         return _to_shape(_deflate(out), _output_shape, _template)
     return out
-
-
-def _to_verbose(adj, shape, template):
-    if shape == "graph_adjacency":
-        f_name = template["fields"][0]["name"]
-        l_name = template["links"][0]["name"]
-        keys = list(adj.keys())
-        id_for_key = {{k: i for i, k in enumerate(keys)}}
-        nodes = []
-        for i, k in enumerate(keys):
-            try:
-                val = int(k)
-            except (TypeError, ValueError):
-                val = k
-            neighbor_ids = [id_for_key[str(n)] for n in adj[k] if str(n) in id_for_key]
-            nodes.append({{"id": i, "fields": {{f_name: val}}, "links": {{l_name: neighbor_ids}}}})
-        return {{"nodes": nodes, "entry": 0 if nodes else None}}
-    raise ValueError(f"unsupported graph shape: {{shape}}")
 
 
 def _to_shape(verbose, output_shape, template):

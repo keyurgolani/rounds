@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { PracticeStatus } from '../components/shell/StatusDot';
-import { api } from '../api/client';
+import {
+  createUserProgress,
+  listUserProgress,
+  updateUserProgress,
+  type PracticeKind,
+} from './progressApi';
 
 const STATUS_KEY = 'rounds.practiceStatus.v1';
 
-export type PracticeKind = 'system' | 'coding' | 'behavioral';
+export type { PracticeKind } from './progressApi';
 type Track = PracticeKind;
 
 type AllMaps = Record<string, Record<string, PracticeStatus>>;
@@ -69,13 +74,7 @@ export function setActiveCampaignForStatus(id: string | null) {
 
 export async function hydrateCampaignProgress(campaignId: string) {
   try {
-    const rows = await api.get<
-      {
-        question_type: Track;
-        question_slug: string;
-        status: PracticeStatus;
-      }[]
-    >(`/api/user-progress?campaign=${campaignId}`);
+    const rows = await listUserProgress(campaignId);
     const m: Record<string, PracticeStatus> = {};
     for (const r of rows) {
       if (!r.question_type || !r.question_slug) continue;
@@ -96,26 +95,20 @@ async function persistSingle(
 ) {
   if (!campaignId) return;
   try {
-    const existing = await api.get<
-      { id: string; question_type: Track; question_slug: string }[]
-    >(`/api/user-progress?campaign=${campaignId}`);
+    const existing = await listUserProgress(campaignId);
     const match = existing.find(
       (r) => r.question_type === track && r.question_slug === slugOrId,
     );
+    const input = {
+      campaign_id: campaignId,
+      question_type: track,
+      question_slug: slugOrId,
+      status,
+    };
     if (match) {
-      await api.put(`/api/user-progress/${match.id}`, {
-        campaign_id: campaignId,
-        question_type: track,
-        question_slug: slugOrId,
-        status,
-      });
+      await updateUserProgress(match.id, input);
     } else {
-      await api.post('/api/user-progress', {
-        campaign_id: campaignId,
-        question_type: track,
-        question_slug: slugOrId,
-        status,
-      });
+      await createUserProgress(input);
     }
   } catch {
     /* swallow — localStorage remains the user-visible source of truth */

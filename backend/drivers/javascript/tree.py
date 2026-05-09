@@ -1,4 +1,4 @@
-"""JavaScript tree driver."""
+"""JavaScript tree driver — verbose-only inputs at runtime."""
 from __future__ import annotations
 
 import json
@@ -14,7 +14,6 @@ _DEFAULT_TEMPLATE = {
         {"name": "right", "arity": "single"},
     ],
 }
-_DEFAULT_SHAPE = "tree_level_order"
 _SUPPORTED_OUTPUT_SHAPES = {"verbose", "tree_level_order"}
 
 
@@ -29,6 +28,12 @@ def validate(entry: dict) -> list[str]:
         errors.append("node_template must declare at least one field")
     if not isinstance(template.get("links"), list) or not template.get("links"):
         errors.append("node_template must declare at least one link")
+    input_shape = entry.get("input_shape", "verbose")
+    if input_shape != "verbose":
+        errors.append(
+            f"unsupported input_shape {input_shape!r}; tree inputs must be authored as "
+            f"verbose JSON (use builder._shorthand.level_order_to_verbose at build time)"
+        )
     output_shape = entry.get("output_shape", "verbose")
     if output_shape not in _SUPPORTED_OUTPUT_SHAPES:
         errors.append(
@@ -42,7 +47,6 @@ def wrapper_snippet(entry: dict) -> str:
     name = entry["name"]
     params = entry["params"]
     template = entry.get("node_template", _DEFAULT_TEMPLATE)
-    shape = entry.get("input_shape", _DEFAULT_SHAPE)
     output_shape = entry.get("output_shape", "verbose")
 
     cls_code = emit_class(template)
@@ -55,40 +59,6 @@ def wrapper_snippet(entry: dict) -> str:
 {cls_code}
 {inflate_code}
 {deflate_code}
-
-function _to_verbose(values, shape, template) {{
-  if (shape === "tree_level_order") {{
-    if (!values || values.length === 0) return {{nodes: [], entry: null}};
-    const f = template.fields[0].name;
-    const lNames = template.links.map(l => l.name);
-    const nodes = [];
-    const idForPos = {{}};
-    for (let pos = 0; pos < values.length; pos++) {{
-      const v = values[pos];
-      if (v === null || v === undefined) continue;
-      idForPos[pos] = nodes.length;
-      const linkInit = {{}};
-      for (const ln of lNames) linkInit[ln] = null;
-      nodes.push({{ id: nodes.length, fields: {{ [f]: v }}, links: linkInit }});
-    }}
-    if (!(0 in idForPos)) return {{nodes: [], entry: null}};
-    const queue = [[0, idForPos[0]]];
-    let cursor = 1;
-    while (queue.length && cursor < values.length) {{
-      const [, parentId] = queue.shift();
-      for (const ln of lNames) {{
-        if (cursor >= values.length) break;
-        const childPos = cursor++;
-        if (values[childPos] === null || values[childPos] === undefined) continue;
-        const childId = idForPos[childPos];
-        nodes[parentId].links[ln] = childId;
-        queue.push([childPos, childId]);
-      }}
-    }}
-    return {{ nodes, entry: 0 }};
-  }}
-  throw new Error("unsupported tree shape: " + shape);
-}}
 
 function _to_shape(verbose, outputShape, template) {{
   if (outputShape === "verbose") return verbose;
@@ -119,17 +89,18 @@ function _drive(input) {{
   const fn = eval({json.dumps(name)});
   const kwargs = {{...input}};
   const nodeParams = {json.dumps(node_param_names)};
-  const shape = {json.dumps(shape)};
   const template = {json.dumps(template)};
   const outputShape = {json.dumps(output_shape)};
   for (const p of nodeParams) {{
     const v = kwargs[p];
     if (v == null) continue;
-     if (shape === "verbose" || (v && typeof v === "object" && "nodes" in v)) {{
-       kwargs[p] = _inflate(v);
-     }} else {{
-       kwargs[p] = _inflate(_to_verbose(v, shape, template));
-     }}
+    if (!(v && typeof v === "object" && "nodes" in v && "entry" in v)) {{
+      throw new TypeError(
+        "tree driver expected verbose JSON {{nodes: [...], entry: id}} for param " +
+        JSON.stringify(p) + "; got " + (Array.isArray(v) ? "array" : typeof v)
+      );
+    }}
+    kwargs[p] = _inflate(v);
   }}
   const out = fn(...Object.values(kwargs));
   if (out instanceof {template["name"]} || out === null) {{

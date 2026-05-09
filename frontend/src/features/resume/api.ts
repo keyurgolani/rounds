@@ -22,7 +22,82 @@ import type {
 } from './types';
 import { emptyResumeData } from './types';
 
-type AnyRecord = RecordModel & Record<string, unknown>;
+// ---- Row shapes -----------------------------------------------------
+//
+// The PocketBase SDK is generic on the record type: `pb.collection<R>(name)`
+// returns a service whose methods return `R`. Declaring the row shape
+// once per collection lets every call site stay type-safe without the
+// `as unknown as AnyRecord` casts that proliferated when this file was
+// first written.
+
+interface ResumeRow extends RecordModel {
+  user: string;
+  name: string;
+  slug: string;
+  template_id: string;
+  design: TemplateConfig;
+  data: ResumeData;
+}
+
+interface VariantRow extends RecordModel {
+  user: string;
+  resume: string;
+  application?: string;
+  name: string;
+  target_company?: string;
+  job_title?: string;
+  job_description?: string;
+  tone?: string;
+  role_focus?: string[];
+  data: ResumeData;
+  ats_score?: number;
+  ats_breakdown?: ResumeVariant['ats_breakdown'];
+}
+
+interface VersionRow extends RecordModel {
+  user: string;
+  resume?: string;
+  variant?: string;
+  data: ResumeData;
+  label?: string;
+  is_auto: boolean;
+}
+
+interface BulletRow extends RecordModel {
+  user: string;
+  text: string;
+  tags?: string[];
+  source_anecdote?: string;
+  metrics?: Bullet['metrics'];
+}
+
+interface AISettingsRow extends RecordModel {
+  user: string;
+  provider: AISettings['provider'];
+  model: string;
+  import_model?: string;
+  base_url?: string;
+  encrypted_key?: string;
+  key_iv?: string;
+}
+
+interface ShareLinkRow extends RecordModel {
+  user: string;
+  variant: string;
+  token: string;
+  is_password: boolean;
+  password_hash?: string;
+  expires_at?: string;
+}
+
+// ---- Typed collection accessors -------------------------------------
+
+const resumesCol = () => pb.collection<ResumeRow>('resumes');
+const variantsCol = () => pb.collection<VariantRow>('resume_variants');
+const versionsCol = () => pb.collection<VersionRow>('resume_versions');
+const bulletsCol = () => pb.collection<BulletRow>('resume_bullets');
+const aiSettingsCol = () => pb.collection<AISettingsRow>('ai_settings');
+const shareLinksCol = () => pb.collection<ShareLinkRow>('resume_share_links');
 
 function userId(): string {
   const id = pb.authStore.record?.id;
@@ -30,106 +105,96 @@ function userId(): string {
   return id;
 }
 
-function strip<T extends AnyRecord>(r: T): Record<string, unknown> {
-  const { collectionId, collectionName, expand, ...rest } = r as Record<string, unknown>;
-  void collectionId;
-  void collectionName;
-  void expand;
-  return rest;
+function pbStatus(err: unknown): number | undefined {
+  return (err as { status?: number } | null)?.status;
 }
 
-// --- Adapters: PocketBase row → typed snake_case object ---------------
+// ---- Row → domain adapters ------------------------------------------
 
-function adaptResume(r: AnyRecord): Resume {
-  const base = strip(r);
+function adaptResume(r: ResumeRow): Resume {
   return {
-    id: base.id as string,
-    user_id: r.user as string,
-    name: (base.name as string) ?? '',
-    slug: (base.slug as string) ?? '',
-    template_id: ((base.template_id as string) ?? 'modern'),
-    design: ((base.design as TemplateConfig) ?? {}),
-    data: ((base.data as ResumeData) ?? emptyResumeData()),
-    created_at: r.created as string,
-    updated_at: r.updated as string,
+    id: r.id,
+    user_id: r.user,
+    name: r.name ?? '',
+    slug: r.slug ?? '',
+    template_id: r.template_id ?? 'modern',
+    design: r.design ?? {},
+    data: r.data ?? emptyResumeData(),
+    created_at: r.created,
+    updated_at: r.updated,
   };
 }
 
-function adaptVariant(r: AnyRecord): ResumeVariant {
-  const base = strip(r);
+function adaptVariant(r: VariantRow): ResumeVariant {
   return {
-    id: base.id as string,
-    user_id: r.user as string,
-    resume_id: r.resume as string,
-    name: (base.name as string) ?? '',
-    target_company: base.target_company as string | undefined,
-    job_title: base.job_title as string | undefined,
-    job_description: base.job_description as string | undefined,
-    tone: base.tone as string | undefined,
-    role_focus: (base.role_focus as string[] | undefined) ?? [],
-    data: ((base.data as ResumeData) ?? emptyResumeData()),
-    ats_score: base.ats_score as number | undefined,
-    ats_breakdown: base.ats_breakdown as ResumeVariant['ats_breakdown'],
-    application_id: (r.application as string | undefined) || undefined,
-    created_at: r.created as string,
-    updated_at: r.updated as string,
+    id: r.id,
+    user_id: r.user,
+    resume_id: r.resume,
+    name: r.name ?? '',
+    target_company: r.target_company,
+    job_title: r.job_title,
+    job_description: r.job_description,
+    tone: r.tone,
+    role_focus: r.role_focus ?? [],
+    data: r.data ?? emptyResumeData(),
+    ats_score: r.ats_score,
+    ats_breakdown: r.ats_breakdown,
+    application_id: r.application || undefined,
+    created_at: r.created,
+    updated_at: r.updated,
   };
 }
 
-function adaptVersion(r: AnyRecord): ResumeVersion {
-  const base = strip(r);
+function adaptVersion(r: VersionRow): ResumeVersion {
   return {
-    id: base.id as string,
-    user_id: r.user as string,
-    resume_id: (r.resume as string | undefined) || undefined,
-    variant_id: (r.variant as string | undefined) || undefined,
-    data: (base.data as ResumeData) ?? emptyResumeData(),
-    label: base.label as string | undefined,
-    is_auto: Boolean(base.is_auto),
-    created_at: r.created as string,
+    id: r.id,
+    user_id: r.user,
+    resume_id: r.resume || undefined,
+    variant_id: r.variant || undefined,
+    data: r.data ?? emptyResumeData(),
+    label: r.label,
+    is_auto: Boolean(r.is_auto),
+    created_at: r.created,
   };
 }
 
-function adaptBullet(r: AnyRecord): Bullet {
-  const base = strip(r);
+function adaptBullet(r: BulletRow): Bullet {
   return {
-    id: base.id as string,
-    user_id: r.user as string,
-    text: (base.text as string) ?? '',
-    tags: (base.tags as string[] | undefined) ?? [],
-    source_anecdote_id: (r.source_anecdote as string | undefined) || undefined,
-    metrics: (base.metrics as Bullet['metrics']) ?? [],
-    created_at: r.created as string,
-    updated_at: r.updated as string,
+    id: r.id,
+    user_id: r.user,
+    text: r.text ?? '',
+    tags: r.tags ?? [],
+    source_anecdote_id: r.source_anecdote || undefined,
+    metrics: r.metrics ?? [],
+    created_at: r.created,
+    updated_at: r.updated,
   };
 }
 
-function adaptAISettings(r: AnyRecord): AISettings {
-  const base = strip(r);
+function adaptAISettings(r: AISettingsRow): AISettings {
   return {
-    id: base.id as string,
-    user_id: r.user as string,
-    provider: (base.provider as AISettings['provider']) ?? 'anthropic',
-    model: (base.model as string) ?? '',
-    import_model: base.import_model as string | undefined,
-    base_url: base.base_url as string | undefined,
-    encrypted_key: base.encrypted_key as string | undefined,
-    key_iv: base.key_iv as string | undefined,
-    updated_at: r.updated as string,
+    id: r.id,
+    user_id: r.user,
+    provider: r.provider ?? 'anthropic',
+    model: r.model ?? '',
+    import_model: r.import_model,
+    base_url: r.base_url,
+    encrypted_key: r.encrypted_key,
+    key_iv: r.key_iv,
+    updated_at: r.updated,
   };
 }
 
-function adaptShareLink(r: AnyRecord): ShareLink {
-  const base = strip(r);
+function adaptShareLink(r: ShareLinkRow): ShareLink {
   return {
-    id: base.id as string,
-    user_id: r.user as string,
-    variant_id: r.variant as string,
-    token: (base.token as string) ?? '',
-    is_password: Boolean(base.is_password),
-    password_hash: base.password_hash as string | undefined,
-    expires_at: base.expires_at as string | undefined,
-    created_at: r.created as string,
+    id: r.id,
+    user_id: r.user,
+    variant_id: r.variant,
+    token: r.token ?? '',
+    is_password: Boolean(r.is_password),
+    password_hash: r.password_hash,
+    expires_at: r.expires_at,
+    created_at: r.created,
   };
 }
 
@@ -145,18 +210,13 @@ export async function ensureUniqueSlug(
   let n = 2;
   while (true) {
     try {
-      const existing = (await pb
-        .collection('resumes')
-        .getFirstListItem(
-          `user = "${me}" && slug = "${candidate}"`,
-        )) as unknown as { id?: string };
-      // If the only collision is the resume being renamed itself,
-      // its current slug is fine to keep / land on.
-      if (excludeId && existing?.id === excludeId) return candidate;
+      const existing = await resumesCol().getFirstListItem(
+        `user = "${me}" && slug = "${candidate}"`,
+      );
+      if (excludeId && existing.id === excludeId) return candidate;
       candidate = `${base}-${n++}`;
     } catch (err: unknown) {
-      const status = (err as { status?: number })?.status;
-      if (status === 404) return candidate;
+      if (pbStatus(err) === 404) return candidate;
       throw err;
     }
   }
@@ -166,24 +226,24 @@ export async function ensureUniqueSlug(
 
 export async function listResumes(): Promise<Resume[]> {
   const me = userId();
-  const items = (await pb.collection('resumes').getFullList({
+  const items = await resumesCol().getFullList({
     filter: `user = "${me}"`,
     sort: '-updated',
-  })) as unknown as AnyRecord[];
+  });
   return items.map(adaptResume);
 }
 
 export async function getResumeBySlug(slug: string): Promise<Resume> {
   const me = userId();
   const safe = slug.replace(/"/g, '');
-  const r = (await pb
-    .collection('resumes')
-    .getFirstListItem(`user = "${me}" && slug = "${safe}"`)) as unknown as AnyRecord;
+  const r = await resumesCol().getFirstListItem(
+    `user = "${me}" && slug = "${safe}"`,
+  );
   return adaptResume(r);
 }
 
 export async function getResume(id: string): Promise<Resume> {
-  const r = (await pb.collection('resumes').getOne(id)) as unknown as AnyRecord;
+  const r = await resumesCol().getOne(id);
   return adaptResume(r);
 }
 
@@ -194,14 +254,14 @@ export async function createResume(input: {
   design?: TemplateConfig;
 }): Promise<Resume> {
   const slug = await ensureUniqueSlug(input.name);
-  const r = (await pb.collection('resumes').create({
+  const r = await resumesCol().create({
     user: userId(),
     name: input.name,
     slug,
     template_id: input.template_id ?? 'modern',
     design: input.design ?? {},
     data: input.data ?? emptyResumeData(),
-  })) as unknown as AnyRecord;
+  });
   return adaptResume(r);
 }
 
@@ -209,12 +269,12 @@ export async function updateResume(
   id: string,
   patch: Partial<Pick<Resume, 'name' | 'slug' | 'template_id' | 'design' | 'data'>>,
 ): Promise<Resume> {
-  const r = (await pb.collection('resumes').update(id, patch)) as unknown as AnyRecord;
+  const r = await resumesCol().update(id, patch);
   return adaptResume(r);
 }
 
 export async function deleteResume(id: string): Promise<void> {
-  await pb.collection('resumes').delete(id);
+  await resumesCol().delete(id);
 }
 
 // --- Variants ---------------------------------------------------------
@@ -223,10 +283,10 @@ export async function listVariants(resumeId?: string): Promise<ResumeVariant[]> 
   const me = userId();
   const filters = [`user = "${me}"`];
   if (resumeId) filters.push(`resume = "${resumeId}"`);
-  const items = (await pb.collection('resume_variants').getFullList({
+  const items = await variantsCol().getFullList({
     filter: filters.join(' && '),
     sort: '-updated',
-  })) as unknown as AnyRecord[];
+  });
   return items.map(adaptVariant);
 }
 
@@ -234,10 +294,10 @@ export async function listVariantsForApplication(
   applicationId: string,
 ): Promise<ResumeVariant[]> {
   const me = userId();
-  const items = (await pb.collection('resume_variants').getFullList({
+  const items = await variantsCol().getFullList({
     filter: `user = "${me}" && application = "${applicationId}"`,
     sort: '-updated',
-  })) as unknown as AnyRecord[];
+  });
   return items.map(adaptVariant);
 }
 
@@ -252,7 +312,7 @@ export async function createVariant(input: {
   role_focus?: string[];
   application_id?: string;
 }): Promise<ResumeVariant> {
-  const r = (await pb.collection('resume_variants').create({
+  const r = await variantsCol().create({
     user: userId(),
     resume: input.resume_id,
     name: input.name,
@@ -262,8 +322,8 @@ export async function createVariant(input: {
     job_description: input.job_description ?? '',
     tone: input.tone ?? '',
     role_focus: input.role_focus ?? [],
-    application: input.application_id || null,
-  })) as unknown as AnyRecord;
+    application: input.application_id || undefined,
+  });
   return adaptVariant(r);
 }
 
@@ -276,12 +336,12 @@ export async function updateVariant(
     payload.application = patch.application_id || null;
     delete payload.application_id;
   }
-  const r = (await pb.collection('resume_variants').update(id, payload)) as unknown as AnyRecord;
+  const r = await variantsCol().update(id, payload);
   return adaptVariant(r);
 }
 
 export async function deleteVariant(id: string): Promise<void> {
-  await pb.collection('resume_variants').delete(id);
+  await variantsCol().delete(id);
 }
 
 // --- Versions ---------------------------------------------------------
@@ -294,10 +354,10 @@ export async function listVersions(opts: {
   const filters = [`user = "${me}"`];
   if (opts.resumeId) filters.push(`resume = "${opts.resumeId}"`);
   if (opts.variantId) filters.push(`variant = "${opts.variantId}"`);
-  const items = (await pb.collection('resume_versions').getFullList({
+  const items = await versionsCol().getFullList({
     filter: filters.join(' && '),
     sort: '-created',
-  })) as unknown as AnyRecord[];
+  });
   return items.map(adaptVersion);
 }
 
@@ -308,14 +368,14 @@ export async function createVersion(input: {
   label?: string;
   isAuto?: boolean;
 }): Promise<ResumeVersion> {
-  const r = (await pb.collection('resume_versions').create({
+  const r = await versionsCol().create({
     user: userId(),
-    resume: input.resumeId || null,
-    variant: input.variantId || null,
+    resume: input.resumeId || undefined,
+    variant: input.variantId || undefined,
     data: input.data,
     label: input.label ?? '',
     is_auto: input.isAuto ?? true,
-  })) as unknown as AnyRecord;
+  });
   return adaptVersion(r);
 }
 
@@ -323,10 +383,10 @@ export async function createVersion(input: {
 
 export async function listBullets(): Promise<Bullet[]> {
   const me = userId();
-  const items = (await pb.collection('resume_bullets').getFullList({
+  const items = await bulletsCol().getFullList({
     filter: `user = "${me}"`,
     sort: '-updated',
-  })) as unknown as AnyRecord[];
+  });
   return items.map(adaptBullet);
 }
 
@@ -336,13 +396,13 @@ export async function createBullet(input: {
   source_anecdote_id?: string;
   metrics?: Bullet['metrics'];
 }): Promise<Bullet> {
-  const r = (await pb.collection('resume_bullets').create({
+  const r = await bulletsCol().create({
     user: userId(),
     text: input.text,
     tags: input.tags ?? [],
-    source_anecdote: input.source_anecdote_id || null,
+    source_anecdote: input.source_anecdote_id || undefined,
     metrics: input.metrics ?? [],
-  })) as unknown as AnyRecord;
+  });
   return adaptBullet(r);
 }
 
@@ -350,12 +410,12 @@ export async function updateBullet(
   id: string,
   patch: Partial<Pick<Bullet, 'text' | 'tags' | 'metrics'>>,
 ): Promise<Bullet> {
-  const r = (await pb.collection('resume_bullets').update(id, patch)) as unknown as AnyRecord;
+  const r = await bulletsCol().update(id, patch);
   return adaptBullet(r);
 }
 
 export async function deleteBullet(id: string): Promise<void> {
-  await pb.collection('resume_bullets').delete(id);
+  await bulletsCol().delete(id);
 }
 
 // --- AI Settings ------------------------------------------------------
@@ -363,13 +423,10 @@ export async function deleteBullet(id: string): Promise<void> {
 export async function getAISettings(): Promise<AISettings | null> {
   const me = userId();
   try {
-    const r = (await pb
-      .collection('ai_settings')
-      .getFirstListItem(`user = "${me}"`)) as unknown as AnyRecord;
+    const r = await aiSettingsCol().getFirstListItem(`user = "${me}"`);
     return adaptAISettings(r);
   } catch (err: unknown) {
-    const status = (err as { status?: number })?.status;
-    if (status === 404) return null;
+    if (pbStatus(err) === 404) return null;
     throw err;
   }
 }
@@ -393,18 +450,13 @@ export async function upsertAISettings(input: {
     key_iv: input.key_iv ?? '',
   };
   try {
-    const existing = (await pb
-      .collection('ai_settings')
-      .getFirstListItem(`user = "${me}"`)) as unknown as AnyRecord;
-    const r = (await pb
-      .collection('ai_settings')
-      .update(existing.id as string, payload)) as unknown as AnyRecord;
+    const existing = await aiSettingsCol().getFirstListItem(`user = "${me}"`);
+    const r = await aiSettingsCol().update(existing.id, payload);
     return adaptAISettings(r);
   } catch (err: unknown) {
-    const status = (err as { status?: number })?.status;
-    if (status !== 404) throw err;
+    if (pbStatus(err) !== 404) throw err;
   }
-  const r = (await pb.collection('ai_settings').create(payload)) as unknown as AnyRecord;
+  const r = await aiSettingsCol().create(payload);
   return adaptAISettings(r);
 }
 
@@ -414,10 +466,10 @@ export async function listShareLinks(variantId?: string): Promise<ShareLink[]> {
   const me = userId();
   const filters = [`user = "${me}"`];
   if (variantId) filters.push(`variant = "${variantId}"`);
-  const items = (await pb.collection('resume_share_links').getFullList({
+  const items = await shareLinksCol().getFullList({
     filter: filters.join(' && '),
     sort: '-created',
-  })) as unknown as AnyRecord[];
+  });
   return items.map(adaptShareLink);
 }
 
@@ -428,17 +480,17 @@ export async function createShareLink(input: {
   passwordHash?: string;
   expiresAt?: string;
 }): Promise<ShareLink> {
-  const r = (await pb.collection('resume_share_links').create({
+  const r = await shareLinksCol().create({
     user: userId(),
     variant: input.variantId,
     token: input.token,
     is_password: input.isPassword ?? false,
     password_hash: input.passwordHash ?? '',
     expires_at: input.expiresAt ?? '',
-  })) as unknown as AnyRecord;
+  });
   return adaptShareLink(r);
 }
 
 export async function deleteShareLink(id: string): Promise<void> {
-  await pb.collection('resume_share_links').delete(id);
+  await shareLinksCol().delete(id);
 }

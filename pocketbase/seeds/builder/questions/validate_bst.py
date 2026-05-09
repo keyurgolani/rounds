@@ -9,22 +9,7 @@ The reference returns a bool.
 """
 from builder.registry import register
 
-
-def _build(level):
-    """Deserialize LeetCode level-order list (with None for missing) to a tree."""
-    if not level:
-        return None
-    nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
-    kids = nodes[1:][::-1]
-    for node in nodes:
-        if node is None:
-            continue
-        if kids:
-            node["left"] = kids.pop()
-        if kids:
-            node["right"] = kids.pop()
-    return nodes[0]
-
+from builder._shorthand import level_order_to_verbose, inflate_tree
 
 def _is_valid_bst(node, low, high):
     if node is None:
@@ -33,7 +18,6 @@ def _is_valid_bst(node, low, high):
         return False
     return (_is_valid_bst(node["left"], low, node["val"])
             and _is_valid_bst(node["right"], node["val"], high))
-
 
 PAYLOAD = {
     "title": "Validate Binary Search Tree",
@@ -154,34 +138,34 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": []}, "expected": True,
+        {"input": {"root": level_order_to_verbose([])}, "expected": True,
          "description": "Empty tree — vacuously a valid BST", "tags": ["edge"]},
-        {"input": {"root": [1]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([1])}, "expected": True,
          "description": "Single node — trivially a valid BST", "tags": ["edge"]},
-        {"input": {"root": [2, 1, 3]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([2, 1, 3])}, "expected": True,
          "description": "Classic valid 3-node BST: left < root < right", "tags": ["basic"]},
-        {"input": {"root": [5, 1, 4, None, None, 3, 6]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([5, 1, 4, None, None, 3, 6])}, "expected": False,
          "description": "Classic invalid: 4's left child 3 violates the global BST property (3 < 5 but is in 5's right subtree)",
          "tags": ["tricky"]},
-        {"input": {"root": [5, 4, 6, None, None, 3, 7]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([5, 4, 6, None, None, 3, 7])}, "expected": False,
          "description": "Just-parent-check trap: 6's left child 3 looks fine locally (3 < 6) but 3 < 5 in 5's right subtree fails the global invariant",
          "tags": ["tricky"]},
-        {"input": {"root": [10, 5, 15, 3, 7, 12, 20, 1, 4, 6, 8, 11, 13, 17, 25]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([10, 5, 15, 3, 7, 12, 20, 1, 4, 6, 8, 11, 13, 17, 25])}, "expected": True,
          "description": "Long valid BST — full balanced tree, all bounds satisfied", "tags": ["basic"]},
-        {"input": {"root": [10, 5, 15, 3, 7, 12, 20, 1, 4, 6, 8, 11, 13, 9, 25]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([10, 5, 15, 3, 7, 12, 20, 1, 4, 6, 8, 11, 13, 9, 25])}, "expected": False,
          "description": "Long invalid BST — node 9 is the left child of 20 (deep in the right subtree of 10), but 9 < 15 violates the global bound for 15's subtree",
          "tags": ["tricky"]},
-        {"input": {"root": [2, 1, 2]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([2, 1, 2])}, "expected": False,
          "description": "Duplicate value with the root — strict inequality means this is invalid", "tags": ["tricky"]},
-        {"input": {"root": [2, 2, 3]}, "expected": False,
+        {"input": {"root": level_order_to_verbose([2, 2, 3])}, "expected": False,
          "description": "Duplicate value with the left child — strict inequality fails", "tags": ["edge"]},
-        {"input": {"root": [-2147483648]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([-2147483648])}, "expected": True,
          "description": "INT_MIN as a single-node tree — sentinel bound `-infinity` must be looser than INT_MIN",
          "tags": ["edge"]},
-        {"input": {"root": [2147483647]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([2147483647])}, "expected": True,
          "description": "INT_MAX as a single-node tree — sentinel bound `+infinity` must be looser than INT_MAX",
          "tags": ["edge"]},
-        {"input": {"root": [-2147483648, None, 2147483647]}, "expected": True,
+        {"input": {"root": level_order_to_verbose([-2147483648, None, 2147483647])}, "expected": True,
          "description": "INT_MIN root with INT_MAX right child — full integer range, both boundaries used",
          "tags": ["tricky"]},
     ],
@@ -316,15 +300,12 @@ PAYLOAD = {
         "params": [
             {"name": "root", "type": "node"},
         ],
-        "input_shape": "tree_level_order",
     },
 }
 
-
 def REFERENCE(root):
     """Take a level-order list, return whether the represented tree is a valid BST."""
-    tree = _build(root)
+    tree = inflate_tree(root)
     return _is_valid_bst(tree, float("-inf"), float("inf"))
-
 
 register(PAYLOAD, REFERENCE)

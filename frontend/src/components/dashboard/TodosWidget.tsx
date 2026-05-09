@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, ChevronRight, ListTodo } from 'lucide-react';
-import { api } from '../../api/client';
 import { useCampaign } from '../../campaign/CampaignContext';
 import MentionText from '../../todos/MentionText';
-import type { Todo } from '../../pages/Todos';
+import { listTodos, updateTodo, type Todo } from '../../todos/api';
 import { usePlatform } from '../../hooks/usePlatform';
 
 // A compact "top 5 active todos" card for the dashboard. Overdue
@@ -20,9 +19,7 @@ export default function TodosWidget() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const url = currentId ? `/api/todos?campaign=${currentId}` : '/api/todos';
-      const list = await api.get<Todo[]>(url);
-      setTodos(list);
+      setTodos(await listTodos(currentId ?? undefined));
     } catch {
       /* silent — widget just stays empty */
     } finally {
@@ -47,11 +44,7 @@ export default function TodosWidget() {
       prev.map((t) => (t.id === todo.id ? { ...t, completed_at: nextCompletedAt } : t)),
     );
     try {
-      await api.put(`/api/todos/${todo.id}`, {
-        ...todo,
-        campaign_id: todo.campaign_id,
-        completed_at: nextCompletedAt,
-      });
+      await updateTodo(todo.id, { ...todo, completed_at: nextCompletedAt });
     } catch {
       setTodos((prev) =>
         prev.map((t) => (t.id === todo.id ? { ...t, completed_at: todo.completed_at } : t)),

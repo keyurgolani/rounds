@@ -1,4 +1,12 @@
-import { api } from '../api/client';
+import { listApplications, listRounds } from '../applications/api';
+import { listCampaigns } from '../campaign/api';
+import {
+  listBehavioralCategories,
+  listBehavioralQuestions,
+  listCodingQuestions,
+  listSystemDesignQuestions,
+} from '../content/api';
+import { listAnecdotes } from '../pages/behavioral/anecdotesApi';
 import type { Mention, MentionType } from './mentions';
 
 export interface MentionEntry extends Mention {
@@ -21,43 +29,16 @@ interface RawCategory {
   name: string;
 }
 
-interface RawCampaign {
-  id?: string;
-  slug: string;
-  name: string;
-  target_role_level?: string;
-}
-
-interface RawAnecdote {
-  id?: string;
-  title: string;
-  updated_at?: string;
-}
-
-interface RawApp {
-  id: string;
-  company: string;
-  role: string;
-  campaign?: string;
-}
-
-interface RawRound {
-  id: string;
-  round_type: string;
-  date?: string;
-  application_id?: string;
-}
-
 export async function buildMentionIndex(): Promise<MentionEntry[]> {
   const [sd, coding, behavioral, categories, campaigns, anecdotes, applications] =
     await Promise.all([
-      api.get<RawQuestion[]>('/api/system-design').catch(() => []),
-      api.get<RawQuestion[]>('/api/coding').catch(() => []),
-      api.get<RawQuestion[]>('/api/behavioral').catch(() => []),
-      api.get<RawCategory[]>('/api/behavioral-categories').catch(() => []),
-      api.get<RawCampaign[]>('/api/campaigns').catch(() => []),
-      api.get<RawAnecdote[]>('/api/anecdotes').catch(() => []),
-      api.get<RawApp[]>('/api/applications').catch(() => []),
+      listSystemDesignQuestions<RawQuestion>().catch(() => []),
+      listCodingQuestions<RawQuestion>().catch(() => []),
+      listBehavioralQuestions<RawQuestion>().catch(() => []),
+      listBehavioralCategories<RawCategory>().catch(() => []),
+      listCampaigns().catch(() => []),
+      listAnecdotes().catch(() => []),
+      listApplications().catch(() => []),
     ]);
 
   const out: MentionEntry[] = [];
@@ -117,11 +98,12 @@ export async function buildMentionIndex(): Promise<MentionEntry[]> {
       label: `${a.company} · ${a.role}`,
     });
   }
-  // Rounds — pulled per application because the backend exposes them
-  // under that path. Cheap even with dozens of applications.
+  // Rounds — pulled per application because PB exposes them as a
+  // separate collection scoped by `application`. Cheap even with
+  // dozens of applications.
   for (const a of applications) {
     try {
-      const rounds = await api.get<RawRound[]>(`/api/applications/${a.id}/rounds`);
+      const rounds = await listRounds(a.id);
       for (const r of rounds) {
         out.push({
           type: 'round',

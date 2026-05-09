@@ -29,23 +29,29 @@ export type GuideRecord = {
   resources: GuideResourceCategory[];
 };
 
+import {
+  getBehavioralGuide,
+  getCodingGuide,
+  getSystemDesignGuide,
+} from '../../content/api';
+
 export const GUIDE_CONFIGS = {
   'system-design': {
-    apiBase: '/api/system-design/guide',
+    fetch: <T>(slug?: string) => getSystemDesignGuide<T>(slug),
     guidePath: '/system-design/guide',
     questionsPath: '/system-design/questions',
     eyebrow: 'System Design · Guide',
     loadingEyebrow: 'System Design',
   },
   coding: {
-    apiBase: '/api/coding/guide',
+    fetch: <T>(slug?: string) => getCodingGuide<T>(slug),
     guidePath: '/coding/guide',
     questionsPath: '/coding/questions',
     eyebrow: 'Coding · Guide',
     loadingEyebrow: 'Coding',
   },
   behavioral: {
-    apiBase: '/api/behavioral/guide',
+    fetch: <T>(slug?: string) => getBehavioralGuide<T>(slug),
     guidePath: '/behavioral/guide',
     questionsPath: '/behavioral/questions',
     eyebrow: 'Behavioral · Guide',

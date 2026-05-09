@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, BriefcaseBusiness, CalendarClock, CheckCircle2, ClipboardList, Command, FolderKanban, ListTodo, Plus, Target } from 'lucide-react';
-import { api } from '../api/client';
+import { listApplications, listRounds } from '../applications/api';
+import {
+  listBehavioralCategories,
+  listBehavioralQuestions,
+  listCodingQuestions,
+  listSystemDesignQuestions,
+} from '../content/api';
+import { listAnecdotes } from './behavioral/anecdotesApi';
 import { useAuth } from '../auth/AuthProvider';
 import { useCampaign } from '../campaign/CampaignContext';
 import { useCommandCenter } from '../command-center/CommandCenterProvider';
@@ -16,8 +23,8 @@ import type { PracticeStatus } from '../components/shell/StatusDot';
 type SQ = { id: string; title: string; difficulty: string };
 type CQ = { id: string; title: string; difficulty: string };
 type BQ = { id: string; title: string };
-type App = { id: number; company: string; role: string; status: string; applied_date?: string; updated_at?: string; last_activity_at?: string };
-type Round = { id: number; application_id: number; round_type: string; date: string; interviewer: string; notes: string; result: string };
+type App = { id: string; company: string; role: string; status: string; applied_date?: string; updated_at?: string; last_activity_at?: string };
+type Round = { id: string; application_id: string; round_type: string; date: string; interviewer: string; notes: string; result: string };
 type Anecdote = { id: string; title: string; situation: string; category_ids: string[]; linked_question_ids: string[]; updated_at?: string | null };
 type Cat = { id: string; name: string; color: string };
 
@@ -80,16 +87,15 @@ export default function Dashboard() {
   const [cats, setCats] = useState<Cat[]>([]);
 
   const load = useCallback(async () => {
-    const campaignQs = currentId ? `?campaign=${currentId}` : '';
     const [s, c, b, a, an, ca] = await Promise.all([
-      api.get<SQ[]>('/api/system-design'),
-      api.get<CQ[]>('/api/coding'),
-      api.get<BQ[]>('/api/behavioral'),
-      api.get<App[]>(`/api/applications${campaignQs}`),
-      api.get<Anecdote[]>('/api/anecdotes'),
-      api.get<Cat[]>('/api/behavioral-categories'),
+      listSystemDesignQuestions<SQ>(),
+      listCodingQuestions<CQ>(),
+      listBehavioralQuestions<BQ>(),
+      listApplications(currentId ?? undefined),
+      listAnecdotes(),
+      listBehavioralCategories<Cat>(),
     ]);
-    const roundLists = await Promise.all(a.map((app) => api.get<Round[]>(`/api/applications/${app.id}/rounds`).catch(() => [])));
+    const roundLists = await Promise.all(a.map((app) => listRounds(app.id).catch(() => [] as Round[])));
     setSys(s);
     setCod(c);
     setBeh(b);

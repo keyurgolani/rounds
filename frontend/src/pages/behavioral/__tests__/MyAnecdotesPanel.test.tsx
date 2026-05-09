@@ -2,10 +2,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MyAnecdotesPanel } from '../MyAnecdotesPanel';
 import type { Anecdote, BehavioralCategoryLite, BehavioralQuestionLite } from '../types';
-import { api } from '../../../api/client';
+import { listAnecdotes, updateAnecdote } from '../anecdotesApi';
 
-vi.mock('../../../api/client', () => ({
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
+vi.mock('../anecdotesApi', () => ({
+  listAnecdotes: vi.fn(),
+  createAnecdote: vi.fn(),
+  updateAnecdote: vi.fn(),
+  deleteAnecdote: vi.fn(),
+  getAnecdote: vi.fn(),
 }));
 
 const navigateMock = vi.fn();
@@ -13,6 +17,9 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return { ...actual, useNavigate: () => navigateMock };
 });
+
+const listAnecdotesMock = listAnecdotes as unknown as ReturnType<typeof vi.fn>;
+const updateAnecdoteMock = updateAnecdote as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   navigateMock.mockClear();
@@ -82,14 +89,14 @@ function renderPanel(questionId = 'q10') {
 
 describe('MyAnecdotesPanel', () => {
   it('auto-selects the first linked anecdote and loads it into the STAR editor', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    listAnecdotesMock.mockResolvedValue(anecdotes);
     renderPanel();
     await waitFor(() => screen.getByDisplayValue('Linked story'));
     expect(screen.getByDisplayValue('X situation')).toBeInTheDocument();
   });
 
   it('opens the library panel and excludes already-linked anecdotes', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    listAnecdotesMock.mockResolvedValue(anecdotes);
     renderPanel();
     await waitFor(() => screen.getByDisplayValue('Linked story'));
     fireEvent.click(screen.getByRole('button', { name: /Link from library/i }));
@@ -99,7 +106,7 @@ describe('MyAnecdotesPanel', () => {
   });
 
   it('library list orders category-matching anecdotes first', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    listAnecdotesMock.mockResolvedValue(anecdotes);
     renderPanel();
     await waitFor(() => screen.getByDisplayValue('Linked story'));
     fireEvent.click(screen.getByRole('button', { name: /Link from library/i }));
@@ -111,38 +118,32 @@ describe('MyAnecdotesPanel', () => {
     expect(matchIdx).toBeLessThan(otherIdx);
   });
 
-  it('clicking a library row PUTs the anecdote with the question added', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
-    (api.put as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ...anecdotes[1],
-      linked_question_ids: ['q10'],
-    });
+  it('clicking a library row updates the anecdote with the question added', async () => {
+    listAnecdotesMock.mockResolvedValue(anecdotes);
+    updateAnecdoteMock.mockResolvedValue({ ...anecdotes[1], linked_question_ids: ['q10'] });
     renderPanel();
     await waitFor(() => screen.getByDisplayValue('Linked story'));
     fireEvent.click(screen.getByRole('button', { name: /Link from library/i }));
     fireEvent.click(screen.getByRole('button', { name: /Match candidate/i }));
-    await waitFor(() => expect(api.put).toHaveBeenCalled());
-    const [path, body] = (api.put as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(path).toMatch(/\/api\/anecdotes\/a2$/);
+    await waitFor(() => expect(updateAnecdoteMock).toHaveBeenCalled());
+    const [id, body] = updateAnecdoteMock.mock.calls[0];
+    expect(id).toBe('a2');
     expect(body.linked_question_ids).toContain('q10');
   });
 
   it('Unlink removes the current question from the selected anecdote', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
-    (api.put as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ...anecdotes[0],
-      linked_question_ids: [],
-    });
+    listAnecdotesMock.mockResolvedValue(anecdotes);
+    updateAnecdoteMock.mockResolvedValue({ ...anecdotes[0], linked_question_ids: [] });
     renderPanel();
     await waitFor(() => screen.getByDisplayValue('Linked story'));
     fireEvent.click(screen.getByRole('button', { name: /unlink/i }));
-    await waitFor(() => expect(api.put).toHaveBeenCalled());
-    const body = (api.put as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    await waitFor(() => expect(updateAnecdoteMock).toHaveBeenCalled());
+    const body = updateAnecdoteMock.mock.calls[0][1];
     expect(body.linked_question_ids).not.toContain('q10');
   });
 
   it('New anecdote button navigates to new anecdote page with ?question=<slug>', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    listAnecdotesMock.mockResolvedValue(anecdotes);
     renderPanel();
     await waitFor(() => screen.getByDisplayValue('Linked story'));
     fireEvent.click(screen.getByRole('button', { name: /^\s*New anecdote\s*$/i }));
@@ -165,14 +166,14 @@ describe('MyAnecdotesPanel', () => {
         updated_at: '2026-04-18T00:00:00',
       },
     ];
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(descOnly);
+    listAnecdotesMock.mockResolvedValue(descOnly);
     renderPanel();
     await waitFor(() => screen.getByDisplayValue('Desc only'));
     expect(screen.getByDisplayValue('A quick summary of what happened.')).toBeInTheDocument();
   });
 
   it('defaults to STAR mode when the anecdote has STAR content', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(anecdotes);
+    listAnecdotesMock.mockResolvedValue(anecdotes);
     renderPanel();
     await waitFor(() => screen.getByDisplayValue('Linked story'));
     expect(screen.getByDisplayValue('X situation')).toBeInTheDocument();

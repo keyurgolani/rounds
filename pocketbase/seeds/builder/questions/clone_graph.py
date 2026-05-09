@@ -17,6 +17,7 @@ from collections import deque
 from builder.registry import register
 
 
+from builder._shorthand import adj_to_verbose, inflate_graph
 PAYLOAD = {
     "title": "Clone Graph",
     "difficulty": "Medium",
@@ -141,34 +142,33 @@ PAYLOAD = {
         "kind": "graph",
         "name": "clone_graph",
         "params": [{"name": "node", "type": "node"}],
-        "input_shape": "graph_adjacency",
         "output_shape": "graph_adjacency",
     },
     "test_cases": [
-        {"input": {"node": {}}, "expected": {},
+        {"input": {"node": adj_to_verbose({})}, "expected": {},
          "description": "Empty graph — no node to clone", "tags": ["edge"]},
-        {"input": {"node": {"1": []}}, "expected": {"1": []},
+        {"input": {"node": adj_to_verbose({"1": []})}, "expected": {"1": []},
          "description": "Single node, no neighbors", "tags": ["edge"]},
-        {"input": {"node": {"1": [2], "2": [1]}}, "expected": {"1": [2], "2": [1]},
+        {"input": {"node": adj_to_verbose({"1": [2], "2": [1]})}, "expected": {"1": [2], "2": [1]},
          "description": "Two nodes connected by a single edge", "tags": ["basic"]},
-        {"input": {"node": {"1": [2, 4], "2": [1, 3], "3": [2, 4], "4": [1, 3]}},
+        {"input": {"node": adj_to_verbose({"1": [2, 4], "2": [1, 3], "3": [2, 4], "4": [1, 3]})},
          "expected": {"1": [2, 4], "2": [1, 3], "3": [2, 4], "4": [1, 3]},
          "description": "Classic LC example — 4-cycle", "tags": ["basic"]},
-        {"input": {"node": {"1": [2, 3, 4, 5], "2": [1], "3": [1], "4": [1], "5": [1]}},
+        {"input": {"node": adj_to_verbose({"1": [2, 3, 4, 5], "2": [1], "3": [1], "4": [1], "5": [1]})},
          "expected": {"1": [2, 3, 4, 5], "2": [1], "3": [1], "4": [1], "5": [1]},
          "description": "Star graph — node 1 in the center, 4 leaves", "tags": ["basic"]},
-        {"input": {"node": {"1": [2], "2": [1, 3], "3": [2, 4], "4": [3, 5], "5": [4]}},
+        {"input": {"node": adj_to_verbose({"1": [2], "2": [1, 3], "3": [2, 4], "4": [3, 5], "5": [4]})},
          "expected": {"1": [2], "2": [1, 3], "3": [2, 4], "4": [3, 5], "5": [4]},
          "description": "Chain (path graph) of 5 nodes", "tags": ["tricky"]},
-        {"input": {"node": {"1": [2, 3, 4], "2": [1, 3, 4], "3": [1, 2, 4], "4": [1, 2, 3]}},
+        {"input": {"node": adj_to_verbose({"1": [2, 3, 4], "2": [1, 3, 4], "3": [1, 2, 4], "4": [1, 2, 3]})},
          "expected": {"1": [2, 3, 4], "2": [1, 3, 4], "3": [1, 2, 4], "4": [1, 2, 3]},
          "description": "Fully connected K4 — every pair adjacent", "tags": ["tricky"]},
-        {"input": {"node": {"1": [4, 5, 6], "2": [4, 5, 6], "3": [4, 5, 6],
-                          "4": [1, 2, 3], "5": [1, 2, 3], "6": [1, 2, 3]}},
+        {"input": {"node": adj_to_verbose({"1": [4, 5, 6], "2": [4, 5, 6], "3": [4, 5, 6],
+                          "4": [1, 2, 3], "5": [1, 2, 3], "6": [1, 2, 3]})},
          "expected": {"1": [4, 5, 6], "2": [4, 5, 6], "3": [4, 5, 6],
                       "4": [1, 2, 3], "5": [1, 2, 3], "6": [1, 2, 3]},
          "description": "Complete bipartite K3,3", "tags": ["tricky"]},
-        {"input": {"node": {"1": [2], "2": [1, 3], "3": [2]}},
+        {"input": {"node": adj_to_verbose({"1": [2], "2": [1, 3], "3": [2]})},
          "expected": {"1": [2], "2": [1, 3], "3": [2]},
          "description": "Three-node path — minimal branching chain", "tags": ["basic"]},
     ],
@@ -343,7 +343,7 @@ def _build_graph(adj):
 
 
 def REFERENCE(node):
-    adj = node
+    adj = inflate_graph(node)
     if not adj:
         return {}
     root = _build_graph(adj)

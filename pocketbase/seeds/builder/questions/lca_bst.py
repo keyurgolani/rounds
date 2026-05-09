@@ -12,22 +12,7 @@ LCA's value as an int.
 """
 from builder.registry import register
 
-
-def _build(level):
-    """Build an internal tree dict from a raw level-order list."""
-    if not level:
-        return None
-    nodes = [None if v is None else {"val": v, "left": None, "right": None} for v in level]
-    kids = nodes[1:][::-1]
-    for node in nodes:
-        if node is None:
-            continue
-        if kids:
-            node["left"] = kids.pop()
-        if kids:
-            node["right"] = kids.pop()
-    return nodes[0]
-
+from builder._shorthand import level_order_to_verbose, inflate_tree
 
 def _lca(root, p, q):
     cur = root
@@ -39,7 +24,6 @@ def _lca(root, p, q):
         else:
             return cur["val"]
     return None
-
 
 PAYLOAD = {
     "title": "Lowest Common Ancestor of a BST",
@@ -166,32 +150,32 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"root": [6, 2, 8, 0, 4, 7, 9, None, None, 3, 5], "p": 2, "q": 8}, "expected": 6,
+        {"input": {"root": level_order_to_verbose([6, 2, 8, 0, 4, 7, 9, None, None, 3, 5]), "p": 2, "q": 8}, "expected": 6,
          "description": "Classic LeetCode example — p and q split at the root", "tags": ["basic"]},
-        {"input": {"root": [6, 2, 8, 0, 4, 7, 9, None, None, 3, 5], "p": 2, "q": 4}, "expected": 2,
+        {"input": {"root": level_order_to_verbose([6, 2, 8, 0, 4, 7, 9, None, None, 3, 5]), "p": 2, "q": 4}, "expected": 2,
          "description": "One target is an ancestor of the other — LCA is the ancestor itself",
          "tags": ["basic"]},
-        {"input": {"root": [6, 2, 8, 0, 4, 7, 9, None, None, 3, 5], "p": 3, "q": 5}, "expected": 4,
+        {"input": {"root": level_order_to_verbose([6, 2, 8, 0, 4, 7, 9, None, None, 3, 5]), "p": 3, "q": 5}, "expected": 4,
          "description": "Both targets are deep — split happens at node 4", "tags": ["basic"]},
-        {"input": {"root": [6, 2, 8, 0, 4, 7, 9, None, None, 3, 5], "p": 7, "q": 9}, "expected": 8,
+        {"input": {"root": level_order_to_verbose([6, 2, 8, 0, 4, 7, 9, None, None, 3, 5]), "p": 7, "q": 9}, "expected": 8,
          "description": "Both targets in the right subtree — LCA is 8", "tags": ["basic"]},
-        {"input": {"root": [6, 2, 8, 0, 4, 7, 9, None, None, 3, 5], "p": 0, "q": 9}, "expected": 6,
+        {"input": {"root": level_order_to_verbose([6, 2, 8, 0, 4, 7, 9, None, None, 3, 5]), "p": 0, "q": 9}, "expected": 6,
          "description": "Min and max leaves — LCA is the root", "tags": ["basic"]},
-        {"input": {"root": [2, 1], "p": 1, "q": 2}, "expected": 2,
+        {"input": {"root": level_order_to_verbose([2, 1]), "p": 1, "q": 2}, "expected": 2,
          "description": "Two-node tree — root is the ancestor of its child", "tags": ["edge"]},
-        {"input": {"root": [2, 1, 3], "p": 1, "q": 3}, "expected": 2,
+        {"input": {"root": level_order_to_verbose([2, 1, 3]), "p": 1, "q": 3}, "expected": 2,
          "description": "Three-node tree — split at the root", "tags": ["edge"]},
-        {"input": {"root": [5, 4, None, 3, None, 2, None, 1], "p": 1, "q": 4}, "expected": 4,
+        {"input": {"root": level_order_to_verbose([5, 4, None, 3, None, 2, None, 1]), "p": 1, "q": 4}, "expected": 4,
          "description": "Left-only chain — LCA is the higher of the two on the chain", "tags": ["edge"]},
-        {"input": {"root": [1, None, 2, None, 3, None, 4, None, 5], "p": 3, "q": 5}, "expected": 3,
+        {"input": {"root": level_order_to_verbose([1, None, 2, None, 3, None, 4, None, 5]), "p": 3, "q": 5}, "expected": 3,
          "description": "Right-only chain — LCA is the higher of the two on the chain", "tags": ["edge"]},
-        {"input": {"root": [20, 10, 30, 5, 15, 25, 35, None, None, 12, 17], "p": 12, "q": 17},
+        {"input": {"root": level_order_to_verbose([20, 10, 30, 5, 15, 25, 35, None, None, 12, 17]), "p": 12, "q": 17},
          "expected": 15,
          "description": "Deeper BST — split happens at depth 2", "tags": ["tricky"]},
-        {"input": {"root": [20, 10, 30, 5, 15, 25, 35, None, None, 12, 17], "p": 5, "q": 35},
+        {"input": {"root": level_order_to_verbose([20, 10, 30, 5, 15, 25, 35, None, None, 12, 17]), "p": 5, "q": 35},
          "expected": 20,
          "description": "Targets on opposite extremes — LCA is the root", "tags": ["tricky"]},
-        {"input": {"root": [20, 10, 30, 5, 15, 25, 35, None, None, 12, 17], "p": 10, "q": 12},
+        {"input": {"root": level_order_to_verbose([20, 10, 30, 5, 15, 25, 35, None, None, 12, 17]), "p": 10, "q": 12},
          "expected": 10,
          "description": "Root of a subtree is itself one of the targets", "tags": ["tricky"]},
     ],
@@ -339,15 +323,12 @@ PAYLOAD = {
             {"name": "p", "type": "int"},
             {"name": "q", "type": "int"},
         ],
-        "input_shape": "tree_level_order",
     },
 }
 
-
 def REFERENCE(root, p, q):
     """Build the BST from the level-order list and return the LCA's value."""
-    tree = _build(root)
+    tree = inflate_tree(root)
     return _lca(tree, p, q)
-
 
 register(PAYLOAD, REFERENCE)

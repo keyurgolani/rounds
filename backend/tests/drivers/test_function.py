@@ -88,6 +88,33 @@ def test_js_wrapper_invokes_function_with_scalar():
     assert out == 16
 
 
+def test_js_wrapper_binds_dict_args_in_declaration_order_when_params_given():
+    """Regression for the Object.values()-by-insertion bug: when the
+    test-case input dict's keys are in a different order than the
+    function's parameter list, declaration order must win."""
+    code = "function sub(a, b) { return a - b; }\n"
+    entry = {
+        "kind": "function",
+        "name": "sub",
+        "params": [{"name": "a", "type": "int"}, {"name": "b", "type": "int"}],
+    }
+    snippet = js_wrapper(entry)
+    # Keys in REVERSE order — Object.values would yield [3, 10] and
+    # call sub(3, 10) = -7. The fix calls sub(10, 3) = 7.
+    out = _run_js(code, snippet, {"b": 3, "a": 10})
+    assert out == 7
+
+
+def test_js_wrapper_no_params_falls_back_to_object_values():
+    """Backward-compat: entries that don't declare params keep the
+    legacy Object.values() behavior. Values authored in declaration
+    order still resolve correctly."""
+    code = "function sub(a, b) { return a - b; }\n"
+    snippet = js_wrapper({"kind": "function", "name": "sub"})
+    out = _run_js(code, snippet, {"a": 10, "b": 3})
+    assert out == 7
+
+
 def _run_js(user_code, snippet, input_value):
     wrapper = f"""
 {user_code}

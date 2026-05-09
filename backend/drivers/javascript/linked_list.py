@@ -1,4 +1,4 @@
-"""JavaScript linked_list driver."""
+"""JavaScript linked_list driver — verbose-only inputs at runtime."""
 from __future__ import annotations
 
 import json
@@ -11,7 +11,6 @@ _DEFAULT_TEMPLATE = {
     "fields": [{"name": "val", "type": "int"}],
     "links": [{"name": "next", "arity": "single"}],
 }
-_DEFAULT_SHAPE = "linked_list_array"
 _SUPPORTED_OUTPUT_SHAPES = {"verbose", "linked_list_array"}
 
 
@@ -26,6 +25,12 @@ def validate(entry: dict) -> list[str]:
         errors.append("node_template must declare at least one field")
     if not isinstance(template.get("links"), list) or not template.get("links"):
         errors.append("node_template must declare at least one link")
+    input_shape = entry.get("input_shape", "verbose")
+    if input_shape != "verbose":
+        errors.append(
+            f"unsupported input_shape {input_shape!r}; linked_list inputs must be authored "
+            f"as verbose JSON (use builder._shorthand.linked_list_to_verbose at build time)"
+        )
     output_shape = entry.get("output_shape", "verbose")
     if output_shape not in _SUPPORTED_OUTPUT_SHAPES:
         errors.append(
@@ -39,7 +44,6 @@ def wrapper_snippet(entry: dict) -> str:
     name = entry["name"]
     params = entry["params"]
     template = entry.get("node_template", _DEFAULT_TEMPLATE)
-    shape = entry.get("input_shape", _DEFAULT_SHAPE)
     output_shape = entry.get("output_shape", "verbose")
 
     cls_code = emit_class(template)
@@ -53,28 +57,12 @@ def wrapper_snippet(entry: dict) -> str:
 {inflate_code}
 {deflate_code}
 
-function _to_verbose(value, shape, template) {{
-  if (shape === "linked_list_array") {{
-    if (!value || value.length === 0) return {{nodes: [], entry: null}};
-    const f = template.fields[0].name;
-    const l = template.links[0].name;
-    return {{
-      nodes: value.map((v, i) => ({{
-        id: i, fields: {{ [f]: v }},
-        links: {{ [l]: (i + 1 < value.length) ? i + 1 : null }}
-      }})),
-      entry: 0
-    }};
-  }}
-  throw new Error("shorthand shape not supported in linked_list runtime: " + shape);
-}}
-
 function _to_shape(verbose, outputShape, template) {{
   if (outputShape === "verbose") return verbose;
   if (outputShape === "linked_list_array") {{
     if (!verbose || verbose.entry == null) return [];
     const f = template.fields[0].name;
-    const l = template.links[0].name;
+    const ln = template.links[0].name;
     const byId = new Map(verbose.nodes.map(n => [n.id, n]));
     const out = [];
     const seen = new Set();
@@ -83,7 +71,7 @@ function _to_shape(verbose, outputShape, template) {{
       seen.add(cur);
       const node = byId.get(cur);
       out.push(node.fields[f]);
-      cur = node.links[l];
+      cur = node.links[ln];
     }}
     return out;
   }}
@@ -94,17 +82,18 @@ function _drive(input) {{
   const fn = eval({json.dumps(name)});
   const kwargs = {{...input}};
   const nodeParams = {json.dumps(node_param_names)};
-  const shape = {json.dumps(shape)};
   const template = {json.dumps(template)};
   const outputShape = {json.dumps(output_shape)};
   for (const p of nodeParams) {{
     const v = kwargs[p];
     if (v == null) continue;
-     if (shape === "verbose" || (v && typeof v === "object" && "nodes" in v)) {{
-       kwargs[p] = _inflate(v);
-     }} else {{
-       kwargs[p] = _inflate(_to_verbose(v, shape, template));
-     }}
+    if (!(v && typeof v === "object" && "nodes" in v && "entry" in v)) {{
+      throw new TypeError(
+        "linked_list driver expected verbose JSON {{nodes: [...], entry: id}} for param " +
+        JSON.stringify(p) + "; got " + (Array.isArray(v) ? "array" : typeof v)
+      );
+    }}
+    kwargs[p] = _inflate(v);
   }}
   const out = fn(...Object.values(kwargs));
   if (out instanceof {template["name"]} || out === null) {{

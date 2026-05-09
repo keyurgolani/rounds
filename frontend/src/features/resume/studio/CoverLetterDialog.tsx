@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Copy, Download, Mail, Wand2, X } from 'lucide-react';
-import { api } from '../../../api/client';
+import { listApplications } from '../../../applications/api';
 import { coverLetterStream } from '../ai/client';
 import { downloadString } from '../export/index';
 import type { ResumeData } from '../types';
@@ -53,8 +53,7 @@ export default function CoverLetterDialog({
 
   useEffect(() => {
     if (!open) return;
-    api
-      .get<AppRow[]>('/api/applications')
+    listApplications()
       .then(setApps)
       .catch(() => setApps([]));
   }, [open]);
