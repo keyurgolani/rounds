@@ -9,13 +9,16 @@ type Props = {
 
 export default function SkillsEditor({ data, setData }: Props) {
   const list = data.skills;
-  const add = () => setData((prev) => ({ ...prev, skills: [...prev.skills, newSkillGroup()] }));
+  const add = (category = '') =>
+    setData((prev) => ({ ...prev, skills: [...prev.skills, newSkillGroup(category)] }));
   const update = (id: string, patch: Partial<ResumeData['skills'][number]>) =>
     setData((prev) => ({ ...prev, skills: patchById(prev.skills, id, patch) }));
   const remove = (id: string) =>
     setData((prev) => ({ ...prev, skills: removeById(prev.skills, id) }));
   const move = (i: number, j: number) =>
     setData((prev) => ({ ...prev, skills: moveItem(prev.skills, i, j) }));
+
+  const hasAtsCategory = list.some((sk) => /^\s*ats\s*keywords\s*$/i.test(sk.category));
 
   return (
     <div className="flex flex-col gap-2">
@@ -45,7 +48,12 @@ export default function SkillsEditor({ data, setData }: Props) {
           </Field>
         </ItemCard>
       ))}
-      <AddButton onClick={add} label="Add skill group" />
+      <div className="flex flex-wrap gap-2">
+        <AddButton onClick={() => add()} label="Add skill group" />
+        {!hasAtsCategory && (
+          <AddButton onClick={() => add('ATS Keywords')} label="Add ATS Keywords" />
+        )}
+      </div>
     </div>
   );
 }

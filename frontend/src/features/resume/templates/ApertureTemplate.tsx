@@ -46,6 +46,20 @@ export default function ApertureTemplate({ data, design }: Props) {
             {p.title}
           </div>
         )}
+        {p.subtitle && (
+          <div
+            style={{
+              fontSize: 10,
+              color: '#555',
+              marginTop: 3,
+              textTransform: 'uppercase',
+              letterSpacing: '0.16em',
+              fontWeight: 500,
+            }}
+          >
+            {p.subtitle}
+          </div>
+        )}
         <div
           style={{
             display: 'grid',

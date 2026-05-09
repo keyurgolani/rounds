@@ -54,6 +54,19 @@ export default function ExecutiveTemplate({ data, design }: Props) {
             {p.title}
           </div>
         )}
+        {p.subtitle && (
+          <div
+            style={{
+              fontSize: 11,
+              color: '#6b7280',
+              marginTop: 2,
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {p.subtitle}
+          </div>
+        )}
         {meta && (
           <div style={{ fontSize: 9.5, color: '#374151', marginTop: 6 }}>{meta}</div>
         )}

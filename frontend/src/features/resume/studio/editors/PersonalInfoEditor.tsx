@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { Ruler } from 'lucide-react';
 import type { ResumeData } from '../../types';
+import GuidedSummaryDialog from './GuidedSummaryDialog';
 import ImproveButton from './ImproveButton';
 import { Field, GridTwo, TextArea, TextInput } from './parts';
 
@@ -11,6 +13,7 @@ type Props = {
 export default function PersonalInfoEditor({ data, setData }: Props) {
   const p = data.personalInfo;
   const [summaryEnh, setSummaryEnh] = useState(false);
+  const [guidedOpen, setGuidedOpen] = useState(false);
   const set = <K extends keyof ResumeData['personalInfo']>(key: K, value: ResumeData['personalInfo'][K]) => {
     setData((prev) => ({ ...prev, personalInfo: { ...prev.personalInfo, [key]: value } }));
   };
@@ -26,6 +29,16 @@ export default function PersonalInfoEditor({ data, setData }: Props) {
             value={p.title ?? ''}
             onChange={(v) => set('title', v)}
             placeholder="Senior Software Engineer"
+          />
+        </Field>
+        <Field
+          label="Subtitle"
+          hint="Optional second title. The Langstaff template renders this as a dual-title row: 'Title • Subtitle'."
+        >
+          <TextInput
+            value={p.subtitle ?? ''}
+            onChange={(v) => set('subtitle', v)}
+            placeholder="CPG Industry Expert"
           />
         </Field>
         <Field label="Email">
@@ -79,12 +92,38 @@ export default function PersonalInfoEditor({ data, setData }: Props) {
         hint="2–3 sentences. Lead with what you do, who you do it for, and a measurable outcome."
         loading={summaryEnh}
         actions={
-          <ImproveButton
-            text={p.summary ?? ''}
-            field="personalInfo.summary"
-            onChange={(v) => set('summary', v)}
-            onStreamingChange={setSummaryEnh}
-          />
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <button
+              type="button"
+              onClick={() => setGuidedOpen(true)}
+              title="Guided 3-part formula summary"
+              aria-label="Guided summary"
+              style={{
+                height: 24,
+                padding: '0 8px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                background: 'transparent',
+                color: 'var(--text-2)',
+                border: 0,
+                borderRadius: 6,
+                boxShadow: 'inset 0 0 0 1px var(--border)',
+                fontSize: 10,
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              <Ruler size={11} strokeWidth={1.8} />
+              Guided
+            </button>
+            <ImproveButton
+              text={p.summary ?? ''}
+              field="personalInfo.summary"
+              onChange={(v) => set('summary', v)}
+              onStreamingChange={setSummaryEnh}
+            />
+          </div>
         }
       >
         <TextArea
@@ -95,6 +134,12 @@ export default function PersonalInfoEditor({ data, setData }: Props) {
           disabled={summaryEnh}
         />
       </Field>
+      <GuidedSummaryDialog
+        open={guidedOpen}
+        onClose={() => setGuidedOpen(false)}
+        onApply={(s) => set('summary', s)}
+        currentSummary={p.summary}
+      />
     </div>
   );
 }

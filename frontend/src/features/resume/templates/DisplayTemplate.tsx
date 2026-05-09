@@ -55,17 +55,35 @@ export default function DisplayTemplate({ data, design }: Props) {
             borderTop: `2px solid ${accent}`,
           }}
         >
-          {p.title ? (
-            <div
-              style={{
-                fontSize: 11,
-                color: '#222',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.18em',
-              }}
-            >
-              {p.title}
+          {p.title || p.subtitle ? (
+            <div>
+              {p.title && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: '#222',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.18em',
+                  }}
+                >
+                  {p.title}
+                </div>
+              )}
+              {p.subtitle && (
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: '#555',
+                    fontWeight: 500,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.16em',
+                    marginTop: 2,
+                  }}
+                >
+                  {p.subtitle}
+                </div>
+              )}
             </div>
           ) : (
             <span />

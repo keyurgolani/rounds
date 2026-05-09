@@ -32,6 +32,7 @@ export type PersonalInfo = {
   linkedin?: string;
   github?: string;
   title?: string;
+  subtitle?: string;
   summary?: string;
 };
 

@@ -62,6 +62,20 @@ export default function BannerTemplate({ data, design }: Props) {
             {p.title}
           </div>
         )}
+        {p.subtitle && (
+          <div
+            style={{
+              fontSize: 11,
+              marginTop: 3,
+              opacity: 0.8,
+              letterSpacing: '0.16em',
+              textTransform: 'uppercase',
+              fontWeight: 500,
+            }}
+          >
+            {p.subtitle}
+          </div>
+        )}
         {meta && (
           <div style={{ fontSize: 10, marginTop: 10, opacity: 0.85 }}>{meta}</div>
         )}

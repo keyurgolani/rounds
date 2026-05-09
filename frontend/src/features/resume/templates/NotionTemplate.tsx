@@ -47,6 +47,9 @@ export default function NotionTemplate({ data, design }: Props) {
         {p.title && (
           <div style={{ fontSize: 12.5, color: '#555', marginTop: 4 }}>{p.title}</div>
         )}
+        {p.subtitle && (
+          <div style={{ fontSize: 11, color: '#777', marginTop: 1 }}>{p.subtitle}</div>
+        )}
         {meta && (
           <div style={{ fontSize: 10, color: '#777', marginTop: 8 }}>{meta}</div>
         )}

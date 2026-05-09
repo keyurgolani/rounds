@@ -63,6 +63,20 @@ export default function EditorialTemplate({ data, design }: Props) {
             {p.title}
           </div>
         )}
+        {p.subtitle && (
+          <div
+            style={{
+              fontSize: 10,
+              color: '#555',
+              marginTop: 3,
+              textTransform: 'uppercase',
+              letterSpacing: '0.2em',
+              fontWeight: 500,
+            }}
+          >
+            {p.subtitle}
+          </div>
+        )}
         <div
           style={{
             margin: '10px auto 0',

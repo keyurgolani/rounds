@@ -59,6 +59,18 @@ export default function InvertedTemplate({ data, design }: Props) {
             {p.title}
           </div>
         )}
+        {p.subtitle && (
+          <div
+            style={{
+              fontSize: 11,
+              marginTop: 1,
+              opacity: 0.7,
+              fontWeight: 400,
+            }}
+          >
+            {p.subtitle}
+          </div>
+        )}
         {meta && (
           <div style={{ fontSize: 10, marginTop: 8, opacity: 0.75 }}>{meta}</div>
         )}

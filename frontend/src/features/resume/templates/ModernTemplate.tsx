@@ -41,6 +41,9 @@ export default function ModernTemplate({ data, design }: Props) {
         {p.title && (
           <div style={{ fontSize: 13, color: '#444', marginTop: 2 }}>{p.title}</div>
         )}
+        {p.subtitle && (
+          <div style={{ fontSize: 11, color: '#666', marginTop: 1 }}>{p.subtitle}</div>
+        )}
         {meta && (
           <div style={{ fontSize: 10, color: '#555', marginTop: 4 }}>{meta}</div>
         )}

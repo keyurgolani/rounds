@@ -207,7 +207,7 @@ class SettingsIn(BaseModel):
 
 class ImproveRequest(BaseModel):
     text: str = Field(..., min_length=1)
-    style: Literal["improve", "fix", "shorten"] = "improve"
+    style: Literal["improve", "fix", "shorten", "guided-summary"] = "improve"
     context: dict[str, Any] | None = None
     # Optional whole-resume context. When provided, the model gets
     # the full ResumeData JSON so a single-field rewrite stays
@@ -845,6 +845,29 @@ _IMPROVE_SYSTEM = (
 )
 
 
+# Drives the "Guided summary" affordance in the Personal Info editor
+# (modal with three structured inputs: years, top skills, signature
+# accomplishment). The user payload arrives via context so we can
+# reuse the existing /improve plumbing (auth, streaming, errors)
+# without a separate endpoint.
+_GUIDED_SUMMARY_SYSTEM = (
+    "You write a single-paragraph resume professional summary in the "
+    "three-part formula:\n"
+    "  (1) Years of experience + role/industry\n"
+    "  (2) Two or three best-fit skills (verbatim from input top skills, "
+    "lightly rephrased only if grammar requires it)\n"
+    "  (3) One signature accomplishment with hard numbers (preserve every "
+    "number from the input accomplishment exactly — do not invent or "
+    "alter quantities, percentages, or dollar amounts)\n\n"
+    "Output: 2–3 sentences, 45–75 words, plain prose, no bullets, no "
+    "markdown, no preamble, no quotes, no labels. Lead with the years "
+    "clause. Do not invent companies, titles, technologies, team sizes, "
+    "or metrics not present in the structured input or the resume "
+    "context. If a structured input is missing, omit that part rather "
+    "than fabricate."
+)
+
+
 # Caps for inlined context. Larger context is more grounded but the
 # prompt cost scales linearly so we trim to something usable.
 _IMPROVE_RESUME_LIMIT = 12000
@@ -903,6 +926,23 @@ def _improve_user_prompt(
             bits.append(f"Source paper URL: {context['paper_url']}")
         if bits:
             parts.append(" ".join(bits))
+        guided_bits: list[str] = []
+        years = context.get("years")
+        if isinstance(years, (int, float)) and years > 0:
+            guided_bits.append(f"Years of experience: {int(years)}")
+        top_skills = context.get("top_skills")
+        if isinstance(top_skills, list):
+            cleaned = [str(s).strip() for s in top_skills if str(s).strip()]
+            if cleaned:
+                guided_bits.append("Top skills: " + ", ".join(cleaned))
+        accomplishment = context.get("signature_accomplishment")
+        if isinstance(accomplishment, str) and accomplishment.strip():
+            guided_bits.append(
+                "Signature accomplishment (preserve all numbers exactly): "
+                + accomplishment.strip()
+            )
+        if guided_bits:
+            parts.append("Structured guided-summary inputs:\n" + "\n".join(guided_bits))
 
     if paper_text:
         excerpt = paper_text[:_IMPROVE_PAPER_LIMIT]
@@ -1028,6 +1068,10 @@ async def improve(request: Request, body: ImproveRequest) -> StreamingResponse:
         paper_text=paper_text,
     )
 
+    system_prompt = (
+        _GUIDED_SUMMARY_SYSTEM if body.style == "guided-summary" else _IMPROVE_SYSTEM
+    )
+
     async def gen() -> AsyncIterator[bytes]:
         try:
             async for chunk in _call_stream(
@@ -1035,7 +1079,7 @@ async def improve(request: Request, body: ImproveRequest) -> StreamingResponse:
                 cfg["model"],
                 cfg["api_key"],
                 cfg["base_url"] or None,
-                system=_IMPROVE_SYSTEM,
+                system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
                 max_tokens=1200,
             ):

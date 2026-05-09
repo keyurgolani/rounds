@@ -58,6 +58,19 @@ export default function BrutalistMonoTemplate({ data, design }: Props) {
             // {p.title}
           </div>
         )}
+        {p.subtitle && (
+          <div
+            style={{
+              fontSize: 10,
+              color: '#444',
+              marginTop: 2,
+              textTransform: 'uppercase',
+              letterSpacing: '0.14em',
+            }}
+          >
+            // {p.subtitle}
+          </div>
+        )}
         {meta && (
           <div style={{ fontSize: 9.5, color: '#333', marginTop: 6 }}>{meta}</div>
         )}

@@ -49,6 +49,9 @@ export default function CompactTemplate({ data, design }: Props) {
         {p.title && (
           <div style={{ fontSize: 12, color: '#444', marginTop: 2 }}>{p.title}</div>
         )}
+        {p.subtitle && (
+          <div style={{ fontSize: 10.5, color: '#666', marginTop: 1 }}>{p.subtitle}</div>
+        )}
         {meta && (
           <div style={{ fontSize: 9.5, color: '#555', marginTop: 4 }}>{meta}</div>
         )}

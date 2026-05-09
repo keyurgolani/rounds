@@ -108,6 +108,10 @@ export function joinNonEmpty(parts: Array<string | undefined>, sep = ' · '): st
   return parts.filter((p) => Boolean(p && p.trim())).join(sep);
 }
 
+export function joinPipes(parts: Array<string | undefined>): string {
+  return parts.filter((p) => Boolean(p && p.trim())).join(' | ');
+}
+
 // Renders a slim A4 sheet with a configurable margin. The studio
 // wraps this in a Zoomable preview; PDF export sets the viewport to
 // match the same dimensions so what you see is what you get.

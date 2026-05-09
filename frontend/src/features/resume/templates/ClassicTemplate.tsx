@@ -35,6 +35,11 @@ export default function ClassicTemplate({ data, design }: Props) {
             {p.title}
           </div>
         )}
+        {p.subtitle && (
+          <div style={{ fontSize: 10.5, fontStyle: 'italic', color: '#555', marginTop: 1 }}>
+            {p.subtitle}
+          </div>
+        )}
         {meta && (
           <div style={{ fontSize: 10, color: '#444', marginTop: 4 }}>{meta}</div>
         )}

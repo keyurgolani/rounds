@@ -46,6 +46,11 @@ export default function TypewriterTemplate({ data, design }: Props) {
         {p.title && (
           <div style={{ fontSize: 10, color: '#444', marginTop: 6 }}>— {p.title} —</div>
         )}
+        {p.subtitle && (
+          <div style={{ fontSize: 9.5, color: '#666', marginTop: 2, fontStyle: 'italic' }}>
+            {p.subtitle}
+          </div>
+        )}
         {meta && (
           <div style={{ fontSize: 9.5, color: '#555', marginTop: 6 }}>{meta}</div>
         )}

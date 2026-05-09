@@ -226,7 +226,7 @@ export function getATSAIScore(
 
 // --- SSE: improve --------------------------------------------------------
 
-export type ImproveStyle = 'improve' | 'fix' | 'shorten';
+export type ImproveStyle = 'improve' | 'fix' | 'shorten' | 'guided-summary';
 
 export type ImproveContext = {
   position?: string;
@@ -235,6 +235,13 @@ export type ImproveContext = {
   // Set on Publication summary improves so the backend can fetch
   // the paper text (HTML or PDF) and ground the rewrite in it.
   paper_url?: string;
+  // Structured inputs for the 'guided-summary' style. The backend
+  // serializes context as JSON so the model can ground a 3-part
+  // formula summary in the user's own numbers without us inventing
+  // a new payload schema.
+  years?: number;
+  top_skills?: string[];
+  signature_accomplishment?: string;
 };
 
 // Snapshot of ATS context an editor wants to forward into a single

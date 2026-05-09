@@ -18,6 +18,7 @@ import LinearTemplate from './LinearTemplate';
 import InvertedTemplate from './InvertedTemplate';
 import BannerTemplate from './BannerTemplate';
 import DisplayTemplate from './DisplayTemplate';
+import LangstaffTemplate from './LangstaffTemplate';
 
 export type TemplateProps = { data: ResumeData; design?: TemplateConfig };
 
@@ -156,6 +157,15 @@ export const TEMPLATES: TemplateMeta[] = [
     blurb:
       'Mega italic display-serif name as the page hero. Tight serif body, type as the design.',
     component: DisplayTemplate,
+  },
+
+  // Recruiter-tested
+  {
+    id: 'langstaff',
+    label: 'Langstaff',
+    blurb:
+      'Recruiter-tested 12-out-of-10 layout. Dual professional titles, pipe-delimited skills, dedicated ATS-keyword block.',
+    component: LangstaffTemplate,
   },
 ];
 

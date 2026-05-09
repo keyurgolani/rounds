@@ -49,6 +49,9 @@ export default function TimelineTemplate({ data, design }: Props) {
             {p.title}
           </div>
         )}
+        {p.subtitle && (
+          <div style={{ fontSize: 11, color: '#555', marginTop: 1 }}>{p.subtitle}</div>
+        )}
         {meta && (
           <div style={{ fontSize: 10, color: '#555', marginTop: 6 }}>{meta}</div>
         )}

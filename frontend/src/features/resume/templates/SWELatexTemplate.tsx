@@ -51,6 +51,9 @@ export default function SWELatexTemplate({ data, design }: Props) {
         {p.title && (
           <div style={{ fontSize: 10.5, fontStyle: 'italic', marginTop: 2 }}>{p.title}</div>
         )}
+        {p.subtitle && (
+          <div style={{ fontSize: 10, fontStyle: 'italic', marginTop: 1 }}>{p.subtitle}</div>
+        )}
       </header>
 
       {p.summary && (

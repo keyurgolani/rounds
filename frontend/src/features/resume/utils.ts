@@ -61,8 +61,8 @@ export function newEducation(): Education {
   return { id: uid(), institution: '' };
 }
 
-export function newSkillGroup(): SkillGroup {
-  return { id: uid(), category: '', items: [] };
+export function newSkillGroup(category = ''): SkillGroup {
+  return { id: uid(), category, items: [] };
 }
 
 export function newProject(): Project {

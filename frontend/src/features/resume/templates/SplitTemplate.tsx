@@ -81,6 +81,20 @@ export default function SplitTemplate({ data, design }: Props) {
               {p.title}
             </div>
           )}
+          {p.subtitle && (
+            <div
+              style={{
+                fontSize: 10,
+                color: '#444',
+                marginTop: 2,
+                fontWeight: 500,
+                textTransform: 'uppercase',
+                letterSpacing: '0.11em',
+              }}
+            >
+              {p.subtitle}
+            </div>
+          )}
 
           <ContactList p={p} accent={accent} />
 

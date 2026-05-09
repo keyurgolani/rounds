@@ -44,6 +44,9 @@ export default function LinearTemplate({ data, design }: Props) {
             {p.title}
           </div>
         )}
+        {p.subtitle && (
+          <div style={{ fontSize: 10, color: '#888', marginTop: 1 }}>{p.subtitle}</div>
+        )}
         {meta && (
           <div
             style={{
