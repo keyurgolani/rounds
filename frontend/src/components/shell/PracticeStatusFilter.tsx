@@ -53,7 +53,8 @@ const OPTS: {
 ];
 
 export default function PracticeStatusFilter({ value, onChange, compact = false }: Props) {
-  const pad = compact ? '4px 7px' : '5px 11px';
+  const pad = compact ? '0 7px' : '0 11px';
+  const h = compact ? 22 : 24;
   const fs = compact ? 11 : 12;
   return (
     <div
@@ -80,6 +81,7 @@ export default function PracticeStatusFilter({ value, onChange, compact = false 
             title={o.label}
             className="inline-flex items-center gap-1.5"
             style={{
+              height: h,
               padding: pad,
               border: 0,
               borderRadius: 5,

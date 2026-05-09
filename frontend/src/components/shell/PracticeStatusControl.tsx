@@ -66,7 +66,8 @@ export default function PracticeStatusControl({
   }
 
   // Existing 3-pill behavior preserved as-is below this point.
-  const pad = size === 'sm' ? '4px 9px' : '5px 11px';
+  const pad = size === 'sm' ? '0 9px' : '0 11px';
+  const h = size === 'sm' ? 22 : 24;
   const fs = size === 'sm' ? 11 : 12;
   return (
     <div
@@ -87,6 +88,7 @@ export default function PracticeStatusControl({
             onClick={() => onChange(o.key)}
             className="inline-flex items-center gap-1.5"
             style={{
+              height: h,
               padding: pad,
               border: 0,
               borderRadius: 5,
