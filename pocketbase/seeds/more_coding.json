@@ -126420,6 +126420,685 @@
       "space_complexity": "O(n)"
     },
     {
+      "title": "Filesystem Search API",
+      "difficulty": "Medium",
+      "description": "You're designing the search backend for a filesystem-style application. Implement a function `search_files(files, criteria)` that returns the entries in `files` matching every populated criterion, sorted as requested.\n\n**Input \u2014 `files`:** a list of dicts, each describing one entry:\n```\n{\n  \"name\": str,           # base name, e.g. \"report.pdf\"\n  \"path\": str,           # full path, e.g. \"/home/me/report.pdf\"\n  \"size\": int,           # bytes; directories may pass 0\n  \"created_ts\": int,     # unix-second timestamp\n  \"is_directory\": bool,  # true for dirs, false for files\n}\n```\n\n**Input \u2014 `criteria`:** a dict with any subset of these keys (every key is optional; if absent, the filter is not applied):\n- `name_substring` (str, case-insensitive substring match against `name`)\n- `kind` (one of `\"file\"`, `\"directory\"`, `\"both\"`; default `\"both\"`)\n- `min_size`, `max_size` (int; bytes; only enforced on FILES, not directories)\n- `start_ts`, `end_ts` (int; unix seconds; matches when `start_ts <= created_ts <= end_ts`)\n- `extensions` (list of strings, leading dot or no dot, case-insensitive; matches the lowercased extension of `name`; only enforced on FILES)\n- `sort_by` (one of `\"name\"`, `\"size\"`, `\"created_ts\"`, `\"extension\"`; default `\"name\"`)\n- `sort_direction` (one of `\"asc\"`, `\"desc\"`; default `\"asc\"`)\n\nReturn a list of the matching `file` dicts in sorted order. **Don't** mutate the input. An entry passes when EVERY populated criterion accepts it \u2014 absent criteria are no-ops, which means a `criteria = {}` returns the full input sorted by name ascending.\n\n**Example:**\n```\nfiles = [\n  {\"name\": \"a.txt\", \"path\": \"/x/a.txt\", \"size\": 100, \"created_ts\": 10, \"is_directory\": False},\n  {\"name\": \"b.txt\", \"path\": \"/x/b.txt\", \"size\": 500, \"created_ts\": 20, \"is_directory\": False},\n  {\"name\": \"docs\",  \"path\": \"/x/docs\",  \"size\":   0, \"created_ts\":  5, \"is_directory\": True},\n]\ncriteria = {\"kind\": \"file\", \"min_size\": 200}\n\u2192 [{\"name\": \"b.txt\", ...}]\n```",
+      "hints": [
+        "Treat each criterion as an independent predicate `(file) \u2192 bool`. The match is the AND of all populated predicates. This decomposition keeps the matcher flat and easy to extend.",
+        "Absent criterion \u2194 identity predicate. Express this in code: if the key isn't in `criteria`, skip the predicate construction \u2014 don't use `criteria.get(key)` and a None-check inline at the predicate; that path branches inside the hot loop.",
+        "Size and extension filters apply only to files. Directories should pass them unconditionally. Encode this as 'predicate is `is_directory or matches`'.",
+        "Extension normalisation: lowercase, strip leading dot. The user can pass `[\".PDF\", \"txt\"]` and you should match both `.pdf` and `.txt` files. Compute the file's extension once per file (last `.` segment) \u2014 don't re-split inside the loop.",
+        "Case-insensitive name substring: lowercase both sides and use `in`. Don't reach for regex unless the prompt specifies wildcards.",
+        "Sort with a deterministic tiebreak. When `sort_by=\"size\"` produces ties, secondary-sort by name ascending so the output is stable and reviewable. Use `key=lambda f: (primary, f[\"name\"])`.",
+        "Don't mutate the input list (`sorted` returns a new list; `sort` mutates). The criterion dict is also input \u2014 don't write to it.",
+        "Empty `criteria` is the all-pass case; default sort is name ascending. Test this; it's the easiest miss."
+      ],
+      "constraints": [
+        "0 <= len(files) <= 10\u2074",
+        "Every file dict contains all five required fields with the documented types.",
+        "0 <= size <= 10\u00b9\u00b2",
+        "0 <= created_ts <= 10\u00b9\u2070",
+        "Names contain printable characters; extension is everything after the LAST `.` in the name (so `archive.tar.gz` has extension `gz`).",
+        "Extensions in criteria are matched case-insensitively after stripping a leading dot.",
+        "Criteria dict may contain none, some, or all of the documented keys; unrecognised keys must be ignored."
+      ],
+      "starter_code": {
+        "python": "def search_files(files, criteria):\n    # Your code here\n    pass",
+        "javascript": "function searchFiles(files, criteria) {\n    // Your code here\n}",
+        "java": "public java.util.List<java.util.Map<String, Object>> searchFiles(\n        java.util.List<java.util.Map<String, Object>> files,\n        java.util.Map<String, Object> criteria) {\n    // Your code here\n    return java.util.Collections.emptyList();\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    files = [\n        {\"name\": \"a.txt\", \"path\": \"/x/a.txt\", \"size\": 100,\n         \"created_ts\": 10, \"is_directory\": False},\n        {\"name\": \"b.txt\", \"path\": \"/x/b.txt\", \"size\": 500,\n         \"created_ts\": 20, \"is_directory\": False},\n    ]\n    print(search_files(files, {\"min_size\": 200}))",
+        "javascript": "// Test runner (read-only)",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "files": [
+              {
+                "name": "a.txt",
+                "path": "/x/a.txt",
+                "size": 100,
+                "created_ts": 10,
+                "is_directory": false
+              },
+              {
+                "name": "b.txt",
+                "path": "/x/b.txt",
+                "size": 500,
+                "created_ts": 20,
+                "is_directory": false
+              },
+              {
+                "name": "docs",
+                "path": "/x/docs",
+                "size": 0,
+                "created_ts": 5,
+                "is_directory": true
+              }
+            ],
+            "criteria": {}
+          },
+          "expected": [
+            {
+              "name": "a.txt",
+              "path": "/x/a.txt",
+              "size": 100,
+              "created_ts": 10,
+              "is_directory": false
+            },
+            {
+              "name": "b.txt",
+              "path": "/x/b.txt",
+              "size": 500,
+              "created_ts": 20,
+              "is_directory": false
+            },
+            {
+              "name": "docs",
+              "path": "/x/docs",
+              "size": 0,
+              "created_ts": 5,
+              "is_directory": true
+            }
+          ],
+          "description": "Empty criteria returns all entries sorted by name ascending",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "files": [
+              {
+                "name": "a.txt",
+                "path": "/x/a.txt",
+                "size": 100,
+                "created_ts": 10,
+                "is_directory": false
+              },
+              {
+                "name": "b.txt",
+                "path": "/x/b.txt",
+                "size": 500,
+                "created_ts": 20,
+                "is_directory": false
+              },
+              {
+                "name": "docs",
+                "path": "/x/docs",
+                "size": 0,
+                "created_ts": 5,
+                "is_directory": true
+              }
+            ],
+            "criteria": {
+              "kind": "file",
+              "min_size": 200
+            }
+          },
+          "expected": [
+            {
+              "name": "b.txt",
+              "path": "/x/b.txt",
+              "size": 500,
+              "created_ts": 20,
+              "is_directory": false
+            }
+          ],
+          "description": "kind=file + min_size filter excludes the smaller file and the directory",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "files": [
+              {
+                "name": "report.pdf",
+                "path": "/d/report.pdf",
+                "size": 100,
+                "created_ts": 1,
+                "is_directory": false
+              },
+              {
+                "name": "ReportFinal.PDF",
+                "path": "/d/ReportFinal.PDF",
+                "size": 200,
+                "created_ts": 2,
+                "is_directory": false
+              },
+              {
+                "name": "image.png",
+                "path": "/d/image.png",
+                "size": 300,
+                "created_ts": 3,
+                "is_directory": false
+              }
+            ],
+            "criteria": {
+              "name_substring": "REPORT"
+            }
+          },
+          "expected": [
+            {
+              "name": "ReportFinal.PDF",
+              "path": "/d/ReportFinal.PDF",
+              "size": 200,
+              "created_ts": 2,
+              "is_directory": false
+            },
+            {
+              "name": "report.pdf",
+              "path": "/d/report.pdf",
+              "size": 100,
+              "created_ts": 1,
+              "is_directory": false
+            }
+          ],
+          "description": "Case-insensitive name substring match (sort is case-sensitive: 'R' < 'r')",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "files": [
+              {
+                "name": "a.txt",
+                "path": "/p/a.txt",
+                "size": 100,
+                "created_ts": 10,
+                "is_directory": false
+              },
+              {
+                "name": "b.PDF",
+                "path": "/p/b.PDF",
+                "size": 200,
+                "created_ts": 20,
+                "is_directory": false
+              },
+              {
+                "name": "c.tar.gz",
+                "path": "/p/c.tar.gz",
+                "size": 300,
+                "created_ts": 30,
+                "is_directory": false
+              }
+            ],
+            "criteria": {
+              "extensions": [
+                ".pdf",
+                "GZ"
+              ]
+            }
+          },
+          "expected": [
+            {
+              "name": "b.PDF",
+              "path": "/p/b.PDF",
+              "size": 200,
+              "created_ts": 20,
+              "is_directory": false
+            },
+            {
+              "name": "c.tar.gz",
+              "path": "/p/c.tar.gz",
+              "size": 300,
+              "created_ts": 30,
+              "is_directory": false
+            }
+          ],
+          "description": "Extension list matches case-insensitively, with or without leading dot",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "files": [
+              {
+                "name": "old.txt",
+                "path": "/o/old.txt",
+                "size": 100,
+                "created_ts": 100,
+                "is_directory": false
+              },
+              {
+                "name": "mid.txt",
+                "path": "/o/mid.txt",
+                "size": 200,
+                "created_ts": 200,
+                "is_directory": false
+              },
+              {
+                "name": "new.txt",
+                "path": "/o/new.txt",
+                "size": 300,
+                "created_ts": 300,
+                "is_directory": false
+              }
+            ],
+            "criteria": {
+              "start_ts": 150,
+              "end_ts": 250
+            }
+          },
+          "expected": [
+            {
+              "name": "mid.txt",
+              "path": "/o/mid.txt",
+              "size": 200,
+              "created_ts": 200,
+              "is_directory": false
+            }
+          ],
+          "description": "Inclusive timestamp range filter",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "files": [
+              {
+                "name": "a.txt",
+                "path": "/s/a.txt",
+                "size": 100,
+                "created_ts": 1,
+                "is_directory": false
+              },
+              {
+                "name": "b.txt",
+                "path": "/s/b.txt",
+                "size": 200,
+                "created_ts": 2,
+                "is_directory": false
+              },
+              {
+                "name": "c.txt",
+                "path": "/s/c.txt",
+                "size": 300,
+                "created_ts": 3,
+                "is_directory": false
+              }
+            ],
+            "criteria": {
+              "sort_by": "size",
+              "sort_direction": "desc"
+            }
+          },
+          "expected": [
+            {
+              "name": "c.txt",
+              "path": "/s/c.txt",
+              "size": 300,
+              "created_ts": 3,
+              "is_directory": false
+            },
+            {
+              "name": "b.txt",
+              "path": "/s/b.txt",
+              "size": 200,
+              "created_ts": 2,
+              "is_directory": false
+            },
+            {
+              "name": "a.txt",
+              "path": "/s/a.txt",
+              "size": 100,
+              "created_ts": 1,
+              "is_directory": false
+            }
+          ],
+          "description": "Sort by size descending",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "files": [
+              {
+                "name": "data.json",
+                "path": "/e/data.json",
+                "size": 100,
+                "created_ts": 1,
+                "is_directory": false
+              },
+              {
+                "name": "image.png",
+                "path": "/e/image.png",
+                "size": 200,
+                "created_ts": 2,
+                "is_directory": false
+              },
+              {
+                "name": "code.py",
+                "path": "/e/code.py",
+                "size": 300,
+                "created_ts": 3,
+                "is_directory": false
+              }
+            ],
+            "criteria": {
+              "sort_by": "extension",
+              "sort_direction": "asc"
+            }
+          },
+          "expected": [
+            {
+              "name": "data.json",
+              "path": "/e/data.json",
+              "size": 100,
+              "created_ts": 1,
+              "is_directory": false
+            },
+            {
+              "name": "image.png",
+              "path": "/e/image.png",
+              "size": 200,
+              "created_ts": 2,
+              "is_directory": false
+            },
+            {
+              "name": "code.py",
+              "path": "/e/code.py",
+              "size": 300,
+              "created_ts": 3,
+              "is_directory": false
+            }
+          ],
+          "description": "Sort by extension ascending \u2014 json, png, py",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "files": [
+              {
+                "name": "logs",
+                "path": "/dirs/logs",
+                "size": 0,
+                "created_ts": 1,
+                "is_directory": true
+              },
+              {
+                "name": "tmp",
+                "path": "/dirs/tmp",
+                "size": 0,
+                "created_ts": 2,
+                "is_directory": true
+              },
+              {
+                "name": "a.txt",
+                "path": "/dirs/a.txt",
+                "size": 100,
+                "created_ts": 3,
+                "is_directory": false
+              }
+            ],
+            "criteria": {
+              "kind": "directory"
+            }
+          },
+          "expected": [
+            {
+              "name": "logs",
+              "path": "/dirs/logs",
+              "size": 0,
+              "created_ts": 1,
+              "is_directory": true
+            },
+            {
+              "name": "tmp",
+              "path": "/dirs/tmp",
+              "size": 0,
+              "created_ts": 2,
+              "is_directory": true
+            }
+          ],
+          "description": "kind=directory excludes files",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "files": [
+              {
+                "name": "small.bin",
+                "path": "/m/small.bin",
+                "size": 10,
+                "created_ts": 1,
+                "is_directory": false
+              },
+              {
+                "name": "medium.bin",
+                "path": "/m/medium.bin",
+                "size": 1000,
+                "created_ts": 2,
+                "is_directory": false
+              },
+              {
+                "name": "large.bin",
+                "path": "/m/large.bin",
+                "size": 100000,
+                "created_ts": 3,
+                "is_directory": false
+              },
+              {
+                "name": "myfolder",
+                "path": "/m/myfolder",
+                "size": 0,
+                "created_ts": 0,
+                "is_directory": true
+              }
+            ],
+            "criteria": {
+              "min_size": 100,
+              "max_size": 10000
+            }
+          },
+          "expected": [
+            {
+              "name": "medium.bin",
+              "path": "/m/medium.bin",
+              "size": 1000,
+              "created_ts": 2,
+              "is_directory": false
+            },
+            {
+              "name": "myfolder",
+              "path": "/m/myfolder",
+              "size": 0,
+              "created_ts": 0,
+              "is_directory": true
+            }
+          ],
+          "description": "min_size + max_size \u2014 directories pass through size filters; output sorted by name asc",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "files": [],
+            "criteria": {
+              "min_size": 100
+            }
+          },
+          "expected": [],
+          "description": "Empty file list returns empty",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "files": [
+              {
+                "name": "a.TXT",
+                "path": "/c/a.TXT",
+                "size": 100,
+                "created_ts": 5,
+                "is_directory": false
+              },
+              {
+                "name": "b.txt",
+                "path": "/c/b.txt",
+                "size": 200,
+                "created_ts": 3,
+                "is_directory": false
+              },
+              {
+                "name": "c.txt",
+                "path": "/c/c.txt",
+                "size": 100,
+                "created_ts": 1,
+                "is_directory": false
+              }
+            ],
+            "criteria": {
+              "sort_by": "size",
+              "sort_direction": "asc"
+            }
+          },
+          "expected": [
+            {
+              "name": "a.TXT",
+              "path": "/c/a.TXT",
+              "size": 100,
+              "created_ts": 5,
+              "is_directory": false
+            },
+            {
+              "name": "c.txt",
+              "path": "/c/c.txt",
+              "size": 100,
+              "created_ts": 1,
+              "is_directory": false
+            },
+            {
+              "name": "b.txt",
+              "path": "/c/b.txt",
+              "size": 200,
+              "created_ts": 3,
+              "is_directory": false
+            }
+          ],
+          "description": "Tied size \u2014 secondary sort by name ascending (case-sensitive on the raw name)",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "files": [
+              {
+                "name": "a.txt",
+                "path": "/u/a.txt",
+                "size": 100,
+                "created_ts": 1,
+                "is_directory": false
+              }
+            ],
+            "criteria": {
+              "unknown_key": "ignore me"
+            }
+          },
+          "expected": [
+            {
+              "name": "a.txt",
+              "path": "/u/a.txt",
+              "size": 100,
+              "created_ts": 1,
+              "is_directory": false
+            }
+          ],
+          "description": "Unrecognised criteria keys are silently ignored",
+          "tags": [
+            "edge"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Predicate-Per-Criterion + Sort (Optimal)",
+          "time_complexity": "O(N log N) sort dominates; O(N) for the filter pass",
+          "space_complexity": "O(N) for the output list",
+          "description": "Build the predicate list once from the populated criteria, walk the files, keep those that pass every predicate, then sort. The shape is intentional: one place per criterion that hardcodes its semantics, and a single AND-fold over the predicates per file. New criteria add a new predicate constructor; nothing else changes. Extension normalisation (lowercase, strip leading dot) happens once per criterion, not per file. Sort uses a stable key with name-ascending tiebreak.",
+          "code": {
+            "python": "def search_files(files, criteria):\n    criteria = criteria or {}\n    \n    def get_ext(name):\n        i = name.rfind('.')\n        return name[i + 1:].lower() if i >= 0 else ''\n    \n    predicates = []\n    \n    if 'name_substring' in criteria:\n        needle = criteria['name_substring'].lower()\n        predicates.append(lambda f, _n=needle: _n in f['name'].lower())\n    \n    if 'kind' in criteria:\n        kind = criteria['kind']\n        if kind == 'file':\n            predicates.append(lambda f: not f['is_directory'])\n        elif kind == 'directory':\n            predicates.append(lambda f: f['is_directory'])\n        # 'both' or unknown \u2192 no predicate\n    \n    # Default-arg capture pins the value at definition time. Without it,\n    # the lambda closes over the loop-mutated `m`/`t` and every predicate\n    # ends up using the LAST assigned value. Classic late-binding trap.\n    if 'min_size' in criteria:\n        predicates.append(\n            lambda f, _m=criteria['min_size']: f['is_directory'] or f['size'] >= _m\n        )\n    \n    if 'max_size' in criteria:\n        predicates.append(\n            lambda f, _m=criteria['max_size']: f['is_directory'] or f['size'] <= _m\n        )\n    \n    if 'start_ts' in criteria:\n        predicates.append(\n            lambda f, _t=criteria['start_ts']: f['created_ts'] >= _t\n        )\n    \n    if 'end_ts' in criteria:\n        predicates.append(\n            lambda f, _t=criteria['end_ts']: f['created_ts'] <= _t\n        )\n    \n    if 'extensions' in criteria:\n        normalised = {ext.lower().lstrip('.') for ext in criteria['extensions']}\n        predicates.append(\n            lambda f, _n=normalised: f['is_directory'] or get_ext(f['name']) in _n\n        )\n    \n    matches = [f for f in files if all(p(f) for p in predicates)]\n    \n    sort_by = criteria.get('sort_by', 'name')\n    direction = criteria.get('sort_direction', 'asc')\n    reverse = direction == 'desc'\n    \n    if sort_by == 'name':\n        key = lambda f: (f['name'], f['name'])\n    elif sort_by == 'size':\n        key = lambda f: (f['size'], f['name'])\n    elif sort_by == 'created_ts':\n        key = lambda f: (f['created_ts'], f['name'])\n    elif sort_by == 'extension':\n        key = lambda f: (get_ext(f['name']), f['name'])\n    else:\n        key = lambda f: (f['name'], f['name'])\n    \n    return sorted(matches, key=key, reverse=reverse)",
+            "javascript": "function searchFiles(files, criteria) {\n    criteria = criteria || {};\n    const getExt = (name) => {\n        const i = name.lastIndexOf('.');\n        return i >= 0 ? name.slice(i + 1).toLowerCase() : '';\n    };\n    const preds = [];\n    if ('name_substring' in criteria) {\n        const needle = criteria.name_substring.toLowerCase();\n        preds.push(f => f.name.toLowerCase().includes(needle));\n    }\n    if ('kind' in criteria) {\n        if (criteria.kind === 'file') preds.push(f => !f.is_directory);\n        else if (criteria.kind === 'directory') preds.push(f => f.is_directory);\n    }\n    if ('min_size' in criteria) {\n        const m = criteria.min_size;\n        preds.push(f => f.is_directory || f.size >= m);\n    }\n    if ('max_size' in criteria) {\n        const m = criteria.max_size;\n        preds.push(f => f.is_directory || f.size <= m);\n    }\n    if ('start_ts' in criteria) {\n        const t = criteria.start_ts;\n        preds.push(f => f.created_ts >= t);\n    }\n    if ('end_ts' in criteria) {\n        const t = criteria.end_ts;\n        preds.push(f => f.created_ts <= t);\n    }\n    if ('extensions' in criteria) {\n        const set = new Set(criteria.extensions.map(e => e.toLowerCase().replace(/^\\./, '')));\n        preds.push(f => f.is_directory || set.has(getExt(f.name)));\n    }\n    const matches = files.filter(f => preds.every(p => p(f)));\n    const sortBy = criteria.sort_by || 'name';\n    const dir = criteria.sort_direction || 'asc';\n    const cmp = (a, b) => {\n        const get = (f) => sortBy === 'size' ? [f.size, f.name]\n                          : sortBy === 'created_ts' ? [f.created_ts, f.name]\n                          : sortBy === 'extension' ? [getExt(f.name), f.name]\n                          : [f.name, f.name];\n        const ka = get(a), kb = get(b);\n        if (ka[0] < kb[0]) return -1;\n        if (ka[0] > kb[0]) return 1;\n        if (ka[1] < kb[1]) return -1;\n        if (ka[1] > kb[1]) return 1;\n        return 0;\n    };\n    const sorted = [...matches].sort(cmp);\n    return dir === 'desc' ? sorted.reverse() : sorted;\n}"
+          }
+        },
+        {
+          "title": "Inline Single-Pass Loop (Beginner Shape)",
+          "time_complexity": "O(N log N)",
+          "space_complexity": "O(N)",
+          "description": "All criteria checked inline in one big `if` per file. Easy to write fast under pressure but hard to extend cleanly \u2014 every new criterion adds another branch in the hot loop and the criterion-list is implicit. Show this version only as the 'first cut', then refactor to predicate-per-criterion in the same interview.",
+          "code": {
+            "python": "def search_files(files, criteria):\n    criteria = criteria or {}\n    name_sub = criteria.get('name_substring', '').lower()\n    kind = criteria.get('kind', 'both')\n    mn = criteria.get('min_size'); mx = criteria.get('max_size')\n    sts = criteria.get('start_ts'); ets = criteria.get('end_ts')\n    exts = criteria.get('extensions')\n    if exts is not None:\n        exts = {e.lower().lstrip('.') for e in exts}\n    \n    matches = []\n    for f in files:\n        nm = f['name']; isd = f['is_directory']\n        if name_sub and name_sub not in nm.lower(): continue\n        if kind == 'file' and isd: continue\n        if kind == 'directory' and not isd: continue\n        if not isd:\n            if mn is not None and f['size'] < mn: continue\n            if mx is not None and f['size'] > mx: continue\n        if sts is not None and f['created_ts'] < sts: continue\n        if ets is not None and f['created_ts'] > ets: continue\n        if exts is not None and not isd:\n            i = nm.rfind('.')\n            ext = nm[i + 1:].lower() if i >= 0 else ''\n            if ext not in exts: continue\n        matches.append(f)\n    \n    sort_by = criteria.get('sort_by', 'name')\n    reverse = criteria.get('sort_direction', 'asc') == 'desc'\n    def get_ext(name):\n        i = name.rfind('.')\n        return name[i + 1:].lower() if i >= 0 else ''\n    keymap = {\n        'name': lambda f: (f['name'], f['name']),\n        'size': lambda f: (f['size'], f['name']),\n        'created_ts': lambda f: (f['created_ts'], f['name']),\n        'extension': lambda f: (get_ext(f['name']), f['name']),\n    }\n    return sorted(matches, key=keymap.get(sort_by, keymap['name']), reverse=reverse)"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Restate the API. Inputs: a flat file inventory + a criteria dict. Output: filtered, sorted list. Absent criterion = no-op.",
+        "2. Choose the data shape. Flat list of dicts is what the prompt gives us. (Tree-of-directories is a different problem; if asked to extend, walk the tree externally and feed the leaf list into this function.)",
+        "3. Decompose: filter (predicates) + sort. Fight the urge to put the sort key inside the filter loop.",
+        "4. Predicate per criterion. Each is independent: 'this criterion is satisfied'. The match is AND-fold over the predicates. Adding a new criterion is one new predicate-builder; the loop and sort don't change.",
+        "5. Directories vs files. Size and extension filters are file-only. Encode this as 'predicate is `is_directory or matches`'. Don't have the caller filter directories out before invoking.",
+        "6. Normalise inputs once, not per file. Lowercase the name substring, lowercase the extensions, strip leading dots. The hot loop is integer / string comparisons after that.",
+        "7. Sort with a tiebreak. `key=(primary, name)` keeps the output deterministic when two files share the primary sort field. `sorted` is stable in Python, but the explicit tiebreak makes the contract clear without relying on stability.",
+        "8. Edge cases: empty files, empty criteria, unrecognised criteria keys (silently ignored), case-insensitive matches, ties in sort.",
+        "9. Senior reach: stream this for large inventories. Replace the eager sort with a top-K heap if the caller passes a `limit` parameter; replace the in-memory list with a generator if memory matters."
+      ],
+      "tips": [
+        "Predicate-per-criterion is the design choice that signals 'I've thought about extension'. Walk the criteria once, build a list of predicates, walk files once, AND the predicates.",
+        "Extension matching is the trap. Users pass `.PDF`, `pdf`, `PDF` \u2014 all should match `.pdf` files. Normalise (lower + lstrip dot) once when building the predicate.",
+        "Don't apply size or extension filters to directories. The reference behaviour is 'directories pass through these filters unchanged' \u2014 otherwise a `min_size=100` filter hides every directory.",
+        "Sort tiebreak by name ascending. Otherwise `sort_by=size` gives non-reproducible output across runs (because Python dict iteration order, while now stable, isn't a contract callers should depend on).",
+        "An empty criteria dict matches every file. The default sort is name ascending. Test this first.",
+        "Common follow-up: 'now make it tree-walking + recursive'. Same predicates; the input is now a tree-walking generator that yields files; the result is the same flat list. The filtering function shouldn't change.",
+        "Common follow-up: 'now allow regex name matching'. Replace the `in` substring with `re.search`; isolate the pattern compile to once-per-call.",
+        "Common follow-up: 'pagination'. Add `offset`, `limit` to criteria; slice the sorted list. For large N, consider a top-K heap to avoid the full sort.",
+        "Pure functional shape. Don't mutate the input list or the criteria dict. `sorted(...)` returns a new list; `.sort()` mutates."
+      ],
+      "companies": [
+        "Amazon",
+        "Microsoft",
+        "Apple",
+        "Bloomberg",
+        "Dropbox",
+        "Google"
+      ],
+      "topics": [
+        "Hash Table",
+        "Sorting",
+        "Filter",
+        "Design"
+      ],
+      "time_complexity": "O(N log N)",
+      "space_complexity": "O(N)",
+      "entry": {
+        "kind": "function",
+        "name": "search_files",
+        "params": [
+          {
+            "name": "files",
+            "type": "list"
+          },
+          {
+            "name": "criteria",
+            "type": "dict"
+          }
+        ]
+      }
+    },
+    {
       "title": "Find All Anagrams in a String",
       "difficulty": "Medium",
       "description": "Given two strings `s` and `p`, return an array of **all the start indices** of `p`'s anagrams in `s`. You may return the answer in any order (this problem expects ascending).\n\nAn **anagram** is a rearrangement of all the letters of a string. Two strings are anagrams iff they are the same length and have identical character frequencies.\n\n**Example 1:**\n- Input: `s = \"cbaebabacd\", p = \"abc\"`\n- Output: `[0, 6]`\n- Explanation: The substring starting at index `0` is `\"cba\"`, which is an anagram of `\"abc\"`. The substring starting at index `6` is `\"bac\"`, which is also an anagram of `\"abc\"`.\n\n**Example 2:**\n- Input: `s = \"abab\", p = \"ab\"`\n- Output: `[0, 1, 2]`\n- Explanation: The substrings starting at indices `0` (`\"ab\"`), `1` (`\"ba\"`), and `2` (`\"ab\"`) are all anagrams of `\"ab\"`.",
@@ -275988,6 +276667,726 @@
       }
     },
     {
+      "title": "Leaderboard System",
+      "difficulty": "Medium",
+      "description": "Design a `LeaderboardSystem` that maintains a live top-K standings as player score updates stream in. Each player has a unique `player_id` (string), a `name` (string), and a non-negative integer `wins` count.\n\n**Operations:**\n- `record_player(player_id, name, wins)` \u2014 insert a player or update an existing one. The wins value passed in is the new authoritative wins for that player \u2014 it **replaces**, not adds.\n- `top(k)` \u2014 return the top `k` players as a list of `[name, wins]` pairs sorted by `wins` descending, ties broken by `name` ascending. If fewer than `k` players exist, return all of them. If `k <= 0`, return `[]`.\n\n**Notes:**\n- Player names are not unique \u2014 two different `player_id`s can share a name. The same `player_id` keeps a single row that's updated in place across calls.\n- The interview discussion typically extends this into the streaming-files framing: many files arrive over time, each containing player records. Implementation is file-format agnostic \u2014 assume someone else parsed them and is calling `record_player` for each row.\n\n**Example sequence:**\n```\nlb = LeaderboardSystem()\nlb.record_player(\"p1\", \"Alice\", 5)\nlb.record_player(\"p2\", \"Bob\", 3)\nlb.record_player(\"p3\", \"Cara\", 7)\nlb.top(2)               # [[\"Cara\", 7], [\"Alice\", 5]]\nlb.record_player(\"p2\", \"Bob\", 9)   # update Bob's wins\nlb.top(2)               # [[\"Bob\", 9], [\"Cara\", 7]]\n```",
+      "hints": [
+        "The simplest correct version: store `player_id \u2192 (name, wins)` in a dict. On `top(k)`, sort and slice. O(N log N) per query but trivially correct and fine when N is small.",
+        "If the read-rate is high, maintain a min-heap of size K of (wins, name, player_id). On insert, if smaller than the min, drop it; else heappush, then heappop until size is K. O(log K) per write.",
+        "The catch with the heap-of-K approach: if a player who's currently in the top-K gets their wins UPDATED, the heap holds a stale (wins, ...) entry. Three ways to handle: (a) lazy deletion via tokens (most popular), (b) eager removal which is O(K) on a binary heap, (c) Fibonacci or indexed heap.",
+        "Lazy deletion: keep a 'tombstone' set keyed by player_id. When the heap top points at a tombstoned id, pop and discard. Cost: bounded by total updates between heap reads.",
+        "Variable K (different `top(k)` calls request different k) breaks the heap-of-K trick \u2014 the structure depends on K. If K varies, fall back to maintaining a sorted structure (sorted list, balanced BST / skip list, or just sort on read).",
+        "If you're operating at scale (many writers, many readers) the bottleneck moves to concurrency. Discuss: a single-writer-many-reader copy-on-write snapshot, or per-shard partitioning of player_id space with cross-shard merge on read.",
+        "Real-world: the file-streaming framing is mostly distraction \u2014 the parser is somebody else's problem. The senior signal is in the consistency story: do `top(k)` and `record_player` interleave atomically, or can `top` see a half-applied update?"
+      ],
+      "constraints": [
+        "1 <= total operations across the test sequence <= 10\u2075",
+        "1 <= len(player_id) <= 32; player_id is a printable ASCII string",
+        "1 <= len(name) <= 64; name is a printable string (may contain spaces)",
+        "0 <= wins <= 10\u2079",
+        "0 <= k <= 10\u2075 (k larger than the player count just returns everyone sorted)",
+        "Updates always replace; there is no decrement-only path (wins values can also go down on update)"
+      ],
+      "starter_code": {
+        "python": "class LeaderboardSystem:\n    def __init__(self): pass\n    def record_player(self, player_id, name, wins): pass\n    def top(self, k): pass",
+        "javascript": "class LeaderboardSystem {\n    constructor() {}\n    recordPlayer(playerId, name, wins) {}\n    top(k) {}\n}",
+        "java": "class LeaderboardSystem {\n    public LeaderboardSystem() {}\n    public void recordPlayer(String playerId, String name, long wins) {}\n    public java.util.List<Object[]> top(int k) { return java.util.Collections.emptyList(); }\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    lb = LeaderboardSystem()\n    lb.record_player(\"p1\", \"Alice\", 5)\n    lb.record_player(\"p2\", \"Bob\", 3)\n    lb.record_player(\"p3\", \"Cara\", 7)\n    print(lb.top(2))",
+        "javascript": "// Test runner (read-only)",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "ops": [
+              "LeaderboardSystem",
+              "record_player",
+              "record_player",
+              "record_player",
+              "top"
+            ],
+            "args": [
+              [],
+              [
+                "p1",
+                "Alice",
+                5
+              ],
+              [
+                "p2",
+                "Bob",
+                3
+              ],
+              [
+                "p3",
+                "Cara",
+                7
+              ],
+              [
+                2
+              ]
+            ]
+          },
+          "expected": [
+            null,
+            null,
+            null,
+            null,
+            [
+              [
+                "Cara",
+                7
+              ],
+              [
+                "Alice",
+                5
+              ]
+            ]
+          ],
+          "description": "Three players, top-2 by wins desc",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "ops": [
+              "LeaderboardSystem",
+              "record_player",
+              "record_player",
+              "record_player",
+              "record_player",
+              "top"
+            ],
+            "args": [
+              [],
+              [
+                "p1",
+                "Alice",
+                5
+              ],
+              [
+                "p2",
+                "Bob",
+                3
+              ],
+              [
+                "p3",
+                "Cara",
+                7
+              ],
+              [
+                "p2",
+                "Bob",
+                9
+              ],
+              [
+                2
+              ]
+            ]
+          },
+          "expected": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            [
+              [
+                "Bob",
+                9
+              ],
+              [
+                "Cara",
+                7
+              ]
+            ]
+          ],
+          "description": "Update existing player's wins \u2014 they jump to top",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "ops": [
+              "LeaderboardSystem",
+              "top"
+            ],
+            "args": [
+              [],
+              [
+                3
+              ]
+            ]
+          },
+          "expected": [
+            null,
+            []
+          ],
+          "description": "Empty leaderboard returns empty list",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "ops": [
+              "LeaderboardSystem",
+              "record_player",
+              "record_player",
+              "record_player",
+              "top"
+            ],
+            "args": [
+              [],
+              [
+                "p1",
+                "Alice",
+                5
+              ],
+              [
+                "p2",
+                "Bob",
+                3
+              ],
+              [
+                "p3",
+                "Cara",
+                7
+              ],
+              [
+                10
+              ]
+            ]
+          },
+          "expected": [
+            null,
+            null,
+            null,
+            null,
+            [
+              [
+                "Cara",
+                7
+              ],
+              [
+                "Alice",
+                5
+              ],
+              [
+                "Bob",
+                3
+              ]
+            ]
+          ],
+          "description": "k > player count \u2192 return all sorted",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "ops": [
+              "LeaderboardSystem",
+              "record_player",
+              "record_player",
+              "record_player",
+              "top"
+            ],
+            "args": [
+              [],
+              [
+                "p1",
+                "Alice",
+                5
+              ],
+              [
+                "p2",
+                "Bob",
+                5
+              ],
+              [
+                "p3",
+                "Cara",
+                5
+              ],
+              [
+                3
+              ]
+            ]
+          },
+          "expected": [
+            null,
+            null,
+            null,
+            null,
+            [
+              [
+                "Alice",
+                5
+              ],
+              [
+                "Bob",
+                5
+              ],
+              [
+                "Cara",
+                5
+              ]
+            ]
+          ],
+          "description": "Tied wins \u2014 break by name ascending",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "ops": [
+              "LeaderboardSystem",
+              "record_player",
+              "record_player",
+              "top"
+            ],
+            "args": [
+              [],
+              [
+                "p1",
+                "Alice",
+                5
+              ],
+              [
+                "p1",
+                "Alice Updated",
+                10
+              ],
+              [
+                1
+              ]
+            ]
+          },
+          "expected": [
+            null,
+            null,
+            null,
+            [
+              [
+                "Alice Updated",
+                10
+              ]
+            ]
+          ],
+          "description": "Same player_id with renamed display \u2014 name field updates too",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "ops": [
+              "LeaderboardSystem",
+              "record_player",
+              "record_player",
+              "top"
+            ],
+            "args": [
+              [],
+              [
+                "p1",
+                "Alice",
+                7
+              ],
+              [
+                "p1",
+                "Alice",
+                3
+              ],
+              [
+                1
+              ]
+            ]
+          },
+          "expected": [
+            null,
+            null,
+            null,
+            [
+              [
+                "Alice",
+                3
+              ]
+            ]
+          ],
+          "description": "Update can also LOWER wins \u2014 the latest call is authoritative",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "ops": [
+              "LeaderboardSystem",
+              "record_player",
+              "top",
+              "top"
+            ],
+            "args": [
+              [],
+              [
+                "p1",
+                "Alice",
+                0
+              ],
+              [
+                1
+              ],
+              [
+                0
+              ]
+            ]
+          },
+          "expected": [
+            null,
+            null,
+            [
+              [
+                "Alice",
+                0
+              ]
+            ],
+            []
+          ],
+          "description": "Wins=0 is a valid score; k=0 returns []",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "ops": [
+              "LeaderboardSystem",
+              "record_player",
+              "record_player",
+              "record_player",
+              "record_player",
+              "record_player",
+              "top"
+            ],
+            "args": [
+              [],
+              [
+                "p1",
+                "A",
+                1
+              ],
+              [
+                "p2",
+                "B",
+                2
+              ],
+              [
+                "p3",
+                "C",
+                3
+              ],
+              [
+                "p4",
+                "D",
+                4
+              ],
+              [
+                "p5",
+                "E",
+                5
+              ],
+              [
+                3
+              ]
+            ]
+          },
+          "expected": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            [
+              [
+                "E",
+                5
+              ],
+              [
+                "D",
+                4
+              ],
+              [
+                "C",
+                3
+              ]
+            ]
+          ],
+          "description": "Five-player streaming, top-3",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "ops": [
+              "LeaderboardSystem",
+              "record_player",
+              "record_player",
+              "record_player",
+              "top",
+              "record_player",
+              "top"
+            ],
+            "args": [
+              [],
+              [
+                "p1",
+                "A",
+                10
+              ],
+              [
+                "p2",
+                "B",
+                8
+              ],
+              [
+                "p3",
+                "C",
+                5
+              ],
+              [
+                2
+              ],
+              [
+                "p4",
+                "D",
+                9
+              ],
+              [
+                3
+              ]
+            ]
+          },
+          "expected": [
+            null,
+            null,
+            null,
+            null,
+            [
+              [
+                "A",
+                10
+              ],
+              [
+                "B",
+                8
+              ]
+            ],
+            null,
+            [
+              [
+                "A",
+                10
+              ],
+              [
+                "D",
+                9
+              ],
+              [
+                "B",
+                8
+              ]
+            ]
+          ],
+          "description": "Insert in middle of stream \u2014 top recomputes correctly",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "ops": [
+              "LeaderboardSystem",
+              "record_player",
+              "record_player",
+              "record_player",
+              "record_player",
+              "record_player",
+              "top"
+            ],
+            "args": [
+              [],
+              [
+                "pA",
+                "Zoe",
+                5
+              ],
+              [
+                "pB",
+                "Yan",
+                5
+              ],
+              [
+                "pC",
+                "Xin",
+                5
+              ],
+              [
+                "pD",
+                "Wes",
+                5
+              ],
+              [
+                "pE",
+                "Vic",
+                5
+              ],
+              [
+                3
+              ]
+            ]
+          },
+          "expected": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            [
+              [
+                "Vic",
+                5
+              ],
+              [
+                "Wes",
+                5
+              ],
+              [
+                "Xin",
+                5
+              ]
+            ]
+          ],
+          "description": "Five-way tie \u2014 name ASC across the entire result",
+          "tags": [
+            "tricky"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Hash Map + Sort-on-Read (Optimal for Variable K)",
+          "time_complexity": "O(1) record_player; O(N log N + k) top",
+          "space_complexity": "O(N)",
+          "description": "Store one row per player_id in a dict; sort on every `top()`. Because `k` can vary from query to query and updates can move any player anywhere in the order, maintaining a precomputed structure adds complexity without saving complexity in the average case. This is the production shape when N is in the thousands and queries are infrequent \u2014 measure before optimising. The dominant cost is the sort, O(N log N), which is fine until N is genuinely huge or queries are extremely hot.",
+          "code": {
+            "python": "class LeaderboardSystem:\n    def __init__(self):\n        self._players = {}  # player_id \u2192 (name, wins)\n    \n    def record_player(self, player_id, name, wins):\n        self._players[player_id] = (name, wins)\n    \n    def top(self, k):\n        if k <= 0:\n            return []\n        # Sort by wins desc, then name asc.\n        ranked = sorted(\n            self._players.values(),\n            key=lambda nw: (-nw[1], nw[0]),\n        )\n        return [list(nw) for nw in ranked[:k]]",
+            "javascript": "class LeaderboardSystem {\n    constructor() { this._players = new Map(); }\n    recordPlayer(playerId, name, wins) {\n        this._players.set(playerId, [name, wins]);\n    }\n    top(k) {\n        if (k <= 0) return [];\n        const ranked = [...this._players.values()].sort((a, b) => {\n            if (a[1] !== b[1]) return b[1] - a[1];\n            return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0;\n        });\n        return ranked.slice(0, k);\n    }\n}"
+          }
+        },
+        {
+          "title": "Hash Map + Min-Heap of K (Fixed K, Hot Reads)",
+          "time_complexity": "O(log K) record_player; O(K log K) top",
+          "space_complexity": "O(N + K)",
+          "description": "Keep the player dict as before. Maintain a min-heap of size at most K of `(wins, name, player_id)`. On record_player: if the heap is smaller than K, push; else if the new wins exceeds the heap top, replace. To avoid stale entries from prior versions of the same player, tag each heap entry with a version counter and lazy-drop entries whose version disagrees with the dict on read. This wins when K is fixed, the read rate is high, and N is much larger than K. It loses when K varies across queries.",
+          "code": {
+            "python": "import heapq\n\nclass LeaderboardSystem:\n    def __init__(self):\n        self._players = {}    # player_id \u2192 (name, wins)\n        self._version = {}    # player_id \u2192 monotonic version int\n        self._heap = []       # entries of (wins, name, player_id, version)\n    \n    def record_player(self, player_id, name, wins):\n        v = self._version.get(player_id, 0) + 1\n        self._version[player_id] = v\n        self._players[player_id] = (name, wins)\n        heapq.heappush(self._heap, (wins, name, player_id, v))\n    \n    def top(self, k):\n        if k <= 0: return []\n        # Walk the heap, dropping stale entries; collect top-k by sort.\n        # In a long-lived system you'd maintain a SIZE-K view incrementally\n        # and snapshot it; for clarity here we just sort the live snapshot.\n        live = []\n        for wins, name, pid, v in self._heap:\n            if self._version.get(pid) == v and self._players.get(pid) == (name, wins):\n                live.append((name, wins))\n        live.sort(key=lambda nw: (-nw[1], nw[0]))\n        return [list(nw) for nw in live[:k]]"
+          }
+        },
+        {
+          "title": "Hash Map + Indexed Sorted Container (Fast Top-K, Variable K)",
+          "time_complexity": "O(log N) record_player; O(k) top",
+          "space_complexity": "O(N)",
+          "description": "If both writes and reads are hot AND k varies, neither plain sort nor heap-of-K wins. Use an order-statistic structure: in Python, a `SortedList` from `sortedcontainers`; in Java, a `TreeMap`; in C++, an order-statistic tree. Key the structure by `(-wins, name, player_id)` so the natural iteration order is descending wins / ascending name. Updates remove the old key and insert the new one \u2014 O(log N) each. Reads slice the first k entries \u2014 O(k). This is the structure most production leaderboards reach for. The shape below uses `bisect.insort` on a maintained sorted list of (-wins, name, player_id) tuples \u2014 same idea, no third-party dependency.",
+          "code": {
+            "python": "import bisect\n\nclass LeaderboardSystem:\n    def __init__(self):\n        self._players = {}    # player_id \u2192 (name, wins)\n        self._sorted = []     # list of (-wins, name, player_id), kept sorted\n    \n    def record_player(self, player_id, name, wins):\n        old = self._players.get(player_id)\n        if old is not None:\n            old_name, old_wins = old\n            old_key = (-old_wins, old_name, player_id)\n            i = bisect.bisect_left(self._sorted, old_key)\n            if i < len(self._sorted) and self._sorted[i] == old_key:\n                self._sorted.pop(i)\n        self._players[player_id] = (name, wins)\n        bisect.insort(self._sorted, (-wins, name, player_id))\n    \n    def top(self, k):\n        if k <= 0:\n            return []\n        return [[name, -neg_wins] for neg_wins, name, _ in self._sorted[:k]]"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Restate. Stream of (id, name, wins) updates; queries ask for top-K by wins desc, name asc tiebreak. Updates REPLACE the player row, they don't add to it.",
+        "2. Smallest correct thing: dict for O(1) update + sort-on-read for queries. O(N log N) per query \u2014 fine for small N.",
+        "3. If queries get hot: heap of size K. But K is variable here, which kills the simple heap-of-K trick. Note this and move on.",
+        "4. Lazy deletion: when a player gets updated, the heap may hold a stale snapshot. Tag entries with a version; drop on read whenever the version doesn't match the dict. Trade memory + occasional sweep for fast writes.",
+        "5. The senior reach: order-statistic structure (TreeMap / SortedList) keyed by `(-wins, name, id)` gives O(log N) writes and O(K) reads with no staleness ever. This is what production code uses.",
+        "6. Tiebreak on name asc \u2014 pin this in the comparator, not the sort. The Python `sorted` with `key=lambda x: (-x[1], x[0])` is stable AND correct.",
+        "7. Edge cases: k <= 0 \u2192 []. k > N \u2192 return all N. Empty leaderboard \u2192 []. Update with same wins (no-op semantically, but the version still bumps).",
+        "8. Concurrency follow-up: if the file stream is multi-threaded, snapshot reads (copy-on-write) keep `top()` consistent. Otherwise an interleaved update mid-sort can produce a torn read."
+      ],
+      "tips": [
+        "Pin the tiebreak rule explicitly. 'Name ascending' is the most defensible default \u2014 alphabetical, deterministic, doesn't depend on insertion order.",
+        "Update REPLACES wins. The 'wins can go down' test case catches solutions that maintain a max-tracker which assumes monotonic growth.",
+        "Variable K is the hidden trap. Solutions that maintain a heap-of-K silently produce wrong answers when called with `top(K')` for K' > K.",
+        "If the interviewer asks 'how big can N get?', the answer determines the data structure. <10\u2074: sort on read. 10\u2074\u201310\u2076 with hot reads: order-statistic tree. >10\u2076: shard by player_id and merge K-way on read.",
+        "Common follow-up: 'now wins are EVENTS, not absolute counts.' Now record_player ADDS wins; the question becomes 'which structure tracks running totals AND maintains rank?' Answer: same data structure, just with += instead of =.",
+        "Common follow-up: 'now we want top-K AND each player's rank.' Order-statistic tree gives both: rank = index of the player's key.",
+        "Common follow-up: 'now there are 100 leaderboards (per-region, per-mode).' Same structure parameterised by leaderboard_id; per-id state in a map.",
+        "The streaming-files framing is a red herring. Parse-and-call is somebody else's problem. Don't get distracted writing JSON / CSV / XML parsers in the interview."
+      ],
+      "companies": [
+        "Amazon",
+        "Google",
+        "Microsoft",
+        "Meta",
+        "Bloomberg",
+        "Netflix"
+      ],
+      "topics": [
+        "Hash Table",
+        "Heap",
+        "Sorting",
+        "Design"
+      ],
+      "time_complexity": "O(N log N) sort-on-read / O(log N) order-statistic",
+      "space_complexity": "O(N)",
+      "entry": {
+        "kind": "class_ops",
+        "class": "LeaderboardSystem",
+        "constructor": {
+          "params": []
+        },
+        "methods": [
+          {
+            "name": "record_player",
+            "params": [
+              {
+                "name": "player_id",
+                "type": "string"
+              },
+              {
+                "name": "name",
+                "type": "string"
+              },
+              {
+                "name": "wins",
+                "type": "int"
+              }
+            ],
+            "returns": "any"
+          },
+          {
+            "name": "top",
+            "params": [
+              {
+                "name": "k",
+                "type": "int"
+              }
+            ],
+            "returns": "list"
+          }
+        ]
+      }
+    },
+    {
       "title": "Letter Combinations of a Phone Number",
       "difficulty": "Medium",
       "description": "Given a string `digits` containing digits from `2-9` inclusive, return all possible letter combinations that the number could represent. Return the answer in **any order**.\n\nA mapping of digits to letters (just like on the telephone buttons) is given below. Note that `1` does not map to any letters.\n\n- `2` \u2192 `abc`\n- `3` \u2192 `def`\n- `4` \u2192 `ghi`\n- `5` \u2192 `jkl`\n- `6` \u2192 `mno`\n- `7` \u2192 `pqrs`\n- `8` \u2192 `tuv`\n- `9` \u2192 `wxyz`\n\n**Example 1:**\n- Input: `digits = \"23\"`\n- Output: `[\"ad\",\"ae\",\"af\",\"bd\",\"be\",\"bf\",\"cd\",\"ce\",\"cf\"]`\n\n**Example 2:**\n- Input: `digits = \"\"`\n- Output: `[]`\n\n**Example 3:**\n- Input: `digits = \"2\"`\n- Output: `[\"a\",\"b\",\"c\"]`",
@@ -417127,6 +418526,402 @@
       "space_complexity": "O(1)"
     },
     {
+      "title": "Stringify Looped Graph",
+      "difficulty": "Medium",
+      "description": "Given an adjacency-list representation of an undirected graph, return a string formed by concatenating node labels in the order you encounter them while walking the cycle.\n\n**Input shape:** a dict like\n```\n{\n  \"A\": [\"B\", \"D\"],\n  \"B\": [\"C\", \"A\"],\n  \"C\": [\"D\", \"B\"],\n  \"D\": [\"A\", \"C\"]\n}\n```\nwhich represents the cycle\n```\nA - B\n|   |\nD - C\n```\n\nStart from the **first key in iteration order** of the input dict. At each step pick the neighbour you haven't just come from. Return the concatenation of node labels in visit order. For the example above, return `\"ABCD\"`.\n\n**Edge cases for the basic problem:**\n- Empty / `None` input \u2192 return `\"\"`.\n- One-node graph \u2192 return that single label.\n- Two-node graph (`A \u2194 B`) \u2192 return both labels concatenated.\n\n**Follow-up \u2014 robustness:** drop the guarantee that the input is a clean cycle. The function must now also detect and reject malformed inputs: any node whose degree isn't exactly 2 (for graphs with 3+ nodes), graphs with disconnected components, branches, or dangling leaves. Return `None` for any malformed input.",
+      "hints": [
+        "A clean n-cycle (n \u2265 3) is uniquely characterised by two facts: every node has degree 2, AND a single walk from any node visits every node before returning to the start. If either fails, it isn't a clean cycle.",
+        "Three-state walk: track `prev`, `current`, `next`. At each step, `next = neighbour of current that isn't prev`. With degree exactly 2 this is unambiguous: pick whichever of the two neighbours isn't `prev`.",
+        "First step is the only awkward one \u2014 you have no `prev` yet. Just pick either neighbour as the first step. The traversal direction is arbitrary so this is fine.",
+        "Termination: the walk ends when `next == start`. Don't append the start node twice.",
+        "For the validity follow-up: track the visited set. After the walk, if `len(visited) != len(graph)`, you have disconnected components or branches \u2014 reject. Combined with the per-node degree-2 check at every step, this catches every malformed shape.",
+        "Don't forget the small-n edge cases (`n = 0, 1, 2`). They don't satisfy the degree-2 invariant trivially \u2014 handle them as special cases up front rather than letting the loop misbehave.",
+        "Dict iteration order in Python 3.7+ is insertion-ordered. If the interviewer cares, ask whether they want canonical (lexicographic) ordering or insertion-order; the answer affects which valid rotation you return."
+      ],
+      "constraints": [
+        "0 <= number of nodes <= 26 (single-letter labels in tests, but solution should handle arbitrary string keys)",
+        "Each node's neighbour list contains 0 to (n - 1) labels; no self-loops in test inputs.",
+        "For VALID inputs: every node has degree 0 (single-node graph), 1 (two-node graph), or 2 (3+ node cycle).",
+        "Labels are strings; they'd typically be single characters in interview discussion but assume arbitrary strings in code."
+      ],
+      "starter_code": {
+        "python": "def stringify_looped_graph(graph):\n    # Your code here\n    pass",
+        "javascript": "function stringifyLoopedGraph(graph) {\n    // Your code here\n}",
+        "java": "public String stringifyLoopedGraph(java.util.Map<String, java.util.List<String>> graph) {\n    // Your code here\n    return \"\";\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(stringify_looped_graph({\n        \"A\": [\"B\", \"D\"], \"B\": [\"C\", \"A\"],\n        \"C\": [\"D\", \"B\"], \"D\": [\"A\", \"C\"]\n    }))",
+        "javascript": "// Test runner (read-only)\nconsole.log(stringifyLoopedGraph({\n    A: ['B', 'D'], B: ['C', 'A'], C: ['D', 'B'], D: ['A', 'C']\n}));",
+        "java": "// Test runner (read-only)"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "graph": null
+          },
+          "expected": "",
+          "description": "None input \u2192 empty string",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "graph": {}
+          },
+          "expected": "",
+          "description": "Empty graph \u2192 empty string",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "graph": {
+              "A": []
+            }
+          },
+          "expected": "A",
+          "description": "Single-node graph",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "graph": {
+              "A": [
+                "B"
+              ],
+              "B": [
+                "A"
+              ]
+            }
+          },
+          "expected": "AB",
+          "description": "Two-node graph A\u2194B",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "graph": {
+              "A": [
+                "B",
+                "C"
+              ],
+              "B": [
+                "C",
+                "A"
+              ],
+              "C": [
+                "A",
+                "B"
+              ]
+            }
+          },
+          "expected": "ABC",
+          "description": "Triangle ABC \u2014 all three pairwise adjacent",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "graph": {
+              "A": [
+                "B",
+                "D"
+              ],
+              "B": [
+                "C",
+                "A"
+              ],
+              "C": [
+                "D",
+                "B"
+              ],
+              "D": [
+                "A",
+                "C"
+              ]
+            }
+          },
+          "expected": "ABCD",
+          "description": "Square cycle \u2014 the canonical example",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "graph": {
+              "A": [
+                "B",
+                "I"
+              ],
+              "B": [
+                "C",
+                "A"
+              ],
+              "C": [
+                "B",
+                "D"
+              ],
+              "D": [
+                "E",
+                "C"
+              ],
+              "E": [
+                "D",
+                "F"
+              ],
+              "F": [
+                "E",
+                "G"
+              ],
+              "G": [
+                "H",
+                "F"
+              ],
+              "H": [
+                "I",
+                "G"
+              ],
+              "I": [
+                "A",
+                "H"
+              ]
+            }
+          },
+          "expected": "ABCDEFGHI",
+          "description": "Nine-node cycle traced by following neighbour[0] when not prev",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "graph": {
+              "A": [
+                "B",
+                "D"
+              ],
+              "B": [
+                "C",
+                "A"
+              ],
+              "C": [
+                "B"
+              ],
+              "D": [
+                "A"
+              ]
+            }
+          },
+          "expected": null,
+          "description": "Invalid \u2014 degree-1 nodes (C and D) on a 4-node graph",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "graph": {
+              "A": [
+                "B",
+                "D"
+              ],
+              "B": [
+                "C",
+                "A",
+                "E"
+              ],
+              "C": [
+                "B",
+                "D",
+                "F"
+              ],
+              "D": [
+                "A",
+                "C"
+              ],
+              "E": [
+                "B",
+                "F"
+              ],
+              "F": [
+                "E",
+                "C"
+              ]
+            }
+          },
+          "expected": null,
+          "description": "Invalid \u2014 B and C have degree 3 (the 'two squares glued' shape)",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "graph": {
+              "A": [
+                "B",
+                "D"
+              ],
+              "B": [
+                "C",
+                "A",
+                "E"
+              ],
+              "C": [
+                "B",
+                "D"
+              ],
+              "D": [
+                "A",
+                "C"
+              ],
+              "E": [
+                "B"
+              ]
+            }
+          },
+          "expected": null,
+          "description": "Invalid \u2014 B has degree 3 plus a dangling leaf E",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "graph": {
+              "A": [
+                "B"
+              ],
+              "B": [
+                "A",
+                "C"
+              ],
+              "C": [
+                "B",
+                "D"
+              ],
+              "D": [
+                "C"
+              ]
+            }
+          },
+          "expected": null,
+          "description": "Invalid \u2014 open path (a chain, not a cycle)",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "graph": {
+              "A": [
+                "B",
+                "C"
+              ],
+              "B": [
+                "A",
+                "C"
+              ],
+              "C": [
+                "A",
+                "B"
+              ],
+              "X": [
+                "Y",
+                "Z"
+              ],
+              "Y": [
+                "X",
+                "Z"
+              ],
+              "Z": [
+                "X",
+                "Y"
+              ]
+            }
+          },
+          "expected": null,
+          "description": "Invalid \u2014 two disconnected triangles (degrees fine, components wrong)",
+          "tags": [
+            "tricky"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Walk + Validate (Optimal)",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(n) for the visited set + result buffer",
+          "description": "Three-state walk: keep `prev`, `current`, `next`. Start from the first dict key with `prev = None`. At each step, the next node is the neighbour of `current` that isn't `prev` \u2014 for a degree-2 node this is unique. Stop when `next == start`. Validate as we go (degree must be exactly 2 once we're past the trivial cases) and at the end (visited set must equal the full node set, otherwise components are missing). Trivial small-n cases (0, 1, 2 nodes) get short-circuited up front since they don't satisfy the degree-2 invariant.",
+          "code": {
+            "python": "def stringify_looped_graph(graph):\n    if not graph:\n        return \"\"\n    keys = list(graph.keys())\n    n = len(keys)\n    if n == 1:\n        return keys[0]\n    if n == 2:\n        a, b = keys\n        # Two-node 'cycle' is just A\u2194B; require mutual edge.\n        if graph[a] != [b] and graph[a] != [b, b]: return None\n        if graph[b] != [a] and graph[b] != [a, a]: return None\n        return a + b\n    \n    start = keys[0]\n    current = start\n    prev = None\n    result = []\n    visited = set()\n    \n    while True:\n        if current in visited:\n            return None  # revisit before completion \u2192 branch / disconnect\n        visited.add(current)\n        result.append(current)\n        conns = graph.get(current, [])\n        if len(conns) != 2:\n            return None\n        nxt = conns[0] if conns[0] != prev else conns[1]\n        if nxt not in graph:\n            return None  # neighbour not in node set \u2192 malformed\n        prev = current\n        current = nxt\n        if current == start:\n            break\n    \n    if len(visited) != n:\n        return None  # disconnected components\n    return \"\".join(result)",
+            "javascript": "function stringifyLoopedGraph(graph) {\n    if (!graph) return '';\n    const keys = Object.keys(graph);\n    const n = keys.length;\n    if (n === 0) return '';\n    if (n === 1) return keys[0];\n    if (n === 2) {\n        const [a, b] = keys;\n        if (!graph[a].includes(b) || !graph[b].includes(a)) return null;\n        return a + b;\n    }\n    \n    const start = keys[0];\n    let current = start;\n    let prev = null;\n    const result = [];\n    const visited = new Set();\n    \n    while (true) {\n        if (visited.has(current)) return null;\n        visited.add(current);\n        result.push(current);\n        const conns = graph[current] || [];\n        if (conns.length !== 2) return null;\n        const nxt = conns[0] !== prev ? conns[0] : conns[1];\n        if (!(nxt in graph)) return null;\n        prev = current;\n        current = nxt;\n        if (current === start) break;\n    }\n    \n    if (visited.size !== n) return null;\n    return result.join('');\n}"
+          }
+        },
+        {
+          "title": "Validate-First, Walk-Second",
+          "time_complexity": "O(n)",
+          "space_complexity": "O(n)",
+          "description": "Some interviewers prefer a clean separation: a single pre-pass that checks every structural invariant, then a separate walk that's allowed to assume the input is well-formed. Pre-pass: every node has degree exactly 2 (for n \u2265 3); every neighbour is a known node; every edge is symmetric (`B in graph[A]` iff `A in graph[B]`). Then a single DFS validates connectivity. If both pass, the walk is just a clean linear traversal. Same complexity, slightly more readable; trades one extra pass for code that splits cleanly into 'parse' and 'process'.",
+          "code": {
+            "python": "def stringify_looped_graph(graph):\n    if not graph: return \"\"\n    keys = list(graph.keys())\n    n = len(keys)\n    if n == 1: return keys[0]\n    if n == 2:\n        a, b = keys\n        if b not in graph.get(a, []) or a not in graph.get(b, []): return None\n        return a + b\n    \n    # Pre-pass: degree, known-neighbour, symmetry.\n    for node, conns in graph.items():\n        if len(conns) != 2:\n            return None\n        for nb in conns:\n            if nb not in graph or node not in graph[nb]:\n                return None\n    \n    # Walk \u2014 guaranteed safe by pre-pass.\n    start = keys[0]\n    prev, current = None, start\n    result = []\n    while True:\n        result.append(current)\n        conns = graph[current]\n        nxt = conns[0] if conns[0] != prev else conns[1]\n        prev, current = current, nxt\n        if current == start:\n            break\n    \n    if len(result) != n:\n        return None  # multiple disjoint cycles\n    return \"\".join(result)"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Restate. Input is an adjacency list of an UNDIRECTED graph claimed to be a single cycle. Output is a string of node labels in walk order.",
+        "2. Edge cases up front: empty/None \u2192 \"\". One node \u2192 that label. Two nodes \u2192 both labels (it's the only valid 2-cycle in this convention).",
+        "3. Three-state walk for n \u2265 3: track `prev`, `current`, pick `next` = the neighbour that isn't `prev`. With degree exactly 2 this is unique; that's the whole reason the cycle is walkable in O(n).",
+        "4. Termination: when `next == start`, stop. Don't include start twice.",
+        "5. Follow-up flips this from 'walk a cycle' to 'detect that it isn't a cycle.' Check at every step that current has degree 2 and the next neighbour exists in the graph. Then check at the end that the visited set equals the full node set.",
+        "6. The 'two glued cycles' test case (B and C have degree 3) is caught by the degree-2 check at the first step where we reach B or C.",
+        "7. The 'disjoint two triangles' test case is the subtle one. Each node has degree 2, the walk completes, but only half the nodes are visited. Catch it with the visited-count check at the end.",
+        "8. The chain-not-cycle case (`A-B-C-D`) catches via degree: A and D have degree 1, not 2. The very first step hitting A returns None."
+      ],
+      "tips": [
+        "Pick a starting node deterministically (first key in iteration order) so tests are reproducible. Otherwise valid traversals form an equivalence class of 2n rotations.",
+        "Don't forget the n \u2264 2 cases. They're the off-by-one of this problem \u2014 the degree-2 invariant doesn't apply.",
+        "The validity follow-up is what separates a pass from a strong pass. Walking is easy; rejecting malformed input correctly is the senior signal.",
+        "Check symmetry of edges in the pre-pass version \u2014 `B in graph[A]` should imply `A in graph[B]`. The walk-and-validate version catches asymmetric edges incidentally (the walk steers off-cycle and triggers a degree check), but pre-pass makes it explicit.",
+        "Common follow-up: 'now allow self-loops.' A node with `[X, X]` should be treated as having one logical neighbour. Decide whether to filter or special-case in the next-step rule.",
+        "Common follow-up: 'now allow multiple cycles.' Run the walk-from-unvisited loop until visited covers the graph; concatenate cycles separated by a delimiter.",
+        "Common follow-up: 'detect & describe \u2014 what shape is this if it's not a clean cycle?' Classify into branch / chain / disconnected / multi-cycle by counting degree-1, degree-3+, and connected component count."
+      ],
+      "companies": [
+        "Google",
+        "Microsoft",
+        "Bloomberg",
+        "Amazon",
+        "Meta"
+      ],
+      "topics": [
+        "Graph",
+        "Hash Table",
+        "DFS",
+        "Validation"
+      ],
+      "time_complexity": "O(n)",
+      "space_complexity": "O(n)",
+      "entry": {
+        "kind": "function",
+        "name": "stringify_looped_graph",
+        "params": [
+          {
+            "name": "graph",
+            "type": "dict"
+          }
+        ]
+      }
+    },
+    {
       "title": "Subarray Sum Equals K",
       "difficulty": "Medium",
       "description": "Given an integer array `nums` and an integer `k`, return the **number of contiguous non-empty subarrays** whose sum equals `k`.\n\n**Example 1:**\n- Input: `nums = [1,1,1]`, `k = 2`\n- Output: `2`\n- Explanation: The subarrays `[1,1]` (indices 0..1) and `[1,1]` (indices 1..2) each sum to 2.\n\n**Example 2:**\n- Input: `nums = [1,2,3]`, `k = 3`\n- Output: `2`\n- Explanation: `[1,2]` and `[3]` each sum to 3.",
@@ -425279,6 +427074,522 @@
       ],
       "time_complexity": "O(n)",
       "space_complexity": "O(1)"
+    },
+    {
+      "title": "Team Vacation Overlap \u2014 Risk Periods",
+      "difficulty": "Hard",
+      "description": "You manage a team and want to know when too many teammates will be on vacation at once.\n\nGiven:\n- `team_size` \u2014 total number of people on the team.\n- `threshold` \u2014 the **minimum fraction** of the team that must be available. A threshold of `0.6` means a date is *risky* whenever **strictly less than 60%** of the team is present.\n- `vacations` \u2014 a list (one entry per teammate) of vacation intervals `[start_day, end_day]` (both inclusive, integer day-of-year, 1\u2013366).\n\nReturn the merged, sorted list of contiguous risk periods `[start, end]` (inclusive). A risk period is a maximal run of consecutive days where strictly less than `threshold * team_size` teammates are available.\n\n**Example:**\n```\nteam_size = 5\nthreshold = 0.6   # we want at least 60% available; flag when fewer\nvacations = [\n    [[1, 3], [8, 10]],   # Member 1\n    [[2, 6]],            # Member 2\n    [[3, 7], [9, 11]],   # Member 3\n    [[2, 4]],            # Member 4\n    [[5, 7], [10, 12]],  # Member 5\n]\nOutput: [[2, 6], [10, 10]]\n```\n\nDay-by-day absent count: `1 3 4 3 3 3 2 1 2 3 2 1`. Risk (absent \u2265 3) on days 2\u20136 and 10.",
+      "hints": [
+        "Pure brute force: for every day in the span, count how many teammates have any interval covering it. O(D \u00b7 M \u00b7 K) where D is span length, M members, K average intervals per member. Fine for small inputs and easy to get right; document this as your 'first cut'.",
+        "Sweep-line is the canonical optimisation. Convert each `[start, end]` into two events: `(start, +1)` and `(end + 1, -1)` \u2014 note the `+1` because the interval is *inclusive*. Sort by date.",
+        "Running count of absent teammates: walk the events, apply ALL deltas at the same date before deciding. Start a risk period when the count first crosses above the threshold, end it when it drops back.",
+        "The threshold-to-absent-count conversion: 'at least `threshold` fraction available' \u2194 'at most `team_size * (1 - threshold)` absent'. Risk = `absent > team_size * (1 - threshold)`. Mind whether the comparison is strict.",
+        "Fence-post trap: using `(end, -1)` instead of `(end + 1, -1)` removes the teammate ON their last day, off-by-one on every period boundary. Use a closed-interval convention end-to-end OR convert to half-open at the boundary, but pick one and stick with it.",
+        "Don't accumulate floating-point error. With small team sizes the math stays exact, but if you'd rather not depend on that, multiply both sides: `absent * 100 > (100 - threshold_pct) * team_size` keeps everything in integers.",
+        "Two events on the same day: a teammate ends a vacation (release) and another starts (acquire). Apply BOTH deltas before evaluating the threshold for that date \u2014 otherwise you'll record a transient false-negative."
+      ],
+      "constraints": [
+        "1 <= team_size <= 10\u2075",
+        "0.0 <= threshold <= 1.0",
+        "0 <= len(vacations) <= team_size",
+        "Each member contributes 0+ intervals; total intervals across all members <= 10\u2075",
+        "Each interval is `[start, end]` with `1 <= start <= end <= 366` (inclusive day-of-year)",
+        "Multiple intervals per member may overlap each other (don't assume non-overlap)."
+      ],
+      "starter_code": {
+        "python": "def find_risk_periods(team_size, threshold, vacations):\n    # Your code here\n    pass",
+        "javascript": "function findRiskPeriods(teamSize, threshold, vacations) {\n    // Your code here\n}",
+        "java": "public int[][] findRiskPeriods(int teamSize, double threshold, int[][][] vacations) {\n    // Your code here\n    return new int[][]{};\n}"
+      },
+      "boilerplate_code": {
+        "python": "# Test runner (read-only)\nif __name__ == \"__main__\":\n    print(find_risk_periods(5, 0.6, [\n        [[1,3],[8,10]], [[2,6]], [[3,7],[9,11]], [[2,4]], [[5,7],[10,12]]\n    ]))",
+        "javascript": "// Test runner (read-only)\nconsole.log(findRiskPeriods(5, 0.6, [\n    [[1,3],[8,10]], [[2,6]], [[3,7],[9,11]], [[2,4]], [[5,7],[10,12]]\n]));",
+        "java": "// Test runner (read-only)\npublic class Main {\n    public static void main(String[] args) {\n        Solution s = new Solution();\n        int[][] r = s.findRiskPeriods(5, 0.6, new int[][][]{\n            {{1,3},{8,10}}, {{2,6}}, {{3,7},{9,11}}, {{2,4}}, {{5,7},{10,12}}\n        });\n        for (int[] iv : r) System.out.println(iv[0] + \",\" + iv[1]);\n    }\n}"
+      },
+      "test_cases": [
+        {
+          "input": {
+            "team_size": 5,
+            "threshold": 0.6,
+            "vacations": [
+              [
+                [
+                  1,
+                  3
+                ],
+                [
+                  8,
+                  10
+                ]
+              ],
+              [
+                [
+                  2,
+                  6
+                ]
+              ],
+              [
+                [
+                  3,
+                  7
+                ],
+                [
+                  9,
+                  11
+                ]
+              ],
+              [
+                [
+                  2,
+                  4
+                ]
+              ],
+              [
+                [
+                  5,
+                  7
+                ],
+                [
+                  10,
+                  12
+                ]
+              ]
+            ]
+          },
+          "expected": [
+            [
+              2,
+              6
+            ],
+            [
+              10,
+              10
+            ]
+          ],
+          "description": "Canonical example \u2014 risk on 2\u20136 and 10",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "team_size": 3,
+            "threshold": 0.5,
+            "vacations": []
+          },
+          "expected": [],
+          "description": "No vacations \u2192 no risk",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "team_size": 4,
+            "threshold": 0.5,
+            "vacations": [
+              [
+                [
+                  1,
+                  5
+                ]
+              ],
+              [
+                [
+                  1,
+                  5
+                ]
+              ],
+              [
+                [
+                  1,
+                  5
+                ]
+              ]
+            ]
+          },
+          "expected": [
+            [
+              1,
+              5
+            ]
+          ],
+          "description": "Three of four out for the same span \u2014 one continuous risk",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "team_size": 4,
+            "threshold": 1.0,
+            "vacations": [
+              [
+                [
+                  10,
+                  12
+                ]
+              ]
+            ]
+          },
+          "expected": [
+            [
+              10,
+              12
+            ]
+          ],
+          "description": "Threshold 100% \u2014 any absence is risk",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "team_size": 4,
+            "threshold": 0.0,
+            "vacations": [
+              [
+                [
+                  1,
+                  5
+                ]
+              ],
+              [
+                [
+                  1,
+                  5
+                ]
+              ],
+              [
+                [
+                  1,
+                  5
+                ]
+              ],
+              [
+                [
+                  1,
+                  5
+                ]
+              ]
+            ]
+          },
+          "expected": [],
+          "description": "Threshold 0% \u2014 never risk, even when everyone is out",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "team_size": 5,
+            "threshold": 0.6,
+            "vacations": [
+              [
+                [
+                  1,
+                  1
+                ]
+              ],
+              [
+                [
+                  3,
+                  3
+                ]
+              ],
+              [
+                [
+                  5,
+                  5
+                ]
+              ]
+            ]
+          },
+          "expected": [],
+          "description": "Single-day vacations, never enough simultaneous absentees",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "team_size": 3,
+            "threshold": 0.5,
+            "vacations": [
+              [
+                [
+                  1,
+                  2
+                ]
+              ],
+              [
+                [
+                  2,
+                  3
+                ]
+              ],
+              [
+                [
+                  2,
+                  2
+                ]
+              ]
+            ]
+          },
+          "expected": [
+            [
+              2,
+              2
+            ]
+          ],
+          "description": "Same-day boundary \u2014 multiple events on day 2 must be applied together",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "team_size": 4,
+            "threshold": 0.6,
+            "vacations": [
+              [
+                [
+                  1,
+                  3
+                ],
+                [
+                  7,
+                  9
+                ]
+              ],
+              [
+                [
+                  2,
+                  5
+                ]
+              ],
+              [
+                [
+                  3,
+                  4
+                ],
+                [
+                  8,
+                  10
+                ]
+              ]
+            ]
+          },
+          "expected": [
+            [
+              2,
+              4
+            ],
+            [
+              8,
+              9
+            ]
+          ],
+          "description": "Two disjoint risk periods, each with multiple absentees",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "team_size": 2,
+            "threshold": 0.6,
+            "vacations": [
+              [
+                [
+                  1,
+                  5
+                ]
+              ],
+              [
+                [
+                  3,
+                  7
+                ]
+              ]
+            ]
+          },
+          "expected": [
+            [
+              1,
+              7
+            ]
+          ],
+          "description": "Two-person team \u2014 a single absence is risk under 60% threshold (50% < 60%)",
+          "tags": [
+            "tricky"
+          ]
+        },
+        {
+          "input": {
+            "team_size": 5,
+            "threshold": 0.8,
+            "vacations": [
+              [
+                [
+                  1,
+                  10
+                ]
+              ],
+              [
+                [
+                  3,
+                  5
+                ]
+              ]
+            ]
+          },
+          "expected": [
+            [
+              3,
+              5
+            ]
+          ],
+          "description": "Threshold 80% \u2014 1 absent OK, 2 absent triggers risk only on overlap",
+          "tags": [
+            "basic"
+          ]
+        },
+        {
+          "input": {
+            "team_size": 3,
+            "threshold": 0.5,
+            "vacations": [
+              [
+                [
+                  1,
+                  5
+                ]
+              ],
+              [
+                [
+                  1,
+                  5
+                ]
+              ],
+              [
+                [
+                  1,
+                  5
+                ]
+              ]
+            ]
+          },
+          "expected": [
+            [
+              1,
+              5
+            ]
+          ],
+          "description": "Whole team out \u2014 risk for entire span",
+          "tags": [
+            "edge"
+          ]
+        },
+        {
+          "input": {
+            "team_size": 5,
+            "threshold": 0.6,
+            "vacations": [
+              [
+                [
+                  1,
+                  3
+                ],
+                [
+                  2,
+                  4
+                ]
+              ]
+            ]
+          },
+          "expected": [],
+          "description": "Self-overlapping intervals on one member still count as one absentee per day",
+          "tags": [
+            "tricky"
+          ]
+        }
+      ],
+      "solutions": [
+        {
+          "title": "Sweep Line on Inclusive Intervals (Optimal)",
+          "time_complexity": "O((I + D) log I) \u2014 sort dominated; D is the unique-event count",
+          "space_complexity": "O(I) for the events buffer",
+          "description": "Convert each interval `[s, e]` into two events: `(s, +1)` and `(e + 1, -1)`. The `+1` is the fence-post: an inclusive interval ends *after* day `e`, so the decrement fires on day `e + 1`. Sort events by date. Walk them, applying ALL deltas at the current date before deciding the threshold \u2014 otherwise a release-then-acquire on the same day creates a phantom dip. Risk fires when the running count crosses the absent limit; resolves on the day it crosses back. Self-overlapping intervals from one member must be normalised first (or we double-count them) \u2014 the simplest fix is to merge each member's intervals before generating events.",
+          "code": {
+            "python": "def find_risk_periods(team_size, threshold, vacations):\n    events = []\n    for member in vacations:\n        # Merge per-member self-overlaps first so each absent-day counts once.\n        intervals = sorted(member)\n        merged = []\n        for s, e in intervals:\n            if merged and s <= merged[-1][1] + 1:\n                merged[-1] = (merged[-1][0], max(merged[-1][1], e))\n            else:\n                merged.append((s, e))\n        for s, e in merged:\n            events.append((s, 1))\n            events.append((e + 1, -1))\n    events.sort()\n    \n    # Strict comparison: risk when absent > limit (so absent=2 with limit=2 is NOT risk).\n    # 'less than threshold available' means available < threshold * team_size,\n    # i.e. absent > team_size - threshold * team_size = team_size * (1 - threshold).\n    limit = team_size - team_size * threshold\n    \n    out = []\n    count = 0\n    risk_start = None\n    i = 0\n    while i < len(events):\n        d = events[i][0]\n        while i < len(events) and events[i][0] == d:\n            count += events[i][1]\n            i += 1\n        if count > limit and risk_start is None:\n            risk_start = d\n        elif count <= limit and risk_start is not None:\n            out.append([risk_start, d - 1])\n            risk_start = None\n    return out",
+            "javascript": "function findRiskPeriods(teamSize, threshold, vacations) {\n    const events = [];\n    for (const member of vacations) {\n        const intervals = [...member].sort((a, b) => a[0] - b[0]);\n        const merged = [];\n        for (const [s, e] of intervals) {\n            if (merged.length && s <= merged[merged.length - 1][1] + 1) {\n                merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], e);\n            } else {\n                merged.push([s, e]);\n            }\n        }\n        for (const [s, e] of merged) {\n            events.push([s, 1]);\n            events.push([e + 1, -1]);\n        }\n    }\n    events.sort((a, b) => a[0] - b[0]);\n    const limit = teamSize - teamSize * threshold;\n    const out = [];\n    let count = 0;\n    let riskStart = null;\n    let i = 0;\n    while (i < events.length) {\n        const d = events[i][0];\n        while (i < events.length && events[i][0] === d) {\n            count += events[i][1];\n            i++;\n        }\n        if (count > limit && riskStart === null) riskStart = d;\n        else if (count <= limit && riskStart !== null) {\n            out.push([riskStart, d - 1]);\n            riskStart = null;\n        }\n    }\n    return out;\n}"
+          }
+        },
+        {
+          "title": "Per-Day Brute Force",
+          "time_complexity": "O(D \u00b7 I) where D is the calendar span and I total intervals",
+          "space_complexity": "O(1) extra (besides the output)",
+          "description": "For every day in the active span, count how many teammates have any interval covering it; emit a risk run when the count crosses the limit. Easy to write under pressure and obviously correct, but blows up linearly with the calendar span. Useful as the warm-up answer or the oracle to validate an optimised version against.",
+          "code": {
+            "python": "def find_risk_periods(team_size, threshold, vacations):\n    if not vacations or not any(vacations):\n        return []\n    spans = [iv for member in vacations for iv in member]\n    if not spans:\n        return []\n    lo = min(s for s, _ in spans)\n    hi = max(e for _, e in spans)\n    limit = team_size - team_size * threshold\n    out = []\n    risk_start = None\n    for d in range(lo, hi + 2):  # one past for the closing edge\n        absent = sum(\n            1 for member in vacations\n            if any(s <= d <= e for s, e in member)\n        )\n        if absent > limit and risk_start is None:\n            risk_start = d\n        elif absent <= limit and risk_start is not None:\n            out.append([risk_start, d - 1])\n            risk_start = None\n    return out"
+          }
+        }
+      ],
+      "thought_process": [
+        "1. Restate. We have intervals per teammate; we want days when the *count of overlapping intervals across teammates* is too high. The per-teammate granularity matters \u2014 overlapping intervals on the SAME teammate should still count as one absentee.",
+        "2. Choose representation. Brute force per day is fine for small inputs but blows up if days are large; events (sweep line) are O(I log I).",
+        "3. Inclusive vs half-open. The intervals are inclusive on both ends. Use `(end + 1, -1)` so the decrement happens AFTER the last absent day.",
+        "4. Threshold semantics. 'At least 60% available' = 'absent < 40% of team'. 'Less than 60% available' = 'absent \u2265 40%'? Or `>` 40%? Pin this down explicitly with the interviewer; the tests assume strict inequality (`absent > limit`) so 40% absent with limit=40% is NOT risk.",
+        "5. Same-day events. If a teammate ends and another starts on day D, apply both deltas before evaluating \u2014 otherwise you'll record a phantom non-risk minute.",
+        "6. Per-member overlaps. If a member has [1,3] and [2,4], they're absent on days 1\u20134 as one person, not two. Merge per-member intervals first.",
+        "7. Output format. Inclusive `[start, end]`. The end is the day BEFORE the count drops back below the limit \u2014 careful with the `d - 1`.",
+        "8. Edge cases. No vacations \u2192 []. One member, threshold=1.0 \u2192 entire union of their absences. Threshold=0.0 \u2192 never risk regardless."
+      ],
+      "tips": [
+        "Pin the threshold semantics at the start. 'Less than 60%' is strict; 'at most 60%' is not. The tests use strict.",
+        "The fence-post `(end + 1, -1)` is the #1 bug. Write it once, comment it, never touch it.",
+        "Per-member merge is the #2 bug. Without it, [1,3] + [2,4] from one teammate counts as 2 absentees on day 2.",
+        "When applying events, batch by date. Don't decide the threshold mid-batch \u2014 only after every delta on that date is applied.",
+        "The brute force version is a great oracle. Keep it around in scratch space; randomise inputs and assert the optimised version agrees.",
+        "Common follow-up: 'now teammates can also be on parental leave with a different multiplier.' Generalise the `+1 / -1` deltas to weighted; everything else stays the same.",
+        "Common follow-up: 'tell me which teammate caused the risk to start.' Tag each event with the member id; track the last-acquired set.",
+        "Common follow-up: 'which date has the most simultaneous vacations?' Same sweep, just track max(count) and the date(s) achieving it."
+      ],
+      "companies": [
+        "Amazon",
+        "Microsoft",
+        "Google",
+        "Bloomberg",
+        "LinkedIn"
+      ],
+      "topics": [
+        "Array",
+        "Sorting",
+        "Greedy",
+        "Sweep Line",
+        "Intervals"
+      ],
+      "time_complexity": "O(I log I)",
+      "space_complexity": "O(I)",
+      "entry": {
+        "kind": "function",
+        "name": "find_risk_periods",
+        "params": [
+          {
+            "name": "team_size",
+            "type": "int"
+          },
+          {
+            "name": "threshold",
+            "type": "float"
+          },
+          {
+            "name": "vacations",
+            "type": "list"
+          }
+        ]
+      }
     },
     {
       "title": "3Sum",
