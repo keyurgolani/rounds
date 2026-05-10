@@ -11,6 +11,8 @@ import BehavioralList from './pages/BehavioralList';
 import BehavioralDetail from './pages/BehavioralDetail';
 import AICodingList from './pages/ai-coding/AICodingList';
 import AICodingDetail from './pages/ai-coding/AICodingDetail';
+import TakeHomeList from './pages/take-home/TakeHomeList';
+import TakeHomeDetail from './pages/take-home/TakeHomeDetail';
 import { AnecdoteEditorPage } from './pages/behavioral/AnecdoteEditorPage';
 import Applications from './pages/Applications';
 import ApplicationDetail from './pages/ApplicationDetail';
@@ -67,6 +69,8 @@ export default function App() {
         <Route path="behavioral/question/:slug" element={<BehavioralDetail />} />
         <Route path="ai-coding" element={<AICodingList />} />
         <Route path="ai-coding/round/:slug" element={<AICodingDetail />} />
+        <Route path="take-home" element={<TakeHomeList />} />
+        <Route path="take-home/assignment/:slug" element={<TakeHomeDetail />} />
         <Route path="applications" element={<Applications />} />
         <Route path="applications/new" element={<NewApplication />} />
         <Route path="applications/:slug" element={<ApplicationDetail />} />

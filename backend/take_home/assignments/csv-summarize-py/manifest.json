@@ -1,0 +1,21 @@
+{
+  "slug": "csv-summarize-py",
+  "title": "CSV Summarizer",
+  "difficulty": "easy",
+  "language": "python",
+  "time_budget_min": 45,
+  "ai_policy": "off",
+  "entrypoint": "python3 harness/run.py",
+  "topics": ["data-cleaning", "stdlib"],
+  "companies": ["Stripe", "Snowflake"],
+  "rubric": {
+    "items": [
+      {"id": "count_correct", "label": "Count is correct", "weight": 0.15, "prompt": "Does the output's count match the number of data rows?"},
+      {"id": "mean_score_correct", "label": "Mean is correct", "weight": 0.2, "prompt": "Does mean_score equal sum(scores)/count, with reasonable precision?"},
+      {"id": "max_correct", "label": "Max identified", "weight": 0.2, "prompt": "Does max.name and max.score match the highest-score row?"},
+      {"id": "min_correct", "label": "Min identified", "weight": 0.2, "prompt": "Does min.name and min.score match the lowest-score row?"},
+      {"id": "empty_csv_returns_count_zero", "label": "Empty CSV handled", "weight": 0.15, "prompt": "On an empty (header-only) CSV, does the output equal {count: 0} (no other keys)?"},
+      {"id": "code_quality", "label": "Code quality", "weight": 0.1, "prompt": "Does the candidate use the stdlib csv module idiomatically? Single-pass reasonable?"}
+    ]
+  }
+}

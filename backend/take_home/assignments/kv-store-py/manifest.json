@@ -1,0 +1,21 @@
+{
+  "slug": "kv-store-py",
+  "title": "Tiny KV Store",
+  "difficulty": "easy",
+  "language": "python",
+  "time_budget_min": 60,
+  "ai_policy": "off",
+  "entrypoint": "python3 harness/run.py",
+  "topics": ["backend", "data-structures"],
+  "companies": ["Stripe", "Plaid"],
+  "rubric": {
+    "items": [
+      {"id": "set_returns_ok", "label": "POST /set works", "weight": 0.2, "prompt": "Does POST /set/{key} accept and store the value, returning (200, {ok: True})?"},
+      {"id": "get_returns_stored_value", "label": "GET /get returns set value", "weight": 0.2, "prompt": "After a successful set, does GET /get/{key} return (200, {value: ...}) with the stored value?"},
+      {"id": "get_missing_404", "label": "GET /get of missing key 404s", "weight": 0.15, "prompt": "Does GET /get of an unset key return 404 with an error body?"},
+      {"id": "delete_removes", "label": "DELETE removes key", "weight": 0.2, "prompt": "Does DELETE /del/{key} remove the key (so subsequent GET 404s)? Idempotent — succeeds on missing keys too?"},
+      {"id": "list_returns_sorted_keys", "label": "GET /list returns sorted keys", "weight": 0.15, "prompt": "Does GET /list return all current keys, sorted?"},
+      {"id": "code_quality", "label": "Code quality", "weight": 0.1, "prompt": "Is dispatch idiomatic (no spaghetti if/elif chain)? Helpful error handling?"}
+    ]
+  }
+}

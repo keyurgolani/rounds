@@ -11,7 +11,7 @@ import type { RecordModel } from 'pocketbase';
 import { pb } from '../lib/pocketbase';
 import type { PracticeStatus } from '../components/shell/StatusDot';
 
-export type PracticeKind = 'system' | 'coding' | 'behavioral' | 'ai-coding';
+export type PracticeKind = 'system' | 'coding' | 'behavioral' | 'ai-coding' | 'take-home';
 
 export interface UserProgress {
   id: string;

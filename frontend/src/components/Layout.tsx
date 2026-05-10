@@ -81,6 +81,15 @@ const practiceNav: PracticeNavGroup[] = [
     ],
   },
   {
+    basePath: '/take-home',
+    label: 'Take-Home Assignments',
+    shortLabel: 'Take-Home',
+    glyph: AIGlyph,
+    children: [
+      { path: '/take-home', label: 'Assignments' },
+    ],
+  },
+  {
     basePath: '/behavioral',
     label: 'Behavioral',
     shortLabel: 'Behavioral',

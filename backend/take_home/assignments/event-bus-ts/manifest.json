@@ -1,0 +1,21 @@
+{
+  "slug": "event-bus-ts",
+  "title": "Event Bus",
+  "difficulty": "easy",
+  "language": "typescript",
+  "time_budget_min": 60,
+  "ai_policy": "off",
+  "entrypoint": "node --experimental-strip-types harness/run.ts",
+  "topics": ["pub-sub", "data-structures"],
+  "companies": ["Cloudflare", "Discord"],
+  "rubric": {
+    "items": [
+      {"id": "single_subscriber_receives_emit", "label": "Single subscriber receives emit", "weight": 0.2, "prompt": "Does on(event, fn) followed by emit(event, data) call fn with data?"},
+      {"id": "multiple_subscribers_all_called", "label": "Multiple subscribers all called", "weight": 0.2, "prompt": "Do multiple subscribers all receive the same emit?"},
+      {"id": "unsubscribe_returned_function", "label": "Unsubscribe via returned fn", "weight": 0.2, "prompt": "Does the function returned by on() unsubscribe that listener so subsequent emits don't call it?"},
+      {"id": "no_cross_event_leakage", "label": "No cross-event leakage", "weight": 0.15, "prompt": "Does emit('a',...) NOT invoke listeners registered on('b',...)?"},
+      {"id": "throwing_subscriber_does_not_block_others", "label": "Throwing subscriber doesn't block others", "weight": 0.15, "prompt": "If one subscriber throws during emit, do the remaining subscribers still receive the event?"},
+      {"id": "code_quality", "label": "Code quality", "weight": 0.1, "prompt": "Does the implementation use a Map or similar idiomatic structure (not a flat array of [event,fn] tuples)?"}
+    ]
+  }
+}
