@@ -6,7 +6,7 @@ matching. Two common implementations: comparing 26-element counters
 decrements as characters enter/leave the window (O(|s|+|p|)). Worth
 knowing both — interviewers often push from the first to the second.
 """
-from builder.registry import register
+from builder.registry import register, unordered_deep
 
 
 PAYLOAD = {
@@ -14,7 +14,7 @@ PAYLOAD = {
     "difficulty": "Medium",
     "description": (
         "Given two strings `s` and `p`, return an array of **all the start indices** of `p`'s anagrams in "
-        "`s`. You may return the answer in any order (this problem expects ascending).\n\n"
+        "`s`. You may return the answer in any order.\n\n"
         "An **anagram** is a rearrangement of all the letters of a string. Two strings are anagrams iff they "
         "are the same length and have identical character frequencies.\n\n"
         "**Example 1:**\n"
@@ -75,9 +75,9 @@ PAYLOAD = {
         ),
     },
     "test_cases": [
-        {"input": {"s": "cbaebabacd", "p": "abc"}, "expected": [0, 6],
+        {"input": {"s": "cbaebabacd", "p": "abc"}, "expected": unordered_deep([0, 6]),
          "description": "Classic LeetCode example — two anagram windows", "tags": ["basic"]},
-        {"input": {"s": "abab", "p": "ab"}, "expected": [0, 1, 2],
+        {"input": {"s": "abab", "p": "ab"}, "expected": unordered_deep([0, 1, 2]),
          "description": "Overlapping anagram windows at every index", "tags": ["basic"]},
         {"input": {"s": "ab", "p": "abcd"}, "expected": [],
          "description": "|p| > |s| — no window possible", "tags": ["edge"]},
@@ -85,20 +85,22 @@ PAYLOAD = {
          "description": "|p| == |s| and they match — single window at index 0", "tags": ["edge"]},
         {"input": {"s": "abc", "p": "def"}, "expected": [],
          "description": "|p| == |s| but no shared letters — no match", "tags": ["edge"]},
-        {"input": {"s": "aaaaaaaaaa", "p": "aaa"}, "expected": [0, 1, 2, 3, 4, 5, 6, 7],
+        {"input": {"s": "aaaaaaaaaa", "p": "aaa"},
+         "expected": unordered_deep([0, 1, 2, 3, 4, 5, 6, 7]),
          "description": "All chars the same — every starting index up to |s|-|p| qualifies",
          "tags": ["tricky"]},
-        {"input": {"s": "aaa", "p": "aa"}, "expected": [0, 1],
+        {"input": {"s": "aaa", "p": "aa"}, "expected": unordered_deep([0, 1]),
          "description": "All positions match — short overlap", "tags": ["tricky"]},
         {"input": {"s": "baa", "p": "aa"}, "expected": [1],
          "description": "Duplicates in p — must require both 'a's, not just one", "tags": ["tricky"]},
-        {"input": {"s": "abacbabc", "p": "abc"}, "expected": [1, 2, 3, 5],
+        {"input": {"s": "abacbabc", "p": "abc"}, "expected": unordered_deep([1, 2, 3, 5]),
          "description": "Multiple overlapping anagrams scattered through s", "tags": ["tricky"]},
         {"input": {"s": "a", "p": "a"}, "expected": [0],
          "description": "Single-char match", "tags": ["edge"]},
         {"input": {"s": "a", "p": "b"}, "expected": [],
          "description": "Single-char mismatch", "tags": ["edge"]},
-        {"input": {"s": "z" * 30000, "p": "z" * 100}, "expected": list(range(30000 - 100 + 1)),
+        {"input": {"s": "z" * 30000, "p": "z" * 100},
+         "expected": unordered_deep(list(range(30000 - 100 + 1))),
          "description": "Long s, every window matches — stress test for the linear solution",
          "tags": ["large"]},
         {"input": {"s": "x" * 29999 + "y", "p": "xy"}, "expected": [29998],

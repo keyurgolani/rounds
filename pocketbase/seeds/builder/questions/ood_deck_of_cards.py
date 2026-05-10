@@ -18,9 +18,11 @@ PAYLOAD = {
         "- `peek()` — return the card on top without removing.\n"
         "- `remaining()` — number of cards still in the deck.\n"
         "- `reset_and_shuffle(seed)` — restore to 52 cards and re-shuffle with the new seed.\n\n"
-        "Cards are tuples `(rank, suit)` where rank ∈ {`'2'..'10','J','Q','K','A'`} and suit ∈ "
-        "{`'C','D','H','S'`}. Canonical order: clubs 2..A, diamonds 2..A, hearts 2..A, spades 2..A.\n\n"
-        "**Test framing:** because shuffle uses a seed, the harness can assert exact card order."
+        "Cards are pairs `[rank, suit]` where rank ∈ {`'2'..'10','J','Q','K','A'`} and suit ∈ "
+        "{`'C','D','H','S'`}. Pick any canonical pre-shuffle ordering you like (the spec doesn't pin one).\n\n"
+        "**Test framing:** the harness validates the 52-card invariant after each operation — every "
+        "dealt card is a valid `[rank, suit]` pair, deals never duplicate cards, and `remaining()` "
+        "tracks the deck size. Any seed-deterministic shuffle passes."
     ),
     "hints": [
         "Use `random.Random(seed)` and `random.shuffle` (Python) — deterministic, language-built-in.",
@@ -153,22 +155,20 @@ PAYLOAD = {
 import random as _random
 
 
-def _build_canonical():
-    ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
-    suits = ["C", "D", "H", "S"]
-    return [[r, s] for s in suits for r in ranks]
-
-
-def _shuffled(seed):
-    deck = _build_canonical()
-    _random.Random(seed).shuffle(deck)
-    return deck
-
-
-# Compute expected outputs for tests so they line up with the reference impl.
-_seed_0_full = _shuffled(0)
-_seed_42_full = _shuffled(42)
-_seed_7_full = _shuffled(7)
+# Validators run inside the matcher's eval sandbox (see backend/matchers.py).
+# Tests assert the 52-card invariant — never a specific shuffle permutation —
+# so any canonical pre-shuffle ordering plus a seeded shuffle passes.
+_RANKS_LIT = "['2','3','4','5','6','7','8','9','10','J','Q','K','A']"
+_SUITS_LIT = "['C','D','H','S']"
+_VALID_CARD = (
+    f"(lambda c: isinstance(c, list) and len(c) == 2 "
+    f"and c[0] in {_RANKS_LIT} and c[1] in {_SUITS_LIT})"
+)
+_VALID_DISTINCT_CARDS = (
+    f"(lambda lst: isinstance(lst, list) "
+    f"and all({_VALID_CARD}(c) for c in lst) "
+    f"and len(set((c[0], c[1]) for c in lst)) == len(lst))"
+)
 
 
 def REFERENCE(input):
@@ -213,27 +213,83 @@ def REFERENCE(input):
     return results
 
 
-# Replace placeholder test cases with concrete expected values
+# Tests assert the 52-card invariant — that dealt cards are valid, distinct,
+# and that `remaining()` tracks the deck size — not a specific shuffle order.
 PAYLOAD["test_cases"] = [
-    {"input": {"ops": ["Deck", "remaining", "deal", "remaining", "deal", "remaining"],
-                "args": [[0], [], [3], [], [60], []]},
-     "expected": [None, 52, _seed_0_full[:3], 49, _seed_0_full[3:], 0],
-     "description": "Deal 3, then deal more than remaining — return what's left",
-     "tags": ["basic"]},
+    {
+        "input": {"ops": ["Deck", "remaining", "deal", "remaining", "deal", "remaining"],
+                  "args": [[0], [], [3], [], [60], []]},
+        "expected": {
+            "$match": "validator",
+            "description": (
+                "Deal 3, then deal more than remaining — combined deals form 52 valid distinct cards; "
+                "remaining() drops correctly; over-deal returns what's left."
+            ),
+            "code": (
+                "lambda inp, out: ("
+                "isinstance(out, list) and len(out) == 6 "
+                "and out[0] is None "
+                "and out[1] == 52 "
+                "and out[3] == 49 "
+                "and out[5] == 0 "
+                f"and {_VALID_DISTINCT_CARDS}(out[2]) and len(out[2]) == 3 "
+                f"and {_VALID_DISTINCT_CARDS}(out[4]) and len(out[4]) == 49 "
+                "and len(set((c[0], c[1]) for c in out[2] + out[4])) == 52"
+                ")"
+            ),
+        },
+        "description": "Deal 3, then deal more than remaining — preserves 52-card invariant",
+        "tags": ["basic"],
+    },
     {"input": {"ops": ["Deck", "remaining"], "args": [[42], []]},
      "expected": [None, 52],
      "description": "Fresh deck has 52 cards", "tags": ["edge"]},
     {"input": {"ops": ["Deck", "deal", "remaining"], "args": [[42], [0], []]},
      "expected": [None, [], 52],
      "description": "Deal 0 — no-op", "tags": ["edge"]},
-    {"input": {"ops": ["Deck", "deal", "deal", "remaining"],
-                "args": [[42], [40], [20], []]},
-     "expected": [None, _seed_42_full[:40], _seed_42_full[40:], 0],
-     "description": "Two deals consuming the deck", "tags": ["edge"]},
-    {"input": {"ops": ["Deck", "deal", "peek", "remaining"],
-                "args": [[7], [52], [], []]},
-     "expected": [None, _seed_7_full, None, 0],
-     "description": "Deal everything; peek empty returns None", "tags": ["edge"]},
+    {
+        "input": {"ops": ["Deck", "deal", "deal", "remaining"],
+                  "args": [[42], [40], [20], []]},
+        "expected": {
+            "$match": "validator",
+            "description": (
+                "Two deals consume the deck — first 40 valid distinct cards, then the remaining 12; "
+                "together they form the canonical 52."
+            ),
+            "code": (
+                "lambda inp, out: ("
+                "isinstance(out, list) and len(out) == 4 "
+                "and out[0] is None "
+                "and out[3] == 0 "
+                f"and {_VALID_DISTINCT_CARDS}(out[1]) and len(out[1]) == 40 "
+                f"and {_VALID_DISTINCT_CARDS}(out[2]) and len(out[2]) == 12 "
+                "and len(set((c[0], c[1]) for c in out[1] + out[2])) == 52"
+                ")"
+            ),
+        },
+        "description": "Two deals consuming the deck", "tags": ["edge"],
+    },
+    {
+        "input": {"ops": ["Deck", "deal", "peek", "remaining"],
+                  "args": [[7], [52], [], []]},
+        "expected": {
+            "$match": "validator",
+            "description": (
+                "Deal everything — yields the full 52 valid distinct cards; peek on empty returns None; "
+                "remaining is 0."
+            ),
+            "code": (
+                "lambda inp, out: ("
+                "isinstance(out, list) and len(out) == 4 "
+                "and out[0] is None "
+                f"and {_VALID_DISTINCT_CARDS}(out[1]) and len(out[1]) == 52 "
+                "and out[2] is None "
+                "and out[3] == 0"
+                ")"
+            ),
+        },
+        "description": "Deal everything; peek empty returns None", "tags": ["edge"],
+    },
 ]
 
 

@@ -25,9 +25,11 @@ live runner and validates against expected outputs.
 from __future__ import annotations
 
 import importlib
+import inspect
 import json
 import os
 import pkgutil
+import re
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -81,6 +83,113 @@ def _invoke_reference(reference, test_input: Any) -> Any:
     if isinstance(test_input, list):
         return reference(*test_input)
     return reference(test_input)
+
+
+# ---- Platform-coupling lint ----------------------------------------------
+# Three smells that bog learners down with platform-internal details:
+#   (a) Reference imports a seeded RNG and a test asserts a literal list/dict
+#       — the test would only pass for one specific shuffle permutation.
+#   (b) Description claims "any order" / "no particular order" but the test
+#       expected is an ordered literal list — penalises learners whose
+#       traversal differs.
+#   (c) Float values appear in expected without `$match: approx` — exact-
+#       equality on floats is brittle by default.
+# Warn-only: each smell prints a one-liner; the build never aborts on lint.
+
+_RNG_PATTERNS = (
+    re.compile(r"\bimport\s+random\b"),
+    re.compile(r"\bfrom\s+random\b"),
+    re.compile(r"\bRandom\s*\("),
+)
+_ANY_ORDER_PATTERNS = (
+    re.compile(r"any\s+order", re.IGNORECASE),
+    re.compile(r"no\s+particular\s+order", re.IGNORECASE),
+)
+
+
+def _ref_uses_random(reference) -> bool:
+    """True if the reference's defining module imports/uses random."""
+    try:
+        mod = inspect.getmodule(reference)
+        src = inspect.getsource(mod) if mod else ""
+    except (OSError, TypeError):
+        src = ""
+    return any(p.search(src) for p in _RNG_PATTERNS)
+
+
+def _is_match_tag(v: Any) -> bool:
+    return isinstance(v, dict) and isinstance(v.get("$match"), str)
+
+
+def _has_float(v: Any) -> bool:
+    if isinstance(v, bool):
+        return False
+    if isinstance(v, float):
+        return True
+    if isinstance(v, list):
+        return any(_has_float(x) for x in v)
+    if isinstance(v, dict):
+        return any(_has_float(x) for x in v.values())
+    return False
+
+
+def _could_encode_random_data(v: Any) -> bool:
+    """True if `v` contains a string, float, or non-empty nested container —
+    i.e. content that might be a shuffle/draw artifact. False for literals
+    composed only of None/int/bool/empty containers, which are deterministic
+    regardless of the RNG (e.g. `[None, 52]`, `[1]`, `{"mean": 0}`)."""
+    if isinstance(v, str):
+        return True
+    if isinstance(v, float):
+        return True
+    if isinstance(v, list):
+        return bool(v) and any(_could_encode_random_data(x) for x in v)
+    if isinstance(v, dict):
+        return bool(v) and any(_could_encode_random_data(x) for x in v.values())
+    return False
+
+
+def _lint_question(q) -> list[str]:
+    payload = q.payload
+    title = payload.get("title", "<untitled>")
+    desc = payload.get("description", "") or ""
+    cases = payload.get("test_cases") or []
+
+    rng = _ref_uses_random(q.reference_python)
+    any_order = any(p.search(desc) for p in _ANY_ORDER_PATTERNS)
+
+    warnings: list[str] = []
+    for idx, tc in enumerate(cases):
+        expected = tc.get("expected")
+        if _is_match_tag(expected):
+            continue  # already using a tagged matcher — author opted out
+
+        loc = f"  [{title}] case {idx} ({tc.get('description','')})"
+
+        # (a) RNG-coupled literal list/dict — only warn when the literal
+        # could plausibly encode shuffle/draw output. Trivially-deterministic
+        # literals like `[None, 52]` or `{"mean": 0}` are skipped.
+        if rng and _could_encode_random_data(expected):
+            warnings.append(
+                f"{loc}: reference uses `random` and `expected` is a literal "
+                f"{type(expected).__name__}; consider `$match: validator` so the "
+                f"test asserts behavioural properties, not a specific permutation."
+            )
+
+        # (b) "Any order" claim with an ordered literal of length > 1.
+        if any_order and isinstance(expected, list) and len(expected) > 1:
+            warnings.append(
+                f"{loc}: description allows any order but `expected` is an ordered "
+                f"literal list; consider `$match: unordered_deep`."
+            )
+
+        # (c) Float in literal expected without approx tolerance.
+        if _has_float(expected):
+            warnings.append(
+                f"{loc}: `expected` contains float value(s) without "
+                f"`$match: approx`; floating-point exact-equality is brittle."
+            )
+    return warnings
 
 
 def _smoke_run_python_solution(question, match_fn, run_one) -> list[str]:
@@ -146,6 +255,10 @@ def main() -> int:
         return 1
 
     failures: list[str] = []
+    lint_warnings: list[str] = []
+
+    for q in QUESTIONS:
+        lint_warnings.extend(_lint_question(q))
 
     for q in QUESTIONS:
         title = q.payload.get("title", "<untitled>")
@@ -215,6 +328,14 @@ def main() -> int:
                 failures.extend(fail_list)
     else:
         print("(smoke step skipped)")
+
+    if lint_warnings:
+        print(
+            f"\nLint: {len(lint_warnings)} platform-coupling warning(s) "
+            f"(non-fatal — see docs in this file):"
+        )
+        for w in lint_warnings:
+            print(w)
 
     if failures:
         print(f"\nBuild aborted — {len(failures)} validation failure(s):")
