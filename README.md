@@ -17,6 +17,7 @@ The demo account is seeded on first PocketBase deployment, can run one custom co
 
 - System design practice with question lists, API-backed cheat-sheet guides, diagrams, trade-off panels, and senior follow-up topics.
 - Coding practice with Monaco editor, local drafts, focus mode, custom runs, full-suite evaluation, curated runnable question sets, and structured problem metadata.
+- AI Assisted Coding rounds with multi-file Monaco workspace, AI chat (Ask mode) using your configured provider, per-checkpoint test runner, and a rubric-grade submission flow.
 - Behavioral prep with competency-tagged questions, STAR story guidance, personal anecdotes, and question-to-story linking.
 - Application tracking with companies, roles, statuses, rounds, offers, campaign context, and todos.
 - Resume Studio with four templates, per-section editors, drag-and-drop reordering, JD-aware tailoring, ATS scoring, version history, AI bullet rewrites, server-rendered PDFs, exports to DOCX / HTML / Markdown / plain text / JSON Resume, and public share links.

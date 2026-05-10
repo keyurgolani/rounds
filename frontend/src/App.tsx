@@ -9,7 +9,8 @@ import CodingList from './pages/CodingList';
 import CodingDetail from './pages/CodingDetail';
 import BehavioralList from './pages/BehavioralList';
 import BehavioralDetail from './pages/BehavioralDetail';
-import AICoding from './pages/AICoding';
+import AICodingList from './pages/ai-coding/AICodingList';
+import AICodingDetail from './pages/ai-coding/AICodingDetail';
 import { AnecdoteEditorPage } from './pages/behavioral/AnecdoteEditorPage';
 import Applications from './pages/Applications';
 import ApplicationDetail from './pages/ApplicationDetail';
@@ -64,7 +65,8 @@ export default function App() {
         <Route path="behavioral/anecdotes/new" element={<AnecdoteEditorPage />} />
         <Route path="behavioral/anecdotes/:slug/edit" element={<AnecdoteEditorPage />} />
         <Route path="behavioral/question/:slug" element={<BehavioralDetail />} />
-        <Route path="ai-coding" element={<AICoding />} />
+        <Route path="ai-coding" element={<AICodingList />} />
+        <Route path="ai-coding/round/:slug" element={<AICodingDetail />} />
         <Route path="applications" element={<Applications />} />
         <Route path="applications/new" element={<NewApplication />} />
         <Route path="applications/:slug" element={<ApplicationDetail />} />

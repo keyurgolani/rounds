@@ -72,6 +72,15 @@ const practiceNav: PracticeNavGroup[] = [
     ],
   },
   {
+    basePath: '/ai-coding',
+    label: 'AI Assisted Coding',
+    shortLabel: 'AI Coding',
+    glyph: AIGlyph,
+    children: [
+      { path: '/ai-coding', label: 'Rounds' },
+    ],
+  },
+  {
     basePath: '/behavioral',
     label: 'Behavioral',
     shortLabel: 'Behavioral',
@@ -82,8 +91,6 @@ const practiceNav: PracticeNavGroup[] = [
     ],
   },
 ];
-
-const aiPracticeNav: NavDef = { path: '/ai-coding', label: 'AI Assisted Coding', glyph: AIGlyph, comingSoon: true };
 
 const trackingNav: NavDef[] = [
   { path: '/applications', label: 'Applications', glyph: AppsGlyph },
@@ -172,7 +179,6 @@ export default function Layout() {
               {practiceNav.map((item) => (
                 <PracticeGroup key={item.basePath} item={item} collapsed={collapsed} currentPath={location.pathname} />
               ))}
-              <NavRow item={aiPracticeNav} collapsed={collapsed} />
 
               <div style={{ flex: 1 }} />
 

@@ -1,0 +1,7 @@
+{
+  "name": "log-parser-ts",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/parser.test.ts"
+  }
+}

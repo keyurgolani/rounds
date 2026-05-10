@@ -88,6 +88,7 @@ export type SSEHandlers = {
   onDelta: (chunk: string) => void;
   onDone?: () => void;
   onError?: (err: Error) => void;
+  onEvent?: (event: SSEEvent) => void;
 };
 
 export type SSEEvent = {
@@ -96,6 +97,10 @@ export type SSEEvent = {
   error?: string;
   /** Set by the backend on error events for support correlation. */
   request_id?: string;
+  /** Set by /api/ai-coding/edit on its sidecar patches event.
+   *  Shape: PatchProposal[]. Typed as `unknown` here to avoid a
+   *  cross-module dependency on AIPatchView; consumers narrow. */
+  patches?: unknown;
 };
 
 /** Consume a `text/event-stream` response shaped as
@@ -136,6 +141,12 @@ export async function consumeSSE(
             return;
           }
           if (obj.delta) handlers.onDelta(obj.delta);
+          // onEvent is for sidecar events (e.g. /edit's `patches` payload)
+          // — skip the hot-path delta and the terminal done so handlers
+          // don't have to filter every chunk themselves.
+          if (!obj.delta && !obj.done) {
+            handlers.onEvent?.(obj);
+          }
           if (obj.done) {
             handlers.onDone?.();
             return;
@@ -157,7 +168,7 @@ export async function runnerSSE(
   path: string,
   init: RunnerInit & SSEHandlers,
 ): Promise<void> {
-  const { onDelta, onDone, onError, ...rest } = init;
+  const { onDelta, onDone, onError, onEvent, ...rest } = init;
   let res: Response;
   try {
     res = await runnerFetch(path, rest);
@@ -165,5 +176,5 @@ export async function runnerSSE(
     onError?.(err as Error);
     return;
   }
-  await consumeSSE(res, { onDelta, onDone, onError });
+  await consumeSSE(res, { onDelta, onDone, onError, onEvent });
 }
