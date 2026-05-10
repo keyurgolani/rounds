@@ -251,6 +251,7 @@ export default function SystemDesignDetail() {
         }
         chromeActions={<StatusAction kind="system" id={q.id} />}
         compactActions={<StatusAction kind="system" id={q.id} compact />}
+        timer={q ? { kind: 'system', id: q.id } : undefined}
       />
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">

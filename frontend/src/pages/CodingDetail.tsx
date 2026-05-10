@@ -408,6 +408,7 @@ export default function CodingDetail() {
         }
         chromeActions={<StatusAction kind="coding" id={q.id} />}
         compactActions={<StatusAction kind="coding" id={q.id} compact />}
+        timer={q ? { kind: 'coding', id: q.id } : undefined}
       />
 
       {/* Three-column body. On mobile (`data-mobile-sheet`) the editor

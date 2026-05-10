@@ -348,6 +348,7 @@ export default function BehavioralDetail() {
         }
         chromeActions={<StatusAction kind="behavioral" id={q.id} />}
         compactActions={<StatusAction kind="behavioral" id={q.id} compact />}
+        timer={q ? { kind: 'behavioral', id: q.id } : undefined}
       />
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">

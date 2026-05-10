@@ -146,6 +146,7 @@ export default function TakeHomeDetail() {
           title={assignment?.title ?? 'Take-Home'}
           chromeActions={<StatusAction kind="take-home" id={slug} />}
           compactActions={<StatusAction kind="take-home" id={slug} compact />}
+          timer={slug ? { kind: 'take-home', id: slug } : undefined}
         />
       }
     >

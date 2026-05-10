@@ -165,6 +165,7 @@ export default function AICodingDetail() {
           title={round?.title ?? 'AI Round'}
           chromeActions={<StatusAction kind="ai-coding" id={slug} />}
           compactActions={<StatusAction kind="ai-coding" id={slug} compact />}
+          timer={slug ? { kind: 'ai-coding', id: slug } : undefined}
         />
       }
     >

@@ -3,6 +3,8 @@ import { Maximize2, Minimize2, Command } from 'lucide-react';
 import { useCommandCenter } from '../../command-center/CommandCenterProvider';
 import InlineMarkdown from './InlineMarkdown';
 import { usePlatform } from '../../hooks/usePlatform';
+import type { PracticeKind } from '../../hooks/progressApi';
+import HeaderTimer from './HeaderTimer';
 
 // Shared base for the two chrome chip buttons. Each button spreads
 // this and adds the properties that differ (size, padding, font).
@@ -38,6 +40,13 @@ type Props = {
   // buttons, and other compact actions that belong in the chrome area.
   // Only `actions` (e.g. StreakCard) should use the full-height area.
   chromeActions?: ReactNode;
+  /**
+   * When set, renders a per-question persistent timer in the chrome
+   * chip (alongside focus-toggle + ⌘K). Click toggles start/pause,
+   * shift-click resets. Persists across sessions/devices via
+   * PocketBase.
+   */
+  timer?: { kind: PracticeKind; id: string | number };
 };
 
 function readManual(): boolean {
@@ -76,6 +85,7 @@ export default function AppHeader({
   actions,
   compactActions,
   chromeActions,
+  timer,
 }: Props) {
   const cc = useCommandCenter();
   const { minimal, manual, toggleManual } = useMinimalHeader();
@@ -126,6 +136,7 @@ export default function AppHeader({
             toggleManual={toggleManual}
             onOpenCC={cc.open}
             align="center"
+            timer={timer}
           />
         </div>
       </header>
@@ -238,6 +249,7 @@ export default function AppHeader({
           manual={manual}
           toggleManual={toggleManual}
           onOpenCC={cc.open}
+          timer={timer}
         />
       </div>
     </header>
@@ -249,11 +261,13 @@ function ChromeButtons({
   toggleManual,
   onOpenCC,
   align,
+  timer,
 }: {
   manual: boolean;
   toggleManual: () => void;
   onOpenCC: () => void;
   align?: 'start' | 'center';
+  timer?: { kind: PracticeKind; id: string | number };
 }) {
   const { modifierSymbol, modifierLabel, isMac } = usePlatform();
   const hint = `Command Center (${modifierLabel}+K)`;
@@ -277,6 +291,21 @@ function ChromeButtons({
         flexShrink: 0,
       }}
     >
+      {timer && (
+        <>
+          <HeaderTimer kind={timer.kind} id={timer.id} />
+          <span
+            aria-hidden="true"
+            style={{
+              width: 1,
+              height: 14,
+              background: 'var(--border-strong)',
+              margin: '0 2px',
+              flexShrink: 0,
+            }}
+          />
+        </>
+      )}
       <button
         type="button"
         onClick={toggleManual}
