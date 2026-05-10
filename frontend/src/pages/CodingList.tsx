@@ -235,7 +235,7 @@ export default function CodingList() {
             className="mono ml-auto"
             style={{ fontSize: 10.5, color: 'var(--text-4)', letterSpacing: '0.1em' }}
           >
-            {filtered.length} OF {questions.length} PROBLEMS
+            {filtered.length} OF {questions.length} QUESTIONS
           </span>
         </div>
       </div>
@@ -256,7 +256,7 @@ export default function CodingList() {
           }}
         >
           <span>#</span>
-          <span>Problem</span>
+          <span>Question</span>
           <span>Difficulty</span>
           <span>Topics</span>
           <span>Companies</span>
@@ -279,7 +279,7 @@ export default function CodingList() {
             </div>
           ) : filtered.length === 0 ? (
             <div className="p-12 text-center" style={{ color: 'var(--text-4)' }}>
-              No problems match that filter.
+              No questions match that filter.
             </div>
           ) : (
             <>

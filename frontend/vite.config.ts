@@ -15,7 +15,8 @@ const DEV_ALLOWED_HOSTS = (process.env.VITE_DEV_ALLOWED_HOSTS || 'localhost')
 
 // Same routing as the production nginx config so that code written
 // against same-origin URLs works in both dev and prod:
-//   /api/run, /api/evaluate, /api/execute  → runner
+//   /api/run, /api/evaluate, /api/execute, /api/pdf, /api/share,
+//   /api/ai, /api/ai-coding, /api/take-home → runner
 //   /api/* (everything else)               → pocketbase
 //   /_/*                                   → pocketbase admin UI
 // Vite's proxy picks the longest-matching prefix, so exact-path
@@ -25,8 +26,10 @@ const proxy = {
   '/api/evaluate': { target: RUNNER_TARGET, changeOrigin: true },
   '/api/execute': { target: RUNNER_TARGET, changeOrigin: true },
   '/api/pdf': { target: RUNNER_TARGET, changeOrigin: true },
+  '/api/ai-coding': { target: RUNNER_TARGET, changeOrigin: true },
   '/api/ai': { target: RUNNER_TARGET, changeOrigin: true },
   '/api/share': { target: RUNNER_TARGET, changeOrigin: true },
+  '/api/take-home': { target: RUNNER_TARGET, changeOrigin: true },
   '/api': { target: POCKETBASE_TARGET, changeOrigin: true, ws: true },
   '/_': { target: POCKETBASE_TARGET, changeOrigin: true },
 };

@@ -15,7 +15,8 @@
       {"id": "get_missing_404", "label": "GET /get of missing key 404s", "weight": 0.15, "prompt": "Does GET /get of an unset key return 404 with an error body?"},
       {"id": "delete_removes", "label": "DELETE removes key", "weight": 0.2, "prompt": "Does DELETE /del/{key} remove the key (so subsequent GET 404s)? Idempotent — succeeds on missing keys too?"},
       {"id": "list_returns_sorted_keys", "label": "GET /list returns sorted keys", "weight": 0.15, "prompt": "Does GET /list return all current keys, sorted?"},
-      {"id": "code_quality", "label": "Code quality", "weight": 0.1, "prompt": "Is dispatch idiomatic (no spaghetti if/elif chain)? Helpful error handling?"}
+      {"id": "code_quality", "label": "Code quality", "weight": 0.05, "prompt": "Is dispatch idiomatic (no spaghetti if/elif chain)? Helpful error handling?"},
+      {"id": "notes_quality", "label": "Design notes quality", "weight": 0.05, "prompt": "Did the candidate write meaningful design notes in NOTES.md? Look for: explicit trade-offs, alternatives considered, what was deferred or skipped, why specific choices were made. An empty placeholder or generic boilerplate should score low; specific reasoning about THIS assignment's choices should score high. NOTES.md is in the submitted file tree."}
     ]
   }
 }

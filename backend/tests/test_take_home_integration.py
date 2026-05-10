@@ -79,3 +79,16 @@ def test_all_seeded_assignments_have_required_fields(seeded_assignments: list[di
         for it in (a["rubric"].get("items") or []):
             for key in ("id", "label", "weight", "prompt"):
                 assert key in it, f"{a['slug']} rubric item missing {key!r}: {it}"
+
+
+def test_seeded_take_home_rubric_weights_sum_to_one(seeded_assignments: list[dict]):
+    """Catch a regression where adding/removing a rubric item leaves
+    the weights miscalibrated."""
+    for a in seeded_assignments:
+        items = (a["rubric"] or {}).get("items") or []
+        if not items:
+            continue
+        total = sum(float(it.get("weight", 0)) for it in items)
+        assert abs(total - 1.0) < 1e-6, (
+            f"rubric weights for {a['slug']!r} sum to {total!r}, expected 1.0"
+        )

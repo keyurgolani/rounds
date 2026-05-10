@@ -9,7 +9,7 @@ const ASSIGNMENTS = [
     "time_budget_min": 45,
     "ai_policy": "off",
     "entrypoint": "python3 harness/run.py",
-    "prompt_md": "# CSV Summarizer\n\nImplement `summarize(csv_path, out_path)` in `summarize.py`.\n\n## Contract\n\nRead a CSV file at `csv_path`. The file has two columns:\n\n```csv\nname,score\nAlice,87\nBob,92\nCarol,71\n```\n\nWrite a JSON file to `out_path`:\n\n```json\n{\"count\": 3, \"mean_score\": 83.33, \"max\": {\"name\": \"Bob\", \"score\": 92}, \"min\": {\"name\": \"Carol\", \"score\": 71}}\n```\n\nFor an **empty** CSV (header row only, no data), the output is exactly:\n\n```json\n{\"count\": 0}\n```\n\n(no other keys.)\n\n## Constraints\n\n- Use Python's standard library only (`csv`, `json`).\n- Names may contain spaces; CSV quoting follows the default `csv` module dialect.\n- The score column is integer-valued.\n- Mean precision: use float; the harness allows up to 0.001 absolute error.\n\n## Deliverables\n\n- `summarize.py` implementing the function.\n- Optional: `NOTES.md` with any trade-off you made (e.g., one-pass vs two-pass, how you handled malformed rows).\n\n## Time budget\n\n~45 minutes.\n",
+    "prompt_md": "# CSV Summarizer\n\nA small data team you're joining keeps re-implementing the same five\nlines of CSV math in every script — count, mean, max, min. Today they\nwant **one** tiny library function that does it once, predictably, with\na JSON output the rest of the pipeline can rely on. The shape is\nsimple, but the empty-input case has bitten them twice.\n\nYour job: implement `summarize(csv_path, out_path)` in `summarize.py`\nso a teammate can drop it into any script and trust the contract.\n\n## Contract\n\nRead a CSV file at `csv_path`. The file has two columns:\n\n```csv\nname,score\nAlice,87\nBob,92\nCarol,71\n```\n\nWrite a JSON file to `out_path`:\n\n```json\n{\"count\": 3, \"mean_score\": 83.33, \"max\": {\"name\": \"Bob\", \"score\": 92}, \"min\": {\"name\": \"Carol\", \"score\": 71}}\n```\n\nFor an **empty** CSV (header row only, no data), the output is exactly:\n\n```json\n{\"count\": 0}\n```\n\n(no other keys.)\n\n## Constraints\n\n- Use Python's standard library only (`csv`, `json`).\n- Names may contain spaces; CSV quoting follows the default `csv` module dialect.\n- The score column is integer-valued.\n- Mean precision: use float; the harness allows up to 0.001 absolute error.\n\n## Deliverables\n\n- `summarize.py` implementing the function.\n- `NOTES.md` — a short paragraph on the trade-off you made (one-pass\n  vs two-pass, how you'd handle malformed rows, what you'd add next).\n  The reviewer reads this alongside your code.\n\n## Time budget\n\n~45 minutes. The grading harness runs in a few seconds; iterate freely.\n",
     "starter_files": [
       {
         "path": "NOTES.md",
@@ -61,8 +61,14 @@ const ASSIGNMENTS = [
         {
           "id": "code_quality",
           "label": "Code quality",
-          "weight": 0.1,
+          "weight": 0.05,
           "prompt": "Does the candidate use the stdlib csv module idiomatically? Single-pass reasonable?"
+        },
+        {
+          "id": "notes_quality",
+          "label": "Design notes quality",
+          "weight": 0.05,
+          "prompt": "Did the candidate write meaningful design notes in NOTES.md? Look for: explicit trade-offs, alternatives considered, what was deferred or skipped, why specific choices were made. An empty placeholder or generic boilerplate should score low; specific reasoning about THIS assignment's choices should score high. NOTES.md is in the submitted file tree."
         }
       ]
     },
@@ -83,7 +89,7 @@ const ASSIGNMENTS = [
     "time_budget_min": 60,
     "ai_policy": "off",
     "entrypoint": "node --experimental-strip-types harness/run.ts",
-    "prompt_md": "# Event Bus\n\nImplement an in-memory pub/sub event bus in `eventBus.ts`.\n\n## Contract\n\n```ts\nexport type Listener<T = unknown> = (data: T) => void;\n\nexport class EventBus {\n  // Subscribe `fn` to `event`. Returns an unsubscribe function \u2014 calling\n  // it removes this listener and only this listener (the same fn may be\n  // subscribed multiple times; each subscription is independent).\n  on<T>(event: string, fn: Listener<T>): () => void;\n\n  // Emit `data` to every current listener of `event`, in registration\n  // order. Listeners registered for OTHER events are not called.\n  // If a listener throws, the remaining listeners must still be called.\n  emit<T>(event: string, data: T): void;\n}\n```\n\n## Constraints\n\n- TypeScript, no external deps. The harness runs via `node --experimental-strip-types`.\n- A given function can be subscribed multiple times. Each subscription is independent (the unsubscribe handle for one subscription doesn't affect others).\n- A listener throwing during `emit` MUST NOT prevent remaining listeners from running.\n\n## Deliverables\n\n- `eventBus.ts` exporting the `EventBus` class and `Listener` type.\n- Optional: `NOTES.md` with any trade-off you made.\n\n## Time budget\n\n~1 hour.\n",
+    "prompt_md": "# Event Bus\n\nA small editor app you're working on has features wired together with\ndirect method calls, and the result is a dependency knot — the toolbar\nimports the document, the document imports the inspector, the\ninspector imports back into the toolbar. You're going to break that\nwith a tiny pub/sub bus: features `emit` events, other features\nsubscribe with `on`. No external deps; this lives in the editor's lib\nfolder for the rest of its life, so it has to be small and obvious.\n\nTwo details from the bug tracker that already shaped the design:\n\n- A single function may need to subscribe more than once (and each\n  subscription has to be independently removable).\n- One buggy listener throwing during `emit` must not silently kill the\n  rest of the listeners.\n\nBoth are in the contract below.\n\n## Contract\n\n```ts\nexport type Listener<T = unknown> = (data: T) => void;\n\nexport class EventBus {\n  // Subscribe `fn` to `event`. Returns an unsubscribe function — calling\n  // it removes this listener and only this listener (the same fn may be\n  // subscribed multiple times; each subscription is independent).\n  on<T>(event: string, fn: Listener<T>): () => void;\n\n  // Emit `data` to every current listener of `event`, in registration\n  // order. Listeners registered for OTHER events are not called.\n  // If a listener throws, the remaining listeners must still be called.\n  emit<T>(event: string, data: T): void;\n}\n```\n\n## Constraints\n\n- TypeScript, no external deps. The harness runs via `node --experimental-strip-types`.\n- A given function can be subscribed multiple times. Each subscription is independent (the unsubscribe handle for one subscription doesn't affect others).\n- A listener throwing during `emit` MUST NOT prevent remaining listeners from running.\n\n## Deliverables\n\n- `eventBus.ts` exporting the `EventBus` class and `Listener` type.\n- `NOTES.md` — what storage you reached for and why (Map vs object,\n  array per event, etc.), and what you'd add if this graduated to a\n  real library (typed events? wildcard subscribers? once?).\n\n## Time budget\n\n~1 hour. Iterate as much as you want before submitting.\n",
     "starter_files": [
       {
         "path": "NOTES.md",
@@ -135,8 +141,14 @@ const ASSIGNMENTS = [
         {
           "id": "code_quality",
           "label": "Code quality",
-          "weight": 0.1,
+          "weight": 0.05,
           "prompt": "Does the implementation use a Map or similar idiomatic structure (not a flat array of [event,fn] tuples)?"
+        },
+        {
+          "id": "notes_quality",
+          "label": "Design notes quality",
+          "weight": 0.05,
+          "prompt": "Did the candidate write meaningful design notes in NOTES.md? Look for: explicit trade-offs, alternatives considered, what was deferred or skipped, why specific choices were made. An empty placeholder or generic boilerplate should score low; specific reasoning about THIS assignment's choices should score high. NOTES.md is in the submitted file tree."
         }
       ]
     },
@@ -157,7 +169,7 @@ const ASSIGNMENTS = [
     "time_budget_min": 60,
     "ai_policy": "off",
     "entrypoint": "python3 harness/run.py",
-    "prompt_md": "# Tiny KV Store\n\nImplement a small in-memory key-value store as a pure dispatch function.\n\n## Contract\n\nYour job is to fill in `handle(method: str, path: str, body: dict | None = None) -> tuple[int, dict]` in `app.py`.\n\nThe function must support these routes:\n\n| Method | Path           | Body                       | Response                                         |\n|--------|----------------|----------------------------|--------------------------------------------------|\n| POST   | `/set/<key>`   | `{\"value\": <any>}`         | `(200, {\"ok\": True})` \u2014 stores the value         |\n| GET    | `/get/<key>`   | (none)                     | `(200, {\"value\": <stored>})` or `(404, {\"error\": \"not found\"})` |\n| DELETE | `/del/<key>`   | (none)                     | `(200, {\"ok\": True})` \u2014 idempotent on missing    |\n| GET    | `/list`        | (none)                     | `(200, {\"keys\": [<sorted list>]})`               |\n\nState persists across calls within the same process.\n\n## Deliverables\n\n- A working `app.py` with `handle(method, path, body)` implemented.\n- Optional: a short note in `NOTES.md` explaining your dispatch approach (e.g., regex routes, or a tiny route table) and any trade-offs.\n\n## What we're looking for\n\n- Correctness on all four routes.\n- Clean dispatch (avoid a giant if/elif chain on path strings).\n- Clear error responses.\n- The candidate uses Python's standard library only \u2014 no external deps.\n\n## Time budget\n\nRoughly 1 hour. The grading harness runs in a few seconds.\n",
+    "prompt_md": "# Tiny KV Store\n\nYou're building the routing layer of an internal HTTP-shaped service\nand want to pull the dispatch logic out into a pure function so it's\ntrivially testable — no socket, no framework, just\n`(method, path, body) → (status, body)`. The \"service\" itself is a\nfour-route key-value cache. Whoever picks this up next should be able\nto add a fifth route without rewriting the whole switchboard, so the\nshape of dispatch matters as much as the routes themselves.\n\nImplement `handle(method: str, path: str, body: dict | None = None) -> tuple[int, dict]`\nin `app.py`.\n\n## Contract\n\n| Method | Path           | Body                       | Response                                                        |\n|--------|----------------|----------------------------|-----------------------------------------------------------------|\n| POST   | `/set/<key>`   | `{\"value\": <any>}`         | `(200, {\"ok\": True})` — stores the value                        |\n| GET    | `/get/<key>`   | (none)                     | `(200, {\"value\": <stored>})` or `(404, {\"error\": \"not found\"})` |\n| DELETE | `/del/<key>`   | (none)                     | `(200, {\"ok\": True})` — idempotent on missing                   |\n| GET    | `/list`        | (none)                     | `(200, {\"keys\": [<sorted list>]})`                              |\n\nState persists across calls within the same process.\n\n## What we're looking for\n\n- Correctness on all four routes.\n- Clean dispatch — avoid a giant if/elif chain on path strings. A\n  small route table or regex-driven match is the kind of thing that\n  pays off the moment a fifth route shows up.\n- Clear error responses (consistent shape, useful when something\n  unexpected hits the function).\n- Standard library only — no external deps.\n\n## Deliverables\n\n- `app.py` with `handle(method, path, body)` implemented.\n- `NOTES.md` — your dispatch approach in one paragraph (route table?\n  regex? something else?), the trade-off you made, and what you'd\n  change if a fifth route landed tomorrow.\n\n## Time budget\n\n~1 hour. The grading harness runs in seconds.\n",
     "starter_files": [
       {
         "path": "NOTES.md",
@@ -209,8 +221,14 @@ const ASSIGNMENTS = [
         {
           "id": "code_quality",
           "label": "Code quality",
-          "weight": 0.1,
+          "weight": 0.05,
           "prompt": "Is dispatch idiomatic (no spaghetti if/elif chain)? Helpful error handling?"
+        },
+        {
+          "id": "notes_quality",
+          "label": "Design notes quality",
+          "weight": 0.05,
+          "prompt": "Did the candidate write meaningful design notes in NOTES.md? Look for: explicit trade-offs, alternatives considered, what was deferred or skipped, why specific choices were made. An empty placeholder or generic boilerplate should score low; specific reasoning about THIS assignment's choices should score high. NOTES.md is in the submitted file tree."
         }
       ]
     },

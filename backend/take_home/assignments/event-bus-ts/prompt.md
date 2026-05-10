@@ -1,6 +1,21 @@
 # Event Bus
 
-Implement an in-memory pub/sub event bus in `eventBus.ts`.
+A small editor app you're working on has features wired together with
+direct method calls, and the result is a dependency knot — the toolbar
+imports the document, the document imports the inspector, the
+inspector imports back into the toolbar. You're going to break that
+with a tiny pub/sub bus: features `emit` events, other features
+subscribe with `on`. No external deps; this lives in the editor's lib
+folder for the rest of its life, so it has to be small and obvious.
+
+Two details from the bug tracker that already shaped the design:
+
+- A single function may need to subscribe more than once (and each
+  subscription has to be independently removable).
+- One buggy listener throwing during `emit` must not silently kill the
+  rest of the listeners.
+
+Both are in the contract below.
 
 ## Contract
 
@@ -29,8 +44,10 @@ export class EventBus {
 ## Deliverables
 
 - `eventBus.ts` exporting the `EventBus` class and `Listener` type.
-- Optional: `NOTES.md` with any trade-off you made.
+- `NOTES.md` — what storage you reached for and why (Map vs object,
+  array per event, etc.), and what you'd add if this graduated to a
+  real library (typed events? wildcard subscribers? once?).
 
 ## Time budget
 
-~1 hour.
+~1 hour. Iterate as much as you want before submitting.

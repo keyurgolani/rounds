@@ -193,7 +193,7 @@ export default function SystemDesignList() {
             className="mono ml-auto"
             style={{ fontSize: 10.5, color: 'var(--text-4)', letterSpacing: '0.1em' }}
           >
-            {filtered.length} OF {questions.length} DESIGNS
+            {filtered.length} OF {questions.length} QUESTIONS
           </span>
         </div>
       </div>
@@ -205,7 +205,7 @@ export default function SystemDesignList() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16" style={{ color: 'var(--text-4)' }}>
-            No designs match that filter.
+            No questions match that filter.
           </div>
         ) : (
           <div

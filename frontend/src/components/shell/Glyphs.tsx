@@ -119,6 +119,23 @@ export function AIGlyph({ size = 18 }: GlyphProps) {
   );
 }
 
+export function TakeHomeGlyph({ size = 18 }: GlyphProps) {
+  return (
+    <svg viewBox="0 0 18 18" fill="none" width={size} height={size} aria-hidden="true">
+      <rect x="2.5" y="6" width="13" height="9" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
+      <path
+        d="M6.5 6V4.5C6.5 3.95 6.95 3.5 7.5 3.5H10.5C11.05 3.5 11.5 3.95 11.5 4.5V6"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M2.5 10H15.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M8 9.5V10.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M10 9.5V10.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function CalendarGlyph({ size = 18 }: GlyphProps) {
   return (
     <svg viewBox="0 0 18 18" fill="none" width={size} height={size} aria-hidden="true">

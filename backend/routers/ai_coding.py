@@ -228,7 +228,12 @@ async def edit(body: ChatRequest, user: dict = Depends(_auth_user)) -> Streaming
         try:
             async for chunk in _call_stream(
                 cfg["kind"], cfg["model"], cfg["api_key"], cfg["base_url"] or None,
-                system=system, messages=messages, max_tokens=2400,
+                # Generous token budget so the model never feels pressured
+                # to shorten/summarise unrelated content (docstrings, blank
+                # lines, etc.) just to fit within the response window. Edit
+                # mode regenerates the whole file so even a small change
+                # consumes ~file-size in tokens.
+                system=system, messages=messages, max_tokens=8000,
             ):
                 accumulated += chunk
                 yield f"data: {json.dumps({'delta': chunk})}\n\n".encode("utf-8")

@@ -53,22 +53,56 @@ function parse(source: string): Block[] {
       i += 1;
       continue;
     }
-    // Bullet list.
+    // Bullet list — gather hyphen/star lines AND their continuation
+    // lines (indented or unindented soft-wrapped text that follows an
+    // item, until a blank line or a new block).
     if (/^\s*[-*]\s+/.test(line)) {
       const items: string[] = [];
-      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^\s*[-*]\s+/, ''));
-        i += 1;
+      while (i < lines.length) {
+        if (/^\s*[-*]\s+/.test(lines[i])) {
+          items.push(lines[i].replace(/^\s*[-*]\s+/, ''));
+          i += 1;
+          continue;
+        }
+        if (
+          items.length > 0 &&
+          lines[i].trim() !== '' &&
+          !/^(#{1,3})\s+/.test(lines[i]) &&
+          !lines[i].startsWith('```') &&
+          !/^\s*\d+\.\s+/.test(lines[i])
+        ) {
+          // Continuation of the previous item — join with a space so it
+          // reflows naturally, matching CommonMark soft-newline behavior.
+          items[items.length - 1] += ' ' + lines[i].trim();
+          i += 1;
+          continue;
+        }
+        break;
       }
       blocks.push({ kind: 'ul', items });
       continue;
     }
-    // Ordered list.
+    // Ordered list (same continuation rule as bullet list).
     if (/^\s*\d+\.\s+/.test(line)) {
       const items: string[] = [];
-      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
-        i += 1;
+      while (i < lines.length) {
+        if (/^\s*\d+\.\s+/.test(lines[i])) {
+          items.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
+          i += 1;
+          continue;
+        }
+        if (
+          items.length > 0 &&
+          lines[i].trim() !== '' &&
+          !/^(#{1,3})\s+/.test(lines[i]) &&
+          !lines[i].startsWith('```') &&
+          !/^\s*[-*]\s+/.test(lines[i])
+        ) {
+          items[items.length - 1] += ' ' + lines[i].trim();
+          i += 1;
+          continue;
+        }
+        break;
       }
       blocks.push({ kind: 'ol', items });
       continue;
@@ -98,14 +132,21 @@ function parse(source: string): Block[] {
 
 function renderBlock(b: Block, key: number): ReactNode {
   if (b.kind === 'p') {
+    // Soft newlines reflow as spaces (CommonMark behavior). A line
+    // ending in two trailing spaces opts back into a hard break.
     return (
       <p key={key} style={{ margin: 0 }}>
-        {b.lines.map((line, i) => (
-          <span key={i}>
-            <InlineMarkdown text={line} as="span" />
-            {i < b.lines.length - 1 && <br />}
-          </span>
-        ))}
+        {b.lines.map((line, i) => {
+          const hardBreak = /  $/.test(line);
+          const text = hardBreak ? line.replace(/  +$/, '') : line;
+          const last = i === b.lines.length - 1;
+          return (
+            <span key={i}>
+              <InlineMarkdown text={text} as="span" />
+              {!last && (hardBreak ? <br /> : ' ')}
+            </span>
+          );
+        })}
       </p>
     );
   }

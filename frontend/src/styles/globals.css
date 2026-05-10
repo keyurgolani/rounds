@@ -1114,11 +1114,11 @@ html {
 }
 
 /* ============================================================
-   Running-glow border (used while AI work is in flight on a card
-   or input). Enabled by `data-scoring-glow="true"` on any element.
+   Running-glow border. Used anywhere AI work is in flight — chat
+   composer while streaming, Submit while grading, resume import,
+   ATS scoring, etc. Enabled by `data-ai-processing-glow="true"`.
    The conic gradient rotates via an animated registered custom
-   property; falls back to a static accent ring without @property
-   support. The mask-composite trick paints only the border ring.
+   property; the mask-composite trick paints only the border ring.
    ============================================================ */
 @property --rounds-glow-angle {
   syntax: '<angle>';
@@ -1128,10 +1128,10 @@ html {
 @keyframes rounds-running-glow {
   to { --rounds-glow-angle: 360deg; }
 }
-[data-scoring-glow='true'] {
+[data-ai-processing-glow='true'] {
   position: relative;
 }
-[data-scoring-glow='true']::before {
+[data-ai-processing-glow='true']::before {
   content: '';
   position: absolute;
   inset: -1px;
@@ -1152,4 +1152,34 @@ html {
   pointer-events: none;
   filter: drop-shadow(0 0 6px var(--accent)) drop-shadow(0 0 1px var(--accent));
   animation: rounds-running-glow 1.6s linear infinite;
+}
+
+/* ============================================================
+   "Responding…" shimmer — used in AI chat bubbles to indicate
+   the model is actively answering. A horizontal gradient sweeps
+   across the text repeatedly via background-clip: text. Pairs
+   well with a pulsing accent dot next to the label.
+   ============================================================ */
+@keyframes rounds-ai-shimmer {
+  0%   { background-position: 200% 50%; }
+  100% { background-position: -200% 50%; }
+}
+.rounds-ai-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--text-3) 0%,
+    var(--accent) 45%,
+    var(--text) 55%,
+    var(--text-3) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: rounds-ai-shimmer 2.2s linear infinite;
+}
+@keyframes rounds-ai-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.85); }
 }

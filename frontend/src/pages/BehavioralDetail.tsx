@@ -6,7 +6,6 @@ import {
   listBehavioralCategories,
   listBehavioralQuestions,
 } from '../content/api';
-import { oneLineSummary } from '../lib/text';
 import { AnimatedCard } from '../components/visual/AnimatedCard';
 import { Skeleton } from '../components/visual/Skeleton';
 import { MyAnecdotesPanel } from './behavioral/MyAnecdotesPanel';
@@ -327,7 +326,6 @@ export default function BehavioralDetail() {
     <div className="h-full flex flex-col">
       <AppHeader
         title={q.title}
-        description={oneLineSummary(q.question_text)}
         eyebrow={
           <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
             <BackLink to="/behavioral/questions" />

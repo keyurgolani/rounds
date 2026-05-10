@@ -122,9 +122,23 @@ def _is_match_tag(v: Any) -> bool:
 
 
 def _has_float(v: Any) -> bool:
+    """True iff `v` contains a float value that is *not* exactly representable
+    in IEEE-754 by simple inspection. Floats that are integer-valued (e.g.
+    `3.0`, `-1.0`) or half-integers (e.g. `1.5`, `-2.5`, `50.5`) are exact in
+    binary, so exact-equality is fine and shouldn't trip the lint. This
+    suppresses noise on median-style problems where the expected is always
+    `n / 2` for some integer `n`."""
     if isinstance(v, bool):
         return False
     if isinstance(v, float):
+        # Exactly representable: integer-valued or half-integer (n / 2 with
+        # int n). `2 * v` lands on an integer with no rounding for those.
+        try:
+            doubled = v * 2
+            if doubled == int(doubled):
+                return False
+        except (OverflowError, ValueError):
+            pass
         return True
     if isinstance(v, list):
         return any(_has_float(x) for x in v)

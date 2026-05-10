@@ -15,7 +15,8 @@
       {"id": "max_correct", "label": "Max identified", "weight": 0.2, "prompt": "Does max.name and max.score match the highest-score row?"},
       {"id": "min_correct", "label": "Min identified", "weight": 0.2, "prompt": "Does min.name and min.score match the lowest-score row?"},
       {"id": "empty_csv_returns_count_zero", "label": "Empty CSV handled", "weight": 0.15, "prompt": "On an empty (header-only) CSV, does the output equal {count: 0} (no other keys)?"},
-      {"id": "code_quality", "label": "Code quality", "weight": 0.1, "prompt": "Does the candidate use the stdlib csv module idiomatically? Single-pass reasonable?"}
+      {"id": "code_quality", "label": "Code quality", "weight": 0.05, "prompt": "Does the candidate use the stdlib csv module idiomatically? Single-pass reasonable?"},
+      {"id": "notes_quality", "label": "Design notes quality", "weight": 0.05, "prompt": "Did the candidate write meaningful design notes in NOTES.md? Look for: explicit trade-offs, alternatives considered, what was deferred or skipped, why specific choices were made. An empty placeholder or generic boilerplate should score low; specific reasoning about THIS assignment's choices should score high. NOTES.md is in the submitted file tree."}
     ]
   }
 }

@@ -1,4 +1,4 @@
-import { Clock, Pause, Play } from 'lucide-react';
+import { Clock, Pause, Play, RotateCcw } from 'lucide-react';
 import { useQuestionTimer } from '../../hooks/useQuestionTimer';
 import type { PracticeKind } from '../../hooks/progressApi';
 
@@ -16,11 +16,13 @@ type Props = {
   id: string | number;
 };
 
+// Two-button chip: a large primary play/pause that owns the readout, and
+// a small reset that only appears once the timer has accumulated time so
+// it doesn't add noise to a fresh round. Both buttons sit in one rounded
+// well so they read as a single control unit.
 export default function HeaderTimer({ kind, id }: Props) {
   const { displayMs, running, ready, toggle, reset } = useQuestionTimer(kind, id);
   if (!ready) {
-    // Render a placeholder same width as the live state so the chip
-    // doesn't reflow when the row loads.
     return (
       <span
         aria-hidden="true"
@@ -40,47 +42,66 @@ export default function HeaderTimer({ kind, id }: Props) {
       </span>
     );
   }
-  const label = running
-    ? `Question timer: ${formatTimer(displayMs)} running. Click to pause; shift-click to reset.`
-    : `Question timer: ${formatTimer(displayMs)} paused. Click to start; shift-click to reset.`;
   const Icon = running ? Pause : Play;
+  const elapsed = displayMs > 0;
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        if (e.shiftKey) {
-          reset();
-        } else {
-          toggle();
-        }
-      }}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        reset();
-      }}
-      aria-label={label}
-      title={
-        running
-          ? 'Pause • Shift-click or right-click to reset'
-          : 'Start • Shift-click or right-click to reset'
-      }
-      className="app-header-chrome-btn inline-flex items-center"
+    <span
       style={{
+        display: 'inline-flex',
+        alignItems: 'stretch',
         height: 24,
-        padding: '0 8px',
-        gap: 5,
-        fontSize: 11.5,
-        whiteSpace: 'nowrap',
-        border: 0,
-        borderRadius: 5,
-        background: 'transparent',
-        color: running ? 'var(--accent)' : 'var(--text-2)',
-        cursor: 'pointer',
-        fontVariantNumeric: 'tabular-nums',
       }}
     >
-      <Icon size={12} strokeWidth={1.8} />
-      <span>{formatTimer(displayMs)}</span>
-    </button>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={
+          running
+            ? `Pause question timer at ${formatTimer(displayMs)}`
+            : elapsed
+              ? `Resume question timer at ${formatTimer(displayMs)}`
+              : 'Start question timer'
+        }
+        title={running ? 'Pause' : elapsed ? 'Resume' : 'Start'}
+        className="app-header-chrome-btn inline-flex items-center"
+        style={{
+          height: '100%',
+          padding: '0 8px',
+          gap: 5,
+          fontSize: 11.5,
+          whiteSpace: 'nowrap',
+          border: 0,
+          borderRadius: 5,
+          background: 'transparent',
+          color: running ? 'var(--accent)' : 'var(--text-2)',
+          cursor: 'pointer',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        <Icon size={12} strokeWidth={1.8} />
+        <span>{formatTimer(displayMs)}</span>
+      </button>
+      {elapsed && (
+        <button
+          type="button"
+          onClick={reset}
+          aria-label="Reset question timer to 00:00"
+          title="Reset timer"
+          className="app-header-chrome-btn inline-flex items-center justify-center"
+          style={{
+            height: '100%',
+            width: 22,
+            marginLeft: 2,
+            border: 0,
+            borderRadius: 5,
+            background: 'transparent',
+            color: 'var(--text-3)',
+            cursor: 'pointer',
+          }}
+        >
+          <RotateCcw size={11} strokeWidth={1.8} />
+        </button>
+      )}
+    </span>
   );
 }

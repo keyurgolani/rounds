@@ -17,6 +17,10 @@ const DEFAULT_HEIGHT = 180;
 // Console-only bottom dock. Cases + Result moved to the right sidebar
 // (see RightDock); this strip just holds stdout/stderr below the editor
 // and is drag-resizable so users can pull it up when output is long.
+//
+// When the user hasn't produced any output yet AND the dock is closed,
+// the entire strip is hidden — no point in reserving 36px for an empty
+// "Console" handle until there's something to show.
 export function RunDock({ children, open, onOpenChange, hasOutput, rightActions }: RunDockProps) {
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const dragStartY = useRef<number | null>(null);
@@ -48,6 +52,8 @@ export function RunDock({ children, open, onOpenChange, hasOutput, rightActions 
       window.removeEventListener('mouseup', onUp);
     };
   }, []);
+
+  if (!hasOutput && !open) return null;
 
   return (
     <div

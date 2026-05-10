@@ -127,3 +127,59 @@ def test_submit_route_persists_attempt_and_returns_combined(client):
     assert captured_attempt["status"] == "graded"
     assert captured_attempt["assignment"] == "a1"
     assert captured_attempt["notes"] == "design notes"
+
+
+def test_chat_route_404s_when_assignment_missing(client):
+    async def fake_user(_):
+        return {"id": "u1", "token": "t"}
+
+    async def fake_pb_get(_token, _path, params=None):
+        return {"items": []}
+
+    with patch("routers.take_home.current_user", fake_user), \
+         patch("routers.take_home.pb_get", fake_pb_get):
+        res = client.post("/api/take-home/chat", json={
+            "assignment_slug": "missing",
+            "messages": [{"role": "user", "content": "hi"}],
+            "files": {},
+        })
+    assert res.status_code == 404
+
+
+def test_chat_route_blocks_when_ai_policy_off(client):
+    async def fake_user(_):
+        return {"id": "u1", "token": "t"}
+
+    async def fake_pb_get(_token, _path, params=None):
+        return {
+            "items": [
+                {
+                    "id": "a1",
+                    "slug": "tinytest",
+                    "ai_policy": "off",
+                    "prompt_md": "Build a tiny KV store.",
+                }
+            ]
+        }
+
+    with patch("routers.take_home.current_user", fake_user), \
+         patch("routers.take_home.pb_get", fake_pb_get):
+        res = client.post("/api/take-home/chat", json={
+            "assignment_slug": "tinytest",
+            "messages": [{"role": "user", "content": "hi"}],
+            "files": {},
+        })
+    assert res.status_code == 403
+
+
+def test_chat_route_rejects_invalid_slug_pattern(client):
+    async def fake_user(_):
+        return {"id": "u1", "token": "t"}
+
+    with patch("routers.take_home.current_user", fake_user):
+        res = client.post("/api/take-home/chat", json={
+            "assignment_slug": "BAD SLUG",
+            "messages": [{"role": "user", "content": "hi"}],
+            "files": {},
+        })
+    assert res.status_code == 422

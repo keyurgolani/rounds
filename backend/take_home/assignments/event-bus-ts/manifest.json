@@ -15,7 +15,8 @@
       {"id": "unsubscribe_returned_function", "label": "Unsubscribe via returned fn", "weight": 0.2, "prompt": "Does the function returned by on() unsubscribe that listener so subsequent emits don't call it?"},
       {"id": "no_cross_event_leakage", "label": "No cross-event leakage", "weight": 0.15, "prompt": "Does emit('a',...) NOT invoke listeners registered on('b',...)?"},
       {"id": "throwing_subscriber_does_not_block_others", "label": "Throwing subscriber doesn't block others", "weight": 0.15, "prompt": "If one subscriber throws during emit, do the remaining subscribers still receive the event?"},
-      {"id": "code_quality", "label": "Code quality", "weight": 0.1, "prompt": "Does the implementation use a Map or similar idiomatic structure (not a flat array of [event,fn] tuples)?"}
+      {"id": "code_quality", "label": "Code quality", "weight": 0.05, "prompt": "Does the implementation use a Map or similar idiomatic structure (not a flat array of [event,fn] tuples)?"},
+      {"id": "notes_quality", "label": "Design notes quality", "weight": 0.05, "prompt": "Did the candidate write meaningful design notes in NOTES.md? Look for: explicit trade-offs, alternatives considered, what was deferred or skipped, why specific choices were made. An empty placeholder or generic boilerplate should score low; specific reasoning about THIS assignment's choices should score high. NOTES.md is in the submitted file tree."}
     ]
   }
 }

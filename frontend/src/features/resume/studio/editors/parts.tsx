@@ -82,7 +82,7 @@ export function Field({
         {actions}
       </div>
       <div
-        data-scoring-glow={loading ? 'true' : undefined}
+        data-ai-processing-glow={loading ? 'true' : undefined}
         style={{
           borderRadius: 'var(--radius)',
           // The glow lives on a wrapper so the underlying input keeps
@@ -544,7 +544,7 @@ function SortableListRow({
       </button>
 
       <div
-        data-scoring-glow={enhancing ? 'true' : undefined}
+        data-ai-processing-glow={enhancing ? 'true' : undefined}
         style={{
           flex: 1,
           minWidth: 0,

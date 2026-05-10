@@ -40,7 +40,13 @@ export type RunResult = {
 export type SubmitResponse = {
   harness: RunResult;
   rubric_review: {
-    items: Array<{ id: string; score: number; evidence: string; suggestions: string[] }>;
+    items: Array<{
+      id: string;
+      score: number;
+      evidence: string;
+      suggestions: string[];
+      evidence_quotes?: Array<{ file: string; line: number; quote: string }>;
+    }>;
     total: number;
     skipped?: boolean;
     reason?: string;
@@ -99,6 +105,118 @@ export async function submitAttempt(req: SubmitRequest): Promise<SubmitResponse>
   });
 }
 
+// ---- Attempt persistence (chat log + last submission) ---------------
+
+export type TakeHomeChatEntry = {
+  checkpoint: number;
+  role: string;
+  content: string;
+  ts: number;
+};
+
+export type TakeHomeAttemptRow = {
+  id: string;
+  user: string;
+  campaign: string;
+  assignment: string;
+  files?: Record<string, string>;
+  ai_assist_used?: boolean;
+  ai_chats?: TakeHomeChatEntry[];
+  notes?: string;
+  harness_output?: RunResult;
+  rubric_review?: SubmitResponse['rubric_review'];
+  status: 'in-progress' | 'submitted' | 'graded';
+  duration_ms?: number;
+  updated: string;
+};
+
+/** Most recent attempt for the current user + assignment + campaign. */
+export async function getLatestTakeHomeAttempt(
+  assignmentId: string,
+  campaignId?: string,
+): Promise<TakeHomeAttemptRow | null> {
+  const userId = pb.authStore.model?.id;
+  if (!userId) return null;
+  const safeUser = userId.replace(/"/g, '');
+  const safeAssignment = assignmentId.replace(/"/g, '');
+  const safeCampaign = (campaignId ?? '').replace(/"/g, '');
+  const filter = campaignId
+    ? `user="${safeUser}" && assignment="${safeAssignment}" && campaign="${safeCampaign}"`
+    : `user="${safeUser}" && assignment="${safeAssignment}" && campaign=""`;
+  try {
+    return await pb
+      .collection('take_home_attempts')
+      .getFirstListItem<TakeHomeAttemptRow>(filter, { sort: '-updated' });
+  } catch (err: any) {
+    if (err?.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function upsertInProgressTakeHomeAttempt(input: {
+  assignmentId: string;
+  campaignId?: string;
+  chats: TakeHomeChatEntry[];
+}): Promise<void> {
+  const userId = pb.authStore.model?.id;
+  if (!userId) return;
+  const { assignmentId, campaignId, chats } = input;
+  const safeUser = userId.replace(/"/g, '');
+  const safeAssignment = assignmentId.replace(/"/g, '');
+  const safeCampaign = (campaignId ?? '').replace(/"/g, '');
+  const filter = campaignId
+    ? `user="${safeUser}" && assignment="${safeAssignment}" && campaign="${safeCampaign}" && status="in-progress"`
+    : `user="${safeUser}" && assignment="${safeAssignment}" && campaign="" && status="in-progress"`;
+  const payload = {
+    user: userId,
+    assignment: assignmentId,
+    campaign: campaignId ?? '',
+    ai_chats: chats,
+    ai_assist_used: chats.length > 0,
+    files: {},
+    notes: '',
+    harness_output: null,
+    rubric_review: null,
+    status: 'in-progress' as const,
+    duration_ms: 0,
+  };
+  try {
+    const existing = await pb
+      .collection('take_home_attempts')
+      .getFirstListItem<TakeHomeAttemptRow>(filter);
+    await pb.collection('take_home_attempts').update(existing.id, payload);
+  } catch (err: any) {
+    if (err?.status === 404) {
+      await pb.collection('take_home_attempts').create(payload);
+    } else {
+      throw err;
+    }
+  }
+}
+
+export async function deleteInProgressTakeHomeAttempt(
+  assignmentId: string,
+  campaignId?: string,
+): Promise<void> {
+  const userId = pb.authStore.model?.id;
+  if (!userId) return;
+  const safeUser = userId.replace(/"/g, '');
+  const safeAssignment = assignmentId.replace(/"/g, '');
+  const safeCampaign = (campaignId ?? '').replace(/"/g, '');
+  const filter = campaignId
+    ? `user="${safeUser}" && assignment="${safeAssignment}" && campaign="${safeCampaign}" && status="in-progress"`
+    : `user="${safeUser}" && assignment="${safeAssignment}" && campaign="" && status="in-progress"`;
+  try {
+    const existing = await pb
+      .collection('take_home_attempts')
+      .getFirstListItem<TakeHomeAttemptRow>(filter);
+    await pb.collection('take_home_attempts').delete(existing.id);
+  } catch (err: any) {
+    if (err?.status === 404) return;
+    /* swallow — best-effort */
+  }
+}
+
 // ---- Drafts (autosave per-file) -------------------------------------
 
 export type TakeHomeDraftRow = {
@@ -120,6 +238,29 @@ export async function listDrafts(
     ? `assignment="${safeAssignment}" && campaign="${safeCampaign}"`
     : `assignment="${safeAssignment}" && campaign=""`;
   return pb.collection('take_home_drafts').getFullList<TakeHomeDraftRow>({ filter });
+}
+
+/**
+ * Delete every draft row this user has for `assignmentId` (within the
+ * current campaign scope). Used by the "Reset files" button — caller
+ * is responsible for the confirm prompt and for re-hydrating local
+ * file state from the assignment's starter files.
+ */
+export async function deleteAllDrafts(
+  assignmentId: string,
+  campaignId?: string,
+): Promise<void> {
+  const rows = await listDrafts(assignmentId, campaignId);
+  await Promise.all(
+    rows.map((r) =>
+      pb
+        .collection('take_home_drafts')
+        .delete(r.id)
+        .catch(() => {
+          /* swallow — best-effort reset */
+        }),
+    ),
+  );
 }
 
 export async function upsertDraft(input: {

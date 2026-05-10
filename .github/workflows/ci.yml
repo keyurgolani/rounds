@@ -34,6 +34,14 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: backend/requirements.txt
+      # Take-home assignments include TS harnesses invoked via
+      # `node --experimental-strip-types harness/run.ts` (added in
+      # Node 22.6). Without this step the runner falls back to the
+      # ubuntu-latest system Node (18) which doesn't know the flag,
+      # and test_take_home_integration::event-bus-ts fails.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements.txt
       - run: python -m pytest . ../pocketbase/tests

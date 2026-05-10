@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import Editor from '@monaco-editor/react';
+import MultiFileEditor from '../components/editor/MultiFileEditor';
 import { getCodingQuestion } from '../content/api';
 import {
   deleteCodeDraft,
@@ -8,7 +8,6 @@ import {
   upsertCodeDraft,
 } from '../lib/codeDraftsApi';
 import { evaluateCode, runCode } from './coding/runnerApi';
-import { oneLineSummary } from '../lib/text';
 import { RunDock } from './coding/RunDock';
 import { RightDock, type SideTab } from './coding/RightDock';
 import { ConsoleTab } from './coding/ConsoleTab';
@@ -19,24 +18,13 @@ import type {
   EvaluateFilter,
   Entry,
 } from './coding/types';
-import {
-  Check,
-  Copy,
-  FileText,
-  Maximize2,
-  Minimize2,
-  Play,
-  Terminal,
-  WrapText,
-  X,
-} from 'lucide-react';
+import { Check, FileText, Play, Terminal, X } from 'lucide-react';
 import AppHeader from '../components/shell/AppHeader';
 import DifficultyPill from '../components/shell/DifficultyPill';
 import StatusAction from '../components/shell/StatusAction';
 import BackLink from '../components/shell/BackLink';
 import InlineMarkdown from '../components/shell/InlineMarkdown';
 import BlockMarkdown from '../components/shell/BlockMarkdown';
-import { useTheme } from '../theme/ThemeProvider';
 import { useAuth } from '../auth/AuthProvider';
 import { loadLocal, saveLocal } from '../lib/codeDraft';
 import { useCampaign } from '../campaign/CampaignContext';
@@ -118,7 +106,6 @@ function useEditorFocus() {
 
 export default function CodingDetail() {
   const { slug } = useParams<{ slug: string }>();
-  const { theme } = useTheme();
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const [q, setQ] = useState<CQ | null>(null);
@@ -133,8 +120,6 @@ export default function CodingDetail() {
   const [sideTab, setSideTab] = useState<SideTab>('tests');
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
   const [rightWidth, setRightWidth] = useState(440);
-  const [wordWrap, setWordWrap] = useState<'on' | 'off'>('off');
-  const [copied, setCopied] = useState(false);
   const { focus, toggle: toggleFocus } = useEditorFocus();
 
   // Refs for the 10-second backend sync — avoids re-creating the interval on every keystroke.
@@ -280,6 +265,16 @@ export default function CodingDetail() {
     runResult && (runResult.stdout || runResult.stderr || runResult.truncated)
   );
 
+  // MultiFileEditor expects a files map even in single-file mode. We
+  // synthesise a one-entry map keyed by an extension that matches the
+  // language so Monaco's path-based language detection lines up.
+  const langExt = lang === 'javascript' ? 'js' : lang === 'java' ? 'java' : 'py';
+  const singleFilePath = `solution.${langExt}`;
+  const singleFile = useMemo(
+    () => ({ [singleFilePath]: code }),
+    [singleFilePath, code],
+  );
+
   useEffect(() => {
     if (hasConsoleOutput) setConsoleOpen(true);
   }, [hasConsoleOutput]);
@@ -368,18 +363,16 @@ export default function CodingDetail() {
   if (!q) {
     return (
       <div className="flex items-center justify-center h-full">
-        <BackLink to="/coding/questions" label="Back to problems" />
+        <BackLink to="/coding/questions" label="Back to practice" />
       </div>
     );
   }
 
-  const monacoTheme = theme === 'dark' ? 'vs-dark' : 'vs';
 
   return (
     <div className="h-full flex flex-col relative">
       <AppHeader
         title={q.title}
-        description={oneLineSummary(q.description)}
         eyebrow={
           <span
             style={{
@@ -525,210 +518,98 @@ export default function CodingDetail() {
           )}
 
           <div className="flex-1 min-h-0 relative" style={{ background: 'var(--bg-sunken)' }}>
-            {/* Desktop: floating language + wrap + copy toolbar at top-right. */}
-            <div
-              className="hidden lg:flex items-center gap-1"
-              style={{
-                position: 'absolute',
-                top: 10,
-                right: 16,
-                zIndex: 10,
+            <MultiFileEditor
+              hideExplorer
+              files={singleFile}
+              activePath={singleFilePath}
+              onActivePathChange={() => { /* no-op — single-file mode */ }}
+              onFileChange={(_p, contents) => {
+                setCode(contents);
+                if (q) saveLocal(userId, q.id, lang, contents);
               }}
-            >
-              <Select
-                value={lang}
-                onChange={setLang}
-                options={LANGUAGES.map((l) => ({ value: l.key, label: l.label }))}
-                ariaLabel="Language"
-                fullWidth={false}
-                align="right"
-              />
-              <button
-                type="button"
-                onClick={() => setWordWrap((w) => (w === 'on' ? 'off' : 'on'))}
-                aria-label={wordWrap === 'on' ? 'Disable word wrap' : 'Enable word wrap'}
-                aria-pressed={wordWrap === 'on'}
-                title={wordWrap === 'on' ? 'Disable word wrap' : 'Enable word wrap'}
-                style={{
-                  width: 30,
-                  height: 30,
-                  border: 0,
-                  borderRadius: 6,
-                  background: wordWrap === 'on' ? 'var(--accent-soft)' : 'var(--bg-elev)',
-                  color: wordWrap === 'on' ? 'var(--accent)' : 'var(--text-3)',
-                  boxShadow: 'inset 0 0 0 1px var(--border-strong)',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <WrapText size={14} strokeWidth={1.8} />
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(code);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1400);
-                  } catch {
-                    /* noop */
-                  }
-                }}
-                aria-label="Copy code to clipboard"
-                title="Copy code"
-                style={{
-                  width: 30,
-                  height: 30,
-                  border: 0,
-                  borderRadius: 6,
-                  background: 'var(--bg-elev)',
-                  color: copied ? 'var(--forest)' : 'var(--text-3)',
-                  boxShadow: 'inset 0 0 0 1px var(--border-strong)',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {copied ? <Check size={14} strokeWidth={2} /> : <Copy size={14} strokeWidth={1.8} />}
-              </button>
-              <button
-                type="button"
-                onClick={toggleFocus}
-                aria-label={focus ? 'Exit focus mode' : 'Focus mode (hide panels)'}
-                aria-pressed={focus}
-                title={focus ? 'Exit focus mode' : 'Focus mode'}
-                style={{
-                  width: 30,
-                  height: 30,
-                  border: 0,
-                  borderRadius: 6,
-                  background: focus ? 'var(--accent-soft)' : 'var(--bg-elev)',
-                  color: focus ? 'var(--accent)' : 'var(--text-3)',
-                  boxShadow: 'inset 0 0 0 1px var(--border-strong)',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {focus ? (
-                  <Minimize2 size={14} strokeWidth={1.8} />
-                ) : (
-                  <Maximize2 size={14} strokeWidth={1.8} />
-                )}
-              </button>
-              {focus && (
-                <button
-                  type="button"
-                  onClick={() => handleEvaluate()}
-                  disabled={running || (q?.test_cases.length ?? 0) === 0}
-                  aria-label={
-                    evalResults
-                      ? `Run all tests. Last run: ${evalResults.passed} of ${evalResults.passed + evalResults.failed} passed.`
-                      : 'Run all tests'
-                  }
-                  className="inline-flex items-center gap-1.5"
-                  style={{
-                    padding: '5px 12px',
-                    height: 30,
-                    fontSize: 11,
-                    fontWeight: 500,
-                    background: 'var(--ink)',
-                    color: 'var(--paper)',
-                    border: 0,
-                    borderRadius: 999,
-                    cursor: running ? 'wait' : 'pointer',
-                    opacity: running ? 0.6 : 1,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <Play size={10} strokeWidth={1.9} />
-                  {running
-                    ? 'Running…'
-                    : evalResults
-                      ? (
-                          <span
-                            style={{
-                              color:
-                                evalResults.failed === 0
-                                  ? 'var(--status-pass)'
-                                  : 'var(--status-fail)',
-                            }}
-                          >
-                            {evalResults.passed}/{evalResults.passed + evalResults.failed}
-                          </span>
-                        )
-                      : `Run all (${q?.test_cases.length ?? 0})`}
-                </button>
-              )}
-            </div>
-
-            <Editor
-              height="100%"
-              language={LANGUAGES.find((l) => l.key === lang)?.monaco || 'python'}
-              value={code}
-              onChange={(val) => {
-                const next = val || '';
-                setCode(next);
-                if (q) saveLocal(userId, q.id, lang, next);
-              }}
-              onMount={(editor, monaco) => {
-                // Intercept Cmd/Ctrl+S so the browser's "save page"
-                // dialog doesn't fire — users hit it reflexively.
-                // Drafts are already auto-persisted to PocketBase
-                // every 10s and to localStorage on every change, so
-                // there's nothing to actually save here; the binding
-                // exists purely to suppress the OS dialog and signal
-                // that the keystroke was handled.
-                let pristineShadow: string | null = null;
-                let restoreTimer: number | null = null;
-                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-                  const dom = editor.getDomNode();
-                  if (!dom) return;
-                  // Capture the un-flashed shadow once per flash sequence so
-                  // spammed presses don't progressively snapshot the green
-                  // glow as "previous" and leave it stuck.
-                  if (restoreTimer !== null) {
-                    window.clearTimeout(restoreTimer);
-                  } else {
-                    pristineShadow = dom.style.boxShadow;
-                  }
-                  dom.style.boxShadow = 'inset 0 0 0 2px var(--forest)';
-                  dom.style.transition = 'box-shadow 140ms';
-                  restoreTimer = window.setTimeout(() => {
-                    dom.style.boxShadow = pristineShadow ?? '';
-                    pristineShadow = null;
-                    restoreTimer = null;
-                  }, 320);
-                });
-              }}
-              theme={monacoTheme}
-              options={{
-                minimap: { enabled: false },
+              languageOverride={
+                LANGUAGES.find((l) => l.key === lang)?.monaco || 'python'
+              }
+              storageKey="rounds:editor.coding"
+              focused={focus}
+              onFocusToggle={toggleFocus}
+              editorOptions={{
                 fontSize: 13,
                 fontFamily: "'JetBrains Mono', monospace",
                 lineNumbers: 'on',
-                scrollBeyondLastLine: false,
-                padding: { top: 14, bottom: 14 },
                 renderLineHighlight: 'none',
                 overviewRulerBorder: false,
                 automaticLayout: true,
-                wordWrap,
+                padding: { top: 14, bottom: 14 },
                 scrollbar: {
                   verticalScrollbarSize: 6,
                   horizontalScrollbarSize: 6,
                 },
               }}
+              topRightExtras={
+                <>
+                  <Select
+                    value={lang}
+                    onChange={setLang}
+                    options={LANGUAGES.map((l) => ({ value: l.key, label: l.label }))}
+                    ariaLabel="Language"
+                    fullWidth={false}
+                    align="right"
+                  />
+                  {focus && (
+                    <button
+                      type="button"
+                      onClick={() => handleEvaluate()}
+                      disabled={running || (q?.test_cases.length ?? 0) === 0}
+                      aria-label={
+                        evalResults
+                          ? `Run all tests. Last run: ${evalResults.passed} of ${evalResults.passed + evalResults.failed} passed.`
+                          : 'Run all tests'
+                      }
+                      className="inline-flex items-center gap-1.5"
+                      style={{
+                        padding: '5px 12px',
+                        height: 26,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        background: 'var(--ink)',
+                        color: 'var(--paper)',
+                        border: 0,
+                        borderRadius: 999,
+                        cursor: running ? 'wait' : 'pointer',
+                        opacity: running ? 0.6 : 1,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <Play size={10} strokeWidth={1.9} />
+                      {running
+                        ? 'Running…'
+                        : evalResults
+                          ? (
+                              <span
+                                style={{
+                                  color:
+                                    evalResults.failed === 0
+                                      ? 'var(--status-pass)'
+                                      : 'var(--status-fail)',
+                                }}
+                              >
+                                {evalResults.passed}/{evalResults.passed + evalResults.failed}
+                              </span>
+                            )
+                          : `Run all (${q?.test_cases.length ?? 0})`}
+                    </button>
+                  )}
+                </>
+              }
             />
           </div>
 
-          {/* Mobile-only editor bottom strip — language + wrap/copy in
-              the thumb zone. */}
+          {/* Mobile-only editor bottom strip — just the language picker,
+              since MultiFileEditor's own wrap/copy toolbar is hidden
+              below the `sm` breakpoint. */}
           <div
-            className="flex lg:hidden items-center gap-2 flex-shrink-0 px-3 py-2"
+            className="flex sm:hidden items-center flex-shrink-0 px-3 py-2"
             style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)' }}
           >
             <Select
@@ -740,55 +621,6 @@ export default function CodingDetail() {
               align="left"
               style={{ minWidth: 124 }}
             />
-            <button
-              type="button"
-              onClick={() => setWordWrap((w) => (w === 'on' ? 'off' : 'on'))}
-              aria-label={wordWrap === 'on' ? 'Disable word wrap' : 'Enable word wrap'}
-              aria-pressed={wordWrap === 'on'}
-              className="inline-flex items-center gap-1.5 ml-auto"
-              style={{
-                padding: '6px 10px',
-                border: 0,
-                borderRadius: 6,
-                background: wordWrap === 'on' ? 'var(--accent-soft)' : 'var(--bg-sunken)',
-                color: wordWrap === 'on' ? 'var(--accent)' : 'var(--text-3)',
-                boxShadow: 'inset 0 0 0 1px var(--border)',
-                cursor: 'pointer',
-                fontSize: 11.5,
-                fontWeight: 500,
-              }}
-            >
-              <WrapText size={13} strokeWidth={1.8} />
-              Wrap
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(code);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1400);
-                } catch {
-                  /* noop */
-                }
-              }}
-              aria-label="Copy code to clipboard"
-              className="inline-flex items-center gap-1.5"
-              style={{
-                padding: '6px 10px',
-                border: 0,
-                borderRadius: 6,
-                background: 'var(--bg-sunken)',
-                color: copied ? 'var(--forest)' : 'var(--text-3)',
-                boxShadow: 'inset 0 0 0 1px var(--border)',
-                cursor: 'pointer',
-                fontSize: 11.5,
-                fontWeight: 500,
-              }}
-            >
-              {copied ? <Check size={13} strokeWidth={2} /> : <Copy size={13} strokeWidth={1.8} />}
-              {copied ? 'Copied' : 'Copy'}
-            </button>
           </div>
         </section>
 

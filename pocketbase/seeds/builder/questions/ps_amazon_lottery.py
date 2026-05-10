@@ -48,7 +48,9 @@ PAYLOAD = {
     },
     "test_cases": [
         {"input": {"orders": [["a", 100]], "k": 1, "seed": 0},
-         "expected": ["a"],
+         "expected": {"$match": "validator",
+                       "description": "Single customer always wins regardless of RNG",
+                       "code": "lambda inp, out: out == ['a']"},
          "description": "Single customer wins by default", "tags": ["edge"]},
         {"input": {"orders": [], "k": 1, "seed": 0}, "expected": [],
          "description": "Empty orders", "tags": ["edge"]},

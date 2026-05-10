@@ -1,5 +1,17 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+
+// AIPatchView pulls in Monaco's DiffEditor + ThemeProvider + AuthProvider
+// for its own deps. The chat-history test only cares that the diff card
+// is rendered (instead of raw JSON), so stub it to a marker element.
+vi.mock('../../components/ai/AIPatchView', () => ({
+  default: ({ patches, applied }: { patches: unknown[]; applied?: boolean }) => (
+    <div data-testid="patch-view" data-applied={applied ? 'true' : 'false'}>
+      {applied ? 'Applied' : 'Proposed'} ({patches.length})
+    </div>
+  ),
+}));
+
 import GradeReport from '../../pages/ai-coding/GradeReport';
 
 describe('GradeReport chat history', () => {
@@ -35,6 +47,29 @@ describe('GradeReport chat history', () => {
     expect(screen.getByText('Question A')).toBeInTheDocument();
     expect(screen.getByText('Answer A')).toBeInTheDocument();
     expect(screen.getByText('Question B')).toBeInTheDocument();
+  });
+
+  it('renders an AI patch as an Applied diff card, not raw JSON', () => {
+    // Patch contents include a `[` character — the regression we're
+    // guarding against was using lastIndexOf('[') which would land
+    // INSIDE the contents string and fail to parse, causing the raw
+    // JSON to render as plain text.
+    const json = JSON.stringify([
+      {
+        file: 'cart.py',
+        patch_kind: 'replace',
+        contents: 'def total(cart):\n    return sum(item[1] for item in cart)\n',
+      },
+    ]);
+    const aiChats = [
+      { checkpoint: 0, role: 'user', content: 'fix it', ts: 1 },
+      { checkpoint: 0, role: 'assistant', content: json, ts: 2 },
+    ];
+    render(<GradeReport {...baseProps} aiChats={aiChats} files={{}} />);
+    // The "Applied" badge from AIPatchView should be visible.
+    expect(screen.getByText(/Applied/i)).toBeInTheDocument();
+    // The raw JSON text shouldn't appear anywhere as a rendered string.
+    expect(screen.queryByText(/"patch_kind"/)).toBeNull();
   });
 
   it('preserves message newlines via whitespace pre-wrap', () => {

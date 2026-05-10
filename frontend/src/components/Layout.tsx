@@ -22,6 +22,7 @@ import {
   DashGlyph,
   ResumeGlyph,
   SystemGlyph,
+  TakeHomeGlyph,
   TodoGlyph,
 } from './shell/Glyphs';
 import { useTheme } from '../theme/ThemeProvider';
@@ -58,7 +59,7 @@ const practiceNav: PracticeNavGroup[] = [
     glyph: SystemGlyph,
     children: [
       { path: '/system-design/guide', label: 'Guide' },
-      { path: '/system-design/questions', label: 'Problem List' },
+      { path: '/system-design/questions', label: 'Practice' },
     ],
   },
   {
@@ -68,7 +69,7 @@ const practiceNav: PracticeNavGroup[] = [
     glyph: CodeGlyph,
     children: [
       { path: '/coding/guide', label: 'Guide' },
-      { path: '/coding/questions', label: 'Problem List' },
+      { path: '/coding/questions', label: 'Practice' },
     ],
   },
   {
@@ -77,16 +78,16 @@ const practiceNav: PracticeNavGroup[] = [
     shortLabel: 'AI Coding',
     glyph: AIGlyph,
     children: [
-      { path: '/ai-coding', label: 'Rounds' },
+      { path: '/ai-coding', label: 'Practice' },
     ],
   },
   {
     basePath: '/take-home',
-    label: 'Take-Home Assignments',
-    shortLabel: 'Take-Home',
-    glyph: AIGlyph,
+    label: 'Builder Problems',
+    shortLabel: 'Builder',
+    glyph: TakeHomeGlyph,
     children: [
-      { path: '/take-home', label: 'Assignments' },
+      { path: '/take-home', label: 'Practice' },
     ],
   },
   {
@@ -96,7 +97,7 @@ const practiceNav: PracticeNavGroup[] = [
     glyph: BehaviorGlyph,
     children: [
       { path: '/behavioral/guide', label: 'Guide' },
-      { path: '/behavioral/questions', label: 'Problem List' },
+      { path: '/behavioral/questions', label: 'Practice' },
     ],
   },
 ];
@@ -697,7 +698,7 @@ function TopBar() {
       label: 'System Design',
       children: [
         { path: '/system-design/guide', label: 'Guide', glyph: SystemGlyph },
-        { path: '/system-design/questions', label: 'Problem List', glyph: SystemGlyph },
+        { path: '/system-design/questions', label: 'Practice', glyph: SystemGlyph },
       ],
     },
     {
@@ -705,7 +706,21 @@ function TopBar() {
       label: 'Coding',
       children: [
         { path: '/coding/guide', label: 'Guide', glyph: CodeGlyph },
-        { path: '/coding/questions', label: 'Problem List', glyph: CodeGlyph },
+        { path: '/coding/questions', label: 'Practice', glyph: CodeGlyph },
+      ],
+    },
+    {
+      id: 'ai-coding',
+      label: 'AI Assisted Coding',
+      children: [
+        { path: '/ai-coding', label: 'Practice', glyph: AIGlyph },
+      ],
+    },
+    {
+      id: 'take-home',
+      label: 'Builder Problems',
+      children: [
+        { path: '/take-home', label: 'Practice', glyph: TakeHomeGlyph },
       ],
     },
     {
@@ -713,7 +728,7 @@ function TopBar() {
       label: 'Behavioral',
       children: [
         { path: '/behavioral/guide', label: 'Guide', glyph: BehaviorGlyph },
-        { path: '/behavioral/questions', label: 'Problem List', glyph: BehaviorGlyph },
+        { path: '/behavioral/questions', label: 'Practice', glyph: BehaviorGlyph },
       ],
     },
     { path: '/applications', label: 'Applications' },

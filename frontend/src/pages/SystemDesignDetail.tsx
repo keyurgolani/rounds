@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getSystemDesignQuestion } from '../content/api';
-import { oneLineSummary } from '../lib/text';
 import { ArchitectureDiagram } from '../components/visual/ArchitectureDiagram';
 import { FlowchartDiagram } from '../components/visual/FlowchartDiagram';
 import { ERDiagram } from '../components/visual/ERDiagram';
@@ -242,7 +241,6 @@ export default function SystemDesignDetail() {
     <div className="h-full flex flex-col">
       <AppHeader
         title={q.title}
-        description={oneLineSummary(q.description)}
         eyebrow={
           <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
             <BackLink to="/system-design/questions" />

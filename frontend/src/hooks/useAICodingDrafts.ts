@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  deleteAllDrafts,
   listDrafts,
   upsertDraft,
   type AICodingRound,
@@ -88,5 +89,71 @@ export function useAICodingDrafts(round: AICodingRound | null, campaignId?: stri
     });
   }
 
-  return { files, savedFiles, setFile, hydrated };
+  /**
+   * Persist a set of file changes to the server RIGHT NOW (no waiting
+   * for the autosave tick). Used when the user accepts an AI patch:
+   * if they refresh within the autosave window, the post-apply
+   * contents would otherwise be lost — the rehydrated chat would show
+   * "Applied" but the workspace would still hold the pre-apply code.
+   *
+   * Updates the local files map AND savedFiles so the editor reflects
+   * the new contents immediately, and clears those paths from the
+   * dirty set so the timer doesn't double-write them.
+   */
+  async function persistImmediately(updates: Record<string, string>) {
+    if (!round) return;
+    const paths = Object.keys(updates);
+    if (paths.length === 0) return;
+    setFiles((prev) => ({ ...prev, ...updates }));
+    for (const p of paths) dirtyRef.current.delete(p);
+    await Promise.all(
+      paths.map((path) =>
+        upsertDraft({
+          roundId: round.id,
+          campaignId,
+          filePath: path,
+          contents: updates[path],
+        }).catch(() => {
+          // Re-mark for retry on the next autosave tick — at least the
+          // local state is correct, and the user gets a second chance
+          // at persistence. Don't surface the error to the caller; the
+          // accept flow already proceeded.
+          dirtyRef.current.add(path);
+        }),
+      ),
+    );
+    setSavedFiles((prev) => {
+      const next = { ...prev };
+      for (const p of paths) {
+        if (!dirtyRef.current.has(p)) next[p] = updates[p];
+      }
+      return next;
+    });
+  }
+
+  /** Discard every saved draft on the server and rehydrate local
+   *  state from the round's starter files. The caller is expected
+   *  to confirm the destructive intent first. */
+  async function resetToStarter() {
+    if (!round) return;
+    dirtyRef.current.clear();
+    try {
+      await deleteAllDrafts(round.id, campaignId);
+    } catch {
+      /* best-effort — local state still resets */
+    }
+    const starter: Files = {};
+    for (const f of round.starter_files) starter[f.path] = f.contents;
+    setFiles(starter);
+    setSavedFiles(starter);
+  }
+
+  return {
+    files,
+    savedFiles,
+    setFile,
+    hydrated,
+    resetToStarter,
+    persistImmediately,
+  };
 }

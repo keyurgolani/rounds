@@ -43,7 +43,10 @@ describe('TakeHomeList', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText(/No assignments available yet/i)).toBeInTheDocument();
+      // Empty state copy comes from the shared list shell — the
+      // rail's filter-no-match message is what shows when the
+      // assignments array is empty.
+      expect(screen.getByText(/No problems match that filter/i)).toBeInTheDocument();
     });
   });
 });

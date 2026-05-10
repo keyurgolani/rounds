@@ -57,6 +57,29 @@ export async function listDrafts(roundId: string, campaignId?: string): Promise<
   return pb.collection('ai_coding_drafts').getFullList<DraftRow>({ filter });
 }
 
+/**
+ * Delete every draft row this user has for `roundId` (within the
+ * current campaign scope). Used by the "Reset files" button — caller
+ * is responsible for the confirm prompt and for re-hydrating local
+ * file state from the round's starter files.
+ */
+export async function deleteAllDrafts(
+  roundId: string,
+  campaignId?: string,
+): Promise<void> {
+  const rows = await listDrafts(roundId, campaignId);
+  await Promise.all(
+    rows.map((r) =>
+      pb
+        .collection('ai_coding_drafts')
+        .delete(r.id)
+        .catch(() => {
+          /* swallow — best-effort reset */
+        }),
+    ),
+  );
+}
+
 export async function upsertDraft(input: {
   roundId: string;
   campaignId?: string;
@@ -151,6 +174,118 @@ export async function gradeAttempt(req: GradeRequest): Promise<GradeResponse> {
     auth: 'required',
     errorPrefix: 'grade',
   });
+}
+
+/**
+ * Most recent attempt row for the current user + round + campaign,
+ * regardless of status. Used on mount to rehydrate chat log and the
+ * last submission report so refresh doesn't lose them.
+ */
+export type AttemptRow = {
+  id: string;
+  user: string;
+  campaign: string;
+  round: string;
+  current_checkpoint?: number;
+  ai_chats?: AIChatLogEntry[];
+  test_results?: GradeResponse['test_results'];
+  rubric_review?: GradeResponse['rubric_review'];
+  status: 'in-progress' | 'submitted' | 'graded';
+  duration_ms?: number;
+  updated: string;
+};
+
+export async function getLatestAttempt(
+  roundId: string,
+  campaignId?: string,
+): Promise<AttemptRow | null> {
+  const userId = pb.authStore.model?.id;
+  if (!userId) return null;
+  const safeRound = roundId.replace(/"/g, '');
+  const safeUser = userId.replace(/"/g, '');
+  const safeCampaign = (campaignId ?? '').replace(/"/g, '');
+  const filter = campaignId
+    ? `user="${safeUser}" && round="${safeRound}" && campaign="${safeCampaign}"`
+    : `user="${safeUser}" && round="${safeRound}" && campaign=""`;
+  try {
+    const row = await pb
+      .collection('ai_coding_attempts')
+      .getFirstListItem<AttemptRow>(filter, { sort: '-updated' });
+    return row;
+  } catch (err: any) {
+    if (err?.status === 404) return null;
+    throw err;
+  }
+}
+
+/**
+ * Upsert the in-progress attempt for the current (user, round, campaign).
+ * Used to persist the chat log between message turns so a refresh
+ * doesn't lose the conversation. Once the user submits, persistAttempt
+ * creates a new graded row alongside this one (we leave the in-progress
+ * row in place — it's a chronological audit trail).
+ */
+export async function upsertInProgressAttempt(input: {
+  roundId: string;
+  campaignId?: string;
+  currentCheckpoint: number;
+  chats: AIChatLogEntry[];
+}): Promise<void> {
+  const userId = pb.authStore.model?.id;
+  if (!userId) return;
+  const { roundId, campaignId, currentCheckpoint, chats } = input;
+  const safeRound = roundId.replace(/"/g, '');
+  const safeUser = userId.replace(/"/g, '');
+  const safeCampaign = (campaignId ?? '').replace(/"/g, '');
+  const filter = campaignId
+    ? `user="${safeUser}" && round="${safeRound}" && campaign="${safeCampaign}" && status="in-progress"`
+    : `user="${safeUser}" && round="${safeRound}" && campaign="" && status="in-progress"`;
+  const payload = {
+    user: userId,
+    round: roundId,
+    campaign: campaignId ?? '',
+    current_checkpoint: currentCheckpoint,
+    ai_chats: chats,
+    test_results: [],
+    rubric_review: { items: [], total: 0 },
+    status: 'in-progress' as const,
+    duration_ms: 0,
+  };
+  try {
+    const existing = await pb
+      .collection('ai_coding_attempts')
+      .getFirstListItem<AttemptRow>(filter);
+    await pb.collection('ai_coding_attempts').update(existing.id, payload);
+  } catch (err: any) {
+    if (err?.status === 404) {
+      await pb.collection('ai_coding_attempts').create(payload);
+    } else {
+      throw err;
+    }
+  }
+}
+
+export async function deleteInProgressAttempt(
+  roundId: string,
+  campaignId?: string,
+): Promise<void> {
+  const userId = pb.authStore.model?.id;
+  if (!userId) return;
+  const safeRound = roundId.replace(/"/g, '');
+  const safeUser = userId.replace(/"/g, '');
+  const safeCampaign = (campaignId ?? '').replace(/"/g, '');
+  const filter = campaignId
+    ? `user="${safeUser}" && round="${safeRound}" && campaign="${safeCampaign}" && status="in-progress"`
+    : `user="${safeUser}" && round="${safeRound}" && campaign="" && status="in-progress"`;
+  try {
+    const existing = await pb
+      .collection('ai_coding_attempts')
+      .getFirstListItem<AttemptRow>(filter);
+    await pb.collection('ai_coding_attempts').delete(existing.id);
+  } catch (err: any) {
+    if (err?.status === 404) return;
+    /* swallow other errors — best-effort */
+  }
 }
 
 export async function persistAttempt(input: {

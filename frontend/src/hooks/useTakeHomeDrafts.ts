@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  deleteAllDrafts,
   listDrafts,
   upsertDraft,
   type TakeHomeAssignment,
@@ -97,5 +98,21 @@ export function useTakeHomeDrafts(
     });
   }
 
-  return { files, savedFiles, setFile, hydrated };
+  /** Discard every saved draft on the server and rehydrate local
+   *  state from the assignment's starter files. Caller confirms first. */
+  async function resetToStarter() {
+    if (!assignment) return;
+    dirtyRef.current.clear();
+    try {
+      await deleteAllDrafts(assignment.id, campaignId);
+    } catch {
+      /* best-effort — local state still resets */
+    }
+    const starter: Files = {};
+    for (const f of assignment.starter_files) starter[f.path] = f.contents;
+    setFiles(starter);
+    setSavedFiles(starter);
+  }
+
+  return { files, savedFiles, setFile, hydrated, resetToStarter };
 }

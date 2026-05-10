@@ -9,6 +9,7 @@ import { listResumes, createResume, deleteResume } from '../features/resume/api'
 import { importFromText } from '../features/resume/ai/client';
 import { extractText } from '../features/resume/import/extract';
 import type { Resume } from '../features/resume/types';
+import { titleCaseFromSlug } from '../lib/slug';
 
 type SortKey = 'recent-desc' | 'recent-asc' | 'name-asc' | 'name-desc';
 
@@ -98,7 +99,8 @@ export default function ResumesList() {
       setImporting('Parsing with AI…');
       const { data } = await importFromText(text);
       setImporting('Saving resume…');
-      const baseName = file.name.replace(/\.[^.]+$/, '') || 'Imported resume';
+      const stripped = file.name.replace(/\.[^.]+$/, '');
+      const baseName = titleCaseFromSlug(stripped) || 'Imported resume';
       const created = await createResume({ name: baseName, data });
       navigate(`/resumes/${created.slug}`);
     } catch (err) {
@@ -135,7 +137,7 @@ export default function ResumesList() {
                   type="button"
                   onClick={() => fileRef.current?.click()}
                   disabled={importing !== null}
-                  data-scoring-glow={importing ? 'true' : undefined}
+                  data-ai-processing-glow={importing ? 'true' : undefined}
                   className="inline-flex items-center gap-1.5"
                   style={{
                     padding: '6px 12px',

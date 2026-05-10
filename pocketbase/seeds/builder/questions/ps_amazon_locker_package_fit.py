@@ -84,8 +84,17 @@ PAYLOAD = {
         {"input": {"ops": ["LockerLocation", "put", "put"],
                     "args": [[[["S", "S1", 2, 2], ["S", "S2", 2, 2]]],
                              ["p1", 1, 1], ["p2", 1, 1]]},
-         "expected": [None, "S1", "S2"],
-         "description": "Two packages fill two S lockers", "tags": ["basic"]},
+         # Per the spec ("If multiple lockers in the smallest fitting tier
+         # are free, any is acceptable"), both orderings are correct: the
+         # implementation may scan free lockers FIFO, LIFO, or by tightest
+         # fit and still satisfy the contract. Using any_of so a deque-
+         # based vs list-based implementation are both graded as passing.
+         "expected": {"$match": "any_of", "values": [
+             [None, "S1", "S2"],
+             [None, "S2", "S1"],
+         ]},
+         "description": "Two packages fill two S lockers (either ordering valid)",
+         "tags": ["basic"]},
         {"input": {"ops": ["LockerLocation", "put", "put", "put"],
                     "args": [[[["S", "S1", 2, 2]]], ["p1", 1, 1], ["p2", 1, 1], ["p3", 1, 1]]},
          "expected": [None, "S1", None, None],

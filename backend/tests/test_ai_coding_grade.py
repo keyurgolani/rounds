@@ -22,6 +22,48 @@ def test_parse_handles_extra_prose():
     assert out == {"items": [], "total": 0}
 
 
+def test_parse_includes_evidence_quotes_when_present():
+    raw = """
+    {
+      "items": [
+        {"id":"q1","score":0.9,"evidence":"clean fix","evidence_quotes":[{"file":"app.py","line":12,"quote":"return result"}],"suggestions":[]}
+      ],
+      "total": 0.9
+    }
+    """
+    out = parse_ai_output(raw)
+    assert out["items"][0]["evidence_quotes"] == [{"file": "app.py", "line": 12, "quote": "return result"}]
+
+
+def test_parse_defaults_evidence_quotes_to_empty_list_when_missing():
+    raw = '{"items":[{"id":"q1","score":0.5,"evidence":"ok","suggestions":[]}],"total":0.5}'
+    out = parse_ai_output(raw)
+    assert out["items"][0]["evidence_quotes"] == []
+
+
+def test_parse_drops_malformed_evidence_quotes_entries():
+    raw = """
+    {
+      "items":[
+        {
+          "id":"q1","score":0.9,"evidence":"x","suggestions":[],
+          "evidence_quotes":[
+            {"file":"a.py","line":7,"quote":"good"},
+            {"file":"a.py","line":"NaN","quote":"bad-line"},
+            {"file":"a.py","quote":"no line"},
+            "not even a dict",
+            {"line":3,"quote":"no file"}
+          ]
+        }
+      ],
+      "total":0.9
+    }
+    """
+    out = parse_ai_output(raw)
+    qs = out["items"][0]["evidence_quotes"]
+    assert qs == [{"file": "a.py", "line": 7, "quote": "good"}]
+
+
 def test_build_prompt_includes_rubric_and_files():
     prompt = build_prompt(
         rubric={"items": [{"id": "correctness", "label": "Correctness", "weight": 0.4, "prompt": "Did tests pass?"}]},

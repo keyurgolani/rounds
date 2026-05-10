@@ -722,7 +722,7 @@ function ScoreCard({
           : undefined
       }
       className="card"
-      data-scoring-glow={loading ? 'true' : undefined}
+      data-ai-processing-glow={loading ? 'true' : undefined}
       style={{
         padding: '14px 14px',
         display: 'flex',
@@ -997,8 +997,8 @@ const selectStyle: React.CSSProperties = {
 
 function SpinnerStyles() {
   // Running glow + @property declaration now live in globals.css so
-  // any component can opt in via `data-scoring-glow="true"`. Only
-  // the local pulse keyframe remains here.
+  // any component can opt in via `data-ai-processing-glow="true"`.
+  // Only the local pulse keyframe remains here.
   return (
     <style>{`
       @keyframes rounds-pulse {

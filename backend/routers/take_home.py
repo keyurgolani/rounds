@@ -3,11 +3,13 @@ posture: subprocess sandbox via take_home.runner, server-authoritative
 assignment lookup via the user's PB token, optional AI rubric review."""
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any, Dict, List
+from typing import Any, AsyncIterator, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field, model_validator
 
 from take_home.runner import run_assignment
 from ai_coding.rubric import (
@@ -16,7 +18,8 @@ from ai_coding.rubric import (
     parse_ai_output as _parse_rubric,
 )
 from app.pb_auth import current_user, pb_get, pb_post
-from routers.ai import _active_text_config, _call_complete
+from routers.ai import _active_text_config, _call_complete, _call_stream, _friendly_error, _request_id
+from routers.ai_coding import _resolve_text_cfg
 
 _log = logging.getLogger(__name__)
 
@@ -169,3 +172,75 @@ async def submit_route(
         _log.exception("take-home submit: failed to persist attempt")
 
     return {"harness": harness_out, "rubric_review": rubric_review}
+
+
+_TAKE_HOME_SYSTEM = (
+    "You are a senior pair-programmer helping a candidate during a take-home "
+    "assignment practice session. Be concise; point to specific files and "
+    "lines; prefer asking clarifying questions over guessing. Don't rewrite "
+    "whole files — propose minimal changes the candidate can apply. When "
+    "uncertain, say so."
+)
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class TakeHomeChatRequest(BaseModel):
+    assignment_slug: str = Field(pattern=r"^[a-z0-9-]+$")
+    provider_id: str | None = None
+    model: str | None = None
+    messages: List[ChatMessage]
+    files: Dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _override_must_be_paired(self) -> "TakeHomeChatRequest":
+        if (self.provider_id is None) != (self.model is None):
+            raise ValueError(
+                "provider_id and model must both be supplied or both omitted "
+                "(partial override is rejected to surface client bugs)."
+            )
+        return self
+
+
+@router.post("/chat")
+async def chat_route(
+    body: TakeHomeChatRequest,
+    user: dict = Depends(_auth_user),
+) -> StreamingResponse:
+    a = await _fetch_assignment(user["token"], body.assignment_slug)
+    if (a.get("ai_policy") or "off") == "off":
+        raise HTTPException(status_code=403, detail="AI is disabled for this assignment.")
+    cfg = await _resolve_text_cfg(user, body.provider_id, body.model)
+
+    prompt_md = a.get("prompt_md") or ""
+    system = _TAKE_HOME_SYSTEM
+    system += "\n\nAssignment prompt:\n" + prompt_md[:8000]
+    system += "\n\nProject files (JSON):\n" + json.dumps(body.files)[:60_000]
+
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+
+    async def gen() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in _call_stream(
+                cfg["kind"],
+                cfg["model"],
+                cfg["api_key"],
+                cfg["base_url"] or None,
+                system=system,
+                messages=messages,
+                max_tokens=1200,
+            ):
+                yield f"data: {json.dumps({'delta': chunk})}\n\n".encode("utf-8")
+            yield b"data: {\"done\": true}\n\n"
+        except Exception as err:  # noqa: BLE001
+            rid = _request_id()
+            _log.exception("take-home chat stream failed [rid=%s]", rid)
+            kind_, msg = _friendly_error(err)
+            yield (
+                f"data: {json.dumps({'error': msg, 'error_kind': kind_, 'request_id': rid})}\n\n"
+            ).encode("utf-8")
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
