@@ -78,6 +78,7 @@ const practiceNav: PracticeNavGroup[] = [
     shortLabel: 'AI Coding',
     glyph: AIGlyph,
     children: [
+      { path: '/ai-coding/guide', label: 'Guide' },
       { path: '/ai-coding', label: 'Practice' },
     ],
   },
@@ -87,6 +88,7 @@ const practiceNav: PracticeNavGroup[] = [
     shortLabel: 'Builder',
     glyph: TakeHomeGlyph,
     children: [
+      { path: '/builder/guide', label: 'Guide' },
       { path: '/take-home', label: 'Practice' },
     ],
   },
@@ -713,6 +715,7 @@ function TopBar() {
       id: 'ai-coding',
       label: 'AI Assisted Coding',
       children: [
+        { path: '/ai-coding/guide', label: 'Guide', glyph: AIGlyph },
         { path: '/ai-coding', label: 'Practice', glyph: AIGlyph },
       ],
     },
@@ -720,6 +723,7 @@ function TopBar() {
       id: 'take-home',
       label: 'Builder Problems',
       children: [
+        { path: '/builder/guide', label: 'Guide', glyph: TakeHomeGlyph },
         { path: '/take-home', label: 'Practice', glyph: TakeHomeGlyph },
       ],
     },

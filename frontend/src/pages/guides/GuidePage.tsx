@@ -1,96 +1,52 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import AppHeader from '../../components/shell/AppHeader';
-import BackLink from '../../components/shell/BackLink';
-import type { SectionNavItem } from '../../components/shell/SectionNav';
-import BehavioralGuideExperience from './BehavioralGuideExperience';
-import CodingGuideExperience from './CodingGuideExperience';
-import { GenericGuideLayout } from './GuideShared';
-import { GUIDE_CONFIGS, type GuideRecord, type GuideTrack } from './guideTypes';
-import SystemDesignGuideExperience from './SystemDesignGuideExperience';
+import { Navigate, useParams } from 'react-router-dom';
+import type { GuideTrack } from './guideTypes';
+import { TRACK_CONFIGS } from './guideTypes';
+import CodingGuide from './coding/CodingGuide';
+import SystemDesignGuide from './system-design/SystemDesignGuide';
+import BehavioralGuide from './behavioral/BehavioralGuide';
+import AICodingGuide from './ai-coding/AICodingGuide';
+import BuilderGuide from './builder/BuilderGuide';
 
-export default function GuidePage({ track = 'system-design' }: { track?: GuideTrack }) {
-  const config = GUIDE_CONFIGS[track];
+const slugRedirects: Record<GuideTrack, Record<string, string>> = {
+  coding: {
+    'interview-strategy':   'cheatsheet',
+    'pattern-playbook':     'patterns',
+    'optimization-testing': 'complexity',
+    'practice-plan':        'patterns',
+  },
+  'system-design': {
+    'interview-strategy':       'round-flow',
+    'requirements-estimation':  'capacity-math',
+    'core-components':          'building-blocks',
+    'data-storage':             'building-blocks',
+    'tradeoffs-reliability':    'reliability',
+    'practice-playbook':        'round-flow',
+  },
+  behavioral: {
+    'story-crafting':    'story-bank',
+    'signal-rubric':     'mental-model',
+    'senior-behavioral': 'senior-scope',
+    'practice-playbook': 'repair',
+  },
+  'ai-coding': {},
+  builder: {},
+};
+
+export default function GuidePage({ track = 'system-design' }: { track?: GuideTrack | 'take-home' }) {
   const { slug } = useParams<{ slug: string }>();
-  const [guide, setGuide] = useState<GuideRecord | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
-  useLayoutEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0, left: 0 });
-  }, [track, slug, guide?.title]);
-
-  useEffect(() => {
-    let isActive = true;
-
-    setLoading(true);
-    setError(null);
-    setGuide(null);
-
-    config
-      .fetch<GuideRecord>(slug)
-      .then((record) => {
-        if (isActive) setGuide(record);
-      })
-      .catch((err: unknown) => {
-        if (isActive) setError(err instanceof Error ? err.message : 'Unable to load guide');
-      })
-      .finally(() => {
-        if (isActive) setLoading(false);
-      });
-
-    return () => {
-      isActive = false;
-    };
-  }, [config, slug]);
-
-  const sectionItems = useMemo<SectionNavItem[]>(() => {
-    if (!guide) return [];
-    const items = [
-      ...guide.sections.map((section) => ({ id: section.id, label: section.title })),
-      { id: 'checklists', label: 'Checklists' },
-    ];
-    if (guide.resources.some((category) => category.items.length > 0)) {
-      items.push({ id: 'guide-pages', label: 'Guide pages' });
-    }
-    return items;
-  }, [guide]);
-
-  if (loading) {
-    return (
-      <div className="h-full flex flex-col min-h-0">
-        <AppHeader eyebrow={config.loadingEyebrow} title="Interview Guide" description="Loading the API-backed guide..." />
-        <div className="p-8" style={{ color: 'var(--text-3)' }}>Loading...</div>
-      </div>
-    );
+  if (track === 'take-home') {
+    return <Navigate to="/builder/guide" replace />;
   }
 
-  if (error || !guide) {
-    return (
-      <div className="h-full flex flex-col min-h-0">
-        <AppHeader eyebrow={config.loadingEyebrow} title="Interview Guide" description="The guide could not be loaded." />
-        <div className="p-8">
-          <BackLink to={config.questionsPath} />
-          <div className="card mt-5" style={{ padding: 24, color: 'var(--text-2)' }}>
-            {error ?? 'No guide record was found.'}
-          </div>
-        </div>
-      </div>
-    );
+  if (slug && slugRedirects[track][slug]) {
+    return <Navigate to={`${TRACK_CONFIGS[track].guidePath}/${slugRedirects[track][slug]}`} replace />;
   }
-
-  if (track === 'system-design') {
-    return <SystemDesignGuideExperience guide={guide} config={config} slug={slug} scrollRef={scrollRef} />;
+  switch (track) {
+    case 'coding':        return <CodingGuide />;
+    case 'system-design': return <SystemDesignGuide />;
+    case 'behavioral':    return <BehavioralGuide />;
+    case 'ai-coding':     return <AICodingGuide />;
+    case 'builder':       return <BuilderGuide />;
   }
-
-  if (track === 'coding') {
-    return <CodingGuideExperience guide={guide} config={config} slug={slug} scrollRef={scrollRef} />;
-  }
-
-  if (track === 'behavioral') {
-    return <BehavioralGuideExperience guide={guide} config={config} slug={slug} scrollRef={scrollRef} />;
-  }
-
-  return <GenericGuideLayout guide={guide} config={config} slug={slug} scrollRef={scrollRef} sectionItems={sectionItems} />;
 }

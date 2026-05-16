@@ -1,64 +1,64 @@
 [
   {
     "slug": "master-coding-interview-guide",
-    "title": "Coding Interview Cheat Sheet",
-    "description": "A practical coding-round reference: pattern triggers, complexity targets, debugging checks, and answer scripts you can use during mock interviews.",
+    "title": "Coding Interview Field Guide",
+    "description": "A coding-round field guide built around invariants, data-structure choice, readable Python/JavaScript/Java implementation, and proof under time pressure.",
     "sections": [
       {
         "id": "round-script",
-        "title": "10-Minute Operating Script",
-        "summary": "Use this exact order when you get a new problem.",
+        "title": "Mental Model: Invariant First",
+        "summary": "A coding interview is not a template recall test. It is a state-management test: identify the state, protect the invariant, and code so the state is obvious.",
         "items": [
-          "0:00 Restate: input, output, one example, and goal.",
-          "0:45 Ask: n size, duplicates, negatives, sorted?, mutate?, empty?, return all or one?, tie behavior?",
-          "1:30 Brute force: say the simplest correct approach and O(...) baseline.",
-          "2:30 Find bottleneck: repeated lookup, nested scan, recomputed state, sorting, recursion fanout, or graph revisit.",
-          "3:30 Pick pattern: hash map, two pointers, sliding window, heap, BFS/DFS, DP, backtracking, monotonic stack, union-find.",
-          "4:30 State invariant: 'window contains...', 'heap stores...', 'dp[i] means...', 'visited prevents...'.",
-          "5:00 Code only after interviewer agrees with the plan.",
-          "8:00 Test: sample, empty/singleton, duplicate, boundary, impossible case.",
-          "9:30 Close: final time, space, and one trade-off."
+          "Restate the input, output, and one concrete example before solving.",
+          "Ask only questions that change code: size, sortedness, duplicates, negatives, mutation, tie behavior, and empty input.",
+          "Say the brute force baseline to expose the bottleneck.",
+          "Name the repeated work: lookup, range computation, ordering, graph revisit, or overlapping subproblem.",
+          "Choose the data structure and say exactly what it stores.",
+          "State the invariant in one sentence before implementation.",
+          "Code with explainable variable names that match the invariant.",
+          "Test the invariant with sample, empty/singleton, duplicate, impossible, and boundary cases.",
+          "Close with final complexity and the trade-off the chosen structure introduced."
         ]
       },
       {
         "id": "pattern-triggers",
-        "title": "Pattern Trigger Table",
-        "summary": "Map the prompt wording to the likely technique.",
+        "title": "Cheatsheet: Data Structure Triggers",
+        "summary": "Map prompt pressure to the structure that removes the expensive operation.",
         "items": [
-          "Contains pair/count/frequency/anagram/first unique -> hash map or set.",
-          "Sorted array, find pair/triplet, remove duplicates, partition -> two pointers.",
-          "Longest/shortest subarray or substring with condition -> sliding window.",
-          "Range sum, subarray equals k, immutable queries -> prefix sum plus map.",
+          "Repeated lookup, complements, counts, anagrams, first unique -> map or set.",
+          "Sorted input with pair/triplet/partition pressure -> two pointers.",
+          "Longest or shortest contiguous range with a condition -> sliding window.",
+          "Range totals, subarray equals k, immutable queries -> prefix sum plus map.",
           "Next greater/smaller, histogram, temperatures -> monotonic stack.",
-          "Top k, merge k lists, running median, scheduling by priority -> heap.",
-          "Cycle or middle in linked list -> fast/slow pointers.",
-          "Shortest path in unweighted graph/grid -> BFS.",
-          "All paths/components/tree recursion -> DFS with visited or parent guard.",
-          "Dependencies, course schedule, build order -> topological sort.",
-          "Groups/connectivity/dynamic components -> union-find.",
-          "Min/max/count ways with overlapping choices -> dynamic programming.",
-          "All subsets/permutations/combinations -> backtracking with choose/explore/unchoose."
+          "Top k, merge k lists, running median, scheduling priority -> heap.",
+          "Linked-list cycle, middle, or intersection -> fast/slow pointers.",
+          "Shortest unweighted path, nearest cell, level spread -> BFS.",
+          "Components, all paths, tree aggregation -> DFS with visited or parent guard.",
+          "Dependencies and build order -> topological sort.",
+          "Dynamic connectivity -> union-find.",
+          "Count/min/max over repeated choices -> dynamic programming.",
+          "All combinations/permutations/subsets -> backtracking with choose/explore/unchoose."
         ]
       },
       {
         "id": "complexity-targets",
-        "title": "Complexity Targets",
-        "summary": "Use n to reject approaches before coding.",
+        "title": "Cheatsheet: Complexity and Proof",
+        "summary": "Use constraints to reject bad plans and use the invariant to prove the good one.",
         "items": [
-          "n <= 20: exponential/backtracking can be acceptable.",
-          "n <= 100: O(n^3) may pass if constants are small.",
-          "n <= 1,000: O(n^2) is usually the ceiling.",
+          "n <= 20: exponential search may be acceptable if pruning is clear.",
+          "n <= 1,000: O(n^2) is often the ceiling.",
           "n <= 100,000: target O(n log n) or O(n).",
-          "n >= 1,000,000: target O(n), O(log n), or streaming.",
-          "Graph: O(V + E) is the default target for traversal.",
-          "DP state count times transition count is the real runtime.",
-          "Sorting costs O(n log n); only sort if ordering unlocks simpler logic."
+          "n >= 1,000,000: target O(n), O(log n), or streaming state.",
+          "Graphs: traversal should usually be O(V + E).",
+          "DP runtime is number of states times transition cost.",
+          "Sorting costs O(n log n); only pay it if ordering unlocks a simpler invariant.",
+          "Proof language: each item enters/leaves once, each edge is visited once, heap size stays k, or each memo state solves once."
         ]
       }
     ],
     "checklists": [
-      {"title":"Clarify Before Coding","items":["n and constraints", "duplicates", "negative values", "sortedness", "empty input", "mutation allowed", "tie-breaking", "return index/value", "all answers or one answer"]},
-      {"title":"Bug Sweep","items":["off-by-one", "empty window", "stale max/min", "visited marked too late", "heap comparator reversed", "integer overflow", "wrong base case", "forgot final window", "duplicate result"]}
+      {"title":"Plan Before Coding","items":["input/output/example", "constraints", "baseline", "bottleneck", "data structure", "invariant", "complexity target"]},
+      {"title":"Bug Sweep","items":["off-by-one", "empty window", "stale state", "visited marked too late", "heap comparator reversed", "wrong base case", "duplicate handling", "final return"]}
     ],
     "resources": [
       {"category":"Guide Pages","items":[
