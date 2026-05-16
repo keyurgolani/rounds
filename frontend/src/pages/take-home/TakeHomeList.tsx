@@ -154,8 +154,8 @@ export default function TakeHomeList() {
   return (
     <div className="h-full flex flex-col min-h-0">
       <AppHeader
-        eyebrow="Track 05 · Builder Problems"
-        title="Builder Problems"
+        eyebrow="Track 05 · Real World Problems"
+        title="Real World Problems"
         description="Project-shaped prompts you ship end-to-end. Each one runs against a custom-built grading harness, then a rubric review reads your code and design notes — exactly the read a hiring team gives a take-home."
         chromeActions={
           <PracticeStatusFilter value={statusFilter} onChange={setStatusFilter} />

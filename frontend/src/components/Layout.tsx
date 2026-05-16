@@ -84,8 +84,8 @@ const practiceNav: PracticeNavGroup[] = [
   },
   {
     basePath: '/take-home',
-    label: 'Builder Problems',
-    shortLabel: 'Builder',
+    label: 'Real World Problems',
+    shortLabel: 'Real World',
     glyph: TakeHomeGlyph,
     children: [
       { path: '/builder/guide', label: 'Guide' },
@@ -721,7 +721,7 @@ function TopBar() {
     },
     {
       id: 'take-home',
-      label: 'Builder Problems',
+      label: 'Real World Problems',
       children: [
         { path: '/builder/guide', label: 'Guide', glyph: TakeHomeGlyph },
         { path: '/take-home', label: 'Practice', glyph: TakeHomeGlyph },

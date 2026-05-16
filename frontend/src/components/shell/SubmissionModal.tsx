@@ -10,7 +10,7 @@ type Props = {
 };
 
 /**
- * Centered modal used by the AI Coding and Builder Problems detail pages
+ * Centered modal used by the AI Coding and Real World Problems detail pages
  * to surface a submission report. Closes on backdrop click or Escape.
  * The parent owns whether the modal is open and what the last result was;
  * this component is only chrome.

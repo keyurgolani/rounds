@@ -313,7 +313,7 @@ export default function TakeHomeDetail() {
             )}
           </span>
         }
-        title={assignment?.title ?? 'Builder Problem'}
+        title={assignment?.title ?? 'Real World Problem'}
         description={
           assignment?.prompt_md ? toLeadSummary(assignment.prompt_md) : undefined
         }
@@ -510,7 +510,7 @@ export default function TakeHomeDetail() {
       <SubmissionModal
         open={reportOpen}
         onClose={() => setReportOpen(false)}
-        title={`Submission · ${assignment?.title ?? 'Builder Problem'}`}
+        title={`Submission · ${assignment?.title ?? 'Real World Problem'}`}
         subtitle={
           report
             ? `Harness ${Math.round(report.harness.score * 100)}/100 · Rubric ${report.rubric_review.skipped ? '—' : Math.round(report.rubric_review.total * 100) + '/100'}`
