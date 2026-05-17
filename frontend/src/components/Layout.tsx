@@ -39,69 +39,16 @@ type NavDef = {
   comingSoon?: boolean;
 };
 
-type PracticeNavGroup = {
-  basePath: string;
-  label: string;
-  shortLabel: string;
-  glyph: (p: { size?: number }) => ReactNode;
-  children: Array<Pick<NavDef, 'path' | 'label' | 'comingSoon'>>;
-};
-
 const primaryNav: NavDef[] = [
   { path: '/dashboard', label: 'Today', glyph: DashGlyph },
 ];
 
-const practiceNav: PracticeNavGroup[] = [
-  {
-    basePath: '/system-design',
-    label: 'System Design',
-    shortLabel: 'System',
-    glyph: SystemGlyph,
-    children: [
-      { path: '/system-design/guide', label: 'Guide' },
-      { path: '/system-design/questions', label: 'Practice' },
-    ],
-  },
-  {
-    basePath: '/coding',
-    label: 'Coding',
-    shortLabel: 'Coding',
-    glyph: CodeGlyph,
-    children: [
-      { path: '/coding/guide', label: 'Guide' },
-      { path: '/coding/questions', label: 'Practice' },
-    ],
-  },
-  {
-    basePath: '/ai-coding',
-    label: 'AI Assisted Coding',
-    shortLabel: 'AI Coding',
-    glyph: AIGlyph,
-    children: [
-      { path: '/ai-coding/guide', label: 'Guide' },
-      { path: '/ai-coding', label: 'Practice' },
-    ],
-  },
-  {
-    basePath: '/take-home',
-    label: 'Real World Problems',
-    shortLabel: 'Real World',
-    glyph: TakeHomeGlyph,
-    children: [
-      { path: '/builder/guide', label: 'Guide' },
-      { path: '/take-home', label: 'Practice' },
-    ],
-  },
-  {
-    basePath: '/behavioral',
-    label: 'Behavioral',
-    shortLabel: 'Behavioral',
-    glyph: BehaviorGlyph,
-    children: [
-      { path: '/behavioral/guide', label: 'Guide' },
-      { path: '/behavioral/questions', label: 'Practice' },
-    ],
-  },
+const practiceNav: NavDef[] = [
+  { path: '/system-design/guide', label: 'System Design', glyph: SystemGlyph },
+  { path: '/coding/guide', label: 'Coding', glyph: CodeGlyph },
+  { path: '/ai-coding/guide', label: 'AI Assisted Coding', glyph: AIGlyph },
+  { path: '/builder/guide', label: 'Real World Problems', glyph: TakeHomeGlyph },
+  { path: '/behavioral/guide', label: 'Behavioral', glyph: BehaviorGlyph },
 ];
 
 const trackingNav: NavDef[] = [
@@ -189,7 +136,7 @@ export default function Layout() {
                 />
               )}
               {practiceNav.map((item) => (
-                <PracticeGroup key={item.basePath} item={item} collapsed={collapsed} currentPath={location.pathname} />
+                <NavRow key={item.path} item={item} collapsed={collapsed} />
               ))}
 
               <div style={{ flex: 1 }} />
@@ -373,110 +320,6 @@ function NavRow({ item, collapsed }: { item: NavDef; collapsed: boolean }) {
   );
 }
 
-function PracticeGroup({
-  item,
-  collapsed,
-  currentPath,
-}: {
-  item: PracticeNavGroup;
-  collapsed: boolean;
-  currentPath: string;
-}) {
-  const Glyph = item.glyph;
-  const active = currentPath === item.basePath || currentPath.startsWith(`${item.basePath}/`);
-
-  if (collapsed) {
-    return (
-      <NavRow
-        item={{ path: item.children[0].path, label: item.label, glyph: item.glyph, comingSoon: item.children[0].comingSoon }}
-        collapsed
-      />
-    );
-  }
-
-  return (
-    <div className="grid gap-0.5" style={{ marginTop: 2 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '9px 12px 5px',
-          color: active ? 'var(--text)' : 'var(--text-3)',
-          fontSize: 13,
-          fontWeight: active ? 500 : 400,
-        }}
-      >
-        <span
-          className="inline-flex"
-          style={{
-            width: 18,
-            height: 18,
-            color: active ? 'var(--accent)' : 'var(--text-3)',
-          }}
-        >
-          <Glyph />
-        </span>
-        <span>{item.label}</span>
-      </div>
-      <div className="grid gap-0.5" style={{ marginLeft: 30 }}>
-        {item.children.map((child) => (
-          <NavLink
-            key={child.path}
-            to={child.path}
-            className="relative"
-            style={({ isActive }) => ({
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '7px 10px',
-              borderRadius: 'var(--radius)',
-              background: isActive ? 'var(--bg-elev)' : 'transparent',
-              boxShadow: isActive ? 'inset 0 0 0 1px var(--border)' : 'none',
-              color: isActive ? 'var(--text)' : 'var(--text-4)',
-              fontSize: 12.5,
-              fontWeight: isActive ? 500 : 400,
-              textDecoration: 'none',
-              transition: 'background 120ms, color 120ms',
-            })}
-          >
-            {({ isActive }) => (
-              <>
-                <span
-                  style={{
-                    width: 5,
-                    height: 5,
-                    borderRadius: 999,
-                    background: isActive ? 'var(--accent)' : 'var(--border-strong)',
-                    flex: '0 0 auto',
-                  }}
-                />
-                <span>{child.label}</span>
-                {child.comingSoon && (
-                  <span
-                    className="mono"
-                    style={{
-                      marginLeft: 'auto',
-                      padding: '1px 6px',
-                      borderRadius: 999,
-                      background: 'var(--bg-sunken)',
-                      color: 'var(--text-4)',
-                      fontSize: 9,
-                      letterSpacing: '0.1em',
-                      boxShadow: 'inset 0 0 0 1px var(--border)',
-                    }}
-                  >
-                    SOON
-                  </span>
-                )}
-              </>
-            )}
-          </NavLink>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function UserMenu({ collapsed }: { collapsed: boolean }) {
   const { user, logout } = useAuth();
@@ -659,7 +502,6 @@ function TopBar() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const location = useLocation();
   const { modifierSymbol } = usePlatform();
 
   useEffect(() => {
@@ -681,60 +523,13 @@ function TopBar() {
     navigate(path);
   }
 
-  type CategoryDef = {
-    id: string;
-    label: string;
-    children: Array<{
-      path: string;
-      label: string;
-      group?: string;
-      glyph?: (p: { size?: number }) => ReactNode;
-      comingSoon?: boolean;
-    }>;
-  };
-
-  const categories: Array<CategoryDef | { path: string; label: string }> = [
+  const categories: Array<{ path: string; label: string }> = [
     { path: '/dashboard', label: 'Today' },
-    {
-      id: 'system-design',
-      label: 'System Design',
-      children: [
-        { path: '/system-design/guide', label: 'Guide', glyph: SystemGlyph },
-        { path: '/system-design/questions', label: 'Practice', glyph: SystemGlyph },
-      ],
-    },
-    {
-      id: 'coding',
-      label: 'Coding',
-      children: [
-        { path: '/coding/guide', label: 'Guide', glyph: CodeGlyph },
-        { path: '/coding/questions', label: 'Practice', glyph: CodeGlyph },
-      ],
-    },
-    {
-      id: 'ai-coding',
-      label: 'AI Assisted Coding',
-      children: [
-        { path: '/ai-coding/guide', label: 'Guide', glyph: AIGlyph },
-        { path: '/ai-coding', label: 'Practice', glyph: AIGlyph },
-      ],
-    },
-    {
-      id: 'take-home',
-      label: 'Real World Problems',
-      children: [
-        { path: '/builder/guide', label: 'Guide', glyph: TakeHomeGlyph },
-        { path: '/take-home', label: 'Practice', glyph: TakeHomeGlyph },
-      ],
-    },
-    {
-      id: 'behavioral',
-      label: 'Behavioral',
-      children: [
-        { path: '/behavioral/guide', label: 'Guide', glyph: BehaviorGlyph },
-        { path: '/behavioral/questions', label: 'Practice', glyph: BehaviorGlyph },
-      ],
-    },
+    { path: '/system-design/guide', label: 'System Design' },
+    { path: '/coding/guide', label: 'Coding' },
+    { path: '/ai-coding/guide', label: 'AI Assisted Coding' },
+    { path: '/builder/guide', label: 'Real World Problems' },
+    { path: '/behavioral/guide', label: 'Behavioral' },
     { path: '/applications', label: 'Applications' },
     { path: '/interviews', label: 'Interview' },
     { path: '/todos', label: 'Todo' },
@@ -753,51 +548,43 @@ function TopBar() {
         <RoundsLockup markSize={22} textSize={22} />
       </Link>
       <nav className="flex gap-1 ml-3">
-        {categories.map((cat) => {
-          if ('path' in cat && !('children' in cat)) {
-            return (
-              <NavLink
-                key={cat.path}
-                to={cat.path}
-                end={cat.path === '/dashboard'}
-                className="relative whitespace-nowrap"
-                style={({ isActive }) => ({
-                  padding: '8px 12px',
-                  border: 0,
-                  background: 'transparent',
-                  color: isActive ? 'var(--text)' : 'var(--text-3)',
-                  fontSize: 13,
-                  fontWeight: isActive ? 500 : 400,
-                  textDecoration: 'none',
-                  cursor: 'pointer',
-                })}
-              >
-                {({ isActive }) => (
-                  <>
-                    {cat.label}
-                    {isActive && (
-                      <span
-                        style={{
-                          position: 'absolute',
-                          left: 12,
-                          right: 12,
-                          bottom: -19,
-                          height: 2,
-                          background: 'var(--accent)',
-                          borderRadius: 1,
-                        }}
-                      />
-                    )}
-                  </>
+        {categories.map((cat) => (
+          <NavLink
+            key={cat.path}
+            to={cat.path}
+            end={cat.path === '/dashboard'}
+            className="relative whitespace-nowrap"
+            style={({ isActive }) => ({
+              padding: '8px 12px',
+              border: 0,
+              background: 'transparent',
+              color: isActive ? 'var(--text)' : 'var(--text-3)',
+              fontSize: 13,
+              fontWeight: isActive ? 500 : 400,
+              textDecoration: 'none',
+              cursor: 'pointer',
+            })}
+          >
+            {({ isActive }) => (
+              <>
+                {cat.label}
+                {isActive && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      left: 12,
+                      right: 12,
+                      bottom: -19,
+                      height: 2,
+                      background: 'var(--accent)',
+                      borderRadius: 1,
+                    }}
+                  />
                 )}
-              </NavLink>
-            );
-          }
-
-          const c = cat as CategoryDef;
-          const active = c.children.some((ch) => location.pathname === ch.path || location.pathname.startsWith(ch.path + '/'));
-          return <TopBarDropdown key={c.id} category={c} active={active} onNavigate={go} />;
-        })}
+              </>
+            )}
+          </NavLink>
+        ))}
       </nav>
       <div className="ml-auto flex items-center gap-3">
         <CampaignPill compact align="right" showRole={false} />
@@ -889,177 +676,3 @@ function TopBar() {
   );
 }
 
-function TopBarDropdown({
-  category,
-  active,
-  onNavigate,
-}: {
-  category: {
-    id: string;
-    label: string;
-    children: Array<{
-      path: string;
-      label: string;
-      group?: string;
-      glyph?: (p: { size?: number }) => ReactNode;
-      comingSoon?: boolean;
-    }>;
-  };
-  active: boolean;
-  onNavigate: (path: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
-
-  function scheduleClose() {
-    timeoutRef.current = setTimeout(() => setOpen(false), 150);
-  }
-
-  function cancelClose() {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-  }
-
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (!triggerRef.current?.contains(e.target as Node) && !panelRef.current?.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    if (open) {
-      document.addEventListener('mousedown', onDoc);
-      return () => document.removeEventListener('mousedown', onDoc);
-    }
-  }, [open]);
-
-  let lastGroup = '';
-
-  return (
-    <div
-      onMouseEnter={cancelClose}
-      onMouseLeave={scheduleClose}
-      style={{ position: 'relative' }}
-    >
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        onMouseEnter={() => { cancelClose(); setOpen(true); }}
-        className="relative whitespace-nowrap flex items-center gap-1"
-        style={{
-          padding: '8px 12px',
-          border: 0,
-          background: open ? 'var(--bg-sunken)' : 'transparent',
-          color: active || open ? 'var(--text)' : 'var(--text-3)',
-          fontSize: 13,
-          fontWeight: active ? 500 : 400,
-          cursor: 'pointer',
-          borderRadius: 'var(--radius)',
-        }}
-      >
-        {category.label}
-        <ChevronDown
-          size={11}
-          strokeWidth={1.8}
-          style={{
-            marginTop: 1,
-            transform: open ? 'rotate(180deg)' : undefined,
-            transition: 'transform 120ms',
-          }}
-        />
-        {active && !open && (
-          <span
-            style={{
-              position: 'absolute',
-              left: 12,
-              right: 12,
-              bottom: -19,
-              height: 2,
-              background: 'var(--accent)',
-              borderRadius: 1,
-            }}
-          />
-        )}
-      </button>
-
-      {open && (
-        <div
-          ref={panelRef}
-          onMouseEnter={cancelClose}
-          className="card"
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            left: -8,
-            minWidth: 220,
-            boxShadow: 'var(--shadow-elev)',
-            padding: 4,
-            zIndex: 50,
-          }}
-        >
-          {category.children.map((child, i) => {
-            const showGroup = child.group && child.group !== lastGroup;
-            if (child.group) lastGroup = child.group;
-            const Glyph = child.glyph;
-            return (
-              <div key={child.path}>
-                {showGroup && i > 0 && (
-                  <div style={{ height: 1, margin: '4px 8px', background: 'var(--border)' }} />
-                )}
-                {showGroup && (
-                  <div
-                    className="flex items-center gap-2 px-3 pt-2 pb-1"
-                    style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.04em' }}
-                  >
-                    {Glyph && <span className="inline-flex" style={{ width: 14, height: 14 }}><Glyph size={14} /></span>}
-                    {child.group}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => { setOpen(false); onNavigate(child.path); }}
-                  className="flex items-center gap-2.5 w-full text-left"
-                  style={{
-                    padding: '7px 10px',
-                    border: 0,
-                    background: 'transparent',
-                    borderRadius: 6,
-                    fontSize: 12.5,
-                    color: child.comingSoon ? 'var(--text-4)' : 'var(--text-2)',
-                    cursor: child.comingSoon ? 'default' : 'pointer',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!child.comingSoon) e.currentTarget.style.background = 'var(--bg-sunken)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                  }}
-                >
-                  {child.label}
-                  {child.comingSoon && (
-                    <span
-                      className="mono"
-                      style={{
-                        marginLeft: 'auto',
-                        padding: '1px 6px',
-                        borderRadius: 999,
-                        background: 'var(--bg-sunken)',
-                        color: 'var(--text-4)',
-                        fontSize: 9,
-                        letterSpacing: '0.1em',
-                        boxShadow: 'inset 0 0 0 1px var(--border)',
-                      }}
-                    >
-                      SOON
-                    </span>
-                  )}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}

@@ -1,6 +1,8 @@
 import type { ReactNode, RefObject } from 'react';
 import AppHeader from '../../../components/shell/AppHeader';
 import GuideNav, { type GuideNavGroup } from './GuideNav';
+import StudyPracticeBar from './StudyPracticeBar';
+import type { GuideTrack } from '../guideTypes';
 
 type Props = {
   eyebrow: string;
@@ -12,6 +14,13 @@ type Props = {
   children: ReactNode;
 };
 
+/** '/coding/guide' -> 'coding'. Mirrors TRACK_CONFIGS keys. */
+function trackFromBasePath(basePath: string): GuideTrack | null {
+  const slug = basePath.replace(/^\//, '').replace(/\/guide$/, '');
+  const known: GuideTrack[] = ['system-design', 'coding', 'behavioral', 'ai-coding', 'builder'];
+  return (known as string[]).includes(slug) ? (slug as GuideTrack) : null;
+}
+
 export default function StudyShell({
   eyebrow,
   title,
@@ -21,6 +30,7 @@ export default function StudyShell({
   scrollRef,
   children,
 }: Props) {
+  const track = trackFromBasePath(trackBasePath);
   return (
     <div className="h-full flex flex-col min-h-0">
       <AppHeader eyebrow={eyebrow} title={title} description={description} />
@@ -50,10 +60,9 @@ export default function StudyShell({
           <div
             ref={scrollRef}
             role="main"
-            className="grid min-h-0 overflow-y-auto"
+            className="flex flex-col min-h-0 overflow-y-auto"
             style={{
               minWidth: 0,
-              alignContent: 'start',
               gap: 'var(--gap-lg)',
               paddingRight: 2, // scrollbar gutter
               paddingBottom: 'var(--gap-sm)',
@@ -67,6 +76,7 @@ export default function StudyShell({
               />
             </div>
             {children}
+            {track && <StudyPracticeBar track={track} />}
           </div>
         </div>
       </div>

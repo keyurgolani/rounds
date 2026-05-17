@@ -323,3 +323,21 @@ export type AICodingModel = {
 export async function listAICodingModels(): Promise<AICodingModel[]> {
   return runnerJSON<AICodingModel[]>('/api/ai-coding/models', { auth: 'required' });
 }
+
+/**
+ * All attempt rows belonging to the current user, optionally scoped to a campaign.
+ * Used by the study-page progress strip to show "X rounds started · Y graded".
+ */
+export async function listMyAttempts(campaignId?: string): Promise<AttemptRow[]> {
+  const userId = pb.authStore.model?.id;
+  if (!userId) return [];
+  const safeUser = userId.replace(/"/g, '');
+  const filter = campaignId
+    ? `user="${safeUser}" && campaign="${campaignId.replace(/"/g, '')}"`
+    : `user="${safeUser}"`;
+  try {
+    return await pb.collection('ai_coding_attempts').getFullList<AttemptRow>({ filter });
+  } catch {
+    return [];
+  }
+}

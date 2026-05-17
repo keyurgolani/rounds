@@ -297,3 +297,23 @@ export async function upsertDraft(input: {
     }
   }
 }
+
+/**
+ * All take-home attempt rows belonging to the current user, optionally scoped
+ * to a campaign. Used by the Real-World study-page progress strip.
+ */
+export async function listMyTakeHomeAttempts(
+  campaignId?: string,
+): Promise<TakeHomeAttemptRow[]> {
+  const userId = pb.authStore.model?.id;
+  if (!userId) return [];
+  const safeUser = userId.replace(/"/g, '');
+  const filter = campaignId
+    ? `user="${safeUser}" && campaign="${campaignId.replace(/"/g, '')}"`
+    : `user="${safeUser}"`;
+  try {
+    return await pb.collection('take_home_attempts').getFullList<TakeHomeAttemptRow>({ filter });
+  } catch {
+    return [];
+  }
+}

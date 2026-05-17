@@ -71,6 +71,7 @@ export default function App() {
         <Route path="ai-coding/guide/:slug" element={<GuidePage track="ai-coding" />} />
         <Route path="builder/guide" element={<GuidePage track="builder" />} />
         <Route path="builder/guide/:slug" element={<GuidePage track="builder" />} />
+        <Route path="builder" element={<Navigate to="/take-home" replace />} />
         <Route path="take-home/guide" element={<GuidePage track="take-home" />} />
         <Route path="ai-coding" element={<AICodingList />} />
         <Route path="ai-coding/round/:slug" element={<AICodingDetail />} />

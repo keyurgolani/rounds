@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { RoundsLockup } from '../components/Logo';
 import { oauthConfig } from '../auth/oauthConfig';
@@ -134,12 +134,20 @@ const MARKETING_FEATURES = [
     body: 'Monaco editor, persistent drafts, sandboxed execution against public and hidden tests.',
   },
   {
-    title: 'Anecdotes that stay reusable',
-    body: 'Write STAR stories once, link them to the behavioral questions they answer.',
+    title: 'AI-assisted coding',
+    body: 'Chat-graded rounds across five flavors — audit, drive, debug-refactor, prompt-spec, and mini-app.',
+  },
+  {
+    title: 'Real-world problems',
+    body: 'Multi-day take-home builds graded against a written rubric.',
+  },
+  {
+    title: 'Behavioral, with reusable anecdotes',
+    body: 'Write STAR stories once, link them to every question they answer.',
   },
   {
     title: 'Pipeline, not spreadsheets',
-    body: 'Track every application, round, interviewer, and result in the same surface as your prep.',
+    body: 'Companies, rounds, interviewers, and a resume studio in the same workspace as your prep.',
   },
 ];
 
@@ -174,8 +182,8 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
             }}
           >
             Rounds is an editorial home for the entire interview cycle — one practice surface for
-            System Design, Coding, and Behavioral, plus a tracker for the companies you're pursuing
-            and the rounds you're prepping for.
+            System Design, Coding, AI-Assisted Coding, Real-World Problems, and Behavioral, plus a
+            tracker for the companies, rounds, and resumes you're prepping with.
           </p>
 
           <ul
@@ -219,7 +227,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
           className="mono"
           style={{ fontSize: 10.5, color: 'var(--text-4)', letterSpacing: '0.14em' }}
         >
-          SYSTEM DESIGN · CODING · BEHAVIORAL
+          SYSTEM DESIGN · CODING · AI · REAL WORLD · BEHAVIORAL
         </div>
       </aside>
 
@@ -250,8 +258,8 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
               maxWidth: 380,
             }}
           >
-            One calm workspace for System Design, Coding, and Behavioral practice — plus the
-            pipeline of companies and rounds you're running.
+            One calm workspace for System Design, Coding, AI-Assisted, Real-World, and Behavioral
+            practice — plus the pipeline of companies and rounds you're running.
           </p>
           {children}
         </div>
@@ -301,27 +309,59 @@ export function Field({
   required?: boolean;
   placeholder?: string;
 }) {
+  const [shown, setShown] = useState(false);
+  const isPassword = type === 'password';
+  const effectiveType = isPassword ? (shown ? 'text' : 'password') : type;
+
   return (
     <label className="flex flex-col gap-1">
       <span className="eyebrow">{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        autoComplete={autoComplete}
-        required={required}
-        placeholder={placeholder}
-        style={{
-          padding: '11px 12px',
-          background: 'var(--bg-elev)',
-          boxShadow: 'inset 0 0 0 1px var(--border-strong)',
-          borderRadius: 'var(--radius)',
-          border: 0,
-          fontSize: 14,
-          color: 'var(--text)',
-          outline: 'none',
-        }}
-      />
+      <div style={{ position: 'relative' }}>
+        <input
+          type={effectiveType}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete={autoComplete}
+          required={required}
+          placeholder={placeholder}
+          style={{
+            width: '100%',
+            padding: isPassword ? '11px 40px 11px 12px' : '11px 12px',
+            background: 'var(--bg-elev)',
+            boxShadow: 'inset 0 0 0 1px var(--border-strong)',
+            borderRadius: 'var(--radius)',
+            border: 0,
+            fontSize: 14,
+            color: 'var(--text)',
+            outline: 'none',
+          }}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            aria-label={shown ? 'Hide password' : 'Show password'}
+            aria-pressed={shown}
+            onClick={() => setShown((v) => !v)}
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              right: 8,
+              width: 28,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'transparent',
+              border: 0,
+              color: 'var(--text-3)',
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          >
+            {shown ? <EyeOff size={16} strokeWidth={1.7} /> : <Eye size={16} strokeWidth={1.7} />}
+          </button>
+        )}
+      </div>
     </label>
   );
 }
