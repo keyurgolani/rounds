@@ -92,7 +92,7 @@ export default function AtRiskSection() {
   if (!loading && total === 0) return null;
 
   return (
-    <section className="fade-up" style={{ marginTop: 44 }}>
+    <section className="fade-up">
       <div
         className="flex items-center gap-2 mb-3"
         style={{ color: 'var(--plum)' }}
@@ -112,8 +112,8 @@ export default function AtRiskSection() {
         </span>
       </div>
       <div
-        className="grid gap-3"
-        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
+        className="grid"
+        style={{ gap: 'var(--gap-sm)', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
       >
         {overdueTodos.length > 0 && (
           <RiskCard
@@ -194,7 +194,7 @@ function RiskCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="card p-5 flex flex-col gap-2">
+    <div className="card flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span
           className="flex items-center gap-1.5"

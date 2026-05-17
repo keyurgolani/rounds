@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, BriefcaseBusiness, CalendarClock, CheckCircle2, ClipboardList, Command, FolderKanban, ListTodo, Plus, Target } from 'lucide-react';
+import { ArrowRight, BriefcaseBusiness, CalendarClock, Command, FolderKanban, Plus } from 'lucide-react';
 import { listApplications, listRounds } from '../applications/api';
 import {
   listBehavioralCategories,
@@ -76,7 +76,7 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { currentId, currentCampaign, campaigns } = useCampaign();
   const cc = useCommandCenter();
-  useStatusMapVersion();
+  const statusVersion = useStatusMapVersion();
 
   const [sys, setSys] = useState<SQ[]>([]);
   const [cod, setCod] = useState<CQ[]>([]);
@@ -118,9 +118,9 @@ export default function Dashboard() {
     };
   }, [load]);
 
-  const sysStat = useMemo(() => sys.map((q) => ({ ...q, _s: effectiveStatus('system', q.id) })), [sys]);
-  const codStat = useMemo(() => cod.map((q) => ({ ...q, _s: effectiveStatus('coding', q.id) })), [cod]);
-  const behStat = useMemo(() => beh.map((q) => ({ ...q, _s: effectiveStatus('behavioral', q.id) })), [beh]);
+  const sysStat = useMemo(() => sys.map((q) => ({ ...q, _s: effectiveStatus('system', q.id) })), [sys, statusVersion]);
+  const codStat = useMemo(() => cod.map((q) => ({ ...q, _s: effectiveStatus('coding', q.id) })), [cod, statusVersion]);
+  const behStat = useMemo(() => beh.map((q) => ({ ...q, _s: effectiveStatus('behavioral', q.id) })), [beh, statusVersion]);
   const all = [...sysStat, ...codStat, ...behStat];
   const totalQs = all.length;
   const mastered = countBy(all, 'mastered');
@@ -171,7 +171,7 @@ export default function Dashboard() {
         compactActions={<StreakCard compact />}
       />
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-5 sm:px-8 lg:px-12 pt-6 pb-10 grid gap-8">
+        <div style={{ padding: 'var(--page-pad-y) var(--page-pad-x)', display: 'grid', gap: 'var(--gap-lg)' }}>
           <CampaignStrip
             label={campaignLabel}
             activeApps={activeApps.length}
@@ -183,42 +183,44 @@ export default function Dashboard() {
             onCampaigns={() => cc.openView('campaigns')}
           />
 
-          <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)] items-stretch">
+          <section className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] items-stretch" style={{ gap: 'var(--gap-md)' }}>
             <TodayQueue nextRound={nextRound} nextRoundApp={nextRoundApp} practices={nextPractice} onScheduleInterview={() => cc.openView('schedule-interview')} />
             <PipelinePulse apps={apps} activeApps={activeApps} interviewingApps={interviewingApps} upcomingRounds={upcomingRounds} onAddApplication={() => cc.openView('add-application')} />
           </section>
 
           <AtRiskSection />
 
-          <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] items-start">
-            <div className="grid gap-5">
-              <TrackReadiness
-                tracks={[
-                  { name: 'Coding', to: '/coding/guide', total: codStat.length, mastered: countBy(codStat, 'mastered'), inProgress: countBy(codStat, 'in-progress'), color: 'var(--forest)' },
-                  { name: 'System Design', to: '/system-design/guide', total: sysStat.length, mastered: countBy(sysStat, 'mastered'), inProgress: countBy(sysStat, 'in-progress'), color: 'var(--terracotta)' },
-                  { name: 'Behavioral', to: '/behavioral/guide', total: behStat.length, mastered: countBy(behStat, 'mastered'), inProgress: countBy(behStat, 'in-progress'), color: 'var(--plum)' },
-                ]}
-              />
-              <RecentApplications apps={apps.slice(0, 6)} onAddApplication={() => cc.openView('add-application')} />
-              <RecentAnecdotes anecdotes={anecdotes.slice(0, 4)} cats={cats} />
-            </div>
-            <div className="grid gap-5">
-              <TodosWidget />
-              <UpcomingInterviews rounds={upcomingRounds.slice(0, 5)} apps={apps} onScheduleInterview={() => cc.openView('schedule-interview')} />
-            </div>
+          <section style={referenceGrid}>
+            <TrackReadiness
+              tracks={[
+                { name: 'Coding', to: '/coding/guide', total: codStat.length, mastered: countBy(codStat, 'mastered'), inProgress: countBy(codStat, 'in-progress'), color: 'var(--forest)' },
+                { name: 'System Design', to: '/system-design/guide', total: sysStat.length, mastered: countBy(sysStat, 'mastered'), inProgress: countBy(sysStat, 'in-progress'), color: 'var(--terracotta)' },
+                { name: 'Behavioral', to: '/behavioral/guide', total: behStat.length, mastered: countBy(behStat, 'mastered'), inProgress: countBy(behStat, 'in-progress'), color: 'var(--plum)' },
+              ]}
+            />
+            <RecentApplications apps={apps.slice(0, 6)} onAddApplication={() => cc.openView('add-application')} />
+            <UpcomingInterviews rounds={upcomingRounds.slice(0, 5)} apps={apps} onScheduleInterview={() => cc.openView('schedule-interview')} />
+            <TodosWidget />
           </section>
 
-          <div style={{ height: 36 }} />
+          <RecentAnecdotes anecdotes={anecdotes.slice(0, 8)} cats={cats} />
         </div>
       </div>
     </div>
   );
 }
 
+const referenceGrid: React.CSSProperties = {
+  display: 'grid',
+  gap: 'var(--gap-md)',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+  alignItems: 'start',
+};
+
 function CampaignStrip({ label, activeApps, upcomingRounds, mastered, total, onAddApplication, onScheduleInterview, onCampaigns }: { label: string; activeApps: number; upcomingRounds: number; mastered: number; total: number; onAddApplication: () => void; onScheduleInterview: () => void; onCampaigns: () => void }) {
   return (
-    <section className="card p-4 sm:p-5 fade-up" style={{ background: 'linear-gradient(135deg, var(--bg-elev), var(--bg))' }}>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+    <section className="card fade-up" style={{ background: 'linear-gradient(135deg, var(--bg-elev), var(--bg))' }}>
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center" style={{ gap: 'var(--gap-sm)' }}>
         <div>
           <div className="eyebrow mb-2">Campaign command</div>
           <div className="display-italic" style={{ fontSize: 'clamp(28px, 5vw, 42px)', lineHeight: 0.95, fontWeight: 400 }}>{label}</div>
@@ -240,15 +242,15 @@ function CampaignStrip({ label, activeApps, upcomingRounds, mastered, total, onA
 
 function TodayQueue({ nextRound, nextRoundApp, practices, onScheduleInterview }: { nextRound?: Round; nextRoundApp?: App | null; practices: { kind: string; title: string; status: PracticeStatus; difficulty?: string; to: string }[]; onScheduleInterview: () => void }) {
   return (
-    <section className="card p-5 fade-up h-full flex flex-col">
-      <div className="flex items-start justify-between gap-3 mb-4">
+    <section className="card fade-up h-full flex flex-col">
+      <div className="flex items-start justify-between gap-3" style={{ marginBottom: 'var(--gap-sm)' }}>
         <div>
           <div className="eyebrow mb-1">Today's prep queue</div>
           <h2 className="display" style={{ margin: 0, fontSize: 28, fontWeight: 400 }}>What deserves attention first</h2>
         </div>
         <button type="button" onClick={onScheduleInterview} className="pill mono" style={ghostPill}><Command size={12} /> Schedule <KbdHint /></button>
       </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.2fr)]">
+      <div className="grid lg:grid-cols-[minmax(220px,0.85fr)_minmax(0,1.15fr)]" style={{ gap: 'var(--gap-sm)' }}>
         <div className="card p-4" style={{ background: 'var(--bg-sunken)', boxShadow: 'none' }}>
           <div className="flex items-center gap-2 mb-3" style={{ color: 'var(--accent)' }}><CalendarClock size={15} /><span className="eyebrow">Next interview</span></div>
           {nextRound ? (
@@ -276,8 +278,8 @@ function TodayQueue({ nextRound, nextRoundApp, practices, onScheduleInterview }:
 function PipelinePulse({ apps, activeApps, interviewingApps, upcomingRounds, onAddApplication }: { apps: App[]; activeApps: App[]; interviewingApps: App[]; upcomingRounds: Round[]; onAddApplication: () => void }) {
   const counts = ['Wishlist', 'Applied', 'Interviewing', 'Offer'].map((status) => ({ status, count: apps.filter((app) => app.status === status).length }));
   return (
-    <section className="card p-5 fade-up h-full flex flex-col">
-      <div className="flex items-start justify-between gap-3 mb-4">
+    <section className="card fade-up h-full flex flex-col">
+      <div className="flex items-start justify-between gap-3" style={{ marginBottom: 'var(--gap-sm)' }}>
         <div>
           <div className="eyebrow mb-1">Pipeline pulse</div>
           <h2 className="display" style={{ margin: 0, fontSize: 28, fontWeight: 400 }}>{activeApps.length} active targets</h2>
@@ -287,7 +289,7 @@ function PipelinePulse({ apps, activeApps, interviewingApps, upcomingRounds, onA
       <div className="grid gap-2">
         {counts.map(({ status, count }) => <PipelineCount key={status} status={status} count={count} total={Math.max(activeApps.length, 1)} />)}
       </div>
-      <div className="grid gap-2 mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
+      <div className="grid gap-2" style={{ marginTop: 'var(--gap-sm)', paddingTop: 'var(--gap-sm)', borderTop: '1px solid var(--border)' }}>
         <MiniSignal icon={<BriefcaseBusiness size={14} />} label="Interviewing" value={interviewingApps.length} />
         <MiniSignal icon={<CalendarClock size={14} />} label="Scheduled rounds" value={upcomingRounds.length} />
       </div>
@@ -297,14 +299,14 @@ function PipelinePulse({ apps, activeApps, interviewingApps, upcomingRounds, onA
 
 function TrackReadiness({ tracks }: { tracks: { name: string; to: string; total: number; mastered: number; inProgress: number; color: string }[] }) {
   return (
-    <section className="card p-5 fade-up">
-      <div className="flex items-end justify-between gap-3 mb-4">
+    <section className="card fade-up">
+      <div className="flex items-end justify-between gap-3" style={{ marginBottom: 'var(--gap-sm)' }}>
         <div>
           <div className="eyebrow mb-1">Track readiness</div>
-          <h2 className="display" style={{ margin: 0, fontSize: 26, fontWeight: 400 }}>Prep coverage</h2>
+          <h2 className="display" style={{ margin: 0, fontSize: 24, fontWeight: 400 }}>Prep coverage</h2>
         </div>
       </div>
-      <div className="grid gap-3">
+      <div className="grid gap-2">
         {tracks.map((track) => <TrackBar key={track.name} {...track} />)}
       </div>
     </section>
@@ -313,25 +315,23 @@ function TrackReadiness({ tracks }: { tracks: { name: string; to: string; total:
 
 function RecentApplications({ apps, onAddApplication }: { apps: App[]; onAddApplication: () => void }) {
   return (
-    <section className="card p-5 fade-up">
-      <div className="flex items-center justify-between gap-3 mb-4">
+    <section className="card fade-up">
+      <div className="flex items-center justify-between gap-3" style={{ marginBottom: 'var(--gap-sm)' }}>
         <div>
           <div className="eyebrow mb-1">Applications</div>
-          <h2 className="display" style={{ margin: 0, fontSize: 24, fontWeight: 400 }}>Latest targets</h2>
+          <h2 className="display" style={{ margin: 0, fontSize: 22, fontWeight: 400 }}>Latest targets</h2>
         </div>
         <button type="button" onClick={onAddApplication} style={textAction}>Add <KbdHint inline /></button>
       </div>
       {apps.length ? (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-1.5">
           {apps.map((app) => (
-            <Link key={app.id} to={`/applications/${app.id}`} className="card card-hover p-3" style={{ textDecoration: 'none', color: 'inherit', background: 'var(--bg)', boxShadow: 'inset 0 0 0 1px var(--border)' }}>
-              <div className="flex items-start justify-between gap-2">
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.company}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.role}</div>
-                </div>
-                <span className="pill" style={statusPill(app.status)}>{app.status.toLowerCase()}</span>
+            <Link key={app.id} to={`/applications/${app.id}`} className="flex items-center justify-between gap-2" style={rowLink}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.company}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.role}</div>
               </div>
+              <span className="pill" style={{ ...statusPill(app.status), fontSize: 10.5, flexShrink: 0 }}>{app.status.toLowerCase()}</span>
             </Link>
           ))}
         </div>
@@ -342,13 +342,13 @@ function RecentApplications({ apps, onAddApplication }: { apps: App[]; onAddAppl
 
 function UpcomingInterviews({ rounds, apps, onScheduleInterview }: { rounds: Round[]; apps: App[]; onScheduleInterview: () => void }) {
   return (
-    <section className="card p-5 fade-up">
-      <div className="flex items-center justify-between gap-3 mb-3">
+    <section className="card fade-up">
+      <div className="flex items-center justify-between gap-3" style={{ marginBottom: 'var(--gap-sm)' }}>
         <span className="flex items-center gap-1.5" style={{ fontSize: 13, fontWeight: 600 }}><CalendarClock size={14} /> Upcoming interviews</span>
         <button type="button" onClick={onScheduleInterview} style={textAction}>Schedule <KbdHint inline /></button>
       </div>
       {rounds.length ? (
-        <div className="grid gap-2">
+        <div className="grid gap-1.5">
           {rounds.map((round) => {
             const app = apps.find((item) => item.id === round.application_id);
             return (
@@ -370,10 +370,10 @@ function UpcomingInterviews({ rounds, apps, onScheduleInterview }: { rounds: Rou
 function RecentAnecdotes({ anecdotes, cats }: { anecdotes: Anecdote[]; cats: Cat[] }) {
   if (anecdotes.length === 0) return null;
   return (
-    <section className="card p-5 fade-up">
+    <section className="card fade-up">
       <div className="eyebrow mb-1">Behavioral notebook</div>
-      <h2 className="display" style={{ margin: '0 0 14px', fontSize: 24, fontWeight: 400 }}>Recent stories</h2>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <h2 className="display" style={{ margin: 0, fontSize: 24, fontWeight: 400, marginBottom: 'var(--gap-sm)' }}>Recent stories</h2>
+      <div className="grid" style={{ gap: 'var(--gap-sm)', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
         {anecdotes.map((anecdote) => (
           <div key={anecdote.id} className="card p-3" style={{ background: 'var(--bg)', boxShadow: 'inset 0 0 0 1px var(--border)' }}>
             <div className="display-italic" style={{ fontSize: 19, lineHeight: 1.1, fontWeight: 400 }}>{anecdote.title}</div>
