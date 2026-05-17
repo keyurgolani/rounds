@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import type { GuideNavGroup } from '../../shared/GuideNav';
-import type { TrackConfig, AIPolicy } from '../../guideTypes';
+import type { TrackConfig, AIPolicy, AICompanyRow } from '../../guideTypes';
 import StudyShell from '../../shared/StudyShell';
 import { Section, Callout, Prose } from '../../shared/primitives';
 import { aiCodingContent } from '../../content/aiCoding';
@@ -28,6 +28,106 @@ function PolicyPill({ policy }: { policy: AIPolicy }) {
   );
 }
 
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="mono uppercase"
+      style={{ fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--text-4)', marginBottom: 4 }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function CompanyCard({ row }: { row: AICompanyRow }) {
+  return (
+    <article
+      className="card"
+      style={{
+        padding: 'var(--pad-md)',
+        display: 'grid',
+        gap: 'var(--gap-sm)',
+        height: '100%',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)', flexWrap: 'wrap' }}>
+        <strong style={{ fontSize: 16, color: 'var(--text)' }}>{row.company}</strong>
+        <PolicyPill policy={row.aiPolicyDefault} />
+        <span className="mono" style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--text-4)' }}>
+          {row.timeBudgetMin} min
+        </span>
+      </div>
+
+      <div>
+        <FieldLabel>Format</FieldLabel>
+        <Prose size="sm">{row.format}</Prose>
+      </div>
+
+      {row.tools && (
+        <div>
+          <FieldLabel>Tools</FieldLabel>
+          <Prose size="sm">{row.tools}</Prose>
+        </div>
+      )}
+
+      {row.rubric && (
+        <div>
+          <FieldLabel>Rubric</FieldLabel>
+          <Prose size="sm">{row.rubric}</Prose>
+        </div>
+      )}
+
+      <div>
+        <FieldLabel>Lean into</FieldLabel>
+        <Prose size="sm">{row.leanInto}</Prose>
+      </div>
+
+      {row.followUps && (
+        <div>
+          <FieldLabel>Common follow-ups</FieldLabel>
+          <Prose size="sm">{row.followUps}</Prose>
+        </div>
+      )}
+
+      {row.sources && row.sources.length > 0 && (
+        <details
+          style={{
+            marginTop: 4,
+            paddingTop: 8,
+            borderTop: '1px dashed var(--border)',
+          }}
+        >
+          <summary
+            className="mono uppercase"
+            style={{
+              fontSize: 10,
+              letterSpacing: '0.1em',
+              color: 'var(--text-4)',
+              cursor: 'pointer',
+              listStyle: 'none',
+            }}
+          >
+            Sources ({row.sources.length})
+          </summary>
+          <ul
+            style={{
+              margin: '6px 0 0',
+              paddingLeft: 16,
+              fontSize: 11.5,
+              lineHeight: 1.5,
+              color: 'var(--text-3)',
+            }}
+          >
+            {row.sources.map((src, i) => (
+              <li key={i} style={{ marginBottom: 2 }}>{src}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </article>
+  );
+}
+
 export default function Companies({ config, navGroups, scrollRef }: Props) {
   const companies = aiCodingContent.companies;
   return (
@@ -50,66 +150,18 @@ export default function Companies({ config, navGroups, scrollRef }: Props) {
 
       <Section
         title="Company-by-company expectations"
-        lede="Each company below has a distinct emphasis: Meta grades engineering judgment, Shopify grades shipping speed, Stripe grades correctness and idempotency, and so on. Knowing the emphasis lets you weight your review time correctly and choose what to say out loud."
+        lede="Each card surfaces the round structure, AI tooling that's allowed or provided, the rubric the interviewer is grading against, and the most actionable thing to lean into. Sources are linked at the bottom of each card so you can audit the claim and check freshness before each round."
       >
         <div
           className="grid"
-          style={{ gap: 'var(--gap-md)' }}
+          style={{
+            gap: 'var(--gap-md)',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+            alignItems: 'stretch',
+          }}
         >
           {companies.map((row) => (
-            <article
-              key={row.company}
-              className="card"
-              style={{
-                padding: 'var(--pad-md)',
-                display: 'grid',
-                gap: 'var(--gap-sm)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)', flexWrap: 'wrap' }}>
-                <strong style={{ fontSize: 16, color: 'var(--text)' }}>{row.company}</strong>
-                <PolicyPill policy={row.aiPolicyDefault} />
-              </div>
-
-              <div
-                className="grid"
-                style={{
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: 'var(--gap-sm)',
-                  paddingTop: 4,
-                }}
-              >
-                <div>
-                  <div
-                    className="mono uppercase"
-                    style={{ fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--text-4)', marginBottom: 4 }}
-                  >
-                    Format
-                  </div>
-                  <Prose size="sm">{row.format}</Prose>
-                </div>
-
-                <div>
-                  <div
-                    className="mono uppercase"
-                    style={{ fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--text-4)', marginBottom: 4 }}
-                  >
-                    Time budget
-                  </div>
-                  <Prose size="sm">{row.timeBudgetMin} min</Prose>
-                </div>
-
-                <div>
-                  <div
-                    className="mono uppercase"
-                    style={{ fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--text-4)', marginBottom: 4 }}
-                  >
-                    Lean into
-                  </div>
-                  <Prose size="sm">{row.leanInto}</Prose>
-                </div>
-              </div>
-            </article>
+            <CompanyCard key={row.company} row={row} />
           ))}
         </div>
       </Section>

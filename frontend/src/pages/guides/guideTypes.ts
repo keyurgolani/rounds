@@ -349,10 +349,14 @@ export type AIDefectExample = {
 
 export type AICompanyRow = {
   company: string;
-  format: string;
-  timeBudgetMin: string;    // e.g. "45-60"
+  format: string;             // round structure
+  timeBudgetMin: string;      // e.g. "45-60"
   aiPolicyDefault: AIPolicy;
-  leanInto: string;
+  tools?: string;             // AI tools allowed / provided / required
+  rubric?: string;            // what's graded
+  leanInto: string;           // actionable advice
+  followUps?: string;         // common follow-up questions
+  sources?: string[];         // grounded source descriptors with URLs
 };
 
 export type AICodingContent = {

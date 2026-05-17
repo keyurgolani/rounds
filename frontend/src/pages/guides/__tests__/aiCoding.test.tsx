@@ -64,6 +64,6 @@ describe('ai-coding guide pages', () => {
     // Shopify is also in the table
     expect(screen.getByText('Shopify')).toBeInTheDocument();
     // leanInto text unique to Meta row body
-    expect(screen.getByText(/verbalize every AI output you accept/i)).toBeInTheDocument();
+    expect(screen.getByText(/Treat the AI like a junior pair/i)).toBeInTheDocument();
   });
 });
