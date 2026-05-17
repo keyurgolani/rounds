@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import ai, ai_coding, pdf, runner, share, take_home
+from routers import ai, ai_coding, pdf, runner, sd_practice, share, take_home
 
 app = FastAPI(title="Rounds — Code Runner", version="1.0.0")
 
@@ -26,6 +26,7 @@ app.include_router(runner.router)
 app.include_router(pdf.router)
 app.include_router(ai.router)
 app.include_router(ai_coding.router)
+app.include_router(sd_practice.router)
 app.include_router(share.router)
 app.include_router(take_home.router)
 

@@ -55,6 +55,7 @@ export default function App() {
         <Route path="system-design/guide" element={<GuidePage />} />
         <Route path="system-design/guide/:slug" element={<GuidePage />} />
         <Route path="system-design/question/:slug" element={<SystemDesignDetail />} />
+        <Route path="system-design/question/:slug/guidance" element={<SystemDesignDetail />} />
         <Route path="coding" element={<Navigate to="/coding/guide" replace />} />
         <Route path="coding/questions" element={<CodingList />} />
         <Route path="coding/guide" element={<GuidePage track="coding" />} />

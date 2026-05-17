@@ -22,6 +22,13 @@ vi.mock('../../hooks/usePracticeStatus', () => ({
   usePracticeStatus: () => ['todo', vi.fn()],
 }));
 
+// SDPracticeView lazy-loads Excalidraw which doesn't resolve cleanly under
+// Node's strict ESM (roughjs import without explicit .js). Replace the
+// orchestrator with a stub so the Practice tab renders trivially in tests.
+vi.mock('../sd-practice/SDPracticeView', () => ({
+  default: () => <div data-testid="sd-practice-stub">practice surface</div>,
+}));
+
 const baseSDQ = {
   id: 1,
   title: 'Design a URL Shortener',
@@ -54,6 +61,7 @@ function renderAt(url: string) {
       <CommandCenterProvider>
         <Routes>
           <Route path="/system-design/question/:slug" element={<SystemDesignDetail />} />
+          <Route path="/system-design/question/:slug/guidance" element={<SystemDesignDetail />} />
         </Routes>
       </CommandCenterProvider>
     </MemoryRouter>,
@@ -65,20 +73,42 @@ beforeEach(() => {
   (getSystemDesignQuestion as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(baseSDQ);
 });
 
-describe('SystemDesignDetail — single-scroll layout', () => {
-  it('renders every section in one page (no tab switching)', async () => {
+describe('SystemDesignDetail — Practice (default) tab', () => {
+  it('renders the PromptHeader + Practice surface on the bare URL', async () => {
     renderAt('/system-design/question/design-a-url-shortener');
     await waitFor(() => screen.getByText('Design a URL Shortener'));
 
-    // No tab toggles for the old Problem/Approach/Solutions split.
-    expect(screen.queryByRole('button', { name: 'Problem' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Approach' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Solutions' })).toBeNull();
+    // PromptHeader is always visible — prompt text + requirements live above the tabs.
+    expect(screen.getByText('Describe the system.')).toBeInTheDocument();
+    expect(screen.getByText('c1')).toBeInTheDocument(); // constraint
+    expect(screen.getByText('rf1')).toBeInTheDocument(); // functional req
 
-    // All primary section headings render together.
+    // Practice tab is the default — the practice surface stub mounts.
+    expect(screen.getByTestId('sd-practice-stub')).toBeInTheDocument();
+
+    // Guidance-only sections are NOT in the DOM on the Practice tab.
     expect(
-      screen.getByRole('heading', { level: 2, name: /requirements/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole('heading', { level: 2, name: /approach framework/i }),
+    ).toBeNull();
+    expect(screen.queryByRole('heading', { level: 2, name: /architecture/i })).toBeNull();
+  });
+
+  it('has Practice and Guidance tabs in the tab strip', async () => {
+    renderAt('/system-design/question/design-a-url-shortener');
+    await waitFor(() => screen.getByText('Design a URL Shortener'));
+
+    const tabs = screen.getAllByRole('tab');
+    const labels = tabs.map((t) => t.textContent);
+    expect(labels).toContain('Practice');
+    expect(labels).toContain('Guidance');
+  });
+});
+
+describe('SystemDesignDetail — Guidance tab', () => {
+  it('renders every guidance section on the /guidance URL', async () => {
+    renderAt('/system-design/question/design-a-url-shortener/guidance');
+    await waitFor(() => screen.getByText('Design a URL Shortener'));
+
     expect(
       screen.getByRole('heading', { level: 2, name: /approach framework/i }),
     ).toBeInTheDocument();
@@ -88,17 +118,19 @@ describe('SystemDesignDetail — single-scroll layout', () => {
     expect(screen.getByRole('heading', { level: 2, name: /architecture/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: /database/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: /^api$/i })).toBeInTheDocument();
+
+    // Prompt + Requirements moved to the always-visible header, no longer
+    // duplicated as H2 sections inside Guidance.
+    expect(screen.queryByRole('heading', { level: 2, name: /^prompt$/i })).toBeNull();
+    expect(screen.queryByRole('heading', { level: 2, name: /^requirements$/i })).toBeNull();
   });
 
-  it('pushes hints and tips to the right rail, not the main flow', async () => {
-    renderAt('/system-design/question/design-a-url-shortener');
+  it('pushes hints and tips to the right rail on Guidance, not the main flow', async () => {
+    renderAt('/system-design/question/design-a-url-shortener/guidance');
     await waitFor(() => screen.getByText('Design a URL Shortener'));
 
-    // Hints/Tips no longer get their own SectionHeading — they live in the
-    // right rail only. So no H2 heading with that text.
     expect(screen.queryByRole('heading', { level: 2, name: /^hints$/i })).toBeNull();
     expect(screen.queryByRole('heading', { level: 2, name: /^tips$/i })).toBeNull();
-    // The content itself still renders (in the rail).
     expect(screen.getAllByText('h1').length).toBeGreaterThan(0);
     expect(screen.getAllByText('t1').length).toBeGreaterThan(0);
   });
@@ -106,7 +138,7 @@ describe('SystemDesignDetail — single-scroll layout', () => {
 
 describe('SystemDesignDetail — conditional sections', () => {
   it('hides the Senior topics section and nav entry when senior_topics is null', async () => {
-    renderAt('/system-design/question/design-a-url-shortener');
+    renderAt('/system-design/question/design-a-url-shortener/guidance');
     await waitFor(() => screen.getByText('hld'));
     expect(screen.queryByRole('heading', { level: 2, name: /senior topics/i })).toBeNull();
     const navs = screen.queryAllByRole('navigation', { name: /on this page/i });
@@ -122,7 +154,7 @@ describe('SystemDesignDetail — conditional sections', () => {
         { title: 'Caching strategies', summary: 's', bullets: ['b'], callout: null },
       ],
     });
-    renderAt('/system-design/question/design-a-url-shortener');
+    renderAt('/system-design/question/design-a-url-shortener/guidance');
     await waitFor(() => screen.getByText('hld'));
     expect(
       screen.getByRole('heading', { level: 2, name: /senior topics/i }),

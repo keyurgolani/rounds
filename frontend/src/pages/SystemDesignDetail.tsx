@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useLocation, Link, NavLink } from 'react-router-dom';
+import SDPracticeView from './sd-practice/SDPracticeView';
 import { getSystemDesignQuestion } from '../content/api';
 import { ArchitectureDiagram } from '../components/visual/ArchitectureDiagram';
 import { FlowchartDiagram } from '../components/visual/FlowchartDiagram';
@@ -15,7 +16,7 @@ import type {
   SeniorTopic,
 } from '../components/visual/types';
 import { SeniorTopicsPanel } from '../components/visual/SeniorTopicsPanel';
-import { ArrowRight, Check, Lightbulb, BookOpen } from 'lucide-react';
+import { ArrowRight, Check, Lightbulb, BookOpen, ChevronUp, ChevronDown } from 'lucide-react';
 import AppHeader from '../components/shell/AppHeader';
 import DifficultyPill from '../components/shell/DifficultyPill';
 import StatusAction from '../components/shell/StatusAction';
@@ -81,9 +82,20 @@ function SectionHeading({ children, id }: { children: React.ReactNode; id?: stri
 
 export default function SystemDesignDetail() {
   const { slug } = useParams<{ slug: string }>();
+  const location = useLocation();
+  const tab: 'practice' | 'guidance' = location.pathname.endsWith('/guidance') ? 'guidance' : 'practice';
   const [q, setQ] = useState<SDQ | null>(null);
   const [loading, setLoading] = useState(true);
   const [referenceOpen, setReferenceOpen] = useState(false);
+  const headerStorageKey = slug ? `rounds.sd.detail.${slug}.headerCollapsed` : '';
+  const [headerCollapsed, setHeaderCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || !headerStorageKey) return false;
+    return window.localStorage.getItem(headerStorageKey) === '1';
+  });
+  useEffect(() => {
+    if (!headerStorageKey || typeof window === 'undefined') return;
+    window.localStorage.setItem(headerStorageKey, headerCollapsed ? '1' : '0');
+  }, [headerCollapsed, headerStorageKey]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -97,13 +109,8 @@ export default function SystemDesignDetail() {
   const sectionItems = useMemo<SectionNavItem[]>(() => {
     if (!q) return [];
     const items: SectionNavItem[] = [];
-    if (q.description) items.push({ id: 'prompt', label: 'Prompt' });
-    const hasReqs =
-      q.constraints.length > 0 ||
-      q.requirements_functional.length > 0 ||
-      q.requirements_nonfunctional.length > 0 ||
-      Object.keys(q.estimation).length > 0;
-    if (hasReqs) items.push({ id: 'requirements', label: 'Requirements' });
+    // Prompt + Requirements live in the always-visible header above the
+    // tabs now — nav lists only the Guidance-tab sections.
     if (q.thought_process.length > 0)
       items.push({ id: 'approach-framework', label: 'Approach framework' });
     if (q.thought_flow) items.push({ id: 'approach-map', label: 'Approach map' });
@@ -252,143 +259,27 @@ export default function SystemDesignDetail() {
         timer={q ? { kind: 'system', id: q.id } : undefined}
       />
 
+      <PromptHeader
+        q={q}
+        hasRequirements={hasRequirements}
+        collapsed={headerCollapsed}
+        onToggle={() => setHeaderCollapsed((v) => !v)}
+      />
+
+      <TabStrip slug={slug ?? ''} active={tab} />
+
+      {tab === 'practice' ? (
+        <div className="flex-1 min-h-0 overflow-hidden" style={{ padding: 'var(--page-pad-y) var(--page-pad-x)' }}>
+          <SDPracticeView
+            questionSlug={slug ?? ''}
+            questionPrompt={q.description}
+          />
+        </div>
+      ) : (
+      <>
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
         <div className="px-5 sm:px-8 py-6 lg:py-8 grid gap-8 lg:gap-10 grid-cols-1 lg:[grid-template-columns:minmax(0,1fr)_300px]">
           <main className="space-y-12 min-w-0">
-            {q.description && (
-              <section>
-                <SectionHeading id="prompt">Prompt</SectionHeading>
-                <AnimatedCard className="card" style={{ padding: 24 }}>
-                  <BlockMarkdown
-                    text={q.description}
-                    style={{
-                      color: 'var(--text-2)',
-                      fontSize: 14.5,
-                      lineHeight: 1.65,
-                    }}
-                  />
-                </AnimatedCard>
-              </section>
-            )}
-
-            {hasRequirements && (
-              <section>
-                <SectionHeading id="requirements">Requirements</SectionHeading>
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 auto-rows-min">
-                  {q.constraints.length > 0 && (
-                    <AnimatedCard className="card p-5 lg:col-span-7">
-                      <h3 className="eyebrow mb-3">Constraints</h3>
-                      <ul className="flex flex-col gap-2">
-                        {q.constraints.map((c, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-2"
-                            style={{ fontSize: 13, color: 'var(--text-2)' }}
-                          >
-                            <span style={{ color: 'var(--text-4)' }}>•</span>
-                            <InlineMarkdown text={c} />
-                          </li>
-                        ))}
-                      </ul>
-                    </AnimatedCard>
-                  )}
-                  {Object.entries(q.estimation).length > 0 && (
-                    <AnimatedCard
-                      className={`card p-4 ${
-                        q.constraints.length > 0 ? 'lg:col-span-5' : 'lg:col-span-12'
-                      }`}
-                    >
-                      <h3 className="eyebrow mb-3">Estimation</h3>
-                      <table className="w-full" style={{ fontSize: 13 }}>
-                        <tbody>
-                          {Object.entries(q.estimation).map(([key, value]) => {
-                            const n = extractNumber(value);
-                            return (
-                              <tr
-                                key={key}
-                                style={{ borderBottom: '1px solid var(--border)' }}
-                              >
-                                <td
-                                  className="mono uppercase"
-                                  style={{
-                                    padding: '10px 12px 10px 0',
-                                    color: 'var(--text-3)',
-                                    fontSize: 10.5,
-                                    letterSpacing: '0.1em',
-                                    width: 180,
-                                  }}
-                                >
-                                  {key.replace(/_/g, ' ')}
-                                </td>
-                                <td style={{ padding: '10px 0', color: 'var(--text-2)' }}>
-                                  {n !== null ? (
-                                    <span>
-                                      <AnimatedCounter
-                                        value={n}
-                                        duration={1.0}
-                                        className="font-mono"
-                                      />
-                                      <span style={{ marginLeft: 4, color: 'var(--text-3)' }}>
-                                        {value.replace(/(\d{1,3}(?:,\d{3})+|\d+)/, '').trim()}
-                                      </span>
-                                    </span>
-                                  ) : (
-                                    value
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </AnimatedCard>
-                  )}
-                  {q.requirements_functional.length > 0 && (
-                    <AnimatedCard className="card p-5 lg:col-span-6">
-                      <h3 className="eyebrow mb-3">Functional</h3>
-                      <ul className="flex flex-col gap-2">
-                        {q.requirements_functional.map((r, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-2.5"
-                            style={{ fontSize: 13, color: 'var(--text-2)' }}
-                          >
-                            <Check
-                              size={14}
-                              strokeWidth={2}
-                              style={{ color: 'var(--forest)', marginTop: 2, flexShrink: 0 }}
-                            />
-                            <InlineMarkdown text={r} />
-                          </li>
-                        ))}
-                      </ul>
-                    </AnimatedCard>
-                  )}
-                  {q.requirements_nonfunctional.length > 0 && (
-                    <AnimatedCard className="card p-5 lg:col-span-6" delay={0.05}>
-                      <h3 className="eyebrow mb-3">Non-functional</h3>
-                      <ul className="flex flex-col gap-2">
-                        {q.requirements_nonfunctional.map((r, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-2.5"
-                            style={{ fontSize: 13, color: 'var(--text-2)' }}
-                          >
-                            <Check
-                              size={14}
-                              strokeWidth={2}
-                              style={{ color: 'var(--accent)', marginTop: 2, flexShrink: 0 }}
-                            />
-                            <InlineMarkdown text={r} />
-                          </li>
-                        ))}
-                      </ul>
-                    </AnimatedCard>
-                  )}
-                </div>
-              </section>
-            )}
-
             {q.thought_process.length > 0 && (
               <section>
                 <SectionHeading id="approach-framework">Approach framework</SectionHeading>
@@ -888,6 +779,246 @@ export default function SystemDesignDetail() {
             {referenceCards}
           </BottomSheet>
         </>
+      )}
+      </>
+      )}
+    </div>
+  );
+}
+
+function TabStrip({ slug, active }: { slug: string; active: 'practice' | 'guidance' }) {
+  const tabs: { id: typeof active; label: string; to: string }[] = [
+    { id: 'practice', label: 'Practice', to: `/system-design/question/${slug}` },
+    { id: 'guidance', label: 'Guidance', to: `/system-design/question/${slug}/guidance` },
+  ];
+  return (
+    <div
+      role="tablist"
+      style={{
+        display: 'flex',
+        gap: 0,
+        borderBottom: '1px solid var(--border)',
+        padding: '0 var(--page-pad-x)',
+        background: 'var(--bg)',
+      }}
+    >
+      {tabs.map((t) => (
+        <NavLink
+          key={t.id}
+          to={t.to}
+          end={t.id === 'practice'}
+          role="tab"
+          aria-selected={active === t.id}
+          style={() => ({
+            padding: '10px 14px',
+            fontSize: 13,
+            fontWeight: 600,
+            color: active === t.id ? 'var(--text)' : 'var(--text-3)',
+            borderBottom:
+              active === t.id ? '2px solid var(--accent)' : '2px solid transparent',
+            textDecoration: 'none',
+            marginBottom: -1,
+          })}
+        >
+          {t.label}
+        </NavLink>
+      ))}
+    </div>
+  );
+}
+
+function PromptHeader({
+  q,
+  hasRequirements,
+  collapsed,
+  onToggle,
+}: {
+  q: SDQ;
+  hasRequirements: boolean;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          padding: '8px var(--page-pad-x)',
+          background: 'var(--bg-elev)',
+          borderBottom: '1px solid var(--border)',
+          color: 'var(--text-3)',
+          fontSize: 12.5,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          cursor: 'pointer',
+          width: '100%',
+          textAlign: 'left',
+          border: 0,
+        }}
+        aria-expanded={false}
+        aria-label="Show prompt and requirements"
+      >
+        <ChevronDown size={13} strokeWidth={2} />
+        <span style={{ fontWeight: 600, color: 'var(--text-2)' }}>Prompt &amp; requirements</span>
+        <span style={{ color: 'var(--text-4)', marginLeft: 4 }}>·</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+          {q.description.replace(/\s+/g, ' ').slice(0, 140)}
+          {q.description.length > 140 ? '…' : ''}
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        padding: 'var(--pad-md) var(--page-pad-x)',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--gap-sm)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span
+          className="eyebrow"
+          style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.12em' }}
+        >
+          Prompt
+        </span>
+        <button
+          type="button"
+          onClick={onToggle}
+          style={{
+            marginLeft: 'auto',
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            padding: '4px 10px',
+            fontSize: 11.5,
+            color: 'var(--text-3)',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+          aria-expanded={true}
+          aria-label="Hide prompt and requirements"
+        >
+          <ChevronUp size={12} strokeWidth={2} />
+          Hide
+        </button>
+      </div>
+
+      {q.description && (
+        <BlockMarkdown
+          text={q.description}
+          style={{
+            color: 'var(--text-2)',
+            fontSize: 14,
+            lineHeight: 1.6,
+            margin: 0,
+          }}
+        />
+      )}
+
+      {hasRequirements && (
+        <div
+          className="grid grid-cols-1 lg:grid-cols-12"
+          style={{ gap: 'var(--gap-sm)', marginTop: 4 }}
+        >
+          {q.constraints.length > 0 && (
+            <div className="card lg:col-span-7" style={{ padding: 'var(--pad-sm)' }}>
+              <h3 className="eyebrow" style={{ marginBottom: 6, fontSize: 10.5 }}>Constraints</h3>
+              <ul className="flex flex-col gap-1">
+                {q.constraints.map((c, i) => (
+                  <li
+                    key={i}
+                    className="flex items-start gap-2"
+                    style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5 }}
+                  >
+                    <span style={{ color: 'var(--text-4)' }}>•</span>
+                    <InlineMarkdown text={c} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {Object.entries(q.estimation).length > 0 && (
+            <div
+              className={`card ${q.constraints.length > 0 ? 'lg:col-span-5' : 'lg:col-span-12'}`}
+              style={{ padding: 'var(--pad-sm)' }}
+            >
+              <h3 className="eyebrow" style={{ marginBottom: 6, fontSize: 10.5 }}>Estimation</h3>
+              <table className="w-full" style={{ fontSize: 12.5 }}>
+                <tbody>
+                  {Object.entries(q.estimation).map(([key, value]) => (
+                    <tr key={key} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td
+                        className="mono uppercase"
+                        style={{
+                          padding: '6px 10px 6px 0',
+                          color: 'var(--text-3)',
+                          fontSize: 10,
+                          letterSpacing: '0.1em',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {key.replace(/_/g, ' ')}
+                      </td>
+                      <td style={{ padding: '6px 0', color: 'var(--text-2)' }}>{value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {q.requirements_functional.length > 0 && (
+            <div className="card lg:col-span-6" style={{ padding: 'var(--pad-sm)' }}>
+              <h3 className="eyebrow" style={{ marginBottom: 6, fontSize: 10.5 }}>Functional</h3>
+              <ul className="flex flex-col gap-1">
+                {q.requirements_functional.map((r, i) => (
+                  <li
+                    key={i}
+                    className="flex items-start gap-2"
+                    style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5 }}
+                  >
+                    <Check
+                      size={12}
+                      strokeWidth={2}
+                      style={{ color: 'var(--forest)', marginTop: 3, flexShrink: 0 }}
+                    />
+                    <InlineMarkdown text={r} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {q.requirements_nonfunctional.length > 0 && (
+            <div className="card lg:col-span-6" style={{ padding: 'var(--pad-sm)' }}>
+              <h3 className="eyebrow" style={{ marginBottom: 6, fontSize: 10.5 }}>Non-functional</h3>
+              <ul className="flex flex-col gap-1">
+                {q.requirements_nonfunctional.map((r, i) => (
+                  <li
+                    key={i}
+                    className="flex items-start gap-2"
+                    style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5 }}
+                  >
+                    <Check
+                      size={12}
+                      strokeWidth={2}
+                      style={{ color: 'var(--accent)', marginTop: 3, flexShrink: 0 }}
+                    />
+                    <InlineMarkdown text={r} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

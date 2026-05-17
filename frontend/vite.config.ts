@@ -27,6 +27,7 @@ const proxy = {
   '/api/execute': { target: RUNNER_TARGET, changeOrigin: true },
   '/api/pdf': { target: RUNNER_TARGET, changeOrigin: true },
   '/api/ai-coding': { target: RUNNER_TARGET, changeOrigin: true },
+  '/api/sd-practice': { target: RUNNER_TARGET, changeOrigin: true },
   '/api/ai': { target: RUNNER_TARGET, changeOrigin: true },
   '/api/share': { target: RUNNER_TARGET, changeOrigin: true },
   '/api/take-home': { target: RUNNER_TARGET, changeOrigin: true },
