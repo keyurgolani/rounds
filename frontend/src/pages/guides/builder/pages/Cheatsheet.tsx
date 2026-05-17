@@ -2,7 +2,13 @@ import type { RefObject } from 'react';
 import type { GuideNavGroup } from '../../shared/GuideNav';
 import type { TrackConfig, BuilderFlavor } from '../../guideTypes';
 import StudyShell from '../../shared/StudyShell';
-import { Section, LaneCard } from '../../shared/primitives';
+import {
+  Section,
+  Callout,
+  LaneCard,
+  GuidanceGrid,
+  Guidance,
+} from '../../shared/primitives';
 import DecisionDeck from '../../shared/visuals/DecisionDeck';
 import { builderContent } from '../../content/builder';
 
@@ -28,12 +34,16 @@ export default function Cheatsheet({ config, navGroups, scrollRef }: Props) {
     <StudyShell
       eyebrow={`${config.eyebrow} · Cheatsheet`}
       title="Builder Cheatsheet"
-      description="Time tier, flavor move, AI policy — at a glance."
+      description="Day budget, flavor move, AI policy — at a glance."
       navGroups={navGroups}
       trackBasePath={config.guidePath}
       scrollRef={scrollRef}
     >
-      <Section eyebrow="Time" title="What's reasonable to ship at each budget">
+      <Section
+        eyebrow="Time"
+        title="What is reasonable to ship at each day budget"
+        lede="These are the realistic quality bars for each time budget — not aspirational targets. Hitting the bar for your budget cleanly beats overreaching and leaving gaps. Use the round-length picker to set your budget before reviewing the Time Plan page."
+      >
         <div
           className="flex"
           style={{ gap: 'var(--gap-sm)', overflowX: 'auto', paddingBottom: 6 }}
@@ -63,7 +73,11 @@ export default function Cheatsheet({ config, navGroups, scrollRef }: Props) {
         </div>
       </Section>
 
-      <Section eyebrow="Flavors" title="Pick the right move for the flavor">
+      <Section
+        eyebrow="Flavors"
+        title="Pick the right move for the flavor"
+        lede="The prompt's domain tells you what the opening move should be. Getting the move right in the first few hours sets the direction for the rest of the take-home — getting it wrong means refactoring under time pressure later."
+      >
         <DecisionDeck
           entries={cheatsheet.flavorDeck.map((card) => ({
             id: card.id,
@@ -75,19 +89,22 @@ export default function Cheatsheet({ config, navGroups, scrollRef }: Props) {
         />
       </Section>
 
-      <Section eyebrow="AI Policy" title="How to behave under each policy">
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--gap-md)' }}
-        >
+      <Section
+        eyebrow="AI Policy"
+        title="How to behave under each policy"
+        lede="The prompt's AI policy changes what you put in the README, not necessarily how much help you get. Even under a strict 'off' policy, you can read documentation, search for examples, and reference open-source code — the line is code generation, not all external resources."
+      >
+        <Callout>
+          Under any policy: own every line. The follow-up call will test whether you understand
+          what you submitted.
+        </Callout>
+        <GuidanceGrid>
           {cheatsheet.aiPolicyMoves.map((policy) => (
-            <LaneCard
-              key={policy.policy}
-              eyebrow={policy.policy.toUpperCase()}
-              title={policy.behave}
-            />
+            <Guidance key={policy.policy} label={policy.policy.toUpperCase()}>
+              {policy.behave}
+            </Guidance>
           ))}
-        </div>
+        </GuidanceGrid>
       </Section>
     </StudyShell>
   );

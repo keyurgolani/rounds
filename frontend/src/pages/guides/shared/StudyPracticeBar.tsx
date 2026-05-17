@@ -38,16 +38,11 @@ export default function StudyPracticeBar({ track }: { track: GuideTrack }) {
     <div
       className="card"
       style={{
-        position: 'sticky',
-        bottom: 0,
-        marginTop: 'auto',
         padding: '10px 16px',
         display: 'flex',
         alignItems: 'center',
         gap: 16,
-        boxShadow: 'var(--shadow-elev)',
         background: 'var(--bg-elev)',
-        zIndex: 10,
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>

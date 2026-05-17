@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import type { GuideNavGroup } from '../../shared/GuideNav';
 import type { TrackConfig } from '../../guideTypes';
 import StudyShell from '../../shared/StudyShell';
-import { Section, LaneCard } from '../../shared/primitives';
+import { Section, Callout, LaneCard, Prose } from '../../shared/primitives';
 import { builderContent } from '../../content/builder';
 
 type Props = {
@@ -22,7 +22,27 @@ export default function DomainCheats({ config, navGroups, scrollRef }: Props) {
       trackBasePath={config.guidePath}
       scrollRef={scrollRef}
     >
-      <Section eyebrow="Primers" title="Domain primers for recurring shapes">
+      <Section
+        title="Domain primers for recurring shapes"
+        lede="When the prompt is in one of these domains, these are the standard concerns reviewers look for. Use this as a checklist before submission, not a script. Each primer names the core entities and operations, and — most importantly — the one trap that causes silent failures in that domain."
+      >
+        <Prose>
+          Take-home reviewers have seen hundreds of submissions in each of these domains. They know
+          exactly which invariant most candidates miss, and they test it explicitly. Reading the
+          relevant primer before you finalize your data model takes two minutes and regularly
+          catches a load-bearing edge case before it becomes a silent failure in the test suite.
+        </Prose>
+        <Callout>
+          Every domain has one load-bearing rule. Find it in the prompt, write a test for it first,
+          and make sure your model preserves it under every operation.
+        </Callout>
+      </Section>
+
+      <Section
+        eyebrow="Primers"
+        title="Reference by domain"
+        lede="Each card shows the minimal domain model (entities, operations, and evaluation order) plus the single trap that almost always shows up in hidden tests."
+      >
         <div
           className="grid"
           style={{

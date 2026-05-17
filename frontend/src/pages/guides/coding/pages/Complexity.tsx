@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import type { GuideNavGroup } from '../../shared/GuideNav';
 import type { TrackConfig } from '../../guideTypes';
 import StudyShell from '../../shared/StudyShell';
-import { Section, LaneCard } from '../../shared/primitives';
+import { Section, LaneCard, Prose } from '../../shared/primitives';
 import { codingContent } from '../../content/coding';
 
 type Props = {
@@ -28,7 +28,11 @@ export default function Complexity({ config, navGroups, scrollRef }: Props) {
       trackBasePath={config.guidePath}
       scrollRef={scrollRef}
     >
-      <Section eyebrow="Compass" title="Input size × complexity class">
+      <Section
+        eyebrow="Compass"
+        title="Input size × complexity class"
+        lede="The constraint in the problem statement is the fastest clue to your target complexity class. An input of n ≤ 10⁵ rules out O(n²); n ≤ 20 opens up exponential approaches. Read the table row for your input size, then aim for anything in the green column."
+      >
         <div
           className="card"
           style={{
@@ -85,7 +89,10 @@ export default function Complexity({ config, navGroups, scrollRef }: Props) {
         </div>
       </Section>
 
-      <Section eyebrow="Constraint → Target" title="What to aim for at each input band">
+      <Section
+        title="What to aim for at each input band"
+        lede="Once you know the complexity ceiling, you can immediately rule in or rule out entire families of algorithms. Each card below maps an input size band to the complexity you're aiming for and the patterns that naturally produce it — use this to quickly narrow your design space."
+      >
         <div
           className="grid"
           style={{ gap: 'var(--gap-md)', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}
@@ -109,7 +116,11 @@ export default function Complexity({ config, navGroups, scrollRef }: Props) {
         </div>
       </Section>
 
-      <Section eyebrow="Proof Language" title="What to say to prove correctness">
+      <Section
+        title="What to say to prove correctness"
+        lede="Interviewers can't verify correctness from code alone — they need to hear you reason about it. These are the sentences that demonstrate you understand why the algorithm terminates, why it visits each node exactly once, or why the DP recurrence is sound. Practice saying them out loud, not just thinking them."
+      >
+        <Prose size="sm">Recite the relevant phrase as you finish coding, before running examples. It signals you're not guessing.</Prose>
         <ul className="grid" style={{ gap: 6, margin: 0, padding: 0, listStyle: 'none' }}>
           {complexity.proofLanguage.map((line) => (
             <li key={line} style={{ paddingLeft: 14, position: 'relative', color: 'var(--text-2)', fontSize: 13.5 }}>
@@ -120,7 +131,10 @@ export default function Complexity({ config, navGroups, scrollRef }: Props) {
         </ul>
       </Section>
 
-      <Section eyebrow="Cost Reference" title="Standard time costs to keep in your head">
+      <Section
+        title="Standard time costs to keep in your head"
+        lede="When you claim an algorithm is O(n log n) or O(1) amortized, you need to be able to back it up. These are the primitive costs — sort, heap push, hash lookup, DFS — that you'll compose into your overall analysis. Internalise them so you aren't doing mental arithmetic during the walkthrough."
+      >
         <div
           className="grid"
           style={{ gap: 'var(--gap-sm)', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}

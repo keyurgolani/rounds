@@ -2,6 +2,7 @@ import type { ReactNode, RefObject } from 'react';
 import AppHeader from '../../../components/shell/AppHeader';
 import GuideNav, { type GuideNavGroup } from './GuideNav';
 import StudyPracticeBar from './StudyPracticeBar';
+import InterviewLengthPicker from './InterviewLengthPicker';
 import type { GuideTrack } from '../guideTypes';
 
 type Props = {
@@ -17,7 +18,13 @@ type Props = {
 /** '/coding/guide' -> 'coding'. Mirrors TRACK_CONFIGS keys. */
 function trackFromBasePath(basePath: string): GuideTrack | null {
   const slug = basePath.replace(/^\//, '').replace(/\/guide$/, '');
-  const known: GuideTrack[] = ['system-design', 'coding', 'behavioral', 'ai-coding', 'builder'];
+  const known: GuideTrack[] = [
+    'system-design',
+    'coding',
+    'behavioral',
+    'ai-coding',
+    'builder',
+  ];
   return (known as string[]).includes(slug) ? (slug as GuideTrack) : null;
 }
 
@@ -31,53 +38,65 @@ export default function StudyShell({
   children,
 }: Props) {
   const track = trackFromBasePath(trackBasePath);
+
   return (
     <div className="h-full flex flex-col min-h-0">
       <AppHeader eyebrow={eyebrow} title={title} description={description} />
       <div
-        className="flex-1 min-h-0"
-        style={{ padding: 'var(--page-pad-y) var(--page-pad-x)' }}
+        ref={scrollRef}
+        role="main"
+        className="flex-1 min-h-0 overflow-y-auto"
       >
+        {/* Sticky top region: practice progress + CTA above, then the
+            pill nav + length picker. Both regions stick to the top of
+            the scrollable column so they remain accessible while the
+            user reads. */}
         <div
-          className="grid xl:grid-cols-[248px_minmax(0,1fr)] items-stretch h-full min-h-0"
-          style={{ gap: 'var(--gap-lg)' }}
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 20,
+            background: 'var(--bg)',
+            paddingInline: 'var(--page-pad-x)',
+            paddingTop: 'var(--gap-md)',
+            paddingBottom: 0,
+          }}
         >
-          <aside
-            className="hidden xl:flex card"
+          {track && <StudyPracticeBar track={track} />}
+          <div
+            className="flex flex-wrap"
             style={{
-              flexDirection: 'column',
-              padding: 'var(--pad-sm)',
-              height: '100%',
-              overflowY: 'auto',
+              gap: 'var(--gap-md)',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: 'var(--gap-sm)',
+              paddingBottom: 'var(--gap-sm)',
+              borderBottom: '1px solid var(--border)',
             }}
           >
             <GuideNav
               groups={navGroups}
               trackBasePath={trackBasePath}
-              orientation="vertical"
+              orientation="horizontal"
             />
-          </aside>
-          <div
-            ref={scrollRef}
-            role="main"
-            className="flex flex-col min-h-0 overflow-y-auto"
-            style={{
-              minWidth: 0,
-              gap: 'var(--gap-lg)',
-              paddingRight: 2, // scrollbar gutter
-              paddingBottom: 'var(--gap-sm)',
-            }}
-          >
-            <div className="xl:hidden">
-              <GuideNav
-                groups={navGroups}
-                trackBasePath={trackBasePath}
-                orientation="horizontal"
-              />
-            </div>
-            {children}
-            {track && <StudyPracticeBar track={track} />}
+            {track && <InterviewLengthPicker track={track} />}
           </div>
+        </div>
+
+        {/* Content column — full width with a reading-width cap so long
+            paragraphs don't run edge to edge. Diagrams that need more
+            room can break out via their own width:100% styling. */}
+        <div
+          className="grid"
+          style={{
+            gap: 'var(--gap-lg)',
+            padding: 'var(--gap-lg) var(--page-pad-x) var(--gap-lg)',
+            maxWidth: 'min(960px, 100%)',
+            margin: '0 auto',
+            width: '100%',
+          }}
+        >
+          {children}
         </div>
       </div>
     </div>

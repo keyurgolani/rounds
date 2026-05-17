@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import type { GuideNavGroup } from '../../shared/GuideNav';
 import type { TrackConfig } from '../../guideTypes';
 import StudyShell from '../../shared/StudyShell';
-import { Section, Pact } from '../../shared/primitives';
+import { Section, GuidanceGrid, Guidance, Pact, Prose } from '../../shared/primitives';
 import { behavioralContent } from '../../content/behavioral';
 
 type Props = {
@@ -22,7 +22,11 @@ export default function SeniorScope({ config, navGroups, scrollRef }: Props) {
       trackBasePath={config.guidePath}
       scrollRef={scrollRef}
     >
-      <Section eyebrow="Ladder" title="Mid → Principal — what scope looks like at each tier">
+      <Section
+        eyebrow="Ladder"
+        title="Mid → Principal — what scope looks like at each tier"
+        lede="The most common calibration failure in senior-and-above interviews is telling a mid-level story for a senior role — or a senior story that sounds staff-level to a principal panel. The ladder below shows the expected scope markers at each tier. Before your interview, audit your anecdotes: do the numbers and stakeholder span match the level you're applying for?"
+      >
         <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 'var(--gap-md)' }}>
           {seniorScope.ladder.map((tier, index) => (
             <li
@@ -77,26 +81,73 @@ export default function SeniorScope({ config, navGroups, scrollRef }: Props) {
         </ol>
       </Section>
 
-      <Section eyebrow="Frame" title="Six elements every senior answer has">
+      <Section
+        eyebrow="Frame"
+        title="Six elements every senior answer has"
+        lede="Senior panels aren't just scoring whether you completed something — they're scoring whether you understand why it mattered, how you navigated ambiguity, and whether your decisions would hold up to scrutiny. The six elements below are the difference between a story that answers the question and a story that signals operating maturity."
+      >
+        <GuidanceGrid>
+          {ANSWER_FRAME_GUIDANCE.map((item) => (
+            <Guidance key={item.label} label={item.label}>
+              {item.body}
+            </Guidance>
+          ))}
+        </GuidanceGrid>
+        <Prose size="sm">
+          For defensive framing of risky stories (escalation, failure, disagreement), see{' '}
+          <strong>Mental Model → When the story has risk</strong>. The moves there apply equally
+          at senior and above.
+        </Prose>
+      </Section>
+
+      <Section
+        eyebrow="Calibration"
+        title="Audit your library for scope signals"
+        lede="Once you've written your anecdote library, run a calibration pass. For each story, ask: does the stakeholder span, number of teams affected, and timeline match the level you're targeting? A strong action in a too-small context reads as mid-level regardless of quality."
+      >
         <Pact>
           <ol style={{ margin: 0, paddingLeft: 18 }}>
-            {seniorScope.answerFrame.map((line) => (
-              <li key={line} style={{ marginBottom: 6 }}>{line}</li>
+            {CALIBRATION_STEPS.map((step) => (
+              <li key={step} style={{ marginBottom: 6 }}>{step}</li>
             ))}
           </ol>
         </Pact>
       </Section>
-
-      <Section eyebrow="Defense" title="Defensive framing for risky stories">
-        <div className="grid" style={{ gap: 'var(--gap-sm)', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-          {seniorScope.defensiveFraming.map((entry) => (
-            <div key={entry.case} className="card" style={{ padding: 'var(--pad-sm)' }}>
-              <strong style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>{entry.case}</strong>
-              <p style={{ margin: '6px 0 0', color: 'var(--text-3)', fontSize: 12.5, lineHeight: 1.5 }}>{entry.reframe}</p>
-            </div>
-          ))}
-        </div>
-      </Section>
     </StudyShell>
   );
 }
+
+const ANSWER_FRAME_GUIDANCE = [
+  {
+    label: 'Open with outcome',
+    body: 'Lead with the result before explaining what you did. "This reduced incidents by 38% across three teams" anchors the story at the right altitude and signals that you think in outcomes, not activities.',
+  },
+  {
+    label: 'Name the ambiguity',
+    body: 'Senior interviewers expect unclear ownership, conflicting goals, or missing data. Describe what was ambiguous explicitly — it shows you can articulate a problem precisely before trying to solve it.',
+  },
+  {
+    label: 'Name decision criteria',
+    body: 'State the criteria you used to choose between options: reversibility, blast radius, cost, reliability, team morale. Criteria-driven decisions are senior signals; gut-feel decisions are not.',
+  },
+  {
+    label: 'Show alignment mechanism',
+    body: 'Describe the specific mechanism you used to get others aligned — RFC, working prototype, phased rollout, decision log. "I got buy-in" without the mechanism sounds like luck; the mechanism shows repeatability.',
+  },
+  {
+    label: 'Show operating maturity',
+    body: 'Mention the operational guardrails: observability, rollback plan, runbook, post-launch review. Senior engineers build for failure modes; demonstrating you did shows you operate at the right altitude.',
+  },
+  {
+    label: 'End with lesson applied at larger scope',
+    body: 'Close with where you reused the decision, mechanism, or lesson — and at what scale. A lesson applied once is learning; a lesson applied at increasing scope is growth.',
+  },
+];
+
+const CALIBRATION_STEPS = [
+  'For each anecdote, write the stakeholder count and team span in one sentence.',
+  'Compare that sentence to the ladder tier above. Does it match the level you\'re applying for?',
+  'If not, either find a bigger story for that signal, or add scope context that\'s currently missing from your telling.',
+  'Check your numbers: revenue, users, timeline, team size. Replace "large" and "significant" with actual figures.',
+  'Verify that at least two anecdotes show cross-functional alignment — not just within your team.',
+];

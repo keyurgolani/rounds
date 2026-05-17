@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import type { GuideNavGroup } from '../shared/GuideNav';
 import type { TrackConfig } from '../guideTypes';
 import StudyShell from '../shared/StudyShell';
-import { Section, Pact, ChipRow } from '../shared/primitives';
+import { Section, ChipRow, Prose } from '../shared/primitives';
 import TimelineStrip, { type TimelinePhase } from '../shared/visuals/TimelineStrip';
 import InfographicFrame from '../shared/visuals/InfographicFrame';
 import { systemDesignContent } from '../content/systemDesign';
@@ -38,27 +38,30 @@ export default function SystemDesignDashboard({ config, navGroups, scrollRef }: 
       scrollRef={scrollRef}
     >
       <Section eyebrow="Whiteboard" title="The board layout an interviewer expects to see">
-        <InfographicFrame caption={dashboard.boardLayoutCaption} minHeight={280}>
+        <InfographicFrame caption={dashboard.boardLayoutCaption}>
           <BoardLayoutSketch />
         </InfographicFrame>
       </Section>
 
-      <Section eyebrow="Timeline" title="45-minute round flow">
+      <Section
+        eyebrow="Timeline"
+        title="The round, end to end"
+        lede="The exact minute split scales with the round length you pick above. Each phase below assumes its share of the total time and adapts as you change the picker."
+      >
         <TimelineStrip phases={phases} />
       </Section>
 
-      <Section eyebrow="Pressure Menu" title="What requirements force into the design">
+      <Section
+        eyebrow="Pressure Menu"
+        title="What requirements force into the design"
+        lede="Before sketching components, name the forces in the prompt. Each force in the menu below is a wedge that earns a specific component its seat on the board. Skip naming the forces and the architecture turns into a wish list."
+      >
         <ChipRow chips={dashboard.pressureMenu} />
-      </Section>
-
-      <Section eyebrow="Senior Phrases" title="Lines that signal staff judgment">
-        <Pact>
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {dashboard.seniorPhrases.map((line) => (
-              <li key={line} style={{ marginBottom: 8 }}>{line}</li>
-            ))}
-          </ul>
-        </Pact>
+        <Prose>
+          When you read the requirements, underline the words that map to these
+          forces. The mapping is the connective tissue between problem and design —
+          and it's also what an interviewer is grading.
+        </Prose>
       </Section>
     </StudyShell>
   );

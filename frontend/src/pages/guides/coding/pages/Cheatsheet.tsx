@@ -2,7 +2,7 @@ import { useState, type RefObject } from 'react';
 import type { GuideNavGroup } from '../../shared/GuideNav';
 import type { PatternFamily, TrackConfig } from '../../guideTypes';
 import StudyShell from '../../shared/StudyShell';
-import { Section, ChipRow, LaneCard } from '../../shared/primitives';
+import { Section, ChipRow, LaneCard, Prose } from '../../shared/primitives';
 import { codingContent } from '../../content/coding';
 
 type Props = {
@@ -37,11 +37,18 @@ export default function Cheatsheet({ config, navGroups, scrollRef }: Props) {
       trackBasePath={config.guidePath}
       scrollRef={scrollRef}
     >
-      <Section eyebrow="Pre-flight" title="Before you code">
+      <Section
+        title="Before you code"
+        lede="The biggest interview mistakes happen in the first two minutes — jumping to code before the problem is understood. Run through this checklist out loud. It takes thirty seconds and prevents the worst kind of backtrack: realising mid-solution that you misread the constraints."
+      >
+        <Prose size="sm">Each item below is a question to ask or a check to make before your fingers hit the keyboard. Don't internalize these as rules; use them as a spoken script that signals structured thinking to the interviewer.</Prose>
         <ChipRow chips={cheatsheet.preflight} />
       </Section>
 
-      <Section eyebrow="Complexity Ceiling" title="What constraints allow">
+      <Section
+        title="What constraints allow"
+        lede="Each line below is a rule of thumb: given this input size, your solution must fit inside this complexity class. Scan the constraint in the problem first, pick the matching row, and let it rule out whole families of algorithms before you sketch anything."
+      >
         <div
           className="grid"
           style={{ gap: 'var(--gap-sm)', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}
@@ -65,7 +72,11 @@ export default function Cheatsheet({ config, navGroups, scrollRef }: Props) {
         </div>
       </Section>
 
-      <Section eyebrow="Pattern Matrix" title="Recognize the pattern → know the move">
+      <Section
+        eyebrow="Pattern Matrix"
+        title="Recognize the pattern → know the move"
+        lede="Pattern recognition is the core interview skill. Each card maps a trigger phrase — the kind of language the problem uses — to the state you'd declare and the exact move you'd make. Filter by family to focus on one algorithm class at a time."
+      >
         <div className="flex flex-wrap" style={{ gap: 'var(--gap-sm)' }}>
           {FAMILY_FILTERS.map((option) => {
             const active = option.key === filter;

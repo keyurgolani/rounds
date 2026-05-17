@@ -13,6 +13,7 @@ export const systemDesignNavGroups: GuideNavGroup[] = [
     label: 'Topics',
     items: [
       { slug: 'round-flow',      label: 'Round Flow' },
+      { slug: 'decisions',       label: 'Decisions' },
       { slug: 'capacity-math',   label: 'Capacity Math' },
       { slug: 'building-blocks', label: 'Building Blocks' },
       { slug: 'reliability',     label: 'Reliability' },

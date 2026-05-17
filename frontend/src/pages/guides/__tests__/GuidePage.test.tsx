@@ -55,17 +55,17 @@ describe('GuidePage legacy slug redirects', () => {
     ['coding',        '/coding/guide',        '/coding/guide/optimization-testing', () => expect(screen.getByText('Complexity Compass')).toBeInTheDocument()],
     ['coding',        '/coding/guide',        '/coding/guide/practice-plan',        () => expect(screen.getByText('Pattern Playbook')).toBeInTheDocument()],
     // system-design (6) — assertions key on body text unique to the destination page
-    ['system-design', '/system-design/guide', '/system-design/guide/interview-strategy',      () => expect(screen.getByText(/Hello Interview's delivery framework/i)).toBeInTheDocument()],
+    ['system-design', '/system-design/guide', '/system-design/guide/interview-strategy',      () => expect(screen.getByText(/Useful lines for the round/i)).toBeInTheDocument()],
     ['system-design', '/system-design/guide', '/system-design/guide/requirements-estimation', () => expect(screen.getByText(/Tune the inputs/i)).toBeInTheDocument()],
     ['system-design', '/system-design/guide', '/system-design/guide/core-components',         () => expect(screen.getByText(/Pick storage from access pattern/i)).toBeInTheDocument()],
     ['system-design', '/system-design/guide', '/system-design/guide/data-storage',            () => expect(screen.getByText(/Pick storage from access pattern/i)).toBeInTheDocument()],
     ['system-design', '/system-design/guide', '/system-design/guide/tradeoffs-reliability',   () => expect(screen.getByText(/Pick the failure that hurts/i)).toBeInTheDocument()],
-    ['system-design', '/system-design/guide', '/system-design/guide/practice-playbook',       () => expect(screen.getByText(/Hello Interview's delivery framework/i)).toBeInTheDocument()],
+    ['system-design', '/system-design/guide', '/system-design/guide/practice-playbook',       () => expect(screen.getByText(/Useful lines for the round/i)).toBeInTheDocument()],
     // behavioral (4) — assertions key on body text unique to the destination page
     ['behavioral',    '/behavioral/guide',    '/behavioral/guide/story-crafting',    () => expect(screen.getByText(/Build your portfolio/i)).toBeInTheDocument()],
     ['behavioral',    '/behavioral/guide',    '/behavioral/guide/signal-rubric',     () => expect(screen.getByText(/Question opener → signal/i)).toBeInTheDocument()],
     ['behavioral',    '/behavioral/guide',    '/behavioral/guide/senior-behavioral', () => expect(screen.getByText(/Show scope in numbers/i)).toBeInTheDocument()],
-    ['behavioral',    '/behavioral/guide',    '/behavioral/guide/practice-playbook', () => expect(screen.getByText(/Score yourself 1-3/i)).toBeInTheDocument()],
+    ['behavioral',    '/behavioral/guide',    '/behavioral/guide/practice-playbook', () => expect(screen.getByText(/Score yourself 1.{1,2}3/i)).toBeInTheDocument()],
   ] as const)('redirects %s legacy slug to its new destination (%s)', (track, base, full, assertion) => {
     renderGuide(track, base, full);
     assertion();

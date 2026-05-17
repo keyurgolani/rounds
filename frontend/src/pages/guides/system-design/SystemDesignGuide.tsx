@@ -9,9 +9,10 @@ import RoundFlow from './pages/RoundFlow';
 import CapacityMath from './pages/CapacityMath';
 import BuildingBlocks from './pages/BuildingBlocks';
 import Reliability from './pages/Reliability';
+import Decisions from './pages/Decisions';
 
 const KNOWN_SLUGS = [
-  'mental-model', 'cheatsheet', 'round-flow',
+  'mental-model', 'cheatsheet', 'round-flow', 'decisions',
   'capacity-math', 'building-blocks', 'reliability',
 ] as const;
 type Slug = (typeof KNOWN_SLUGS)[number];
@@ -34,6 +35,7 @@ export default function SystemDesignGuide() {
     case 'mental-model':    return <MentalModel {...common} />;
     case 'cheatsheet':      return <Cheatsheet {...common} />;
     case 'round-flow':      return <RoundFlow {...common} />;
+    case 'decisions':       return <Decisions {...common} />;
     case 'capacity-math':   return <CapacityMath {...common} />;
     case 'building-blocks': return <BuildingBlocks {...common} />;
     case 'reliability':     return <Reliability {...common} />;

@@ -27,7 +27,7 @@ describe('behavioral guide pages', () => {
     expect(screen.getByText(/Behavioral Interview Field Guide/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Situation/).length).toBeGreaterThan(0);
     expect(screen.getByText('Impact')).toBeInTheDocument();
-    expect(screen.getByText('Ownership')).toBeInTheDocument();
+    expect(screen.getByText(/Customer focus/i)).toBeInTheDocument();
   });
 
   it('mental model renders the signal decoder table', () => {
@@ -57,6 +57,6 @@ describe('behavioral guide pages', () => {
   it('repair renders rewrites + scorecard', () => {
     renderAt('/behavioral/guide/repair');
     expect(screen.getByText(/We improved performance/)).toBeInTheDocument();
-    expect(screen.getByText(/Specificity/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Specificity/).length).toBeGreaterThan(0);
   });
 });

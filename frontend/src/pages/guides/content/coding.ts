@@ -120,6 +120,30 @@ const CHEATSHEET_PATTERN_MATRIX_PARTIAL: CodingContent['cheatsheet']['patternMat
     move: 'dp[i] = f(dp[i-1], dp[i-2], ...) based on last choice; fill left to right',
     watch: 'set all base cases before the loop; missing one causes silently wrong answers',
   },
+  {
+    id: 'matrix-binary-search-sorted',
+    family: 'search',
+    trigger: 'sorted input, find a value or insertion index, O(n) is too slow',
+    state: 'lo, hi bracket the index that could still match',
+    move: 'compare numbers[mid]; shrink the half that cannot contain the target',
+    watch: 'off-by-one on bounds — pick a contract (find-first vs find-any) and code only that one',
+  },
+  {
+    id: 'matrix-binary-search-on-answer',
+    family: 'search',
+    trigger: 'minimise the max or maximise the min with a monotonic feasibility check',
+    state: 'lo, hi bracket the answer domain; feasible(mid) shrinks the range',
+    move: 'binary search the answer; the predicate flips at exactly one point',
+    watch: 'predicate must be strictly monotonic — verify on tiny inputs before coding the search',
+  },
+  {
+    id: 'matrix-rotated-sorted-search',
+    family: 'search',
+    trigger: 'array was sorted then rotated; find a value or the rotation pivot in O(log n)',
+    state: 'lo, hi bracket the index; one half [lo, mid] or [mid, hi] is always sorted',
+    move: 'identify the sorted half, decide which side the target lives in, recurse on that half',
+    watch: 'duplicates can defeat the log-n decision — fall back to O(n) when nums[lo] == nums[mid] == nums[hi]',
+  },
 ];
 
 const ARRAY_TOOLKIT_IMPL: Record<'python' | 'javascript' | 'java', string> = {

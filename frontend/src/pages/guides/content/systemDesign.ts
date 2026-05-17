@@ -264,4 +264,157 @@ export const systemDesignContent: SystemDesignContent = {
 
   buildingBlocks: BUILDING_BLOCKS,
   reliability: RELIABILITY,
+
+  decisions: [
+    {
+      id: 'sync-vs-async',
+      title: 'Sync vs Async',
+      question: 'Should the caller block waiting for this work to finish, or hand it off and continue?',
+      pickA: {
+        option: 'Sync (request/response)',
+        signals: [
+          'The caller cannot proceed without the result (search query, login, payment authorization).',
+          'The work is fast enough (<100 ms) that holding the connection is cheap.',
+          'Failures should be visible to the user immediately so they can retry.',
+        ],
+      },
+      pickB: {
+        option: 'Async (queue + worker)',
+        signals: [
+          'The work is slow (sending email, encoding video, charging a card asynchronously).',
+          'Throughput matters more than per-request latency — bursty load you want to absorb.',
+          'You can return an ack now and surface the result via a webhook, push, or polling status.',
+        ],
+      },
+      defaultPick:
+        'Sync unless a step is slow, expensive, or independent of the request. The moment you reach for "retry on failure", you usually want async with idempotency.',
+      seniorMove:
+        'Name the user-visible contract — is the caller getting a result or an ack? Then name the failure path (DLQ, retry budget, alert) so the async choice has teeth.',
+    },
+    {
+      id: 'strong-vs-eventual',
+      title: 'Strong vs Eventual Consistency',
+      question: 'Must every read see the latest write, or can a stale read be acceptable for a small window?',
+      pickA: {
+        option: 'Strong consistency',
+        signals: [
+          'Money, inventory, seat counts — read-modify-write where a stale read would over-promise.',
+          'The user just performed the action and expects to see the result immediately.',
+          'Single-source-of-truth datasets where divergence between replicas is unacceptable.',
+        ],
+      },
+      pickB: {
+        option: 'Eventual consistency',
+        signals: [
+          'Feeds, counters, likes, search indexes — the user tolerates a small staleness window.',
+          'Reads vastly outnumber writes and you want to serve from local replicas / cache / CDN.',
+          'Cross-region — the write-quorum latency would dominate the request budget.',
+        ],
+      },
+      defaultPick:
+        'Strong for transactional integrity (money, identity, unique constraints). Eventual for everything else, with a named staleness budget ("p99 ≤ 5 s").',
+      seniorMove:
+        'State the stale window the user can absorb and the reconciliation path — version vectors, last-write-wins, server timestamp, or a domain-specific merge.',
+    },
+    {
+      id: 'push-vs-pull',
+      title: 'Push vs Pull (fan-out)',
+      question: 'When User A produces something that User B reads, do you push into Bʼs view at write time, or compute Bʼs view at read time?',
+      pickA: {
+        option: 'Push / fan-out on write',
+        signals: [
+          'Reads vastly outnumber writes (Twitter timeline for typical users).',
+          'You can tolerate write amplification — a celebrity post that fans out to millions of inboxes.',
+          'The downstream consumer is latency-sensitive and lookups must be O(1).',
+        ],
+      },
+      pickB: {
+        option: 'Pull / fan-out on read',
+        signals: [
+          'A small number of high-fan-out producers (a celebrity with 10M followers).',
+          'Writes are bursty and you want to amortise cost at read time.',
+          'The consumer can tolerate a few hundred ms to aggregate sources.',
+        ],
+      },
+      defaultPick:
+        'Hybrid: push for the common case, pull for high-fanout producers. Most social-feed systems land here for a reason.',
+      seniorMove:
+        'Show the math — at what fanout does push stop being affordable, and what is the read latency for the pull case at p99?',
+    },
+    {
+      id: 'stateful-vs-stateless',
+      title: 'Stateful vs Stateless Services',
+      question: 'Should this service hold session/cache state in memory, or push all state to an external store?',
+      pickA: {
+        option: 'Stateless services + external state',
+        signals: [
+          'Horizontal scaling is the primary scaling lever (web tier, API gateway).',
+          'Deploys are frequent and you want any instance to handle any request.',
+          'Failure domain should be small — losing one instance loses zero data.',
+        ],
+      },
+      pickB: {
+        option: 'Stateful services',
+        signals: [
+          'Per-connection state is expensive to externalise (WebSocket gateways, game servers).',
+          'Strong locality matters — co-locating compute and data unlocks an order-of-magnitude win.',
+          'You can afford sticky sessions or sharded state with a known migration story.',
+        ],
+      },
+      defaultPick:
+        'Stateless by default. Push session/cache state to Redis or similar; let any instance serve any request. Only go stateful when the locality win is concrete.',
+      seniorMove:
+        'If you choose stateful, name the failover/draining plan and how a deploy works without dropping connections.',
+    },
+    {
+      id: 'single-region-vs-multi',
+      title: 'Single-region vs Multi-region',
+      question: 'Is the system deployed in one region with multi-AZ redundancy, or replicated across regions?',
+      pickA: {
+        option: 'Single-region, multi-AZ',
+        signals: [
+          'Three or four nines of availability is sufficient.',
+          'Users are concentrated in one geography; cross-region latency would not improve UX.',
+          'Strong consistency dominates and you do not want to pay for cross-region quorum.',
+        ],
+      },
+      pickB: {
+        option: 'Multi-region (active-active or active-passive)',
+        signals: [
+          'Five nines target, or a single-region outage is unacceptable to the business.',
+          'Users are global and per-region latency matters (<100 ms reads for distant users).',
+          'Regulatory boundaries require data to live near the user (data residency).',
+        ],
+      },
+      defaultPick:
+        'Single-region multi-AZ. Add a second region only when the cost of the next-larger outage exceeds the cost of running it. Multi-region is one of the most expensive choices on the board.',
+      seniorMove:
+        'State the RPO and RTO numerically. Explain how writes are conflict-resolved if you go active-active — last-write-wins is almost never the right answer.',
+    },
+    {
+      id: 'realtime-transport',
+      title: 'Polling vs Long-poll vs WebSocket vs SSE',
+      question: 'How does the client learn about new server-side events?',
+      pickA: {
+        option: 'Polling / long-polling',
+        signals: [
+          'Update cadence is slow (minutes) and clients are short-lived.',
+          'Bidirectional channel is overkill — server pushes only.',
+          'You want HTTP semantics (auth, caching, debugging) without a sticky connection.',
+        ],
+      },
+      pickB: {
+        option: 'WebSocket (or SSE for one-way)',
+        signals: [
+          'Sub-second push latency matters (chat, presence, collaborative editing, live dashboards).',
+          'Connection churn is acceptable and you have a session gateway story.',
+          'Bidirectional traffic — the client also pushes events back continuously.',
+        ],
+      },
+      defaultPick:
+        'SSE for server→client push when bidirectional isnʼt needed (it falls back gracefully and is cheaper to scale). WebSocket only when the client also needs to push continuously.',
+      seniorMove:
+        'Name the reconnect strategy with backoff + jitter, and what happens to in-flight messages during a reconnect — without a story here, the channel pretends to be reliable while silently dropping events.',
+    },
+  ],
 };

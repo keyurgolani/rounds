@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import type { GuideNavGroup } from '../../shared/GuideNav';
 import type { TrackConfig } from '../../guideTypes';
 import StudyShell from '../../shared/StudyShell';
-import { Section, ThesisLine, Pact, LaneCard } from '../../shared/primitives';
+import { Section, Callout, Pact, LaneCard, Prose } from '../../shared/primitives';
 import InfographicFrame from '../../shared/visuals/InfographicFrame';
 import { systemDesignContent } from '../../content/systemDesign';
 
@@ -43,17 +43,26 @@ export default function MentalModel({ config, navGroups, scrollRef }: Props) {
       trackBasePath={config.guidePath}
       scrollRef={scrollRef}
     >
-      <Section eyebrow="Thesis" title="Pressure before components">
-        <ThesisLine>{mentalModel.thesis}</ThesisLine>
+      <Section
+        title="Pressure before components"
+        lede="A system design prompt rarely tells you which component to draw — it tells you what the system must endure. Reading the requirements is the act of naming each force the system is under (users, latency, retention, consistency). Components come second; they exist only to absorb a specific force."
+      >
+        <Callout>{mentalModel.thesis}</Callout>
       </Section>
 
-      <Section eyebrow="Wiring" title="Forces → architecture">
-        <InfographicFrame caption="Each line is one force that earns one component its seat" minHeight={340}>
+      <Section
+        title="Forces → architecture"
+        lede="Each force in your requirements pulls in a small set of components. The diagram below maps the recurring force-to-component edges that show up in interviews. When you draw a component, you should be able to trace it back to one of these forces."
+      >
+        <InfographicFrame caption="Each line is one force that earns one component its seat">
           <ForcesGraph links={mentalModel.forceComponentLinks} />
         </InfographicFrame>
       </Section>
 
-      <Section eyebrow="Earn Its Seat" title="Every box on the board must answer four questions">
+      <Section
+        title="Every box on the board must answer four questions"
+        lede="Before you accept any component into your design, run it through these four checks. If you can't answer one cleanly, you're padding the diagram — and an interviewer will hear it."
+      >
         <div className="grid" style={{ gap: 'var(--gap-md)', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
           {mentalModel.earnItsSeatQuestions.map((question, index) => (
             <LaneCard
@@ -65,8 +74,17 @@ export default function MentalModel({ config, navGroups, scrollRef }: Props) {
         </div>
       </Section>
 
-      <Section eyebrow="Order" title="Path before infrastructure">
+      <Section
+        title="Path before infrastructure"
+        lede="The order in which you build the design matters as much as the design itself. Walk one user request end-to-end across the components you've drawn — only then add scaling primitives. This keeps the conversation grounded in behaviour, not architecture astronomy."
+      >
         <Pact>{mentalModel.pathBeforeInfraNote}</Pact>
+        <Prose>
+          A common failure mode is jumping to caches, queues, and shards before the
+          single-user path is even traced through the system. Walk one request all
+          the way through first; then bring in the scaling primitives the forces
+          actually justify.
+        </Prose>
       </Section>
     </StudyShell>
   );

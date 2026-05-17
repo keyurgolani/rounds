@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import type { GuideNavGroup } from '../../shared/GuideNav';
 import type { TrackConfig } from '../../guideTypes';
 import StudyShell from '../../shared/StudyShell';
-import { Section } from '../../shared/primitives';
+import { Section, Prose, GuidanceGrid, Guidance } from '../../shared/primitives';
 import { behavioralContent } from '../../content/behavioral';
 
 type Props = {
@@ -22,7 +22,11 @@ export default function StoryBank({ config, navGroups, scrollRef }: Props) {
       trackBasePath={config.guidePath}
       scrollRef={scrollRef}
     >
-      <Section eyebrow="Portfolio" title="What good evidence looks like for each signal">
+      <Section
+        eyebrow="Portfolio"
+        title="What good evidence looks like for each signal"
+        lede="Each card below is a signal the interviewer wants to confirm. The four dimensions — artifacts, metrics, stakeholders, and criteria — are the ingredients that make a story credible. Before your interview, check that your stored anecdote for each signal includes at least one artifact and one metric; stories without both tend to sound generic."
+      >
         <div
           className="grid"
           style={{ gap: 'var(--gap-md)', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
@@ -46,7 +50,11 @@ export default function StoryBank({ config, navGroups, scrollRef }: Props) {
         </div>
       </Section>
 
-      <Section eyebrow="Format" title="Canonical story entry">
+      <Section
+        eyebrow="Format"
+        title="Canonical story entry"
+        lede="This is the format to use when writing an anecdote into your library. The fields are ordered by what the interviewer needs to hear earliest — title for fast retrieval, signals for matching to questions, numbers for instant credibility, and weak spot so you're not surprised by a follow-up."
+      >
         <div className="card" style={{ padding: 'var(--pad-md)' }}>
           <dl style={{ margin: 0, display: 'grid', gap: 'var(--gap-sm)' }}>
             {storyBank.storyFormat.map((row) => (
@@ -61,19 +69,34 @@ export default function StoryBank({ config, navGroups, scrollRef }: Props) {
         </div>
       </Section>
 
-      <Section eyebrow="Angles" title="One story → many prompts">
-        <div className="grid" style={{ gap: 'var(--gap-sm)', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+      <Section
+        eyebrow="Angles"
+        title="One story → many prompts"
+        lede="A well-constructed story is reusable. The same project that demonstrates impact can be told as a conflict story, a failure story, or a leadership story depending on which angle you lead with. The cards below show how to choose the lead — the first sentence determines which signal the interviewer scores."
+      >
+        <GuidanceGrid>
           {storyBank.reusableAngles.map((entry) => (
-            <div key={entry.angle} className="card" style={{ padding: 'var(--pad-sm)' }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)' }}>{entry.angle}</div>
-              <div style={{ marginTop: 4, color: 'var(--text-3)', fontSize: 12.5, lineHeight: 1.45 }}>{entry.lead}</div>
-            </div>
+            <Guidance key={entry.angle} label={entry.angle}>
+              {ANGLE_EXPANSIONS[entry.angle] ?? entry.lead}
+            </Guidance>
           ))}
-        </div>
+        </GuidanceGrid>
+        <Prose size="sm">
+          To reuse a story: pick the angle that matches the signal being asked about, restructure the first sentence to lead with that angle's framing, then proceed through STAR normally. The underlying facts stay the same — only the lens changes.
+        </Prose>
       </Section>
     </StudyShell>
   );
 }
+
+const ANGLE_EXPANSIONS: Record<string, string> = {
+  'Impact angle':     'Open with the metric and explain why it mattered to the business or users, before saying anything about what you did. Pull the audience into the stakes before the story.',
+  'Conflict angle':   'Open with the disagreement and who held which position. Make both sides sound reasonable — then show how you built alignment through criteria, not persuasion.',
+  'Failure angle':    'Open with the bad assumption you made and the impact it caused. Own it directly. Then move to repair work and the later proof that your operating model updated.',
+  'Ambiguity angle':  'Open with what was missing — unclear ownership, competing requirements, or absent data. Then show the structure you created from nothing and the trade-off you made explicit.',
+  'Leadership angle': 'Open with how a peer or team outside your reporting line changed their behavior because of something you built or demonstrated. Titles don\'t matter; behavior change does.',
+  'Growth angle':     'Open with the specific feedback you received, including your initial emotional reaction. Then describe the behavior that changed and cite a later outcome as proof.',
+};
 
 function DimensionList({ label, items }: { label: string; items: string[] }) {
   return (

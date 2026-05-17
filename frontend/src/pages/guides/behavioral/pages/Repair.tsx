@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import type { GuideNavGroup } from '../../shared/GuideNav';
 import type { TrackConfig } from '../../guideTypes';
 import StudyShell from '../../shared/StudyShell';
-import { Section, Pact } from '../../shared/primitives';
+import { Section, Prose, Pact } from '../../shared/primitives';
 import { behavioralContent } from '../../content/behavioral';
 
 type Props = {
@@ -17,12 +17,16 @@ export default function Repair({ config, navGroups, scrollRef }: Props) {
     <StudyShell
       eyebrow={`${config.eyebrow} · Repair`}
       title="Answer Repair"
-      description="Weak → strong rewrites, a self-scorecard rubric, and a 30-minute mock drill loop."
+      description="Weak → strong rewrites and a self-scorecard rubric to diagnose and fix vague responses."
       navGroups={navGroups}
       trackBasePath={config.guidePath}
       scrollRef={scrollRef}
     >
-      <Section eyebrow="Rewrites" title="Weak phrase → what's missing → strong rewrite">
+      <Section
+        eyebrow="Rewrites"
+        title="Weak phrase → what's missing → strong rewrite"
+        lede="Each pair below starts with a phrase that sounds reasonable but scores poorly, explains the underlying gap, and shows the rewrite. The pattern is consistent: weak answers lack an actor, a decision criterion, or a quantified result. Study the rewrites until the repair move becomes automatic."
+      >
         <div className="grid" style={{ gap: 'var(--gap-md)' }}>
           {repair.rewrites.map((pair, index) => (
             <article
@@ -57,7 +61,11 @@ export default function Repair({ config, navGroups, scrollRef }: Props) {
         </div>
       </Section>
 
-      <Section eyebrow="Scorecard" title="Score yourself 1-3 across five dimensions">
+      <Section
+        eyebrow="Scorecard"
+        title="Score yourself 1–3 across five dimensions"
+        lede="Use this rubric after recording a practice answer. Score each dimension honestly — a 2 on Ownership or a 1 on Impact means the answer is likely to score below bar regardless of how good the underlying story is. The goal is a minimum 2 on every dimension, with 3s on Specificity and Impact."
+      >
         <div className="card" style={{ padding: 'var(--pad-md)', overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
@@ -80,9 +88,17 @@ export default function Repair({ config, navGroups, scrollRef }: Props) {
             </tbody>
           </table>
         </div>
+        <Prose size="sm">
+          If you scored a 1 on Ownership, revisit the Repair rewrites above — every rewrite with "no actor" in the missing column shows the fix. If you scored a 1 on Reflection, see the{' '}
+          <strong>Cheatsheet</strong> for examples of behavior-proof lessons versus generic ones.
+        </Prose>
       </Section>
 
-      <Section eyebrow="Drill" title="30-minute mock practice loop">
+      <Section
+        eyebrow="Drill"
+        title="30-minute mock practice loop"
+        lede="Prep without a drill loop doesn't transfer to performance under pressure. Run this cycle for each story in your library — once is enough to expose the weak spots, twice is enough to fix them. The goal is to be able to tell any story cold, to time, without notes."
+      >
         <Pact>
           <ol style={{ margin: 0, paddingLeft: 18 }}>
             {repair.mockDrillSteps.map((step) => (

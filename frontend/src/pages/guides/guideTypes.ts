@@ -177,6 +177,23 @@ export type SystemDesignContent = {
     patterns: ReliabilityPattern[];   // 8 entries
     seniorFraming: string[];          // 6 lines
   };
+  decisions: SDDecisionTopic[];
+};
+
+export type SDDecisionTopic = {
+  id: string;
+  /** Short, "X vs Y" framing (e.g. "Sync vs Async"). */
+  title: string;
+  /** What the candidate is actually deciding, in 1 sentence. */
+  question: string;
+  /** Concrete signals that point toward option A. */
+  pickA: { option: string; signals: string[] };
+  /** Concrete signals that point toward option B. */
+  pickB: { option: string; signals: string[] };
+  /** A "good default" the candidate can fall back on when in doubt. */
+  defaultPick: string;
+  /** The trade-off framing an interviewer wants to hear out loud. */
+  seniorMove: string;
 };
 
 // Behavioral ─────────────────────────────────────────────────────────────────
@@ -385,8 +402,11 @@ export type BuilderFlavorCard = {
 };
 
 export type TimeBudgetPlan = {
-  totalMinutes: number;     // 60 / 90 / 120 / 180
-  phases: { id: string; minutes: string; label: string; do: string }[]; // 6 phases
+  /** Stable identifier matching a builder LengthPreset id ('d1','d3','w1','w2'). */
+  presetId: string;
+  /** Human-readable label, e.g. "1 day" or "1 week". */
+  label: string;
+  phases: { id: string; timeLabel: string; label: string; do: string }[]; // 3 phases
   whatSlipsFirst: string;
 };
 
@@ -403,7 +423,7 @@ export type BuilderContent = {
     description: string;
     flavorMatrix: BuilderFlavorCard[];      // 4 entries
     policyDistribution: { off: number; choice: number; on: number }; // 2 / 6 / 12
-    timeTiers: string[];                    // ['30 min','45 min','60 min','90 min','120 min','180 min']
+    timeTiers: string[];                    // ['1 day','3 days','1 week','2 weeks']
     submissionPact: string;
   };
   mentalModel: {
@@ -413,12 +433,12 @@ export type BuilderContent = {
     whatToCut: string[];                    // 4 items
   };
   cheatsheet: {
-    timeTiers: { tier: string; reasonable: string }[]; // 6 tiers
+    timeTiers: { tier: string; reasonable: string }[]; // 4 day-based tiers
     flavorDeck: { id: BuilderFlavor; trigger: string; move: string; watch: string }[]; // 4
     aiPolicyMoves: { policy: 'off' | 'candidate-choice' | 'on'; behave: string }[]; // 3
   };
   timePlan: {
-    plans: TimeBudgetPlan[];                 // 4 plans (60/90/120/180)
+    plans: TimeBudgetPlan[];                 // 4 plans (1d/3d/1w/2w)
   };
   submission: {
     readmeTemplate: string;                  // multi-line template literal

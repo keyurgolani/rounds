@@ -1,15 +1,21 @@
 import type { ReactNode } from 'react';
 
-/** Theme-correct wrapper for SVG/CSS infographics. Provides the surrounding
- *  card chrome so individual infographics can focus on their inner artwork. */
+/** Theme-correct wrapper for SVG/CSS infographics.
+ *
+ *  Defaults to shrinking to the child's intrinsic width so narrow
+ *  diagrams don't waste horizontal real estate. Pass `wide` to opt into
+ *  a full-bleed frame for diagrams that legitimately benefit from the
+ *  full column (force/component tables, network maps).
+ *
+ *  No min-height — frames shrink to content. */
 export default function InfographicFrame({
   caption,
   children,
-  minHeight = 240,
+  wide = false,
 }: {
   caption?: string;
   children: ReactNode;
-  minHeight?: number;
+  wide?: boolean;
 }) {
   return (
     <figure
@@ -19,11 +25,16 @@ export default function InfographicFrame({
         padding: 'var(--pad-md)',
         background: 'var(--bg-sunken)',
         boxShadow: 'inset 0 0 0 1px var(--border)',
+        // Shrink the frame to its content unless the caller opted into a
+        // full-width treatment. `max-content` keeps width snug for SVGs
+        // with their own maxWidth, while still letting them scale down
+        // when the column is narrower.
+        width: wide ? '100%' : 'fit-content',
+        maxWidth: '100%',
       }}
     >
       <div
         style={{
-          minHeight,
           display: 'grid',
           placeItems: 'center',
           color: 'var(--text-2)',

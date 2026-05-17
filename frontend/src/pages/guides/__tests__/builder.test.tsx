@@ -48,11 +48,11 @@ describe('builder guide pages', () => {
     ).toBeInTheDocument();
   });
 
-  it('time-plan renders the 60-minute plan whatSlipsFirst', () => {
+  it('time-plan renders the active plan whatSlipsFirst', () => {
     renderAt('/builder/guide/time-plan');
-    // 60-min whatSlipsFirst — unique body content for this page
+    // The active preset defaults to '1 week' (w1). The w1 whatSlipsFirst contains this phrase.
     expect(
-      screen.getByText(/Edge-case coverage. At 60 min, name the cuts in the README/i),
+      screen.getByText(/Premature abstraction/i),
     ).toBeInTheDocument();
   });
 

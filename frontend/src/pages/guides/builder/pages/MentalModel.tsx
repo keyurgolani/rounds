@@ -2,7 +2,14 @@ import type { RefObject } from 'react';
 import type { GuideNavGroup } from '../../shared/GuideNav';
 import type { TrackConfig } from '../../guideTypes';
 import StudyShell from '../../shared/StudyShell';
-import { Section, ThesisLine, KeyValueRow, LaneCard, ChipRow } from '../../shared/primitives';
+import {
+  Section,
+  Callout,
+  KeyValueRow,
+  GuidanceGrid,
+  Guidance,
+  SubHeading,
+} from '../../shared/primitives';
 import InfographicFrame from '../../shared/visuals/InfographicFrame';
 import { builderContent } from '../../content/builder';
 
@@ -29,12 +36,12 @@ export default function MentalModel({ config, navGroups, scrollRef }: Props) {
       trackBasePath={config.guidePath}
       scrollRef={scrollRef}
     >
-      <Section eyebrow="Thesis" title="Pull on one corner; the other two move.">
-        <ThesisLine>{mentalModel.thesis}</ThesisLine>
-      </Section>
-
-      <Section eyebrow="Triangle" title="The take-home trade-off">
-        <InfographicFrame caption="Triangle">
+      <Section
+        title="The take-home trade-off triangle"
+        lede="Every take-home forces you to balance three things: how much you build (scope), how well you build it (quality), and how long you spend (time). You cannot pull on one corner without the other two shifting. Knowing which corner to sacrifice — and saying so in your README — is itself a signal of senior judgment."
+      >
+        <Callout>{mentalModel.thesis}</Callout>
+        <InfographicFrame caption="Scope · Quality · Time">
           <div
             className="grid"
             style={{ gap: 'var(--gap-md)', width: '100%', justifyItems: 'center' }}
@@ -75,19 +82,31 @@ export default function MentalModel({ config, navGroups, scrollRef }: Props) {
         </div>
       </Section>
 
-      <Section eyebrow="Ship" title={'What "ship" actually means'}>
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--gap-md)' }}
-        >
-          {mentalModel.shipMeans.map((item) => (
-            <LaneCard key={item} title={item} />
+      <Section
+        title={'What "ship" actually means'}
+        lede="In a take-home context, 'shipped' is not the same as 'coded.' Something is shipped when a reviewer can clone it, run it, and understand it in under 5 minutes without your help. These four criteria define the bar — not lines of code, not cleverness."
+      >
+        <GuidanceGrid>
+          {mentalModel.shipMeans.map((item, i) => (
+            <Guidance key={i} label={`Criterion ${i + 1}`}>
+              {item}
+            </Guidance>
           ))}
-        </div>
+        </GuidanceGrid>
       </Section>
 
-      <Section eyebrow="Cut" title="What to cut without regret">
-        <ChipRow chips={mentalModel.whatToCut} />
+      <Section
+        title="What to cut without regret"
+        lede="Take-homes punish over-scope. When you are running short on time, these are the safe cuts — things that feel important in the moment but rarely change a reviewer's evaluation. Name every cut in the README so reviewers know you made a deliberate choice, not an oversight."
+      >
+        <SubHeading>Safe cuts</SubHeading>
+        <GuidanceGrid>
+          {mentalModel.whatToCut.map((item, i) => (
+            <Guidance key={i} label="">
+              {item}
+            </Guidance>
+          ))}
+        </GuidanceGrid>
       </Section>
     </StudyShell>
   );

@@ -51,176 +51,108 @@ const FLAVOR_MATRIX: BuilderFlavorCard[] = [
 
 const TIME_PLANS: TimeBudgetPlan[] = [
   {
-    totalMinutes: 60,
+    presetId: 'd1',
+    label: '1 day',
     phases: [
       {
-        id: 'read-clarify',
-        minutes: '0-5',
-        label: 'Read & clarify',
-        do: 'Read prompt twice. Restate the contract in your own words. Note 1 question you would ask if this were a real sprint — write it in the README as a stated assumption.',
+        id: 'scope-spike',
+        timeLabel: 'First ~2 hours',
+        label: 'Scope & spike',
+        do: 'Read the prompt twice. List explicit requirements vs implicit assumptions — write them in the README before touching code. Sketch the data model and the one design question that shapes everything else. Build the thinnest possible spike that proves the central concern works (e.g. if it is an auth system, prove the session lifecycle end-to-end with hardcoded data). Commit this spike.',
       },
       {
-        id: 'sketch',
-        minutes: '5-10',
-        label: 'Sketch',
-        do: 'One paragraph: data flow, interface shape, where the complexity lives. No code yet.',
+        id: 'build',
+        timeLabel: 'Next ~4 hours',
+        label: 'Build',
+        do: 'Implement the remaining features. Use AI to scaffold, but verify every behavior yourself before committing. Write at least one test per logical chunk. Commit per feature — small, focused commits so the reviewer can follow the build order.',
       },
       {
-        id: 'build-happy',
-        minutes: '10-35',
-        label: 'Build happy path',
-        do: 'End-to-end smallest working version. Skip every "what if" until the happy path passes a real invocation.',
-      },
-      {
-        id: 'edge-cases',
-        minutes: '35-45',
-        label: 'Edge cases',
-        do: 'Add the 1-2 edges the prompt named explicitly. Leave the rest out and note them in the README.',
-      },
-      {
-        id: 'polish-readme',
-        minutes: '45-55',
-        label: 'Polish + README',
-        do: 'Setup / Run / Test / Design / Trade-offs. 4-6 lines per section. No marketing, no apologies.',
-      },
-      {
-        id: 'submit',
-        minutes: '55-60',
-        label: 'Submit',
-        do: 'git log reads as a story. No "wip" commits. Push.',
+        id: 'final-pass',
+        timeLabel: 'Last ~2 hours',
+        label: 'Final pass',
+        do: 'Read the README as a stranger would. It must answer setup / run / test / design / trade-offs / what you would do next. Read the git log — no "wip" commits. Verify a clean run from a fresh terminal. Push.',
       },
     ],
     whatSlipsFirst:
-      'Edge-case coverage. At 60 min, name the cuts in the README rather than skip silently — a documented cut is a sign of judgment, not a sign of incompleteness.',
+      'Deep edge-case coverage. With 1 day, name the untested edges in the README rather than skip them silently — a documented cut shows judgment; a silent gap does not.',
   },
   {
-    totalMinutes: 90,
+    presetId: 'd3',
+    label: '3 days',
     phases: [
       {
-        id: 'read-clarify',
-        minutes: '0-5',
-        label: 'Read & clarify',
-        do: 'Read prompt twice. Restate the contract. Write 1-2 clarifying assumptions directly in the README before touching code.',
+        id: 'scope-spike',
+        timeLabel: 'Day 1',
+        label: 'Scope & spike',
+        do: 'Read the prompt twice. Write a one-paragraph restatement of the contract with explicit assumptions and any open questions. Sketch the entity model, operations, and invariants. Build the thinnest end-to-end spike that proves the central concern (happy path only, hardcoded data is fine). Commit it and stop — do not start feature work on day 1.',
       },
       {
-        id: 'sketch',
-        minutes: '5-15',
-        label: 'Sketch',
-        do: 'Data flow diagram or a paragraph with entity names, operations, and invariants. Pick the data structure before writing a line.',
+        id: 'build',
+        timeLabel: 'Day 2',
+        label: 'Build',
+        do: 'Implement the full feature set. Handle every named edge case, plus 1-2 inferred from the domain. Use AI freely — scaffold, debug, review — but own every line that ships. Write tests as you go. Commit per logical chunk. By end of day 2 the implementation should be functionally complete.',
       },
       {
-        id: 'build-happy',
-        minutes: '15-45',
-        label: 'Build happy path',
-        do: 'End-to-end working version. Run it against a real input before moving on.',
-      },
-      {
-        id: 'edge-cases',
-        minutes: '45-65',
-        label: 'Edge cases',
-        do: 'Add every edge the prompt named. Add one you inferred from the domain. Note anything you skipped.',
-      },
-      {
-        id: 'polish-readme',
-        minutes: '65-80',
-        label: 'Polish + README',
-        do: 'Setup / Run / Test / Design / Trade-offs. Add a "What I would do next" section if time allows.',
-      },
-      {
-        id: 'submit',
-        minutes: '80-90',
-        label: 'Submit',
-        do: 'Squash any "wip" commits. Verify clean run from a fresh terminal. Push.',
+        id: 'final-pass',
+        timeLabel: 'Day 3',
+        label: 'Final pass',
+        do: 'Polish: inline comments where the why is not obvious, a clean README that answers setup / run / test / design / trade-offs / what you would do next. One design decision deserves a full paragraph explaining why this approach over the obvious alternative. Read the git log as if you are the reviewer. No wip commits. Tag the release commit if the prompt requests a deliverable artifact.',
       },
     ],
     whatSlipsFirst:
-      'Polish. At 90 min, functional is graded; visual alignment, inline comments, and extra test assertions are not. Cut them and ship.',
+      'Observability and operational polish. At 3 days you have time for logging and error codes — but if the core is not solid, skip the polish and extend the implementation instead. A working app beats a polished broken one every time.',
   },
   {
-    totalMinutes: 120,
+    presetId: 'w1',
+    label: '1 week',
     phases: [
       {
-        id: 'read-clarify',
-        minutes: '0-10',
-        label: 'Read & clarify',
-        do: 'Read prompt twice. Write a one-paragraph restatement of the contract with explicit assumptions. Flag any ambiguity you would resolve in a real sprint.',
+        id: 'scope-spike',
+        timeLabel: 'Days 1–2',
+        label: 'Scope & spike',
+        do: 'Read the prompt twice. Write a full restatement: entities, operations, invariants, and the two or three structural options you considered. Pick one and say why in the README. Build a spike that proves the central concern end-to-end. Commit the spike as the first real commit. Day 2: extend the spike into a working happy path with at least one test. Commit when the happy path passes.',
       },
       {
-        id: 'sketch',
-        minutes: '10-20',
-        label: 'Sketch',
-        do: 'Data flow + entity model + the one design decision you want to explain in the README. Commit this as the first commit.',
+        id: 'build',
+        timeLabel: 'Days 3–5',
+        label: 'Build',
+        do: 'Implement everything. All named edges, plus the inferred ones from the domain. Observability hooks (structured logging, error codes) where the problem domain warrants them. Use AI for scaffolding and debugging, but review every output before it ships — you will be asked to explain any line in a follow-up call. Commit per feature; the git log should read as a coherent story.',
       },
       {
-        id: 'build-happy',
-        minutes: '20-55',
-        label: 'Build happy path',
-        do: 'Working end-to-end version with a test. Commit when the happy path passes.',
-      },
-      {
-        id: 'edge-cases',
-        minutes: '55-80',
-        label: 'Edge cases',
-        do: 'All named edges plus 1-2 inferred. Each handled, each tested. Commit per logical chunk.',
-      },
-      {
-        id: 'polish-readme',
-        minutes: '80-110',
-        label: 'Polish + README',
-        do: 'Setup / Run / Test / Design / Trade-offs / What I would do next. One design decision should get a full paragraph explaining why this over the alternative.',
-      },
-      {
-        id: 'submit',
-        minutes: '110-120',
-        label: 'Submit',
-        do: 'Read the README as a stranger. Fix one thing. Verify clean run. Push.',
+        id: 'final-pass',
+        timeLabel: 'Day 6–7',
+        label: 'Final pass',
+        do: 'Production-shaped README: Setup / Run / Test / Design / Trade-offs / What I would do next. Include a deployable artifact (Dockerfile or start.sh) if it fits the domain. Add an AI-usage note: what you scaffolded, what you rewrote, what you verified manually. Read the full README and git log as if you are the reviewer. Fix one thing. Push.',
       },
     ],
     whatSlipsFirst:
-      'Design-notes depth. At 120 min you have time for one careful explanation; spend it on the riskiest decision, not on the safe choices that justify themselves.',
+      'Premature abstraction — with a week, the temptation is to add one more interface or generic helper. Resist it. Reviewers grade the README and the commit story first; a focused concrete implementation beats a clever abstract one every time.',
   },
   {
-    totalMinutes: 180,
+    presetId: 'w2',
+    label: '2 weeks',
     phases: [
       {
-        id: 'read-clarify',
-        minutes: '0-10',
-        label: 'Read & clarify',
-        do: 'Read prompt twice. Write a restatement with assumptions. Identify the one design question that changes the architecture.',
+        id: 'scope-spike',
+        timeLabel: 'Week 1, days 1–3',
+        label: 'Scope & spike',
+        do: 'Read the prompt twice. Write a full design document in the README: problem restatement, entities and operations, invariants, structural options considered, and the option you chose with rationale. Build a spike that proves the central concern. Get to a working happy path with tests before end of day 3. Use the remaining days of week 1 to extend coverage and close all named edges.',
       },
       {
-        id: 'sketch',
-        minutes: '10-25',
-        label: 'Sketch',
-        do: 'Full entity model, operation list, invariants, and the two or three structural options. Pick one and say why in a commit message or the README.',
+        id: 'build',
+        timeLabel: 'Week 1, days 4–5 + Week 2, days 1–3',
+        label: 'Build',
+        do: 'Full implementation with comprehensive tests. All named and inferred edges. Structured logging and error codes. Clean module boundaries — but earn every abstraction; do not add an interface until you have two concrete implementors. Use AI for scaffolding, generation, and code review. Review every output — document where AI helped and what you changed in the README AI-usage note.',
       },
       {
-        id: 'build-happy',
-        minutes: '25-70',
-        label: 'Build happy path',
-        do: 'Working implementation with a test suite covering the happy path. Commit per feature.',
-      },
-      {
-        id: 'edge-cases',
-        minutes: '70-110',
-        label: 'Edge cases',
-        do: 'All named and inferred edges. Observability hook (logging or error codes) where the problem domain warrants it.',
-      },
-      {
-        id: 'polish-readme',
-        minutes: '110-160',
-        label: 'Polish + README',
-        do: 'Production-shaped README: Setup / Run / Test / Design / Trade-offs / What I would do next. Include a deployable artifact (Dockerfile or start.sh) if time allows.',
-      },
-      {
-        id: 'submit',
-        minutes: '160-180',
-        label: 'Submit',
-        do: 'Read the full README and git log as if you are the reviewer. No wip commits. Tag the final commit if the problem requests a deliverable artifact.',
+        id: 'final-pass',
+        timeLabel: 'Week 2, days 4–5',
+        label: 'Final pass',
+        do: 'Production-shaped README with a full design rationale section. Deployable artifact (Dockerfile, docker-compose, or start.sh). Optional Loom walkthrough — 5 minutes showing the app running and explaining one design decision out loud. Read the full repo as a stranger. Fix whatever makes you wince. No wip commits. Tag the release.',
       },
     ],
     whatSlipsFirst:
-      'Premature abstraction. At 180 min the temptation is to add one more interface or generic helper — resist it. The polish time is finite and reviewers grade the README and the commit story, not the abstraction count.',
+      'Scope creep — two weeks is enough time to add features that were not asked for and obscure the ones that were. Stay anchored to the prompt. Every hour spent on unrequested stretch goals is an hour not spent on the README, the tests, or the operational story that reviewers actually evaluate.',
   },
 ];
 
@@ -302,7 +234,7 @@ export const builderContent: BuilderContent = {
       'How to attack a take-home or live real-world engineering problem — scope it right, ship it clean, and document what you cut.',
     flavorMatrix: FLAVOR_MATRIX,
     policyDistribution: { off: 2, choice: 6, on: 12 },
-    timeTiers: ['30 min', '45 min', '60 min', '90 min', '120 min', '180 min'],
+    timeTiers: ['1 day', '3 days', '1 week', '2 weeks'],
     submissionPact:
       'What you submit matters as much as what you build. A working, well-documented 80% solution beats an over-engineered 100% that nobody can run.',
   },
@@ -343,34 +275,24 @@ export const builderContent: BuilderContent = {
   cheatsheet: {
     timeTiers: [
       {
-        tier: '30 min',
+        tier: '1 day',
         reasonable:
-          'Happy path only. One edge case. README is 4 lines: setup / run / test / design notes.',
+          'Happy path, 1-2 named edge cases. README covers setup / run / test / design notes / trade-offs. Clean commit history. A documented cut beats a silent gap.',
       },
       {
-        tier: '45 min',
+        tier: '3 days',
         reasonable:
-          'Happy path + 1-2 edge cases. README adds a trade-offs paragraph.',
+          'Full feature set. All named edge cases, plus 1-2 inferred from the domain. README adds a "what I would do next" section. One design decision earns a full explanatory paragraph.',
       },
       {
-        tier: '60 min',
+        tier: '1 week',
         reasonable:
-          'Happy path + edge cases + 1 stretch goal if the core is solid. README adds "what I would do next".',
+          'All of the above plus observability hooks (logging, error codes). A deployable artifact (Dockerfile or start.sh). README with full design rationale. Optional Loom walkthrough.',
       },
       {
-        tier: '90 min',
+        tier: '2 weeks',
         reasonable:
-          'All of the above + 1 design polish: logging, retries, or a split into clean modules. README explains the key design decision.',
-      },
-      {
-        tier: '120 min',
-        reasonable:
-          'Full happy + edges + observability story + thoughtful structure. README includes one full paragraph on the riskiest design decision.',
-      },
-      {
-        tier: '180 min',
-        reasonable:
-          'Production-shaped: full README with design rationale, 1-2 careful abstractions that earn their complexity, and a deployable artifact (Dockerfile or start.sh).',
+          'Production-shaped: comprehensive tests, structured logging, clean module boundaries, deployable artifact, AI-usage note in the README, and an optional 5-minute Loom walkthrough explaining a key design decision.',
       },
     ],
     flavorDeck: [

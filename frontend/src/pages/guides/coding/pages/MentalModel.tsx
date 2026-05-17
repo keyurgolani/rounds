@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import type { GuideNavGroup } from '../../shared/GuideNav';
 import type { TrackConfig } from '../../guideTypes';
 import StudyShell from '../../shared/StudyShell';
-import { Section, ThesisLine, LaneCard, ChipRow } from '../../shared/primitives';
+import { Section, Callout, LaneCard, ChipRow, Prose } from '../../shared/primitives';
 import InfographicFrame from '../../shared/visuals/InfographicFrame';
 import { codingContent } from '../../content/coding';
 
@@ -23,17 +23,27 @@ export default function MentalModel({ config, navGroups, scrollRef }: Props) {
       trackBasePath={config.guidePath}
       scrollRef={scrollRef}
     >
-      <Section eyebrow="Thesis" title="Invariant first">
-        <ThesisLine>{mentalModel.thesis}</ThesisLine>
+      <Section
+        title="Invariant first"
+        lede="Interviewers expect you to name the invariant before you write code. A clear invariant rules out whole families of bugs and gives both of you a fixed reference to debug against — without one, every wrong output is a mystery."
+      >
+        <Callout>{mentalModel.thesis}</Callout>
       </Section>
 
-      <Section eyebrow="Invariant Loop" title="The four-step cycle every solve runs through">
+      <Section
+        title="The four-step cycle every solve runs through"
+        lede="Each iteration of your solution follows this loop: identify what state you're tracking, declare the invariant it must hold, take the action that advances toward the answer, then prove the invariant still holds. Run this cycle consciously until it becomes instinct."
+      >
         <InfographicFrame caption="Loop">
           <InvariantLoop />
         </InfographicFrame>
       </Section>
 
-      <Section eyebrow="State" title="What 'name the state' looks like">
+      <Section
+        eyebrow="State"
+        title="What 'name the state' looks like"
+        lede="'Name the state' means saying out loud exactly what variable holds what meaning at each step. The examples below pair a classic pattern with the precise English phrase that captures its state — practice until you can recall the phrase from the pattern name alone."
+      >
         <div
           className="grid"
           style={{ gap: 'var(--gap-md)', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}
@@ -48,7 +58,11 @@ export default function MentalModel({ config, navGroups, scrollRef }: Props) {
         </div>
       </Section>
 
-      <Section eyebrow="Stress Tests" title="Edge cases the invariant should survive">
+      <Section
+        title="Edge cases the invariant should survive"
+        lede="Before submitting, walk the invariant through each of these inputs. They are the most common places an off-by-one or boundary assumption silently breaks — catching them here is faster than debugging during the interview."
+      >
+        <Prose>Each chip below is a category of input that frequently exposes broken invariants. For each one, ask yourself: does my loop terminate correctly? Does my state variable still mean what I said it means?</Prose>
         <ChipRow chips={mentalModel.edgeCases} />
       </Section>
     </StudyShell>
