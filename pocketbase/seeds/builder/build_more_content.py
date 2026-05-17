@@ -31,13 +31,19 @@ def main() -> int:
         sys.path.pop(0)
 
     payload = {
-        # New behavioural category — questions reference this by name.
+        # New behavioural categories — questions reference these by name.
         "behavioral_categories": [
             {
                 "name": "Amazon Leadership Principles",
                 "description": "Amazon's 16 Leadership Principles framing for behavioural questions.",
                 "color": "#FF9900",
                 "icon": "Star",
+            },
+            {
+                "name": "AI Collaboration",
+                "description": "Stories about partnering with AI tools, verifying AI output, knowing when NOT to use AI, and adopting / updating beliefs as the tooling lands. Maps to Meta's AI-Native Behavioral signal areas (AI-Driven Impact, Continuous AI Learning, Safe & Responsible AI).",
+                "color": "#6366f1",
+                "icon": "Sparkles",
             },
         ],
         "system_design_questions": ALL_SDQS,
