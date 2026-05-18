@@ -69,6 +69,12 @@ export interface InterviewRound {
   result: string;
   scheduled_status: 'scheduled' | 'completed' | 'canceled';
   preparation_notes: string;
+  /** Optional label that groups rounds into an interview loop. Rounds
+   *  sharing the same loop_label on the same application render under
+   *  a single loop header. Empty string = one-off round. */
+  loop_label: string;
+  /** Scheduled round length in minutes. 0 / undefined renders as "—". */
+  duration_minutes: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -85,6 +91,8 @@ interface InterviewRoundRow extends RecordModel {
   result?: string;
   scheduled_status?: InterviewRound['scheduled_status'];
   preparation_notes?: string;
+  loop_label?: string;
+  duration_minutes?: number;
 }
 
 export interface InterviewRoundInput {
@@ -97,6 +105,8 @@ export interface InterviewRoundInput {
   scheduled_status?: InterviewRound['scheduled_status'];
   preparation_notes?: string;
   campaign_id?: string;
+  loop_label?: string;
+  duration_minutes?: number;
 }
 
 // --- Offer ------------------------------------------------------------
@@ -205,6 +215,8 @@ function adaptRound(r: InterviewRoundRow): InterviewRound {
     result: r.result ?? 'Pending',
     scheduled_status: r.scheduled_status ?? 'scheduled',
     preparation_notes: r.preparation_notes ?? '',
+    loop_label: r.loop_label ?? '',
+    duration_minutes: r.duration_minutes ?? 0,
     created_at: r.created,
     updated_at: r.updated,
   };
@@ -223,6 +235,8 @@ function roundPayload(input: InterviewRoundInput, uid: string, applicationId: st
     result: input.result ?? 'Pending',
     scheduled_status: input.scheduled_status ?? 'scheduled',
     preparation_notes: input.preparation_notes ?? '',
+    loop_label: input.loop_label ?? '',
+    duration_minutes: input.duration_minutes ?? 0,
     campaign: campaign ? campaign : null,
   };
 }
@@ -289,8 +303,46 @@ export async function listApplications(campaignId?: string): Promise<Application
   return items.map(adaptApplication);
 }
 
-export async function getApplication(id: string): Promise<Application> {
-  return adaptApplication(await appsCol().getOne(id));
+/**
+ * Resolve an Application by either its PocketBase id (the canonical
+ * url-safe form) OR a human-readable slug like "meta-software-engineer".
+ *
+ * Slugs aren't stored on the row — they're derived client-side from
+ * `slugify(company + " " + role)` so the URL is readable. When the
+ * caller hands us a slug, getOne() 404s; we fall back to listing the
+ * user's applications and matching by the same slug rule the link
+ * generator used.
+ */
+export async function getApplication(idOrSlug: string): Promise<Application> {
+  try {
+    return adaptApplication(await appsCol().getOne(idOrSlug));
+  } catch (err) {
+    const status = (err as { status?: number; data?: { status?: number } })?.status
+      ?? (err as { data?: { status?: number } })?.data?.status;
+    if (status !== 404) throw err;
+  }
+  // Fall back to slug resolution.
+  const { slugify } = await import('../lib/slug');
+  const all = await listApplications();
+  const match = all.find(
+    (a) => slugify(`${a.company} ${a.role}`) === idOrSlug,
+  );
+  if (!match) {
+    throw new Error(`Application not found: ${idOrSlug}`);
+  }
+  return match;
+}
+
+/**
+ * Same idea for rounds: callers may have a slug (from the URL) instead
+ * of a PB id. We resolve the slug to an application id, then load
+ * rounds normally.
+ */
+export async function listRoundsBySlugOrId(
+  idOrSlug: string,
+): Promise<InterviewRound[]> {
+  const app = await getApplication(idOrSlug);
+  return listRounds(app.id);
 }
 
 export async function createApplication(input: ApplicationInput): Promise<Application> {
@@ -306,6 +358,35 @@ export async function updateApplication(
 
 export async function deleteApplication(id: string): Promise<void> {
   await appsCol().delete(id);
+}
+
+/**
+ * Patch-style update for a single application. Read-modify-write so
+ * callers can pass just one field and we won't accidentally clear
+ * the others. Used by the inline-edit affordances on
+ * ApplicationDetail.
+ */
+export async function updateApplicationField(
+  id: string,
+  patch: Partial<ApplicationInput>,
+): Promise<Application> {
+  const current = adaptApplication(await appsCol().getOne(id));
+  const merged: ApplicationInput = {
+    company: current.company,
+    role: current.role,
+    status: current.status,
+    applied_date: current.applied_date,
+    notes: current.notes,
+    resume_variant: current.resume_variant,
+    url: current.url,
+    job_description: current.job_description,
+    campaign_id: current.campaign_id,
+    last_activity_at: new Date().toISOString(),
+    ...patch,
+  };
+  return adaptApplication(
+    await appsCol().update(id, applicationPayload(merged, userId())),
+  );
 }
 
 // --- Round CRUD ------------------------------------------------------
@@ -329,6 +410,37 @@ export async function createRound(
 
 export async function deleteRound(id: string): Promise<void> {
   await roundsCol().delete(id);
+}
+
+/**
+ * Patch-style update for a round. Pass only the fields you want to
+ * change; everything else is read-modify-written from the live PB row
+ * so we don't accidentally clear sibling fields.
+ */
+export async function updateRound(
+  id: string,
+  patch: Partial<InterviewRoundInput>,
+): Promise<InterviewRound> {
+  const current = adaptRound(await roundsCol().getOne(id));
+  const merged: InterviewRoundInput = {
+    round_type: current.round_type,
+    date: current.date,
+    interviewer: current.interviewer,
+    questions_asked: current.questions_asked,
+    notes: current.notes,
+    result: current.result,
+    scheduled_status: current.scheduled_status,
+    preparation_notes: current.preparation_notes,
+    campaign_id: current.campaign_id,
+    loop_label: current.loop_label,
+    duration_minutes: current.duration_minutes,
+    ...patch,
+  };
+  const updated = await roundsCol().update(
+    id,
+    roundPayload(merged, userId(), current.application_id),
+  );
+  return adaptRound(updated);
 }
 
 // --- Offer CRUD ------------------------------------------------------
@@ -364,4 +476,8 @@ export async function updateOffer(
   return adaptOffer(
     await offersCol().update(offerId, offerPayload(input, userId(), applicationId)),
   );
+}
+
+export async function deleteOffer(offerId: string): Promise<void> {
+  await offersCol().delete(offerId);
 }

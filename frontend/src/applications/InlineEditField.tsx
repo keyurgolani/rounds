@@ -1,0 +1,430 @@
+/**
+ * Click-to-edit field with explicit ✓/✗ commit. Renders a read view
+ * by default; clicking it swaps to an input flanked by a tick and a
+ * cross. Tick (or Enter) applies the change; cross (or Escape) discards.
+ *
+ * The "save" callback is async — while it runs the controls disable
+ * and the row shows a faint spinner. On error, the field stays in
+ * edit mode with the entered value preserved and the error rendered
+ * underneath.
+ *
+ * Designed for the application/round detail pattern where the user
+ * scans values and only edits the one they want to change.
+ */
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import { Check, X } from 'lucide-react';
+import { INTERVIEW_TYPES } from './interviewTypes';
+import Select from '../components/shell/Select';
+import DatePicker from '../components/shell/DatePicker';
+import DateTimePicker from '../components/shell/DateTimePicker';
+
+type BaseProps = {
+  /** Label rendered above the value (eyebrow style). */
+  label: string;
+  /** Current value of the field. */
+  value: string;
+  /** Async commit. Resolve to confirm save; throw to surface an
+   *  error and keep the field in edit mode. */
+  onCommit: (next: string) => Promise<void>;
+  /** Placeholder shown when the value is empty. */
+  placeholder?: string;
+  /** Override the read-view rendering (e.g. show a type pill instead
+   *  of raw text). The "click target" affordance is added by this
+   *  component regardless. */
+  renderRead?: (value: string) => ReactNode;
+};
+
+type TextProps = BaseProps & { kind: 'text' };
+type MultilineProps = BaseProps & { kind: 'multiline'; rows?: number };
+type DateProps = BaseProps & { kind: 'date' };
+type DateOnlyProps = BaseProps & { kind: 'date-only' };
+type SelectProps = BaseProps & {
+  kind: 'select';
+  options: Array<{ value: string; label: string }>;
+};
+type InterviewTypeProps = BaseProps & { kind: 'interview-type' };
+/** Number-of-minutes input. Renders as a numeric stepper with a
+ *  trailing "min" suffix and a few common defaults underneath. */
+type DurationMinutesProps = BaseProps & { kind: 'duration-minutes' };
+type UrlProps = BaseProps & { kind: 'url' };
+
+type Props =
+  | TextProps
+  | MultilineProps
+  | DateProps
+  | DateOnlyProps
+  | SelectProps
+  | InterviewTypeProps
+  | DurationMinutesProps
+  | UrlProps;
+
+const COMMON_DURATIONS = [30, 45, 60, 75, 90];
+
+export default function InlineEditField(props: Props) {
+  const { label, value, onCommit, placeholder, renderRead } = props;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>(null);
+
+  // Reset the draft whenever the upstream value changes while we're
+  // not editing — the parent might have refreshed the row.
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [value, editing]);
+
+  // Auto-focus the input as soon as we enter edit mode.
+  useEffect(() => {
+    if (editing) {
+      const el = inputRef.current;
+      if (el) {
+        el.focus();
+        if ('select' in el && typeof el.select === 'function') {
+          el.select();
+        }
+      }
+    }
+  }, [editing]);
+
+  function startEdit() {
+    if (saving) return;
+    setDraft(value);
+    setError(null);
+    setEditing(true);
+  }
+
+  function discard() {
+    setEditing(false);
+    setDraft(value);
+    setError(null);
+  }
+
+  async function commit() {
+    if (draft === value) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onCommit(draft);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function onKey(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      discard();
+    } else if (
+      e.key === 'Enter' &&
+      // Allow newlines in textareas — only commit on Cmd/Ctrl+Enter
+      // or on plain Enter for single-line inputs.
+      (props.kind !== 'multiline' || e.metaKey || e.ctrlKey)
+    ) {
+      e.preventDefault();
+      void commit();
+    }
+  }
+
+  return (
+    <div className="flex flex-col" style={{ gap: 4 }}>
+      <span className="eyebrow" style={{ color: 'var(--text-3)' }}>
+        {label}
+      </span>
+      {editing ? (
+        <div
+          className="flex"
+          style={{
+            gap: 6,
+            alignItems: props.kind === 'multiline' ? 'flex-start' : 'center',
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {renderInput({
+              props,
+              draft,
+              setDraft,
+              onKey,
+              inputRef,
+              placeholder,
+            })}
+          </div>
+          <div className="flex items-center" style={{ gap: 4, flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => void commit()}
+              disabled={saving}
+              aria-label="Apply change"
+              title="Apply (Enter)"
+              style={commitBtnStyle('apply', saving)}
+            >
+              <Check size={13} strokeWidth={2.2} />
+            </button>
+            <button
+              type="button"
+              onClick={discard}
+              disabled={saving}
+              aria-label="Discard change"
+              title="Discard (Esc)"
+              style={commitBtnStyle('discard', saving)}
+            >
+              <X size={13} strokeWidth={2.2} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={startEdit}
+          className="text-left"
+          style={readBtnStyle}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--bg-sunken)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+          }}
+        >
+          {renderRead ? (
+            <span style={{ display: 'inline-block', width: '100%' }}>
+              {renderRead(value)}
+            </span>
+          ) : value ? (
+            <span style={{ color: 'var(--text)', fontSize: 13 }}>{value}</span>
+          ) : (
+            <span style={{ color: 'var(--text-4)', fontSize: 13, fontStyle: 'italic' }}>
+              {placeholder ?? 'Click to add'}
+            </span>
+          )}
+        </button>
+      )}
+      {error && (
+        <div
+          style={{
+            fontSize: 11.5,
+            color: 'var(--plum)',
+          }}
+        >
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Render the editor for whichever kind this field is. Extracted out
+ *  of InlineEditField so the main render stays readable as the kind
+ *  matrix grows. */
+function renderInput({
+  props,
+  draft,
+  setDraft,
+  onKey,
+  inputRef,
+  placeholder,
+}: {
+  props: Props;
+  draft: string;
+  setDraft: (v: string) => void;
+  onKey: (e: React.KeyboardEvent) => void;
+  inputRef: React.MutableRefObject<
+    HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
+  >;
+  placeholder?: string;
+}): ReactNode {
+  switch (props.kind) {
+    case 'multiline':
+      return (
+        <textarea
+          ref={(el) => {
+            inputRef.current = el;
+          }}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={onKey}
+          rows={props.rows ?? 4}
+          placeholder={placeholder}
+          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+        />
+      );
+    case 'date':
+      // Use the themed combo so the calendar + clock popovers match
+      // the rest of the chrome instead of the bare native widgets.
+      return (
+        <DateTimePicker
+          value={draft}
+          onChange={setDraft}
+          ariaLabel={placeholder ?? 'Date'}
+        />
+      );
+    case 'date-only':
+      return (
+        <DatePicker
+          value={draft}
+          onChange={setDraft}
+          ariaLabel={placeholder ?? 'Date'}
+        />
+      );
+    case 'select':
+      return (
+        <Select
+          value={draft}
+          options={props.options}
+          onChange={setDraft}
+          fullWidth
+        />
+      );
+    case 'interview-type': {
+      const opts = [
+        ...(!INTERVIEW_TYPES.some((t) => t.key === draft) && draft
+          ? [{ value: draft, label: `${draft} (custom)` }]
+          : []),
+        ...INTERVIEW_TYPES.map((t) => ({ value: t.key, label: t.label })),
+      ];
+      return (
+        <Select
+          value={draft}
+          options={opts}
+          onChange={setDraft}
+          fullWidth
+        />
+      );
+    }
+    case 'duration-minutes':
+      return (
+        <div className="flex items-center" style={{ gap: 6 }}>
+          <input
+            ref={(el) => {
+              inputRef.current = el;
+            }}
+            type="number"
+            min={0}
+            max={1440}
+            step={5}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={onKey}
+            placeholder={placeholder ?? 'minutes'}
+            style={{
+              ...inputStyle,
+              width: 110,
+              colorScheme: 'light dark',
+              fontFamily: 'var(--font-mono)',
+            }}
+          />
+          <span
+            className="mono"
+            style={{ fontSize: 11, color: 'var(--text-3)' }}
+          >
+            min
+          </span>
+          <div className="flex" style={{ gap: 4 }}>
+            {COMMON_DURATIONS.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setDraft(String(m))}
+                style={{
+                  padding: '3px 8px',
+                  background:
+                    draft === String(m) ? 'var(--accent)' : 'var(--bg-sunken)',
+                  color: draft === String(m) ? 'var(--bg)' : 'var(--text-3)',
+                  border: 0,
+                  borderRadius: 999,
+                  fontSize: 10.5,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    case 'url':
+      return (
+        <input
+          ref={(el) => {
+            inputRef.current = el;
+          }}
+          type="url"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={onKey}
+          placeholder={placeholder}
+          style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
+        />
+      );
+    case 'text':
+    default:
+      return (
+        <input
+          ref={(el) => {
+            inputRef.current = el;
+          }}
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={onKey}
+          placeholder={placeholder}
+          style={inputStyle}
+        />
+      );
+  }
+}
+
+const inputStyle: CSSProperties = {
+  padding: '8px 10px',
+  borderRadius: 'var(--radius)',
+  border: '1px solid var(--accent)',
+  background: 'var(--bg)',
+  color: 'var(--text)',
+  fontSize: 13,
+  width: '100%',
+};
+
+const readBtnStyle: CSSProperties = {
+  padding: '6px 10px',
+  borderRadius: 'var(--radius)',
+  border: '1px solid transparent',
+  background: 'transparent',
+  cursor: 'text',
+  minHeight: 32,
+  display: 'flex',
+  alignItems: 'center',
+  width: '100%',
+  transition: 'background 120ms',
+};
+
+function commitBtnStyle(
+  kind: 'apply' | 'discard',
+  saving: boolean,
+): CSSProperties {
+  return {
+    width: 28,
+    height: 28,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background:
+      kind === 'apply' ? 'var(--accent)' : 'var(--bg-sunken)',
+    color: kind === 'apply' ? 'var(--bg)' : 'var(--text-2)',
+    border: 0,
+    borderRadius: 999,
+    cursor: saving ? 'wait' : 'pointer',
+    opacity: saving ? 0.6 : 1,
+  };
+}

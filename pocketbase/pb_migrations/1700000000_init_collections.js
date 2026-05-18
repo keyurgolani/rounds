@@ -374,6 +374,18 @@ migrate(
           options: { maxSelect: 1, values: ["scheduled", "completed", "canceled"] },
         },
         { name: "preparation_notes", type: "text" },
+        // Optional free-text label used to group rounds into an
+        // interview "loop" (e.g. a Meta onsite of 6 rounds across 2
+        // days). Empty/null means a one-off round. Kept as text (not
+        // a relation) — see migration 1700001600 for rationale.
+        { name: "loop_label", type: "text" },
+        // Scheduled round length in minutes. Optional — empty/null
+        // renders as "—" in the UI. See migration 1700001700.
+        {
+          name: "duration_minutes",
+          type: "number",
+          options: { min: 0, max: 1440 },
+        },
       ],
       indexes: [
         "CREATE INDEX idx_rounds_user ON interview_rounds (user)",

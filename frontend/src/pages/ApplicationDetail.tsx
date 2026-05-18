@@ -1,13 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Briefcase, Calendar, CalendarPlus, ExternalLink, FileText, Wand2 } from 'lucide-react';
+import { Check, ChevronDown, Wand2 } from 'lucide-react';
 import {
   getApplication,
   listRounds,
   updateApplication,
+  updateApplicationField,
   type Application,
   type InterviewRound as Round,
 } from '../applications/api';
+import RoundsList from '../applications/RoundsList';
+import InlineAddRound from '../applications/InlineAddRound';
+import InlineEditField from '../applications/InlineEditField';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
 import BackLink from '../components/shell/BackLink';
@@ -34,18 +38,44 @@ export default function ApplicationDetail() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('');
 
+  // Mirror of the OfferPanel's last-seen offer, used to detect the
+  // null → non-null transition (i.e. user just created an offer).
+  // Without this ref, the auto-flip code can't tell the difference
+  // between "offer was just created" and "offer was edited" and ends
+  // up clobbering deliberate status changes.
+  const offerRef = useRef<Offer | null>(null);
+  const existingLoopLabels = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rounds) {
+      if (r.loop_label) set.add(r.loop_label);
+    }
+    return Array.from(set).sort();
+  }, [rounds]);
+
   useEffect(() => {
     if (!slug) return;
-    Promise.all([
-      getApplication(slug),
-      listRounds(slug).catch(() => [] as Round[]),
-    ])
-      .then(([a, rs]) => {
+    setLoading(true);
+    // Slug-or-id resolution happens in getApplication; we then load
+    // rounds by the resolved id so we never fire listRounds against a
+    // slug (which the previous code did, silently returning []).
+    let cancelled = false;
+    getApplication(slug)
+      .then(async (a) => {
+        if (cancelled) return;
         setApp(a);
         setStatus(a.status);
-        setRounds(rs);
+        const rs = await listRounds(a.id).catch(() => [] as Round[]);
+        if (!cancelled) setRounds(rs);
       })
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) setApp(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [slug]);
 
   if (loading) {
@@ -63,16 +93,24 @@ export default function ApplicationDetail() {
     return (
       <PageShell
         header={
-          <div className="px-8 pt-5">
-            <BackLink to="/applications" label="All applications" />
-          </div>
+          <AppHeader
+            eyebrow={
+              <span className="inline-flex items-center" style={{ gap: 6 }}>
+                <BackLink to="/applications" label="All applications" />
+                <span style={{ color: 'var(--text-4)' }}>·</span>
+                <span>Not found</span>
+              </span>
+            }
+            title="Application not found"
+            description="The application you tried to open doesn't exist (or was deleted). Head back to the list to pick another."
+          />
         }
       >
         <div
           className="flex items-center justify-center h-full"
           style={{ color: 'var(--text-3)', fontSize: 13 }}
         >
-          Application not found.
+          We couldn't find that application.
         </div>
       </PageShell>
     );
@@ -106,284 +144,168 @@ export default function ApplicationDetail() {
   return (
     <PageShell
       header={
-        <>
-          <div className="px-8 pt-5">
-            <BackLink to="/applications" label="All applications" />
-          </div>
-          <AppHeader
-            eyebrow={`Track · Application · ${app.company}`}
-            title={app.role}
-            description={`Everything you've captured about ${app.company} — status, role detail, prepped rounds, and the notes you want near you before the next conversation.`}
-            chromeActions={
-              <div className="flex items-center gap-1.5">
-                <TailorButton applicationId={String(app.id)} />
-                <button
-                  type="button"
-                  onClick={() => navigate(`/interviews/new?applicationId=${app.id}`)}
-                  className="inline-flex items-center gap-1.5"
-                  style={primaryBtn}
-                >
-                  <CalendarPlus size={14} strokeWidth={1.7} />
-                  Schedule a round
-                </button>
-              </div>
-            }
-          />
-        </>
+        <AppHeader
+          eyebrow={
+            <span className="inline-flex items-center" style={{ gap: 6 }}>
+              <BackLink to="/applications" label="All applications" />
+              <span style={{ color: 'var(--text-4)' }}>·</span>
+              <span>{app.company}</span>
+            </span>
+          }
+          title={app.role}
+          description={`Everything you've captured about ${app.company} — role detail, rounds, notes, and offer terms once they land.`}
+          chromeActions={
+            <div className="flex items-center gap-1.5">
+              <StatusSwitch
+                status={status}
+                saving={saving}
+                onChange={(next) => void updateStatus(next)}
+              />
+              <TailorButton applicationId={String(app.id)} />
+            </div>
+          }
+        />
       }
     >
-      <div className="px-5 sm:px-8 py-6 grid gap-5 grid-cols-1 lg:[grid-template-columns:minmax(0,1fr)_320px]">
-        <div className="flex flex-col gap-5">
+      <div className="px-5 sm:px-8 py-6 flex flex-col gap-5">
+        <div
+          className="grid gap-5"
+          style={{
+            gridTemplateColumns:
+              'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr)',
+          }}
+        >
           <div className="card p-6">
             <div className="eyebrow mb-3">Company</div>
-            <div className="flex items-baseline gap-3 flex-wrap">
-              <span
-                className="display-italic"
-                style={{ fontSize: 36, fontWeight: 400, lineHeight: 1.05 }}
-              >
-                {app.company}
-              </span>
-              {(() => {
-                const c = STATUS_COLORS[app.status] ?? STATUS_COLORS.Applied;
-                return (
-                  <span
-                    className="pill"
-                    style={{ background: c.bg, color: c.fg }}
-                  >
-                    {app.status.toLowerCase()}
-                  </span>
-                );
-              })()}
-            </div>
+            <InlineEditField
+              kind="text"
+              label="Company"
+              value={app.company}
+              onCommit={async (next) => {
+                const saved = await updateApplicationField(app.id, {
+                  company: next,
+                });
+                setApp(saved);
+              }}
+              placeholder="Company name"
+              renderRead={(v) => (
+                <span
+                  className="display-italic"
+                  style={{
+                    fontSize: 30,
+                    fontWeight: 400,
+                    lineHeight: 1.05,
+                    color: v ? 'var(--text)' : 'var(--text-4)',
+                  }}
+                >
+                  {v || 'Untitled company'}
+                </span>
+              )}
+            />
 
             <div
-              className="grid gap-6 mt-5"
-              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}
+              className="grid gap-4 mt-5"
+              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}
             >
-              <Meta label="Role" value={app.role} Icon={Briefcase} />
-              <Meta
+              <InlineEditField
+                kind="text"
+                label="Role"
+                value={app.role}
+                onCommit={async (next) => {
+                  const saved = await updateApplicationField(app.id, {
+                    role: next,
+                  });
+                  setApp(saved);
+                }}
+                placeholder="Software Engineer"
+              />
+              <InlineEditField
+                kind="date-only"
                 label="Applied"
-                value={app.applied_date || '—'}
-                Icon={Calendar}
-                mono
-              />
-              <Meta
-                label="Resume"
-                value={app.resume_variant || '—'}
-                Icon={FileText}
-                mono
-              />
-              {app.url ? (
-                <a
-                  href={app.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex flex-col gap-1.5"
-                  style={{ textDecoration: 'none' }}
-                >
-                  <span className="eyebrow inline-flex items-center gap-1.5">
-                    <ExternalLink size={11} strokeWidth={1.7} />
-                    Posting
-                  </span>
+                value={app.applied_date}
+                onCommit={async (next) => {
+                  const saved = await updateApplicationField(app.id, {
+                    applied_date: next,
+                  });
+                  setApp(saved);
+                }}
+                placeholder="Set the applied date"
+                renderRead={(v) => (
                   <span
-                    className="mono truncate"
-                    style={{ color: 'var(--accent)', fontSize: 12 }}
-                  >
-                    {prettyUrl(app.url)}
-                  </span>
-                </a>
-              ) : (
-                <Meta label="Posting" value="—" Icon={ExternalLink} mono />
-              )}
-            </div>
-          </div>
-
-          <div className="card p-6">
-            <div className="eyebrow mb-3">Job description</div>
-            {app.job_description.trim() ? (
-              <InlineMarkdown
-                as="div"
-                text={app.job_description}
-                style={{
-                  fontSize: 14,
-                  color: 'var(--text-2)',
-                  lineHeight: 1.7,
-                  whiteSpace: 'pre-wrap',
-                }}
-              />
-            ) : (
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 13,
-                  color: 'var(--text-4)',
-                  lineHeight: 1.6,
-                  fontStyle: 'italic',
-                }}
-              >
-                No job description on file. Paste the role description when you edit this
-                application — it'll anchor prep to the actual asks.
-              </p>
-            )}
-          </div>
-
-          {app.notes.trim() && (
-            <div className="card p-6">
-              <div className="eyebrow mb-3">Notes</div>
-              <InlineMarkdown
-                as="div"
-                text={app.notes}
-                style={{
-                  fontSize: 13.5,
-                  color: 'var(--text-2)',
-                  lineHeight: 1.65,
-                  whiteSpace: 'pre-wrap',
-                }}
-              />
-            </div>
-          )}
-
-          <OfferPanel
-            applicationId={String(app.id)}
-            onOfferChange={(o) => {
-              // When an offer first appears on an application, reflect that in
-              // the pipeline status so the listing badges line up.
-              if (o && app.status !== 'Offer' && app.status !== 'Rejected') {
-                updateStatus('Offer');
-              }
-              // Expose the offer back to the page so the dashboard/at-risk
-              // computations can read it without a second fetch.
-              void (o as Offer | null);
-            }}
-          />
-
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-3">
-              <div className="eyebrow">Rounds</div>
-              <button
-                type="button"
-                onClick={() => navigate(`/interviews/new?applicationId=${app.id}`)}
-                className="mono uppercase inline-flex items-center gap-1"
-                style={{
-                  background: 'transparent',
-                  border: 0,
-                  color: 'var(--accent)',
-                  fontSize: 10.5,
-                  letterSpacing: '0.12em',
-                  cursor: 'pointer',
-                  padding: 0,
-                }}
-              >
-                <CalendarPlus size={12} strokeWidth={1.7} />
-                Schedule
-              </button>
-            </div>
-            {rounds.length === 0 ? (
-              <div
-                style={{
-                  fontSize: 13,
-                  color: 'var(--text-4)',
-                  lineHeight: 1.55,
-                  fontStyle: 'italic',
-                }}
-              >
-                No rounds scheduled yet. When you put one on the calendar, the dashboard will
-                surface prep tailored to the round type.
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {rounds.map((r, i) => (
-                  <div
-                    key={r.id}
-                    className="flex justify-between items-center"
+                    className="mono"
                     style={{
-                      padding: '12px 14px',
-                      borderRadius: 'var(--radius)',
-                      background: 'var(--bg-sunken)',
-                      boxShadow: 'inset 0 0 0 1px var(--border)',
+                      fontSize: 13,
+                      color: v ? 'var(--text)' : 'var(--text-4)',
                     }}
                   >
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>
-                        <span
-                          className="mono"
-                          style={{
-                            color: 'var(--text-4)',
-                            marginRight: 8,
-                            fontSize: 10.5,
-                          }}
-                        >
-                          {String(i + 1).padStart(2, '0')}
-                        </span>
-                        {r.round_type}
-                      </div>
-                      <div
-                        style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}
-                      >
-                        {r.interviewer || 'Interviewer TBD'}
-                      </div>
-                    </div>
+                    {v || '—'}
+                  </span>
+                )}
+              />
+              <InlineEditField
+                kind="text"
+                label="Resume variant"
+                value={app.resume_variant}
+                onCommit={async (next) => {
+                  const saved = await updateApplicationField(app.id, {
+                    resume_variant: next,
+                  });
+                  setApp(saved);
+                }}
+                placeholder="main / AI / staff …"
+              />
+              <InlineEditField
+                kind="url"
+                label="Posting"
+                value={app.url}
+                onCommit={async (next) => {
+                  const saved = await updateApplicationField(app.id, {
+                    url: next,
+                  });
+                  setApp(saved);
+                }}
+                placeholder="https://…"
+                renderRead={(v) =>
+                  v ? (
+                    <a
+                      href={v}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mono truncate"
+                      style={{
+                        color: 'var(--accent)',
+                        fontSize: 12,
+                        textDecoration: 'none',
+                        maxWidth: '100%',
+                        display: 'inline-block',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {prettyUrl(v)}
+                    </a>
+                  ) : (
                     <span
                       className="mono"
-                      style={{ fontSize: 11, color: 'var(--text-3)' }}
+                      style={{
+                        fontSize: 12,
+                        color: 'var(--text-4)',
+                        fontStyle: 'italic',
+                      }}
                     >
-                      {r.date || '—'}
+                      No posting URL
                     </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <aside className="flex flex-col gap-4">
-          <div className="card p-5">
-            <div className="eyebrow mb-3">Status</div>
-            <div className="flex flex-col gap-1.5">
-              {STATUS_OPTIONS.map((opt) => {
-                const active = status === opt;
-                const c = STATUS_COLORS[opt] ?? STATUS_COLORS.Applied;
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => updateStatus(opt)}
-                    disabled={saving}
-                    className="flex items-center justify-between"
-                    style={{
-                      padding: '8px 12px',
-                      border: 0,
-                      borderRadius: 'var(--radius)',
-                      background: active ? c.bg : 'transparent',
-                      boxShadow: active ? 'none' : 'inset 0 0 0 1px var(--border)',
-                      color: active ? c.fg : 'var(--text-2)',
-                      fontSize: 12.5,
-                      fontWeight: active ? 500 : 400,
-                      cursor: saving ? 'wait' : 'pointer',
-                      textAlign: 'left' as const,
-                    }}
-                  >
-                    <span>{opt}</span>
-                    {active && (
-                      <span
-                        style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: 999,
-                          background: c.fg,
-                        }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
+                  )
+                }
+              />
             </div>
           </div>
-
           <div className="card p-5">
             <div className="eyebrow mb-2.5">Activity</div>
             <Row
-              label="Rounds scheduled"
+              label="Rounds tracked"
               value={String(rounds.length)}
             />
             <Row
@@ -411,23 +333,293 @@ export default function ApplicationDetail() {
             />
           </div>
 
-          <Link
-            to={`/interviews/new?applicationId=${app.id}`}
-            className="card card-hover inline-flex items-center justify-between"
-            style={{
-              padding: '14px 18px',
-              textDecoration: 'none',
-              color: 'var(--accent)',
-              fontSize: 13,
-              fontWeight: 500,
+          <OfferPanel
+            applicationId={String(app.id)}
+            onOfferChange={(o) => {
+              // Sync application.status with offer presence on the two
+              // edge transitions:
+              //   null  → Offer    : recording a first offer flips to "Offer"
+              //   Offer → null     : clearing the offer flips back to "Interviewing"
+              // Mid-state edits (any non-null → non-null) don't touch
+              // status — that would clobber deliberate status changes
+              // the user made on the chrome pill.
+              const prev = offerRef.current;
+              offerRef.current = o;
+              if (o && !prev && app.status !== 'Offer' && app.status !== 'Rejected') {
+                updateStatus('Offer');
+              } else if (!o && prev && app.status === 'Offer') {
+                updateStatus('Interviewing');
+              }
             }}
-          >
-            <span>Schedule a round</span>
-            <CalendarPlus size={14} strokeWidth={1.7} />
-          </Link>
-        </aside>
+          />
+        </div>
+
+        <div className="card p-6">
+          <InlineEditField
+            kind="multiline"
+            label="Job description"
+            value={app.job_description}
+            onCommit={async (next) => {
+              const saved = await updateApplicationField(app.id, {
+                job_description: next,
+              });
+              setApp(saved);
+            }}
+            placeholder="Paste the role description so prep anchors to the actual asks."
+            renderRead={(v) =>
+              v.trim() ? (
+                <InlineMarkdown
+                  as="div"
+                  text={v}
+                  style={{
+                    fontSize: 14,
+                    color: 'var(--text-2)',
+                    lineHeight: 1.7,
+                    whiteSpace: 'pre-wrap',
+                  }}
+                />
+              ) : (
+                <span
+                  style={{
+                    fontSize: 13,
+                    color: 'var(--text-4)',
+                    fontStyle: 'italic',
+                  }}
+                >
+                  No job description on file. Click to add.
+                </span>
+              )
+            }
+          />
+        </div>
+
+        <div className="card p-6">
+          <InlineEditField
+            kind="multiline"
+            label="Notes"
+            value={app.notes}
+            onCommit={async (next) => {
+              const saved = await updateApplicationField(app.id, {
+                notes: next,
+              });
+              setApp(saved);
+            }}
+            placeholder="Anything you want to remember about this role."
+            renderRead={(v) =>
+              v.trim() ? (
+                <InlineMarkdown
+                  as="div"
+                  text={v}
+                  style={{
+                    fontSize: 13.5,
+                    color: 'var(--text-2)',
+                    lineHeight: 1.65,
+                    whiteSpace: 'pre-wrap',
+                  }}
+                />
+              ) : (
+                <span
+                  style={{
+                    fontSize: 13,
+                    color: 'var(--text-4)',
+                    fontStyle: 'italic',
+                  }}
+                >
+                  Click to add notes.
+                </span>
+              )
+            }
+          />
+        </div>
+
+          <div className="card p-6">
+            <div className="eyebrow mb-3">Rounds &amp; loops</div>
+            {rounds.length === 0 ? (
+              <div
+                style={{
+                  fontSize: 13,
+                  color: 'var(--text-4)',
+                  lineHeight: 1.55,
+                  fontStyle: 'italic',
+                  marginBottom: 14,
+                }}
+              >
+                No rounds tracked yet. Add the first one below.
+              </div>
+            ) : (
+              <div style={{ marginBottom: 14 }}>
+                <RoundsList
+                  rounds={rounds}
+                  onUpdated={(next) =>
+                    setRounds((prev) =>
+                      prev.map((r) => (r.id === next.id ? next : r)),
+                    )
+                  }
+                  onDeleted={(id) =>
+                    setRounds((prev) => prev.filter((r) => r.id !== id))
+                  }
+                />
+              </div>
+            )}
+            <InlineAddRound
+              applicationId={app.id}
+              existingLoopLabels={existingLoopLabels}
+              onCreated={(round) => setRounds((prev) => [...prev, round])}
+            />
+          </div>
       </div>
     </PageShell>
+  );
+}
+
+/**
+ * Compact status picker that sits in the header chrome next to the
+ * Tailor button. Trigger is a colored pill matching the current
+ * status; click drops the themed Select popover with all 5 options.
+ * We compute the popover ourselves rather than reusing shell/Select
+ * because the trigger has its own pill aesthetic — but we share the
+ * same outside-click / Escape semantics.
+ */
+function StatusSwitch({
+  status,
+  saving,
+  onChange,
+}: {
+  status: string;
+  saving: boolean;
+  onChange: (next: string) => void;
+}) {
+  const c = STATUS_COLORS[status] ?? STATUS_COLORS.Applied;
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={saving}
+        aria-label="Application status"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="inline-flex items-center"
+        style={{
+          gap: 6,
+          padding: '6px 10px 6px 12px',
+          borderRadius: 999,
+          background: c.bg,
+          color: c.fg,
+          border: 0,
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: saving ? 'wait' : 'pointer',
+          opacity: saving ? 0.7 : 1,
+        }}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: 999,
+            background: 'currentColor',
+          }}
+        />
+        <span style={{ minWidth: 60 }}>{status}</span>
+        <ChevronDown size={12} strokeWidth={2} aria-hidden="true" />
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Application status"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            right: 0,
+            zIndex: 30,
+            margin: 0,
+            padding: 4,
+            listStyle: 'none',
+            background: 'var(--bg-elev)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            boxShadow: 'var(--shadow-elev)',
+            minWidth: 160,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          {STATUS_OPTIONS.map((opt) => {
+            const oc = STATUS_COLORS[opt] ?? STATUS_COLORS.Applied;
+            const active = opt === status;
+            return (
+              <li key={opt} role="option" aria-selected={active}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(opt);
+                    setOpen(false);
+                  }}
+                  className="flex items-center justify-between w-full"
+                  style={{
+                    padding: '6px 10px',
+                    background: active ? 'var(--bg-sunken)' : 'transparent',
+                    border: 0,
+                    borderRadius: 'var(--radius)',
+                    color: 'var(--text)',
+                    fontSize: 12.5,
+                    cursor: 'pointer',
+                    gap: 8,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) e.currentTarget.style.background = 'var(--bg-sunken)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  <span className="inline-flex items-center" style={{ gap: 8 }}>
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 999,
+                        background: oc.fg,
+                      }}
+                    />
+                    {opt}
+                  </span>
+                  {active && (
+                    <Check size={12} strokeWidth={2.2} color={oc.fg} aria-hidden="true" />
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -550,33 +742,6 @@ function TailorButton({ applicationId }: { applicationId: string }) {
   );
 }
 
-function Meta({
-  label,
-  value,
-  Icon,
-  mono,
-}: {
-  label: string;
-  value: string;
-  Icon: (p: { size?: number; strokeWidth?: number }) => React.ReactNode;
-  mono?: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5 min-w-0">
-      <span className="eyebrow inline-flex items-center gap-1.5">
-        <Icon size={11} strokeWidth={1.7} />
-        {label}
-      </span>
-      <span
-        className={mono ? 'mono truncate' : 'truncate'}
-        style={{ fontSize: 13, color: 'var(--text)' }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
 function Row({ label, value, last }: { label: string; value: string; last?: boolean }) {
   return (
     <div
@@ -599,14 +764,3 @@ function prettyUrl(url: string) {
     return url;
   }
 }
-
-const primaryBtn: React.CSSProperties = {
-  padding: '8px 14px',
-  borderRadius: 'var(--radius)',
-  border: 0,
-  background: 'var(--accent)',
-  color: 'var(--bg-elev)',
-  fontSize: 12.5,
-  fontWeight: 500,
-  cursor: 'pointer',
-};

@@ -1,12 +1,26 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, CalendarPlus, Plus } from 'lucide-react';
-import { listApplications, type Application } from '../applications/api';
+import { ArrowRight, CalendarPlus, ChevronRight, Plus } from 'lucide-react';
+import {
+  listApplications,
+  listRounds,
+  type Application,
+  type InterviewRound,
+} from '../applications/api';
 import { slugify } from '../lib/slug';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
 import Select from '../components/shell/Select';
 import { usePersistedState } from '../hooks/usePersistedState';
+import RoundsList from '../applications/RoundsList';
+import InlineAddRound from '../applications/InlineAddRound';
+
+/** Statuses where the round list should default to expanded — these
+ *  are "ongoing" applications the user is actively working on. The
+ *  other statuses (Offer, Rejected) are terminal and collapse by
+ *  default to keep the list scannable. Either way the user can
+ *  toggle and we persist their choice. */
+const ONGOING_STATUSES = new Set(['Wishlist', 'Applied', 'Interviewing']);
 
 type App = Application;
 
@@ -38,16 +52,74 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 export default function Applications() {
   const navigate = useNavigate();
   const [apps, setApps] = useState<App[]>([]);
+  /** rounds keyed by application_id. We fetch them in parallel after
+   *  the apps list resolves; missing entries mean "not loaded yet"
+   *  (the row renders a small skeleton instead of "0 rounds"). */
+  const [roundsByApp, setRoundsByApp] = useState<Record<string, InterviewRound[]>>({});
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = usePersistedState<string | null>('rounds.apps.statusFilter', null);
   const [sort, setSort] = usePersistedState<SortKey>('rounds.apps.sort', 'recent-desc');
-
+  /** Per-application expansion override. Status drives the default;
+   *  this map records intentional user toggles so the choice sticks
+   *  across reloads and beyond a status change. */
+  const [expandedOverride, setExpandedOverride] = usePersistedState<
+    Record<string, boolean>
+  >('rounds.apps.expanded', {});
   useEffect(() => {
     listApplications()
-      .then(setApps)
+      .then(async (xs) => {
+        setApps(xs);
+        // Fan-out rounds load. Per-app cost is one PB filter query; with
+        // ~20 apps in flight in parallel this is plenty fast and keeps
+        // the code simple. We don't await before showing apps — they
+        // render immediately, rounds fill in as they arrive.
+        const entries = await Promise.all(
+          xs.map(async (a) => {
+            try {
+              const rs = await listRounds(a.id);
+              return [a.id, rs] as const;
+            } catch {
+              return [a.id, [] as InterviewRound[]] as const;
+            }
+          }),
+        );
+        setRoundsByApp(Object.fromEntries(entries));
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  const isExpanded = useCallback(
+    (app: App): boolean => {
+      const override = expandedOverride[app.id];
+      if (typeof override === 'boolean') return override;
+      return ONGOING_STATUSES.has(app.status);
+    },
+    [expandedOverride],
+  );
+
+  const toggleExpanded = useCallback(
+    (app: App) => {
+      setExpandedOverride((prev) => ({
+        ...prev,
+        [app.id]: !isExpanded(app),
+      }));
+    },
+    [isExpanded, setExpandedOverride],
+  );
+
+  const handleScheduled = useCallback(
+    (appId: string, created: InterviewRound[]) => {
+      setRoundsByApp((prev) => ({
+        ...prev,
+        [appId]: [...(prev[appId] ?? []), ...created],
+      }));
+      // Force-expand the row whose round was just scheduled so the
+      // user sees the new entry land where they expect.
+      setExpandedOverride((prev) => ({ ...prev, [appId]: true }));
+    },
+    [setExpandedOverride],
+  );
 
   const hasData = apps.length > 0;
 
@@ -217,7 +289,24 @@ export default function Applications() {
                   key={a.id}
                   app={a}
                   last={i === filtered.length - 1}
-                  onSchedule={() => navigate(`/interviews/new?applicationId=${a.id}`)}
+                  rounds={roundsByApp[a.id]}
+                  expanded={isExpanded(a)}
+                  onToggleExpanded={() => toggleExpanded(a)}
+                  onRoundCreated={(round) => handleScheduled(a.id, [round])}
+                  onRoundUpdated={(next) =>
+                    setRoundsByApp((prev) => ({
+                      ...prev,
+                      [next.application_id]: (prev[next.application_id] ?? []).map(
+                        (r) => (r.id === next.id ? next : r),
+                      ),
+                    }))
+                  }
+                  onRoundDeleted={(id) =>
+                    setRoundsByApp((prev) => ({
+                      ...prev,
+                      [a.id]: (prev[a.id] ?? []).filter((r) => r.id !== id),
+                    }))
+                  }
                 />
               ))}
             </div>
@@ -239,79 +328,180 @@ export default function Applications() {
   );
 }
 
+/**
+ * One application + its embedded rounds list. The header row stays a
+ * clickable Link to the detail page (so muscle memory still works);
+ * the chevron button is the explicit toggle for the rounds drawer
+ * underneath, and it stops propagation so the click doesn't navigate.
+ */
 function ApplicationRow({
   app,
   last,
-  onSchedule,
+  rounds,
+  expanded,
+  onToggleExpanded,
+  onRoundCreated,
+  onRoundUpdated,
+  onRoundDeleted,
 }: {
   app: App;
   last: boolean;
-  onSchedule: () => void;
+  /** undefined = "not loaded yet" (skeleton), [] = "loaded but none". */
+  rounds: InterviewRound[] | undefined;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  onRoundCreated: (round: InterviewRound) => void;
+  onRoundUpdated: (next: InterviewRound) => void;
+  onRoundDeleted: (id: string) => void;
 }) {
+  const existingLoopLabels = Array.from(
+    new Set((rounds ?? []).map((r) => r.loop_label).filter(Boolean)),
+  ).sort();
+  const slug = slugify(`${app.company} ${app.role}`) || app.id;
+  const hasRounds = !!rounds && rounds.length > 0;
   return (
-    <Link
-      to={`/applications/${slugify(`${app.company} ${app.role}`) || app.id}`}
-      className="flex md:grid items-start md:items-center gap-2 md:gap-3 transition-colors flex-col md:flex-row"
+    <div
       style={{
-        gridTemplateColumns: '1fr 150px 120px auto',
-        padding: '14px 16px',
         borderBottom: last ? 'none' : '1px solid var(--border)',
-        textDecoration: 'none',
-        color: 'var(--text)',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'var(--bg-sunken)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'transparent';
       }}
     >
-      <div className="min-w-0">
-        <div style={{ fontSize: 14, fontWeight: 500 }}>{app.company}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{app.role}</div>
-      </div>
-      <StatusPill status={app.status} />
-      <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>
-        {app.applied_date || '—'}
-      </span>
-      <div className="flex items-center gap-1">
+      <div
+        className="flex md:grid items-start md:items-center gap-2 md:gap-3 transition-colors flex-col md:flex-row"
+        style={{
+          gridTemplateColumns: '24px 1fr 150px 120px auto',
+          padding: '14px 16px',
+        }}
+      >
         <button
           type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onSchedule();
-          }}
-          className="inline-flex items-center gap-1.5"
-          aria-label={`Schedule a round for ${app.company}`}
+          onClick={onToggleExpanded}
+          aria-expanded={expanded}
+          aria-label={
+            expanded
+              ? `Collapse rounds for ${app.company}`
+              : `Expand rounds for ${app.company}`
+          }
+          title={
+            rounds === undefined
+              ? 'Loading rounds…'
+              : hasRounds
+                ? `${rounds.length} round${rounds.length === 1 ? '' : 's'}`
+                : 'No rounds scheduled yet'
+          }
           style={{
-            padding: '6px 10px',
-            border: 0,
-            borderRadius: 'var(--radius)',
+            width: 24,
+            height: 24,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             background: 'transparent',
-            boxShadow: 'inset 0 0 0 1px var(--border-strong)',
-            color: 'var(--text-2)',
-            fontSize: 11.5,
-            fontWeight: 500,
+            border: 0,
             cursor: 'pointer',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--bg-elev)';
-            e.currentTarget.style.color = 'var(--accent)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = 'var(--text-2)';
+            color: 'var(--text-3)',
+            padding: 0,
+            borderRadius: 4,
           }}
         >
-          <CalendarPlus size={12} strokeWidth={1.7} />
-          Round
+          <ChevronRight
+            size={14}
+            strokeWidth={2}
+            style={{
+              transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+              transition: 'transform 120ms',
+            }}
+          />
         </button>
-        <span style={{ color: 'var(--text-4)', display: 'inline-flex', marginLeft: 4 }}>
-          <ArrowRight size={13} strokeWidth={1.7} />
+        <Link
+          to={`/applications/${slug}`}
+          className="min-w-0 flex-1"
+          style={{
+            textDecoration: 'none',
+            color: 'var(--text)',
+          }}
+        >
+          <div style={{ fontSize: 14, fontWeight: 500 }}>{app.company}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{app.role}</div>
+        </Link>
+        <StatusPill status={app.status} />
+        <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+          {app.applied_date || '—'}
         </span>
+        <div className="flex items-center gap-1">
+          {rounds !== undefined && (
+            <span
+              className="mono"
+              style={{
+                fontSize: 10.5,
+                color: 'var(--text-4)',
+                letterSpacing: '0.08em',
+                marginRight: 6,
+              }}
+              aria-hidden="true"
+            >
+              {rounds.length} {rounds.length === 1 ? 'ROUND' : 'ROUNDS'}
+            </span>
+          )}
+          <Link
+            to={`/applications/${slug}`}
+            aria-label={`Open ${app.company} application`}
+            style={{
+              color: 'var(--text-4)',
+              display: 'inline-flex',
+              padding: '4px',
+              marginLeft: 4,
+              textDecoration: 'none',
+              borderRadius: 4,
+            }}
+          >
+            <ArrowRight size={13} strokeWidth={1.7} />
+          </Link>
+        </div>
       </div>
-    </Link>
+      {expanded && (
+        <div
+          style={{
+            padding: '0 16px 14px 50px',
+            background: 'var(--bg-elev)',
+            borderTop: '1px solid var(--border)',
+          }}
+        >
+          {rounds === undefined ? (
+            <div
+              style={{
+                padding: '12px 0',
+                fontSize: 12,
+                color: 'var(--text-4)',
+                fontStyle: 'italic',
+              }}
+            >
+              Loading rounds…
+            </div>
+          ) : (
+            <div
+              style={{
+                padding: '12px 0 4px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+              }}
+            >
+              {rounds.length > 0 && (
+                <RoundsList
+                  rounds={rounds}
+                  onUpdated={onRoundUpdated}
+                  onDeleted={onRoundDeleted}
+                />
+              )}
+              <InlineAddRound
+                applicationId={app.id}
+                existingLoopLabels={existingLoopLabels}
+                onCreated={onRoundCreated}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

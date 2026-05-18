@@ -232,7 +232,7 @@ function CampaignStrip({ label, activeApps, upcomingRounds, mastered, total, onA
         </div>
         <div className="flex flex-wrap gap-2 lg:justify-end">
           <ActionButton onClick={onAddApplication} icon={<BriefcaseBusiness size={14} />}>Add application <KbdHint /></ActionButton>
-          <ActionButton onClick={onScheduleInterview} icon={<CalendarClock size={14} />}>Schedule <KbdHint /></ActionButton>
+          <ActionButton onClick={onScheduleInterview} icon={<CalendarClock size={14} />}>Add round <KbdHint /></ActionButton>
           <ActionButton onClick={onCampaigns} icon={<FolderKanban size={14} />} subtle>Campaigns <KbdHint /></ActionButton>
         </div>
       </div>
@@ -248,13 +248,19 @@ function TodayQueue({ nextRound, nextRoundApp, practices, onScheduleInterview }:
           <div className="eyebrow mb-1">Today's prep queue</div>
           <h2 className="display" style={{ margin: 0, fontSize: 28, fontWeight: 400 }}>What deserves attention first</h2>
         </div>
-        <button type="button" onClick={onScheduleInterview} className="pill mono" style={ghostPill}><Command size={12} /> Schedule <KbdHint /></button>
+        <button type="button" onClick={onScheduleInterview} className="pill mono" style={ghostPill}><Command size={12} /> Add round <KbdHint /></button>
       </div>
       <div className="grid lg:grid-cols-[minmax(220px,0.85fr)_minmax(0,1.15fr)]" style={{ gap: 'var(--gap-sm)' }}>
         <div className="card p-4" style={{ background: 'var(--bg-sunken)', boxShadow: 'none' }}>
           <div className="flex items-center gap-2 mb-3" style={{ color: 'var(--accent)' }}><CalendarClock size={15} /><span className="eyebrow">Next interview</span></div>
           {nextRound ? (
-            <Link to={`/interviews/${nextRound.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+            <Link
+              // Link straight to the parent application's detail
+              // page — round CRUD lives inline there now, not on a
+              // separate /interviews/:id route.
+              to={nextRoundApp ? `/applications/${nextRoundApp.id}` : '/applications'}
+              style={{ color: 'inherit', textDecoration: 'none' }}
+            >
               <div className="display-italic" style={{ fontSize: 26, lineHeight: 1, fontWeight: 400 }}>{formatShortDate(nextRound.date)}</div>
               <div style={{ marginTop: 10, fontWeight: 600 }}>{nextRound.round_type}</div>
               <div style={{ marginTop: 4, color: 'var(--text-3)', fontSize: 12.5 }}>{nextRoundApp ? `${nextRoundApp.company} / ${nextRoundApp.role}` : 'Application'}</div>
@@ -345,14 +351,19 @@ function UpcomingInterviews({ rounds, apps, onScheduleInterview }: { rounds: Rou
     <section className="card fade-up">
       <div className="flex items-center justify-between gap-3" style={{ marginBottom: 'var(--gap-sm)' }}>
         <span className="flex items-center gap-1.5" style={{ fontSize: 13, fontWeight: 600 }}><CalendarClock size={14} /> Upcoming interviews</span>
-        <button type="button" onClick={onScheduleInterview} style={textAction}>Schedule <KbdHint inline /></button>
+        <button type="button" onClick={onScheduleInterview} style={textAction}>Add round <KbdHint inline /></button>
       </div>
       {rounds.length ? (
         <div className="grid gap-1.5">
           {rounds.map((round) => {
             const app = apps.find((item) => item.id === round.application_id);
             return (
-              <Link key={round.id} to={`/interviews/${round.id}`} className="flex items-center justify-between gap-3" style={rowLink}>
+              <Link
+                key={round.id}
+                to={app ? `/applications/${app.id}` : '/applications'}
+                className="flex items-center justify-between gap-3"
+                style={rowLink}
+              >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 600 }}>{round.round_type}</div>
                   <div style={{ fontSize: 11.5, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app ? `${app.company} / ${app.role}` : 'Application'}</div>

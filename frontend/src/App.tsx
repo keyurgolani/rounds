@@ -17,8 +17,6 @@ import { AnecdoteEditorPage } from './pages/behavioral/AnecdoteEditorPage';
 import Applications from './pages/Applications';
 import ApplicationDetail from './pages/ApplicationDetail';
 import NewApplication from './pages/NewApplication';
-import Interviews from './pages/Interviews';
-import ScheduleRound from './pages/ScheduleRound';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Profile from './pages/Profile';
@@ -26,7 +24,6 @@ import Settings from './pages/Settings';
 import Campaigns from './pages/Campaigns';
 import CampaignDetail from './pages/CampaignDetail';
 import Todos from './pages/Todos';
-import RoundDetail from './pages/RoundDetail';
 import ResumesList from './pages/ResumesList';
 import ResumeStudio from './pages/ResumeStudio';
 import PublicResume from './pages/PublicResume';
@@ -81,9 +78,13 @@ export default function App() {
         <Route path="applications" element={<Applications />} />
         <Route path="applications/new" element={<NewApplication />} />
         <Route path="applications/:slug" element={<ApplicationDetail />} />
-        <Route path="interviews" element={<Interviews />} />
-        <Route path="interviews/new" element={<ScheduleRound />} />
-        <Route path="interviews/:id" element={<RoundDetail />} />
+        {/* The standalone Interviews aggregate, the "schedule round"
+            page, and the per-round detail page were all removed. All
+            round CRUD now happens inline on the application page.
+            Legacy interview URLs redirect to /applications. */}
+        <Route path="interviews" element={<Navigate to="/applications" replace />} />
+        <Route path="interviews/new" element={<Navigate to="/applications" replace />} />
+        <Route path="interviews/:id" element={<Navigate to="/applications" replace />} />
         <Route path="campaigns" element={<Campaigns />} />
         <Route path="campaigns/:slug" element={<CampaignDetail />} />
         <Route path="todos" element={<Todos />} />

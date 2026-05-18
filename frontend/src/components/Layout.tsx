@@ -17,7 +17,6 @@ import {
   AIGlyph,
   AppsGlyph,
   BehaviorGlyph,
-  CalendarGlyph,
   CodeGlyph,
   DashGlyph,
   ResumeGlyph,
@@ -52,8 +51,10 @@ const practiceNav: NavDef[] = [
 ];
 
 const trackingNav: NavDef[] = [
+  // Interviews live under each application as inline rounds — no
+  // standalone Interviews entry. RoundDetail pages remain reachable
+  // by deep link from the per-app rounds list.
   { path: '/applications', label: 'Applications', glyph: AppsGlyph },
-  { path: '/interviews', label: 'Interviews', glyph: CalendarGlyph },
   { path: '/todos', label: 'Todos', glyph: TodoGlyph },
   { path: '/resumes', label: 'Resumes', glyph: ResumeGlyph },
 ];
@@ -531,7 +532,6 @@ function TopBar() {
     { path: '/builder/guide', label: 'Real World Problems' },
     { path: '/behavioral/guide', label: 'Behavioral' },
     { path: '/applications', label: 'Applications' },
-    { path: '/interviews', label: 'Interview' },
     { path: '/todos', label: 'Todo' },
   ];
 

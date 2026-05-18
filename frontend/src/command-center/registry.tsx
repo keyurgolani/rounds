@@ -52,8 +52,8 @@ export const registry: CommandView[] = [
   },
   {
     id: 'schedule-interview',
-    label: 'Schedule interview',
-    description: 'Add a round to an existing application.',
+    label: 'Add round',
+    description: 'Log a new round under an existing application.',
     icon: <CalendarPlus size={14} strokeWidth={1.7} />,
     Component: ScheduleInterviewView,
   },
