@@ -37,6 +37,27 @@ export type CanvasElementSummary =
       position?: { x: number; y: number };
     };
 
+/** Spec for one component in a batched draw_diagram call. The AI
+ *  supplies a short string id (e.g. `"lb"`) and references it from
+ *  connections in the same call. The driver maps AI-ids → real ids. */
+export type DiagramComponentSpec = {
+  id: string;
+  label: string;
+  kind: ComponentKind;
+  position: { x: number; y: number };
+};
+
+export type DiagramConnectionSpec = {
+  from_id: string;
+  to_id: string;
+  label?: string;
+};
+
+export type DiagramNoteSpec = {
+  text: string;
+  position: { x: number; y: number };
+};
+
 /** A discriminated union of every tool call the AI can issue. */
 export type CanvasToolCall =
   | {
@@ -58,6 +79,14 @@ export type CanvasToolCall =
   | {
       name: 'add_note';
       input: { text: string; position: { x: number; y: number } };
+    }
+  | {
+      name: 'draw_diagram';
+      input: {
+        components: DiagramComponentSpec[];
+        connections?: DiagramConnectionSpec[];
+        notes?: DiagramNoteSpec[];
+      };
     }
   | {
       name: 'read_canvas';

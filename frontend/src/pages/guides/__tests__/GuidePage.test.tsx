@@ -1,6 +1,17 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+
+// Stub the MultiFileEditor (and indirectly Monaco). The real editor +
+// FileExplorer hang jsdom on mount.
+vi.mock('../../../components/editor/MultiFileEditor', () => ({
+  default: ({ activePath, files }: { activePath: string; files: Record<string, string> }) => (
+    <div data-testid="mock-multi-file-editor">
+      <span data-testid="active-path">{activePath}</span>
+      <pre>{files[activePath] ?? ''}</pre>
+    </div>
+  ),
+}));
 import { CommandCenterProvider } from '../../../command-center/CommandCenterProvider';
 import GuidePage from '../GuidePage';
 import type { GuideTrack } from '../guideTypes';

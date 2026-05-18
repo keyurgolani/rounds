@@ -92,6 +92,7 @@ const LANGUAGE_FOR_EXT: Record<string, string> = {
   tsx: 'typescript',
   js: 'javascript',
   jsx: 'javascript',
+  java: 'java',
   json: 'json',
   md: 'markdown',
 };

@@ -14,11 +14,16 @@ import {
   type ComponentKind,
 } from './canvasTools';
 
-const COMPONENT_W = 180;
-const COMPONENT_H = 70;
-const GUTTER = 60;
-const NOTE_W = 200;
-const NOTE_H = 56;
+const COMPONENT_W = 200;
+const COMPONENT_H = 84;
+// Wide enough that arrows routed between adjacent boxes don't run
+// through unrelated components, and the box labels have breathing room.
+// (Earlier 60px gutter caused visible overlap; user feedback.)
+const GUTTER_X = 160;
+const GUTTER_Y = 110;
+const GRID_COLS = 3;
+const NOTE_W = 220;
+const NOTE_H = 60;
 
 type DriverState = {
   components: Map<string, { kind: ComponentKind; label: string; x: number; y: number }>;
@@ -38,15 +43,17 @@ function emptyState(): DriverState {
   };
 }
 
-/** Auto-layout: place a new component on a 4-col grid using the
- *  current component count. */
+/** Auto-layout: place a new component on a 3-column grid with a
+ *  generous gutter so connecting arrows don't cross unrelated boxes.
+ *  Counter advances per call (not per current size) so deletions
+ *  don't cause later inserts to land on top of survivors. */
 function autoPosition(state: DriverState): { x: number; y: number } {
-  const n = state.components.size;
-  const col = n % 4;
-  const row = Math.floor(n / 4);
+  const n = state.counters.component;
+  const col = n % GRID_COLS;
+  const row = Math.floor(n / GRID_COLS);
   return {
-    x: 80 + col * (COMPONENT_W + GUTTER),
-    y: 80 + row * (COMPONENT_H + GUTTER),
+    x: 80 + col * (COMPONENT_W + GUTTER_X),
+    y: 80 + row * (COMPONENT_H + GUTTER_Y),
   };
 }
 
@@ -76,17 +83,32 @@ export function createExcalidrawDriver(api: ExcalidrawImperativeAPI): CanvasDriv
         },
       });
     }
-    // Connections (arrows with bindings).
+    // Connections (arrows with bindings). We supply an explicit
+    // `points` polyline from box-centre to box-centre — without it
+    // Excalidraw renders a zero-length stub at the start until the
+    // first scene mutation triggers a rebinding pass, which is why
+    // users saw arrows "appear" only after dragging a box. The
+    // start/end bindings still clip the visible endpoints to the
+    // rectangle edges, so the arrows look like clean side-to-side
+    // links despite the polyline going centre-to-centre.
     const connections: ExcalidrawElementSkeleton[] = [];
     for (const [id, conn] of state.connections.entries()) {
       const from = state.components.get(conn.fromId);
       const to = state.components.get(conn.toId);
       if (!from || !to) continue;
+      const fromCx = from.x + COMPONENT_W / 2;
+      const fromCy = from.y + COMPONENT_H / 2;
+      const toCx = to.x + COMPONENT_W / 2;
+      const toCy = to.y + COMPONENT_H / 2;
       connections.push({
         id,
         type: 'arrow',
-        x: from.x + COMPONENT_W / 2,
-        y: from.y + COMPONENT_H / 2,
+        x: fromCx,
+        y: fromCy,
+        points: [
+          [0, 0],
+          [toCx - fromCx, toCy - fromCy],
+        ],
         start: { id: conn.fromId, type: 'rectangle' },
         end: { id: conn.toId, type: 'rectangle' },
         strokeColor: '#475569',
@@ -218,6 +240,55 @@ export function createExcalidrawDriver(api: ExcalidrawImperativeAPI): CanvasDriv
         });
         rebuildScene();
         return { ok: true, result: { id } };
+      }
+      if (call.name === 'draw_diagram') {
+        const { components, connections = [], notes = [] } = call.input;
+        // Map the AI-chosen ids (e.g. "lb", "gateway") to the
+        // driver-issued ids that connections will bind to. Existing
+        // canvas ids pass through so the AI can also draw additions
+        // that link into prior turns.
+        const idMap = new Map<string, string>();
+        for (const c of components) {
+          const id = `comp-${++state.counters.component}`;
+          idMap.set(c.id, id);
+          state.components.set(id, {
+            kind: c.kind,
+            label: c.label,
+            x: c.position.x,
+            y: c.position.y,
+          });
+        }
+        const addedConnections: Array<{ id: string; from: string; to: string }> = [];
+        for (const conn of connections) {
+          const fromId = idMap.get(conn.from_id) ?? conn.from_id;
+          const toId = idMap.get(conn.to_id) ?? conn.to_id;
+          if (!state.components.has(fromId) || !state.components.has(toId)) {
+            // Skip connections that reference unknown ids. The AI can
+            // read the result and retry with the correct binding.
+            continue;
+          }
+          const id = `conn-${++state.counters.connection}`;
+          state.connections.set(id, { fromId, toId, label: conn.label });
+          addedConnections.push({ id, from: fromId, to: toId });
+        }
+        const addedNotes: string[] = [];
+        for (const n of notes) {
+          const id = `note-${++state.counters.note}`;
+          state.notes.set(id, { text: n.text, x: n.position.x, y: n.position.y });
+          addedNotes.push(id);
+        }
+        rebuildScene();
+        return {
+          ok: true,
+          result: {
+            components: Array.from(idMap.entries()).map(([aiId, id]) => ({
+              ai_id: aiId,
+              id,
+            })),
+            connections: addedConnections,
+            notes: addedNotes,
+          },
+        };
       }
       if (call.name === 'read_canvas') {
         return { ok: true, result: { elements: this.readCanvas() } };

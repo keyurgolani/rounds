@@ -1,8 +1,15 @@
 import { lazy, Suspense, useState } from 'react';
 import type { CanvasDriver } from './canvasTools';
 import SDPracticeChatPanel from './SDPracticeChatPanel';
+import { useResizableWidth } from '../../hooks/useResizableWidth';
+import ResizeHandle from '../../components/layout/ResizeHandle';
 
 const ExcalidrawCanvas = lazy(() => import('./ExcalidrawCanvas'));
+
+const CHAT_RAIL_KEY = 'rounds.sd-practice.chatRailWidth';
+const CHAT_RAIL_DEFAULT = 400;
+const CHAT_RAIL_MIN = 280;
+const CHAT_RAIL_MAX = 720;
 
 type Props = {
   questionSlug: string;
@@ -11,6 +18,13 @@ type Props = {
 
 export default function SDPracticeView({ questionSlug, questionPrompt }: Props) {
   const [driver, setDriver] = useState<CanvasDriver | null>(null);
+  const { width: railWidth, onResizeStart } = useResizableWidth({
+    storageKey: CHAT_RAIL_KEY,
+    defaultWidth: CHAT_RAIL_DEFAULT,
+    min: CHAT_RAIL_MIN,
+    max: CHAT_RAIL_MAX,
+    edge: 'left',
+  });
 
   return (
     <div
@@ -44,21 +58,23 @@ export default function SDPracticeView({ questionSlug, questionPrompt }: Props) 
           <ExcalidrawCanvas onDriverReady={setDriver} />
         </Suspense>
       </div>
-      <div
+      <aside
         style={{
-          width: 400,
+          width: railWidth,
           flexShrink: 0,
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
+          position: 'relative',
         }}
       >
+        <ResizeHandle onMouseDown={onResizeStart} edge="left" />
         <SDPracticeChatPanel
           questionSlug={questionSlug}
           questionPrompt={questionPrompt}
           driver={driver}
         />
-      </div>
+      </aside>
     </div>
   );
 }

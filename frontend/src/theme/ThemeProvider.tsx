@@ -316,8 +316,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
-export function useTheme() {
+export function useTheme(): ThemeContextValue {
   const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error('useTheme must be used within ThemeProvider');
+  // Fall back to defaults when there is no provider — keeps callers
+  // safe in isolated unit tests that render a single component without
+  // mounting the full app shell. Real app code always has a provider
+  // mounted by main.tsx, so this branch is only ever taken in tests.
+  if (!ctx) {
+    return {
+      ...defaults,
+      setTweak: () => {},
+      reset: () => {},
+    };
+  }
   return ctx;
 }

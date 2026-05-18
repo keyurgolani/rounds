@@ -1,7 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { vi } from 'vitest';
+
+// Stub the MultiFileEditor (and indirectly Monaco). The real editor +
+// FileExplorer hang jsdom on mount.
+vi.mock('../../../components/editor/MultiFileEditor', () => ({
+  default: ({ activePath, files }: { activePath: string; files: Record<string, string> }) => (
+    <div data-testid="mock-multi-file-editor">
+      <span data-testid="active-path">{activePath}</span>
+      <pre>{files[activePath] ?? ''}</pre>
+    </div>
+  ),
+}));
 import { CommandCenterProvider } from '../../../command-center/CommandCenterProvider';
 import GuidePage from '../GuidePage';
 
@@ -44,15 +54,15 @@ describe('coding guide pages', () => {
 
   it('code kit renders language tabs and at least one shelf', () => {
     renderAt('/coding/guide/code-kit');
-    expect(screen.getByRole('button', { name: 'Python', pressed: true })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'JavaScript' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Python', selected: true })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'JavaScript' })).toBeInTheDocument();
     expect(screen.getByText('ArrayToolkit')).toBeInTheDocument();
   });
 
-  it('patterns renders pattern cards including the binary search variant', () => {
+  it('patterns renders the active pattern card and the language tab strip', () => {
     renderAt('/coding/guide/patterns');
+    expect(screen.getByRole('tab', { name: 'Python', selected: true })).toBeInTheDocument();
     expect(screen.getByText('Two Pointers')).toBeInTheDocument();
-    expect(screen.getByText('Binary Search on the Answer')).toBeInTheDocument();
   });
 
   it('complexity renders the compass with pass/warn/fail cells', () => {

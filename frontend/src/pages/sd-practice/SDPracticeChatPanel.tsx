@@ -1,33 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Send, Sparkles, AlertTriangle, X } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
+import { ChevronRight, Sparkles } from 'lucide-react';
+import ChatPanel, {
+  type ChatMessage,
+  type ChatSendArgs,
+} from '../../components/chat/ChatPanel';
 import {
   canvasElementsToWire,
   streamSDChat,
   type SDChatMessage,
-  type SDChatStreamEvent,
 } from './sdPracticeApi';
-import type {
-  CanvasDriver,
-  CanvasToolCall,
-} from './canvasTools';
-import ModelSwitcher, { type ModelOverride } from '../../components/ai/ModelSwitcher';
-import { listAICodingModels, type AICodingModel } from '../ai-coding/aiCodingApi';
+import type { CanvasDriver, CanvasToolCall } from './canvasTools';
 
-type ChatTurn =
-  | { id: string; role: 'user'; text: string }
-  | {
-      id: string;
-      role: 'assistant';
-      text: string;
-      toolCalls: Array<{
-        id: string;
-        name: string;
-        partialJson: string;
-        parsed?: CanvasToolCall;
-        result?: { ok: true; value: unknown } | { ok: false; error: string };
-      }>;
-      streaming: boolean;
-    };
+/** Extras attached to assistant turns in the SD chat — one entry per
+ *  tool the AI invoked during that turn. The chip beneath the bubble
+ *  surfaces success/failure to the candidate. */
+type SDToolCall = {
+  id: string;
+  name: string;
+  parsed?: CanvasToolCall;
+  result?: { ok: true; value: unknown } | { ok: false; error: string };
+};
+
+type SDExtras = { toolCalls: SDToolCall[] };
 
 type Props = {
   questionSlug: string;
@@ -35,493 +29,680 @@ type Props = {
   driver: CanvasDriver | null;
 };
 
-/** Accumulates streamed text + tool_use blocks per assistant turn,
- *  executes each tool against the canvas driver, and packages a
- *  follow-up tool_result message for the AI on the next turn. */
+/**
+ * AI sparring partner for system-design practice. Streams text +
+ * tool_use blocks; tool calls mutate the Excalidraw canvas via the
+ * supplied driver. Tool-call chips render as per-message extras below
+ * each assistant bubble.
+ *
+ * All chat shell concerns — composer, scrolling, model picker, Stop
+ * button, Markdown rendering, bubble width tiering — live in the
+ * shared ChatPanel.
+ */
 export default function SDPracticeChatPanel({
   questionSlug,
   questionPrompt,
   driver,
 }: Props) {
-  const [turns, setTurns] = useState<ChatTurn[]>([]);
-  const [draft, setDraft] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [models, setModels] = useState<AICodingModel[]>([]);
-  const [override, setOverride] = useState<ModelOverride>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  // In-flight tool-call buffers, kept OUTSIDE React state so the canvas
+  // mutation can run exactly once. React 18 StrictMode invokes
+  // setState updater functions twice in dev — anything inside one runs
+  // twice. (See dedupe note in handleStreamEvent below.)
+  const toolBufferRef = useRef<
+    Map<string, { name: string; partialJson: string }>
+  >(new Map());
 
-  // Tool-use requires an Anthropic-compatible provider; filter the
-  // model list down so the picker only surfaces options that will
-  // actually work against /api/sd-practice/chat.
-  const anthropicModels = useMemo(
-    () => models.filter((m) => m.kind === 'anthropic' || m.kind === 'anthropic-compatible'),
-    [models],
-  );
+  const handleSend = useCallback(
+    async (args: ChatSendArgs<SDExtras>) => {
+      if (!driver) return;
+      const { text, history, override, signal, callbacks } = args;
 
-  useEffect(() => {
-    listAICodingModels()
-      .then(setModels)
-      .catch((err) => {
-        console.warn('[sd-practice] failed to load model list:', err);
-        setModels([]);
-      });
-  }, []);
+      // Build the Anthropic-shaped wire history from prior messages.
+      // `history` includes the just-appended user turn AND the empty
+      // streaming placeholder. We slice off the placeholder, then add
+      // the new user text explicitly so the wire ordering is obvious.
+      const priorTurns = history.slice(0, -2);
+      const backendMessages = priorTurnsToWire(priorTurns);
+      backendMessages.push({ role: 'user', content: text });
 
-  const scrollToBottom = useCallback(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [turns, scrollToBottom]);
-
-  const buildBackendMessages = useCallback(
-    (priorTurns: ChatTurn[], pendingUserText: string): SDChatMessage[] => {
-      const out: SDChatMessage[] = [];
-      for (const t of priorTurns) {
-        if (t.role === 'user') {
-          out.push({ role: 'user', content: t.text });
-        } else {
-          // Assistant turn: text + tool_use blocks
-          const blocks: Array<
-            | { type: 'text'; text: string }
-            | { type: 'tool_use'; id: string; name: string; input: unknown }
-          > = [];
-          if (t.text) blocks.push({ type: 'text', text: t.text });
-          for (const tc of t.toolCalls) {
-            if (!tc.parsed) continue;
-            blocks.push({
-              type: 'tool_use',
-              id: tc.id,
-              name: tc.name,
-              input: tc.parsed.input,
-            });
-          }
-          if (blocks.length) out.push({ role: 'assistant', content: blocks });
-          // Tool results from the canvas driver — sent as a user turn
-          // containing only tool_result blocks, per Anthropic API shape.
-          const results = t.toolCalls
-            .filter((tc) => tc.parsed && tc.result)
-            .map((tc) => ({
-              type: 'tool_result' as const,
-              tool_use_id: tc.id,
-              content:
-                tc.result && tc.result.ok
-                  ? JSON.stringify(tc.result.value)
-                  : tc.result && !tc.result.ok
-                    ? tc.result.error
-                    : '',
-              is_error: tc.result && !tc.result.ok ? true : undefined,
-            }));
-          if (results.length) {
-            out.push({ role: 'user', content: results });
-          }
-        }
-      }
-      out.push({ role: 'user', content: pendingUserText });
-      return out;
-    },
-    [],
-  );
-
-  const send = useCallback(async () => {
-    const text = draft.trim();
-    if (!text || busy || !driver) return;
-    setError(null);
-    setBusy(true);
-
-    const userTurn: ChatTurn = {
-      id: `u-${Date.now()}`,
-      role: 'user',
-      text,
-    };
-    const aTurn: ChatTurn = {
-      id: `a-${Date.now()}`,
-      role: 'assistant',
-      text: '',
-      toolCalls: [],
-      streaming: true,
-    };
-
-    // Capture priorTurns BEFORE we add the new user message so the
-    // history we send to the backend is accurate.
-    const priorTurns = turns;
-    setTurns((prev) => [...prev, userTurn, aTurn]);
-    setDraft('');
-
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-
-    try {
       const canvasState = driver.readCanvas();
-      const backendMessages = buildBackendMessages(priorTurns, text);
-      await streamSDChat(
-        {
-          question_slug: questionSlug,
-          question_prompt: questionPrompt,
-          canvas_elements: canvasElementsToWire(canvasState),
-          messages: backendMessages,
-          provider_id: override?.provider_id,
-          model: override?.model,
-        },
-        (evt) => handleStreamEvent(evt, aTurn.id, driver),
-        ac.signal,
-      );
-    } catch (err) {
-      if ((err as { name?: string }).name === 'AbortError') return;
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-      setTurns((prev) =>
-        prev.map((t) => (t.id === aTurn.id && t.role === 'assistant' ? { ...t, streaming: false } : t)),
-      );
-    }
-  }, [draft, busy, driver, turns, questionSlug, questionPrompt, buildBackendMessages, override]);
-
-  const handleStreamEvent = useCallback(
-    (evt: SDChatStreamEvent, turnId: string, drv: CanvasDriver) => {
-      setTurns((prev) =>
-        prev.map((t) => {
-          if (t.id !== turnId || t.role !== 'assistant') return t;
-          if (evt.type === 'text_delta') {
-            return { ...t, text: t.text + evt.text };
-          }
-          if (evt.type === 'tool_use_start') {
-            return {
-              ...t,
-              toolCalls: [
-                ...t.toolCalls,
-                { id: evt.id, name: evt.name, partialJson: '' },
-              ],
-            };
-          }
-          if (evt.type === 'tool_use_delta') {
-            return {
-              ...t,
-              toolCalls: t.toolCalls.map((tc) =>
-                tc.id === evt.id
-                  ? { ...tc, partialJson: tc.partialJson + evt.partial_json }
-                  : tc,
-              ),
-            };
-          }
-          if (evt.type === 'tool_use_stop') {
-            return {
-              ...t,
-              toolCalls: t.toolCalls.map((tc) => {
-                if (tc.id !== evt.id) return tc;
-                let parsed: CanvasToolCall | undefined;
+      try {
+        await streamSDChat(
+          {
+            question_slug: questionSlug,
+            question_prompt: questionPrompt,
+            canvas_elements: canvasElementsToWire(canvasState),
+            messages: backendMessages,
+            provider_id: override?.provider_id,
+            model: override?.model,
+          },
+          (evt) => {
+            if (evt.type === 'text_delta') {
+              callbacks.appendText(evt.text);
+              return;
+            }
+            if (evt.type === 'tool_use_start') {
+              toolBufferRef.current.set(evt.id, {
+                name: evt.name,
+                partialJson: '',
+              });
+              callbacks.setExtras((prev) => ({
+                toolCalls: [
+                  ...(prev?.toolCalls ?? []),
+                  { id: evt.id, name: evt.name },
+                ],
+              }));
+              return;
+            }
+            if (evt.type === 'tool_use_delta') {
+              const buf = toolBufferRef.current.get(evt.id);
+              if (buf) buf.partialJson += evt.partial_json;
+              return;
+            }
+            if (evt.type === 'tool_use_stop') {
+              // Side effect — apply against the canvas exactly once.
+              const buf = toolBufferRef.current.get(evt.id);
+              toolBufferRef.current.delete(evt.id);
+              let parsed: CanvasToolCall | undefined;
+              let resolved:
+                | { ok: true; value: unknown }
+                | { ok: false; error: string };
+              if (!buf) {
+                resolved = { ok: false, error: 'Missing tool call buffer.' };
+              } else {
                 try {
-                  const input = tc.partialJson
-                    ? (JSON.parse(tc.partialJson) as unknown)
+                  const input = buf.partialJson
+                    ? (JSON.parse(buf.partialJson) as unknown)
                     : {};
-                  parsed = { name: tc.name, input } as CanvasToolCall;
+                  parsed = { name: buf.name, input } as CanvasToolCall;
                 } catch {
-                  return {
-                    ...tc,
-                    result: { ok: false, error: 'AI emitted malformed tool input JSON.' },
+                  resolved = {
+                    ok: false,
+                    error: 'AI emitted malformed tool input JSON.',
                   };
                 }
-                const out = drv.applyTool(parsed);
-                return {
-                  ...tc,
-                  parsed,
-                  result: out.ok
+                if (parsed) {
+                  const out = driver.applyTool(parsed);
+                  resolved = out.ok
                     ? { ok: true, value: out.result }
-                    : { ok: false, error: out.error },
-                };
-              }),
-            };
-          }
-          return t;
-        }),
-      );
-      if (evt.type === 'error') {
-        setError(evt.message);
+                    : { ok: false, error: out.error };
+                }
+              }
+              callbacks.setExtras((prev) => ({
+                toolCalls: (prev?.toolCalls ?? []).map((tc) =>
+                  tc.id === evt.id ? { ...tc, parsed, result: resolved } : tc,
+                ),
+              }));
+              return;
+            }
+            if (evt.type === 'error') {
+              callbacks.error(evt.message);
+            }
+          },
+          signal,
+        );
+      } catch (err) {
+        if ((err as { name?: string }).name === 'AbortError') return;
+        throw err;
       }
     },
-    [],
-  );
-
-  const onKey = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        void send();
-      }
-    },
-    [send],
+    [driver, questionSlug, questionPrompt],
   );
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
+    <ChatPanel<SDExtras>
+      onSend={handleSend}
+      composerPlaceholder={
+        driver ? 'Ask the AI…' : 'Canvas loading…'
+      }
+      disabled={!driver}
+      emptyState={<SDEmpty />}
+      renderExtras={(msg) =>
+        msg.role === 'assistant' && msg.extras?.toolCalls?.length
+          ? <ToolCallList calls={msg.extras.toolCalls} />
+          : null
+      }
+      rootStyle={{
         background: 'var(--bg-elev)',
         borderLeft: '1px solid var(--border)',
-        minWidth: 0,
+      }}
+    />
+  );
+}
+
+/** Pack the prior conversation back into the Anthropic-shaped wire
+ *  protocol the SD chat backend expects. */
+function priorTurnsToWire(
+  prior: ChatMessage<SDExtras>[],
+): SDChatMessage[] {
+  const out: SDChatMessage[] = [];
+  for (const m of prior) {
+    if (m.role === 'user') {
+      if (!m.content) continue;
+      out.push({ role: 'user', content: m.content });
+      continue;
+    }
+    // assistant: text + tool_use blocks
+    const blocks: Array<
+      | { type: 'text'; text: string }
+      | { type: 'tool_use'; id: string; name: string; input: unknown }
+    > = [];
+    if (m.content) blocks.push({ type: 'text', text: m.content });
+    const toolCalls = m.extras?.toolCalls ?? [];
+    for (const tc of toolCalls) {
+      if (!tc.parsed) continue;
+      blocks.push({
+        type: 'tool_use',
+        id: tc.id,
+        name: tc.name,
+        input: tc.parsed.input,
+      });
+    }
+    if (blocks.length) out.push({ role: 'assistant', content: blocks });
+    // Tool results — sent as a user turn with structured content.
+    const results = toolCalls
+      .filter((tc) => tc.parsed && tc.result)
+      .map((tc) => ({
+        type: 'tool_result' as const,
+        tool_use_id: tc.id,
+        content:
+          tc.result && tc.result.ok
+            ? JSON.stringify(tc.result.value)
+            : tc.result && !tc.result.ok
+              ? tc.result.error
+              : '',
+        is_error: tc.result && !tc.result.ok ? true : undefined,
+      }));
+    if (results.length) out.push({ role: 'user', content: results });
+  }
+  return out;
+}
+
+function SDEmpty() {
+  return (
+    <div
+      style={{
+        margin: 'auto 0',
+        padding: 14,
+        background: 'var(--bg-sunken)',
+        borderRadius: 'var(--radius)',
+        fontSize: 12.5,
+        color: 'var(--text-3)',
+        lineHeight: 1.55,
       }}
     >
       <div
+        className="eyebrow"
         style={{
-          padding: 'var(--pad-sm) var(--pad-md)',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
+          marginBottom: 6,
+          color: 'var(--accent)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            fontSize: 13,
-            fontWeight: 600,
-            color: 'var(--text-2)',
-          }}
-        >
-          <Sparkles size={14} strokeWidth={1.8} />
-          AI sparring partner
-          <span
-            className="mono"
-            style={{
-              marginLeft: 'auto',
-              fontSize: 10.5,
-              color: 'var(--text-4)',
-              letterSpacing: '0.1em',
-            }}
-          >
-            CANVAS-AWARE
-          </span>
-        </div>
-        <ModelSwitcher
-          models={anthropicModels}
-          value={override}
-          onChange={setOverride}
-          disabled={busy}
-          fullWidth
-        />
-        {models.length > 0 && anthropicModels.length === 0 && (
-          <div
-            style={{
-              fontSize: 11,
-              color: 'var(--plum)',
-              lineHeight: 1.4,
-            }}
-          >
-            Tool-use requires an Anthropic-compatible provider. Add one in settings.
-          </div>
-        )}
+        <Sparkles size={11} strokeWidth={2} /> SPARRING PARTNER
       </div>
-
-      <div
-        ref={scrollRef}
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: 'var(--pad-md)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--gap-sm)',
-        }}
-      >
-        {turns.length === 0 && (
-          <div style={{ color: 'var(--text-3)', fontSize: 13, lineHeight: 1.55 }}>
-            Ask the AI to spar on this design. It can draw on the canvas, but it
-            asks before mutating and challenges your assumptions. Try:
-            <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
-              <li>"Start me off — what should I clarify first?"</li>
-              <li>"Add an API gateway in front of the service."</li>
-              <li>"What's the failure mode here at p99?"</li>
-            </ul>
-          </div>
-        )}
-        {turns.map((t) => (
-          <Turn key={t.id} turn={t} />
-        ))}
-        {error && (
-          <div
-            style={{
-              padding: 8,
-              border: '1px solid var(--plum)',
-              borderRadius: 'var(--radius)',
-              color: 'var(--plum)',
-              fontSize: 12,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <AlertTriangle size={13} /> {error}
-            <button
-              type="button"
-              onClick={() => setError(null)}
-              style={{
-                marginLeft: 'auto',
-                background: 'transparent',
-                border: 0,
-                color: 'inherit',
-                cursor: 'pointer',
-              }}
-              aria-label="Dismiss error"
-            >
-              <X size={12} />
-            </button>
-          </div>
-        )}
+      <div>
+        Ask the AI to spar on this design. It draws on the canvas but
+        asks before mutating and challenges your assumptions.
       </div>
-
-      <div
-        style={{
-          padding: 'var(--pad-sm)',
-          borderTop: '1px solid var(--border)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 6,
-        }}
-      >
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKey}
-          placeholder={driver ? 'Ask the AI… (⌘/Ctrl+Enter to send)' : 'Canvas loading…'}
-          disabled={!driver || busy}
-          rows={3}
-          style={{
-            width: '100%',
-            resize: 'vertical',
-            padding: 8,
-            fontSize: 13,
-            lineHeight: 1.5,
-            background: 'var(--bg)',
-            color: 'var(--text)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            fontFamily: 'inherit',
-          }}
-        />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-4)' }}>
-            ⌘/Ctrl+Enter to send
-          </span>
-          <button
-            type="button"
-            onClick={() => void send()}
-            disabled={!draft.trim() || busy || !driver}
-            style={{
-              marginLeft: 'auto',
-              padding: '6px 12px',
-              background: !draft.trim() || busy ? 'var(--bg-sunken)' : 'var(--accent)',
-              color: !draft.trim() || busy ? 'var(--text-4)' : 'var(--bg-elev)',
-              border: 0,
-              borderRadius: 'var(--radius)',
-              fontSize: 12.5,
-              fontWeight: 600,
-              cursor: !draft.trim() || busy ? 'not-allowed' : 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-          >
-            <Send size={12} /> {busy ? 'Thinking…' : 'Send'}
-          </button>
-        </div>
-      </div>
+      <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+        <li>"Start me off — what should I clarify first?"</li>
+        <li>"Add an API gateway in front of the service."</li>
+        <li>"What's the failure mode here at p99?"</li>
+      </ul>
     </div>
   );
 }
 
-function Turn({ turn }: { turn: ChatTurn }) {
-  if (turn.role === 'user') {
-    return (
-      <div
-        style={{
-          alignSelf: 'flex-end',
-          maxWidth: '92%',
-          padding: '8px 12px',
-          background: 'var(--accent-soft)',
-          color: 'var(--accent)',
-          borderRadius: 'var(--radius)',
-          fontSize: 13,
-          lineHeight: 1.5,
-          whiteSpace: 'pre-wrap',
-        }}
-      >
-        {turn.text}
-      </div>
-    );
-  }
+function ToolCallList({ calls }: { calls: SDToolCall[] }) {
   return (
-    <div
-      style={{
-        alignSelf: 'flex-start',
-        maxWidth: '92%',
-        fontSize: 13,
-        lineHeight: 1.55,
-      }}
-    >
-      <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text)' }}>
-        {turn.text}
-        {turn.streaming && (
-          <span
-            className="mono"
-            style={{ marginLeft: 4, color: 'var(--text-4)', fontSize: 11 }}
-          >
-            ▍
-          </span>
-        )}
-      </div>
-      {turn.toolCalls.map((tc) => (
-        <div
-          key={tc.id}
-          className="mono"
-          style={{
-            marginTop: 4,
-            padding: '4px 8px',
-            background: 'var(--bg-sunken)',
-            border: '1px solid var(--border)',
-            borderRadius: 4,
-            fontSize: 11,
-            color:
-              tc.result && !tc.result.ok
-                ? 'var(--plum)'
-                : tc.result?.ok
-                  ? 'var(--forest)'
-                  : 'var(--text-3)',
-          }}
-        >
-          <span style={{ fontWeight: 600 }}>
-            {tc.result ? (tc.result.ok ? '✓' : '✗') : '…'}
-          </span>{' '}
-          {tc.name}
-          {tc.parsed?.input ? ` (${summariseInput(tc.parsed.input)})` : ''}
-          {tc.result && !tc.result.ok && (
-            <span style={{ marginLeft: 6 }}>— {tc.result.error}</span>
-          )}
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {calls.map((tc) => (
+        <ToolCallChip key={tc.id} call={tc} />
       ))}
     </div>
   );
 }
 
-function summariseInput(input: unknown): string {
-  if (!input || typeof input !== 'object') return '';
+function ToolCallChip({ call }: { call: SDToolCall }) {
+  const [expanded, setExpanded] = useState(false);
+  const status: 'pending' | 'ok' | 'error' = !call.result
+    ? 'pending'
+    : call.result.ok
+      ? 'ok'
+      : 'error';
+  const color =
+    status === 'error'
+      ? 'var(--plum)'
+      : status === 'ok'
+        ? 'var(--forest)'
+        : 'var(--text-3)';
+  const glyph = status === 'pending' ? '…' : status === 'ok' ? '✓' : '✗';
+  const summary = call.parsed
+    ? summariseToolCall(call.name, call.parsed.input)
+    : { verb: prettyToolName(call.name), detail: null as string | null };
+  // Pending tool calls have no parsed input yet — not interactive.
+  const canExpand = !!call.parsed;
+
+  return (
+    <div
+      style={{
+        background: 'var(--bg-sunken)',
+        border: '1px solid var(--border)',
+        borderRadius: 4,
+        fontSize: 11.5,
+        color,
+        lineHeight: 1.5,
+        overflow: 'hidden',
+      }}
+    >
+      <button
+        type="button"
+        onClick={canExpand ? () => setExpanded((v) => !v) : undefined}
+        disabled={!canExpand}
+        aria-expanded={canExpand ? expanded : undefined}
+        style={{
+          width: '100%',
+          padding: '4px 8px',
+          background: 'transparent',
+          border: 0,
+          color: 'inherit',
+          font: 'inherit',
+          textAlign: 'left',
+          cursor: canExpand ? 'pointer' : 'default',
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 6,
+        }}
+      >
+        {canExpand ? (
+          <span
+            aria-hidden="true"
+            style={{
+              width: 12,
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+              transition: 'transform 120ms',
+              color: 'var(--text-4)',
+            }}
+          >
+            <ChevronRight size={11} strokeWidth={2.2} />
+          </span>
+        ) : (
+          <span style={{ width: 12, flexShrink: 0 }} />
+        )}
+        <span
+          aria-hidden="true"
+          className="mono"
+          style={{ fontWeight: 600, width: 12, flexShrink: 0 }}
+        >
+          {glyph}
+        </span>
+        <span style={{ fontWeight: 500 }}>{summary.verb}</span>
+        {summary.detail && (
+          <span style={{ color: 'var(--text-3)', flex: 1, minWidth: 0 }}>
+            {summary.detail}
+          </span>
+        )}
+        {status === 'error' && (
+          <span style={{ color: 'var(--plum)', flex: 1, minWidth: 0 }}>
+            — {(call.result as { ok: false; error: string }).error}
+          </span>
+        )}
+      </button>
+      {canExpand && expanded && call.parsed && (
+        <ToolCallDetails name={call.name} input={call.parsed.input} />
+      )}
+    </div>
+  );
+}
+
+/** Expanded panel: a structured breakdown of the tool's input so the
+ *  user can audit exactly what the AI drew without scanning raw JSON. */
+function ToolCallDetails({
+  name,
+  input,
+}: {
+  name: string;
+  input: unknown;
+}) {
+  return (
+    <div
+      style={{
+        padding: '8px 10px 10px 30px',
+        borderTop: '1px solid var(--border)',
+        background: 'var(--bg)',
+        fontSize: 11.5,
+        color: 'var(--text-2)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}
+    >
+      {renderToolDetail(name, input)}
+    </div>
+  );
+}
+
+function renderToolDetail(name: string, input: unknown): React.ReactNode {
+  if (!input || typeof input !== 'object') {
+    return <em style={{ color: 'var(--text-4)' }}>No input.</em>;
+  }
   const obj = input as Record<string, unknown>;
-  // Prefer label or id when present, else just the first 2 keys.
-  if (typeof obj.label === 'string') return String(obj.label);
-  if (typeof obj.id === 'string') return String(obj.id);
-  const keys = Object.keys(obj).slice(0, 2);
-  return keys
-    .map((k) => {
-      const v = obj[k];
-      return `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`;
-    })
-    .join(', ');
+
+  if (name === 'draw_diagram') {
+    const components = Array.isArray(obj.components)
+      ? (obj.components as Array<Record<string, unknown>>)
+      : [];
+    const connections = Array.isArray(obj.connections)
+      ? (obj.connections as Array<Record<string, unknown>>)
+      : [];
+    const notes = Array.isArray(obj.notes)
+      ? (obj.notes as Array<Record<string, unknown>>)
+      : [];
+    return (
+      <>
+        {components.length > 0 && (
+          <DetailSection title={`Components (${components.length})`}>
+            {components.map((c, i) => (
+              <DetailRow
+                key={`comp-${i}`}
+                label={String(c.label ?? `#${i + 1}`)}
+                meta={[
+                  c.kind ? `kind: ${String(c.kind)}` : null,
+                  c.id ? `id: ${String(c.id)}` : null,
+                  positionLabel(c.position),
+                ]}
+              />
+            ))}
+          </DetailSection>
+        )}
+        {connections.length > 0 && (
+          <DetailSection title={`Connections (${connections.length})`}>
+            {connections.map((c, i) => (
+              <DetailRow
+                key={`conn-${i}`}
+                label={`${String(c.from_id ?? '?')} → ${String(c.to_id ?? '?')}`}
+                meta={[c.label ? `“${String(c.label)}”` : null]}
+              />
+            ))}
+          </DetailSection>
+        )}
+        {notes.length > 0 && (
+          <DetailSection title={`Notes (${notes.length})`}>
+            {notes.map((n, i) => (
+              <DetailRow
+                key={`note-${i}`}
+                label={String(n.text ?? `Note #${i + 1}`)}
+                meta={[positionLabel(n.position)]}
+              />
+            ))}
+          </DetailSection>
+        )}
+      </>
+    );
+  }
+
+  if (name === 'add_component') {
+    return (
+      <DetailSection title="Component">
+        <DetailRow
+          label={String(obj.label ?? '(unnamed)')}
+          meta={[
+            obj.kind ? `kind: ${String(obj.kind)}` : null,
+            positionLabel(obj.position),
+          ]}
+        />
+      </DetailSection>
+    );
+  }
+
+  if (name === 'add_connection') {
+    return (
+      <DetailSection title="Connection">
+        <DetailRow
+          label={`${String(obj.from_id ?? '?')} → ${String(obj.to_id ?? '?')}`}
+          meta={[
+            obj.label ? `label: “${String(obj.label)}”` : null,
+            obj.direction ? `direction: ${String(obj.direction)}` : null,
+          ]}
+        />
+      </DetailSection>
+    );
+  }
+
+  if (name === 'update_component') {
+    return (
+      <DetailSection title="Update">
+        <DetailRow
+          label={String(obj.id ?? '(no id)')}
+          meta={[
+            obj.label ? `label: “${String(obj.label)}”` : null,
+            obj.kind ? `kind: ${String(obj.kind)}` : null,
+          ]}
+        />
+      </DetailSection>
+    );
+  }
+
+  if (name === 'delete_element') {
+    return (
+      <DetailSection title="Delete">
+        <DetailRow label={String(obj.id ?? '(no id)')} meta={[]} />
+      </DetailSection>
+    );
+  }
+
+  if (name === 'add_note') {
+    return (
+      <DetailSection title="Note">
+        <DetailRow
+          label={String(obj.text ?? '')}
+          meta={[positionLabel(obj.position)]}
+        />
+      </DetailSection>
+    );
+  }
+
+  if (name === 'read_canvas') {
+    return (
+      <em style={{ color: 'var(--text-4)' }}>
+        No input. (See assistant message for the AI&rsquo;s read-out.)
+      </em>
+    );
+  }
+
+  // Unknown tool — fall through to a labelled key/value list, avoiding
+  // a raw JSON dump.
+  return (
+    <DetailSection title="Input">
+      {Object.entries(obj).map(([k, v]) => (
+        <DetailRow
+          key={k}
+          label={k}
+          meta={[typeof v === 'string' ? v : JSON.stringify(v)]}
+        />
+      ))}
+    </DetailSection>
+  );
+}
+
+function DetailSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div
+        className="eyebrow"
+        style={{
+          fontSize: 9.5,
+          letterSpacing: '0.08em',
+          color: 'var(--text-4)',
+          marginBottom: 4,
+        }}
+      >
+        {title}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  meta,
+}: {
+  label: string;
+  meta: Array<string | null>;
+}) {
+  const visibleMeta = meta.filter((m): m is string => !!m);
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'baseline',
+        gap: 6,
+        minWidth: 0,
+      }}
+    >
+      <span style={{ color: 'var(--text)', fontWeight: 500 }}>{label}</span>
+      {visibleMeta.length > 0 && (
+        <span
+          className="mono"
+          style={{ color: 'var(--text-4)', fontSize: 10.5 }}
+        >
+          {visibleMeta.join(' · ')}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function positionLabel(pos: unknown): string | null {
+  if (!pos || typeof pos !== 'object') return null;
+  const p = pos as Record<string, unknown>;
+  if (typeof p.x !== 'number' || typeof p.y !== 'number') return null;
+  return `(${Math.round(p.x)}, ${Math.round(p.y)})`;
+}
+
+function prettyToolName(name: string): string {
+  switch (name) {
+    case 'add_component':
+      return 'Added component';
+    case 'add_connection':
+      return 'Linked';
+    case 'update_component':
+      return 'Updated component';
+    case 'delete_element':
+      return 'Deleted element';
+    case 'add_note':
+      return 'Added note';
+    case 'draw_diagram':
+      return 'Drew diagram';
+    case 'read_canvas':
+      return 'Read canvas';
+    default:
+      return name;
+  }
+}
+
+/** Produce a human-friendly verb + detail pair from a tool call's
+ *  input. Distinct from raw JSON dumps — keeps the chat clean even
+ *  when the AI emits a batch draw_diagram with dozens of items. */
+function summariseToolCall(
+  name: string,
+  input: unknown,
+): { verb: string; detail: string | null } {
+  const verb = prettyToolName(name);
+  if (!input || typeof input !== 'object') return { verb, detail: null };
+  const obj = input as Record<string, unknown>;
+
+  if (name === 'draw_diagram') {
+    const components = Array.isArray(obj.components)
+      ? (obj.components as Array<{ label?: string }>)
+      : [];
+    const connections = Array.isArray(obj.connections)
+      ? (obj.connections as unknown[])
+      : [];
+    const notes = Array.isArray(obj.notes) ? (obj.notes as unknown[]) : [];
+    const parts: string[] = [];
+    parts.push(plural(components.length, 'component', 'components'));
+    if (connections.length) {
+      parts.push(plural(connections.length, 'connection', 'connections'));
+    }
+    if (notes.length) {
+      parts.push(plural(notes.length, 'note', 'notes'));
+    }
+    return { verb, detail: parts.join(' · ') };
+  }
+
+  if (name === 'add_component') {
+    const label = typeof obj.label === 'string' ? obj.label : '';
+    const kind = typeof obj.kind === 'string' ? obj.kind : '';
+    const detail = label
+      ? kind
+        ? `${label} (${kind})`
+        : label
+      : kind || null;
+    return { verb, detail };
+  }
+
+  if (name === 'add_connection') {
+    const from = typeof obj.from_id === 'string' ? obj.from_id : '';
+    const to = typeof obj.to_id === 'string' ? obj.to_id : '';
+    const label = typeof obj.label === 'string' ? obj.label : '';
+    if (from && to) {
+      return {
+        verb,
+        detail: label ? `${from} → ${to} (${label})` : `${from} → ${to}`,
+      };
+    }
+    return { verb, detail: null };
+  }
+
+  if (name === 'update_component') {
+    const id = typeof obj.id === 'string' ? obj.id : '';
+    const label = typeof obj.label === 'string' ? obj.label : '';
+    return {
+      verb,
+      detail: id ? (label ? `${id} → "${label}"` : id) : null,
+    };
+  }
+
+  if (name === 'delete_element') {
+    const id = typeof obj.id === 'string' ? obj.id : '';
+    return { verb, detail: id || null };
+  }
+
+  if (name === 'add_note') {
+    const text = typeof obj.text === 'string' ? obj.text : '';
+    const trimmed = text.length > 60 ? text.slice(0, 57) + '…' : text;
+    return { verb, detail: trimmed || null };
+  }
+
+  if (name === 'read_canvas') {
+    return { verb, detail: null };
+  }
+
+  // Unknown tool — fall back to first string-valued key, never dump JSON.
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === 'string') return { verb, detail: `${k}: ${v}` };
+  }
+  return { verb, detail: null };
+}
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
 }
