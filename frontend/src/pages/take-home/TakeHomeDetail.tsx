@@ -4,12 +4,12 @@ import {
   Bot,
   ChevronsLeft,
   Clock,
-  GripVertical,
   History,
   MessageSquare,
   Play,
   Send,
 } from 'lucide-react';
+import ResizeHandle from '../../components/layout/ResizeHandle';
 import AppHeader from '../../components/shell/AppHeader';
 import BackLink from '../../components/shell/BackLink';
 import BlockMarkdown from '../../components/shell/BlockMarkdown';
@@ -623,47 +623,6 @@ function ProblemBar({
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function ResizeHandle({
-  onMouseDown,
-  edge,
-}: {
-  onMouseDown: (e: React.MouseEvent) => void;
-  edge: 'left' | 'right';
-}) {
-  return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize panel"
-      onMouseDown={onMouseDown}
-      style={{
-        position: 'absolute',
-        top: 0,
-        bottom: 0,
-        width: 6,
-        cursor: 'col-resize',
-        zIndex: 5,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        ...(edge === 'right' ? { right: -3 } : { left: -3 }),
-      }}
-    >
-      <span
-        aria-hidden="true"
-        style={{ opacity: 0, color: 'var(--text-4)', transition: 'opacity 120ms' }}
-        className="rounds-resize-grip"
-      >
-        <GripVertical size={12} strokeWidth={1.8} />
-      </span>
-      <style>{`
-        .rounds-resize-grip { opacity: 0; }
-        [role="separator"]:hover .rounds-resize-grip { opacity: 0.6; }
-      `}</style>
     </div>
   );
 }
