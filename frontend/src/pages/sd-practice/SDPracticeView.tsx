@@ -32,9 +32,6 @@ export default function SDPracticeView({ questionSlug, questionPrompt }: Props) 
         display: 'flex',
         height: '100%',
         minHeight: 0,
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)',
-        overflow: 'hidden',
         background: 'var(--bg)',
       }}
     >

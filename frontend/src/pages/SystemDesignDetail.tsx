@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useLocation, Link, NavLink } from 'react-router-dom';
 import SDPracticeView from './sd-practice/SDPracticeView';
 import { getSystemDesignQuestion } from '../content/api';
@@ -8,7 +8,6 @@ import { ERDiagram } from '../components/visual/ERDiagram';
 import { SequenceDiagram } from '../components/visual/SequenceDiagram';
 import { TradeoffSlider } from '../components/visual/TradeoffSlider';
 import { AnimatedCard } from '../components/visual/AnimatedCard';
-import { AnimatedCounter } from '../components/visual/AnimatedCounter';
 import { Skeleton } from '../components/visual/Skeleton';
 import type {
   ArchitectureDiagramData,
@@ -16,16 +15,15 @@ import type {
   SeniorTopic,
 } from '../components/visual/types';
 import { SeniorTopicsPanel } from '../components/visual/SeniorTopicsPanel';
-import { ArrowRight, Check, Lightbulb, BookOpen, ChevronUp, ChevronDown } from 'lucide-react';
+import { Check, ChevronUp, ChevronDown } from 'lucide-react';
 import AppHeader from '../components/shell/AppHeader';
 import DifficultyPill from '../components/shell/DifficultyPill';
 import StatusAction from '../components/shell/StatusAction';
 import BackLink from '../components/shell/BackLink';
-import BottomSheet from '../components/shell/BottomSheet';
 import InlineMarkdown from '../components/shell/InlineMarkdown';
 import BlockMarkdown from '../components/shell/BlockMarkdown';
-import SectionNav, { type SectionNavItem } from '../components/shell/SectionNav';
 import Zoomable from '../components/shell/Zoomable';
+import { Section } from './guides/shared/primitives';
 
 interface SDQ {
   id: number;
@@ -55,38 +53,12 @@ interface SDQ {
   senior_topics?: SeniorTopic[] | null;
 }
 
-const extractNumber = (s: string): number | null => {
-  const m = s.match(/(\d{1,3}(?:,\d{3})+|\d+)/);
-  if (!m) return null;
-  const n = Number(m[1].replace(/,/g, ''));
-  return Number.isFinite(n) ? n : null;
-};
-
-function SectionHeading({ children, id }: { children: React.ReactNode; id?: string }) {
-  return (
-    <h2
-      id={id}
-      className="display-italic"
-      style={{
-        fontSize: 'clamp(22px, 5.5vw, 30px)',
-        fontWeight: 400,
-        lineHeight: 1.1,
-        margin: '0 0 14px',
-        scrollMarginTop: 24,
-      }}
-    >
-      {children}
-    </h2>
-  );
-}
-
 export default function SystemDesignDetail() {
   const { slug } = useParams<{ slug: string }>();
   const location = useLocation();
   const tab: 'practice' | 'guidance' = location.pathname.endsWith('/guidance') ? 'guidance' : 'practice';
   const [q, setQ] = useState<SDQ | null>(null);
   const [loading, setLoading] = useState(true);
-  const [referenceOpen, setReferenceOpen] = useState(false);
   const headerStorageKey = slug ? `rounds.sd.detail.${slug}.headerCollapsed` : '';
   const [headerCollapsed, setHeaderCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined' || !headerStorageKey) return false;
@@ -105,34 +77,6 @@ export default function SystemDesignDetail() {
       .then(setQ)
       .finally(() => setLoading(false));
   }, [slug]);
-
-  const sectionItems = useMemo<SectionNavItem[]>(() => {
-    if (!q) return [];
-    const items: SectionNavItem[] = [];
-    // Prompt + Requirements live in the always-visible header above the
-    // tabs now — nav lists only the Guidance-tab sections.
-    if (q.thought_process.length > 0)
-      items.push({ id: 'approach-framework', label: 'Approach framework' });
-    if (q.thought_flow) items.push({ id: 'approach-map', label: 'Approach map' });
-    if (q.trade_offs.length > 0 || q.tradeoff_visual)
-      items.push({ id: 'trade-offs', label: 'Trade-offs' });
-    const hasArch =
-      q.architecture_diagram ||
-      q.high_level_design.description ||
-      Object.keys(q.detailed_design).length > 0;
-    if (hasArch) items.push({ id: 'architecture', label: 'Architecture' });
-    const hasDb =
-      q.er_diagram ||
-      (q.database_schema.tables && q.database_schema.tables.length > 0) ||
-      (q.database_schema.indexes && q.database_schema.indexes.length > 0);
-    if (hasDb) items.push({ id: 'database', label: 'Database' });
-    const hasApi =
-      q.sequence_diagram || (q.api_design.endpoints && q.api_design.endpoints.length > 0);
-    if (hasApi) items.push({ id: 'api', label: 'API' });
-    if (q.senior_topics && q.senior_topics.length > 0)
-      items.push({ id: 'senior-topics', label: 'Senior topics' });
-    return items;
-  }, [q]);
 
   if (loading) {
     return (
@@ -174,76 +118,6 @@ export default function SystemDesignDetail() {
   const hasApi =
     q.sequence_diagram || (q.api_design.endpoints && q.api_design.endpoints.length > 0);
 
-  const hasReference = q.hints.length > 0 || q.tips.length > 0;
-
-  // Extracted so we can render the same hints/tips cards in the
-  // desktop sidebar and, on mobile, inside the BottomSheet reference
-  // panel without duplicating ~60 lines of JSX.
-  const referenceCards = (
-    <>
-      {q.hints.length > 0 && (
-        <div
-          className="card p-4"
-          style={{ background: 'var(--bg-elev)' }}
-        >
-          <div
-            className="eyebrow mb-3 inline-flex items-center gap-1.5"
-            style={{ color: 'var(--accent)' }}
-          >
-            <Lightbulb size={11} strokeWidth={1.8} />
-            Hints
-          </div>
-          <ol className="flex flex-col gap-2.5 list-none p-0 m-0">
-            {q.hints.map((h, i) => (
-              <li
-                key={i}
-                className="flex items-start gap-2"
-                style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5 }}
-              >
-                <span
-                  className="mono"
-                  style={{
-                    color: 'var(--accent)',
-                    fontSize: 10.5,
-                    minWidth: 16,
-                    flexShrink: 0,
-                  }}
-                >
-                  {String(i + 1).padStart(2, '0')}
-                </span>
-                <span>{h}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-
-      {q.tips.length > 0 && (
-        <div className="card p-4" style={{ background: 'var(--bg-elev)' }}>
-          <div
-            className="eyebrow mb-3 inline-flex items-center gap-1.5"
-            style={{ color: 'var(--ochre)' }}
-          >
-            <ArrowRight size={11} strokeWidth={1.8} />
-            Tips
-          </div>
-          <ul className="flex flex-col gap-2 list-none p-0 m-0">
-            {q.tips.map((tip, i) => (
-              <li
-                key={i}
-                className="flex items-start gap-2"
-                style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5 }}
-              >
-                <span style={{ color: 'var(--ochre)', marginTop: 2 }}>·</span>
-                <InlineMarkdown text={tip} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </>
-  );
-
   return (
     <div className="h-full flex flex-col">
       <AppHeader
@@ -269,20 +143,25 @@ export default function SystemDesignDetail() {
       <TabStrip slug={slug ?? ''} active={tab} />
 
       {tab === 'practice' ? (
-        <div className="flex-1 min-h-0 overflow-hidden" style={{ padding: 'var(--page-pad-y) var(--page-pad-x)' }}>
+        <div className="flex-1 min-h-0 overflow-hidden">
           <SDPracticeView
             questionSlug={slug ?? ''}
             questionPrompt={q.description}
           />
         </div>
       ) : (
-      <>
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-5 sm:px-8 py-6 lg:py-8 grid gap-8 lg:gap-10 grid-cols-1 lg:[grid-template-columns:minmax(0,1fr)_300px]">
-          <main className="space-y-12 min-w-0">
+        <div
+          className="grid"
+          style={{
+            gap: 'var(--gap-lg)',
+            padding: 'var(--gap-lg) var(--page-pad-x)',
+            width: '100%',
+            minWidth: 0,
+          }}
+        >
             {q.thought_process.length > 0 && (
-              <section>
-                <SectionHeading id="approach-framework">Approach framework</SectionHeading>
+              <Section id="approach-framework" title="Approach framework">
                 <AnimatedCard className="card p-6">
                   <ol className="flex flex-col gap-3">
                     {q.thought_process.map((step, i) => (
@@ -307,23 +186,21 @@ export default function SystemDesignDetail() {
                     ))}
                   </ol>
                 </AnimatedCard>
-              </section>
+              </Section>
             )}
 
             {q.thought_flow && (
-              <section>
-                <SectionHeading id="approach-map">Approach map</SectionHeading>
+              <Section id="approach-map" title="Approach map">
                 <AnimatedCard className="card p-4 overflow-hidden">
                   <Zoomable label="Approach map">
                     <FlowchartDiagram source={q.thought_flow} />
                   </Zoomable>
                 </AnimatedCard>
-              </section>
+              </Section>
             )}
 
             {(q.trade_offs.length > 0 || q.tradeoff_visual) && (
-              <section>
-                <SectionHeading id="trade-offs">Trade-offs</SectionHeading>
+              <Section id="trade-offs" title="Trade-offs">
                 {q.tradeoff_visual && (
                   <div className="mb-5">
                     <Zoomable label="Trade-off comparison">
@@ -392,12 +269,11 @@ export default function SystemDesignDetail() {
                     })}
                   </div>
                 )}
-              </section>
+              </Section>
             )}
 
             {hasArch && (
-              <section>
-                <SectionHeading id="architecture">Architecture</SectionHeading>
+              <Section id="architecture" title="Architecture">
                 {q.architecture_diagram && (
                   <AnimatedCard className="card overflow-hidden mb-5">
                     <Zoomable label="Architecture diagram">
@@ -519,12 +395,11 @@ export default function SystemDesignDetail() {
                     </div>
                   )}
                 </div>
-              </section>
+              </Section>
             )}
 
             {hasDb && (
-              <section>
-                <SectionHeading id="database">Database</SectionHeading>
+              <Section id="database" title="Database">
                 {q.er_diagram && (
                   <AnimatedCard className="card p-5 overflow-hidden mb-5">
                     <h3 className="eyebrow mb-3">Schema relationships</h3>
@@ -643,12 +518,11 @@ export default function SystemDesignDetail() {
                     </div>
                   </AnimatedCard>
                 )}
-              </section>
+              </Section>
             )}
 
             {hasApi && (
-              <section>
-                <SectionHeading id="api">API</SectionHeading>
+              <Section id="api" title="API">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                   {q.sequence_diagram && (
                     <AnimatedCard className="lg:col-span-7 card p-4 overflow-hidden">
@@ -717,70 +591,60 @@ export default function SystemDesignDetail() {
                       ))}
                   </div>
                 </div>
-              </section>
+              </Section>
             )}
 
             {q.senior_topics && q.senior_topics.length > 0 && (
-              <section>
-                <SectionHeading id="senior-topics">Senior topics</SectionHeading>
+              <Section id="senior-topics" title="Senior topics">
                 <SeniorTopicsPanel topics={q.senior_topics} />
-              </section>
+              </Section>
             )}
-          </main>
 
-          <aside className="hidden lg:block lg:min-w-0">
-            <div className="lg:sticky lg:top-4 flex flex-col gap-4 lg:max-h-[calc(100vh-32px)]">
-              <div
-                className="hidden lg:block"
-                style={{ background: 'var(--bg)', flexShrink: 0, paddingBottom: 4 }}
-              >
-                <SectionNav items={sectionItems} scrollContainer={scrollRef} nonSticky />
-              </div>
-              <div className="space-y-5 lg:overflow-y-auto lg:pr-1 lg:min-h-0">
-                {referenceCards}
-              </div>
-            </div>
-          </aside>
+            {q.hints.length > 0 && (
+              <Section id="hints" title="Hints">
+                <ol className="flex flex-col gap-2.5 list-none p-0 m-0">
+                  {q.hints.map((h, i) => (
+                    <li
+                      key={i}
+                      className="flex items-start gap-2"
+                      style={{ fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.55 }}
+                    >
+                      <span
+                        className="mono"
+                        style={{
+                          color: 'var(--accent)',
+                          fontSize: 11,
+                          minWidth: 20,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <span>{h}</span>
+                    </li>
+                  ))}
+                </ol>
+              </Section>
+            )}
+
+            {q.tips.length > 0 && (
+              <Section id="tips" title="Tips">
+                <ul className="flex flex-col gap-2 list-none p-0 m-0">
+                  {q.tips.map((tip, i) => (
+                    <li
+                      key={i}
+                      className="flex items-start gap-2"
+                      style={{ fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.55 }}
+                    >
+                      <span style={{ color: 'var(--ochre)', marginTop: 2 }}>·</span>
+                      <InlineMarkdown text={tip} />
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            )}
         </div>
       </div>
-
-      {/* Mobile-only floating trigger + bottom sheet for the Hints /
-          Tips reference material that otherwise sits in the desktop
-          sidebar. Matches the Option C pattern used on the Coding
-          detail page. */}
-      {hasReference && (
-        <>
-          <button
-            type="button"
-            onClick={() => setReferenceOpen(true)}
-            aria-label="Open hints and tips"
-            className="detail-reference-fab lg:hidden inline-flex items-center gap-1.5"
-            style={{
-              padding: '11px 16px',
-              border: 0,
-              borderRadius: 999,
-              background: 'var(--accent)',
-              color: 'var(--bg-elev)',
-              fontSize: 13,
-              fontWeight: 600,
-              boxShadow:
-                '0 6px 16px -4px rgba(24,22,19,0.35), 0 0 0 1px rgba(24,22,19,0.1)',
-              cursor: 'pointer',
-            }}
-          >
-            <BookOpen size={13} strokeWidth={2} />
-            Reference
-          </button>
-          <BottomSheet
-            open={referenceOpen}
-            onClose={() => setReferenceOpen(false)}
-            title="Hints & Tips"
-          >
-            {referenceCards}
-          </BottomSheet>
-        </>
-      )}
-      </>
       )}
     </div>
   );
@@ -838,11 +702,37 @@ function PromptHeader({
   collapsed: boolean;
   onToggle: () => void;
 }) {
+  // Shared toggle pill — top-right of the header in BOTH states so the
+  // click target doesn't jump as the user toggles. Chevron + label swap
+  // for visual hint (Show ↓ / Hide ↑).
+  const toggleButton = (
+    <button
+      type="button"
+      onClick={onToggle}
+      style={{
+        background: 'transparent',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        padding: '4px 10px',
+        fontSize: 11.5,
+        color: 'var(--text-3)',
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        flexShrink: 0,
+      }}
+      aria-expanded={!collapsed}
+      aria-label={collapsed ? 'Show prompt and requirements' : 'Hide prompt and requirements'}
+    >
+      {collapsed ? <ChevronDown size={12} strokeWidth={2} /> : <ChevronUp size={12} strokeWidth={2} />}
+      {collapsed ? 'Show' : 'Hide'}
+    </button>
+  );
+
   if (collapsed) {
     return (
-      <button
-        type="button"
-        onClick={onToggle}
+      <div
         style={{
           padding: '8px var(--page-pad-x)',
           background: 'var(--bg-elev)',
@@ -852,22 +742,26 @@ function PromptHeader({
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          cursor: 'pointer',
-          width: '100%',
-          textAlign: 'left',
-          border: 0,
         }}
-        aria-expanded={false}
-        aria-label="Show prompt and requirements"
       >
-        <ChevronDown size={13} strokeWidth={2} />
-        <span style={{ fontWeight: 600, color: 'var(--text-2)' }}>Prompt &amp; requirements</span>
-        <span style={{ color: 'var(--text-4)', marginLeft: 4 }}>·</span>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+        <span style={{ fontWeight: 600, color: 'var(--text-2)', flexShrink: 0 }}>
+          Prompt &amp; requirements
+        </span>
+        <span style={{ color: 'var(--text-4)' }}>·</span>
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
           {q.description.replace(/\s+/g, ' ').slice(0, 140)}
           {q.description.length > 140 ? '…' : ''}
         </span>
-      </button>
+        {toggleButton}
+      </div>
     );
   }
 
@@ -889,28 +783,7 @@ function PromptHeader({
         >
           Prompt
         </span>
-        <button
-          type="button"
-          onClick={onToggle}
-          style={{
-            marginLeft: 'auto',
-            background: 'transparent',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            padding: '4px 10px',
-            fontSize: 11.5,
-            color: 'var(--text-3)',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
-          aria-expanded={true}
-          aria-label="Hide prompt and requirements"
-        >
-          <ChevronUp size={12} strokeWidth={2} />
-          Hide
-        </button>
+        <span style={{ marginLeft: 'auto' }}>{toggleButton}</span>
       </div>
 
       {q.description && (

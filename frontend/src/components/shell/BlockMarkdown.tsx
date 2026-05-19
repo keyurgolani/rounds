@@ -21,7 +21,8 @@ type Block =
   | { kind: 'ul'; items: string[] }
   | { kind: 'ol'; items: string[] }
   | { kind: 'h'; level: 1 | 2 | 3; text: string }
-  | { kind: 'code'; text: string; lang?: string };
+  | { kind: 'code'; text: string; lang?: string }
+  | { kind: 'hr' };
 
 function parse(source: string): Block[] {
   const lines = source.split('\n');
@@ -40,6 +41,16 @@ function parse(source: string): Block[] {
       }
       i += 1; // skip closing fence (or end)
       blocks.push({ kind: 'code', text: buf.join('\n'), lang });
+      continue;
+    }
+    // Thematic break — three or more hyphens / asterisks / underscores
+    // on their own line (with optional spaces). Renders as <hr/>.
+    // Matched BEFORE headings so a literal "---" line stays a divider
+    // (it would otherwise be ambiguous with a setext-style heading
+    // underline, which we don't support).
+    if (/^\s*([-*_])\s*(?:\1\s*){2,}$/.test(line)) {
+      blocks.push({ kind: 'hr' });
+      i += 1;
       continue;
     }
     // ATX heading.
@@ -120,7 +131,8 @@ function parse(source: string): Block[] {
       !lines[i].startsWith('```') &&
       !/^(#{1,3})\s+/.test(lines[i]) &&
       !/^\s*[-*]\s+/.test(lines[i]) &&
-      !/^\s*\d+\.\s+/.test(lines[i])
+      !/^\s*\d+\.\s+/.test(lines[i]) &&
+      !/^\s*([-*_])\s*(?:\1\s*){2,}$/.test(lines[i])
     ) {
       para.push(lines[i]);
       i += 1;
@@ -184,6 +196,25 @@ function renderBlock(b: Block, key: number): ReactNode {
           </li>
         ))}
       </ol>
+    );
+  }
+  if (b.kind === 'hr') {
+    // Edge-fading horizontal rule — jkneb/DpJBRN style. A 1px line
+    // drawn via a linear gradient that fades to transparent at both
+    // ends so the divider sits naturally inside a chat bubble without
+    // a hard square cap.
+    return (
+      <hr
+        key={key}
+        aria-hidden="true"
+        style={{
+          margin: '6px 0',
+          border: 0,
+          height: 1,
+          background:
+            'linear-gradient(to right, transparent, var(--border-strong), transparent)',
+        }}
+      />
     );
   }
   if (b.kind === 'h') {

@@ -125,14 +125,17 @@ describe('SystemDesignDetail — Guidance tab', () => {
     expect(screen.queryByRole('heading', { level: 2, name: /^requirements$/i })).toBeNull();
   });
 
-  it('pushes hints and tips to the right rail on Guidance, not the main flow', async () => {
+  it('renders Hints and Tips as inline sections in the main flow', async () => {
     renderAt('/system-design/question/design-a-url-shortener/guidance');
     await waitFor(() => screen.getByText('Design a URL Shortener'));
 
-    expect(screen.queryByRole('heading', { level: 2, name: /^hints$/i })).toBeNull();
-    expect(screen.queryByRole('heading', { level: 2, name: /^tips$/i })).toBeNull();
-    expect(screen.getAllByText('h1').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('t1').length).toBeGreaterThan(0);
+    // Right-side aside is gone — Hints + Tips now live as their own
+    // top-level h2 sections, ordered after the design content so they
+    // don't spoil the user before they've worked through the rest.
+    expect(screen.getByRole('heading', { level: 2, name: /^hints$/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /^tips$/i })).toBeInTheDocument();
+    expect(screen.getByText('h1')).toBeInTheDocument();
+    expect(screen.getByText('t1')).toBeInTheDocument();
   });
 });
 

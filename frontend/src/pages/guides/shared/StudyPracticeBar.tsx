@@ -30,9 +30,52 @@ const CTA_LABEL: Record<GuideTrack, string> = {
   builder: 'View assignments',
 };
 
-export default function StudyPracticeBar({ track }: { track: GuideTrack }) {
+export default function StudyPracticeBar({
+  track,
+  compact,
+}: {
+  track: GuideTrack;
+  /** When true, render as a tight inline strip suitable for the page
+   *  header's `actions` slot — narrower progress meter + smaller CTA
+   *  button, no card chrome. */
+  compact?: boolean;
+}) {
   const ctaTo = TRACK_CONFIGS[track].questionsPath;
   const ctaLabel = CTA_LABEL[track];
+
+  if (compact) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
+        <div style={{ minWidth: 160, maxWidth: 240 }}>
+          <ProgressStrip track={track} />
+        </div>
+        <Link
+          to={ctaTo}
+          className="flex items-center gap-1.5"
+          style={{
+            padding: '6px 12px',
+            borderRadius: 'var(--radius)',
+            background: 'var(--accent)',
+            color: 'var(--bg-elev)',
+            fontSize: 12,
+            fontWeight: 600,
+            textDecoration: 'none',
+            letterSpacing: '0.01em',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {ctaLabel}
+          <ArrowRight size={12} strokeWidth={1.8} />
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div

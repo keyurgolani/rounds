@@ -41,16 +41,20 @@ export default function StudyShell({
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <AppHeader eyebrow={eyebrow} title={title} description={description} />
+      <AppHeader
+        eyebrow={eyebrow}
+        title={title}
+        description={description}
+        actions={track ? <StudyPracticeBar track={track} compact /> : undefined}
+      />
       <div
         ref={scrollRef}
         role="main"
         className="flex-1 min-h-0 overflow-y-auto"
       >
-        {/* Sticky top region: practice progress + CTA above, then the
-            pill nav + length picker. Both regions stick to the top of
-            the scrollable column so they remain accessible while the
-            user reads. */}
+        {/* Sticky pill nav + length picker. The practice progress + CTA
+            now live in the page header (compact strip) so the in-page
+            sticky region is just the section navigation. */}
         <div
           style={{
             position: 'sticky',
@@ -58,18 +62,16 @@ export default function StudyShell({
             zIndex: 20,
             background: 'var(--bg)',
             paddingInline: 'var(--page-pad-x)',
-            paddingTop: 'var(--gap-md)',
+            paddingTop: 'var(--gap-sm)',
             paddingBottom: 0,
           }}
         >
-          {track && <StudyPracticeBar track={track} />}
           <div
             className="flex flex-wrap"
             style={{
               gap: 'var(--gap-md)',
               alignItems: 'center',
               justifyContent: 'space-between',
-              marginTop: 'var(--gap-sm)',
               paddingBottom: 'var(--gap-sm)',
               borderBottom: '1px solid var(--border)',
             }}
@@ -83,16 +85,14 @@ export default function StudyShell({
           </div>
         </div>
 
-        {/* Content column — full width with a reading-width cap so long
-            paragraphs don't run edge to edge. Diagrams that need more
-            room can break out via their own width:100% styling. */}
+        {/* Content column — full width, no reading-width cap. Diagrams
+            and prose stretch to the available viewport so the page
+            doesn't leave dead space on the sides. */}
         <div
           className="grid"
           style={{
             gap: 'var(--gap-lg)',
             padding: 'var(--gap-lg) var(--page-pad-x) var(--gap-lg)',
-            maxWidth: 'min(960px, 100%)',
-            margin: '0 auto',
             width: '100%',
           }}
         >
