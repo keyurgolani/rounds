@@ -166,17 +166,67 @@ export default function ApplicationDetail() {
           }
         />
       }
+      footer={
+        /*
+          Offer dock — floating card pinned to the bottom of the
+          viewport via PageShell's footer slot, so it stays put
+          regardless of content height above. Wrapper has page-edge
+          padding so the dock reads as a separate floating element
+          rather than a flush bottom bar. Height is content-driven:
+          collapsed when there's no offer, taller when recording /
+          editing or when there's a long negotiation trail. Capped at
+          60vh with internal scroll so it never swallows more than
+          ~60% of the viewport.
+        */
+        <div className="px-5 sm:px-8 pb-4 pt-2">
+          <div
+            style={{
+              maxHeight: '60vh',
+              overflowY: 'auto',
+              borderRadius: 'var(--radius)',
+              boxShadow: '0 12px 28px rgba(0, 0, 0, 0.16)',
+            }}
+          >
+            <OfferPanel
+              applicationId={String(app.id)}
+              onOfferChange={(o) => {
+                // Sync application.status with offer presence on the
+                // two edge transitions:
+                //   null  → Offer    : recording a first offer flips to "Offer"
+                //   Offer → null     : clearing the offer flips back to "Interviewing"
+                // Mid-state edits (any non-null → non-null) don't
+                // touch status — that would clobber deliberate status
+                // changes the user made on the chrome pill.
+                const prev = offerRef.current;
+                offerRef.current = o;
+                if (
+                  o &&
+                  !prev &&
+                  app.status !== 'Offer' &&
+                  app.status !== 'Rejected'
+                ) {
+                  updateStatus('Offer');
+                } else if (!o && prev && app.status === 'Offer') {
+                  updateStatus('Interviewing');
+                }
+              }}
+            />
+          </div>
+        </div>
+      }
     >
       <div className="px-5 sm:px-8 py-6 flex flex-col gap-5">
         <div
           className="grid gap-5"
           style={{
-            gridTemplateColumns:
-              'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr)',
+            gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)',
           }}
         >
           <div className="card p-6">
-            <div className="eyebrow mb-3">Company</div>
+            <div className="flex items-center justify-between mb-3 gap-3">
+              <div className="eyebrow">Company</div>
+              <Timestamps createdAt={app.created_at} updatedAt={app.updated_at} />
+            </div>
             <InlineEditField
               kind="text"
               label="Company"
@@ -302,56 +352,45 @@ export default function ApplicationDetail() {
               />
             </div>
           </div>
-          <div className="card p-5">
-            <div className="eyebrow mb-2.5">Activity</div>
-            <Row
-              label="Rounds tracked"
-              value={String(rounds.length)}
-            />
-            <Row
-              label="Last updated"
-              value={
-                app.updated_at
-                  ? new Date(app.updated_at).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                    })
-                  : '—'
+
+          <div className="card p-6">
+            <InlineEditField
+              kind="multiline"
+              label="Notes"
+              value={app.notes}
+              onCommit={async (next) => {
+                const saved = await updateApplicationField(app.id, {
+                  notes: next,
+                });
+                setApp(saved);
+              }}
+              placeholder="Anything you want to remember about this role."
+              renderRead={(v) =>
+                v.trim() ? (
+                  <InlineMarkdown
+                    as="div"
+                    text={v}
+                    style={{
+                      fontSize: 13.5,
+                      color: 'var(--text-2)',
+                      lineHeight: 1.65,
+                      whiteSpace: 'pre-wrap',
+                    }}
+                  />
+                ) : (
+                  <span
+                    style={{
+                      fontSize: 13,
+                      color: 'var(--text-4)',
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    Click to add notes.
+                  </span>
+                )
               }
-            />
-            <Row
-              label="Created"
-              value={
-                app.created_at
-                  ? new Date(app.created_at).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                    })
-                  : '—'
-              }
-              last
             />
           </div>
-
-          <OfferPanel
-            applicationId={String(app.id)}
-            onOfferChange={(o) => {
-              // Sync application.status with offer presence on the two
-              // edge transitions:
-              //   null  → Offer    : recording a first offer flips to "Offer"
-              //   Offer → null     : clearing the offer flips back to "Interviewing"
-              // Mid-state edits (any non-null → non-null) don't touch
-              // status — that would clobber deliberate status changes
-              // the user made on the chrome pill.
-              const prev = offerRef.current;
-              offerRef.current = o;
-              if (o && !prev && app.status !== 'Offer' && app.status !== 'Rejected') {
-                updateStatus('Offer');
-              } else if (!o && prev && app.status === 'Offer') {
-                updateStatus('Interviewing');
-              }
-            }}
-          />
         </div>
 
         <div className="card p-6">
@@ -387,45 +426,6 @@ export default function ApplicationDetail() {
                   }}
                 >
                   No job description on file. Click to add.
-                </span>
-              )
-            }
-          />
-        </div>
-
-        <div className="card p-6">
-          <InlineEditField
-            kind="multiline"
-            label="Notes"
-            value={app.notes}
-            onCommit={async (next) => {
-              const saved = await updateApplicationField(app.id, {
-                notes: next,
-              });
-              setApp(saved);
-            }}
-            placeholder="Anything you want to remember about this role."
-            renderRead={(v) =>
-              v.trim() ? (
-                <InlineMarkdown
-                  as="div"
-                  text={v}
-                  style={{
-                    fontSize: 13.5,
-                    color: 'var(--text-2)',
-                    lineHeight: 1.65,
-                    whiteSpace: 'pre-wrap',
-                  }}
-                />
-              ) : (
-                <span
-                  style={{
-                    fontSize: 13,
-                    color: 'var(--text-4)',
-                    fontStyle: 'italic',
-                  }}
-                >
-                  Click to add notes.
                 </span>
               )
             }
@@ -742,16 +742,46 @@ function TailorButton({ applicationId }: { applicationId: string }) {
   );
 }
 
-function Row({ label, value, last }: { label: string; value: string; last?: boolean }) {
+/**
+ * Discreet "Created · Updated" caption rendered next to the Company
+ * eyebrow at the top-right of the card. Both timestamps used to live
+ * in their own "Activity" card, which earned too much real estate for
+ * what's essentially row-metadata.
+ */
+function Timestamps({
+  createdAt,
+  updatedAt,
+}: {
+  createdAt?: string;
+  updatedAt?: string;
+}) {
+  const fmt = (iso?: string) =>
+    iso
+      ? new Date(iso).toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        })
+      : null;
+  const created = fmt(createdAt);
+  const updated = fmt(updatedAt);
+  if (!created && !updated) return null;
   return (
     <div
-      className="flex justify-between py-2.5 gap-3"
-      style={{ borderBottom: last ? 'none' : '1px solid var(--border)' }}
+      className="mono"
+      style={{
+        fontSize: 10.5,
+        color: 'var(--text-4)',
+        letterSpacing: '0.04em',
+        whiteSpace: 'nowrap',
+        textAlign: 'right',
+      }}
     >
-      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{label}</span>
-      <span className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>
-        {value}
-      </span>
+      {created && <span>Created {created}</span>}
+      {created && updated && (
+        <span style={{ margin: '0 8px', color: 'var(--text-4)' }}>·</span>
+      )}
+      {updated && <span>Updated {updated}</span>}
     </div>
   );
 }

@@ -1,9 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Award, CheckCircle2, Clock, History, Trash2, X, XCircle } from 'lucide-react';
+import {
+  Award,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  History,
+  Layers,
+  Trash2,
+  X,
+  XCircle,
+} from 'lucide-react';
 import {
   createOffer,
   deleteOffer,
-  getOffer,
+  listOffers,
   updateOffer,
   type Offer,
   type OfferStatus,
@@ -17,6 +28,10 @@ import InlineEditField from './InlineEditField';
 
 export type { Offer, OfferStatus, OfferTerms, TrailEntry, VisaOption };
 
+/** Statuses that lock the offer from term edits — accepted/declined/expired
+ *  are terminal outcomes for the round. `superseded` is also frozen (it's
+ *  history), but it never appears as the active row, so the active-card
+ *  code paths don't see it. */
 const FROZEN: OfferStatus[] = ['accepted', 'declined', 'expired'];
 
 const TERM_KEYS: (keyof OfferTerms)[] = [
@@ -39,6 +54,7 @@ const STATUS_COLORS: Record<OfferStatus, { bg: string; fg: string; icon: typeof 
   accepted: { bg: 'var(--forest-soft)', fg: 'var(--forest)', icon: CheckCircle2 },
   declined: { bg: 'var(--plum-soft)', fg: 'var(--plum)', icon: XCircle },
   expired: { bg: 'var(--paper-3)', fg: 'var(--text-3)', icon: XCircle },
+  superseded: { bg: 'var(--paper-3)', fg: 'var(--text-3)', icon: Layers },
 };
 
 const EMPTY_TERMS: OfferTerms = {
@@ -64,39 +80,46 @@ const VISA_OPTIONS: { value: VisaOption; label: string }[] = [
 
 interface Props {
   applicationId: string;
+  /** Fires when the *active* offer changes (null ↔ non-null transitions
+   *  drive ApplicationDetail's auto-status flip). Mid-state edits and
+   *  history changes don't trigger a parent-visible change. */
   onOfferChange?: (o: Offer | null) => void;
 }
 
 export default function OfferPanel({ applicationId, onOfferChange }: Props) {
-  const [offer, setOffer] = useState<Offer | null>(null);
-  /** A locally-held offer in "draft" mode, BEFORE we've persisted any
-   *  PB row. The user can Cancel and walk away without leaving an
-   *  all-zeros row in the database — the previous version did that
-   *  because it called createOffer() the instant the button was
-   *  clicked. */
-  const [draftOffer, setDraftOffer] = useState<Offer | null>(null);
+  /** Full chain, newest first. The head (offers[0]) is either the
+   *  active offer or — when the only rows are superseded — empty/none.
+   *  We store the full list so history rendering is cheap. */
+  const [offers, setOffers] = useState<Offer[]>([]);
+  /** In-memory draft for "Record an offer" or "Record new round". No
+   *  PB row exists yet — Cancel walks away cleanly. */
+  const [draft, setDraft] = useState<Offer | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [confirmingClear, setConfirmingClear] = useState(false);
-  const [clearing, setClearing] = useState(false);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Set of history offer ids the user has expanded. History entries
+   *  collapse by default — the chain can grow long. */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const active = offers.find((o) => o.status !== 'superseded') ?? null;
+  const history = offers.filter((o) => o.status === 'superseded');
 
   useEffect(() => {
     let cancel = false;
     setLoading(true);
-    getOffer(applicationId)
-      .then((o) => {
+    listOffers(applicationId)
+      .then((list) => {
         if (cancel) return;
-        setOffer(o);
-        // We deliberately do NOT fire onOfferChange on initial load.
-        // The parent already knows about persisted offers if it cares;
-        // firing here makes parents that auto-react to "an offer
-        // exists" (e.g. ApplicationDetail's auto-flip to status =
-        // Offer) clobber any subsequent user-driven status change
-        // every time the page mounts.
+        setOffers(list);
+        // Initial load does NOT fire onOfferChange. The parent already
+        // reflects the persisted state; firing here would re-trigger the
+        // null → Offer auto-flip on every page mount and clobber any
+        // user-driven status changes.
       })
       .catch(() => {
-        if (!cancel) setOffer(null);
+        if (!cancel) setOffers([]);
       })
       .finally(() => {
         if (!cancel) setLoading(false);
@@ -106,16 +129,15 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
     };
   }, [applicationId]);
 
-  /** "Record an offer" — opens the editor with an in-memory draft only.
-   *  No PB row is created until the user clicks Save. */
-  function beginRecordingOffer() {
-    setDraftOffer({
+  function beginRecording(preFill: OfferTerms = EMPTY_TERMS) {
+    setDraft({
       id: '',
       application_id: applicationId,
-      ...EMPTY_TERMS,
+      ...preFill,
       status: 'pending',
       notes: '',
       trail: [],
+      previous_offer_id: '',
     });
     setError(null);
   }
@@ -124,13 +146,13 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const created = await createOffer(applicationId, {
-        ...next,
-        trail: [],
-      });
-      setOffer(created);
-      setDraftOffer(null);
-      onOfferChange?.(created);
+      const created = await createOffer(applicationId, { ...next, trail: [] });
+      // Reload the chain — createOffer flipped the prior active to
+      // superseded, so the local list is stale.
+      const list = await listOffers(applicationId);
+      setOffers(list);
+      setDraft(null);
+      onOfferChange?.(list.find((o) => o.status !== 'superseded') ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save offer.');
     } finally {
@@ -138,27 +160,27 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
     }
   }
 
-  /** Apply a single-field change to the persisted offer. Each commit
-   *  appends a snapshot to the negotiation trail when a term changed
-   *  and the offer isn't frozen — same semantics as the old bulk
-   *  editor, just per-field instead of per-save. */
+  /** Apply a single-field change to the active offer. Appends a
+   *  negotiation-trail snapshot when a term changed and the round
+   *  isn't frozen. Mirrors the prior per-field commit behavior; now
+   *  scoped to the active row only. */
   async function commitField<K extends keyof Offer>(key: K, value: Offer[K]) {
-    if (!offer) return;
-    if (normalize(offer[key]) === normalize(value)) return;
-    const merged: Offer = { ...offer, [key]: value };
+    if (!active) return;
+    if (normalize(active[key]) === normalize(value)) return;
+    const merged: Offer = { ...active, [key]: value };
     const isTermChange = (TERM_KEYS as readonly string[]).includes(key as string);
-    if (isTermChange && !FROZEN.includes(offer.status)) {
+    if (isTermChange && !FROZEN.includes(active.status)) {
       merged.trail = [
-        ...offer.trail,
+        ...active.trail,
         {
           timestamp: new Date().toISOString(),
           author_note: '',
-          snapshot: pickTerms(offer),
+          snapshot: pickTerms(active),
         },
       ];
     }
-    const saved = await updateOffer(offer.id, applicationId, merged);
-    setOffer(saved);
+    const saved = await updateOffer(active.id, applicationId, merged);
+    setOffers((prev) => prev.map((o) => (o.id === saved.id ? saved : o)));
     onOfferChange?.(saved);
   }
 
@@ -166,20 +188,39 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
     await commitField('status', status);
   }
 
-  async function clearOffer() {
-    if (!offer) return;
-    setClearing(true);
+  /** Walk back one step in the chain — delete the active round and
+   *  revive the previous one to pending. With no prior round, the
+   *  application becomes offer-less (parent flips status back to
+   *  Interviewing via onOfferChange(null)). */
+  async function discardActive() {
+    if (!active) return;
+    setDiscarding(true);
     setError(null);
     try {
-      await deleteOffer(offer.id);
-      setOffer(null);
-      setConfirmingClear(false);
-      onOfferChange?.(null);
+      const revived = await deleteOffer(active.id);
+      const list = await listOffers(applicationId);
+      setOffers(list);
+      setConfirmingDiscard(false);
+      const nextActive = list.find((o) => o.status !== 'superseded') ?? null;
+      onOfferChange?.(nextActive);
+      // `revived` is returned by the API for documentation/future use
+      // (which row was un-superseded); we re-derive nextActive from
+      // the freshly-loaded list to avoid drift.
+      void revived;
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not clear offer.');
+      setError(e instanceof Error ? e.message : 'Could not discard round.');
     } finally {
-      setClearing(false);
+      setDiscarding(false);
     }
+  }
+
+  function toggleExpanded(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   if (loading) {
@@ -191,7 +232,8 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
     );
   }
 
-  if (!offer && !draftOffer) {
+  // --- Empty state: no offers yet, no draft -------------------------
+  if (!active && offers.length === 0 && !draft) {
     return (
       <div className="card p-6">
         <div className="flex items-center justify-between mb-2">
@@ -212,78 +254,141 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
         </p>
         <button
           type="button"
-          onClick={beginRecordingOffer}
+          onClick={() => beginRecording()}
           className="inline-flex items-center gap-1.5"
-          style={{
-            padding: '8px 14px',
-            borderRadius: 'var(--radius)',
-            border: 0,
-            background: 'var(--accent)',
-            color: 'var(--bg-elev)',
-            fontSize: 12.5,
-            fontWeight: 500,
-            cursor: 'pointer',
-          }}
+          style={primaryBtn}
         >
           <Award size={13} strokeWidth={1.7} />
           Record an offer
         </button>
-        {error && (
-          <div style={{ marginTop: 10, color: 'var(--plum)', fontSize: 12 }}>{error}</div>
-        )}
+        {error && <div style={errorStyle}>{error}</div>}
       </div>
     );
   }
 
-  // Draft mode: bulk editor. Cancel walks away cleanly — no PB row was
-  // ever created.
-  if (!offer && draftOffer) {
+  // --- Draft state: recording a brand-new offer or a new round -----
+  if (draft) {
+    const isFirstRound = offers.length === 0;
     return (
       <div className="card p-6">
         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-          <div className="eyebrow">Offer · draft</div>
+          <div className="eyebrow">
+            {isFirstRound ? 'Offer · draft' : 'New round · draft'}
+          </div>
         </div>
+        {!isFirstRound && (
+          <p
+            style={{
+              margin: 0,
+              fontSize: 12.5,
+              color: 'var(--text-3)',
+              lineHeight: 1.55,
+              marginBottom: 14,
+            }}
+          >
+            Tweak the terms for this new round. Saving will mark the
+            previous round as superseded and keep it in the history below.
+          </p>
+        )}
         <OfferDraftEditor
-          initial={draftOffer}
+          initial={draft}
           saving={saving}
           onCancel={() => {
-            setDraftOffer(null);
+            setDraft(null);
             setError(null);
           }}
           onSave={(next) => saveDraft(next)}
         />
-        {error && (
-          <div style={{ marginTop: 10, color: 'var(--plum)', fontSize: 12 }}>{error}</div>
-        )}
+        {error && <div style={errorStyle}>{error}</div>}
       </div>
     );
   }
 
-  if (!offer) return null; // Unreachable.
+  if (!active) {
+    // Edge case: every round is superseded (shouldn't normally happen,
+    // but render history defensively rather than blank).
+    return (
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="eyebrow">Offer · history only</div>
+          <button
+            type="button"
+            onClick={() => beginRecording()}
+            className="inline-flex items-center"
+            style={primaryBtn}
+          >
+            <Award size={13} strokeWidth={1.7} />
+            Record new round
+          </button>
+        </div>
+        <ChainHistory
+          history={history}
+          expanded={expanded}
+          onToggle={toggleExpanded}
+        />
+      </div>
+    );
+  }
 
-  const frozen = FROZEN.includes(offer.status);
-  const status = STATUS_COLORS[offer.status];
+  const frozen = FROZEN.includes(active.status);
+  const status = STATUS_COLORS[active.status];
   const StatusIcon = status.icon;
+  // Accepted = terminal. Declined/expired still allow a counter round.
+  const allowNewRound = active.status !== 'accepted';
+  const discardLabel = history.length > 0 ? 'Discard this round' : 'Clear offer';
+  const discardTitle =
+    history.length > 0
+      ? 'Remove this round and restore the previous round as active'
+      : 'Remove the offer and return to Interviewing';
+  const roundIndex = offers.findIndex((o) => o.id === active.id);
+  // Total rounds = active + history; round number counts from oldest.
+  const roundNumber = offers.length - roundIndex;
 
   return (
     <div className="card p-6">
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <span className="eyebrow">Offer</span>
-          <span className="pill inline-flex items-center gap-1" style={{ background: status.bg, color: status.fg }}>
+          <span className="eyebrow">
+            Offer{offers.length > 1 ? ` · round ${roundNumber}` : ''}
+          </span>
+          <span
+            className="pill inline-flex items-center gap-1"
+            style={{ background: status.bg, color: status.fg }}
+          >
             <StatusIcon size={11} strokeWidth={1.9} />
-            {offer.status}
+            {active.status}
           </span>
         </div>
         <div className="flex items-center" style={{ gap: 4 }}>
-          {confirmingClear ? (
+          {allowNewRound && (
+            <button
+              type="button"
+              onClick={() => beginRecording(pickTerms(active))}
+              className="inline-flex items-center"
+              style={{
+                gap: 5,
+                padding: '4px 10px',
+                background: 'var(--accent-soft)',
+                color: 'var(--accent)',
+                border: 0,
+                borderRadius: 999,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+              title="Record a new offer round — supersedes this one and starts a fresh editable round pre-filled with these terms"
+            >
+              <Layers size={11} strokeWidth={1.8} /> Record new round
+            </button>
+          )}
+          {confirmingDiscard ? (
             <>
               <button
                 type="button"
-                onClick={() => void clearOffer()}
-                disabled={clearing}
-                aria-label="Confirm clear offer"
-                title="Confirm — deletes the offer and flips status back to Interviewing"
+                onClick={() => void discardActive()}
+                disabled={discarding}
+                aria-label="Confirm discard"
+                title="Confirm"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -295,17 +400,17 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
                   color: 'var(--bg)',
                   fontSize: 11,
                   fontWeight: 600,
-                  cursor: clearing ? 'wait' : 'pointer',
-                  opacity: clearing ? 0.6 : 1,
+                  cursor: discarding ? 'wait' : 'pointer',
+                  opacity: discarding ? 0.6 : 1,
                 }}
               >
-                {clearing ? 'Clearing…' : 'Clear offer?'}
+                {discarding ? 'Discarding…' : `${discardLabel}?`}
               </button>
               <button
                 type="button"
-                onClick={() => setConfirmingClear(false)}
-                disabled={clearing}
-                aria-label="Cancel clear"
+                onClick={() => setConfirmingDiscard(false)}
+                disabled={discarding}
+                aria-label="Cancel"
                 title="Cancel"
                 style={iconBtnStyle}
               >
@@ -315,9 +420,9 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
           ) : (
             <button
               type="button"
-              onClick={() => setConfirmingClear(true)}
-              aria-label="Clear offer"
-              title="Delete the offer and return to Interviewing"
+              onClick={() => setConfirmingDiscard(true)}
+              aria-label={discardLabel}
+              title={discardTitle}
               className="inline-flex items-center"
               style={{
                 gap: 5,
@@ -331,20 +436,17 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
                 cursor: 'pointer',
               }}
             >
-              <Trash2 size={11} strokeWidth={1.8} /> Clear offer
+              <Trash2 size={11} strokeWidth={1.8} /> {discardLabel}
             </button>
           )}
         </div>
       </div>
 
       {frozen ? (
-        // Frozen states show terms read-only so a closed-out offer
-        // doesn't get accidentally rewritten. The user can still
-        // Clear offer if they need to undo.
-        <OfferReadOnly offer={offer} />
+        <OfferReadOnly offer={active} />
       ) : (
         <OfferInlineEditor
-          offer={offer}
+          offer={active}
           onCommitText={(key, raw) => commitField(key, raw as Offer[typeof key])}
           onCommitNumber={(key, raw) => {
             const value =
@@ -367,11 +469,114 @@ export default function OfferPanel({ applicationId, onOfferChange }: Props) {
         </div>
       )}
 
-      <OfferTrailView trail={offer.trail ?? []} />
+      <OfferTrailView trail={active.trail ?? []} />
 
-      {error && (
-        <div style={{ marginTop: 10, color: 'var(--plum)', fontSize: 12 }}>{error}</div>
-      )}
+      <ChainHistory
+        history={history}
+        expanded={expanded}
+        onToggle={toggleExpanded}
+      />
+
+      {error && <div style={errorStyle}>{error}</div>}
+    </div>
+  );
+}
+
+/** Collapsed list of superseded offer rounds. Each entry shows status
+ *  pill, round label, key terms in one line; click to expand into the
+ *  full read-only term grid. */
+function ChainHistory({
+  history,
+  expanded,
+  onToggle,
+}: {
+  history: Offer[];
+  expanded: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  if (history.length === 0) return null;
+  return (
+    <div className="mt-6">
+      <div className="flex items-center gap-2 mb-3">
+        <Layers size={13} strokeWidth={1.7} style={{ color: 'var(--text-3)' }} />
+        <span className="eyebrow">Previous rounds · {history.length}</span>
+      </div>
+      <ol
+        className="flex flex-col"
+        style={{ listStyle: 'none', padding: 0, margin: 0, gap: 8 }}
+      >
+        {history.map((h, i) => {
+          const isOpen = expanded.has(h.id);
+          // Oldest round = #1; most recent superseded round = highest #.
+          const roundNumber = history.length - i;
+          return (
+            <li
+              key={h.id}
+              style={{
+                borderRadius: 'var(--radius)',
+                background: 'var(--bg-sunken)',
+                boxShadow: 'inset 0 0 0 1px var(--border)',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => onToggle(h.id)}
+                className="flex items-center w-full text-left"
+                style={{
+                  gap: 10,
+                  padding: '10px 14px',
+                  background: 'transparent',
+                  border: 0,
+                  cursor: 'pointer',
+                  color: 'inherit',
+                }}
+              >
+                {isOpen ? (
+                  <ChevronDown size={13} strokeWidth={1.9} style={{ color: 'var(--text-4)' }} />
+                ) : (
+                  <ChevronRight size={13} strokeWidth={1.9} style={{ color: 'var(--text-4)' }} />
+                )}
+                <span
+                  className="pill inline-flex items-center gap-1"
+                  style={{
+                    background: STATUS_COLORS.superseded.bg,
+                    color: STATUS_COLORS.superseded.fg,
+                  }}
+                >
+                  <Layers size={11} strokeWidth={1.9} />
+                  Round {roundNumber}
+                </span>
+                <span
+                  className="mono truncate"
+                  style={{ fontSize: 12, color: 'var(--text-3)', flex: 1, minWidth: 0 }}
+                >
+                  {summarizeTerms(h)}
+                </span>
+                <span
+                  className="mono"
+                  style={{
+                    fontSize: 10.5,
+                    color: 'var(--text-4)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {h.updated_at
+                    ? new Date(h.updated_at).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                      })
+                    : ''}
+                </span>
+              </button>
+              {isOpen && (
+                <div style={{ padding: '0 14px 14px 14px' }}>
+                  <OfferReadOnly offer={h} />
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
@@ -558,8 +763,8 @@ function OfferInlineEditor({
   );
 }
 
-/** Read-only view used when the offer is in a frozen state
- *  (accepted/declined/expired). Same field layout as the inline
+/** Read-only view used for frozen states (accepted/declined/expired)
+ *  and for expanded history rounds. Same field layout as the inline
  *  editor so the UI doesn't jump when the user marks it. */
 function OfferReadOnly({ offer }: { offer: Offer }) {
   const rows = termRows(offer);
@@ -593,8 +798,9 @@ function OfferReadOnly({ offer }: { offer: Offer }) {
   );
 }
 
-/** Bulk editor used only when the user is creating their first offer
- *  for an application. Cancel walks away with no DB row created. */
+/** Bulk editor used when the user is recording a new offer round
+ *  (first round or a counter to an existing round). Cancel walks
+ *  away with no DB write. */
 function OfferDraftEditor({
   initial,
   saving,
@@ -763,7 +969,7 @@ function OfferTrailView({ trail }: { trail: TrailEntry[] }) {
     <div className="mt-6">
       <div className="flex items-center gap-2 mb-3">
         <History size={13} strokeWidth={1.7} style={{ color: 'var(--text-3)' }} />
-        <span className="eyebrow">Negotiation trail</span>
+        <span className="eyebrow">Negotiation trail (this round)</span>
       </div>
       <ol className="flex flex-col gap-3" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
         {[...trail].reverse().map((e, i) => (
@@ -843,6 +1049,17 @@ function termRows(offer: Offer | OfferTerms) {
     { label: 'Decision by', value: o.decision_deadline, mono: true },
     { label: 'Letter', value: o.letter_url ? shortUrl(o.letter_url) : '', mono: true },
   ];
+}
+
+/** Single-line summary for collapsed history rows — leads with the
+ *  base salary and equity amount, the two terms most callers want at
+ *  a glance. Falls back to "—" when neither is set. */
+function summarizeTerms(o: Offer): string {
+  const parts: string[] = [];
+  if (o.base_salary != null) parts.push(`$${o.base_salary.toLocaleString()} base`);
+  if (o.equity_amount) parts.push(o.equity_amount);
+  if (o.sign_on != null) parts.push(`$${o.sign_on.toLocaleString()} sign-on`);
+  return parts.length > 0 ? parts.join(' · ') : '—';
 }
 
 function pickTerms(offer: Offer): OfferTerms {
@@ -957,4 +1174,10 @@ const iconBtnStyle: React.CSSProperties = {
   borderRadius: 999,
   color: 'var(--text-4)',
   cursor: 'pointer',
+};
+
+const errorStyle: React.CSSProperties = {
+  marginTop: 10,
+  color: 'var(--plum)',
+  fontSize: 12,
 };

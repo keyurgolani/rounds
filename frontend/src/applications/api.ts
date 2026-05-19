@@ -111,7 +111,12 @@ export interface InterviewRoundInput {
 
 // --- Offer ------------------------------------------------------------
 
-export type OfferStatus = 'pending' | 'accepted' | 'declined' | 'expired';
+export type OfferStatus =
+  | 'pending'
+  | 'accepted'
+  | 'declined'
+  | 'expired'
+  | 'superseded';
 export type VisaOption = 'yes' | 'no' | 'n/a';
 
 export interface OfferTerms {
@@ -141,6 +146,9 @@ export interface Offer extends OfferTerms {
   status: OfferStatus;
   notes: string;
   trail: TrailEntry[];
+  /** PB id of the prior round this row superseded. Empty string when
+   *  this is the very first round on the application. */
+  previous_offer_id: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -151,6 +159,7 @@ interface OfferRow extends RecordModel, OfferTerms {
   status: OfferStatus;
   notes: string;
   trail: TrailEntry[];
+  previous_offer?: string;
 }
 
 export type OfferInput = Partial<Offer>;
@@ -260,12 +269,15 @@ function adaptOffer(r: OfferRow): Offer {
     letter_url: r.letter_url ?? '',
     notes: r.notes ?? '',
     trail: r.trail ?? [],
+    previous_offer_id: r.previous_offer ?? '',
     created_at: r.created,
     updated_at: r.updated,
   };
 }
 
 function offerPayload(input: OfferInput, uid: string, applicationId: string) {
+  // PB rejects empty-string for relation fields — they need `null`.
+  const prev = input.previous_offer_id ?? '';
   return {
     user: uid,
     application: applicationId,
@@ -284,6 +296,7 @@ function offerPayload(input: OfferInput, uid: string, applicationId: string) {
     letter_url: input.letter_url ?? '',
     notes: input.notes ?? '',
     trail: input.trail ?? [],
+    previous_offer: prev ? prev : null,
   };
 }
 
@@ -445,12 +458,30 @@ export async function updateRound(
 
 // --- Offer CRUD ------------------------------------------------------
 
-// Returns null when no offer exists yet for this user+application —
-// callers distinguish "no offer" from a real error.
+// Offers are a chain of rounds — see migration 1700001800. The "active"
+// offer is the latest non-superseded row; everything older with
+// status='superseded' is history.
+
+/**
+ * Full chain of offers for an application, newest first. Includes
+ * superseded rounds — callers that only want the active row should use
+ * `getOffer`, which is the head of the chain.
+ */
+export async function listOffers(applicationId: string): Promise<Offer[]> {
+  const items = await offersCol().getFullList({
+    filter: `user = "${userId()}" && application = "${applicationId}"`,
+    sort: '-created',
+  });
+  return items.map(adaptOffer);
+}
+
+// Returns the active offer (latest non-superseded round) or null when
+// the application has no offer rounds at all.
 export async function getOffer(applicationId: string): Promise<Offer | null> {
   try {
     const row = await offersCol().getFirstListItem(
-      `user = "${userId()}" && application = "${applicationId}"`,
+      `user = "${userId()}" && application = "${applicationId}" && status != "superseded"`,
+      { sort: '-created' },
     );
     return adaptOffer(row);
   } catch (err) {
@@ -459,13 +490,25 @@ export async function getOffer(applicationId: string): Promise<Offer | null> {
   }
 }
 
+/**
+ * Record a new round. If the application already has an active
+ * (non-superseded) offer, that row is flipped to status='superseded'
+ * first and the new row's `previous_offer` links back to it.
+ */
 export async function createOffer(
   applicationId: string,
   input: OfferInput,
 ): Promise<Offer> {
-  return adaptOffer(
-    await offersCol().create(offerPayload(input, userId(), applicationId)),
+  const prior = await getOffer(applicationId);
+  if (prior && prior.status !== 'superseded') {
+    await offersCol().update(prior.id, { status: 'superseded' });
+  }
+  const payload = offerPayload(
+    { ...input, previous_offer_id: prior?.id ?? '' },
+    userId(),
+    applicationId,
   );
+  return adaptOffer(await offersCol().create(payload));
 }
 
 export async function updateOffer(
@@ -478,6 +521,24 @@ export async function updateOffer(
   );
 }
 
-export async function deleteOffer(offerId: string): Promise<void> {
+/**
+ * Discard the latest round. If a previous round exists, it's
+ * un-superseded back to 'pending' so the offer chain has an active
+ * head again. With no prior round, this leaves the application
+ * offer-less (caller's responsibility to flip status back to
+ * Interviewing).
+ */
+export async function deleteOffer(offerId: string): Promise<Offer | null> {
+  // Read the row before deleting so we know whether to revive a prior.
+  let priorId = '';
+  try {
+    const row = await offersCol().getOne(offerId);
+    priorId = row.previous_offer ?? '';
+  } catch (err) {
+    if (!isNotFound(err)) throw err;
+  }
   await offersCol().delete(offerId);
+  if (!priorId) return null;
+  const revived = await offersCol().update(priorId, { status: 'pending' });
+  return adaptOffer(revived);
 }

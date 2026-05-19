@@ -477,7 +477,12 @@ migrate(
     });
     dao.saveCollection(preferences);
 
-    // ---- Offers (1:1 with applications) ----------------------------
+    // ---- Offers (chain per application) ----------------------------
+    // Offers are a chain — each row is one offer round. When a new
+    // round lands, the prior active row flips to status='superseded'
+    // and the new row's `previous_offer` points back to it. The latest
+    // non-superseded row is the "active" offer for the application.
+    // See migration 1700001800 for the upgrade path on legacy DBs.
     const offers = new Collection({
       name: "offers",
       type: "base",
@@ -505,7 +510,7 @@ migrate(
           required: true,
           options: {
             maxSelect: 1,
-            values: ["pending", "accepted", "declined", "expired"],
+            values: ["pending", "accepted", "declined", "expired", "superseded"],
           },
         },
         { name: "base_salary", type: "number" },
@@ -528,10 +533,21 @@ migrate(
         json("trail"),
       ],
       indexes: [
-        "CREATE UNIQUE INDEX idx_offers_user_application ON offers (user, application)",
+        "CREATE INDEX idx_offers_user_application ON offers (user, application)",
         "CREATE INDEX idx_offers_status ON offers (status)",
       ],
     });
+    dao.saveCollection(offers);
+
+    // Self-relation has to be added after the collection exists so
+    // PB has an id to reference.
+    offers.schema.addField(
+      new SchemaField({
+        name: "previous_offer",
+        type: "relation",
+        options: { collectionId: offers.id, cascadeDelete: false, maxSelect: 1 },
+      }),
+    );
     dao.saveCollection(offers);
 
     // ---- Code drafts ----------------------------------------------
