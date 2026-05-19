@@ -194,7 +194,7 @@ function RiskCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="card flex flex-col gap-2">
+    <div className="card card-pad-lg flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span
           className="flex items-center gap-1.5"

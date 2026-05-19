@@ -259,10 +259,6 @@
     --radius: 14px;
     --radius-lg: 22px;
   }
-  [data-radius='pill'] {
-    --radius: 999px;
-    --radius-lg: 999px;
-  }
 
   /* ---------- Shadow depth ---------- */
   [data-shadow='none'] {

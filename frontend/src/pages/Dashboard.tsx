@@ -219,7 +219,7 @@ const referenceGrid: React.CSSProperties = {
 
 function CampaignStrip({ label, activeApps, upcomingRounds, mastered, total, onAddApplication, onScheduleInterview, onCampaigns }: { label: string; activeApps: number; upcomingRounds: number; mastered: number; total: number; onAddApplication: () => void; onScheduleInterview: () => void; onCampaigns: () => void }) {
   return (
-    <section className="card fade-up" style={{ background: 'linear-gradient(135deg, var(--bg-elev), var(--bg))' }}>
+    <section className="card card-pad-lg fade-up" style={{ background: 'linear-gradient(135deg, var(--bg-elev), var(--bg))' }}>
       <div className="grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center" style={{ gap: 'var(--gap-sm)' }}>
         <div>
           <div className="eyebrow mb-2">Campaign command</div>
@@ -242,7 +242,7 @@ function CampaignStrip({ label, activeApps, upcomingRounds, mastered, total, onA
 
 function TodayQueue({ nextRound, nextRoundApp, practices, onScheduleInterview }: { nextRound?: Round; nextRoundApp?: App | null; practices: { kind: string; title: string; status: PracticeStatus; difficulty?: string; to: string }[]; onScheduleInterview: () => void }) {
   return (
-    <section className="card fade-up h-full flex flex-col">
+    <section className="card card-pad-lg fade-up h-full flex flex-col">
       <div className="flex items-start justify-between gap-3" style={{ marginBottom: 'var(--gap-sm)' }}>
         <div>
           <div className="eyebrow mb-1">Today's prep queue</div>
@@ -284,7 +284,7 @@ function TodayQueue({ nextRound, nextRoundApp, practices, onScheduleInterview }:
 function PipelinePulse({ apps, activeApps, interviewingApps, upcomingRounds, onAddApplication }: { apps: App[]; activeApps: App[]; interviewingApps: App[]; upcomingRounds: Round[]; onAddApplication: () => void }) {
   const counts = ['Wishlist', 'Applied', 'Interviewing', 'Offer'].map((status) => ({ status, count: apps.filter((app) => app.status === status).length }));
   return (
-    <section className="card fade-up h-full flex flex-col">
+    <section className="card card-pad-lg fade-up h-full flex flex-col">
       <div className="flex items-start justify-between gap-3" style={{ marginBottom: 'var(--gap-sm)' }}>
         <div>
           <div className="eyebrow mb-1">Pipeline pulse</div>
@@ -305,7 +305,7 @@ function PipelinePulse({ apps, activeApps, interviewingApps, upcomingRounds, onA
 
 function TrackReadiness({ tracks }: { tracks: { name: string; to: string; total: number; mastered: number; inProgress: number; color: string }[] }) {
   return (
-    <section className="card fade-up">
+    <section className="card card-pad-lg fade-up">
       <div className="flex items-end justify-between gap-3" style={{ marginBottom: 'var(--gap-sm)' }}>
         <div>
           <div className="eyebrow mb-1">Track readiness</div>
@@ -321,7 +321,7 @@ function TrackReadiness({ tracks }: { tracks: { name: string; to: string; total:
 
 function RecentApplications({ apps, onAddApplication }: { apps: App[]; onAddApplication: () => void }) {
   return (
-    <section className="card fade-up">
+    <section className="card card-pad-lg fade-up">
       <div className="flex items-center justify-between gap-3" style={{ marginBottom: 'var(--gap-sm)' }}>
         <div>
           <div className="eyebrow mb-1">Applications</div>
@@ -348,7 +348,7 @@ function RecentApplications({ apps, onAddApplication }: { apps: App[]; onAddAppl
 
 function UpcomingInterviews({ rounds, apps, onScheduleInterview }: { rounds: Round[]; apps: App[]; onScheduleInterview: () => void }) {
   return (
-    <section className="card fade-up">
+    <section className="card card-pad-lg fade-up">
       <div className="flex items-center justify-between gap-3" style={{ marginBottom: 'var(--gap-sm)' }}>
         <span className="flex items-center gap-1.5" style={{ fontSize: 13, fontWeight: 600 }}><CalendarClock size={14} /> Upcoming interviews</span>
         <button type="button" onClick={onScheduleInterview} style={textAction}>Add round <KbdHint inline /></button>
@@ -381,7 +381,7 @@ function UpcomingInterviews({ rounds, apps, onScheduleInterview }: { rounds: Rou
 function RecentAnecdotes({ anecdotes, cats }: { anecdotes: Anecdote[]; cats: Cat[] }) {
   if (anecdotes.length === 0) return null;
   return (
-    <section className="card fade-up">
+    <section className="card card-pad-lg fade-up">
       <div className="eyebrow mb-1">Behavioral notebook</div>
       <h2 className="display" style={{ margin: 0, fontSize: 24, fontWeight: 400, marginBottom: 'var(--gap-sm)' }}>Recent stories</h2>
       <div className="grid" style={{ gap: 'var(--gap-sm)', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>

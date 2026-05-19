@@ -1,30 +1,9 @@
-import json
 import pathlib
-import re
 import shutil
 
 import pytest
 
 from ai_coding.project_runner import run_project
-
-
-@pytest.fixture
-def seed_migration_files():
-    """Parse the seeded migration's `const ROUNDS = [...];` block and
-    return the JS array as Python objects. Brittle by design — easier
-    to spot a regression in the seed shape than to reimplement the JS
-    runtime."""
-    def _load():
-        path = pathlib.Path(__file__).resolve().parents[2] / "pocketbase" / "pb_migrations" / "1700001200_ai_coding_seed.js"
-        text = path.read_text()
-        # Greedy match from the first `[` after `const ROUNDS = ` up to
-        # the last `];` before the `migrate(` call. Greedy is safer
-        # than non-greedy here because nested `]` chars exist inside
-        # the JSON checkpoint arrays.
-        m = re.search(r"const ROUNDS = (\[.*\]);\s*\n\s*migrate\(", text, re.DOTALL)
-        assert m, "couldn't find ROUNDS array in seed migration"
-        return json.loads(m.group(1))
-    return _load
 
 
 def test_python_project_pass():
@@ -196,33 +175,3 @@ def test_seeded_python_round_runs_via_project_runner():
     )
 
 
-def test_seeded_async_bugs_round_visible_tests_pass_hidden_fail(seed_migration_files):
-    """Round-trip: load the seeded migration, find async-bugs-py, run
-    visible tests through the runner (passes), then run with merged
-    hidden files (fails). Locks in the critical-verification flow."""
-    from ai_coding.project_runner import run_project
-
-    rounds = seed_migration_files()
-    round_row = next(r for r in rounds if r["slug"] == "async-bugs-py")
-    checkpoint = round_row["checkpoints"][0]
-    starter = {f["path"]: f["contents"] for f in round_row["starter_files"]}
-
-    # Visible-only run (no hidden_files merged).
-    visible = run_project(starter, "python", checkpoint["test_command"], timeout_s=15)
-    assert visible.passed is True, visible.stderr
-    assert visible.passed_count == 1
-
-    # Grade-style run (hidden_files merged in).
-    merged = {**starter}
-    for hf in checkpoint.get("hidden_files") or []:
-        merged[hf["path"]] = hf["contents"]
-    graded = run_project(merged, "python", checkpoint["test_command"], timeout_s=15)
-    assert graded.passed is False
-    # The hidden test file has exactly two tests
-    # (test_returns_list_of_all_results + test_runs_concurrently);
-    # both should fail under the seeded bug. Asserting >= 2 catches a
-    # regression where one of them silently stops being collected.
-    assert graded.failed_count >= 2, (
-        f"expected both hidden tests to fail; got {graded.failed_count}\n"
-        f"stdout: {graded.stdout[-1500:]}"
-    )

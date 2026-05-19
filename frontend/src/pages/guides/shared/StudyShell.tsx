@@ -45,7 +45,7 @@ export default function StudyShell({
         eyebrow={eyebrow}
         title={title}
         description={description}
-        actions={track ? <StudyPracticeBar track={track} compact /> : undefined}
+        chromeActions={track ? <StudyPracticeBar track={track} compact /> : undefined}
       />
       <div
         ref={scrollRef}

@@ -43,7 +43,6 @@ const radiusOptions: [Tweaks['radius'], string][] = [
   ['sharp', 'Sharp'],
   ['soft', 'Soft'],
   ['round', 'Round'],
-  ['pill', 'Pill'],
 ];
 
 const shadowOptions: [Tweaks['shadow'], string][] = [

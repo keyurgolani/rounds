@@ -30,7 +30,7 @@ export type SansFont = 'inter' | 'geist' | 'manrope' | 'space-grotesk' | 'system
 export type Density = 'compact' | 'comfortable' | 'spacious';
 export type NavStyle = 'sidebar' | 'topbar';
 export type CardTreatment = 'layered' | 'bordered' | 'flat' | 'filled';
-export type CornerRadius = 'sharp' | 'soft' | 'round' | 'pill';
+export type CornerRadius = 'sharp' | 'soft' | 'round';
 export type Shadow = 'none' | 'subtle' | 'soft' | 'bold';
 export type CardAccent = 'neutral' | 'tinted' | 'ruled';
 export type AppBackground = 'grainy' | 'mesh' | 'gradient' | 'paper' | 'natural';
@@ -140,7 +140,13 @@ function dbToTweaks(row: Partial<DbPrefs>): Partial<Tweaks> {
   if (row.nav_style) out.navStyle = row.nav_style as NavStyle;
   if (row.card_treatment) out.cardTreatment = row.card_treatment as CardTreatment;
   if (row.sans_font) out.sansFont = row.sans_font as SansFont;
-  if (row.radius) out.radius = row.radius as CornerRadius;
+  if (row.radius) {
+    // Legacy preferences may still carry the dropped "pill" value —
+    // collapse it back to "soft" (the default) so the picker reflects
+    // a real option and the data-radius attribute stays in the
+    // supported set.
+    out.radius = (row.radius === 'pill' ? 'soft' : (row.radius as CornerRadius));
+  }
   if (row.shadow) out.shadow = row.shadow as Shadow;
   if (row.card_accent) out.cardAccent = row.card_accent as CardAccent;
   if (row.app_background) out.appBackground = row.app_background as AppBackground;
@@ -190,7 +196,10 @@ function applyTweaks(t: Tweaks) {
   setOrClear(html, 'data-sans', t.sansFont, 'inter');
   setOrClear(html, 'data-density', t.density, 'comfortable');
   setOrClear(html, 'data-cards', t.cardTreatment, 'layered');
-  setOrClear(html, 'data-radius', t.radius, 'soft');
+  // Belt-and-braces: live state may still carry the dropped "pill"
+  // value from a session that hadn't yet round-tripped through PB.
+  // Coerce here too so data-radius is always in the supported set.
+  setOrClear(html, 'data-radius', (t.radius as string) === 'pill' ? 'soft' : t.radius, 'soft');
   setOrClear(html, 'data-shadow', t.shadow, 'soft');
   setOrClear(html, 'data-card-accent', t.cardAccent, 'neutral');
   setOrClear(html, 'data-app-bg', t.appBackground, 'grainy');
