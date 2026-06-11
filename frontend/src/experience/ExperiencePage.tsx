@@ -63,20 +63,44 @@ type TabKey = (typeof TABS)[number]['key'];
 // Helpers
 // ---------------------------------------------------------------------------
 
-function groupByYear(items: TimelineEntity[]): Record<string, TimelineEntity[]> {
+function entityDate(e: TimelineEntity): string {
+  return e.kind === 'job' || e.kind === 'project' ? e.start_date : e.date;
+}
+
+/**
+ * Newest date (epoch ms) anywhere in an entity's subtree. Children render above
+ * the parent, so the subtree's position on the timeline is driven by its newest
+ * descendant, not the (often older) parent.
+ */
+function subtreeMaxDate(
+  id: string,
+  connMap: ConnectionMap,
+  entityById: Record<string, TimelineEntity>,
+  ancestry: Set<string> = new Set(),
+): number {
+  const e = entityById[id];
+  if (!e) return 0;
+  let max = +new Date(entityDate(e));
+  for (const { id: childId } of childIdsOf(connMap, id)) {
+    if (ancestry.has(childId)) continue;
+    const d = subtreeMaxDate(childId, connMap, entityById, new Set(ancestry).add(id));
+    if (d > max) max = d;
+  }
+  return max;
+}
+
+function groupByYear(
+  items: TimelineEntity[],
+  dateOf: (e: TimelineEntity) => number,
+): Record<string, TimelineEntity[]> {
   const groups: Record<string, TimelineEntity[]> = {};
   for (const item of items) {
-    const date = item.kind === 'job' || item.kind === 'project' ? item.start_date : item.date;
-    const year = new Date(date).getFullYear().toString();
+    const year = new Date(dateOf(item)).getFullYear().toString();
     if (!groups[year]) groups[year] = [];
     groups[year].push(item);
   }
   for (const year of Object.keys(groups)) {
-    groups[year].sort((a, b) => {
-      const dateA = a.kind === 'job' || a.kind === 'project' ? a.start_date : a.date;
-      const dateB = b.kind === 'job' || b.kind === 'project' ? b.start_date : b.date;
-      return +new Date(dateB) - +new Date(dateA);
-    });
+    groups[year].sort((a, b) => dateOf(b) - dateOf(a));
   }
   return groups;
 }
@@ -128,132 +152,164 @@ function hasChildren(map: ConnectionMap, parentId: string): boolean {
   return CHILD_KINDS.some((kind) => (entry[kind] ?? []).length > 0);
 }
 
-interface NestedProps {
-  /** Junction lookup id (the actual entity id). */
-  lookupId: string;
-  /** Unique render path key so the same entity expands independently under each parent. */
-  pathKey: string;
-  connMap: ConnectionMap;
-  entityById: Record<string, TimelineEntity>;
-  expandedSet: Set<string>;
-  toggle: (key: string) => void;
-  onClick: (entity: TimelineEntity) => void;
+// Per-depth card sizing. `pt` is the top padding; used to align connectors to
+// the badge/title row.
+const DEPTH = [
+  { padding: '15px 18px', pt: 15, title: 16 },
+  { padding: '11px 15px', pt: 11, title: 14 },
+  { padding: '9px 13px', pt: 9, title: 13 },
+  { padding: '8px 12px', pt: 8, title: 12.5 },
+];
+const depthCfg = (d: number) => DEPTH[Math.min(d, DEPTH.length - 1)];
+const anchorY = (d: number) => depthCfg(d).pt + 8; // badge-row centre from card top
+const GUTTER = 22;     // tree indent per level (outer side)
+const CENTER_GAP = 20; // card inner edge -> central line (per-card connector + node)
+
+function rowTitle(entity: TimelineEntity): string {
+  return entity.kind === 'job' ? (entity.company || 'Untitled') : (entity.title || 'Untitled');
+}
+function rowSubtitle(entity: TimelineEntity): string | undefined {
+  switch (entity.kind) {
+    case 'job': return entity.role || undefined;
+    case 'project': return [entity.company, entity.role].filter(Boolean).join(' · ') || undefined;
+    case 'anecdote': return (entity.result || entity.situation || '').slice(0, 90) || undefined;
+    case 'bullet': return entity.impact || undefined;
+    default: return undefined;
+  }
 }
 
-/** Renders the list of children connected under a given parent. */
-function ChildList({ lookupId, pathKey, connMap, entityById, expandedSet, toggle, onClick }: NestedProps) {
-  const children = childIdsOf(connMap, lookupId);
-  if (children.length === 0) return null;
-  return (
-    <div
-      className="flex flex-col"
-      style={{ gap: 6, marginTop: 8, paddingLeft: 12, borderLeft: '1px dashed var(--border)' }}
-    >
-      {children.map(({ id }) => {
-        const child = entityById[id];
-        if (!child) return null;
-        return (
-          <ChildCard
-            key={`${pathKey}>${id}`}
-            entity={child}
-            pathKey={`${pathKey}>${id}`}
-            connMap={connMap}
-            entityById={entityById}
-            expandedSet={expandedSet}
-            toggle={toggle}
-            onClick={onClick}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-interface ChildCardProps {
+interface TreeNodeProps {
   entity: TimelineEntity;
+  depth: number;
   pathKey: string;
+  isRoot: boolean;
+  isLeft: boolean;
+  enableChildren: boolean;
   connMap: ConnectionMap;
   entityById: Record<string, TimelineEntity>;
-  expandedSet: Set<string>;
+  collapsedSet: Set<string>;
+  ancestry: Set<string>;
   toggle: (key: string) => void;
   onClick: (entity: TimelineEntity) => void;
 }
 
-/** A single nested child card, minimal in proportion to its granularity. */
-function ChildCard({ entity, pathKey, connMap, entityById, expandedSet, toggle, onClick }: ChildCardProps) {
+/** Recursive node. Children render ABOVE the card (further along the timeline
+ *  sits higher) and branch off the parent via an outer spine + elbow; every
+ *  card also taps the central line with its own connector + node. */
+function TreeNode({ entity, depth, pathKey, isRoot, isLeft, enableChildren, connMap, entityById, collapsedSet, ancestry, toggle, onClick }: TreeNodeProps) {
   const colors = TYPE_COLORS[entity.kind];
-  const expandable = hasChildren(connMap, entity.id);
-  const isExpanded = expandedSet.has(pathKey);
+  const cfg = depthCfg(depth);
+  const children = enableChildren
+    ? childIdsOf(connMap, entity.id).filter((c) => !ancestry.has(c.id) && entityById[c.id])
+    : [];
+  const expandable = children.length > 0;
+  const expanded = !collapsedSet.has(pathKey);
+  const anchor = anchorY(depth);
+  const dot = isRoot ? 10 : 7;
+  const spineX = depth * GUTTER + 8;
 
-  const padding =
-    entity.kind === 'project' ? '12px 16px' : entity.kind === 'anecdote' ? '8px 14px' : '6px 14px';
+  const title = rowTitle(entity);
+  const subtitle = rowSubtitle(entity);
+  const showDescription = isRoot && (entity.kind === 'job' || entity.kind === 'project') && !!entity.description;
+  const showTags = isRoot && entity.tags.length > 0;
+  const accentWidth = isRoot ? 3 : 2;
+  const cardBorder = isLeft
+    ? { borderRight: `${accentWidth}px solid ${colors.text}` }
+    : { borderLeft: `${accentWidth}px solid ${colors.text}` };
+  const outerPos = (x: number) => (isLeft ? { left: x } : { right: x });
 
   return (
-    <div>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => onClick(entity)}
-        onKeyDown={(e) => { if (e.key === 'Enter') onClick(entity); }}
-        style={{
-          padding,
-          borderLeft: `2px solid ${colors.text}`,
-          borderRadius: 'var(--radius)',
-          background: 'var(--bg)',
-          boxShadow: 'inset 0 0 0 1px var(--border)',
-          cursor: 'pointer',
-        }}
-      >
-        {entity.kind === 'bullet' ? (
-          <span style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.4 }}>
-            • {entity.title}
-            {entity.impact ? <span style={{ color: 'var(--text-4)' }}> ({entity.impact})</span> : null}
-          </span>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span
-                className="pill mono"
-                style={{ fontSize: 8.5, letterSpacing: '0.06em', background: colors.bg, color: colors.text, padding: '1px 6px' }}
-              >
-                {TYPE_LABELS[entity.kind].toUpperCase()}
-              </span>
-              <span className="mono" style={{ fontSize: 10, color: 'var(--text-4)' }}>{formatDate(entity)}</span>
-              {expandable && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); toggle(pathKey); }}
-                  className="flex items-center gap-0.5 ml-auto"
-                  style={{ background: 0, border: 0, cursor: 'pointer', color: 'var(--text-3)', fontSize: 10, padding: 0 }}
-                >
-                  {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                </button>
-              )}
-            </div>
-            <div style={{ fontSize: entity.kind === 'project' ? 14 : 13, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3, marginTop: 3 }}>
-              {entity.kind === 'job' ? entity.company : entity.title}
-            </div>
-            {entity.kind === 'project' && (entity.company || entity.role) && (
-              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 1 }}>
-                {[entity.company, entity.role].filter(Boolean).join(' · ')}
+    <div style={{ position: 'relative' }}>
+      {/* Children render ABOVE the parent */}
+      {expandable && expanded && (
+        <div style={{ position: 'relative' }}>
+          {children.map((c, i) => {
+            const isTop = i === 0;
+            const childAnchor = anchorY(depth + 1);
+            return (
+              <div key={c.id} style={{ position: 'relative', paddingBottom: 6 }}>
+                {/* vertical spine: from the topmost child's elbow down to the parent card */}
+                <div style={{ position: 'absolute', ...outerPos(spineX), top: isTop ? childAnchor : 0, bottom: 0, width: 1.5, background: 'var(--border-strong)' }} />
+                {/* horizontal elbow into the child card */}
+                <div style={{ position: 'absolute', ...outerPos(spineX), top: childAnchor, width: GUTTER - 8, height: 1.5, background: 'var(--border-strong)' }} />
+                <TreeNode
+                  entity={entityById[c.id]}
+                  depth={depth + 1}
+                  pathKey={`${pathKey}>${c.id}`}
+                  isRoot={false}
+                  isLeft={isLeft}
+                  enableChildren={enableChildren}
+                  connMap={connMap}
+                  entityById={entityById}
+                  collapsedSet={collapsedSet}
+                  ancestry={new Set(ancestry).add(entity.id)}
+                  toggle={toggle}
+                  onClick={onClick}
+                />
               </div>
-            )}
-          </>
-        )}
-      </div>
-      {expandable && isExpanded && (
-        <div style={{ marginLeft: 8 }}>
-          <ChildList
-            lookupId={entity.id}
-            pathKey={pathKey}
-            connMap={connMap}
-            entityById={entityById}
-            expandedSet={expandedSet}
-            toggle={toggle}
-            onClick={onClick}
-          />
+            );
+          })}
         </div>
       )}
+
+      {/* The card, tapping the central line with its own connector + node */}
+      <div style={{ position: 'relative', ...(isLeft ? { paddingLeft: depth * GUTTER } : { paddingRight: depth * GUTTER }) }}>
+        <button
+          type="button"
+          onClick={() => onClick(entity)}
+          className="text-left w-full"
+          style={{
+            padding: cfg.padding,
+            ...cardBorder,
+            borderRadius: 'var(--radius)',
+            background: 'var(--bg-elev)',
+            boxShadow: 'inset 0 0 0 1px var(--border)',
+            cursor: 'pointer',
+            transition: 'box-shadow 120ms, transform 120ms',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--border), 0 4px 12px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--border)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+        >
+          <div className="flex items-center gap-2 flex-wrap" style={{ marginBottom: 3 }}>
+            <span className="pill mono" style={{ fontSize: 8.5, letterSpacing: '0.08em', background: colors.bg, color: colors.text, padding: '2px 7px' }}>
+              {TYPE_LABELS[entity.kind].toUpperCase()}
+            </span>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--text-4)' }}>{formatDate(entity)}</span>
+            {expandable && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); toggle(pathKey); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggle(pathKey); } }}
+                className="flex items-center ml-auto"
+                style={{ cursor: 'pointer', color: 'var(--text-3)' }}
+                title={expanded ? 'Collapse' : 'Expand'}
+              >
+                {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: cfg.title, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3 }}>{title}</div>
+          {subtitle && <div className="line-clamp-1" style={{ fontSize: 12.5, color: 'var(--text-2)', marginTop: 2 }}>{subtitle}</div>}
+          {showDescription && (
+            <p className="line-clamp-2" style={{ fontSize: 13, color: 'var(--text-3)', lineHeight: 1.5, margin: '6px 0 0' }}>
+              {(entity as ExperienceJob | ExperienceProject).description}
+            </p>
+          )}
+          {showTags && (
+            <div className="flex flex-wrap gap-1" style={{ marginTop: 8 }}>
+              {entity.tags.slice(0, 6).map((tag) => (
+                <span key={tag} className="pill" style={{ fontSize: 10, background: 'transparent', color: 'var(--text-4)', boxShadow: 'inset 0 0 0 1px var(--border)', padding: '1px 7px' }}>{tag}</span>
+              ))}
+            </div>
+          )}
+        </button>
+        {/* connector + node tapping the central line (inner side).
+            The connector is offset by half its height so it runs through the
+            vertical centre of the node rather than just below it. */}
+        <div style={{ position: 'absolute', top: anchor - 0.75, ...(isLeft ? { right: -CENTER_GAP } : { left: -CENTER_GAP }), width: CENTER_GAP, height: 1.5, background: colors.text, opacity: 0.45 }} />
+        <div style={{ position: 'absolute', top: anchor - dot / 2, ...(isLeft ? { right: -(CENTER_GAP + dot / 2) } : { left: -(CENTER_GAP + dot / 2) }), width: dot, height: dot, borderRadius: 999, background: colors.text, border: '2px solid var(--bg)' }} />
+      </div>
     </div>
   );
 }
@@ -284,7 +340,7 @@ export default function ExperiencePage() {
   const activeTab = PATH_TO_TAB[location.pathname] ?? 'timeline';
   const [timelineItems, setTimelineItems] = useState<TimelineEntity[] | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [expandedSet, setExpandedSet] = useState<Set<string>>(new Set());
+  const [collapsedSet, setCollapsedSet] = useState<Set<string>>(new Set());
   const [listItems, setListItems] = useState<(ExperienceJob | ExperienceProject | ExperienceAnecdote | ExperienceBullet)[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<TimelineEntity | (ExperienceJob | ExperienceProject | ExperienceAnecdote | ExperienceBullet) | null>(null);
@@ -304,8 +360,8 @@ export default function ExperiencePage() {
       .catch((e) => setError(String(e)));
   }, []);
 
-  const toggleExpanded = useCallback((key: string) => {
-    setExpandedSet((prev) => {
+  const toggleCollapsed = useCallback((key: string) => {
+    setCollapsedSet((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -365,8 +421,13 @@ export default function ExperiencePage() {
 
   const grouped = useMemo(() => {
     if (!filtered) return null;
-    return groupByYear(filtered);
-  }, [filtered]);
+    // In "all" view a subtree's timeline position is its newest item (children
+    // render above the parent); a type filter uses each item's own date.
+    const dateOf = filter === 'all'
+      ? (e: TimelineEntity) => subtreeMaxDate(e.id, connMap, entityById)
+      : (e: TimelineEntity) => +new Date(entityDate(e));
+    return groupByYear(filtered, dateOf);
+  }, [filtered, filter, connMap, entityById]);
 
   const years = useMemo(() => {
     if (!grouped) return [];
@@ -639,211 +700,60 @@ export default function ExperiencePage() {
         )}
 
         {activeTab === 'timeline' && grouped && (
-          <div className="relative mx-auto" style={{ maxWidth: 1100 }}>
+          <div className="relative" style={{ width: '100%' }}>
             {/* Center vertical line */}
-            <div
-              className="absolute"
-              style={{
-                left: '50%',
-                top: 0,
-                bottom: 0,
-                width: 2,
-                marginLeft: -1,
-                background: 'var(--border)',
-              }}
-            />
+            <div className="absolute" style={{ left: '50%', top: 0, bottom: 0, width: 2, marginLeft: -1, background: 'var(--border)' }} />
 
-            {years.map((year) => (
-              <div key={year} className="relative" style={{ marginBottom: 40 }}>
-                {/* Year milestone on the line */}
-                <div
-                  className="absolute mono flex items-center justify-center"
-                  style={{
-                    left: '50%',
-                    top: 0,
-                    transform: 'translateX(-50%)',
-                    padding: '4px 16px',
-                    borderRadius: 999,
-                    background: 'var(--ink)',
-                    color: 'var(--paper)',
-                    boxShadow: '0 0 0 3px var(--bg)',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    letterSpacing: '0.04em',
-                    zIndex: 2,
-                  }}
-                >
-                  {year} · {grouped[year].length}
-                </div>
+            {years.map((year, yearIdx) => {
+              // Running index across all years keeps left/right alternation continuous.
+              const offset = years.slice(0, yearIdx).reduce((n, y) => n + (grouped[y]?.length ?? 0), 0);
+              return (
+                <div key={year} className="relative" style={{ marginBottom: 40 }}>
+                  {/* Year milestone on the line */}
+                  <div
+                    className="absolute mono flex items-center justify-center"
+                    style={{ left: '50%', top: 0, transform: 'translateX(-50%)', padding: '4px 16px', borderRadius: 999, background: 'var(--ink)', color: 'var(--paper)', boxShadow: '0 0 0 3px var(--bg)', fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', zIndex: 3 }}
+                  >
+                    {year} · {grouped[year].length}
+                  </div>
 
-                <div style={{ paddingTop: 36 }}>
-                  {grouped[year].map((item, idx) => {
-                    const isLeft = idx % 2 === 0;
-                    const colors = TYPE_COLORS[item.kind];
-                    const title = item.kind === 'job' ? item.company : item.title;
-                    const subtitle = item.kind === 'job' ? item.role : item.kind === 'project' ? `${item.company ? item.company + ' · ' : ''}${item.role || ''}` : undefined;
-
-                    return (
-                      <div
-                        key={`${item.kind}-${item.id}`}
-                        className="relative flex items-start"
-                        style={{
-                          marginBottom: 16,
-                          flexDirection: isLeft ? 'row' : 'row-reverse',
-                        }}
-                      >
-                        {/* Card side */}
-                        <div style={{ width: 'calc(50% - 20px)' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleCardClick(item)}
-                            className="text-left w-full"
-                            style={{
-                              padding: '16px 20px',
-                              borderLeft: isLeft ? 'none' : `3px solid ${colors.text}`,
-                              borderRight: isLeft ? `3px solid ${colors.text}` : 'none',
-                              borderRadius: 'var(--radius)',
-                              background: 'var(--bg-elev)',
-                              boxShadow: 'inset 0 0 0 1px var(--border)',
-                              cursor: 'pointer',
-                              transition: 'box-shadow 120ms, transform 120ms',
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.boxShadow = `inset 0 0 0 1px var(--border), 0 4px 12px rgba(0,0,0,0.1)`;
-                              e.currentTarget.style.transform = 'translateY(-1px)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--border)';
-                              e.currentTarget.style.transform = 'translateY(0)';
-                            }}
-                          >
-                            <div className="flex items-center gap-2 flex-wrap" style={{ marginBottom: 6 }}>
-                              <span
-                                className="pill mono"
-                                style={{
-                                  fontSize: 9,
-                                  letterSpacing: '0.08em',
-                                  background: colors.bg,
-                                  color: colors.text,
-                                  padding: '2px 8px',
-                                }}
-                              >
-                                {TYPE_LABELS[item.kind].toUpperCase()}
-                              </span>
-                              <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-4)' }}>
-                                {formatDate(item)}
-                              </span>
-                            </div>
-
-                            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3, marginBottom: subtitle || (item.kind !== 'bullet' && 'description' in item && item.description) ? 4 : 0 }}>
-                              {title}
-                            </div>
-
-                            {subtitle && (
-                              <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 2 }}>
-                                {subtitle}
-                              </div>
-                            )}
-
-                            {item.kind !== 'bullet' && 'description' in item && item.description && (
-                              <p className="line-clamp-2" style={{ fontSize: 13, color: 'var(--text-3)', lineHeight: 1.5, margin: '6px 0 0' }}>
-                                {item.description}
-                              </p>
-                            )}
-
-                            {item.kind === 'bullet' && item.impact && (
-                              <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '4px 0 0', lineHeight: 1.5 }}>
-                                {item.impact}
-                              </p>
-                            )}
-
-                            {item.tags.length > 0 && (
-                              <div className="flex flex-wrap gap-1" style={{ marginTop: 8 }}>
-                                {item.tags.slice(0, 6).map((tag) => (
-                                  <span
-                                    key={tag}
-                                    className="pill"
-                                    style={{
-                                      fontSize: 10,
-                                      background: 'transparent',
-                                      color: 'var(--text-4)',
-                                      boxShadow: 'inset 0 0 0 1px var(--border)',
-                                      padding: '1px 7px',
-                                    }}
-                                  >
-                                    {tag}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </button>
-
-                          {/* Nested connected children */}
-                          {filter === 'all' && hasChildren(connMap, item.id) && (
-                            <div style={{ marginTop: 6 }}>
-                              <button
-                                type="button"
-                                onClick={() => toggleExpanded(item.id)}
-                                className="flex items-center gap-1"
-                                style={{ background: 0, border: 0, cursor: 'pointer', color: 'var(--text-3)', fontSize: 11, padding: '2px 0' }}
-                              >
-                                {expandedSet.has(item.id) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                                {childIdsOf(connMap, item.id).length} linked
-                              </button>
-                              {expandedSet.has(item.id) && (
-                                <ChildList
-                                  lookupId={item.id}
-                                  pathKey={item.id}
-                                  connMap={connMap}
-                                  entityById={entityById}
-                                  expandedSet={expandedSet}
-                                  toggle={toggleExpanded}
-                                  onClick={handleCardClick}
-                                />
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Center node + connector */}
+                  <div style={{ paddingTop: 44 }}>
+                    {grouped[year].map((item, idx) => {
+                      const isLeft = (offset + idx) % 2 === 0;
+                      return (
                         <div
-                          className="relative flex items-center justify-center flex-shrink-0"
-                          style={{ width: 40 }}
+                          key={`${item.kind}-${item.id}`}
+                          className="relative flex items-start"
+                          style={{ marginBottom: 24, flexDirection: isLeft ? 'row' : 'row-reverse' }}
                         >
-                          {/* Horizontal connector */}
-                          <div
-                            className="absolute"
-                            style={{
-                              top: 20,
-                              ...(isLeft ? { right: 20 } : { left: 20 }),
-                              width: 20,
-                              height: 2,
-                              background: colors.text,
-                              opacity: 0.4,
-                            }}
-                          />
-                          {/* Node dot */}
-                          <div
-                            style={{
-                              width: 10,
-                              height: 10,
-                              borderRadius: 999,
-                              background: colors.text,
-                              border: '2px solid var(--bg)',
-                              zIndex: 2,
-                              marginTop: 16,
-                            }}
-                          />
+                          {/* Card side: the whole subtree (children render above the parent) */}
+                          <div style={{ width: 'calc(50% - 20px)', position: 'relative' }}>
+                            <TreeNode
+                              entity={item}
+                              depth={0}
+                              pathKey={item.id}
+                              isRoot
+                              isLeft={isLeft}
+                              enableChildren={filter === 'all'}
+                              connMap={connMap}
+                              entityById={entityById}
+                              collapsedSet={collapsedSet}
+                              ancestry={new Set()}
+                              toggle={toggleCollapsed}
+                              onClick={handleCardClick}
+                            />
+                          </div>
+                          {/* center gap — the line is absolute; each card draws its own node */}
+                          <div style={{ width: 40, flexShrink: 0 }} />
+                          {/* empty opposite side (kept clear) */}
+                          <div style={{ width: 'calc(50% - 20px)' }} />
                         </div>
-
-                        {/* Empty side */}
-                        <div style={{ width: 'calc(50% - 20px)' }} />
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
