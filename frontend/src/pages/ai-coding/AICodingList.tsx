@@ -10,7 +10,11 @@ import PracticeStatusFilter, {
 import { effectiveStatus, useStatusMapVersion } from '../../hooks/usePracticeStatus';
 import { useInfiniteList } from '../../hooks/useInfiniteList';
 import { usePersistedState } from '../../hooks/usePersistedState';
-import { listRounds, type AICodingRound } from './aiCodingApi';
+import {
+  effectiveLanguages,
+  listRounds,
+  type AICodingRoundRaw,
+} from './aiCodingApi';
 
 type SortKey =
   | 'title-asc'
@@ -46,7 +50,7 @@ function stripMarkdown(s: string): string {
 }
 
 export default function AICodingList() {
-  const [rounds, setRounds] = useState<AICodingRound[] | null>(null);
+  const [rounds, setRounds] = useState<AICodingRoundRaw[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [difficulty, setDifficulty] = usePersistedState<string | null>(
@@ -79,7 +83,7 @@ export default function AICodingList() {
 
   const allLanguages = useMemo(() => {
     const set = new Set<string>();
-    for (const r of rounds ?? []) if (r.language) set.add(r.language);
+    for (const r of rounds ?? []) for (const lang of effectiveLanguages(r)) set.add(lang);
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [rounds]);
 
@@ -88,7 +92,7 @@ export default function AICodingList() {
     const matches = rounds.filter((r) => {
       if (difficulty && r.difficulty.toLowerCase() !== difficulty.toLowerCase()) return false;
       if (topic !== ALL_OPTION && !(r.topics ?? []).includes(topic)) return false;
-      if (language !== ALL_OPTION && r.language !== language) return false;
+      if (language !== ALL_OPTION && !effectiveLanguages(r).includes(language)) return false;
       if (statusFilter !== 'all' && effectiveStatus('ai-coding', r.slug) !== statusFilter) {
         return false;
       }
@@ -270,25 +274,37 @@ export default function AICodingList() {
                 >
                   <div className="flex items-center gap-2 flex-wrap">
                     <DifficultyPill level={r.difficulty} />
-                    <span
-                      className="pill"
-                      style={{
-                        background: 'transparent',
-                        color: 'var(--text-3)',
-                        boxShadow: 'inset 0 0 0 1px var(--border-strong)',
-                      }}
-                    >
-                      {r.language}
-                    </span>
-                    <span
-                      className="pill"
-                      style={{
-                        background: 'var(--accent-soft)',
-                        color: 'var(--accent)',
-                      }}
-                    >
-                      {r.checkpoints.length} checkpoint{r.checkpoints.length === 1 ? '' : 's'}
-                    </span>
+                    {(() => {
+                      const langs = effectiveLanguages(r);
+                      // Checkpoint count: same per-language for multi-
+                      // lang rounds today, so peek the first variant.
+                      const cps = Array.isArray(r.checkpoints)
+                        ? r.checkpoints
+                        : r.checkpoints[langs[0]] ?? [];
+                      return (
+                        <>
+                          <span
+                            className="pill"
+                            style={{
+                              background: 'transparent',
+                              color: 'var(--text-3)',
+                              boxShadow: 'inset 0 0 0 1px var(--border-strong)',
+                            }}
+                          >
+                            {langs.join(' · ')}
+                          </span>
+                          <span
+                            className="pill"
+                            style={{
+                              background: 'var(--accent-soft)',
+                              color: 'var(--accent)',
+                            }}
+                          >
+                            {cps.length} checkpoint{cps.length === 1 ? '' : 's'}
+                          </span>
+                        </>
+                      );
+                    })()}
                   </div>
                   <div
                     className="display-italic"

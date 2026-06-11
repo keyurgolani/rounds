@@ -17,14 +17,27 @@ export function useAICodingDrafts(round: AICodingRound | null, campaignId?: stri
   const [hydrated, setHydrated] = useState(false);
   const dirtyRef = useRef<Set<string>>(new Set());
 
-  // Hydrate: starter overlaid by draft rows.
+  // Hydrate: starter overlaid by draft rows. For multi-language rounds
+  // we only overlay drafts whose file_path exists in the current
+  // language's starter set — that filters out drafts the user wrote in
+  // the OTHER language during a previous session on the same round.
+  // Single-language rounds keep the historical behavior.
   useEffect(() => {
     if (!round) return;
+    if (!Array.isArray(round.starter_files)) {
+      // Should never happen — AICodingDetail resolves the round to a
+      // single-language shape before passing it in. Bail rather than
+      // attempting to iterate a map.
+      return;
+    }
     let cancelled = false;
     setHydrated(false);
     (async () => {
       const starter: Files = {};
-      for (const f of round.starter_files) starter[f.path] = f.contents;
+      for (const f of round.starter_files as Array<{ path: string; contents: string }>) {
+        starter[f.path] = f.contents;
+      }
+      const starterPaths = new Set(Object.keys(starter));
       let drafts: DraftRow[] = [];
       try {
         drafts = await listDrafts(round.id, campaignId);
@@ -32,7 +45,9 @@ export function useAICodingDrafts(round: AICodingRound | null, campaignId?: stri
         /* fallthrough — starter only */
       }
       const merged: Files = { ...starter };
-      for (const d of drafts) merged[d.file_path] = d.contents;
+      for (const d of drafts) {
+        if (starterPaths.has(d.file_path)) merged[d.file_path] = d.contents;
+      }
       if (cancelled) return;
       setFiles(merged);
       setSavedFiles(merged);
@@ -41,7 +56,11 @@ export function useAICodingDrafts(round: AICodingRound | null, campaignId?: stri
     return () => {
       cancelled = true;
     };
-  }, [round?.id, campaignId]);
+    // `round?.language` is included so switching languages on a multi-
+    // language round (which AICodingDetail signals by resolving to a
+    // new effective round) triggers a re-hydrate against the new
+    // language's starter files.
+  }, [round?.id, round?.language, campaignId]);
 
   // Mirror latest files/savedFiles into refs so the autosave interval can read
   // current values without restarting on every keystroke.
@@ -136,6 +155,7 @@ export function useAICodingDrafts(round: AICodingRound | null, campaignId?: stri
    *  to confirm the destructive intent first. */
   async function resetToStarter() {
     if (!round) return;
+    if (!Array.isArray(round.starter_files)) return;
     dirtyRef.current.clear();
     try {
       await deleteAllDrafts(round.id, campaignId);
@@ -143,7 +163,9 @@ export function useAICodingDrafts(round: AICodingRound | null, campaignId?: stri
       /* best-effort — local state still resets */
     }
     const starter: Files = {};
-    for (const f of round.starter_files) starter[f.path] = f.contents;
+    for (const f of round.starter_files as Array<{ path: string; contents: string }>) {
+      starter[f.path] = f.contents;
+    }
     setFiles(starter);
     setSavedFiles(starter);
   }

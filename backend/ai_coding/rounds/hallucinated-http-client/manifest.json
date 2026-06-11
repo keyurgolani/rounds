@@ -1,0 +1,61 @@
+{
+  "slug": "hallucinated-http-client",
+  "title": "Hallucinated HTTP client method",
+  "difficulty": "easy",
+  "languages": ["python", "typescript"],
+  "topics": ["ai-output-review", "http-client", "library-knowledge"],
+  "companies": ["Meta", "Shopify"],
+  "description": "An AI assistant wrote a small function that fetches a JSON payload from an internal service. The visible test passes against a stub. Find what's wrong before it ships against the real service.\n\nThis is an **audit** round. The AI's draft compiles and the visible test passes — but the code calls a method that doesn't exist on the chosen HTTP library. Your job is to spot the hallucination, replace it with the correct API, and preserve the function's signature and behavior contract.\n\nTen minutes is plenty if you read the AI output critically. If you only run the visible test and ship, you'll ship a 500.",
+  "variants": {
+    "python": {
+      "checkpoints": [
+        {
+          "label": "Spot the hallucinated call",
+          "prompt": "Read `client.py`. The visible test in `tests/checkpoint_0/test_visible.py` passes. Find what's wrong before this ships against the real internal-users service, then fix `client.py` so it would also work against a real HTTP server.\n\nKeep the public signature of `fetch_user(user_id: str) -> dict` unchanged. Don't rewrite from scratch — the bug is one call.",
+          "ai_allowed": true,
+          "test_command": "pytest tests/checkpoint_0/test_visible.py -q",
+          "tests_glob": "tests/**/*.py"
+        }
+      ]
+    },
+    "typescript": {
+      "checkpoints": [
+        {
+          "label": "Spot the hallucinated call",
+          "prompt": "Read `client.ts`. The visible test in `tests/checkpoint_0/client.test.ts` passes. Find what's wrong before this ships against the real internal-users service, then fix `client.ts` so it would also work against a real HTTP server.\n\nKeep the public signature of `fetchUser(userId: string): Promise<UserProfile>` unchanged. Don't rewrite from scratch — the bug is one call.",
+          "ai_allowed": true,
+          "test_command": "tsx --test tests/checkpoint_0/client.test.ts",
+          "tests_glob": "tests/**/*.ts"
+        }
+      ]
+    }
+  },
+  "rubric": {
+    "items": [
+      {
+        "id": "spotted_hallucination",
+        "label": "Spotted the hallucination",
+        "weight": 0.4,
+        "prompt": "Did the candidate identify that the AI-generated call (httpx.get_json / fetch.json) doesn't exist on the real library, rather than trusting that the visible test implied correctness?"
+      },
+      {
+        "id": "minimal_correct_fix",
+        "label": "Minimal, correct fix",
+        "weight": 0.3,
+        "prompt": "Did the candidate make a minimal change — replace the bogus call with the real API (httpx.get(...).json() / fetch(...).then(r => r.json())) — without rewriting the function from scratch or changing its signature?"
+      },
+      {
+        "id": "verification_habits",
+        "label": "Verification habits",
+        "weight": 0.2,
+        "prompt": "Examining the chat history: did the candidate cross-check the AI's suggestion against documentation or first-principles library knowledge before accepting it? Or did they accept the AI's reassurance at face value?"
+      },
+      {
+        "id": "test_critique",
+        "label": "Test critique",
+        "weight": 0.1,
+        "prompt": "Did the candidate articulate why the visible test was insufficient — specifically, that mocking a method by name with create=True (Python) or by assignment (TS) creates the attribute and masks its absence on the real library?"
+      }
+    ]
+  }
+}

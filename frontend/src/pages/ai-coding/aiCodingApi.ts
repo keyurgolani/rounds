@@ -1,42 +1,91 @@
 import { pb } from '../../lib/pocketbase';
 import { runnerJSON } from '../../lib/runnerFetch';
 
-export type AICodingRound = {
+export type StarterFile = { path: string; contents: string; readonly?: boolean };
+export type Checkpoint = {
+  label: string;
+  prompt: string;
+  ai_allowed: boolean;
+  test_command: string;
+  /** Reserved for Phase 2 (critical-verification flavor). Visible-only in MVP. */
+  tests_hidden?: boolean;
+};
+
+/**
+ * The shape PocketBase actually stores. For multi-language rounds
+ * `starter_files` and `checkpoints` are objects keyed by language; for
+ * single-language rounds they're flat arrays. Consumers downstream of
+ * the detail page work with the resolved {@link AICodingRound} shape
+ * instead — only the picker and the list filter need to handle the raw
+ * polymorphism.
+ */
+export type AICodingRoundRaw = {
   id: string;
   slug: string;
   title: string;
   difficulty: string;
+  /** Primary language; for multi-lang rounds it's the first supported. */
   language: string;
   description: string;
-  starter_files: Array<{ path: string; contents: string; readonly?: boolean }>;
-  checkpoints: Array<{
-    label: string;
-    prompt: string;
-    ai_allowed: boolean;
-    test_command: string;
-    /** Reserved for Phase 2 (critical-verification flavor). Visible-only in MVP. */
-    tests_hidden?: boolean;
-  }>;
+  starter_files: StarterFile[] | Record<string, StarterFile[]>;
+  checkpoints: Checkpoint[] | Record<string, Checkpoint[]>;
   rubric: { items: Array<{ id: string; label: string; weight: number; prompt: string }> };
   topics: string[];
   companies: string[];
 };
 
-export async function listRounds(): Promise<AICodingRound[]> {
-  const res = await pb.collection('ai_coding_rounds').getFullList<AICodingRound>({
+/**
+ * A round resolved to a single language — flat arrays everywhere.
+ * Most of the UI works exclusively with this shape; only the listing
+ * page and the detail page's picker care about the multi-language raw
+ * form.
+ */
+export type AICodingRound = Omit<AICodingRoundRaw, 'starter_files' | 'checkpoints'> & {
+  starter_files: StarterFile[];
+  checkpoints: Checkpoint[];
+};
+
+/** Languages this round supports. Derived from the shape of
+ * `checkpoints`: an object's keys are the supported languages; an
+ * array means the round is single-language. */
+export function effectiveLanguages(round: AICodingRoundRaw): string[] {
+  const cps = round.checkpoints;
+  if (cps && !Array.isArray(cps)) {
+    return Object.keys(cps);
+  }
+  return [round.language];
+}
+
+/**
+ * Resolve a raw round into a single-language flat shape. For
+ * single-language rounds the language argument is ignored. For
+ * multi-language rounds the returned round carries the selected
+ * language as `language` and the language's variant as
+ * `starter_files` + `checkpoints`.
+ */
+export function resolveRound(raw: AICodingRoundRaw, language: string): AICodingRound {
+  const sf = raw.starter_files;
+  const cps = raw.checkpoints;
+  const starter_files = Array.isArray(sf) ? sf : sf[language] ?? [];
+  const checkpoints = Array.isArray(cps) ? cps : cps[language] ?? [];
+  return { ...raw, language, starter_files, checkpoints };
+}
+
+export async function listRounds(): Promise<AICodingRoundRaw[]> {
+  const res = await pb.collection('ai_coding_rounds').getFullList<AICodingRoundRaw>({
     sort: 'title',
   });
   return res;
 }
 
-export async function getRound(slug: string): Promise<AICodingRound> {
+export async function getRound(slug: string): Promise<AICodingRoundRaw> {
   const safe = slug.replace(/"/g, '');
   try {
     return await pb
       .collection('ai_coding_rounds')
-      .getFirstListItem<AICodingRound>(`slug="${safe}"`);
+      .getFirstListItem<AICodingRoundRaw>(`slug="${safe}"`);
   } catch {
-    return await pb.collection('ai_coding_rounds').getOne<AICodingRound>(slug);
+    return await pb.collection('ai_coding_rounds').getOne<AICodingRoundRaw>(slug);
   }
 }
 

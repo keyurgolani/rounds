@@ -29,14 +29,17 @@ import GradeReport from './GradeReport';
 import HeaderCheckpointStepper from './HeaderCheckpointStepper';
 import {
   deleteInProgressAttempt,
+  effectiveLanguages,
   getLatestAttempt,
   getRound,
   gradeAttempt,
   persistAttempt,
+  resolveRound,
   runProject,
   upsertInProgressAttempt,
   type AIChatLogEntry,
   type AICodingRound,
+  type AICodingRoundRaw,
   type GradeResponse,
   type RunProjectResult,
 } from './aiCodingApi';
@@ -67,10 +70,22 @@ const CHAT_RAIL_DEFAULT = 360;
 const RAIL_MIN = 240;
 const RAIL_MAX = 560;
 
+// Storage key for the per-slug "last picked language" preference. Multi-
+// language rounds default to their first supported language; once the
+// candidate picks, we remember it so a refresh keeps them where they
+// were rather than snapping back to the alphabetical default.
+function languageStorageKey(slug: string): string {
+  return `rounds.aiCoding.lang:${slug}`;
+}
+
 export default function AICodingDetail() {
   const { slug = '' } = useParams<{ slug: string }>();
   const { currentId: campaignId } = useCampaign();
-  const [round, setRound] = useState<AICodingRound | null>(null);
+  const [rawRound, setRawRound] = useState<AICodingRoundRaw | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('');
+  const round: AICodingRound | null =
+    rawRound && selectedLanguage ? resolveRound(rawRound, selectedLanguage) : null;
+  const availableLanguages = rawRound ? effectiveLanguages(rawRound) : [];
   const [error, setError] = useState<string | null>(null);
   const [activePath, setActivePath] = useState<string>('');
   const [checkpointIdx, setCheckpointIdx] = useState(0);
@@ -108,7 +123,8 @@ export default function AICodingDetail() {
 
   useEffect(() => {
     let cancelled = false;
-    setRound(null);
+    setRawRound(null);
+    setSelectedLanguage('');
     setError(null);
     setCheckpointIdx(0);
     setRunResult(null);
@@ -120,8 +136,22 @@ export default function AICodingDetail() {
     getRound(slug)
       .then(async (r) => {
         if (cancelled) return;
-        setRound(r);
-        setPassedByCheckpoint(new Array(r.checkpoints.length).fill(false));
+        setRawRound(r);
+        // Pick the candidate's last-used language for this slug, or
+        // fall back to the round's first supported language.
+        const langs = effectiveLanguages(r);
+        let initialLang = langs[0] ?? r.language;
+        try {
+          const stored = window.localStorage.getItem(languageStorageKey(slug));
+          if (stored && langs.includes(stored)) initialLang = stored;
+        } catch {
+          /* localStorage unavailable — defaults are fine */
+        }
+        setSelectedLanguage(initialLang);
+        const cps = Array.isArray(r.checkpoints)
+          ? r.checkpoints
+          : r.checkpoints[initialLang] ?? [];
+        setPassedByCheckpoint(new Array(cps.length).fill(false));
         // Rehydrate persisted chat log + most recent submission so
         // refresh doesn't lose them. We grab the most recent attempt
         // row (any status) for chat log; if it's `graded` we also
@@ -310,7 +340,7 @@ export default function AICodingDetail() {
           >
             <BackLink to="/ai-coding" label="Back to practice" />
             {round && <DifficultyPill level={round.difficulty} />}
-            {round && (
+            {round && availableLanguages.length <= 1 && (
               <span
                 className="pill"
                 style={{
@@ -320,6 +350,68 @@ export default function AICodingDetail() {
                 }}
               >
                 {round.language}
+              </span>
+            )}
+            {round && availableLanguages.length > 1 && (
+              <span
+                role="radiogroup"
+                aria-label="Language"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  padding: 2,
+                  borderRadius: 999,
+                  boxShadow: 'inset 0 0 0 1px var(--border-strong)',
+                }}
+              >
+                {availableLanguages.map((lang) => {
+                  const active = lang === selectedLanguage;
+                  return (
+                    <button
+                      key={lang}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => {
+                        if (lang === selectedLanguage) return;
+                        setSelectedLanguage(lang);
+                        try {
+                          window.localStorage.setItem(
+                            languageStorageKey(slug),
+                            lang,
+                          );
+                        } catch {
+                          /* localStorage unavailable — ignore */
+                        }
+                        // The new language has its own checkpoint set —
+                        // reset checkpoint progress, run results, and
+                        // jump back to checkpoint 0.
+                        setCheckpointIdx(0);
+                        setRunResult(null);
+                        if (rawRound) {
+                          const cps = Array.isArray(rawRound.checkpoints)
+                            ? rawRound.checkpoints
+                            : rawRound.checkpoints[lang] ?? [];
+                          setPassedByCheckpoint(new Array(cps.length).fill(false));
+                        }
+                      }}
+                      style={{
+                        padding: '4px 12px',
+                        borderRadius: 999,
+                        background: active ? 'var(--accent)' : 'transparent',
+                        color: active ? 'var(--accent-fg)' : 'var(--text-3)',
+                        fontSize: 12,
+                        fontWeight: active ? 600 : 500,
+                        cursor: active ? 'default' : 'pointer',
+                        border: 'none',
+                        outline: 'none',
+                      }}
+                    >
+                      {lang}
+                    </button>
+                  );
+                })}
               </span>
             )}
           </span>

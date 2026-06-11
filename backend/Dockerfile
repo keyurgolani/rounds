@@ -1,9 +1,19 @@
 FROM python:3.12-slim
 
-# Runtime deps for the code runner (Node for JS, default Python already ships).
-# Keep this minimal — anything heavier belongs in a separate runner image.
+# Runtime deps for the code runner:
+#   - Node 22 (LTS) — required for `node --test` over TS files via the
+#     tsx loader, and for the modern fetch global some rounds exercise.
+#   - tsx (pinned major) — a TypeScript loader so test commands like
+#     `node --import tsx --test path/to/foo.test.ts` resolve TS imports
+#     cleanly without depending on Node's --experimental-strip-types.
+#   - Python ships with the base image.
 RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g tsx@4 \
+    && apt-get purge -y curl gnupg \
+    && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

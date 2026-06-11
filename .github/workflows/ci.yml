@@ -42,6 +42,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # tsx is the TS loader used by AI Coding rounds' test commands
+      # (e.g., `tsx --test tests/checkpoint_0/foo.test.ts`). Mirrors
+      # what the runner Dockerfile installs globally.
+      - run: npm install -g tsx@4
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements.txt
       - run: python -m pytest . ../pocketbase/tests

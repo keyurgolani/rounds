@@ -1,3 +1,4 @@
+import json
 import pathlib
 import shutil
 
@@ -103,75 +104,95 @@ def test_chat_route_requires_auth(client):
     assert res.status_code == 401
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node not on PATH")
-def test_seeded_ts_round_runs_via_project_runner():
-    """Regression test: the seeded log-parser-ts round must actually
-    execute via run_project(). The original test files imported a path
-    that didn't exist at materialize-time, so the entire TS round was
-    non-functional in production. This test catches that class of bug."""
-    import json
-    import pathlib
-    from ai_coding.project_runner import run_project
+# ---------------------------------------------------------------------
+# Per-round regression: each seeded round must actually run end-to-end
+# through run_project for every supported language. Catches the class
+# of bug where a starter file references a path that doesn't exist at
+# materialize time, or where a test command points at a runtime the
+# runner image doesn't carry.
+# ---------------------------------------------------------------------
 
-    round_dir = pathlib.Path(__file__).resolve().parents[1] / "ai_coding" / "rounds" / "log-parser-ts"
+
+def _round_dir(slug: str) -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parents[1] / "ai_coding" / "rounds" / slug
+
+
+def _build_files(round_dir: pathlib.Path, language: str) -> dict[str, str]:
+    """Reproduce what build_seed.py emits for one language of a round.
+    Includes starter files plus every checkpoint's visible tests."""
+    files: dict[str, str] = {}
     manifest = json.loads((round_dir / "manifest.json").read_text())
 
-    # Build the same starter_files dict the seed migration would write to PB.
-    files = {}
-    for f in (round_dir / "starter").rglob("*"):
-        if f.is_file():
-            files[str(f.relative_to(round_dir / "starter"))] = f.read_text()
-    # Embed checkpoint 0's tests just like the seed does.
-    cp0_tests = round_dir / "checkpoints" / "0" / "tests"
-    for f in cp0_tests.rglob("*"):
-        if f.is_file():
-            files[f"tests/checkpoint_0/{f.relative_to(cp0_tests)}"] = f.read_text()
-
-    # Reference manifest for documentation; the test_command below matches
-    # what build_seed.py emits for checkpoint 0 of this round.
-    assert manifest["slug"] == "log-parser-ts"
-
-    # Run with the rewritten test_command (matches what build_seed.py emits).
-    result = run_project(
-        files=files,
-        language="typescript",
-        test_command="node --test tests/checkpoint_0/parser.test.ts",
-        timeout_s=20,
+    starter_root = (
+        round_dir / "starter" / language
+        if (round_dir / "starter" / language).exists()
+        else round_dir / "starter"
     )
-    # We expect the round's seeded bug to make some tests fail, but they
-    # must at least RUN (no module-not-found errors). passed_count + failed_count > 0.
-    assert (result.passed_count + result.failed_count) > 0, (
-        f"TS round failed to run any tests; stderr: {result.stderr[:500]}; error: {result.error}"
+    for f in starter_root.rglob("*"):
+        if f.is_file():
+            files[str(f.relative_to(starter_root))] = f.read_text()
+
+    cps_root = (
+        round_dir / "checkpoints" / language
+        if (round_dir / "checkpoints" / language).exists()
+        else round_dir / "checkpoints"
     )
+    cps = (
+        manifest.get("variants", {}).get(language, {}).get("checkpoints")
+        or manifest.get("checkpoints")
+        or []
+    )
+    for idx, _cp in enumerate(cps):
+        cp_tests = cps_root / str(idx) / "tests"
+        if cp_tests.exists():
+            for f in cp_tests.rglob("*"):
+                if f.is_file():
+                    files[f"tests/checkpoint_{idx}/{f.relative_to(cp_tests)}"] = f.read_text()
+    return files
 
 
-def test_seeded_python_round_runs_via_project_runner():
-    """Companion to the TS-round test — exercises the seeded Python round
-    end-to-end through run_project()."""
-    import json
-    import pathlib
-    from ai_coding.project_runner import run_project
-
-    round_dir = pathlib.Path(__file__).resolve().parents[1] / "ai_coding" / "rounds" / "cart-bugfix-py"
-    files = {}
-    for f in (round_dir / "starter").rglob("*"):
-        if f.is_file():
-            files[str(f.relative_to(round_dir / "starter"))] = f.read_text()
-    cp0_tests = round_dir / "checkpoints" / "0" / "tests"
-    for f in cp0_tests.rglob("*"):
-        if f.is_file():
-            files[f"tests/checkpoint_0/{f.relative_to(cp0_tests)}"] = f.read_text()
-
+def test_hallucinated_http_client_python_runs_via_project_runner():
+    """The python variant's visible checkpoint must execute through
+    run_project against the AI's starter (which embeds the bug). The
+    visible test mocks both the bogus method and the real one, so it
+    is expected to pass — the bug is only surfaced by the hidden test
+    against a real server. Here we just check it runs end-to-end."""
+    rd = _round_dir("hallucinated-http-client")
+    files = _build_files(rd, "python")
     result = run_project(
         files=files,
         language="python",
-        test_command="pytest tests/checkpoint_0/test_checkpoint.py -q",
+        test_command="pytest tests/checkpoint_0/test_visible.py -q",
         timeout_s=20,
     )
-    # Round ships with an intentional bug; expect failures (cp0 is the bug-fix
-    # checkpoint), but tests must at least be collected and run.
-    assert (result.passed_count + result.failed_count) >= 3, (
-        f"Python round failed to run expected 3 tests; stderr: {result.stderr[:500]}; error: {result.error}"
+    assert (result.passed_count + result.failed_count) >= 1, (
+        f"python round failed to run any tests; stderr: {result.stderr[:500]}; "
+        f"error: {result.error}"
+    )
+    assert result.passed, (
+        "visible test for python variant should pass against the AI's "
+        f"hallucinated starter; stdout: {result.stdout[:500]}"
     )
 
 
+@pytest.mark.skipif(shutil.which("tsx") is None, reason="tsx not on PATH")
+def test_hallucinated_http_client_typescript_runs_via_project_runner():
+    """The TS variant's visible checkpoint runs through tsx + node:test.
+    Same shape as the python regression — the bug is only caught by the
+    hidden test, so the visible run is expected to pass here."""
+    rd = _round_dir("hallucinated-http-client")
+    files = _build_files(rd, "typescript")
+    result = run_project(
+        files=files,
+        language="typescript",
+        test_command="tsx --test tests/checkpoint_0/client.test.ts",
+        timeout_s=30,
+    )
+    assert (result.passed_count + result.failed_count) >= 1, (
+        f"typescript round failed to run any tests; stderr: {result.stderr[:500]}; "
+        f"error: {result.error}"
+    )
+    assert result.passed, (
+        "visible test for typescript variant should pass against the AI's "
+        f"hallucinated starter; stdout: {result.stdout[:500]}"
+    )
