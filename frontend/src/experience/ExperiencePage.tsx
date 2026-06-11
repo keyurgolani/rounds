@@ -32,6 +32,17 @@ import {
   type ConnectionMap,
 } from './connectionApi';
 import type { ConnectionProps, LinkedEntity } from './ConnectionSection';
+import {
+  TYPE_COLORS,
+  TYPE_LABELS,
+  depthCfg,
+  entityDate,
+  childIdsOf,
+  subtreeMaxDate,
+  formatDate,
+  rowTitle,
+  rowSubtitle,
+} from './experienceTree';
 import EntitySelector from './EntitySelector';
 import ImportModal from './ImportModal';
 import JobModal from './JobModal';
@@ -39,6 +50,7 @@ import ProjectModal from './ProjectModal';
 import AnecdoteModal from './AnecdoteModal';
 import BulletModal from './BulletModal';
 import ArrangeBoard from './ArrangeBoard';
+import ListTree from './ListTree';
 
 // ---------------------------------------------------------------------------
 // Tab definitions
@@ -55,32 +67,6 @@ type TabKey = (typeof TABS)[number]['key'];
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function entityDate(e: TimelineEntity): string {
-  return e.kind === 'job' || e.kind === 'project' ? e.start_date : e.date;
-}
-
-/**
- * Newest date (epoch ms) anywhere in an entity's subtree. Children render above
- * the parent, so the subtree's position on the timeline is driven by its newest
- * descendant, not the (often older) parent.
- */
-function subtreeMaxDate(
-  id: string,
-  connMap: ConnectionMap,
-  entityById: Record<string, TimelineEntity>,
-  ancestry: Set<string> = new Set(),
-): number {
-  const e = entityById[id];
-  if (!e) return 0;
-  let max = +new Date(entityDate(e));
-  for (const { id: childId } of childIdsOf(connMap, id)) {
-    if (ancestry.has(childId)) continue;
-    const d = subtreeMaxDate(childId, connMap, entityById, new Set(ancestry).add(id));
-    if (d > max) max = d;
-  }
-  return max;
-}
 
 function groupByYear(
   items: TimelineEntity[],
@@ -99,77 +85,14 @@ function groupByYear(
 }
 
 // ---------------------------------------------------------------------------
-// Timeline card
-// ---------------------------------------------------------------------------
-
-const TYPE_COLORS: Record<TimelineEntity['kind'], { bg: string; text: string; dot: string }> = {
-  anecdote: { bg: 'var(--accent-soft)', text: 'var(--accent)', dot: 'var(--accent)' },
-  bullet: { bg: 'var(--forest-soft)', text: 'var(--forest)', dot: 'var(--forest)' },
-  project: { bg: 'var(--ochre-soft)', text: 'var(--ochre)', dot: 'var(--ochre)' },
-  job: { bg: 'var(--ink-soft)', text: 'var(--ink)', dot: 'var(--ink)' },
-};
-
-const TYPE_LABELS: Record<TimelineEntity['kind'], string> = {
-  anecdote: 'Anecdote',
-  bullet: 'Bullet',
-  project: 'Project',
-  job: 'Job',
-};
-
-function formatDate(entity: TimelineEntity): string {
-  if (entity.kind === 'job' || entity.kind === 'project') {
-    const s = new Date(entity.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-    if (!entity.end_date) return `${s} – Present`;
-    const e = new Date(entity.end_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-    return `${s} – ${e}`;
-  }
-  return new Date(entity.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-}
-
-// ---------------------------------------------------------------------------
 // Nested children (timeline)
 // ---------------------------------------------------------------------------
 
-// Child kinds in render order — the more granular, the more minimal the card.
-const CHILD_KINDS: EntityKind[] = ['project', 'anecdote', 'bullet'];
-
-function childIdsOf(map: ConnectionMap, parentId: string): { kind: EntityKind; id: string }[] {
-  const entry = map[parentId];
-  if (!entry) return [];
-  return CHILD_KINDS.flatMap((kind) => (entry[kind] ?? []).map((id) => ({ kind, id })));
-}
-
-function hasChildren(map: ConnectionMap, parentId: string): boolean {
-  const entry = map[parentId];
-  if (!entry) return false;
-  return CHILD_KINDS.some((kind) => (entry[kind] ?? []).length > 0);
-}
-
 // Per-depth card sizing. `pt` is the top padding; used to align connectors to
 // the badge/title row.
-const DEPTH = [
-  { padding: '15px 18px', pt: 15, title: 16 },
-  { padding: '11px 15px', pt: 11, title: 14 },
-  { padding: '9px 13px', pt: 9, title: 13 },
-  { padding: '8px 12px', pt: 8, title: 12.5 },
-];
-const depthCfg = (d: number) => DEPTH[Math.min(d, DEPTH.length - 1)];
 const anchorY = (d: number) => depthCfg(d).pt + 8; // badge-row centre from card top
 const GUTTER = 22;     // tree indent per level (outer side)
 const CENTER_GAP = 20; // card inner edge -> central line (per-card connector + node)
-
-function rowTitle(entity: TimelineEntity): string {
-  return entity.kind === 'job' ? (entity.company || 'Untitled') : (entity.title || 'Untitled');
-}
-function rowSubtitle(entity: TimelineEntity): string | undefined {
-  switch (entity.kind) {
-    case 'job': return entity.role || undefined;
-    case 'project': return [entity.company, entity.role].filter(Boolean).join(' · ') || undefined;
-    case 'anecdote': return (entity.result || entity.situation || '').slice(0, 90) || undefined;
-    case 'bullet': return entity.impact || undefined;
-    default: return undefined;
-  }
-}
 
 interface TreeNodeProps {
   entity: TimelineEntity;
@@ -406,8 +329,9 @@ export default function ExperiencePage() {
     return Object.keys(grouped).sort((a, b) => +b - +a);
   }, [grouped]);
 
-  // Flat List view: every entity matching the filter (unlike the timeline's
-  // "all" view, nothing is hidden because it has a parent).
+  // Data source for the List tab. In "all" mode this is every entity and ListTree
+  // renders the nesting; a type filter narrows it to a flat subset of that kind.
+  // Also drives the "… ITEMS" count in the filter bar.
   const listView = useMemo(() => {
     if (!timelineItems) return null;
     return filter === 'all' ? timelineItems : timelineItems.filter((i) => i.kind === filter);
@@ -453,30 +377,6 @@ export default function ExperiencePage() {
 
   function reload() {
     loadTimeline();
-  }
-
-  function listFormatDate(item: ExperienceJob | ExperienceProject | ExperienceAnecdote | ExperienceBullet): string {
-    if ('start_date' in item) {
-      const s = new Date(item.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-      if (!item.end_date) return `${s} – Present`;
-      const e = new Date(item.end_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-      return `${s} – ${e}`;
-    }
-    return new Date((item as ExperienceAnecdote | ExperienceBullet).date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-  }
-
-  function listPrimary(item: ExperienceJob | ExperienceProject | ExperienceAnecdote | ExperienceBullet): string {
-    if ('company' in item && 'employment_type' in item) {
-      if (item.company) return item.company;
-    }
-    return (item as ExperienceProject | ExperienceAnecdote | ExperienceBullet).title || (item as ExperienceJob).company;
-  }
-
-  function listSecondary(item: ExperienceJob | ExperienceProject | ExperienceAnecdote | ExperienceBullet): string | undefined {
-    if ('role' in item && item.role) return item.role;
-    if ('impact' in item && item.impact) return item.impact;
-    if ('description' in item && (item as ExperienceProject).description) return (item as ExperienceProject).description;
-    return undefined;
   }
 
   // The selected entity's own kind (set on every TimelineEntity, including those
@@ -724,7 +624,7 @@ export default function ExperiencePage() {
           </div>
         )}
 
-        {/* List tab — flat, type-filterable list of all entities */}
+        {/* List tab — nested cards in "all", or a flat list when filtered to one type */}
         {activeTab === 'list' && !error && listView === null && (
           <div className="text-center py-16" style={{ color: 'var(--text-3)' }}>Loading…</div>
         )}
@@ -746,53 +646,15 @@ export default function ExperiencePage() {
           </div>
         )}
 
-        {activeTab === 'list' && listView && listView.length > 0 && (
-          <div className="flex flex-col gap-2">
-            {listView.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => handleCardClick(item)}
-                className="text-left w-full flex items-center gap-4"
-                style={{
-                  padding: '14px 18px',
-                  borderRadius: 'var(--radius)',
-                  background: 'var(--bg-elev)',
-                  boxShadow: 'inset 0 0 0 1px var(--border)',
-                  cursor: 'pointer',
-                  transition: 'box-shadow 120ms',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.boxShadow = `inset 0 0 0 1px var(--border), 0 2px 8px rgba(0,0,0,0.08)`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow = 'inset 0 0 0 1px var(--border)';
-                }}
-              >
-                <div className="flex-1 min-w-0">
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', marginBottom: 2 }}>
-                    {listPrimary(item)}
-                  </div>
-                  {listSecondary(item) && (
-                    <p className="line-clamp-1" style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0 }}>
-                      {listSecondary(item)}
-                    </p>
-                  )}
-                </div>
-                {hasChildren(connMap, item.id) && (
-                  <span
-                    className="mono pill flex-shrink-0"
-                    style={{ fontSize: 10, background: 'var(--bg-sunken)', color: 'var(--text-3)', padding: '2px 8px', boxShadow: 'inset 0 0 0 1px var(--border)' }}
-                  >
-                    {childIdsOf(connMap, item.id).length} linked
-                  </span>
-                )}
-                <span className="mono flex-shrink-0" style={{ fontSize: 11, color: 'var(--text-4)' }}>
-                  {listFormatDate(item)}
-                </span>
-              </button>
-            ))}
-          </div>
+        {activeTab === 'list' && timelineItems && listView && listView.length > 0 && (
+          <ListTree
+            entities={timelineItems}
+            connMap={connMap}
+            reverseMap={reverseMap}
+            entityById={entityById}
+            filter={filter}
+            onOpen={handleCardClick}
+          />
         )}
 
         {/* Arrange tab — live wiring board over all entities */}
