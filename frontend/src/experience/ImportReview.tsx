@@ -5,31 +5,29 @@ import { ConnectorOverlay, type Connector } from '../pages/behavioral/ConnectorO
 import { LinkableCard } from '../pages/behavioral/LinkableCard';
 import {
   createJob, createProject, createAnecdote, createBullet,
+  updateJob, updateProject, updateAnecdote, updateBullet,
   deleteJob, deleteProject, deleteAnecdote, deleteBullet,
   type ExperienceJob, type ExperienceProject, type ExperienceAnecdote, type ExperienceBullet,
-  type EntityKind,
+  type TimelineEntity, type EntityKind,
 } from './experienceApi';
 import { batchCreateConnections, getJunctionTable } from './connectionApi';
-import type { ExtractionResult, ExtractedJob, ExtractedProject, ExtractedAnecdote, ExtractedBullet } from './importApi';
+import type {
+  ExtractionResult, ExistingConnectionRef,
+  ExtractedJob, ExtractedProject, ExtractedAnecdote, ExtractedBullet,
+} from './importApi';
+import {
+  buildReviewModel, diffFields,
+  type ReviewItem, type LocalConnection, type ItemMode,
+} from './importReconcile';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface ExtractedItem {
-  localId: string; // unique within this review
-  kind: EntityKind;
-  included: boolean;
-  data: ExtractedJob | ExtractedProject | ExtractedAnecdote | ExtractedBullet;
-}
-
-interface LocalConnection {
-  parentLocalId: string;
-  childLocalId: string;
-}
-
 interface Props {
   result: ExtractionResult;
+  existingEntities: TimelineEntity[];
+  existingConnections: ExistingConnectionRef[];
   onComplete: () => void;
   onCancel: () => void;
 }
@@ -47,24 +45,27 @@ const TYPE_COLORS: Record<EntityKind, { bg: string; text: string }> = {
 
 const TYPE_LABELS: Record<EntityKind, string> = { job: 'Jobs', project: 'Projects', anecdote: 'Anecdotes', bullet: 'Bullets' };
 
-function localId(kind: EntityKind, index: number) { return `${kind}-${index}`; }
+const MODE_BADGE: Record<ItemMode, { label: string; color: string } | null> = {
+  new: null,
+  edit: { label: 'EDIT', color: 'var(--ochre)' },
+  existing: { label: 'EXISTING', color: 'var(--text-4)' },
+};
 
-function primaryLabel(item: ExtractedItem): string {
-  switch (item.kind) {
-    case 'job': return (item.data as ExtractedJob).company || 'Untitled Job';
-    case 'project': return (item.data as ExtractedProject).title || 'Untitled Project';
-    case 'anecdote': return (item.data as ExtractedAnecdote).title || 'Untitled Anecdote';
-    case 'bullet': return (item.data as ExtractedBullet).title || 'Untitled Bullet';
-    default: return 'Untitled';
+function labelFor(item: ReviewItem): { primary: string; secondary?: string } {
+  if (item.mode === 'existing' && item.original) {
+    const o = item.original;
+    return {
+      primary: o.kind === 'job' ? o.company : o.title,
+      secondary: o.kind === 'job' ? o.role : o.kind === 'project' ? o.company : undefined,
+    };
   }
-}
-
-function secondaryLabel(item: ExtractedItem): string | undefined {
+  const d = item.data;
   switch (item.kind) {
-    case 'job': return (item.data as ExtractedJob).role || undefined;
-    case 'project': return (item.data as ExtractedProject).company || undefined;
-    case 'anecdote': return (item.data as ExtractedAnecdote).situation?.slice(0, 80) || undefined;
-    case 'bullet': return (item.data as ExtractedBullet).impact || undefined;
+    case 'job': return { primary: (d as ExtractedJob).company || 'Untitled Job', secondary: (d as ExtractedJob).role || undefined };
+    case 'project': return { primary: (d as ExtractedProject).title || 'Untitled Project', secondary: (d as ExtractedProject).company || undefined };
+    case 'anecdote': return { primary: (d as ExtractedAnecdote).title || 'Untitled Anecdote', secondary: (d as ExtractedAnecdote).situation?.slice(0, 80) || undefined };
+    case 'bullet': return { primary: (d as ExtractedBullet).title || 'Untitled Bullet', secondary: (d as ExtractedBullet).impact || undefined };
+    default: return { primary: 'Untitled' };
   }
 }
 
@@ -107,25 +108,20 @@ function oneOf(value: string | undefined, allowed: string[]): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function ImportReview({ result, onComplete, onCancel }: Props) {
-  // Build items
-  const [items, setItems] = useState<ExtractedItem[]>(() => {
-    const all: ExtractedItem[] = [];
-    result.jobs.forEach((d, i) => all.push({ localId: localId('job', i), kind: 'job', included: true, data: d }));
-    result.projects.forEach((d, i) => all.push({ localId: localId('project', i), kind: 'project', included: true, data: d }));
-    result.anecdotes.forEach((d, i) => all.push({ localId: localId('anecdote', i), kind: 'anecdote', included: true, data: d }));
-    result.bullets.forEach((d, i) => all.push({ localId: localId('bullet', i), kind: 'bullet', included: true, data: d }));
-    return all;
-  });
+export default function ImportReview({ result, existingEntities, existingConnections, onComplete, onCancel }: Props) {
+  const existingById = useMemo(() => {
+    const map: Record<string, TimelineEntity> = {};
+    for (const e of existingEntities) map[e.id] = e;
+    return map;
+  }, [existingEntities]);
 
-  const [connections, setConnections] = useState<LocalConnection[]>(() =>
-    result.connections
-      .map((c) => ({
-        parentLocalId: localId(c.parent_type, c.parent_index),
-        childLocalId: localId(c.child_type, c.child_index),
-      }))
-      .filter((c) => items.some((i) => i.localId === c.parentLocalId) && items.some((i) => i.localId === c.childLocalId)),
+  const initialModel = useMemo(
+    () => buildReviewModel(result, existingById, existingConnections),
+    [result, existingById, existingConnections],
   );
+
+  const [items, setItems] = useState<ReviewItem[]>(initialModel.items);
+  const [connections, setConnections] = useState<LocalConnection[]>(initialModel.connections);
 
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -140,7 +136,7 @@ export default function ImportReview({ result, onComplete, onCancel }: Props) {
 
   // Group items by kind
   const grouped = useMemo(() => {
-    const groups: Record<EntityKind, ExtractedItem[]> = { job: [], project: [], anecdote: [], bullet: [] };
+    const groups: Record<EntityKind, ReviewItem[]> = { job: [], project: [], anecdote: [], bullet: [] };
     for (const item of items) groups[item.kind].push(item);
     return groups;
   }, [items]);
@@ -167,9 +163,11 @@ export default function ImportReview({ result, onComplete, onCancel }: Props) {
     return !isActive(id);
   }
 
-  // Toggle included
+  // Toggle included — 'existing' items can't be toggled (they aren't imported).
   function toggleIncluded(localId: string) {
-    setItems((prev) => prev.map((i) => i.localId === localId ? { ...i, included: !i.included } : i));
+    setItems((prev) => prev.map((i) =>
+      i.localId === localId && i.mode !== 'existing' ? { ...i, included: !i.included } : i,
+    ));
   }
 
   // Remove connection
@@ -196,7 +194,8 @@ export default function ImportReview({ result, onComplete, onCancel }: Props) {
       // Toggle off
       removeConnection(parent.localId, child.localId);
     } else {
-      setConnections((prev) => [...prev, { parentLocalId: parent.localId, childLocalId: child.localId }]);
+      const dashed = parent.mode !== 'new' || child.mode !== 'new';
+      setConnections((prev) => [...prev, { parentLocalId: parent.localId, childLocalId: child.localId, dashed }]);
     }
   }
 
@@ -265,6 +264,7 @@ export default function ImportReview({ result, onComplete, onCancel }: Props) {
         from: { x: pr.right - cRect.left, y: pr.top - cRect.top + pr.height / 2 },
         to: { x: cr.left - cRect.left, y: cr.top - cRect.top + cr.height / 2 },
         active: hoveredId === c.parentLocalId || hoveredId === c.childLocalId,
+        dashed: c.dashed,
       });
     }
     return out;
@@ -274,28 +274,37 @@ export default function ImportReview({ result, onComplete, onCancel }: Props) {
   // paint so the lines appear on first render instead of waiting for a hover.
   useLayoutEffect(() => { tick(); }, [items, connections]);
 
-  // --- Counts ---
-  const includedItems = useMemo(() => items.filter((i) => i.included), [items]);
-  const includedConnections = useMemo(() =>
-    connections.filter((c) =>
-      includedItems.some((i) => i.localId === c.parentLocalId) &&
-      includedItems.some((i) => i.localId === c.childLocalId),
+  // --- Counts (existing cards aren't imported) ---
+  const includedItems = useMemo(() => items.filter((i) => i.mode !== 'existing' && i.included), [items]);
+  const includedConnections = useMemo(
+    () => connections.filter((c) =>
+      items.some((i) => i.localId === c.parentLocalId && (i.mode === 'existing' || i.included)) &&
+      items.some((i) => i.localId === c.childLocalId && (i.mode === 'existing' || i.included)),
     ),
-    [connections, includedItems],
+    [connections, items],
   );
 
-  // Roll back created entities (best-effort). Deleting an entity cascade-deletes
-  // its junction rows, so connections created during this run go with them.
-  async function rollback(created: Array<{ kind: EntityKind; id: string }>) {
+  // Roll back: delete created records (cascade removes their junctions) and
+  // restore edited records to their captured prior values.
+  async function rollback(
+    created: Array<{ kind: EntityKind; id: string }>,
+    edited: Array<{ kind: EntityKind; id: string; prev: Record<string, unknown> }>,
+  ) {
     for (const c of [...created].reverse()) {
       try {
         if (c.kind === 'job') await deleteJob(c.id);
         else if (c.kind === 'project') await deleteProject(c.id);
         else if (c.kind === 'anecdote') await deleteAnecdote(c.id);
         else await deleteBullet(c.id);
-      } catch {
-        // ignore — best effort
-      }
+      } catch { /* best effort */ }
+    }
+    for (const e of edited) {
+      try {
+        if (e.kind === 'job') await updateJob(e.id, e.prev as Partial<ExperienceJob>);
+        else if (e.kind === 'project') await updateProject(e.id, e.prev as Partial<ExperienceProject>);
+        else if (e.kind === 'anecdote') await updateAnecdote(e.id, e.prev as Partial<ExperienceAnecdote>);
+        else await updateBullet(e.id, e.prev as Partial<ExperienceBullet>);
+      } catch { /* best effort */ }
     }
   }
 
@@ -303,99 +312,93 @@ export default function ImportReview({ result, onComplete, onCancel }: Props) {
   async function executeImport() {
     setImporting(true);
     setImportError(null);
-    const idMap: Record<string, string> = {}; // localId → PocketBase ID
+    const idMap: Record<string, string> = {};   // localId -> PB id
     const created: Array<{ kind: EntityKind; id: string }> = [];
+    const edited: Array<{ kind: EntityKind; id: string; prev: Record<string, unknown> }> = [];
+
+    const editable: Record<EntityKind, string[]> = {
+      job: ['company', 'role', 'location', 'employment_type', 'start_date', 'end_date', 'description', 'tags'],
+      project: ['title', 'company', 'role', 'team_size', 'tech_stack', 'start_date', 'end_date', 'description', 'tags'],
+      anecdote: ['title', 'situation', 'task', 'action', 'result', 'impact', 'company', 'project', 'date', 'tags'],
+      bullet: ['title', 'impact', 'category', 'date', 'tags'],
+    };
+    const pick = (src: Record<string, unknown>, keys: string[]) =>
+      Object.fromEntries(keys.map((k) => [k, src[k]]));
 
     try {
-      for (const item of includedItems) {
+      for (const item of items) {
+        if (item.mode === 'existing') { idMap[item.localId] = item.existingId!; continue; }
+        if (!item.included) continue;
+
+        if (item.mode === 'edit') {
+          const id = item.existingId!;
+          const prev = pick(item.original as unknown as Record<string, unknown>, editable[item.kind]);
+          const next = pick(item.data as unknown as Record<string, unknown>, editable[item.kind]);
+          if (item.kind === 'job') await updateJob(id, next as Partial<ExperienceJob>);
+          else if (item.kind === 'project') await updateProject(id, next as Partial<ExperienceProject>);
+          else if (item.kind === 'anecdote') await updateAnecdote(id, next as Partial<ExperienceAnecdote>);
+          else await updateBullet(id, next as Partial<ExperienceBullet>);
+          edited.push({ kind: item.kind, id, prev });
+          idMap[item.localId] = id;
+          continue;
+        }
+
+        // mode === 'new' — create with sanitization
+        const d = item.data!;
         let pbId: string;
-        switch (item.kind) {
-          case 'job': {
-            const d = item.data as ExtractedJob;
-            pbId = (await createJob({
-              company: reqText(d.company, 'Untitled'),
-              role: reqText(d.role, '—'),
-              location: d.location,
-              employment_type: oneOf(d.employment_type, EMPLOYMENT_TYPES),
-              start_date: reqDate(d.start_date),
-              end_date: optDate(d.end_date),
-              description: d.description,
-              tags: d.tags,
-            })).id;
-            break;
-          }
-          case 'project': {
-            const d = item.data as ExtractedProject;
-            pbId = (await createProject({
-              title: reqText(d.title, 'Untitled Project'),
-              company: d.company,
-              role: d.role,
-              team_size: d.team_size,
-              tech_stack: d.tech_stack,
-              start_date: reqDate(d.start_date),
-              end_date: optDate(d.end_date),
-              description: d.description,
-              tags: d.tags,
-            })).id;
-            break;
-          }
-          case 'anecdote': {
-            const d = item.data as ExtractedAnecdote;
-            pbId = (await createAnecdote({
-              title: reqText(d.title, 'Untitled Anecdote'),
-              situation: d.situation,
-              task: d.task,
-              action: d.action,
-              result: d.result,
-              impact: d.impact,
-              company: d.company,
-              project: d.project,
-              date: reqDate(d.date),
-              tags: d.tags,
-            })).id;
-            break;
-          }
-          case 'bullet': {
-            const d = item.data as ExtractedBullet;
-            pbId = (await createBullet({
-              title: reqText(d.title, 'Untitled Bullet'),
-              impact: d.impact,
-              category: oneOf(d.category, BULLET_CATEGORIES),
-              date: reqDate(d.date),
-              tags: d.tags,
-            })).id;
-            break;
-          }
-          default:
-            throw new Error(`Unknown entity kind: ${item.kind}`);
+        if (item.kind === 'job') {
+          const j = d as ExtractedJob;
+          pbId = (await createJob({
+            company: reqText(j.company, 'Untitled'), role: reqText(j.role, '—'),
+            location: j.location, employment_type: oneOf(j.employment_type, EMPLOYMENT_TYPES),
+            start_date: reqDate(j.start_date), end_date: optDate(j.end_date),
+            description: j.description, tags: j.tags,
+          })).id;
+        } else if (item.kind === 'project') {
+          const p = d as ExtractedProject;
+          pbId = (await createProject({
+            title: reqText(p.title, 'Untitled Project'), company: p.company, role: p.role,
+            team_size: p.team_size, tech_stack: p.tech_stack,
+            start_date: reqDate(p.start_date), end_date: optDate(p.end_date),
+            description: p.description, tags: p.tags,
+          })).id;
+        } else if (item.kind === 'anecdote') {
+          const a = d as ExtractedAnecdote;
+          pbId = (await createAnecdote({
+            title: reqText(a.title, 'Untitled Anecdote'), situation: a.situation, task: a.task,
+            action: a.action, result: a.result, impact: a.impact, company: a.company,
+            project: a.project, date: reqDate(a.date), tags: a.tags,
+          })).id;
+        } else {
+          const b = d as ExtractedBullet;
+          pbId = (await createBullet({
+            title: reqText(b.title, 'Untitled Bullet'), impact: b.impact,
+            category: oneOf(b.category, BULLET_CATEGORIES), date: reqDate(b.date), tags: b.tags,
+          })).id;
         }
         created.push({ kind: item.kind, id: pbId });
         idMap[item.localId] = pbId;
       }
 
-      // Create connections
-      const connectionPairs = includedConnections
+      // Connections — only those whose endpoints both resolved (included/existing).
+      const hierarchy: Record<EntityKind, number> = { job: 0, project: 1, anecdote: 2, bullet: 3 };
+      const pairs = connections
         .map((c) => {
-          const parentItem = items.find((i) => i.localId === c.parentLocalId);
-          const childItem = items.find((i) => i.localId === c.childLocalId);
-          if (!parentItem || !childItem) return null;
-          return {
-            parentKind: parentItem.kind,
-            parentId: idMap[c.parentLocalId],
-            childKind: childItem.kind,
-            childId: idMap[c.childLocalId],
-          };
+          const a = items.find((i) => i.localId === c.parentLocalId);
+          const b = items.find((i) => i.localId === c.childLocalId);
+          if (!a || !b) return null;
+          if (!idMap[a.localId] || !idMap[b.localId]) return null; // an endpoint was excluded
+          const [parent, child] = hierarchy[a.kind] <= hierarchy[b.kind] ? [a, b] : [b, a];
+          if (!getJunctionTable(parent.kind, child.kind)) return null;
+          return { parentKind: parent.kind, parentId: idMap[parent.localId], childKind: child.kind, childId: idMap[child.localId] };
         })
         .filter(Boolean) as Array<{ parentKind: EntityKind; parentId: string; childKind: EntityKind; childId: string }>;
 
-      await batchCreateConnections(connectionPairs);
+      await batchCreateConnections(pairs);
       onComplete();
     } catch (e) {
-      // Atomic: undo everything so no partial state remains.
-      await rollback(created);
-      setImportError(
-        `Import failed and was rolled back — nothing was saved. ${e instanceof Error ? e.message : String(e)}`,
-      );
+      await rollback(created, edited);
+      setImportError(`Import failed and was rolled back — nothing was saved. ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setImporting(false);
     }
@@ -419,8 +422,8 @@ export default function ImportReview({ result, onComplete, onCancel }: Props) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 'min(1040px, 100%)',
-          maxHeight: 'calc(100vh - 48px)',
+          width: '95vw',
+          height: '95vh',
           background: 'var(--bg)',
           borderRadius: 'var(--radius-lg)',
           boxShadow: 'var(--shadow-elev)',
@@ -433,6 +436,8 @@ export default function ImportReview({ result, onComplete, onCancel }: Props) {
         <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0, color: 'var(--text)' }}>Import Review</h2>
         <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '4px 0 0' }}>
           Review extracted items. Check/uncheck to include. Drag between cards to connect.
+          <span style={{ marginLeft: 8, color: 'var(--ochre)' }}>EDIT</span> updates an existing element;
+          <span style={{ marginLeft: 6, color: 'var(--text-4)' }}>EXISTING</span> stays as-is.
         </p>
       </div>
 
@@ -449,43 +454,68 @@ export default function ImportReview({ result, onComplete, onCancel }: Props) {
             return (
               <div key={kind}>
                 <div className="mono" style={{ fontSize: 11, letterSpacing: '0.08em', color: colors.text, marginBottom: 12 }}>
-                  {TYPE_LABELS[kind].toUpperCase()} ({groupItems.filter((i) => i.included).length}/{groupItems.length})
+                  {TYPE_LABELS[kind].toUpperCase()} ({groupItems.filter((i) => i.mode === 'existing' || i.included).length}/{groupItems.length})
                 </div>
                 <div className="flex flex-col gap-3">
-                  {groupItems.map((item) => (
-                    <LinkableCard
-                      key={item.localId}
-                      innerRef={(el) => { cardRefs.current[item.localId] = el; }}
-                      onMouseEnter={() => setHoveredId(item.localId)}
-                      onMouseLeave={() => setHoveredId(null)}
-                      onBeginDrag={(e) => beginDrag(item.localId, e)}
-                      active={isActive(item.localId)}
-                      dimmed={isDimmed(item.localId)}
-                      isDropTarget={dropTarget === item.localId}
-                      isDragSource={drag?.fromId === item.localId}
-                      side="right"
-                      compact={kind === 'bullet' || kind === 'anecdote'}
-                    >
-                      <div className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={item.included}
-                          onChange={() => toggleIncluded(item.localId)}
-                          style={{ marginTop: 2, accentColor: colors.text }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div style={{ fontSize: 14, fontWeight: 500, color: item.included ? 'var(--text)' : 'var(--text-4)', lineHeight: 1.3 }}>
-                            {primaryLabel(item)}
-                          </div>
-                          {secondaryLabel(item) && (
-                            <div className="line-clamp-1" style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                              {secondaryLabel(item)}
-                            </div>
+                  {groupItems.map((item) => {
+                    const { primary, secondary } = labelFor(item);
+                    const badge = MODE_BADGE[item.mode];
+                    return (
+                      <LinkableCard
+                        key={item.localId}
+                        innerRef={(el) => { cardRefs.current[item.localId] = el; }}
+                        onMouseEnter={() => setHoveredId(item.localId)}
+                        onMouseLeave={() => setHoveredId(null)}
+                        onBeginDrag={(e) => beginDrag(item.localId, e)}
+                        active={isActive(item.localId)}
+                        dimmed={isDimmed(item.localId)}
+                        isDropTarget={dropTarget === item.localId}
+                        isDragSource={drag?.fromId === item.localId}
+                        side="right"
+                        compact={kind === 'bullet' || kind === 'anecdote'}
+                      >
+                        <div className="flex items-start gap-2" style={{ opacity: item.mode === 'existing' ? 0.7 : 1 }}>
+                          {item.mode !== 'existing' && (
+                            <input
+                              type="checkbox"
+                              checked={item.included}
+                              onChange={() => toggleIncluded(item.localId)}
+                              style={{ marginTop: 2, accentColor: colors.text }}
+                            />
                           )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5" style={{ flexWrap: 'wrap' }}>
+                              {badge && (
+                                <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.06em', padding: '1px 5px', borderRadius: 4, color: badge.color, boxShadow: `inset 0 0 0 1px ${badge.color}` }}>
+                                  {badge.label}
+                                </span>
+                              )}
+                              <span style={{ fontSize: 14, fontWeight: 500, color: item.mode !== 'new' || item.included ? 'var(--text)' : 'var(--text-4)', lineHeight: 1.3 }}>
+                                {primary}
+                              </span>
+                            </div>
+                            {secondary && (
+                              <div className="line-clamp-1" style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                                {secondary}
+                              </div>
+                            )}
+                            {item.mode === 'edit' && item.original && item.data && (
+                              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                {diffFields(item.original, item.data, item.kind).map((diff) => (
+                                  <div key={diff.field} className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.4 }}>
+                                    <span style={{ color: 'var(--text-4)' }}>{diff.field}: </span>
+                                    <span style={{ textDecoration: 'line-through', color: 'var(--text-4)' }}>{diff.from || '—'}</span>
+                                    {' → '}
+                                    <span style={{ color: 'var(--ochre)' }}>{diff.to || '—'}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </LinkableCard>
-                  ))}
+                      </LinkableCard>
+                    );
+                  })}
                 </div>
               </div>
             );

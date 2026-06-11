@@ -259,3 +259,15 @@ function parentKindFromTable(table: JunctionTable): EntityKind {
   if (table.startsWith('exp_anecdote_')) return 'anecdote';
   throw new Error(`Unknown junction table: ${table}`);
 }
+
+/** Convert raw connections to compact refs (with kinds) for the AI payload. */
+export function connectionRefs(
+  connections: Connection[],
+): Array<{ parent_type: EntityKind; parent_id: string; child_type: EntityKind; child_id: string }> {
+  return connections.map((c) => ({
+    parent_type: parentKindFromTable(c.junctionTable),
+    parent_id: c.parentId,
+    child_type: childKindFromTable(c.junctionTable),
+    child_id: c.childId,
+  }));
+}

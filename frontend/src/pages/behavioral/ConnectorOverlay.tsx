@@ -5,6 +5,7 @@ export type Connector = {
   from: Endpoint;
   to: Endpoint;
   active: boolean;
+  dashed?: boolean;
 };
 
 type Props = {
@@ -59,6 +60,7 @@ export function ConnectorOverlay({ connectors, drag, hasDropTarget }: Props) {
               strokeWidth={c.active ? 1.5 : 1}
               fill="none"
               opacity={c.active ? 1 : 0.5}
+              strokeDasharray={c.dashed ? '5 4' : undefined}
               style={{ transition: 'stroke 160ms, opacity 160ms, stroke-width 160ms' }}
             />
             <circle

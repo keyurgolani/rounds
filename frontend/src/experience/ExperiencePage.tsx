@@ -33,6 +33,7 @@ import {
   listAllConnections,
   buildConnectionMap,
   buildReverseMap,
+  connectionRefs,
   type Connection,
   type ConnectionMap,
 } from './connectionApi';
@@ -930,7 +931,13 @@ export default function ExperiencePage() {
         <BulletModal item={(selected as ExperienceBullet)} open={modalOpen} onClose={() => setModalOpen(false)} onSaved={reload} connection={connectionBundle} />
       )}
 
-      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onImported={reload} />
+      <ImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={reload}
+        existingEntities={timelineItems ?? []}
+        existingConnections={connectionRefs(connections)}
+      />
     </div>
   );
 }

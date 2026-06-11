@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, FileText, Type, X } from 'lucide-react';
 import { extractText } from '../features/resume/import/extract';
-import { importExperienceFromText, type ExtractionResult } from './importApi';
+import { importExperienceFromText, type ExtractionResult, type ExistingElement, type ExistingConnectionRef } from './importApi';
+import type { TimelineEntity } from './experienceApi';
 import ImportReview from './ImportReview';
 
 type Tab = 'upload' | 'paste';
@@ -10,9 +11,11 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onImported: () => void;
+  existingEntities: TimelineEntity[];
+  existingConnections: ExistingConnectionRef[];
 }
 
-export default function ImportModal({ open, onClose, onImported }: Props) {
+export default function ImportModal({ open, onClose, onImported, existingEntities, existingConnections }: Props) {
   const [tab, setTab] = useState<Tab>('upload');
   const [pastedText, setPastedText] = useState('');
   // Staged progress label while work is in flight (null = idle). Drives the
@@ -53,14 +56,21 @@ export default function ImportModal({ open, onClose, onImported }: Props) {
     setStatus('Reading with AI…');
     setError(null);
     try {
-      const res = await importExperienceFromText(text);
+      const existing: ExistingElement[] = existingEntities.map((e) => ({
+        id: e.id,
+        type: e.kind,
+        label: e.kind === 'job' ? e.company : e.title,
+        role: e.kind === 'job' || e.kind === 'project' ? e.role : '',
+        date: e.kind === 'job' || e.kind === 'project' ? e.start_date : e.date,
+      }));
+      const res = await importExperienceFromText(text, existing, existingConnections);
       setResult(res);
     } catch (e) {
       setError(String(e));
     } finally {
       setStatus(null);
     }
-  }, []);
+  }, [existingEntities, existingConnections]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -96,6 +106,8 @@ export default function ImportModal({ open, onClose, onImported }: Props) {
     return (
       <ImportReview
         result={result}
+        existingEntities={existingEntities}
+        existingConnections={existingConnections}
         onComplete={handleReviewComplete}
         onCancel={onClose}
       />

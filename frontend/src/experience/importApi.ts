@@ -2,10 +2,11 @@ import { runnerJSON } from '../lib/runnerFetch';
 import type { EntityKind } from './experienceApi';
 
 // ---------------------------------------------------------------------------
-// Types — match the AI endpoint response
+// Extracted item types — each carries existing_id ("" => new, else => edit).
 // ---------------------------------------------------------------------------
 
 export interface ExtractedJob {
+  existing_id: string;
   company: string;
   role: string;
   location: string;
@@ -17,6 +18,7 @@ export interface ExtractedJob {
 }
 
 export interface ExtractedProject {
+  existing_id: string;
   title: string;
   company: string;
   role: string;
@@ -29,6 +31,7 @@ export interface ExtractedProject {
 }
 
 export interface ExtractedAnecdote {
+  existing_id: string;
   title: string;
   situation: string;
   task: string;
@@ -42,6 +45,7 @@ export interface ExtractedAnecdote {
 }
 
 export interface ExtractedBullet {
+  existing_id: string;
   title: string;
   impact: string;
   category: string;
@@ -49,11 +53,16 @@ export interface ExtractedBullet {
   tags: string[];
 }
 
+/** A connection endpoint: a new item (index) or an existing element (id). */
+export interface EndpointRef {
+  type: EntityKind;
+  index?: number;
+  id?: string;
+}
+
 export interface ExtractedConnection {
-  parent_type: EntityKind;
-  parent_index: number;
-  child_type: EntityKind;
-  child_index: number;
+  parent: EndpointRef;
+  child: EndpointRef;
 }
 
 export interface ExtractionResult {
@@ -66,15 +75,38 @@ export interface ExtractionResult {
 }
 
 // ---------------------------------------------------------------------------
+// Inputs sent to the AI so it can dedup / edit / connect to existing data.
+// ---------------------------------------------------------------------------
+
+export interface ExistingElement {
+  id: string;
+  type: EntityKind;
+  label: string;
+  role: string;
+  date: string;
+}
+
+export interface ExistingConnectionRef {
+  parent_type: EntityKind;
+  parent_id: string;
+  child_type: EntityKind;
+  child_id: string;
+}
+
+// ---------------------------------------------------------------------------
 // API call
 // ---------------------------------------------------------------------------
 
-export async function importExperienceFromText(text: string): Promise<ExtractionResult> {
+export async function importExperienceFromText(
+  text: string,
+  existing: ExistingElement[],
+  existingConnections: ExistingConnectionRef[],
+): Promise<ExtractionResult> {
   const res = await runnerJSON<{ data: Omit<ExtractionResult, 'warnings'>; warnings: string[] }>(
     '/api/ai/experience-import',
     {
       method: 'POST',
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, existing, existing_connections: existingConnections }),
       errorPrefix: 'AI',
     },
   );

@@ -224,8 +224,25 @@ class ImportRequest(BaseModel):
     text: str = Field(..., min_length=10)
 
 
+class ExistingElement(BaseModel):
+    id: str
+    type: str  # job | project | anecdote | bullet
+    label: str = ""  # company (job) or title (others)
+    role: str = ""
+    date: str = ""
+
+
+class ExistingConnectionRef(BaseModel):
+    parent_type: str
+    parent_id: str
+    child_type: str
+    child_id: str
+
+
 class ExperienceImportRequest(BaseModel):
     text: str = Field(..., min_length=10)
+    existing: list[ExistingElement] = Field(default_factory=list)
+    existing_connections: list[ExistingConnectionRef] = Field(default_factory=list)
 
 
 class TailorRequest(BaseModel):
@@ -1125,26 +1142,35 @@ _IMPORT_SYSTEM = (
 
 
 _EXPERIENCE_IMPORT_SYSTEM = (
-    "You extract career experience data from plain text into structured JSON. "
-    "Output ONLY a JSON object — no markdown, no commentary. Schema:\n"
+    "You extract career experience data from plain text and reconcile it against "
+    "the user's EXISTING elements. Output ONLY a JSON object — no markdown, no "
+    "commentary. Schema:\n"
     "{\n"
-    '  "jobs": [{"company":"","role":"","location":"","employment_type":"","start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","description":"","tags":[]}],\n'
-    '  "projects": [{"title":"","company":"","role":"","team_size":null,"tech_stack":[],"start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","description":"","tags":[]}],\n'
-    '  "anecdotes": [{"title":"","situation":"","task":"","action":"","result":"","impact":"","company":"","project":"","date":"YYYY-MM-DD","tags":[]}],\n'
-    '  "bullets": [{"title":"","impact":"","category":"","date":"YYYY-MM-DD","tags":[]}],\n'
-    '  "connections": [{"parent_type":"","parent_index":0,"child_type":"","child_index":0}]\n'
+    '  "jobs": [{"existing_id":"","company":"","role":"","location":"","employment_type":"","start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","description":"","tags":[]}],\n'
+    '  "projects": [{"existing_id":"","title":"","company":"","role":"","team_size":null,"tech_stack":[],"start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","description":"","tags":[]}],\n'
+    '  "anecdotes": [{"existing_id":"","title":"","situation":"","task":"","action":"","result":"","impact":"","company":"","project":"","date":"YYYY-MM-DD","tags":[]}],\n'
+    '  "bullets": [{"existing_id":"","title":"","impact":"","category":"","date":"YYYY-MM-DD","tags":[]}],\n'
+    '  "connections": [{"parent":{"type":"","index":0},"child":{"type":"","id":""}}]\n'
     "}\n"
-    "Rules:\n"
-    "- All dates must be YYYY-MM-DD. If only year-month is known, use the 1st. If only year, use YYYY-01-01.\n"
-    "- Anecdotes should follow STAR format (Situation, Task, Action, Result).\n"
-    "- Connections link entities: valid parent->child pairs are job->project, job->anecdote, "
-    "job->bullet, project->anecdote, project->bullet, anecdote->bullet.\n"
-    "- Indices in connections are 0-based into their respective arrays.\n"
-    "- Extract at most 20 items total across all arrays.\n"
-    "- Leave fields empty (\"\" or [] or null) when unknown — never invent information.\n"
-    "- Tags should be short skill or domain labels (e.g. \"leadership\", \"Python\", \"B2B sales\").\n"
+    "Reconciliation rules:\n"
+    "- You are given the user's EXISTING elements (each with an id) and their EXISTING connections.\n"
+    "- For each thing you extract: if it is genuinely NEW, emit it with existing_id=\"\". "
+    "If it matches an existing element AND the document adds or corrects information, emit it as an EDIT: "
+    "set existing_id to that element's id and fill every field with the MERGED result (existing value plus new detail). "
+    "If it is a pure duplicate that adds nothing, OMIT it entirely.\n"
+    "- Never invent information; leave unknown fields empty (\"\" / [] / null).\n"
+    "Connection rules:\n"
+    "- Each connection endpoint is either a NEW item referenced by {\"type\",\"index\"} (0-based index into the "
+    "array of that type in THIS response) or an EXISTING element referenced by {\"type\",\"id\"}.\n"
+    "- Valid parent->child pairs: job->project, job->anecdote, job->bullet, project->anecdote, "
+    "project->bullet, anecdote->bullet. parent is the higher level.\n"
+    "- Do NOT emit a connection that already exists in the provided existing_connections.\n"
+    "Other rules:\n"
+    "- All dates must be YYYY-MM-DD (use the 1st of the month/year if only partially known).\n"
+    "- Anecdotes follow STAR format. Tags are short skill/domain labels.\n"
     "- employment_type values: full-time, part-time, contract, internship, freelance.\n"
-    "- category values for bullets: achievement, responsibility, skill, other."
+    "- category values for bullets: leadership, technical, process, business, other.\n"
+    "- Extract at most 25 items total across all arrays."
 )
 
 
@@ -1304,6 +1330,13 @@ async def import_experience(request: Request, body: ExperienceImportRequest) -> 
     user = await current_user(request)
     cfg = await _active_text_config(user)
     raw = body.text.strip()
+
+    context = {
+        "document": raw[:30000],
+        "existing_elements": [e.model_dump() for e in body.existing[:120]],
+        "existing_connections": [c.model_dump() for c in body.existing_connections[:300]],
+    }
+
     try:
         text = await _call_complete(
             cfg["kind"],
@@ -1311,7 +1344,7 @@ async def import_experience(request: Request, body: ExperienceImportRequest) -> 
             cfg["api_key"],
             cfg["base_url"] or None,
             system=_EXPERIENCE_IMPORT_SYSTEM,
-            messages=[{"role": "user", "content": raw[:30000]}],
+            messages=[{"role": "user", "content": json.dumps(context)}],
             max_tokens=6000,
         )
     except Exception as err:  # noqa: BLE001
