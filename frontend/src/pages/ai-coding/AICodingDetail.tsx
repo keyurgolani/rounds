@@ -340,8 +340,9 @@ export default function AICodingDetail() {
           >
             <BackLink to="/ai-coding" label="Back to practice" />
             {round && <DifficultyPill level={round.difficulty} />}
-            {round && availableLanguages.length <= 1 && (
+            {round?.topics?.map((t) => (
               <span
+                key={`t-${t}`}
                 className="pill"
                 style={{
                   background: 'transparent',
@@ -349,71 +350,23 @@ export default function AICodingDetail() {
                   boxShadow: 'inset 0 0 0 1px var(--border-strong)',
                 }}
               >
-                {round.language}
+                {t}
               </span>
-            )}
-            {round && availableLanguages.length > 1 && (
+            ))}
+            {round?.companies?.map((c) => (
               <span
-                role="radiogroup"
-                aria-label="Language"
+                key={`c-${c}`}
+                className="pill"
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 2,
-                  padding: 2,
-                  borderRadius: 999,
-                  boxShadow: 'inset 0 0 0 1px var(--border-strong)',
+                  background: 'transparent',
+                  color: 'var(--text-4)',
+                  boxShadow: 'inset 0 0 0 1px var(--border)',
+                  letterSpacing: '0.04em',
                 }}
               >
-                {availableLanguages.map((lang) => {
-                  const active = lang === selectedLanguage;
-                  return (
-                    <button
-                      key={lang}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      onClick={() => {
-                        if (lang === selectedLanguage) return;
-                        setSelectedLanguage(lang);
-                        try {
-                          window.localStorage.setItem(
-                            languageStorageKey(slug),
-                            lang,
-                          );
-                        } catch {
-                          /* localStorage unavailable — ignore */
-                        }
-                        // The new language has its own checkpoint set —
-                        // reset checkpoint progress, run results, and
-                        // jump back to checkpoint 0.
-                        setCheckpointIdx(0);
-                        setRunResult(null);
-                        if (rawRound) {
-                          const cps = Array.isArray(rawRound.checkpoints)
-                            ? rawRound.checkpoints
-                            : rawRound.checkpoints[lang] ?? [];
-                          setPassedByCheckpoint(new Array(cps.length).fill(false));
-                        }
-                      }}
-                      style={{
-                        padding: '4px 12px',
-                        borderRadius: 999,
-                        background: active ? 'var(--accent)' : 'transparent',
-                        color: active ? 'var(--accent-fg)' : 'var(--text-3)',
-                        fontSize: 12,
-                        fontWeight: active ? 600 : 500,
-                        cursor: active ? 'default' : 'pointer',
-                        border: 'none',
-                        outline: 'none',
-                      }}
-                    >
-                      {lang}
-                    </button>
-                  );
-                })}
+                {c}
               </span>
-            )}
+            ))}
           </span>
         }
         title={round?.title ?? 'AI Round'}
@@ -426,6 +379,29 @@ export default function AICodingDetail() {
               gap: 6,
             }}
           >
+            {round && (
+              <LanguageControl
+                languages={availableLanguages}
+                selected={selectedLanguage}
+                onPick={(lang) => {
+                  if (lang === selectedLanguage) return;
+                  setSelectedLanguage(lang);
+                  try {
+                    window.localStorage.setItem(languageStorageKey(slug), lang);
+                  } catch {
+                    /* localStorage unavailable — ignore */
+                  }
+                  setCheckpointIdx(0);
+                  setRunResult(null);
+                  if (rawRound) {
+                    const cps = Array.isArray(rawRound.checkpoints)
+                      ? rawRound.checkpoints
+                      : rawRound.checkpoints[lang] ?? [];
+                    setPassedByCheckpoint(new Array(cps.length).fill(false));
+                  }
+                }}
+              />
+            )}
             {round && round.checkpoints.length > 1 && (
               <HeaderCheckpointStepper
                 checkpoints={round.checkpoints}
@@ -491,8 +467,6 @@ export default function AICodingDetail() {
               {!focus && (
                 <ProblemBar
                   description={round.description}
-                  topics={round.topics}
-                  companies={round.companies}
                   currentCheckpointPrompt={round.checkpoints[checkpointIdx]?.prompt}
                   currentCheckpointLabel={round.checkpoints[checkpointIdx]?.label}
                   checkpointNumber={checkpointIdx + 1}
@@ -694,6 +668,108 @@ export default function AICodingDetail() {
 // ---------------------------------------------------------------------------
 
 /**
+ * Compact language selector that lives in the header's chrome action
+ * slot. Matches the closed-state aesthetic of HeaderCheckpointStepper:
+ * sunken pill chamber, monospaced eyebrow label, accent-filled active
+ * option. For single-language rounds it collapses to a read-only chip
+ * (no buttons) so the visual weight stays consistent with the multi-
+ * language case.
+ */
+function LanguageControl({
+  languages,
+  selected,
+  onPick,
+}: {
+  languages: string[];
+  selected: string;
+  onPick: (lang: string) => void;
+}) {
+  if (languages.length === 0) return null;
+  const single = languages.length === 1;
+  return (
+    <span
+      role={single ? undefined : 'radiogroup'}
+      aria-label="Language"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        height: 24,
+        padding: single ? '0 8px 0 8px' : '0 3px 0 8px',
+        gap: 8,
+        borderRadius: 6,
+        background: 'var(--bg-sunken)',
+        boxShadow: 'inset 0 0 0 1px var(--border)',
+      }}
+    >
+      <span
+        className="mono"
+        aria-hidden="true"
+        style={{
+          fontSize: 9.5,
+          color: 'var(--text-4)',
+          letterSpacing: '0.1em',
+        }}
+      >
+        LANGUAGE
+      </span>
+      {single ? (
+        <span
+          style={{
+            fontSize: 11.5,
+            color: 'var(--text-2)',
+            fontWeight: 500,
+            letterSpacing: '0.01em',
+            textTransform: 'lowercase',
+          }}
+        >
+          {languages[0]}
+        </span>
+      ) : (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          {languages.map((lang) => {
+            const active = lang === selected;
+            return (
+              <button
+                key={lang}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => onPick(lang)}
+                title={`Switch to ${lang}`}
+                style={{
+                  height: 18,
+                  padding: '0 8px',
+                  border: 0,
+                  borderRadius: 4,
+                  background: active ? 'var(--accent)' : 'transparent',
+                  color: active ? 'var(--accent-fg)' : 'var(--text-3)',
+                  fontSize: 11.5,
+                  fontWeight: active ? 600 : 500,
+                  letterSpacing: '0.01em',
+                  cursor: active ? 'default' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  textTransform: 'lowercase',
+                  transition: 'background 100ms ease, color 100ms ease',
+                }}
+              >
+                {lang}
+              </button>
+            );
+          })}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
  * Returns a 1-2 sentence header summary derived from the long-form
  * description, capped so it never blows past the available header
  * width. Strips markdown markup.
@@ -712,21 +788,18 @@ function toLeadSummary(desc: string): string {
 
 function ProblemBar({
   description,
-  topics,
-  companies,
   currentCheckpointPrompt,
   currentCheckpointLabel,
   checkpointNumber,
   checkpointTotal,
 }: {
   description: string;
-  topics: string[];
-  companies: string[];
   currentCheckpointPrompt?: string;
   currentCheckpointLabel?: string;
   checkpointNumber: number;
   checkpointTotal: number;
 }) {
+  const hasCheckpointStrip = !!currentCheckpointLabel && checkpointTotal > 1;
   return (
     <div
       style={{
@@ -737,21 +810,15 @@ function ProblemBar({
         overflow: 'auto',
       }}
     >
-      <div
-        className="flex items-center"
-        style={{
-          padding: '8px 16px 4px',
-          gap: 10,
-          minHeight: 28,
-        }}
-      >
-        <span
-          className="eyebrow"
-          style={{ color: 'var(--text-3)', flexShrink: 0 }}
+      {hasCheckpointStrip && (
+        <div
+          className="flex items-center"
+          style={{
+            padding: '8px 16px 4px',
+            gap: 10,
+            minHeight: 22,
+          }}
         >
-          The round
-        </span>
-        {currentCheckpointLabel && checkpointTotal > 1 && (
           <span
             className="mono"
             style={{
@@ -760,14 +827,14 @@ function ProblemBar({
               letterSpacing: '0.08em',
             }}
           >
-            · CP {checkpointNumber}/{checkpointTotal} ·{' '}
-            {currentCheckpointLabel.toUpperCase()}
+            CP {checkpointNumber}/{checkpointTotal} ·{' '}
+            {currentCheckpointLabel!.toUpperCase()}
           </span>
-        )}
-      </div>
+        </div>
+      )}
       <div
         style={{
-          padding: '4px 16px 14px',
+          padding: hasCheckpointStrip ? '4px 16px 14px' : '12px 16px 14px',
           display: 'flex',
           flexDirection: 'column',
           gap: 12,
@@ -799,37 +866,6 @@ function ProblemBar({
               Current checkpoint
             </div>
             <BlockMarkdown text={currentCheckpointPrompt} />
-          </div>
-        )}
-        {(topics.length > 0 || companies.length > 0) && (
-          <div className="flex flex-wrap gap-1.5">
-            {topics.map((t) => (
-              <span
-                key={`t-${t}`}
-                className="pill"
-                style={{
-                  background: 'transparent',
-                  color: 'var(--text-3)',
-                  boxShadow: 'inset 0 0 0 1px var(--border-strong)',
-                }}
-              >
-                {t}
-              </span>
-            ))}
-            {companies.map((c) => (
-              <span
-                key={`c-${c}`}
-                className="pill"
-                style={{
-                  background: 'transparent',
-                  color: 'var(--text-4)',
-                  boxShadow: 'inset 0 0 0 1px var(--border)',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                {c}
-              </span>
-            ))}
           </div>
         )}
       </div>
