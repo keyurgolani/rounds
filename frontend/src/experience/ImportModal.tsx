@@ -13,9 +13,12 @@ interface Props {
   onImported: () => void;
   existingEntities: TimelineEntity[];
   existingConnections: ExistingConnectionRef[];
+  /** When the modal is opened with a file (e.g. dropped on the Import button),
+   *  auto-extract it and go straight to the review step. */
+  initialFile?: File | null;
 }
 
-export default function ImportModal({ open, onClose, onImported, existingEntities, existingConnections }: Props) {
+export default function ImportModal({ open, onClose, onImported, existingEntities, existingConnections, initialFile }: Props) {
   const [tab, setTab] = useState<Tab>('upload');
   const [pastedText, setPastedText] = useState('');
   // Staged progress label while work is in flight (null = idle). Drives the
@@ -25,6 +28,8 @@ export default function ImportModal({ open, onClose, onImported, existingEntitie
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ExtractionResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Tracks the file we've already auto-run, so we extract once per open.
+  const autoRanFileRef = useRef<File | null>(null);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -36,21 +41,6 @@ export default function ImportModal({ open, onClose, onImported, existingEntitie
       setResult(null);
     }
   }, [open]);
-
-  // Escape to close
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [open, onClose]);
 
   const sendToAI = useCallback(async (text: string) => {
     setStatus('Reading with AI…');
@@ -72,18 +62,51 @@ export default function ImportModal({ open, onClose, onImported, existingEntitie
     }
   }, [existingEntities, existingConnections]);
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const processFile = useCallback(async (file: File) => {
     setStatus('Extracting text…');
     setError(null);
     try {
       const { text } = await extractText(file);
       await sendToAI(text);
-    } catch (e) {
-      setError(String(e));
+    } catch (err) {
+      setError(String(err));
       setStatus(null);
     }
+  }, [sendToAI]);
+
+  // Auto-run when modal is opened with an initial file (e.g. dropped on the Import button).
+  // Declared after the reset effect so reset's setStatus(null) runs before processFile sets
+  // 'Extracting text…' when open flips true.
+  useEffect(() => {
+    if (!open) {
+      autoRanFileRef.current = null;
+      return;
+    }
+    if (initialFile && autoRanFileRef.current !== initialFile) {
+      autoRanFileRef.current = initialFile;
+      void processFile(initialFile);
+    }
+  }, [open, initialFile, processFile]);
+
+  // Escape to close
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open, onClose]);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await processFile(file);
     // Reset file input so the same file can be re-selected
     if (fileInputRef.current) fileInputRef.current.value = '';
   }

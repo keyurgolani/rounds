@@ -51,6 +51,7 @@ import AnecdoteModal from './AnecdoteModal';
 import BulletModal from './BulletModal';
 import ArrangeBoard from './ArrangeBoard';
 import ListTree from './ListTree';
+import { useButtonFileDrop } from '../hooks/useButtonFileDrop';
 
 // ---------------------------------------------------------------------------
 // Tab definitions
@@ -257,8 +258,17 @@ export default function ExperiencePage() {
   const [selected, setSelected] = useState<TimelineEntity | (ExperienceJob | ExperienceProject | ExperienceAnecdote | ExperienceBullet) | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const [filter, setFilter] = useState<string>('all');
   const [selectorOpen, setSelectorOpen] = useState(false);
+
+  const { dropProps: importDropProps, isOver: importDropOver } = useButtonFileDrop({
+    onFile: (file) => {
+      setDroppedFile(file);
+      setImportOpen(true);
+    },
+    disabled: importOpen,
+  });
 
   // Load timeline data
   const loadTimeline = useCallback(() => {
@@ -431,17 +441,22 @@ export default function ExperiencePage() {
               type="button"
               onClick={() => setImportOpen(true)}
               className="inline-flex items-center gap-1.5"
+              {...importDropProps}
               style={{
                 padding: '6px 14px',
                 border: 0,
                 borderRadius: 'var(--radius)',
-                background: 'transparent',
-                color: 'var(--text-2)',
+                background: importDropOver ? 'var(--accent-soft)' : 'transparent',
+                color: importDropOver ? 'var(--accent)' : 'var(--text-2)',
                 fontSize: 12.5,
                 fontWeight: 500,
                 cursor: 'pointer',
-                boxShadow: 'inset 0 0 0 1px var(--border-strong)',
+                boxShadow: importDropOver
+                  ? 'inset 0 0 0 1.5px var(--accent)'
+                  : 'inset 0 0 0 1px var(--border-strong)',
+                transition: 'background 120ms, box-shadow 120ms, color 120ms',
               }}
+              title="Import experience — click, or drop a file here"
             >
               <Upload size={14} strokeWidth={2} />
               Import
@@ -704,10 +719,11 @@ export default function ExperiencePage() {
 
       <ImportModal
         open={importOpen}
-        onClose={() => setImportOpen(false)}
+        onClose={() => { setImportOpen(false); setDroppedFile(null); }}
         onImported={reload}
         existingEntities={timelineItems ?? []}
         existingConnections={connectionRefs(connections)}
+        initialFile={droppedFile}
       />
     </div>
   );

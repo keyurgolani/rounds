@@ -5,6 +5,7 @@ import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
 import EmptyState from '../components/shell/EmptyState';
 import { usePersistedState } from '../hooks/usePersistedState';
+import { useButtonFileDrop } from '../hooks/useButtonFileDrop';
 import { listResumes, createResume, deleteResume } from '../features/resume/api';
 import { importFromText } from '../features/resume/ai/client';
 import { extractText } from '../features/resume/import/extract';
@@ -111,6 +112,11 @@ export default function ResumesList() {
     }
   }
 
+  const { dropProps, isOver: importDropOver } = useButtonFileDrop({
+    onFile: onImport,
+    disabled: importing !== null,
+  });
+
   const hasData = resumes.length > 0;
 
   return (
@@ -139,18 +145,22 @@ export default function ResumesList() {
                   disabled={importing !== null}
                   data-ai-processing-glow={importing ? 'true' : undefined}
                   className="inline-flex items-center gap-1.5"
+                  {...dropProps}
                   style={{
                     padding: '6px 12px',
                     borderRadius: 8,
-                    background: 'transparent',
-                    color: 'var(--text-2)',
-                    boxShadow: 'inset 0 0 0 1px var(--border-strong)',
+                    background: importDropOver ? 'var(--accent-soft)' : 'transparent',
+                    color: importDropOver ? 'var(--accent)' : 'var(--text-2)',
+                    boxShadow: importDropOver
+                      ? 'inset 0 0 0 1.5px var(--accent)'
+                      : 'inset 0 0 0 1px var(--border-strong)',
                     border: 0,
                     fontSize: 12,
                     fontWeight: 500,
                     cursor: importing ? 'wait' : 'pointer',
+                    transition: 'background 120ms, box-shadow 120ms, color 120ms',
                   }}
-                  title="Import from PDF / DOCX / Markdown / Text"
+                  title="Import from PDF / DOCX / Markdown / Text — or drop a file here"
                 >
                   <Upload size={13} strokeWidth={1.8} />
                   {importing ?? 'Import'}
