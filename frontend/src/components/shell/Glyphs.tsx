@@ -171,3 +171,19 @@ export function ResumeGlyph({ size = 18 }: GlyphProps) {
     </svg>
   );
 }
+
+export function ExperienceGlyph({ size = 18 }: GlyphProps) {
+  return (
+    <svg viewBox="0 0 18 18" fill="none" width={size} height={size} aria-hidden="true">
+      <path
+        d="M2 4H16M2 4V14C2 14.55 2.45 15 3 15H15C15.55 15 16 14.55 16 14V4"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M5 8H8M5 11H10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <circle cx="13" cy="9.5" r="1.5" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}

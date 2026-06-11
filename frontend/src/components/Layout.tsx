@@ -19,6 +19,7 @@ import {
   BehaviorGlyph,
   CodeGlyph,
   DashGlyph,
+  ExperienceGlyph,
   ResumeGlyph,
   SystemGlyph,
   TakeHomeGlyph,
@@ -57,6 +58,7 @@ const trackingNav: NavDef[] = [
   { path: '/applications', label: 'Applications', glyph: AppsGlyph },
   { path: '/todos', label: 'Todos', glyph: TodoGlyph },
   { path: '/resumes', label: 'Resumes', glyph: ResumeGlyph },
+  { path: '/experience', label: 'Experience', glyph: ExperienceGlyph },
 ];
 
 export default function Layout() {
