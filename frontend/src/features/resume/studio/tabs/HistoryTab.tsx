@@ -5,10 +5,11 @@
 import { useEffect, useState } from 'react';
 import { listVersions } from '../../api';
 import type { Resume, ResumeData, ResumeVersion } from '../../types';
+import type { ResumeLinks } from '../../links/types';
 
 type Props = {
   resume: Resume | null;
-  onRestore: (data: ResumeData) => void;
+  onRestore: (data: ResumeData, links?: ResumeLinks) => void;
 };
 
 export default function HistoryTab({ resume, onRestore }: Props) {
@@ -58,7 +59,7 @@ export default function HistoryTab({ resume, onRestore }: Props) {
               </div>
               <button
                 type="button"
-                onClick={() => onRestore(v.data)}
+                onClick={() => onRestore(v.data, v.links)}
                 style={{
                   padding: '5px 10px',
                   background: 'transparent',

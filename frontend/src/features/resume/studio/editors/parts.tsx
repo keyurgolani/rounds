@@ -12,7 +12,6 @@ import {
 import {
   ArrowDown,
   ArrowUp,
-  BookOpen,
   GripVertical,
   Plus,
   Trash2,
@@ -36,7 +35,6 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { ImproveContext } from '../../ai/client';
-import { useOptionalBulletLibrary } from '../../bullets/BulletLibraryContext';
 import ImproveButton from './ImproveButton';
 
 export function Field({
@@ -324,24 +322,32 @@ export function GridTwo({ children }: { children: ReactNode }) {
 // AI buttons (passed via `Field actions={…}`) still operate on the
 // whole list at once, independent of these per-row affordances.
 //
-// When `library` is true and a `<BulletLibraryProvider>` is in scope,
-// an "Insert from library" button appears next to "Add" — picking a
-// bullet appends it as a new row.
+// Optional link-state props (`linkRefs`, `linkEdited`, `onLinkChange`):
+// callers that maintain parallel arrays of library-reference metadata
+// can pass these to keep them aligned with add/remove/reorder/edit ops.
+// All three must be supplied together; passing none is perfectly fine.
+//
+// `renderRowAdornment`: optional render-prop called with the row index;
+// the returned node is rendered inside the right-side action cluster,
+// before the trash button, so callers can inject per-row UI (e.g. a
+// link indicator).
 export function StringList({
   values,
   onChange,
   placeholder,
   multiline = false,
-  library = false,
   disabled = false,
   improveContext,
   fieldBase,
+  linkRefs,
+  linkEdited,
+  onLinkChange,
+  renderRowAdornment,
 }: {
   values: string[];
   onChange: (next: string[]) => void;
   placeholder?: string;
   multiline?: boolean;
-  library?: boolean;
   disabled?: boolean;
   // When provided, each row renders its own ImproveButton bound to
   // just that row's text. The button forwards the same studio-wide
@@ -349,10 +355,14 @@ export function StringList({
   improveContext?: ImproveContext;
   // Stable base path for the field — row index is appended.
   fieldBase?: string;
+  // Optional parallel arrays kept in sync with the values array.
+  // All three should be supplied together or not at all.
+  linkRefs?: (string | null)[];
+  linkEdited?: boolean[];
+  onLinkChange?: (refs: (string | null)[], edited: boolean[]) => void;
+  // Optional per-row adornment rendered before the trash button.
+  renderRowAdornment?: (index: number) => ReactNode;
 }) {
-  const bulletLibrary = useOptionalBulletLibrary();
-  const canInsertFromLibrary = library && multiline && Boolean(bulletLibrary);
-
   // Stable per-row IDs for dnd-kit. Synced to `values.length` on
   // append/remove from outside; reorders apply the same arrayMove to
   // both arrays so they stay aligned.
@@ -375,10 +385,24 @@ export function StringList({
     const next = values.slice();
     next[i] = v;
     onChange(next);
+    if (onLinkChange) {
+      const refs = linkRefs ?? [];
+      const edited = linkEdited ?? [];
+      // Mark row as edited only when it had a linked ref and hasn't been
+      // manually edited before — so the link badge can show "stale".
+      if (refs[i] != null && !edited[i]) {
+        onLinkChange(refs, edited.map((e, j) => (j === i ? true : e)));
+      }
+    }
   };
   const remove = (i: number) => {
     onChange(values.filter((_, j) => j !== i));
     idsRef.current = idsRef.current.filter((_, j) => j !== i);
+    if (onLinkChange) {
+      const refs = linkRefs ?? [];
+      const edited = linkEdited ?? [];
+      onLinkChange(refs.filter((_, j) => j !== i), edited.filter((_, j) => j !== i));
+    }
   };
   const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
@@ -388,6 +412,11 @@ export function StringList({
     if (oldIdx < 0 || newIdx < 0) return;
     onChange(arrayMove(values, oldIdx, newIdx));
     idsRef.current = arrayMove(ids, oldIdx, newIdx);
+    if (onLinkChange) {
+      const refs = linkRefs ?? [];
+      const edited = linkEdited ?? [];
+      onLinkChange(arrayMove(refs, oldIdx, newIdx), arrayMove(edited, oldIdx, newIdx));
+    }
   };
 
   return (
@@ -410,6 +439,7 @@ export function StringList({
               field={fieldBase ? `${fieldBase}[${i}]` : undefined}
               onChange={(next) => setAt(i, next)}
               onRemove={() => remove(i)}
+              adornment={renderRowAdornment?.(i)}
             />
           ))}
         </SortableContext>
@@ -417,7 +447,14 @@ export function StringList({
       <div className="flex items-center gap-1.5 self-start flex-wrap">
         <button
           type="button"
-          onClick={() => onChange([...values, ''])}
+          onClick={() => {
+            onChange([...values, '']);
+            if (onLinkChange) {
+              const refs = linkRefs ?? [];
+              const edited = linkEdited ?? [];
+              onLinkChange([...refs, null], [...edited, false]);
+            }
+          }}
           className="inline-flex items-center gap-1"
           style={{
             padding: '5px 9px',
@@ -432,29 +469,6 @@ export function StringList({
         >
           <Plus size={11} strokeWidth={1.8} /> Add
         </button>
-        {canInsertFromLibrary && (
-          <button
-            type="button"
-            onClick={async () => {
-              const picked = await bulletLibrary!.pickBullet();
-              if (picked) onChange([...values, picked.text]);
-            }}
-            className="inline-flex items-center gap-1"
-            style={{
-              padding: '5px 9px',
-              background: 'transparent',
-              boxShadow: 'inset 0 0 0 1px var(--border)',
-              borderRadius: 'var(--radius)',
-              border: 0,
-              color: 'var(--text-3)',
-              fontSize: 11,
-              cursor: 'pointer',
-            }}
-            title="Insert a saved bullet"
-          >
-            <BookOpen size={11} strokeWidth={1.8} /> From library
-          </button>
-        )}
       </div>
     </div>
   );
@@ -481,6 +495,7 @@ function SortableListRow({
   field,
   onChange,
   onRemove,
+  adornment,
 }: {
   id: string;
   value: string;
@@ -491,6 +506,7 @@ function SortableListRow({
   field?: string;
   onChange: (v: string) => void;
   onRemove: () => void;
+  adornment?: ReactNode;
 }) {
   const [enhancing, setEnhancing] = useState(false);
   const effectiveDisabled = Boolean(disabled || enhancing);
@@ -580,6 +596,7 @@ function SortableListRow({
             onStreamingChange={setEnhancing}
           />
         )}
+        {adornment}
         <IconBtn
           onClick={onRemove}
           ariaLabel="Delete"

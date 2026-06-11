@@ -10,8 +10,6 @@ import StudioShell, {
 import CoverLetterDialog from '../features/resume/studio/CoverLetterDialog';
 import PreviewDialog from '../features/resume/studio/PreviewDialog';
 import ShareDialog from '../features/resume/share/ShareDialog';
-import BulletLibraryDrawer from '../features/resume/bullets/BulletLibraryDrawer';
-import { BulletLibraryProvider } from '../features/resume/bullets/BulletLibraryContext';
 import { useResume } from '../features/resume/hooks/useResume';
 import { deleteResume } from '../features/resume/api';
 
@@ -93,7 +91,7 @@ export default function ResumeStudio() {
   };
 
   return (
-    <BulletLibraryProvider>
+    <>
       <PrintStyles />
       <PageShell
         header={
@@ -307,8 +305,7 @@ export default function ResumeStudio() {
           design={result.design}
         />
       )}
-      <BulletLibraryDrawer />
-    </BulletLibraryProvider>
+    </>
   );
 }
 

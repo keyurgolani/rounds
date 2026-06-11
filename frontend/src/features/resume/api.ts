@@ -12,7 +12,6 @@ import { pb } from '../../lib/pocketbase';
 import { slugify } from '../../lib/slug';
 import type {
   AISettings,
-  Bullet,
   Resume,
   ResumeData,
   ResumeVariant,
@@ -21,6 +20,8 @@ import type {
   TemplateConfig,
 } from './types';
 import { emptyResumeData } from './types';
+import { emptyLinks } from './links/types';
+import type { ResumeLinks } from './links/types';
 
 // ---- Row shapes -----------------------------------------------------
 //
@@ -37,6 +38,7 @@ interface ResumeRow extends RecordModel {
   template_id: string;
   design: TemplateConfig;
   data: ResumeData;
+  links?: ResumeLinks;
 }
 
 interface VariantRow extends RecordModel {
@@ -50,6 +52,7 @@ interface VariantRow extends RecordModel {
   tone?: string;
   role_focus?: string[];
   data: ResumeData;
+  links?: ResumeLinks;
   ats_score?: number;
   ats_breakdown?: ResumeVariant['ats_breakdown'];
 }
@@ -59,15 +62,9 @@ interface VersionRow extends RecordModel {
   resume?: string;
   variant?: string;
   data: ResumeData;
+  links?: ResumeLinks;
   label?: string;
   is_auto: boolean;
-}
-
-interface BulletRow extends RecordModel {
-  user: string;
-  text: string;
-  tags?: string[];
-  metrics?: Bullet['metrics'];
 }
 
 interface AISettingsRow extends RecordModel {
@@ -94,7 +91,6 @@ interface ShareLinkRow extends RecordModel {
 const resumesCol = () => pb.collection<ResumeRow>('resumes');
 const variantsCol = () => pb.collection<VariantRow>('resume_variants');
 const versionsCol = () => pb.collection<VersionRow>('resume_versions');
-const bulletsCol = () => pb.collection<BulletRow>('resume_bullets');
 const aiSettingsCol = () => pb.collection<AISettingsRow>('ai_settings');
 const shareLinksCol = () => pb.collection<ShareLinkRow>('resume_share_links');
 
@@ -119,6 +115,7 @@ function adaptResume(r: ResumeRow): Resume {
     template_id: r.template_id ?? 'modern',
     design: r.design ?? {},
     data: r.data ?? emptyResumeData(),
+    links: r.links ?? emptyLinks(),
     created_at: r.created,
     updated_at: r.updated,
   };
@@ -136,6 +133,7 @@ function adaptVariant(r: VariantRow): ResumeVariant {
     tone: r.tone,
     role_focus: r.role_focus ?? [],
     data: r.data ?? emptyResumeData(),
+    links: r.links ?? emptyLinks(),
     ats_score: r.ats_score,
     ats_breakdown: r.ats_breakdown,
     application_id: r.application || undefined,
@@ -151,21 +149,10 @@ function adaptVersion(r: VersionRow): ResumeVersion {
     resume_id: r.resume || undefined,
     variant_id: r.variant || undefined,
     data: r.data ?? emptyResumeData(),
+    links: r.links ?? emptyLinks(),
     label: r.label,
     is_auto: Boolean(r.is_auto),
     created_at: r.created,
-  };
-}
-
-function adaptBullet(r: BulletRow): Bullet {
-  return {
-    id: r.id,
-    user_id: r.user,
-    text: r.text ?? '',
-    tags: r.tags ?? [],
-    metrics: r.metrics ?? [],
-    created_at: r.created,
-    updated_at: r.updated,
   };
 }
 
@@ -265,7 +252,7 @@ export async function createResume(input: {
 
 export async function updateResume(
   id: string,
-  patch: Partial<Pick<Resume, 'name' | 'slug' | 'template_id' | 'design' | 'data'>>,
+  patch: Partial<Pick<Resume, 'name' | 'slug' | 'template_id' | 'design' | 'data' | 'links'>>,
 ): Promise<Resume> {
   const r = await resumesCol().update(id, patch);
   return adaptResume(r);
@@ -303,6 +290,7 @@ export async function createVariant(input: {
   resume_id: string;
   name: string;
   data: ResumeData;
+  links?: ResumeLinks;
   target_company?: string;
   job_title?: string;
   job_description?: string;
@@ -315,6 +303,7 @@ export async function createVariant(input: {
     resume: input.resume_id,
     name: input.name,
     data: input.data,
+    links: input.links ?? emptyLinks(),
     target_company: input.target_company ?? '',
     job_title: input.job_title ?? '',
     job_description: input.job_description ?? '',
@@ -363,6 +352,7 @@ export async function createVersion(input: {
   resumeId?: string;
   variantId?: string;
   data: ResumeData;
+  links?: ResumeLinks;
   label?: string;
   isAuto?: boolean;
 }): Promise<ResumeVersion> {
@@ -371,47 +361,11 @@ export async function createVersion(input: {
     resume: input.resumeId || undefined,
     variant: input.variantId || undefined,
     data: input.data,
+    links: input.links ?? emptyLinks(),
     label: input.label ?? '',
     is_auto: input.isAuto ?? true,
   });
   return adaptVersion(r);
-}
-
-// --- Bullets ----------------------------------------------------------
-
-export async function listBullets(): Promise<Bullet[]> {
-  const me = userId();
-  const items = await bulletsCol().getFullList({
-    filter: `user = "${me}"`,
-    sort: '-updated',
-  });
-  return items.map(adaptBullet);
-}
-
-export async function createBullet(input: {
-  text: string;
-  tags?: string[];
-  metrics?: Bullet['metrics'];
-}): Promise<Bullet> {
-  const r = await bulletsCol().create({
-    user: userId(),
-    text: input.text,
-    tags: input.tags ?? [],
-    metrics: input.metrics ?? [],
-  });
-  return adaptBullet(r);
-}
-
-export async function updateBullet(
-  id: string,
-  patch: Partial<Pick<Bullet, 'text' | 'tags' | 'metrics'>>,
-): Promise<Bullet> {
-  const r = await bulletsCol().update(id, patch);
-  return adaptBullet(r);
-}
-
-export async function deleteBullet(id: string): Promise<void> {
-  await bulletsCol().delete(id);
 }
 
 // --- AI Settings ------------------------------------------------------

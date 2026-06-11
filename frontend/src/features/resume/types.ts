@@ -5,6 +5,8 @@
 // schema (jsonresume.org) so we can export to/import from that format
 // without information loss for the common fields.
 
+import type { ResumeLinks } from './links/types';
+
 export type ResumeId = string;
 
 export type SectionKey =
@@ -149,6 +151,7 @@ export type Resume = {
   template_id: string;
   design: TemplateConfig;
   data: ResumeData;
+  links: ResumeLinks;
   created_at: string;
   updated_at: string;
 };
@@ -164,6 +167,7 @@ export type ResumeVariant = {
   tone?: string;
   role_focus?: string[];
   data: ResumeData;
+  links: ResumeLinks;
   ats_score?: number;
   ats_breakdown?: ATSBreakdown;
   application_id?: string;
@@ -190,19 +194,10 @@ export type ResumeVersion = {
   resume_id?: ResumeId;
   variant_id?: string;
   data: ResumeData;
+  links: ResumeLinks;
   label?: string;
   is_auto: boolean;
   created_at: string;
-};
-
-export type Bullet = {
-  id: string;
-  user_id: string;
-  text: string;
-  tags: string[];
-  metrics?: { value: number; unit?: string }[];
-  created_at: string;
-  updated_at: string;
 };
 
 export type AIProvider =

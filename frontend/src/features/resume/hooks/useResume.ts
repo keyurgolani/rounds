@@ -15,6 +15,9 @@ import {
   updateResume,
 } from '../api';
 import type { Resume, ResumeData, TemplateConfig } from '../types';
+import { resolveAndSync, type LibrarySnapshot } from '../links/resolve';
+import { loadLibrarySnapshot } from '../links/library';
+import { emptyLinks, type ResumeLinks } from '../links/types';
 
 const DEBOUNCE_MS = 700;
 // Keep a short-lived save in flight from kicking another version row
@@ -35,6 +38,8 @@ export type UseResumeResult = {
   setData: (next: ResumeData | ((prev: ResumeData) => ResumeData)) => void;
   setTemplateId: (id: string) => void;
   setDesign: (next: TemplateConfig | ((prev: TemplateConfig) => TemplateConfig)) => void;
+  links: ResumeLinks;
+  setLinks: (next: ResumeLinks | ((p: ResumeLinks) => ResumeLinks)) => void;
   // Returns the new slug (which may equal the old slug if the
   // generated value didn't change). Caller should navigate to
   // /resumes/<newSlug> if it differs from the URL.
@@ -48,6 +53,7 @@ export type UseResumeResult = {
 // is why template selection didn't survive a refresh.
 type Pending = {
   data?: ResumeData;
+  links?: ResumeLinks;
   template_id?: string;
   design?: TemplateConfig;
   name?: string;
@@ -63,16 +69,21 @@ export function useResume(slug: string | undefined): UseResumeResult {
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [links, setLocalLinks] = useState<ResumeLinks>(emptyLinks());
 
   // Pending patch coalesces calls between debounce ticks.
   const pendingRef = useRef<Pending>({});
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastVersionAtRef = useRef<number>(0);
   const dataRef = useRef<ResumeData>(emptyData());
+  const linksRef = useRef<ResumeLinks>(emptyLinks());
   // Tracks the slug we've already fetched. After a rename navigates
   // to the new slug, the loader effect would otherwise re-fetch the
   // same resume and flash a loading state — this short-circuits it.
   const loadedSlugRef = useRef<string | null>(null);
+  // Stable ref to schedule so the initial-load effect can call it
+  // without being listed as a dependency (schedule is defined below).
+  const scheduleRef = useRef<((patch: Pending) => void) | null>(null);
 
   // --- Initial load ----------------------------------------------------
   useEffect(() => {
@@ -80,23 +91,25 @@ export function useResume(slug: string | undefined): UseResumeResult {
     if (loadedSlugRef.current === slug) return; // already loaded
     let cancelled = false;
     setLoading(true);
-    getResumeBySlug(slug)
-      .then((r) => {
+    const emptySnapshot: LibrarySnapshot = { jobs: {}, projects: {}, bullets: {} };
+    Promise.all([
+      getResumeBySlug(slug),
+      loadLibrarySnapshot().catch(() => emptySnapshot),
+    ])
+      .then(([r, lib]) => {
         if (cancelled) return;
+        const resolved = resolveAndSync(r.data, r.links, lib);
         setResume(r);
-        setLocalData(r.data);
-        dataRef.current = r.data;
+        setLocalData(resolved.data); dataRef.current = resolved.data;
+        setLocalLinks(resolved.links); linksRef.current = resolved.links;
         setLocalTemplateId(r.template_id || 'modern');
         setLocalDesign(r.design || {});
         setLastSavedAt(r.updated_at);
         loadedSlugRef.current = r.slug;
+        if (resolved.changed) scheduleRef.current?.({ data: resolved.data, links: resolved.links });
       })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      .catch((err: Error) => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => {
       cancelled = true;
     };
@@ -126,6 +139,7 @@ export function useResume(slug: string | undefined): UseResumeResult {
         createVersion({
           resumeId: r.id,
           data: patch.data,
+          links: patch.links ?? linksRef.current,
           isAuto: true,
         }).catch(() => {
           /* ignore */
@@ -153,6 +167,9 @@ export function useResume(slug: string | undefined): UseResumeResult {
     },
     [performSave],
   );
+  // Keep the ref current so the initial-load effect can reach schedule
+  // without a dependency cycle.
+  scheduleRef.current = schedule;
 
   // --- Public setters --------------------------------------------------
   const setData: UseResumeResult['setData'] = useCallback(
@@ -185,6 +202,15 @@ export function useResume(slug: string | undefined): UseResumeResult {
     },
     [schedule],
   );
+
+  const setLinks: UseResumeResult['setLinks'] = useCallback((next) => {
+    setLocalLinks((prev) => {
+      const value = typeof next === 'function' ? (next as (p: ResumeLinks) => ResumeLinks)(prev) : next;
+      linksRef.current = value;
+      schedule({ links: value });
+      return value;
+    });
+  }, [schedule]);
 
   const rename = useCallback(
     async (name: string): Promise<string | null> => {
@@ -271,6 +297,7 @@ export function useResume(slug: string | undefined): UseResumeResult {
     data,
     templateId,
     design,
+    links,
     loading,
     error,
     saveState,
@@ -278,6 +305,7 @@ export function useResume(slug: string | undefined): UseResumeResult {
     setData,
     setTemplateId,
     setDesign,
+    setLinks,
     rename,
     flush,
   };

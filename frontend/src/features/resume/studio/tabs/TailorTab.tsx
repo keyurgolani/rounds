@@ -19,11 +19,15 @@ import { usePersistedState } from '../../../../hooks/usePersistedState';
 import type { Resume, ResumeData } from '../../types';
 import { tailorResume } from '../../ai/client';
 import { createVariant } from '../../api';
+import { markEdits } from '../../links/maintain';
+import type { ResumeLinks } from '../../links/types';
 
 type Props = {
   data: ResumeData;
   resume: Resume | null;
   setData: (next: ResumeData | ((prev: ResumeData) => ResumeData)) => void;
+  links: ResumeLinks;
+  setLinks: (next: ResumeLinks | ((p: ResumeLinks) => ResumeLinks)) => void;
 };
 
 type AppRow = {
@@ -42,7 +46,7 @@ const TONES = [
   { id: 'storytelling', label: 'Storytelling' },
 ];
 
-export default function TailorTab({ data, resume, setData }: Props) {
+export default function TailorTab({ data, resume, setData, links, setLinks }: Props) {
   const persistKey = `rounds.resume.tailor.${resume?.id ?? 'untitled'}`;
   const [searchParams] = useSearchParams();
   const urlAppId = searchParams.get('app');
@@ -133,6 +137,7 @@ export default function TailorTab({ data, resume, setData }: Props) {
   async function applyToMaster() {
     if (!proposed) return;
     setData(proposed);
+    setLinks(markEdits(data, proposed, links));
     setProposed(null);
   }
 
@@ -149,6 +154,7 @@ export default function TailorTab({ data, resume, setData }: Props) {
         resume_id: resume.id,
         name: baseName,
         data: proposed,
+        links: markEdits(data, proposed, links),
         target_company: selectedApp?.company,
         job_title: selectedApp?.role,
         job_description: jd,

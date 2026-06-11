@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import type { Resume, ResumeData, SectionKey, TemplateConfig } from '../types';
 import type { UseResumeResult } from '../hooks/useResume';
+import { emptyLinks, type ResumeLinks } from '../links/types';
+import { loadLibrarySnapshot, type LibraryData } from '../links/library';
 import { SECTION_LABELS } from '../utils';
 import SectionNav from './SectionNav';
 import PreviewPane from './PreviewPane';
@@ -128,6 +130,7 @@ export default function StudioShell({ result, active, onActiveChange }: Props) {
   const [wide, setWide] = useState<boolean>(() =>
     typeof window === 'undefined' ? true : window.innerWidth >= 1024,
   );
+  const [lib, setLib] = useState<LibraryData | null>(null);
 
   useEffect(() => {
     const onResize = () => setWide(window.innerWidth >= 1024);
@@ -135,7 +138,11 @@ export default function StudioShell({ result, active, onActiveChange }: Props) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const onRestore = (next: ResumeData) => result.setData(next);
+  useEffect(() => {
+    loadLibrarySnapshot().then(setLib).catch(() => {});
+  }, []);
+
+  const onRestore = (next: ResumeData, nextLinks?: ResumeLinks) => { result.setData(next); result.setLinks(nextLinks ?? emptyLinks()); };
   const isSection = (k: ActiveKey): k is SectionKey =>
     !TOOLS.some((t) => t.key === k);
 
@@ -207,6 +214,9 @@ export default function StudioShell({ result, active, onActiveChange }: Props) {
           isSection={isSection(active)}
           data={result.data}
           setData={result.setData}
+          links={result.links}
+          setLinks={result.setLinks}
+          lib={lib}
           templateId={result.templateId}
           setTemplateId={result.setTemplateId}
           design={result.design}
@@ -317,12 +327,15 @@ type ActiveContentProps = {
   isSection: boolean;
   data: ResumeData;
   setData: (next: ResumeData | ((prev: ResumeData) => ResumeData)) => void;
+  links: ResumeLinks;
+  setLinks: (next: ResumeLinks | ((prev: ResumeLinks) => ResumeLinks)) => void;
+  lib: LibraryData | null;
   templateId: string;
   setTemplateId: (id: string) => void;
   design: TemplateConfig;
   setDesign: (next: TemplateConfig | ((prev: TemplateConfig) => TemplateConfig)) => void;
   resume: Resume | null;
-  onRestore: (data: ResumeData) => void;
+  onRestore: (data: ResumeData, nextLinks?: ResumeLinks) => void;
   flush: () => Promise<void>;
 };
 
@@ -334,13 +347,29 @@ function ActiveContent(props: ActiveContentProps) {
       case 'personal':
         return <PersonalInfoEditor data={data} setData={setData} />;
       case 'experience':
-        return <ExperienceEditor data={data} setData={setData} />;
+        return (
+          <ExperienceEditor
+            data={data}
+            setData={setData}
+            links={props.links}
+            setLinks={props.setLinks}
+            lib={props.lib}
+          />
+        );
       case 'education':
         return <EducationEditor data={data} setData={setData} />;
       case 'skills':
         return <SkillsEditor data={data} setData={setData} />;
       case 'projects':
-        return <ProjectsEditor data={data} setData={setData} />;
+        return (
+          <ProjectsEditor
+            data={data}
+            setData={setData}
+            links={props.links}
+            setLinks={props.setLinks}
+            lib={props.lib}
+          />
+        );
       case 'publications':
         return <PublicationsEditor data={data} setData={setData} />;
       case 'profiles':
@@ -367,6 +396,8 @@ function ActiveContent(props: ActiveContentProps) {
           data={data}
           resume={props.resume}
           setData={setData}
+          links={props.links}
+          setLinks={props.setLinks}
         />
       );
     case 'ats':
