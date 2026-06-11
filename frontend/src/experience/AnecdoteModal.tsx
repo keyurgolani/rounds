@@ -1,17 +1,20 @@
 import { useState, useCallback } from 'react';
+import { X } from 'lucide-react';
 import SubmissionModal from '../components/shell/SubmissionModal';
 import InlineEditField from '../applications/InlineEditField';
 import type { ExperienceAnecdote } from './experienceApi';
 import { updateAnecdote, deleteAnecdote } from './experienceApi';
+import ConnectionSection, { type ConnectionProps } from './ConnectionSection';
 
 interface Props {
   item: ExperienceAnecdote | null;
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  connection?: ConnectionProps;
 }
 
-export default function AnecdoteModal({ item, open, onClose, onSaved }: Props) {
+export default function AnecdoteModal({ item, open, onClose, onSaved, connection }: Props) {
   const [saving, setSaving] = useState(false);
 
   const commit = useCallback(
@@ -55,6 +58,26 @@ export default function AnecdoteModal({ item, open, onClose, onSaved }: Props) {
         <InlineEditField kind="multiline" label="Result" value={item.result} onCommit={(next) => commit({ result: next })} rows={2} />
         <InlineEditField kind="text" label="Impact" value={item.impact} onCommit={(next) => commit({ impact: next })} />
 
+        {/* Tags */}
+        <div className="flex flex-col" style={{ gap: 4 }}>
+          <span className="eyebrow" style={{ color: 'var(--text-3)' }}>Tags</span>
+          <div className="flex flex-wrap gap-1.5 items-center">
+            {item.tags.map((tag) => (
+              <span key={tag} className="pill flex items-center gap-1" style={{ fontSize: 11, background: 'var(--bg-sunken)', color: 'var(--text-2)', boxShadow: 'inset 0 0 0 1px var(--border)', padding: '2px 8px' }}>
+                {tag}
+                <button type="button" onClick={() => commit({ tags: item.tags.filter((t) => t !== tag) })} style={{ background: 0, border: 0, cursor: 'pointer', color: 'var(--text-4)', padding: 0, lineHeight: 1, display: 'inline-flex' }}>
+                  <X size={10} />
+                </button>
+              </span>
+            ))}
+            <TagInput onAdd={(tag) => { if (!item.tags.includes(tag)) commit({ tags: [...item.tags, tag] }); }} />
+          </div>
+        </div>
+
+        {connection && (
+          <ConnectionSection entityId={item.id} entityKind="anecdote" {...connection} />
+        )}
+
         <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--border)' }}>
           <button
             type="button"
@@ -68,5 +91,25 @@ export default function AnecdoteModal({ item, open, onClose, onSaved }: Props) {
         </div>
       </div>
     </SubmissionModal>
+  );
+}
+
+function TagInput({ onAdd }: { onAdd: (tag: string) => void }) {
+  const [draft, setDraft] = useState('');
+  return (
+    <input
+      type="text"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const t = draft.trim();
+          if (t) { onAdd(t); setDraft(''); }
+        }
+      }}
+      placeholder="Add tag…"
+      style={{ border: 0, background: 'transparent', color: 'var(--text)', fontSize: 12, outline: 'none', width: 80, padding: '2px 0' }}
+    />
   );
 }

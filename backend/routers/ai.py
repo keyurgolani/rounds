@@ -224,6 +224,10 @@ class ImportRequest(BaseModel):
     text: str = Field(..., min_length=10)
 
 
+class ExperienceImportRequest(BaseModel):
+    text: str = Field(..., min_length=10)
+
+
 class TailorRequest(BaseModel):
     data: dict[str, Any]
     job_description: str = Field(..., min_length=20)
@@ -1120,6 +1124,30 @@ _IMPORT_SYSTEM = (
 )
 
 
+_EXPERIENCE_IMPORT_SYSTEM = (
+    "You extract career experience data from plain text into structured JSON. "
+    "Output ONLY a JSON object — no markdown, no commentary. Schema:\n"
+    "{\n"
+    '  "jobs": [{"company":"","role":"","location":"","employment_type":"","start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","description":"","tags":[]}],\n'
+    '  "projects": [{"title":"","company":"","role":"","team_size":null,"tech_stack":[],"start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","description":"","tags":[]}],\n'
+    '  "anecdotes": [{"title":"","situation":"","task":"","action":"","result":"","impact":"","company":"","project":"","date":"YYYY-MM-DD","tags":[]}],\n'
+    '  "bullets": [{"title":"","impact":"","category":"","date":"YYYY-MM-DD","tags":[]}],\n'
+    '  "connections": [{"parent_type":"","parent_index":0,"child_type":"","child_index":0}]\n'
+    "}\n"
+    "Rules:\n"
+    "- All dates must be YYYY-MM-DD. If only year-month is known, use the 1st. If only year, use YYYY-01-01.\n"
+    "- Anecdotes should follow STAR format (Situation, Task, Action, Result).\n"
+    "- Connections link entities: valid parent->child pairs are job->project, job->anecdote, "
+    "job->bullet, project->anecdote, project->bullet, anecdote->bullet.\n"
+    "- Indices in connections are 0-based into their respective arrays.\n"
+    "- Extract at most 20 items total across all arrays.\n"
+    "- Leave fields empty (\"\" or [] or null) when unknown — never invent information.\n"
+    "- Tags should be short skill or domain labels (e.g. \"leadership\", \"Python\", \"B2B sales\").\n"
+    "- employment_type values: full-time, part-time, contract, internship, freelance.\n"
+    "- category values for bullets: achievement, responsibility, skill, other."
+)
+
+
 _TAILOR_SYSTEM = (
     "You rewrite a resume to better match a target job description. "
     "You receive the current resume as JSON and a job description. "
@@ -1269,6 +1297,41 @@ async def import_resume(request: Request, body: ImportRequest) -> dict[str, Any]
         )
     _stamp_ids(parsed)
     return {"data": parsed}
+
+
+@router.post("/experience-import")
+async def import_experience(request: Request, body: ExperienceImportRequest) -> dict[str, Any]:
+    user = await current_user(request)
+    cfg = await _active_text_config(user)
+    raw = body.text.strip()
+    try:
+        text = await _call_complete(
+            cfg["kind"],
+            cfg["model"],
+            cfg["api_key"],
+            cfg["base_url"] or None,
+            system=_EXPERIENCE_IMPORT_SYSTEM,
+            messages=[{"role": "user", "content": raw[:30000]}],
+            max_tokens=6000,
+        )
+    except Exception as err:  # noqa: BLE001
+        rid = _request_id()
+        _log.exception("experience-import failed [rid=%s]", rid)
+        kind_, msg = _friendly_error(err)
+        raise HTTPException(
+            status_code=_status_for_kind(kind_),
+            detail=f"{msg} (request id: {rid})",
+        ) from err
+
+    parsed = _safe_json(text)
+    if not parsed:
+        raise HTTPException(
+            status_code=503,
+            detail="The provider didn't return valid JSON. Try a different model or shorten the input.",
+        )
+    for key in ("jobs", "projects", "anecdotes", "bullets", "connections"):
+        parsed.setdefault(key, [])
+    return {"data": parsed, "warnings": []}
 
 
 def _safe_json(text: str) -> dict[str, Any] | None:
