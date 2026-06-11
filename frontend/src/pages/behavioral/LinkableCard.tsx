@@ -14,6 +14,10 @@ type Props = {
   delay?: number;
   side: 'right' | 'left';
   compact?: boolean;
+  /** When false, the drag handle is omitted (the card is link-target-only). */
+  draggable?: boolean;
+  /** Visual flag for board state, e.g. an "unfiled" (no-parent) card. */
+  flag?: 'unfiled';
 };
 
 export function LinkableCard({
@@ -30,6 +34,8 @@ export function LinkableCard({
   delay = 0,
   side,
   compact = false,
+  draggable = true,
+  flag,
 }: Props) {
   const outline = isDropTarget
     ? '0 0 0 2px var(--accent)'
@@ -47,9 +53,11 @@ export function LinkableCard({
     animationDelay: `${delay}ms`,
     cursor: onOpen ? 'pointer' : 'default',
     boxShadow: outline,
+    outline: flag === 'unfiled' && !active && !isDropTarget ? '1.5px dashed var(--border-strong)' : undefined,
+    outlineOffset: 2,
     opacity: dimmed ? 0.42 : 1,
     transform: active ? 'translateY(-1px)' : 'none',
-    transition: 'opacity 160ms, transform 160ms, box-shadow 160ms',
+    transition: 'opacity 160ms, transform 160ms, box-shadow 160ms, outline 160ms',
   };
 
   return (
@@ -66,6 +74,7 @@ export function LinkableCard({
     >
       {children}
 
+      {draggable && (
       <span
         data-link-handle
         onPointerDown={onBeginDrag}
@@ -104,6 +113,7 @@ export function LinkableCard({
           }}
         />
       </span>
+      )}
     </div>
   );
 }

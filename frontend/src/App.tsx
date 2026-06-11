@@ -27,8 +27,7 @@ import Todos from './pages/Todos';
 import ResumesList from './pages/ResumesList';
 import ResumeStudio from './pages/ResumeStudio';
 import PublicResume from './pages/PublicResume';
-import ExperienceTimeline from './experience/ExperienceTimeline';
-import ExperienceList from './experience/ExperienceList';
+import ExperiencePage from './experience/ExperiencePage';
 import { CampaignProvider } from './campaign/CampaignContext';
 
 export default function App() {
@@ -94,11 +93,14 @@ export default function App() {
         <Route path="resumes/:slug" element={<ResumeStudio />} />
         <Route path="profile" element={<Profile />} />
         <Route path="settings" element={<Settings />} />
-        <Route path="experience" element={<ExperienceTimeline />} />
-        <Route path="experience/anecdotes" element={<ExperienceList type="anecdote" title="Anecdotes" />} />
-        <Route path="experience/bullets" element={<ExperienceList type="bullet" title="Bullets & Achievements" />} />
-        <Route path="experience/projects" element={<ExperienceList type="project" title="Projects" />} />
-        <Route path="experience/jobs" element={<ExperienceList type="job" title="Job History" />} />
+        <Route path="experience" element={<ExperiencePage />} />
+        <Route path="experience/list" element={<ExperiencePage />} />
+        <Route path="experience/arrange" element={<ExperiencePage />} />
+        {/* Legacy per-type routes now redirect to the consolidated List tab. */}
+        <Route path="experience/anecdotes" element={<Navigate to="/experience/list" replace />} />
+        <Route path="experience/bullets" element={<Navigate to="/experience/list" replace />} />
+        <Route path="experience/projects" element={<Navigate to="/experience/list" replace />} />
+        <Route path="experience/jobs" element={<Navigate to="/experience/list" replace />} />
       </Route>
     </Routes>
   );

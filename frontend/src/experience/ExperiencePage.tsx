@@ -1,10 +1,8 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Briefcase,
-  FolderKanban,
-  MessageSquareQuote,
-  ListChecks,
+  List,
+  Network,
   Clock,
   Plus,
   Upload,
@@ -14,10 +12,6 @@ import {
 import AppHeader from '../components/shell/AppHeader';
 import {
   listTimelineEntities,
-  listJobs,
-  listProjects,
-  listAnecdotes,
-  listBullets,
   createJob,
   createProject,
   createAnecdote,
@@ -44,6 +38,7 @@ import JobModal from './JobModal';
 import ProjectModal from './ProjectModal';
 import AnecdoteModal from './AnecdoteModal';
 import BulletModal from './BulletModal';
+import ArrangeBoard from './ArrangeBoard';
 
 // ---------------------------------------------------------------------------
 // Tab definitions
@@ -51,10 +46,8 @@ import BulletModal from './BulletModal';
 
 const TABS = [
   { key: 'timeline' as const, label: 'Timeline', icon: Clock },
-  { key: 'anecdote' as const, label: 'Anecdotes', icon: MessageSquareQuote },
-  { key: 'bullet' as const, label: 'Bullets', icon: ListChecks },
-  { key: 'project' as const, label: 'Projects', icon: FolderKanban },
-  { key: 'job' as const, label: 'Jobs', icon: Briefcase },
+  { key: 'list' as const, label: 'List', icon: List },
+  { key: 'arrange' as const, label: 'Arrange', icon: Network },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -320,18 +313,14 @@ function TreeNode({ entity, depth, pathKey, isRoot, isLeft, enableChildren, conn
 
 const PATH_TO_TAB: Record<string, TabKey> = {
   '/experience': 'timeline',
-  '/experience/anecdotes': 'anecdote',
-  '/experience/bullets': 'bullet',
-  '/experience/projects': 'project',
-  '/experience/jobs': 'job',
+  '/experience/list': 'list',
+  '/experience/arrange': 'arrange',
 };
 
 const TAB_TO_PATH: Record<TabKey, string> = {
   timeline: '/experience',
-  anecdote: '/experience/anecdotes',
-  bullet: '/experience/bullets',
-  project: '/experience/projects',
-  job: '/experience/jobs',
+  list: '/experience/list',
+  arrange: '/experience/arrange',
 };
 
 export default function ExperiencePage() {
@@ -341,7 +330,6 @@ export default function ExperiencePage() {
   const [timelineItems, setTimelineItems] = useState<TimelineEntity[] | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [collapsedSet, setCollapsedSet] = useState<Set<string>>(new Set());
-  const [listItems, setListItems] = useState<(ExperienceJob | ExperienceProject | ExperienceAnecdote | ExperienceBullet)[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<TimelineEntity | (ExperienceJob | ExperienceProject | ExperienceAnecdote | ExperienceBullet) | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -369,34 +357,18 @@ export default function ExperiencePage() {
     });
   }, []);
 
-  // Load list data for current tab
-  const loadList = useCallback(() => {
-    if (activeTab === 'timeline') return;
-    setError(null);
-    const loader =
-      activeTab === 'job' ? listJobs()
-        : activeTab === 'project' ? listProjects()
-          : activeTab === 'anecdote' ? listAnecdotes()
-            : listBullets();
-    loader.then((v) => setListItems(v as (ExperienceJob | ExperienceProject | ExperienceAnecdote | ExperienceBullet)[]))
-      .catch((e) => setError(String(e)));
-  }, [activeTab]);
-
   useEffect(() => {
-    // Always load timeline entities + connections — they back the entity lookup,
-    // connection maps, and modal navigation used on every tab.
+    // Timeline entities + connections back every tab: the timeline tree, the
+    // flat List view, the Arrange board, the entity lookup, and modal navigation.
     loadTimeline();
-    if (activeTab !== 'timeline') loadList();
-  }, [activeTab, loadTimeline, loadList]);
+  }, [loadTimeline]);
 
   // Sync selected after refresh
   useEffect(() => {
-    if (!selected) return;
-    const items = activeTab === 'timeline' ? timelineItems : listItems;
-    if (!items) return;
-    const updated = items.find((i) => i.id === selected.id);
+    if (!selected || !timelineItems) return;
+    const updated = timelineItems.find((i) => i.id === selected.id);
     if (updated) setSelected(updated);
-  }, [timelineItems, listItems, selected, activeTab]);
+  }, [timelineItems, selected]);
 
   // Connection maps
   const connMap = useMemo(() => buildConnectionMap(connections), [connections]);
@@ -434,6 +406,13 @@ export default function ExperiencePage() {
     return Object.keys(grouped).sort((a, b) => +b - +a);
   }, [grouped]);
 
+  // Flat List view: every entity matching the filter (unlike the timeline's
+  // "all" view, nothing is hidden because it has a parent).
+  const listView = useMemo(() => {
+    if (!timelineItems) return null;
+    return filter === 'all' ? timelineItems : timelineItems.filter((i) => i.kind === filter);
+  }, [timelineItems, filter]);
+
   // Handlers
   function handleCardClick(item: TimelineEntity | (ExperienceJob | ExperienceProject | ExperienceAnecdote | ExperienceBullet)) {
     setSelected(item);
@@ -462,26 +441,18 @@ export default function ExperiencePage() {
         throw new Error(`Unknown entity kind: ${kind}`);
     }
 
-    if (activeTab === 'timeline') {
-      setTimelineItems((prev) => (prev ? [newItem as TimelineEntity, ...prev] : [newItem as TimelineEntity]));
-    } else {
-      setListItems((prev) => (prev ? [newItem, ...prev] : [newItem]));
-    }
+    setTimelineItems((prev) => (prev ? [newItem as TimelineEntity, ...prev] : [newItem as TimelineEntity]));
     setSelected(newItem);
     setModalOpen(true);
   }
 
-  async function handleAddForTab() {
-    if (activeTab === 'timeline') {
-      setSelectorOpen(true);
-      return;
-    }
-    await handleAdd(activeTab as EntityKind);
+  // Add always opens the entity-type picker (Timeline and List both).
+  function handleAddForTab() {
+    setSelectorOpen(true);
   }
 
   function reload() {
     loadTimeline();
-    if (activeTab !== 'timeline') loadList();
   }
 
   function listFormatDate(item: ExperienceJob | ExperienceProject | ExperienceAnecdote | ExperienceBullet): string {
@@ -508,14 +479,10 @@ export default function ExperiencePage() {
     return undefined;
   }
 
-  // Prefer the selected entity's own kind (set on every TimelineEntity, including
-  // those reached via connection navigation); fall back to the active list tab.
+  // The selected entity's own kind (set on every TimelineEntity, including those
+  // reached via connection navigation) drives which edit modal renders.
   const currentEntityKind: EntityKind | undefined =
-    selected && 'kind' in selected
-      ? (selected as TimelineEntity).kind
-      : activeTab !== 'timeline'
-        ? (activeTab as EntityKind)
-        : undefined;
+    selected && 'kind' in selected ? (selected as TimelineEntity).kind : undefined;
 
   // All entities as link targets, plus a connection bundle shared by every modal.
   const allEntities = useMemo<LinkedEntity[]>(
@@ -640,8 +607,8 @@ export default function ExperiencePage() {
         </div>
       </div>
 
-      {/* Filter bar (timeline only) */}
-      {activeTab === 'timeline' && (
+      {/* Filter bar (Timeline + List) */}
+      {(activeTab === 'timeline' || activeTab === 'list') && (
         <div className="flex-shrink-0 px-5 sm:px-8 py-3" style={{ background: 'var(--bg)' }}>
           <div className="flex flex-wrap gap-2 items-center">
             {(['all', 'job', 'project', 'anecdote', 'bullet'] as const).map((f) => (
@@ -667,7 +634,7 @@ export default function ExperiencePage() {
               </button>
             ))}
             <span className="mono ml-auto" style={{ fontSize: 10.5, color: 'var(--text-4)', letterSpacing: '0.1em' }}>
-              {filtered?.length ?? 0} ITEMS
+              {(activeTab === 'list' ? listView?.length : filtered?.length) ?? 0} ITEMS
             </span>
           </div>
         </div>
@@ -757,14 +724,16 @@ export default function ExperiencePage() {
           </div>
         )}
 
-        {/* List tab (anecdotes, bullets, projects, jobs) */}
-        {activeTab !== 'timeline' && !error && listItems === null && (
+        {/* List tab — flat, type-filterable list of all entities */}
+        {activeTab === 'list' && !error && listView === null && (
           <div className="text-center py-16" style={{ color: 'var(--text-3)' }}>Loading…</div>
         )}
 
-        {activeTab !== 'timeline' && !error && listItems && listItems.length === 0 && (
+        {activeTab === 'list' && !error && listView && listView.length === 0 && (
           <div className="text-center py-16" style={{ color: 'var(--text-4)' }}>
-            <p style={{ margin: '0 0 16px' }}>No {activeTab}s yet.</p>
+            <p style={{ margin: '0 0 16px' }}>
+              {filter === 'all' ? 'No experience items yet.' : `No ${filter}s yet.`}
+            </p>
             <button
               type="button"
               onClick={handleAddForTab}
@@ -772,14 +741,14 @@ export default function ExperiencePage() {
               style={{ padding: '10px 18px', border: 0, cursor: 'pointer', fontSize: 13 }}
             >
               <Plus size={16} />
-              Add first {activeTab}
+              Add an item
             </button>
           </div>
         )}
 
-        {activeTab !== 'timeline' && listItems && listItems.length > 0 && (
+        {activeTab === 'list' && listView && listView.length > 0 && (
           <div className="flex flex-col gap-2">
-            {listItems.map((item) => (
+            {listView.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -824,6 +793,36 @@ export default function ExperiencePage() {
               </button>
             ))}
           </div>
+        )}
+
+        {/* Arrange tab — live wiring board over all entities */}
+        {activeTab === 'arrange' && !error && timelineItems === null && (
+          <div className="text-center py-16" style={{ color: 'var(--text-3)' }}>Loading…</div>
+        )}
+
+        {activeTab === 'arrange' && !error && timelineItems && timelineItems.length === 0 && (
+          <div className="text-center py-16" style={{ color: 'var(--text-4)' }}>
+            <p style={{ margin: '0 0 16px' }}>No experience items to arrange yet.</p>
+            <button
+              type="button"
+              onClick={handleAddForTab}
+              className="card card-hover inline-flex items-center gap-2"
+              style={{ padding: '10px 18px', border: 0, cursor: 'pointer', fontSize: 13 }}
+            >
+              <Plus size={16} />
+              Add an item
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'arrange' && timelineItems && timelineItems.length > 0 && (
+          <ArrangeBoard
+            entities={timelineItems}
+            connections={connections}
+            connection={connectionBundle}
+            onChanged={loadTimeline}
+            onOpen={handleCardClick}
+          />
         )}
       </div>
 

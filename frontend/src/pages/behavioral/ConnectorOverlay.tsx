@@ -12,6 +12,8 @@ type Props = {
   connectors: Connector[];
   drag?: { fromX: number; fromY: number; x: number; y: number } | null;
   hasDropTarget?: boolean;
+  /** When true the overlay renders above the card grid (focus-mode edges). */
+  onTop?: boolean;
 };
 
 export function bezierPath(from: Endpoint, to: Endpoint) {
@@ -21,7 +23,7 @@ export function bezierPath(from: Endpoint, to: Endpoint) {
   return `M ${from.x} ${from.y} C ${c1x} ${from.y}, ${c2x} ${to.y}, ${to.x} ${to.y}`;
 }
 
-export function ConnectorOverlay({ connectors, drag, hasDropTarget }: Props) {
+export function ConnectorOverlay({ connectors, drag, hasDropTarget, onTop }: Props) {
   return (
     <svg
       aria-hidden="true"
@@ -31,7 +33,7 @@ export function ConnectorOverlay({ connectors, drag, hasDropTarget }: Props) {
         width: '100%',
         height: '100%',
         pointerEvents: 'none',
-        zIndex: 1,
+        zIndex: onTop ? 5 : 1,
         overflow: 'visible',
       }}
     >
