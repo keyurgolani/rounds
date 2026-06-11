@@ -46,6 +46,10 @@ export interface ExperienceAnecdote {
   project: string;
   date: string;
   tags: string[];
+  description: string;
+  category_ids: string[];
+  linked_question_ids: string[];
+  notes: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -228,9 +232,13 @@ interface AnecdoteRow extends RecordModel {
   project?: string;
   date: string;
   tags?: string[];
+  description?: string;
+  categories?: string[];
+  linked_questions?: string[];
+  notes?: string;
 }
 
-function adaptAnecdote(r: AnecdoteRow): ExperienceAnecdote {
+export function adaptAnecdoteRow(r: AnecdoteRow): ExperienceAnecdote {
   return {
     id: r.id,
     title: r.title,
@@ -243,9 +251,25 @@ function adaptAnecdote(r: AnecdoteRow): ExperienceAnecdote {
     project: r.project ?? '',
     date: r.date,
     tags: r.tags ?? [],
+    description: r.description ?? '',
+    category_ids: r.categories ?? [],
+    linked_question_ids: r.linked_questions ?? [],
+    notes: r.notes ?? '',
     created_at: r.created,
     updated_at: r.updated,
   };
+}
+
+export function anecdotePayload(data: Partial<ExperienceAnecdote>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const direct: (keyof ExperienceAnecdote)[] = [
+    'title', 'situation', 'task', 'action', 'result', 'impact',
+    'company', 'project', 'date', 'tags', 'description', 'notes',
+  ];
+  for (const k of direct) if (data[k] !== undefined) out[k] = data[k];
+  if (data.category_ids !== undefined) out.categories = data.category_ids;
+  if (data.linked_question_ids !== undefined) out.linked_questions = data.linked_question_ids;
+  return out;
 }
 
 export async function listAnecdotes(): Promise<ExperienceAnecdote[]> {
@@ -253,7 +277,7 @@ export async function listAnecdotes(): Promise<ExperienceAnecdote[]> {
     filter: ownerFilter(),
     sort: '-date',
   });
-  return items.map(adaptAnecdote);
+  return items.map(adaptAnecdoteRow);
 }
 
 export async function createAnecdote(data: Partial<ExperienceAnecdote>): Promise<ExperienceAnecdote> {
@@ -269,12 +293,16 @@ export async function createAnecdote(data: Partial<ExperienceAnecdote>): Promise
     project: data.project ?? '',
     date: data.date ?? new Date().toISOString().split('T')[0],
     tags: data.tags ?? [],
+    description: data.description ?? '',
+    notes: data.notes ?? '',
+    categories: data.category_ids ?? [],
+    linked_questions: data.linked_question_ids ?? [],
   };
-  return adaptAnecdote(await pb.collection<AnecdoteRow>('experience_anecdotes').create(payload));
+  return adaptAnecdoteRow(await pb.collection<AnecdoteRow>('experience_anecdotes').create(payload));
 }
 
 export async function updateAnecdote(id: string, data: Partial<ExperienceAnecdote>): Promise<ExperienceAnecdote> {
-  return adaptAnecdote(await pb.collection<AnecdoteRow>('experience_anecdotes').update(id, data));
+  return adaptAnecdoteRow(await pb.collection<AnecdoteRow>('experience_anecdotes').update(id, anecdotePayload(data)));
 }
 
 export async function deleteAnecdote(id: string): Promise<void> {

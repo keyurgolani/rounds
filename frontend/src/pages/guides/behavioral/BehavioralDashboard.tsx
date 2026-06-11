@@ -60,7 +60,7 @@ export default function BehavioralDashboard({ config, navGroups, scrollRef }: Pr
 
         <Pact>
           <Link
-            to="/behavioral/anecdotes/new"
+            to="/experience/list?anecdote=new"
             style={{
               color: 'var(--accent)',
               fontWeight: 600,

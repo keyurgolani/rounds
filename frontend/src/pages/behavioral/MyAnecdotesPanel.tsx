@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Plus, Star } from 'lucide-react';
-import { listAnecdotes, updateAnecdote } from './anecdotesApi';
-import { slugify } from '../../lib/slug';
-import type { Anecdote, BehavioralCategoryLite, BehavioralQuestionLite } from './types';
+import { listAnecdotes, updateAnecdote, createAnecdote } from '../../experience/experienceApi';
+import type { ExperienceAnecdote } from '../../experience/experienceApi';
+import type { BehavioralCategoryLite, BehavioralQuestionLite } from './types';
 
 interface MyAnecdotesPanelProps {
   questionId: string;
@@ -11,6 +11,7 @@ interface MyAnecdotesPanelProps {
   categories: BehavioralCategoryLite[];
   questions: BehavioralQuestionLite[];
 }
+
 
 function categoryName(cats: BehavioralCategoryLite[], id: string): string {
   return cats.find((c) => c.id === id)?.name || '';
@@ -51,10 +52,10 @@ export function MyAnecdotesPanel({
   questions: _questions,
 }: MyAnecdotesPanelProps) {
   const navigate = useNavigate();
-  const [anecdotes, setAnecdotes] = useState<Anecdote[]>([]);
+  const [anecdotes, setAnecdotes] = useState<ExperienceAnecdote[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [dirty, setDirty] = useState<Anecdote | null>(null);
+  const [dirty, setDirty] = useState<ExperienceAnecdote | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
@@ -99,7 +100,7 @@ export function MyAnecdotesPanel({
     [anecdotes, selectedId]
   );
 
-  const persist = useDebouncedCallback(async (a: Anecdote) => {
+  const persist = useDebouncedCallback(async (a: ExperienceAnecdote) => {
     setSaving(true);
     try {
       const saved = await updateAnecdote(a.id, {
@@ -120,7 +121,7 @@ export function MyAnecdotesPanel({
     }
   }, 700);
 
-  function handleField<K extends keyof Anecdote>(key: K, value: Anecdote[K]) {
+  function handleField<K extends keyof ExperienceAnecdote>(key: K, value: ExperienceAnecdote[K]) {
     if (!selected) return;
     const next = { ...selected, [key]: value };
     setDirty(next);
@@ -128,7 +129,7 @@ export function MyAnecdotesPanel({
     persist(next);
   }
 
-  async function linkAnecdote(a: Anecdote) {
+  async function linkAnecdote(a: ExperienceAnecdote) {
     setLibrarianOpen(false);
     setQuery('');
     const updated = await updateAnecdote(a.id, {
@@ -227,10 +228,10 @@ export function MyAnecdotesPanel({
 
           <button
             type="button"
-            onClick={() => {
-              const q = _questions.find((x) => x.id === questionId);
-              const ref = q ? slugify(q.title) || String(questionId) : String(questionId);
-              navigate(`/behavioral/anecdotes/new?question=${ref}`);
+            onClick={async () => {
+              const created = await createAnecdote({ title: 'New anecdote', linked_question_ids: [questionId] });
+              setAnecdotes((prev) => [created, ...prev]);
+              setSelectedId(created.id);
             }}
             className="inline-flex items-center gap-1.5 text-left"
             style={{
@@ -420,22 +421,40 @@ export function MyAnecdotesPanel({
                   </span>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={unlinkSelected}
-                className="mono uppercase ml-auto"
-                style={{
-                  fontSize: 10.5,
-                  color: 'var(--plum)',
-                  letterSpacing: '0.1em',
-                  background: 'transparent',
-                  border: 0,
-                  cursor: 'pointer',
-                  padding: 0,
-                }}
-              >
-                Unlink
-              </button>
+              <div className="mono uppercase ml-auto flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/experience/list?anecdote=${selected.id}`)}
+                  className="mono uppercase"
+                  style={{
+                    fontSize: 10.5,
+                    color: 'var(--text-3)',
+                    letterSpacing: '0.1em',
+                    background: 'transparent',
+                    border: 0,
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  Edit in library →
+                </button>
+                <button
+                  type="button"
+                  onClick={unlinkSelected}
+                  className="mono uppercase"
+                  style={{
+                    fontSize: 10.5,
+                    color: 'var(--plum)',
+                    letterSpacing: '0.1em',
+                    background: 'transparent',
+                    border: 0,
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  Unlink
+                </button>
+              </div>
             </div>
 
             <div className="flex gap-1 mb-4">

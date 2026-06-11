@@ -79,7 +79,7 @@ const DEMO_COLLECTIONS_IN_DELETE_ORDER = [
   'interview_rounds',
   'applications',
   'campaigns',
-  'anecdotes',
+  'experience_anecdotes',
 ];
 
 async function resetDemoUser(record: AuthRecord): Promise<void> {

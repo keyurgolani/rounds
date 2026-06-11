@@ -1,10 +1,11 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MyAnecdotesPanel } from '../MyAnecdotesPanel';
-import type { Anecdote, BehavioralCategoryLite, BehavioralQuestionLite } from '../types';
-import { listAnecdotes, updateAnecdote } from '../anecdotesApi';
+import type { BehavioralCategoryLite, BehavioralQuestionLite } from '../types';
+import type { ExperienceAnecdote } from '../../../experience/experienceApi';
+import { listAnecdotes, updateAnecdote, createAnecdote } from '../../../experience/experienceApi';
 
-vi.mock('../anecdotesApi', () => ({
+vi.mock('../../../experience/experienceApi', () => ({
   listAnecdotes: vi.fn(),
   createAnecdote: vi.fn(),
   updateAnecdote: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('react-router-dom', async () => {
 
 const listAnecdotesMock = listAnecdotes as unknown as ReturnType<typeof vi.fn>;
 const updateAnecdoteMock = updateAnecdote as unknown as ReturnType<typeof vi.fn>;
+const createAnecdoteMock = createAnecdote as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   navigateMock.mockClear();
@@ -34,7 +36,7 @@ const questions: BehavioralQuestionLite[] = [
   { id: 'q10', title: 'Tell me about a conflict' },
   { id: 'q11', title: 'Tell me about a failure' },
 ];
-const anecdotes: Anecdote[] = [
+const anecdotes: ExperienceAnecdote[] = [
   {
     id: 'a1',
     title: 'Linked story',
@@ -43,6 +45,11 @@ const anecdotes: Anecdote[] = [
     task: '',
     action: '',
     result: '',
+    impact: '',
+    company: '',
+    project: '',
+    date: '2026-01-01',
+    tags: [],
     category_ids: ['cat2'],
     linked_question_ids: ['q10'],
     notes: '',
@@ -56,6 +63,11 @@ const anecdotes: Anecdote[] = [
     task: '',
     action: '',
     result: '',
+    impact: '',
+    company: '',
+    project: '',
+    date: '2026-01-01',
+    tags: [],
     category_ids: ['cat2'],
     linked_question_ids: [],
     notes: '',
@@ -69,6 +81,11 @@ const anecdotes: Anecdote[] = [
     task: '',
     action: '',
     result: '',
+    impact: '',
+    company: '',
+    project: '',
+    date: '2026-01-01',
+    tags: [],
     category_ids: ['cat1'],
     linked_question_ids: [],
     notes: '',
@@ -142,16 +159,45 @@ describe('MyAnecdotesPanel', () => {
     expect(body.linked_question_ids).not.toContain('q10');
   });
 
-  it('New anecdote button navigates to new anecdote page with ?question=<slug>', async () => {
+  it('New anecdote button calls createAnecdote with linked_question_ids and does NOT navigate', async () => {
     listAnecdotesMock.mockResolvedValue(anecdotes);
+    const newAnecdote: ExperienceAnecdote = {
+      id: 'a-new',
+      title: 'New anecdote',
+      description: '',
+      situation: '',
+      task: '',
+      action: '',
+      result: '',
+      impact: '',
+      company: '',
+      project: '',
+      date: '2026-06-05',
+      tags: [],
+      category_ids: [],
+      linked_question_ids: ['q10'],
+      notes: '',
+    };
+    createAnecdoteMock.mockResolvedValue(newAnecdote);
     renderPanel();
     await waitFor(() => screen.getByDisplayValue('Linked story'));
     fireEvent.click(screen.getByRole('button', { name: /^\s*New anecdote\s*$/i }));
-    expect(navigateMock).toHaveBeenCalledWith('/behavioral/anecdotes/new?question=tell-me-about-a-conflict');
+    await waitFor(() => expect(createAnecdoteMock).toHaveBeenCalled());
+    const [body] = createAnecdoteMock.mock.calls[0];
+    expect(body.linked_question_ids).toContain('q10');
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it('"Edit in library" button navigates to /experience/list?anecdote=<id>', async () => {
+    listAnecdotesMock.mockResolvedValue(anecdotes);
+    renderPanel();
+    await waitFor(() => screen.getByDisplayValue('Linked story'));
+    fireEvent.click(screen.getByRole('button', { name: /Edit in library/i }));
+    expect(navigateMock).toHaveBeenCalledWith('/experience/list?anecdote=a1');
   });
 
   it('defaults to description mode when the selected anecdote has only description content', async () => {
-    const descOnly: Anecdote[] = [
+    const descOnly: ExperienceAnecdote[] = [
       {
         id: 'a10',
         title: 'Desc only',
@@ -160,6 +206,11 @@ describe('MyAnecdotesPanel', () => {
         task: '',
         action: '',
         result: '',
+        impact: '',
+        company: '',
+        project: '',
+        date: '2026-01-01',
+        tags: [],
         category_ids: ['cat2'],
         linked_question_ids: ['q10'],
         notes: '',

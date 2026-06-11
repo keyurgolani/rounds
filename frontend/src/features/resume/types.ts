@@ -200,7 +200,6 @@ export type Bullet = {
   user_id: string;
   text: string;
   tags: string[];
-  source_anecdote_id?: string;
   metrics?: { value: number; unit?: string }[];
   created_at: string;
   updated_at: string;

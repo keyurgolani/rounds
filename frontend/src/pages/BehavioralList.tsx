@@ -12,13 +12,13 @@ import {
   listBehavioralCategories,
   listBehavioralQuestions,
 } from '../content/api';
-import { listAnecdotes, updateAnecdote } from './behavioral/anecdotesApi';
+import { listAnecdotes, updateAnecdote } from '../experience/experienceApi';
+import type { ExperienceAnecdote } from '../experience/experienceApi';
 import { slugify } from '../lib/slug';
 import AppHeader from '../components/shell/AppHeader';
 import Select from '../components/shell/Select';
 import { LinkableCard } from './behavioral/LinkableCard';
 import { ConnectorOverlay, type Connector, type Endpoint } from './behavioral/ConnectorOverlay';
-import type { Anecdote } from './behavioral/types';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { effectiveStatus, useStatusMapVersion } from '../hooks/usePracticeStatus';
 import PracticeStatusFilter, {
@@ -75,7 +75,7 @@ export default function BehavioralList() {
   const navigate = useNavigate();
   const [questions, setQuestions] = useState<BQ[]>([]);
   const [categories, setCategories] = useState<BC[]>([]);
-  const [anecdotes, setAnecdotes] = useState<Anecdote[]>([]);
+  const [anecdotes, setAnecdotes] = useState<ExperienceAnecdote[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCat, setActiveCat] = usePersistedState<string | null>('rounds.behavioral.activeCat', null);
   const [query, setQuery] = useState('');
@@ -183,17 +183,7 @@ export default function BehavioralList() {
         prev.map((a) => (a.id === aId ? { ...a, linked_question_ids: updated } : a))
       );
       try {
-        const saved = await updateAnecdote(aId, {
-          title: anecdote.title,
-          description: anecdote.description,
-          situation: anecdote.situation,
-          task: anecdote.task,
-          action: anecdote.action,
-          result: anecdote.result,
-          category_ids: anecdote.category_ids,
-          linked_question_ids: updated,
-          notes: anecdote.notes,
-        });
+        const saved = await updateAnecdote(aId, { linked_question_ids: updated });
         setAnecdotes((prev) => prev.map((a) => (a.id === aId ? saved : a)));
       } catch {
         // Revert on failure
@@ -478,7 +468,7 @@ export default function BehavioralList() {
             <div className="eyebrow">Your notebook</div>
             <button
               type="button"
-              onClick={() => navigate('/behavioral/anecdotes/new')}
+              onClick={() => navigate('/experience/list?anecdote=new')}
               style={{
                 padding: '4px 10px',
                 border: 0,
@@ -592,7 +582,7 @@ export default function BehavioralList() {
                 <div className="eyebrow">Your notebook</div>
                 <button
                   type="button"
-                  onClick={() => navigate('/behavioral/anecdotes/new')}
+                  onClick={() => navigate('/experience/list?anecdote=new')}
                   style={{
                     padding: '4px 10px',
                     border: 0,
@@ -623,7 +613,7 @@ export default function BehavioralList() {
                       innerRef={(el) => (anecdoteRefs.current[a.id] = el)}
                       onMouseEnter={() => !drag && setHovered({ kind: 'anecdote', id: a.id })}
                       onMouseLeave={() => !drag && setHovered(null)}
-                      onOpen={() => navigate(`/behavioral/anecdotes/${slugify(a.title) || a.id}/edit`)}
+                      onOpen={() => navigate(`/experience/list?anecdote=${a.id}`)}
                       active={active}
                       dimmed={dimmed}
                       isDropTarget={Boolean(isDrop)}
@@ -661,7 +651,7 @@ export default function BehavioralList() {
                 })}
                 <button
                   type="button"
-                  onClick={() => navigate('/behavioral/anecdotes/new')}
+                  onClick={() => navigate('/experience/list?anecdote=new')}
                   style={{
                     padding: 16,
                     border: '1px dashed var(--border-strong)',

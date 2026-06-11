@@ -96,7 +96,7 @@ export function mentionRoute(m: Mention): string {
     case 'round':
       return `/interviews/${slug}`;
     case 'anecdote':
-      return `/behavioral/anecdotes/${slug}/edit`;
+      return `/experience/list?anecdote=${slug}`;
     case 'campaign':
       return `/campaigns/${slug}`;
   }

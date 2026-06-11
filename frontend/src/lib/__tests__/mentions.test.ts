@@ -56,7 +56,7 @@ describe('mentions parser', () => {
       ['sd-tag', 'cache', '/system-design?tag=cache'],
       ['application', 'meta-sde', '/applications/meta-sde'],
       ['round', 'abc123', '/interviews/abc123'],
-      ['anecdote', 'aws-migration', '/behavioral/anecdotes/aws-migration/edit'],
+      ['anecdote', 'aws-migration', '/experience/list?anecdote=aws-migration'],
       ['campaign', 'summer-hunt', '/campaigns/summer-hunt'],
     ];
     for (const [type, slug, expected] of cases) {

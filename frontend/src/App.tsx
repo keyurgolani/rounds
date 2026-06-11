@@ -13,7 +13,6 @@ import AICodingList from './pages/ai-coding/AICodingList';
 import AICodingDetail from './pages/ai-coding/AICodingDetail';
 import TakeHomeList from './pages/take-home/TakeHomeList';
 import TakeHomeDetail from './pages/take-home/TakeHomeDetail';
-import { AnecdoteEditorPage } from './pages/behavioral/AnecdoteEditorPage';
 import Applications from './pages/Applications';
 import ApplicationDetail from './pages/ApplicationDetail';
 import NewApplication from './pages/NewApplication';
@@ -63,8 +62,6 @@ export default function App() {
         <Route path="behavioral/questions" element={<BehavioralList />} />
         <Route path="behavioral/guide" element={<GuidePage track="behavioral" />} />
         <Route path="behavioral/guide/:slug" element={<GuidePage track="behavioral" />} />
-        <Route path="behavioral/anecdotes/new" element={<AnecdoteEditorPage />} />
-        <Route path="behavioral/anecdotes/:slug/edit" element={<AnecdoteEditorPage />} />
         <Route path="behavioral/question/:slug" element={<BehavioralDetail />} />
         <Route path="ai-coding/guide" element={<GuidePage track="ai-coding" />} />
         <Route path="ai-coding/guide/:slug" element={<GuidePage track="ai-coding" />} />

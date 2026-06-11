@@ -73,7 +73,7 @@ export const registry: CommandView[] = [
     description: 'Open the anecdote editor with a blank STAR story.',
     icon: <NotebookPen size={14} strokeWidth={1.7} />,
     run: ({ navigate }) => {
-      navigate('/behavioral/anecdotes/new');
+      navigate('/experience/list?anecdote=new');
     },
   },
   {

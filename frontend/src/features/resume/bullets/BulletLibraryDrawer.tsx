@@ -7,11 +7,9 @@
 // shared `BulletLibraryContext` for its open/close mode.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Plus,
   Search,
-  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
@@ -455,20 +453,6 @@ function BulletRow({
             {t}
           </span>
         ))}
-        {bullet.source_anecdote_id && (
-          <Link
-            to={`/behavioral/anecdotes/${bullet.source_anecdote_id}/edit`}
-            className="inline-flex items-center gap-1"
-            style={{
-              fontSize: 10,
-              color: 'var(--accent)',
-              textDecoration: 'none',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Sparkles size={10} strokeWidth={1.7} /> from anecdote
-          </Link>
-        )}
       </div>
       <div className="flex items-center gap-1.5">
         {isPicker && (

@@ -67,7 +67,6 @@ interface BulletRow extends RecordModel {
   user: string;
   text: string;
   tags?: string[];
-  source_anecdote?: string;
   metrics?: Bullet['metrics'];
 }
 
@@ -164,7 +163,6 @@ function adaptBullet(r: BulletRow): Bullet {
     user_id: r.user,
     text: r.text ?? '',
     tags: r.tags ?? [],
-    source_anecdote_id: r.source_anecdote || undefined,
     metrics: r.metrics ?? [],
     created_at: r.created,
     updated_at: r.updated,
@@ -393,14 +391,12 @@ export async function listBullets(): Promise<Bullet[]> {
 export async function createBullet(input: {
   text: string;
   tags?: string[];
-  source_anecdote_id?: string;
   metrics?: Bullet['metrics'];
 }): Promise<Bullet> {
   const r = await bulletsCol().create({
     user: userId(),
     text: input.text,
     tags: input.tags ?? [],
-    source_anecdote: input.source_anecdote_id || undefined,
     metrics: input.metrics ?? [],
   });
   return adaptBullet(r);

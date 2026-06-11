@@ -8,7 +8,7 @@ import {
   listCodingQuestions,
   listSystemDesignQuestions,
 } from '../content/api';
-import { listAnecdotes } from './behavioral/anecdotesApi';
+import { listAnecdotes } from '../experience/experienceApi';
 import { useAuth } from '../auth/AuthProvider';
 import { useCampaign } from '../campaign/CampaignContext';
 import { useCommandCenter } from '../command-center/CommandCenterProvider';

@@ -6,7 +6,7 @@ import {
   listCodingQuestions,
   listSystemDesignQuestions,
 } from '../content/api';
-import { listAnecdotes } from '../pages/behavioral/anecdotesApi';
+import { listAnecdotes } from '../experience/experienceApi';
 import type { Mention, MentionType } from './mentions';
 
 export interface MentionEntry extends Mention {

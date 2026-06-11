@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   List,
   Network,
@@ -52,6 +52,7 @@ import BulletModal from './BulletModal';
 import ArrangeBoard from './ArrangeBoard';
 import ListTree from './ListTree';
 import { useButtonFileDrop } from '../hooks/useButtonFileDrop';
+import { resolveAnecdoteParam } from './anecdoteDeepLink';
 
 // ---------------------------------------------------------------------------
 // Tab definitions
@@ -250,6 +251,7 @@ const TAB_TO_PATH: Record<TabKey, string> = {
 export default function ExperiencePage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = PATH_TO_TAB[location.pathname] ?? 'timeline';
   const [timelineItems, setTimelineItems] = useState<TimelineEntity[] | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -302,6 +304,45 @@ export default function ExperiencePage() {
     const updated = timelineItems.find((i) => i.id === selected.id);
     if (updated) setSelected(updated);
   }, [timelineItems, selected]);
+
+  // Deep-link: ?anecdote=<id|slug|new>[&question=<id>]
+  const handledAnecdoteParam = useRef<string | null>(null);
+  useEffect(() => {
+    const param = searchParams.get('anecdote');
+    if (!param || !timelineItems) return;
+    if (handledAnecdoteParam.current === param) return;
+    handledAnecdoteParam.current = param;
+
+    const clear = () => {
+      const next = new URLSearchParams(searchParams);
+      next.delete('anecdote');
+      next.delete('question');
+      setSearchParams(next, { replace: true });
+    };
+
+    if (param === 'new') {
+      const questionId = searchParams.get('question') ?? undefined;
+      void createAnecdote({
+        title: 'New anecdote',
+        linked_question_ids: questionId ? [questionId] : undefined,
+      }).then((created) => {
+        const entity: TimelineEntity = { kind: 'anecdote', ...created };
+        setTimelineItems((prev) => (prev ? [entity, ...prev] : [entity]));
+        setSelected(entity);
+        setModalOpen(true);
+        clear();
+      });
+      return;
+    }
+
+    const found = resolveAnecdoteParam(param, timelineItems);
+    if (found) {
+      setSelected(found);
+      setModalOpen(true);
+    }
+    clear();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, timelineItems]);
 
   // Connection maps
   const connMap = useMemo(() => buildConnectionMap(connections), [connections]);

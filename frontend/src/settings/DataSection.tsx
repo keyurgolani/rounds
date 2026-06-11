@@ -25,7 +25,7 @@ import {
   type CodeDraftInput,
 } from '../lib/codeDraftsApi';
 import { createTodo, listTodos, type TodoInput } from '../todos/api';
-import { listAnecdotes } from '../pages/behavioral/anecdotesApi';
+import { listAnecdotes } from '../experience/experienceApi';
 
 interface OfferSnapshot extends Record<string, unknown> {
   id: string;
