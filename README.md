@@ -2,6 +2,15 @@
 
 Rounds is a self-hostable interview prep workspace for system design, coding, behavioral prep, and job-search tracking.
 
+![Rounds dashboard](docs/screenshots/02-dashboard.png)
+
+<p align="center">
+  <img src="docs/screenshots/05-system-design-diagram.png" alt="System design with Mermaid diagrams" width="49%" />
+  <img src="docs/screenshots/06-coding-monaco.png" alt="Coding with Monaco and a real test runner" width="49%" />
+</p>
+
+<p align="center"><strong>📸 <a href="SHOWCASE.md">See the full visual showcase »</a></strong> — system design, coding, behavioral, applications, and Resume Studio.</p>
+
 Current release: **v1.0.0**
 
 Hosted demo: **https://rounds.keyurgolani.name**
