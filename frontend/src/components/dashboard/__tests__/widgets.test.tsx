@@ -11,6 +11,8 @@ import UpcomingInterviews from '../UpcomingInterviews';
 import type { DashRound, DashApp } from '../derive';
 import ResumeCoverage from '../ResumeCoverage';
 import type { ResumeCoverageResult } from '../derive';
+import ExperienceLibraryOverview from '../ExperienceLibraryOverview';
+import type { ExperienceOverviewResult } from '../derive';
 
 const tracks: TrackReadiness[] = [
   { key: 'coding', name: 'Coding', to: '/coding/guide', color: 'var(--forest)', total: 40, mastered: 14, inProgress: 5 },
@@ -76,5 +78,14 @@ describe('ResumeCoverage', () => {
     const cov: ResumeCoverageResult = { resumeCount: 0, lastEditedAt: null, relevant: 0, covered: 0, missing: [] };
     render(<MemoryRouter><ResumeCoverage coverage={cov} /></MemoryRouter>);
     expect(screen.getByText(/Create your first resume/i)).toBeInTheDocument();
+  });
+});
+
+describe('ExperienceLibraryOverview', () => {
+  it('shows entity counts and unused bullets', () => {
+    const ov: ExperienceOverviewResult = { jobs: 5, projects: 8, anecdotes: 9, bullets: 23, addedThisWeek: 3, unusedBullets: 4 };
+    render(<MemoryRouter><ExperienceLibraryOverview overview={ov} /></MemoryRouter>);
+    expect(screen.getByText('jobs')).toBeInTheDocument();
+    expect(screen.getByText(/4 bullets not yet/i)).toBeInTheDocument();
   });
 });
