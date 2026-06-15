@@ -7,6 +7,8 @@ import type { TrackReadiness } from '../derive';
 import BehavioralDepth from '../BehavioralDepth';
 import type { BehavioralDepthResult } from '../derive';
 import PipelinePulse from '../PipelinePulse';
+import UpcomingInterviews from '../UpcomingInterviews';
+import type { DashRound, DashApp } from '../derive';
 
 const tracks: TrackReadiness[] = [
   { key: 'coding', name: 'Coding', to: '/coding/guide', color: 'var(--forest)', total: 40, mastered: 14, inProgress: 5 },
@@ -40,5 +42,20 @@ describe('PipelinePulse', () => {
     render(<MemoryRouter><PipelinePulse counts={{ Wishlist: 3, Applied: 5, Interviewing: 2, Offer: 1 }} /></MemoryRouter>);
     expect(screen.getByText('Applied')).toBeInTheDocument();
     expect(screen.getByText('5')).toBeInTheDocument();
+  });
+});
+
+const rounds: DashRound[] = [{ id: 'r1', application_id: 'a1', round_type: 'System Design', date: '2026-06-16T00:00:00Z' }];
+const apps: DashApp[] = [{ id: 'a1', company: 'Stripe', role: 'SWE', status: 'Interviewing' }];
+
+describe('UpcomingInterviews', () => {
+  it('lists rounds with their application', () => {
+    render(<MemoryRouter><UpcomingInterviews rounds={rounds} apps={apps} /></MemoryRouter>);
+    expect(screen.getByText('System Design')).toBeInTheDocument();
+    expect(screen.getByText(/Stripe/)).toBeInTheDocument();
+  });
+  it('shows an empty state when there are no rounds', () => {
+    render(<MemoryRouter><UpcomingInterviews rounds={[]} apps={[]} /></MemoryRouter>);
+    expect(screen.getByText(/No scheduled rounds/i)).toBeInTheDocument();
   });
 });
