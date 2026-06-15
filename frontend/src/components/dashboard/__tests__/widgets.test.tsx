@@ -36,7 +36,7 @@ const depth: BehavioralDepthResult = {
 describe('BehavioralDepth', () => {
   it('shows question coverage and thin categories', () => {
     render(<MemoryRouter><BehavioralDepth depth={depth} /></MemoryRouter>);
-    expect(screen.getByText(/11/)).toBeInTheDocument();
+    expect(screen.getByText('11 / 18')).toBeInTheDocument();
     expect(screen.getByText('Conflict · 0')).toBeInTheDocument();
   });
 });

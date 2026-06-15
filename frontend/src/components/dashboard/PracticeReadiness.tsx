@@ -16,7 +16,7 @@ export default function PracticeReadiness({ tracks }: { tracks: TrackReadiness[]
               <div className="card card-hover p-3" style={{ background: 'var(--bg)', boxShadow: 'inset 0 0 0 1px var(--border)' }}>
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <span className="flex items-center gap-2" style={{ fontSize: 13.5, fontWeight: 600 }}>
-                    <span style={{ width: 7, height: 7, borderRadius: 999, background: t.color }} />{t.name}
+                    <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 999, background: t.color }} />{t.name}
                   </span>
                   <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-4)' }}>{t.mastered}/{t.total}</span>
                 </div>

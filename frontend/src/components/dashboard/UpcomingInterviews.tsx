@@ -12,7 +12,7 @@ export default function UpcomingInterviews({ rounds, apps }: { rounds: DashRound
   return (
     <section className="card card-pad-lg fade-up">
       <div className="flex items-center justify-between gap-3" style={{ marginBottom: 'var(--gap-sm)' }}>
-        <span className="flex items-center gap-1.5" style={{ fontSize: 13, fontWeight: 600 }}><CalendarClock size={14} /> Upcoming interviews</span>
+        <span className="flex items-center gap-1.5" style={{ fontSize: 13, fontWeight: 600 }}><CalendarClock size={14} aria-hidden="true" /> Upcoming interviews</span>
         <Link to="/applications" className="mono uppercase" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.1em', textDecoration: 'none' }}>All →</Link>
       </div>
       {rounds.length ? (
