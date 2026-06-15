@@ -6,6 +6,7 @@ import PracticeReadiness from '../PracticeReadiness';
 import type { TrackReadiness } from '../derive';
 import BehavioralDepth from '../BehavioralDepth';
 import type { BehavioralDepthResult } from '../derive';
+import PipelinePulse from '../PipelinePulse';
 
 const tracks: TrackReadiness[] = [
   { key: 'coding', name: 'Coding', to: '/coding/guide', color: 'var(--forest)', total: 40, mastered: 14, inProgress: 5 },
@@ -31,5 +32,13 @@ describe('BehavioralDepth', () => {
     render(<MemoryRouter><BehavioralDepth depth={depth} /></MemoryRouter>);
     expect(screen.getByText(/11/)).toBeInTheDocument();
     expect(screen.getByText('Conflict · 0')).toBeInTheDocument();
+  });
+});
+
+describe('PipelinePulse', () => {
+  it('renders a bar per status with counts', () => {
+    render(<MemoryRouter><PipelinePulse counts={{ Wishlist: 3, Applied: 5, Interviewing: 2, Offer: 1 }} /></MemoryRouter>);
+    expect(screen.getByText('Applied')).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument();
   });
 });
