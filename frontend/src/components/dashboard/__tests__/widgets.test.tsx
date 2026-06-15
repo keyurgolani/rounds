@@ -13,6 +13,8 @@ import ResumeCoverage from '../ResumeCoverage';
 import type { ResumeCoverageResult } from '../derive';
 import ExperienceLibraryOverview from '../ExperienceLibraryOverview';
 import type { ExperienceOverviewResult } from '../derive';
+import TodayZone from '../TodayZone';
+import type { NextRep } from '../derive';
 
 const tracks: TrackReadiness[] = [
   { key: 'coding', name: 'Coding', to: '/coding/guide', color: 'var(--forest)', total: 40, mastered: 14, inProgress: 5 },
@@ -87,5 +89,25 @@ describe('ExperienceLibraryOverview', () => {
     render(<MemoryRouter><ExperienceLibraryOverview overview={ov} /></MemoryRouter>);
     expect(screen.getByText('jobs')).toBeInTheDocument();
     expect(screen.getByText(/4 bullets not yet/i)).toBeInTheDocument();
+  });
+});
+
+const nextInterview: DashRound = { id: 'r1', application_id: 'a1', round_type: 'System Design', date: '2026-06-16T00:00:00Z', interviewer: 'Dana' };
+const nextApp: DashApp = { id: 'a1', company: 'Stripe', role: 'Senior SWE', status: 'Interviewing' };
+const reps: NextRep[] = [{ kind: 'Coding', title: 'LRU Cache', status: 'in-progress', difficulty: 'Medium', to: '/coding/question/c1' }];
+const atRisk = { overdueTodos: [{ id: 't1', body: 'x', due_date: '2000-01-01' }], staleApps: [], pendingOffers: [] };
+
+describe('TodayZone', () => {
+  it('renders the next interview, a rep, and an at-risk count', () => {
+    render(<MemoryRouter><TodayZone nextInterview={nextInterview} nextInterviewApp={nextApp} nextReps={reps} atRisk={atRisk as never} /></MemoryRouter>);
+    expect(screen.getByText('System Design')).toBeInTheDocument();
+    expect(screen.getByText('LRU Cache')).toBeInTheDocument();
+    expect(screen.getByText(/Stripe/)).toBeInTheDocument();
+    expect(screen.getByText(/overdue/i)).toBeInTheDocument();
+  });
+  it('shows graceful fallbacks when nothing is scheduled or queued', () => {
+    render(<MemoryRouter><TodayZone nextInterview={null} nextInterviewApp={null} nextReps={[]} atRisk={{ overdueTodos: [], staleApps: [], pendingOffers: [] } as never} /></MemoryRouter>);
+    expect(screen.getByText(/No round scheduled/i)).toBeInTheDocument();
+    expect(screen.getByText(/You're all caught up/i)).toBeInTheDocument();
   });
 });
