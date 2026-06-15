@@ -4,6 +4,10 @@ import {
   pickNextReps,
   pickNextInterview,
   upcomingRounds,
+  behavioralDepth,
+  resumeCoverage,
+  experienceOverview,
+  computeAtRisk,
   type ReadinessLists,
   type StatusFn,
 } from './derive';
@@ -71,5 +75,85 @@ describe('pickNextInterview', () => {
   });
   it('returns null when nothing is upcoming', () => {
     expect(pickNextInterview([{ id: 'r1', application_id: 'a1', round_type: 'X', date: '2020-01-01T00:00:00Z' }], NOW)).toBeNull();
+  });
+});
+
+describe('behavioralDepth', () => {
+  it('counts questions with a linked story and the thinnest categories', () => {
+    const res = behavioralDepth(
+      [{ id: 'q1' }, { id: 'q2' }, { id: 'q3' }],
+      [{ id: 'cat1', name: 'Conflict' }, { id: 'cat2', name: 'Leadership', color: 'red' }],
+      [
+        { linked_question_ids: ['q1'], category_ids: ['cat2'] },
+        { linked_question_ids: ['q1', 'q2'], category_ids: ['cat2'] },
+      ],
+    );
+    expect(res).toMatchObject({ covered: 2, total: 3, storyCount: 2, categoryCount: 2 });
+    expect(res.thinCategories[0]).toMatchObject({ id: 'cat1', name: 'Conflict', count: 0 });
+    expect(res.thinCategories).toHaveLength(2);
+  });
+});
+
+describe('resumeCoverage', () => {
+  it('flags Applied/Interviewing apps that have no tailored variant', () => {
+    const res = resumeCoverage(
+      [{ updated_at: '2026-06-10T00:00:00Z' }, { updated_at: '2026-06-12T00:00:00Z' }],
+      [{ application_id: 'a1' }, { application_id: undefined }],
+      [
+        { id: 'a1', company: 'Stripe', role: 'SWE', status: 'Applied' },
+        { id: 'a2', company: 'Figma', role: 'SWE', status: 'Interviewing' },
+        { id: 'a3', company: 'Idea', role: 'SWE', status: 'Wishlist' },
+      ],
+    );
+    expect(res).toMatchObject({ resumeCount: 2, relevant: 2, covered: 1, lastEditedAt: '2026-06-12T00:00:00Z' });
+    expect(res.missing).toEqual([{ id: 'a2', company: 'Figma' }]);
+  });
+});
+
+describe('experienceOverview', () => {
+  const NOW = Date.parse('2026-06-14T00:00:00Z');
+  it('counts entities, recent adds, and bullets with no parent connection', () => {
+    const res = experienceOverview(
+      [{ created_at: '2026-06-13T00:00:00Z' }],
+      [],
+      [{ created_at: '2020-01-01T00:00:00Z' }],
+      [{ id: 'bl1' }, { id: 'bl2' }],
+      { bl1: { job: ['j1'], project: [], anecdote: [], bullet: [] } } as never,
+      NOW,
+    );
+    expect(res).toMatchObject({ jobs: 1, anecdotes: 1, bullets: 2, addedThisWeek: 1, unusedBullets: 1 });
+  });
+});
+
+describe('computeAtRisk', () => {
+  it('surfaces overdue todos', () => {
+    const { overdueTodos } = computeAtRisk(
+      [{ id: 't1', body: 'x', due_date: '2000-01-01', completed_at: '' }],
+      [], [], [],
+    );
+    expect(overdueTodos).toHaveLength(1);
+  });
+});
+
+describe('computeAtRisk — stale apps & pending offers', () => {
+  const NOW = Date.parse('2026-06-14T00:00:00Z');
+  it('flags stale Applied/Interviewing apps with no upcoming round, most-neglected first', () => {
+    const apps = [
+      { id: 'a1', company: 'Old', role: 'SWE', status: 'Applied', last_activity_at: '2026-05-01T00:00:00Z' },
+      { id: 'a2', company: 'Older', role: 'SWE', status: 'Interviewing', last_activity_at: '2026-04-01T00:00:00Z' },
+      { id: 'a3', company: 'Fresh', role: 'SWE', status: 'Applied', last_activity_at: '2026-06-13T00:00:00Z' },
+    ];
+    const { staleApps } = computeAtRisk([], apps, [], [], NOW);
+    expect(staleApps.map((s) => s.app.id)).toEqual(['a2', 'a1']);
+  });
+  it('includes pending offers with no deadline and excludes far-future deadlines', () => {
+    const apps = [{ id: 'a1', company: 'X', role: 'r', status: 'Offer' }, { id: 'a2', company: 'Y', role: 'r', status: 'Offer' }];
+    const offers = [
+      { id: 'o1', application_id: 'a1', status: 'pending' },
+      { id: 'o2', application_id: 'a2', status: 'pending', decision_deadline: '2099-01-01T00:00:00Z' },
+    ];
+    const { pendingOffers } = computeAtRisk([], apps, [], offers, NOW);
+    expect(pendingOffers.map((p) => p.offer.id)).toEqual(['o1']);
+    expect(pendingOffers[0].reason).toBe('No decision deadline set');
   });
 });
