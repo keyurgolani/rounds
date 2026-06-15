@@ -70,3 +70,6 @@ findings.md
 progress.md
 sublime-purescript-syntax
 sublime-purescript-syntax/
+
+# Internal SDLC working docs (specs/plans) — kept local, not committed
+docs/superpowers/
