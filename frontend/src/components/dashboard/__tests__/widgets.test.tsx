@@ -9,6 +9,8 @@ import type { BehavioralDepthResult } from '../derive';
 import PipelinePulse from '../PipelinePulse';
 import UpcomingInterviews from '../UpcomingInterviews';
 import type { DashRound, DashApp } from '../derive';
+import ResumeCoverage from '../ResumeCoverage';
+import type { ResumeCoverageResult } from '../derive';
 
 const tracks: TrackReadiness[] = [
   { key: 'coding', name: 'Coding', to: '/coding/guide', color: 'var(--forest)', total: 40, mastered: 14, inProgress: 5 },
@@ -57,5 +59,22 @@ describe('UpcomingInterviews', () => {
   it('shows an empty state when there are no rounds', () => {
     render(<MemoryRouter><UpcomingInterviews rounds={[]} apps={[]} /></MemoryRouter>);
     expect(screen.getByText(/No scheduled rounds/i)).toBeInTheDocument();
+  });
+});
+
+describe('ResumeCoverage', () => {
+  it('names applications missing a tailored variant', () => {
+    const cov: ResumeCoverageResult = {
+      resumeCount: 3, lastEditedAt: '2026-06-12T00:00:00Z', relevant: 4, covered: 2,
+      missing: [{ id: 'a3', company: 'Figma' }, { id: 'a4', company: 'Ramp' }],
+    };
+    render(<MemoryRouter><ResumeCoverage coverage={cov} /></MemoryRouter>);
+    expect(screen.getByText('Figma')).toBeInTheDocument();
+    expect(screen.getByText('Ramp')).toBeInTheDocument();
+  });
+  it('renders an empty-state when there are no resumes', () => {
+    const cov: ResumeCoverageResult = { resumeCount: 0, lastEditedAt: null, relevant: 0, covered: 0, missing: [] };
+    render(<MemoryRouter><ResumeCoverage coverage={cov} /></MemoryRouter>);
+    expect(screen.getByText(/Create your first resume/i)).toBeInTheDocument();
   });
 });
