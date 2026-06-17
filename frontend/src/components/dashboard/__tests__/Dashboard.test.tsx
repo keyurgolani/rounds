@@ -39,6 +39,7 @@ vi.mock('../../../features/resume/api', () => ({
 vi.mock('../../../todos/api', () => ({ listTodos: vi.fn().mockResolvedValue([]), updateTodo: vi.fn() }));
 
 import Dashboard from '../../../pages/Dashboard';
+import { listApplications } from '../../../applications/api';
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -53,5 +54,14 @@ describe('Dashboard (integration)', () => {
     expect(screen.getByText('Behavioral prep depth')).toBeInTheDocument();
     // "System Design" renders in several places (track name, next interview, upcoming) — assert presence, not uniqueness:
     expect(screen.getAllByText('System Design').length).toBeGreaterThan(0);
+    expect(screen.getByText('LRU Cache')).toBeInTheDocument();
+    expect(screen.getAllByText(/Stripe/).length).toBeGreaterThan(0);
+  });
+
+  it('degrades gracefully when a data source fails', async () => {
+    vi.mocked(listApplications).mockRejectedValueOnce(new Error('boom'));
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('Practice readiness')).toBeInTheDocument());
+    expect(screen.getByText('Experience library')).toBeInTheDocument();
   });
 });

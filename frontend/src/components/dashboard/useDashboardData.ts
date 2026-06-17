@@ -95,6 +95,10 @@ export function useDashboardData() {
   useEffect(() => {
     void load();
     const refresh = () => void load();
+    // Re-fetch only on data-mutating events. 'rounds:status' is intentionally
+    // excluded: practice status lives in localStorage and is surfaced via
+    // useStatusMapVersion() (the `statusVersion` dep of the derivation memo),
+    // so a status change recomputes derivations without a full refetch.
     for (const ev of ['rounds:applications-changed', 'rounds:interviews-changed', 'rounds:campaigns-changed', 'rounds:todos-changed']) {
       window.addEventListener(ev, refresh);
     }
