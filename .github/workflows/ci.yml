@@ -143,3 +143,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run migration check
         run: CONTAINER_BIN=docker harness/migration_check.sh
+      - name: Upload receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: account-scope-migration-receipts
+          path: harness/.receipts/
+          if-no-files-found: warn
