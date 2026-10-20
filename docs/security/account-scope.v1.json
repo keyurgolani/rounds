@@ -35,13 +35,23 @@
     },
     "create_foreign_owner": {
       "status": 400,
-      "guarantee": "a create whose user is not the caller is rejected",
-      "enforced_from": "ROUNDS-00B-L01/S3"
+      "guarantee": "a create whose user is not the caller is rejected"
     },
     "update_reassign": {
-      "status": 400,
-      "guarantee": "an update that reassigns user is rejected",
-      "enforced_from": "ROUNDS-00B-L01/S3"
+      "status": 404,
+      "guarantee": "an update that reassigns user is not found under the owner rule"
+    },
+    "server_only": {
+      "status": 403,
+      "guarantee": "a client create or update on a server-only collection is forbidden"
+    },
+    "update_own": {
+      "status": 200,
+      "guarantee": "an account's update of its own row succeeds"
+    },
+    "superuser_create": {
+      "status": 200,
+      "guarantee": "the superuser view-tracking insert succeeds"
     }
   },
   "server_derivation": {
@@ -131,18 +141,47 @@
     "account-scope.create.foreign-owner.denied": {
       "operation": "create",
       "actor": "authenticated-other",
-      "status": "pending",
+      "status": "enforced",
       "deny_key": "create_foreign_owner",
-      "guarantee": "a create whose user is not the caller is rejected",
-      "closed_by": "ROUNDS-00B-L01/S3"
+      "guarantee": "a create whose user is not the caller is rejected"
     },
     "account-scope.update.reassign-owner.denied": {
       "operation": "update",
       "actor": "authenticated-owner",
-      "status": "pending",
+      "status": "enforced",
       "deny_key": "update_reassign",
-      "guarantee": "an update that reassigns a row to another account is rejected",
-      "closed_by": "ROUNDS-00B-L01/S3"
+      "guarantee": "an update that reassigns a row to another account is rejected"
+    },
+    "account-scope.update.own.accepted": {
+      "operation": "update",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "update_own",
+      "guarantee": "an account's update of its own row (omitting user or resending its own) still succeeds"
+    },
+    "account-scope.create.server-only.denied": {
+      "operation": "create",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "server_only",
+      "guarantee": "a client create on a server-only collection is forbidden",
+      "resource": "resume_share_views"
+    },
+    "account-scope.update.server-only.denied": {
+      "operation": "update",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "server_only",
+      "guarantee": "a client update on a server-only collection is forbidden",
+      "resource": "resume_share_views"
+    },
+    "account-scope.create.superuser.accepted": {
+      "operation": "create",
+      "actor": "superuser",
+      "status": "enforced",
+      "deny_key": "superuser_create",
+      "guarantee": "the superuser view-tracking insert still succeeds",
+      "resource": "resume_share_views"
     }
   },
   "collections": {
@@ -153,8 +192,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -170,13 +209,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -191,8 +231,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -210,13 +250,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "interview_rounds": {
@@ -226,8 +267,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -246,13 +287,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -267,8 +309,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -286,13 +328,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "user_preferences": {
@@ -302,8 +345,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -321,13 +364,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "offers": {
@@ -337,8 +381,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -357,13 +401,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -378,8 +423,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -397,13 +442,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "todos": {
@@ -413,8 +459,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -432,13 +478,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -453,8 +500,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -470,13 +517,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -491,8 +539,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -511,13 +559,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -532,8 +581,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -552,13 +601,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -573,8 +623,8 @@
       "current_rules": {
         "list": "user = @request.auth.id || token = @request.query.token",
         "view": "user = @request.auth.id || token = @request.query.token",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -599,13 +649,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "resume_share_views": {
@@ -615,8 +666,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": null,
+        "update": null,
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -640,13 +691,11 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
-        "account-scope.create.anonymous.denied",
-        "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.create.server-only.denied",
+        "account-scope.update.server-only.denied",
+        "account-scope.create.superuser.accepted"
       ]
     },
     "ai_providers": {
@@ -656,8 +705,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -673,13 +722,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -694,8 +744,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -714,13 +764,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "ai_coding_drafts": {
@@ -730,8 +781,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -750,13 +801,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "ai_coding_attempts": {
@@ -766,8 +818,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -792,13 +844,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -813,8 +866,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -833,13 +886,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "take_home_attempts": {
@@ -849,8 +903,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -875,13 +929,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -896,8 +951,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -913,13 +968,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "experience_jobs": {
@@ -929,8 +985,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -946,13 +1002,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -967,8 +1024,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -984,13 +1041,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -1005,8 +1063,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -1022,13 +1080,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -1043,8 +1102,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -1060,13 +1119,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -1081,8 +1141,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -1101,13 +1161,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "exp_job_anecdotes": {
@@ -1117,8 +1178,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -1137,13 +1198,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "exp_job_bullets": {
@@ -1153,8 +1215,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -1173,13 +1235,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "exp_project_anecdotes": {
@@ -1189,8 +1252,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -1209,13 +1272,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "exp_project_bullets": {
@@ -1225,8 +1289,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -1245,13 +1309,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "exp_anecdote_bullets": {
@@ -1261,8 +1326,8 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
@@ -1281,13 +1346,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted"
       ]
     },
     "users": {

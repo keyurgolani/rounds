@@ -114,6 +114,8 @@ Fresh deployments run these migrations in order:
 6. `1700000800_ai_providers.js` adds the per-user AI provider credential collection (keys stored encrypted at rest).
 7. `1700000900_share_links_resume_rel.js` extends `share_links` with a relation to resumes for public read-only views.
 
+The release that adds `1700006000_account_scope_rules.js` tightens the create and update rules on every user-owned collection so a write must name the signed-in account, and makes `resume_share_views` superuser-only. Before deploying it, back up `pb_data` and run the cross-owner relation scan on a copy taken with PocketBase stopped. The rules are forward-only: `migrate down` keeps them. See the "Account-scope rules" runbook in [docs/operations.md](docs/operations.md).
+
 ## Verification
 
 ```sh

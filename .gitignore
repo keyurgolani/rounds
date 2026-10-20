@@ -78,3 +78,6 @@ docs/superpowers/
 harness/.receipts/
 harness/.env
 harness/.env.*
+
+# account-scope migration-check scratch (generated per run)
+harness/.migcheck/

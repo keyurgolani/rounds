@@ -26,19 +26,32 @@ enforce, once per collection it applies to:
 - an anonymous caller cannot read, update, or delete an account's record by id;
 - an anonymous create of a complete, valid row is rejected by the create rule
   (not by field validation);
+- a signed-in account's create of a row owned by another account is rejected
+  by the create rule, and no row is left under that owner;
+- an update that moves a row to another account is rejected, and the row keeps
+  its owner;
+- an account's own update still succeeds, both leaving `user` out and resending
+  its own id;
+- `resume_share_views` refuses a client create or update, and the superuser
+  view-tracking insert still succeeds;
 - a JSON field larger than its `maxSize` is rejected, on every collection that
   has one;
 - signup is rejected when the instance disables signups;
 - the live collection rules read back equal the rule table exactly (including
   the `users` manage rule).
 
-Families whose fix has not landed yet (rejecting a create whose owner is not
-the caller, and rejecting an ownership reassignment on update) are listed in
-the policy as `pending` with the leaf and stage that closes them. They carry
-no probe here by design: their probes land in the pull request that tightens
-the rules, which is where the before/after is demonstrated. The run fails if a
-pending family ever gains an implementation or produces a receipt, so the
-policy row and its probe flip together.
+A guarantee whose fix has not landed yet is listed in the policy as `pending`
+with the leaf and stage that closes it, and carries no probe here: its probes
+land in the pull request that fixes it. The run fails if a pending family ever
+gains an implementation or produces a receipt, so the policy row and its probe
+flip together. Stage 3 of `ROUNDS-00B-L01` closed the last pending families, so
+none remain.
+
+`harness/migration_check.sh` checks the rule migration itself in one-off
+`pocketbase migrate up` containers: the migration produces the rule table's
+rules, a missing collection fails it whole, and the write-lock lever in
+[`pocketbase/levers/`](../pocketbase/levers/) locks a collection until a forward
+fix restores it.
 
 After the verdict, the harness stops PocketBase and runs the read-only
 cross-owner relation scan

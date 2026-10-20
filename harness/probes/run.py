@@ -162,6 +162,26 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
                 payload = factory.fresh_payload(name, a.user_id, a, b, content, secrets.token_hex(6))
                 payload[field] = families.oversized_filler(row["oversized_probe"]["max_bytes"])
                 writer.write(families.oversized_input_rejected(pb, name, a.token, payload, field, expected))
+            elif pid == families.FOREIGN_OWNER_FAMILY:
+                # Caller b claims a no-rows third account (c) as owner, so the
+                # only reason to reject is the createRule and the owner-count
+                # check stays at zero on a clean deny.
+                payload = factory.fresh_payload(name, c.user_id, a, b, content, secrets.token_hex(6))
+                writer.write(families.create_foreign_owner_denied(pb, name, b.token, payload, admin_token, c.user_id, expected))
+            elif pid == families.REASSIGN_FAMILY:
+                writer.write(families.update_reassign_denied(pb, name, a.ids[name], b.user_id, a.token, admin_token, a.user_id, expected))
+            elif pid == families.UPDATE_OWN_FAMILY:
+                writer.write(families.update_own_accepted(pb, name, b.ids[name], b.user_id, b.token, expected))
+            elif pid == families.SERVER_ONLY_CREATE_FAMILY:
+                payload = factory.fresh_payload(name, c.user_id, a, b, content, secrets.token_hex(6))
+                writer.write(families.create_server_only_denied(pb, name, b.token, payload, admin_token, c.user_id, expected))
+            elif pid == families.SERVER_ONLY_UPDATE_FAMILY:
+                writer.write(families.update_server_only_denied(pb, name, a.ids[name], a.token, expected))
+            elif pid == families.SUPERUSER_CREATE_FAMILY:
+                # Owner a owns both the view row and the share link it points
+                # at, so the superuser insert is not a cross-owner relation.
+                payload = factory.fresh_payload(name, a.user_id, a, b, content, secrets.token_hex(6))
+                writer.write(families.create_superuser_accepted(pb, name, admin_token, payload, expected))
             # hook-phase families are handled in run_hook
 
     _readback(pb, doc, admin_token, writer)

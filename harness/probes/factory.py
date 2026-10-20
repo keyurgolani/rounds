@@ -102,10 +102,9 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
     """Create one owned row in every account-scoped collection for `acct`.
 
     Most rows are created with the account's own token, which also confirms
-    the owner create path works. ``resume_share_views`` is seeded with the
-    admin token instead, because its client create path is one stage 3 closes
-    (its target rules make create/update null, superuser-only); seeding it
-    through the client path would stop working once the fix lands.
+    the owner create path works under the create rule: a rejected owner create
+    stops the run. ``resume_share_views`` is seeded with the admin token
+    instead, because its create and update rules are superuser-only (null).
     """
     uid = acct.user_id
     tok = acct.token
@@ -174,13 +173,13 @@ def fresh_payload(
 ) -> dict[str, Any]:
     """A complete, valid, non-colliding create payload for `collection`.
 
-    Used by the anonymous-create and oversized-input probes, which need a
-    body that passes field, relation, and uniqueness validation so that the
-    only thing left to decide the request is the createRule (anonymous) or the
-    field-size check (oversized). ``owner_id`` is the ``user`` value: the
-    anonymous probe uses a no-rows account so there is no per-user uniqueness
-    collision, and relations point at account `a`'s seeded rows (they only
-    need to exist). Junctions pair one of `a`'s endpoints with one of `b`'s so
+    Used by the create probes (anonymous, foreign-owner, server-only, and the
+    superuser view insert) and the oversized-input probe, which need a body
+    that passes field, relation, and uniqueness validation so that the only
+    thing left to decide the request is the createRule or the field-size check.
+    ``owner_id`` is the ``user`` value: the deny probes use a no-rows account so
+    there is no per-user uniqueness collision, and relations point at account
+    `a`'s seeded rows (they only need to exist). Junctions pair one of `a`'s endpoints with one of `b`'s so
     the (parent, child) pair is novel and does not collide with a seeded row.
     Unique scalar fields carry ``suffix`` so repeated runs do not collide.
 
