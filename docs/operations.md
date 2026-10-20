@@ -146,6 +146,33 @@ docker compose -f docker-compose.prod.yml up -d
 
 Before upgrading to the release that tightens the account-scope rules, scan a copy of `pb_data` for relations that point at another account's records and hand the report to the relation quarantine work. The scan is read-only and runs on a copy taken with PocketBase stopped, not on the live volume or a backup of the running one. How to take that copy, the exact commands, what the report holds, and how long to keep it are in [docs/security/cross-owner-scan.md](security/cross-owner-scan.md).
 
+### Relation endpoint authorization and quarantine
+
+`1700007000_relation_endpoint_authz.js` authorizes every typed relation: a write may point a relation only at a target the same account owns, and it adds a transactional SQLite backstop for all 34 relation fields. The same migration quarantines any existing cross-owner (or missing-target) references before the backstop starts rejecting them, so a deployment that already holds such rows upgrades cleanly. A reference on an optional field is cleared; a row whose required relation points at another account (or a missing record) is moved into `relation_quarantine` and deleted, cascading or null-repairing its dependents exactly as a normal delete would. One pseudonymized report row, in the cross-owner scan's shape, is written to `relation_quarantine_reports`. `migrate down` keeps every trigger: a predicate that proves too tight is repaired with a forward-fix migration, never by reverting.
+
+Dry-run it on a copy of each deployment first, so you see exactly what the apply will quarantine before you run it for real:
+
+```sh
+mkdir -p ~/rounds-scan/reports
+docker run --rm --network none \
+  -e ROUNDS_RELATION_QUARANTINE=dry-run \
+  -e ROUNDS_RELATION_QUARANTINE_REPORT=/reports/quarantine-$(date +%F).json \
+  -v ~/rounds-scan/pb_data:/pb/pb_data \
+  -v ~/rounds-scan/reports:/reports \
+  keyurgolani/rounds-pocketbase:${ROUNDS_IMAGE_TAG} \
+  /pb/pocketbase migrate up --dir=/pb/pb_data --migrationsDir=/pb/pb_migrations
+```
+
+`~/rounds-scan/pb_data` is the stopped-PocketBase copy the cross-owner scan already uses; set `ROUNDS_IMAGE_TAG` to the release you are about to deploy so the copy runs the same migrations. The container's report path is `/reports/...`, which resolves outside `/pb/pb_data`. This runs the migration (the dry run writes the report and throws) without serving, and `--network none` keeps it offline.
+
+- The report path must be set and must resolve outside `pb_data`; the migration refuses a path containing `pb_data` and refuses an unset path. Create its directory first (the migration writes the file, not the directory), and the file is written mode `0600`.
+- The dry run writes the report, logs `relation_quarantine_dry_run`, then throws, so PocketBase rolls the transaction back and exits without serving. That non-zero exit is expected: judge the run by the report and the `relation_quarantine_dry_run` log line, not by the exit code. Nothing in the copy changes.
+- The report's `summary` carries `owned_collections`, `relations_checked`, `rows_scanned`, `references_checked`, `cross_owner`, and `missing_target`; `findings` lists each quarantined reference with per-report account pseudonyms (`acct-01`, ...), never account ids. Keep the report and the scanned copy no longer than its `expires_at` (14 days), same as the cross-owner scan.
+
+Deploying the real migration (no dry-run env vars) applies both changes in one transaction. An apply that quarantines anything logs `relation_quarantine_applied` with the report `checksum` and writes the one report row into `relation_quarantine_reports`; compare that checksum against the dry run you took on the copy. They match only if the live data did not change between taking the copy and the apply; a different checksum means rows that cross accounts were added or removed in that window, so re-read the applied report rather than assuming the dry run still describes it. Do not pin a pre-L02 image to avoid the migration, and do not roll back to one to undo it: the backstop and the quarantine are forward-only. The relation triggers live in `data.db`, so they keep rejecting cross-owner writes even under an older image that predates this release; what an older image loses is the relation hook and its uniform denial, so the triggers' own abort error becomes the only guard. Repair a predicate that proves too tight with a forward-fix migration, never by reverting.
+
+After a quarantine, an operator can replay a `relation_quarantine` row through the admin API so the relation hook re-checks it (for example after the owning account is corrected). That replay is the one superuser-run step for this collection; it is recorded in [server-writes.md](security/server-writes.md).
+
 ### Account-scope rules
 
 `1700006000_account_scope_rules.js` sets server-derived ownership on every user-owned collection: a create must name the signed-in account (`@request.data.user = @request.auth.id`) and an update cannot reassign `user`. `resume_share_views` becomes superuser-only, so only the share viewer's admin-token insert writes it. List, view, and delete rules are unchanged, and so are the `users` rules. The policy table is [`docs/security/account-scope.v1.json`](security/account-scope.v1.json).
@@ -153,7 +180,7 @@ Before upgrading to the release that tightens the account-scope rules, scan a co
 Deploying the release that carries it:
 
 1. Take a fresh `pb_data` backup with PocketBase stopped.
-2. Run the cross-owner relation scan (above) on a copy and clear what it finds.
+2. Run the cross-owner relation scan (above) on a copy to see what cross-owner references exist, then dry-run the [relation endpoint authorization and quarantine](#relation-endpoint-authorization-and-quarantine) migration on the same copy; its apply clears and quarantines those references as part of the upgrade.
 3. Note the accepted and denied create and update requests per collection and status in the PocketBase request logs over the retained window (5 days by default). Read them in the admin UI's Logs view, reached as in "PocketBase Admin Access" below.
 4. Deploy. The migration applies on start. If one of its collections is missing, it fails whole: PocketBase logs `Failed to apply migration 1700006000_account_scope_rules.js`, changes no rule, and exits without serving, and under `restart: unless-stopped` it keeps restarting. Go back to the previous image tag while you find out why the collection is missing.
 5. Compare the same counts daily for 7 days. Create or update denials rising on a collection is the alert.
