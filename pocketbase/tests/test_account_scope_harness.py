@@ -28,17 +28,20 @@ from pbclient import Response  # noqa: E402
 from receipts import Receipt  # noqa: E402
 
 ENFORCED = "account-scope.view.cross-account.denied"
-PENDING = "account-scope.create.foreign-owner.denied"
+# A synthetic family name that is never a real, implemented family. Stage 3
+# closes the last open gap, so the pending-handling tests use this name to
+# exercise the verdict logic without depending on a still-open real family.
+PENDING = "account-scope.synthetic.pending"
 
 
 def minimal_doc() -> dict:
     return {
         "version": "v1",
         "contract": "account-scope",
-        "deny_contract": {"view": {"status": 404}, "create_foreign_owner": {"status": 400}},
+        "deny_contract": {"view": {"status": 404}},
         "probe_families": {
             ENFORCED: {"status": "enforced", "deny_key": "view", "operation": "view", "actor": "authenticated-other"},
-            PENDING: {"status": "pending", "deny_key": "create_foreign_owner", "operation": "create", "actor": "authenticated-other"},
+            PENDING: {"status": "pending", "deny_key": "view", "operation": "create", "actor": "authenticated-other"},
         },
         "collections": {
             "campaigns": {
@@ -337,3 +340,117 @@ def test_oversized_passes_only_on_a_json_size_error_for_the_field():
     assert not families.oversized_input_rejected(wrong, "resumes", "tok", {"user": "x"}, "data", 400).passed
     created = _CreatePB(200, {"id": "rec"})
     assert not families.oversized_input_rejected(created, "resumes", "tok", {"user": "x"}, "data", 400).passed
+
+
+# --------------------------------------------------------------------------
+# stage-3 create/update ownership families
+# --------------------------------------------------------------------------
+
+
+class _ProbePB:
+    """Configurable fake PocketBase for the ownership probe functions.
+
+    ``update`` may be a single Response or a list consumed in order (the
+    accept probe issues two updates). ``listing`` is used for the superuser
+    owner-count check.
+    """
+
+    def __init__(self, *, create=None, update=None, view=None, listing=None):
+        self._create, self._update, self._view, self._listing = create, update, view, listing
+        self.calls: list[tuple] = []
+
+    def create(self, collection, token, payload):
+        self.calls.append(("create", collection, token, dict(payload) if payload else payload))
+        return self._create
+
+    def update(self, collection, record_id, payload, token=None):
+        self.calls.append(("update", collection, record_id, token, dict(payload)))
+        if isinstance(self._update, list):
+            return self._update.pop(0)
+        return self._update
+
+    def view(self, collection, record_id, token=None):
+        self.calls.append(("view", collection, record_id, token))
+        return self._view
+
+    def listing(self, collection, token=None, params=None):
+        self.calls.append(("listing", collection, token, params))
+        return self._listing
+
+
+def _count(total):
+    return Response(200, {"items": [], "totalItems": total}, 1)
+
+
+def test_foreign_owner_denied_passes_on_empty_data_and_no_planted_row():
+    pb = _ProbePB(create=Response(400, {"message": "Failed to create record.", "data": {}}, 1),
+                  listing=_count(0))
+    r = families.create_foreign_owner_denied(pb, "campaigns", "b-token", {"user": "uid-c"}, "admin", "uid-c", 400)
+    assert r.passed
+    # The caller is the authenticated account, not anonymous.
+    assert pb.calls[0][:3] == ("create", "campaigns", "b-token")
+
+
+def test_foreign_owner_denied_fails_if_a_row_was_planted():
+    pb = _ProbePB(create=Response(400, {"data": {}}, 1), listing=_count(1))
+    r = families.create_foreign_owner_denied(pb, "campaigns", "b-token", {"user": "uid-c"}, "admin", "uid-c", 400)
+    assert not r.passed and "rows_under_owner=1" in r.detail
+
+
+def test_foreign_owner_denied_fails_on_a_validation_400_with_populated_data():
+    pb = _ProbePB(create=Response(400, {"data": {"slug": {"code": "validation_required"}}}, 1), listing=_count(0))
+    r = families.create_foreign_owner_denied(pb, "campaigns", "b-token", {"user": "uid-c"}, "admin", "uid-c", 400)
+    assert not r.passed and "slug" in r.detail
+
+
+def test_reassign_denied_passes_when_denied_and_owner_unchanged():
+    pb = _ProbePB(update=Response(404, {}, 1), view=Response(200, {"id": "x", "user": "uid-a"}, 1))
+    r = families.update_reassign_denied(pb, "campaigns", "rec", "uid-b", "a-token", "admin", "uid-a", 404)
+    assert r.passed
+
+
+def test_reassign_denied_fails_when_the_owner_actually_changed():
+    # The pre-migration rule lets the reassign through: status is not the deny
+    # status and the owner is now the other account.
+    pb = _ProbePB(update=Response(200, {"id": "x", "user": "uid-b"}, 1), view=Response(200, {"id": "x", "user": "uid-b"}, 1))
+    r = families.update_reassign_denied(pb, "campaigns", "rec", "uid-b", "a-token", "admin", "uid-a", 404)
+    assert not r.passed
+
+
+def test_update_own_accepted_passes_when_both_client_shapes_succeed():
+    pb = _ProbePB(update=[Response(200, {"id": "x"}, 1), Response(200, {"id": "x"}, 1)])
+    r = families.update_own_accepted(pb, "campaigns", "rec", "uid-b", "b-token", 200)
+    assert r.passed
+    # Shape one omits user; shape two resends the owner's own id.
+    assert pb.calls[0][4] == {} and pb.calls[1][4] == {"user": "uid-b"}
+
+
+def test_update_own_accepted_fails_if_either_shape_is_rejected():
+    pb = _ProbePB(update=[Response(200, {"id": "x"}, 1), Response(404, {}, 1)])
+    r = families.update_own_accepted(pb, "campaigns", "rec", "uid-b", "b-token", 200)
+    assert not r.passed and "resend=404" in r.detail
+
+
+def test_server_only_create_denied_passes_on_forbidden_and_no_planted_row():
+    pb = _ProbePB(create=Response(403, {"message": "Only superusers can perform this action."}, 1), listing=_count(0))
+    r = families.create_server_only_denied(pb, "resume_share_views", "b-token", {"user": "uid-c"}, "admin", "uid-c", 403)
+    assert r.passed
+
+
+def test_server_only_update_denied_passes_when_forbidden_but_still_readable():
+    pb = _ProbePB(update=Response(403, {}, 1), view=Response(200, {"id": "x"}, 1))
+    r = families.update_server_only_denied(pb, "resume_share_views", "rec", "a-token", 403)
+    assert r.passed
+
+
+def test_server_only_update_denied_fails_if_the_update_went_through():
+    pb = _ProbePB(update=Response(200, {"id": "x"}, 1), view=Response(200, {"id": "x"}, 1))
+    r = families.update_server_only_denied(pb, "resume_share_views", "rec", "a-token", 403)
+    assert not r.passed
+
+
+def test_superuser_create_accepted_passes_on_success_and_fails_on_forbidden():
+    ok = _ProbePB(create=Response(200, {"id": "view"}, 1))
+    assert families.create_superuser_accepted(ok, "resume_share_views", "admin", {"user": "uid-a"}, 200).passed
+    denied = _ProbePB(create=Response(403, {}, 1))
+    assert not families.create_superuser_accepted(denied, "resume_share_views", "admin", {"user": "uid-a"}, 200).passed

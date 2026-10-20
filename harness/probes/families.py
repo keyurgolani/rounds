@@ -1,21 +1,19 @@
-"""Enforced account-scope probe families.
+"""Account-scope probe families.
 
-Only guarantees the rules already enforce at the audited revision have an
-implementation here (orchestrator decision D4). The two pending families
-(create.foreign-owner / update.reassign-owner) are intentionally absent:
-their probes land in the PR that tightens the create/update rules
-(ROUNDS-00B-L01 stage 3), which proves the negative control locally. The
-verdict fails the run if a pending family ever appears in this registry or
-produces a receipt, so the policy row and its probe flip together.
+Every enforced (collection, operation, actor) write cell has a probe here, so
+a loosened rule plus an edited current_rules row cannot pass silently, and the
+owner's own update is proven to still succeed. This is the PR that tightens the
+create and update rules (ROUNDS-00B-L01 stage 3), so the foreign-owner and
+reassign deny families land here together with the rule migration (orchestrator
+decision D4: a gap's probes land in the PR that closes it); the PR proves the
+negative control locally, that they fail on the pre-migration rules.
 
-Every enforced (collection, operation, actor) denial cell has a probe here,
-so a loosened rule plus an edited current_rules row cannot pass silently.
 Expected statuses come from the policy's deny_contract, never hard-coded, so
 changing the contract changes what the probes require.
 
-A probe states the guarantee it checks (for example a foreign-owner read
-returns not-found); it is a regression check, not an attack recipe, and it
-records only statuses, never record contents.
+A probe states the guarantee it checks (for example a foreign-owner create is
+rejected); it is a regression check, not an attack recipe, and it records only
+statuses and an owner-unchanged read-back, never record contents.
 """
 from __future__ import annotations
 
@@ -125,6 +123,99 @@ def oversized_filler(max_bytes: int) -> list:
     return ["z" * (int(max_bytes) + 4096)]
 
 
+def _admin_owner_count(pb, collection, admin_token, owner_id) -> int:
+    """How many rows the superuser sees owned by ``owner_id``.
+
+    A denied create or a denied reassign must leave no row behind, not just
+    return an error status. The owner used for this check is a no-rows account,
+    so a clean deny leaves the count at zero.
+    """
+    resp = pb.listing(collection, token=admin_token, params={"filter": f'user = "{owner_id}"'})
+    body = resp.body if isinstance(resp.body, dict) else {}
+    total = body.get("totalItems")
+    if isinstance(total, int):
+        return total
+    return len(body.get("items") or [])
+
+
+def create_foreign_owner_denied(pb, collection, caller_token, payload, admin_token, owner_id, expected) -> Receipt:
+    # An authenticated account tries to create a row owned by someone else. The
+    # body is complete and valid (factory.fresh_payload) and names a different,
+    # no-rows account as `user`, so field, relation, and uniqueness validation
+    # all pass and only the createRule can stop the write. A rule denial is the
+    # deny-contract status with empty `data` (a validation failure populates
+    # `data`); the superuser then confirms no row was planted under that owner.
+    resp = pb.create(collection, caller_token, payload)
+    data = resp.body.get("data") if isinstance(resp.body, dict) else None
+    leaked = _admin_owner_count(pb, collection, admin_token, owner_id)
+    ok = resp.status == expected and data == {} and leaked == 0
+    detail = "" if ok else f"status={resp.status} data={list((data or {}).keys())} rows_under_owner={leaked}"
+    return Receipt("account-scope.create.foreign-owner.denied", collection, "create", "authenticated-other",
+                   expected, resp.status, ok, resp.elapsed_ms, detail)
+
+
+def update_reassign_denied(pb, collection, record_id, new_owner_id, owner_token, admin_token, original_owner_id, expected) -> Receipt:
+    # The owner tries to move its own row to another account by resending
+    # `user`. The owner rule matches the row, but the second clause rejects the
+    # changed `user`, so the write is not found and the row keeps its owner.
+    # The superuser reads the owner back to prove it did not change.
+    resp = pb.update(collection, record_id, {"user": new_owner_id}, token=owner_token)
+    after = pb.view(collection, record_id, token=admin_token)
+    owner_after = after.body.get("user") if isinstance(after.body, dict) else None
+    ok = resp.status == expected and owner_after == original_owner_id
+    detail = "" if ok else f"status={resp.status} owner_after={owner_after!r}"
+    return Receipt("account-scope.update.reassign-owner.denied", collection, "update", "authenticated-owner",
+                   expected, resp.status, ok, resp.elapsed_ms, detail)
+
+
+def update_own_accepted(pb, collection, record_id, owner_id, owner_token, expected) -> Receipt:
+    # The owner updates its own row in both client shapes the SPA uses: a
+    # partial body that omits `user`, and a body that resends the owner's own
+    # id. Both must still succeed under the tightened update rule.
+    partial = pb.update(collection, record_id, {}, token=owner_token)
+    resend = pb.update(collection, record_id, {"user": owner_id}, token=owner_token)
+    ok = partial.status == expected and resend.status == expected
+    detail = "" if ok else f"partial={partial.status} resend={resend.status}"
+    return Receipt("account-scope.update.own.accepted", collection, "update", "authenticated-owner",
+                   expected, partial.status, ok, partial.elapsed_ms, detail)
+
+
+def create_server_only_denied(pb, collection, caller_token, payload, admin_token, owner_id, expected) -> Receipt:
+    # A server-only collection (create rule null) rejects an authenticated
+    # client create outright. An authenticated caller is the hardest to deny,
+    # so denying it proves the rule admits no client; the superuser then
+    # confirms no row was planted under the named owner.
+    resp = pb.create(collection, caller_token, payload)
+    leaked = _admin_owner_count(pb, collection, admin_token, owner_id)
+    ok = resp.status == expected and leaked == 0
+    detail = "" if ok else f"status={resp.status} rows_under_owner={leaked}"
+    return Receipt("account-scope.create.server-only.denied", collection, "create", "authenticated-other",
+                   expected, resp.status, ok, resp.elapsed_ms, detail)
+
+
+def update_server_only_denied(pb, collection, record_id, owner_token, expected) -> Receipt:
+    # A server-only collection (update rule null) rejects even the owner's own
+    # update; the owner can still read the row back, proving the deny is the
+    # rule and not a missing record.
+    resp = pb.update(collection, record_id, {}, token=owner_token)
+    still = pb.view(collection, record_id, token=owner_token)
+    ok = resp.status == expected and still.status == 200
+    detail = "" if ok else f"update={resp.status} owner_view={still.status}"
+    return Receipt("account-scope.update.server-only.denied", collection, "update", "authenticated-owner",
+                   expected, resp.status, ok, resp.elapsed_ms, detail)
+
+
+def create_superuser_accepted(pb, collection, admin_token, payload, expected) -> Receipt:
+    # The superuser view-tracking insert still works after create becomes null.
+    # The row names the same owner as the share link it points at, so it is not
+    # a cross-owner relation and the clean scan stays empty.
+    resp = pb.create(collection, admin_token, payload)
+    ok = resp.status in (200, 201)
+    detail = "" if ok else f"status={resp.status}"
+    return Receipt("account-scope.create.superuser.accepted", collection, "create", "superuser",
+                   expected, resp.status, ok, resp.elapsed_ms, detail)
+
+
 def signup_disabled_denied(pb, expected) -> Receipt:
     email = f"blocked-{secrets.token_hex(6)}@harness.invalid"
     password = "Hx" + secrets.token_hex(16) + "!9"
@@ -150,6 +241,16 @@ MAIN_FAMILIES: dict[str, Callable] = {
 
 CREATE_ANON_FAMILY = "account-scope.create.anonymous.denied"
 OVERSIZED_FAMILY = "account-scope.oversized-input.rejected"
+# Families this PR lands with the rule migration. Each needs an extra input
+# (a specific caller token, the superuser token, a claimed owner, or a seeded
+# record id), so run.py dispatches them directly rather than through
+# MAIN_FAMILIES' (pb, collection, a, b, expected) shape.
+FOREIGN_OWNER_FAMILY = "account-scope.create.foreign-owner.denied"
+REASSIGN_FAMILY = "account-scope.update.reassign-owner.denied"
+UPDATE_OWN_FAMILY = "account-scope.update.own.accepted"
+SERVER_ONLY_CREATE_FAMILY = "account-scope.create.server-only.denied"
+SERVER_ONLY_UPDATE_FAMILY = "account-scope.update.server-only.denied"
+SUPERUSER_CREATE_FAMILY = "account-scope.create.superuser.accepted"
 HOOK_FAMILIES: dict[str, Callable] = {
     "account-scope.signup.disabled.denied": signup_disabled_denied,
 }
@@ -157,5 +258,15 @@ HOOK_FAMILIES: dict[str, Callable] = {
 # Every family this harness knows how to run. The verdict cross-checks this
 # against the policy: a family the policy marks "pending" must not be here.
 IMPLEMENTED_FAMILIES = (
-    set(MAIN_FAMILIES) | {CREATE_ANON_FAMILY, OVERSIZED_FAMILY} | set(HOOK_FAMILIES)
+    set(MAIN_FAMILIES)
+    | {CREATE_ANON_FAMILY, OVERSIZED_FAMILY}
+    | {
+        FOREIGN_OWNER_FAMILY,
+        REASSIGN_FAMILY,
+        UPDATE_OWN_FAMILY,
+        SERVER_ONLY_CREATE_FAMILY,
+        SERVER_ONLY_UPDATE_FAMILY,
+        SUPERUSER_CREATE_FAMILY,
+    }
+    | set(HOOK_FAMILIES)
 )
