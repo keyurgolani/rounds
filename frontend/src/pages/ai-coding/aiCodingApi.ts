@@ -173,11 +173,13 @@ export type RunProjectResult = {
   truncated: boolean;
 };
 
+/** The runner takes the checkpoint's test command and timeout from the
+ * round itself; a call names the round, language, and checkpoint. */
 export async function runProject(input: {
-  files: Record<string, string>;
+  round_slug: string;
   language: string;
-  test_command: string;
-  timeout_s?: number;
+  checkpoint_index: number;
+  files: Record<string, string>;
 }): Promise<RunProjectResult> {
   return runnerJSON<RunProjectResult>('/api/ai-coding/run-project', {
     method: 'POST',

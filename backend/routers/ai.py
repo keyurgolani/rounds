@@ -35,11 +35,14 @@ from typing import Any, AsyncIterator, Literal
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app import ats as ats_mod
-from app import obs
+from app import destinations, gates, limits, obs
+from app.errors import TypedError
+from app.limits import StrictModel
 from app.crypto import decrypt, encrypt
 from app.pb_auth import POCKETBASE_URL, current_user, pb_get, pb_patch, pb_post
 
@@ -269,6 +272,23 @@ class ATSRequest(BaseModel):
     use_ai: bool = True
 
 
+class ATSRuleRequest(StrictModel):
+    """admission/v1 body for /api/ai/ats-rule. ``use_ai`` is accepted
+    so the SPA can send its ATS body unchanged; the rule half ignores
+    it."""
+
+    data: dict[str, Any]
+    job_description: str | None = None
+    use_ai: bool = False
+
+    @field_validator("job_description")
+    @classmethod
+    def _job_description(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return limits.check_text(v, limits.JOB_DESCRIPTION_BYTES, "job_description")
+
+
 class EnhanceProjectsRequest(BaseModel):
     # Each project: a partial repo summary the model uses to author a
     # better description + 2–3 highlight bullets.
@@ -355,6 +375,7 @@ async def list_providers(request: Request) -> list[ProviderOut]:
 @router.post("/providers", response_model=ProviderOut)
 async def create_provider(request: Request, body: ProviderIn) -> ProviderOut:
     user = await current_user(request)
+    await destinations.check(body.base_url)
     payload: dict[str, Any] = {
         "user": user["id"],
         "kind": body.kind,
@@ -377,6 +398,7 @@ async def update_provider(
 ) -> ProviderOut:
     user = await current_user(request)
     row = await _load_provider(user, provider_id)
+    await destinations.check(body.base_url)
     payload: dict[str, Any] = {
         "kind": body.kind,
         "label": body.label,
@@ -423,6 +445,7 @@ async def test_provider(
         raise HTTPException(status_code=400, detail="No API key on file for this provider.")
     kind = row.get("kind") or "provider"
     base_url = row.get("base_url") or ""
+    destination = await destinations.vet(base_url)
 
     # Pick the cheapest reasonable model. For the test we ask the model
     # to say PONG; if anything comes back we treat it as success.
@@ -431,7 +454,7 @@ async def test_provider(
     if not model:
         # Refresh once, then try again.
         try:
-            cached = await _fetch_models(kind, api_key, base_url)
+            cached = await _fetch_models(kind, api_key, base_url, destination=destination)
             await pb_patch(
                 user["token"],
                 f"/api/collections/ai_providers/records/{provider_id}",
@@ -457,6 +480,7 @@ async def test_provider(
             system="You are a connectivity check.",
             messages=[{"role": "user", "content": "Reply with the single word PONG."}],
             max_tokens=12,
+            destination=destination,
         )
     except HTTPException:
         raise
@@ -482,9 +506,10 @@ async def refresh_models(
         raise HTTPException(status_code=400, detail="No API key on file for this provider.")
     kind = row.get("kind") or "provider"
     base_url = row.get("base_url") or ""
+    destination = await destinations.vet(base_url)
 
     try:
-        models = await _fetch_models(kind, api_key, base_url)
+        models = await _fetch_models(kind, api_key, base_url, destination=destination)
     except HTTPException:
         raise
     except Exception as err:  # noqa: BLE001
@@ -570,11 +595,14 @@ async def _active_text_config(user: dict) -> dict[str, Any]:
             status_code=400,
             detail="No API key on file for the selected text provider.",
         )
+    destination = await destinations.vet(provider.get("base_url") or "")
     return {
         "kind": provider.get("kind") or "provider",
         "model": settings["text_model"],
         "api_key": api_key,
         "base_url": provider.get("base_url") or "",
+        # Vetted once here; the call reuses it rather than looking up again.
+        "destination": destination,
     }
 
 
@@ -586,10 +614,12 @@ async def _call_complete(
     system: str,
     messages: list[dict[str, Any]],
     max_tokens: int = 1024,
+    destination: destinations.Destination | None = None,
 ) -> str:
+    destination = await destinations.vetted(base_url, destination)
     if kind in ("anthropic", "anthropic-compatible"):
-        return await _anthropic_complete(model, api_key, base_url, system, messages, max_tokens)
-    return await _openai_complete(model, api_key, base_url, system, messages, max_tokens)
+        return await _anthropic_complete(model, api_key, base_url, system, messages, max_tokens, destination)
+    return await _openai_complete(model, api_key, base_url, system, messages, max_tokens, destination)
 
 
 async def _anthropic_complete(
@@ -599,6 +629,7 @@ async def _anthropic_complete(
     system: str,
     messages: list[dict[str, Any]],
     max_tokens: int,
+    destination: destinations.Destination | None = None,
 ) -> str:
     """Native HTTP call to an Anthropic-style messages endpoint.
 
@@ -617,7 +648,7 @@ async def _anthropic_complete(
         "system": system,
         "messages": messages,
     }
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with destinations.client(destination, timeout=60) as client:
         resp = await client.post(
             f"{base}/messages",
             headers={
@@ -650,19 +681,23 @@ async def _openai_complete(
     system: str,
     messages: list[dict[str, Any]],
     max_tokens: int,
+    destination: destinations.Destination | None = None,
 ) -> str:
     from openai import AsyncOpenAI
 
-    kwargs = {"api_key": api_key}
+    kwargs: dict[str, Any] = {"api_key": api_key}
     if base_url:
         kwargs["base_url"] = base_url
-    client = AsyncOpenAI(**kwargs)
     chat = [{"role": "system", "content": system}] + messages
-    res = await client.chat.completions.create(
-        model=model,
-        messages=chat,
-        max_tokens=max_tokens,
-    )
+    # The SDK's own client follows redirects; this one doesn't, and it
+    # connects only to vetted addresses.
+    async with destinations.client(destination) as http_client:
+        client = AsyncOpenAI(**kwargs, http_client=http_client)
+        res = await client.chat.completions.create(
+            model=model,
+            messages=chat,
+            max_tokens=max_tokens,
+        )
     return (res.choices[0].message.content or "").strip()
 
 
@@ -674,12 +709,14 @@ async def _call_stream(
     system: str,
     messages: list[dict[str, Any]],
     max_tokens: int = 512,
+    destination: destinations.Destination | None = None,
 ) -> AsyncIterator[str]:
+    destination = await destinations.vetted(base_url, destination)
     if kind in ("anthropic", "anthropic-compatible"):
-        async for chunk in _anthropic_stream(model, api_key, base_url, system, messages, max_tokens):
+        async for chunk in _anthropic_stream(model, api_key, base_url, system, messages, max_tokens, destination):
             yield chunk
     else:
-        async for chunk in _openai_stream(model, api_key, base_url, system, messages, max_tokens):
+        async for chunk in _openai_stream(model, api_key, base_url, system, messages, max_tokens, destination):
             yield chunk
 
 
@@ -690,6 +727,7 @@ async def _anthropic_stream(
     system: str,
     messages: list[dict[str, Any]],
     max_tokens: int,
+    destination: destinations.Destination | None = None,
 ) -> AsyncIterator[str]:
     """Streaming version — same base-URL handling as ``_anthropic_complete``.
 
@@ -705,7 +743,7 @@ async def _anthropic_stream(
         "messages": messages,
         "stream": True,
     }
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with destinations.client(destination, timeout=120) as client:
         async with client.stream(
             "POST",
             f"{base}/messages",
@@ -750,24 +788,26 @@ async def _openai_stream(
     system: str,
     messages: list[dict[str, Any]],
     max_tokens: int,
+    destination: destinations.Destination | None = None,
 ) -> AsyncIterator[str]:
     from openai import AsyncOpenAI
 
-    kwargs = {"api_key": api_key}
+    kwargs: dict[str, Any] = {"api_key": api_key}
     if base_url:
         kwargs["base_url"] = base_url
-    client = AsyncOpenAI(**kwargs)
     chat = [{"role": "system", "content": system}] + messages
-    stream = await client.chat.completions.create(
-        model=model,
-        messages=chat,
-        max_tokens=max_tokens,
-        stream=True,
-    )
-    async for chunk in stream:
-        delta = chunk.choices[0].delta if chunk.choices else None
-        if delta and delta.content:
-            yield delta.content
+    async with destinations.client(destination) as http_client:
+        client = AsyncOpenAI(**kwargs, http_client=http_client)
+        stream = await client.chat.completions.create(
+            model=model,
+            messages=chat,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if delta and delta.content:
+                yield delta.content
 
 
 # -----------------------------------------------------------------------------
@@ -777,6 +817,9 @@ async def _openai_stream(
 
 _ANTHROPIC_DEFAULT_BASE = "https://api.anthropic.com/v1"
 _OPENAI_DEFAULT_BASE = "https://api.openai.com/v1"
+# A publication link may redirect (DOI to publisher, abstract to PDF);
+# each hop is vetted.
+_PAPER_MAX_REDIRECTS = 5
 
 
 def _models_url(kind: str, base_url: str) -> str:
@@ -805,10 +848,16 @@ def _models_headers(kind: str, api_key: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {api_key}"}
 
 
-async def _fetch_models(kind: str, api_key: str, base_url: str) -> list[str]:
+async def _fetch_models(
+    kind: str,
+    api_key: str,
+    base_url: str,
+    destination: destinations.Destination | None = None,
+) -> list[str]:
+    destination = await destinations.vetted(base_url, destination)
     url = _models_url(kind, base_url)
     headers = _models_headers(kind, api_key)
-    async with httpx.AsyncClient(timeout=12) as client:
+    async with destinations.client(destination, timeout=12) as client:
         resp = await client.get(url, headers=headers)
     if resp.status_code != 200:
         raise HTTPException(
@@ -985,14 +1034,20 @@ async def _fetch_paper_text(url: str) -> str | None:
     Returns plain text from the paper. Handles HTML (strips tags) and
     PDF (via pdfminer.six). Silent on failure — the caller falls back
     to whatever non-paper context it has.
+
+    The URL and every redirect hop get the provider destination check,
+    with private addresses refused whatever PROVIDER_PRIVATE_NETWORK
+    says, and the connection goes to the vetted address.
     """
     if not url or not isinstance(url, str):
         return None
     try:
         timeout = httpx.Timeout(15.0, connect=10.0)
-        async with httpx.AsyncClient(
-            timeout=timeout,
+        async with destinations.client(
+            private_ok=False,
             follow_redirects=True,
+            max_redirects=_PAPER_MAX_REDIRECTS,
+            timeout=timeout,
             headers={"User-Agent": "rounds-resume-studio"},
         ) as client:
             r = await client.get(url)
@@ -1034,6 +1089,10 @@ async def _fetch_paper_text(url: str) -> str | None:
                 text = " ".join(s.strip() for s in p.parts if s.strip())
                 return text.strip() or None
             return (r.text or "").strip() or None
+    except TypedError as err:
+        # A refused destination, for the URL or a redirect hop.
+        _log.info("paper fetch refused (%s)", err.code)
+        return None
     except Exception:  # noqa: BLE001
         _log.exception("paper fetch failed for %s", url)
         return None
@@ -1071,10 +1130,14 @@ async def improve(request: Request, body: ImproveRequest) -> StreamingResponse:
 
     # Publications can hand in a `paper_url` to ground the improve
     # in the actual paper text (HTML or PDF). Best effort — failure
-    # is silent and we fall through to other context.
+    # is silent and we fall through to other context. Off unless
+    # ROUNDS_GATE_PAPER_FETCH is enabled.
+    # TODO(ROUNDS-10-L03): #55's contained URL retrieval replaces this
+    # direct fetch.
     paper_text: str | None = None
     if (
-        isinstance(body.context, dict)
+        gates.value("PAPER_FETCH") == "enabled"
+        and isinstance(body.context, dict)
         and isinstance(body.context.get("paper_url"), str)
         and body.context["paper_url"].strip()
     ):
@@ -1104,6 +1167,7 @@ async def improve(request: Request, body: ImproveRequest) -> StreamingResponse:
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
                 max_tokens=1200,
+                destination=cfg.get("destination"),
             ):
                 yield f"data: {json.dumps({'delta': chunk})}\n\n".encode("utf-8")
             yield b"data: {\"done\": true}\n\n"
@@ -1214,6 +1278,7 @@ async def tailor_resume(request: Request, body: TailorRequest) -> dict[str, Any]
             system=_TAILOR_SYSTEM,
             messages=[{"role": "user", "content": user_prompt[:24000]}],
             max_tokens=6000,
+            destination=cfg.get("destination"),
         )
     except Exception as err:  # noqa: BLE001
         rid = _request_id()
@@ -1276,6 +1341,7 @@ async def cover_letter(
                 system=_COVER_LETTER_SYSTEM,
                 messages=[{"role": "user", "content": user_prompt[:18000]}],
                 max_tokens=900,
+                destination=cfg.get("destination"),
             ):
                 yield f"data: {json.dumps({'delta': chunk})}\n\n".encode("utf-8")
             yield b"data: {\"done\": true}\n\n"
@@ -1306,6 +1372,7 @@ async def import_resume(request: Request, body: ImportRequest) -> dict[str, Any]
             system=_IMPORT_SYSTEM,
             messages=[{"role": "user", "content": raw[:30000]}],
             max_tokens=4000,
+            destination=cfg.get("destination"),
         )
     except Exception as err:  # noqa: BLE001
         rid = _request_id()
@@ -1347,6 +1414,7 @@ async def import_experience(request: Request, body: ExperienceImportRequest) -> 
             system=_EXPERIENCE_IMPORT_SYSTEM,
             messages=[{"role": "user", "content": json.dumps(context)}],
             max_tokens=6000,
+            destination=cfg.get("destination"),
         )
     except Exception as err:  # noqa: BLE001
         rid = _request_id()
@@ -1520,13 +1588,14 @@ def _normalize_keys(obj: Any) -> Any:
 
 
 @router.post("/ats-rule")
-async def ats_rule(body: ATSRequest) -> dict[str, Any]:
+async def ats_rule(body: ATSRuleRequest) -> dict[str, Any]:
     """Rule-based ATS scoring. Pure computation, no AI provider call.
 
     Split from /ats-ai so the frontend can render the rule result
     immediately while the (slow) AI call is still in flight.
     """
-    rule = ats_mod.score_resume(body.data, body.job_description)
+    # CPU-bound on a large resume, so it stays off the event loop.
+    rule = await run_in_threadpool(ats_mod.score_resume, body.data, body.job_description)
     return {
         "rule_score": rule.score,
         "breakdown": rule.breakdown,
@@ -1576,6 +1645,7 @@ async def ats_ai(request: Request, body: ATSRequest) -> dict[str, Any]:
             system=_ATS_SYSTEM,
             messages=[{"role": "user", "content": user_prompt[:18000]}],
             max_tokens=1400,
+            destination=cfg.get("destination"),
         )
     except Exception as err:  # noqa: BLE001
         rid = _request_id()
@@ -1805,6 +1875,7 @@ async def _summarize_doc(
             system=_DOC_SUMMARIZER_SYSTEM,
             messages=[{"role": "user", "content": user_prompt}],
             max_tokens=900,
+            destination=cfg.get("destination"),
         )
     except Exception:  # noqa: BLE001
         _log.exception("doc summarizer failed for %s", path)
@@ -1831,6 +1902,7 @@ async def _aggregate_project(
             system=_PROJECT_AGGREGATOR_SYSTEM,
             messages=[{"role": "user", "content": user_prompt[:30000]}],
             max_tokens=900,
+            destination=cfg.get("destination"),
         )
     except Exception:  # noqa: BLE001
         _log.exception("project aggregator failed")
@@ -1899,6 +1971,9 @@ async def enhance_projects(
     if not body.projects:
         return {"projects": []}
     user = await current_user(request)
+    # TODO(ROUNDS-14-L06): #179's call-site inventory revisits this cap.
+    if len(body.projects) > limits.ENHANCE_MAX_PROJECTS:
+        raise TypedError("limit_exceeded", "Choose at most 25 projects to enhance at once.")
     cfg = await _active_text_config(user)
 
     timeout = httpx.Timeout(20.0, read=20.0, connect=10.0)

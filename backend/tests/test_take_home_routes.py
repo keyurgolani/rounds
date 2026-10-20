@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 
-def test_run_route_404s_when_assignment_missing(client):
+def test_run_route_404s_when_assignment_missing(client, signed_in):
     async def fake_user(_):
         return {"id": "u1", "token": "t"}
 
@@ -10,14 +10,14 @@ def test_run_route_404s_when_assignment_missing(client):
 
     with patch("routers.take_home.current_user", fake_user), \
          patch("routers.take_home.pb_get", fake_pb_get):
-        res = client.post("/api/take-home/run", json={
+        res = client.post("/api/take-home/run", headers=signed_in, json={
             "assignment_slug": "missing",
             "files": {"a.py": "pass"},
         })
     assert res.status_code == 404
 
 
-def test_run_route_executes_harness_and_returns_score(client):
+def test_run_route_executes_harness_and_returns_score(client, signed_in):
     """Real subprocess. The 'harness' embedded in this test is just a
     Python one-liner that prints the canonical {criteria, score} JSON."""
     async def fake_user(_):
@@ -48,7 +48,7 @@ def test_run_route_executes_harness_and_returns_score(client):
 
     with patch("routers.take_home.current_user", fake_user), \
          patch("routers.take_home.pb_get", fake_pb_get):
-        res = client.post("/api/take-home/run", json={
+        res = client.post("/api/take-home/run", headers=signed_in, json={
             "assignment_slug": "tinytest",
             "files": {"main.py": "# user file"},
         })
@@ -59,19 +59,19 @@ def test_run_route_executes_harness_and_returns_score(client):
     assert body["error"] is None
 
 
-def test_run_route_rejects_invalid_slug_pattern(client):
+def test_run_route_rejects_invalid_slug_pattern(client, signed_in):
     async def fake_user(_):
         return {"id": "u1", "token": "t"}
 
     with patch("routers.take_home.current_user", fake_user):
-        res = client.post("/api/take-home/run", json={
+        res = client.post("/api/take-home/run", headers=signed_in, json={
             "assignment_slug": "BAD SLUG",
             "files": {},
         })
     assert res.status_code == 422
 
 
-def test_submit_route_persists_attempt_and_returns_combined(client):
+def test_submit_route_persists_attempt_and_returns_combined(client, signed_in):
     captured_attempt: dict = {}
 
     async def fake_user(_):
@@ -113,7 +113,7 @@ def test_submit_route_persists_attempt_and_returns_combined(client):
          patch("routers.take_home.pb_get", fake_pb_get), \
          patch("routers.take_home.pb_post", fake_pb_post), \
          patch("routers.take_home._active_text_config", fake_cfg):
-        res = client.post("/api/take-home/submit", json={
+        res = client.post("/api/take-home/submit", headers=signed_in, json={
             "assignment_slug": "tinytest",
             "files": {"main.py": "# user file"},
             "notes": "design notes",

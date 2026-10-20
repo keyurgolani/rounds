@@ -1,13 +1,18 @@
 """AI-Assisted Coding endpoints. Project-level run/grade plus an SSE
-chat proxy that reuses backend.routers.ai's call-stream helpers."""
+chat proxy that reuses backend.routers.ai's call-stream helpers.
+
+``run-project`` and ``grade`` are admitted (``app.admission``). The
+caller names a round and a checkpoint; the test command, the hidden
+files, and the timeout come from the round on the server."""
 from __future__ import annotations
 
 import json
 import logging
 from typing import Any, AsyncIterator, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ai_coding.edit_mode import EDIT_SYSTEM_PROMPT, parse_patches as _parse_patches
 from ai_coding.project_runner import run_project
@@ -16,6 +21,9 @@ from ai_coding.rubric import (
     build_prompt as _build_rubric_prompt,
     parse_ai_output as _parse_rubric,
 )
+from app import admission, destinations, limits
+from app.errors import TypedError
+from app.limits import StrictModel
 from app.pb_auth import current_user, pb_get
 from routers.ai import (
     _active_text_config,
@@ -41,15 +49,33 @@ async def _auth_user(request: Request) -> dict:
     working — the lookup happens at call time, not at route registration.
     Switching to a Depends() also makes auth fire BEFORE Pydantic body
     validation, so unauthenticated POSTs return 401 instead of 422.
+
+    On an admitted route admission already holds the account, so it's
+    reused rather than refreshed a second time.
     """
+    admitted = admission.account(request)
+    if admitted is not None:
+        return admitted
     return await current_user(request)
 
 
-class RunProjectRequest(BaseModel):
-    files: Dict[str, str] = Field(..., description="path → contents")
-    language: str
-    test_command: str
-    timeout_s: int = 30
+# Wall time per run-project call and per graded checkpoint.
+RUN_PROJECT_TIMEOUT_S = 10
+GRADE_CHECKPOINT_TIMEOUT_S = 45
+
+
+class RunProjectRequest(StrictModel):
+    round_slug: str = Field(pattern=limits.SLUG_PATTERN)
+    # Multi-language rounds keep one checkpoint list per language. Left
+    # out, the round's primary language applies.
+    language: str | None = Field(default=None, pattern=limits.LANGUAGE_PATTERN)
+    checkpoint_index: int = Field(ge=0, le=limits.MAX_CHECKPOINT_INDEX)
+    files: Dict[str, str]
+
+    @field_validator("files")
+    @classmethod
+    def _files(cls, v: Dict[str, str]) -> Dict[str, str]:
+        return dict(limits.check_files(v))
 
 
 class RunProjectResponse(BaseModel):
@@ -63,14 +89,42 @@ class RunProjectResponse(BaseModel):
     truncated: bool = False
 
 
+def _checkpoints_for(round_row: dict[str, Any], language: str | None) -> tuple[str, list[Any]]:
+    """The round's checkpoints in ``language``, with the language they
+    run in. A round without that language has no such checkpoint."""
+    primary = round_row.get("language") or "python"
+    checkpoints = round_row.get("checkpoints") or []
+    if isinstance(checkpoints, dict):
+        chosen = language or primary
+        listed = checkpoints.get(chosen)
+        if not isinstance(listed, list):
+            raise TypedError("not_found")
+        return chosen, listed
+    if not isinstance(checkpoints, list) or (language is not None and language != primary):
+        raise TypedError("not_found")
+    return primary, checkpoints
+
+
 @router.post("/run-project", response_model=RunProjectResponse)
-def run_project_route(req: RunProjectRequest) -> RunProjectResponse:
-    result = run_project(
-        files=req.files,
-        language=req.language,
-        test_command=req.test_command,
-        timeout_s=req.timeout_s,
-    )
+async def run_project_route(request: Request, req: RunProjectRequest) -> RunProjectResponse:
+    user = admission.account(request)
+    round_row = await admission.first_item(pb_get, user["token"], "ai_coding_rounds", req.round_slug)
+    language, checkpoints = _checkpoints_for(round_row, req.language)
+    if req.checkpoint_index >= len(checkpoints):
+        raise TypedError("not_found")
+    checkpoint = checkpoints[req.checkpoint_index]
+    test_command = checkpoint.get("test_command") if isinstance(checkpoint, dict) else None
+    if not isinstance(test_command, str) or not test_command.strip():
+        raise TypedError("invalid_request", "This checkpoint can't run here.")
+    async with admission.allocate() as slot:
+        result = await run_in_threadpool(
+            run_project,
+            req.files,
+            language,
+            test_command,
+            timeout_s=RUN_PROJECT_TIMEOUT_S,
+            sandbox=slot,
+        )
     return RunProjectResponse(
         passed=result.passed,
         passed_count=result.passed_count,
@@ -129,11 +183,13 @@ async def _resolve_text_cfg(user: dict, provider_id: str | None, model: str | No
         api_key = decrypt(provider.get("encrypted_key") or "", provider.get("key_iv") or "")
         if not api_key:
             raise HTTPException(status_code=400, detail="No API key on file for the chosen provider.")
+        destination = await destinations.vet(provider.get("base_url") or "")
         return {
             "kind": provider.get("kind") or "provider",
             "model": model,
             "api_key": api_key,
             "base_url": provider.get("base_url") or "",
+            "destination": destination,
         }
     return await _active_text_config(user)
 
@@ -187,6 +243,7 @@ async def chat(body: ChatRequest, user: dict = Depends(_auth_user)) -> Streaming
                 system=system,
                 messages=messages,
                 max_tokens=1200,
+                destination=cfg.get("destination"),
             ):
                 yield f"data: {json.dumps({'delta': chunk})}\n\n".encode("utf-8")
             yield b"data: {\"done\": true}\n\n"
@@ -234,6 +291,7 @@ async def edit(body: ChatRequest, user: dict = Depends(_auth_user)) -> Streaming
                 # mode regenerates the whole file so even a small change
                 # consumes ~file-size in tokens.
                 system=system, messages=messages, max_tokens=8000,
+                destination=cfg.get("destination"),
             ):
                 accumulated += chunk
                 yield f"data: {json.dumps({'delta': chunk})}\n\n".encode("utf-8")
@@ -253,37 +311,31 @@ async def edit(body: ChatRequest, user: dict = Depends(_auth_user)) -> Streaming
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
-class GradeRequest(BaseModel):
-    round_slug: str = Field(pattern=r"^[a-z0-9-]+$")
+class GradeRequest(StrictModel):
+    round_slug: str = Field(pattern=limits.SLUG_PATTERN)
     files: Dict[str, str]
     ai_chats: List[Dict[str, Any]] = Field(default_factory=list)
 
+    @field_validator("files")
+    @classmethod
+    def _files(cls, v: Dict[str, str]) -> Dict[str, str]:
+        return dict(limits.check_files(v))
 
-@router.post("/grade")
-async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[str, Any]:
-    # Look up the round server-side. Don't trust the client to ship
-    # checkpoints/rubric/hidden_files — those drive grading and must
-    # come from the seeded source of truth.
-    data = await pb_get(
-        user["token"],
-        "/api/collections/ai_coding_rounds/records",
-        params={"filter": f"slug='{body.round_slug}'", "perPage": 1},
-    )
-    items = (data or {}).get("items") or []
-    if not items:
-        raise HTTPException(status_code=404, detail="Round not found.")
-    round_row = items[0]
-    checkpoints = round_row.get("checkpoints") or []
-    rubric = round_row.get("rubric") or {"items": []}
-    language = round_row.get("language") or "python"
+    @field_validator("ai_chats")
+    @classmethod
+    def _ai_chats(cls, v: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return limits.check_json(v, limits.AI_CHATS_BYTES, "ai_chats")
 
+
+def _grade_checkpoints(slug: str, checkpoints: Any, files: Dict[str, str], language: str, slot) -> list[dict]:
+    """Every checkpoint's tests, hidden files merged, in one slot."""
     test_results = []
     for idx, cp in enumerate(checkpoints):
         test_command = cp.get("test_command")
         if not test_command:
             _log.warning(
                 "ai-coding grade: round %r checkpoint %d has no test_command; recording failure",
-                body.round_slug, idx,
+                slug, idx,
             )
             test_results.append({
                 "passed": False,
@@ -293,18 +345,18 @@ async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[st
                 "error": "Checkpoint is missing a test_command in the seeded round.",
             })
             continue
-        merged = {**body.files}
+        merged = {**files}
         for hf in (cp.get("hidden_files") or []):
             path = hf.get("path") if isinstance(hf, dict) else None
             contents = hf.get("contents") if isinstance(hf, dict) else None
             if not isinstance(path, str) or not isinstance(contents, str):
                 _log.warning(
                     "ai-coding grade: round %r checkpoint %d has malformed hidden_files entry; skipping",
-                    body.round_slug, idx,
+                    slug, idx,
                 )
                 continue
             merged[path] = contents
-        r = run_project(merged, language, test_command, timeout_s=45)
+        r = run_project(merged, language, test_command, timeout_s=GRADE_CHECKPOINT_TIMEOUT_S, sandbox=slot)
         test_results.append({
             "passed": r.passed,
             "passed_count": r.passed_count,
@@ -312,6 +364,23 @@ async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[st
             "stdout": r.stdout[:8000],
             "error": r.error,
         })
+    return test_results
+
+
+@router.post("/grade")
+async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[str, Any]:
+    # Look up the round server-side. Don't trust the client to ship
+    # checkpoints/rubric/hidden_files — those drive grading and must
+    # come from the seeded source of truth.
+    round_row = await admission.first_item(pb_get, user["token"], "ai_coding_rounds", body.round_slug)
+    checkpoints = round_row.get("checkpoints") or []
+    rubric = round_row.get("rubric") or {"items": []}
+    language = round_row.get("language") or "python"
+
+    async with admission.allocate() as slot:
+        test_results = await run_in_threadpool(
+            _grade_checkpoints, body.round_slug, checkpoints, body.files, language, slot
+        )
 
     rubric_review: Dict[str, Any] = {"items": [], "total": 0.0, "skipped": False}
     try:
@@ -327,6 +396,7 @@ async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[st
             system=_RUBRIC_SYS,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1500,
+            destination=cfg.get("destination"),
         )
         rubric_review = _parse_rubric(raw)
     except Exception as e:  # noqa: BLE001

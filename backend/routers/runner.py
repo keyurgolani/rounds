@@ -1,7 +1,24 @@
 """Code runner endpoints — the only HTTP surface the Python backend
-owns now that content and user data live in PocketBase."""
-from fastapi import APIRouter
+owns now that content and user data live in PocketBase.
 
+Both routes are admitted (``app.admission``). The caller names a
+question by slug and sends only code and input; the entry, test cases,
+and expected values load from ``coding_questions`` with the caller's
+token, and validators come only from that stored data.
+
+TODO(ROUNDS-00A-L02): #2's server-owned Test Definitions replace the
+caller-token lookup, and validators leave the API process.
+"""
+from __future__ import annotations
+
+from fastapi import APIRouter, Request
+from fastapi.concurrency import run_in_threadpool
+from pydantic import ValidationError
+
+from app import admission
+from app.errors import TypedError
+from app.limits import EVALUATE_MAX_CASES
+from app.pb_auth import pb_get
 from matchers import match
 from runner import run_one
 from schemas import (
@@ -9,6 +26,7 @@ from schemas import (
     CodeEvaluateResult,
     CodeRunRequest,
     CodeRunResult,
+    Entry,
     EvaluateCaseResult,
 )
 
@@ -18,15 +36,36 @@ DEFAULT_TIMEOUT_S = 3
 LARGE_TAG_TIMEOUT_S = 10
 
 
+async def _load_question(request: Request, slug: str) -> tuple[dict, list[dict]]:
+    """Step 8: the question's stored entry and test cases."""
+    user = admission.account(request)
+    question = await admission.first_item(pb_get, user["token"], "coding_questions", slug)
+    try:
+        entry = Entry.model_validate(question.get("entry") or {})
+    except ValidationError:
+        raise TypedError("invalid_request", "This question can't run here.") from None
+    if entry.kind == "custom":
+        # Stored custom drivers stay off until #2's harness runs them.
+        raise TypedError("invalid_request", "This question can't run here.")
+    cases = question.get("test_cases") or []
+    if not isinstance(cases, list):
+        raise TypedError("invalid_request", "This question can't run here.")
+    return entry.model_dump(), [tc for tc in cases if isinstance(tc, dict)]
+
+
 @router.post("/run", response_model=CodeRunResult)
-def run_code(req: CodeRunRequest):
-    outcome = run_one(
-        req.code,
-        req.language,
-        req.entry.model_dump(),
-        req.input,
-        timeout_s=DEFAULT_TIMEOUT_S,
-    )
+async def run_code(request: Request, req: CodeRunRequest):
+    entry, _cases = await _load_question(request, req.question_slug)
+    async with admission.allocate() as slot:
+        outcome = await run_in_threadpool(
+            run_one,
+            req.code,
+            req.language,
+            entry,
+            req.input,
+            timeout_s=DEFAULT_TIMEOUT_S,
+            sandbox=slot,
+        )
     return CodeRunResult(
         stdout=outcome.stdout,
         stderr=outcome.stderr,
@@ -55,20 +94,18 @@ def _timeout_for(tc) -> int:
     return LARGE_TAG_TIMEOUT_S if "large" in tags else DEFAULT_TIMEOUT_S
 
 
-@router.post("/evaluate", response_model=CodeEvaluateResult)
-def evaluate_code(req: CodeEvaluateRequest):
-    selected = _select_cases(req.test_cases, req.filter)
-    entry_dict = req.entry.model_dump()
+def _evaluate(code, language, entry_dict, selected, slot) -> CodeEvaluateResult:
     results = []
     passed = 0
     failed = 0
     for i, tc in selected:
         outcome = run_one(
-            req.code,
-            req.language,
+            code,
+            language,
             entry_dict,
             tc.get("input", {}),
             timeout_s=_timeout_for(tc),
+            sandbox=slot,
         )
         expected = tc.get("expected")
         if outcome.error is not None:
@@ -92,3 +129,13 @@ def evaluate_code(req: CodeEvaluateRequest):
         else:
             failed += 1
     return CodeEvaluateResult(passed=passed, failed=failed, results=results)
+
+
+@router.post("/evaluate", response_model=CodeEvaluateResult)
+async def evaluate_code(request: Request, req: CodeEvaluateRequest):
+    entry_dict, cases = await _load_question(request, req.question_slug)
+    selected = _select_cases(cases, req.filter)
+    if len(selected) > EVALUATE_MAX_CASES:
+        raise TypedError("limit_exceeded")
+    async with admission.allocate() as slot:
+        return await run_in_threadpool(_evaluate, req.code, req.language, entry_dict, selected, slot)

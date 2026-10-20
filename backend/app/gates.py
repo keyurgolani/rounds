@@ -22,12 +22,12 @@ Resolution, the same in all three readers:
    SPA reads ``VITE_DISABLE_SIGNUPS``, as each does today.
 4. Otherwise the written default applies.
 
-Nothing enforces route or enforcement gates yet; #1's stage 2
-admission reads them.
+Admission (``app/admission.py``) enforces the route gates, the AI
+router reads ``PAPER_FETCH`` and ``PROVIDER_PRIVATE_NETWORK``, and
+PocketBase and the SPA read ``SIGNUPS``.
 
-TODO(ROUNDS-00A-L01): stage 2 admission enforces the route gates and
-``PAPER_FETCH``; stage 3 enforces ``ENFORCE_IDEMPOTENCY`` and
-``ENFORCE_QUOTA``.
+TODO(ROUNDS-00A-L01): stage 3 enforces ``ENFORCE_IDEMPOTENCY`` and
+``ENFORCE_QUOTA``; until then admission passes steps 6 and 7 through.
 """
 from __future__ import annotations
 
@@ -107,10 +107,21 @@ REGISTRY: tuple[Gate, ...] = (
     Gate(
         name="PAPER_FETCH",
         values=ROUTE_VALUES,
-        default="enabled",
+        default="disabled",
         closed="disabled",
         readers=frozenset({RUNNER}),
         description="Lets /api/ai/improve fetch a publication's paper_url.",
+    ),
+    Gate(
+        name="PROVIDER_PRIVATE_NETWORK",
+        values=ROUTE_VALUES,
+        default="disabled",
+        closed="disabled",
+        readers=frozenset({RUNNER}),
+        description=(
+            "Lets an AI provider base URL reach a private address (RFC 1918, "
+            "RFC 6598, or IPv6 ULA), for a model server on the operator's LAN."
+        ),
     ),
     Gate(
         name="ENFORCE_IDEMPOTENCY",

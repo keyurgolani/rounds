@@ -56,15 +56,29 @@ def test_the_registry_covers_each_admitted_route_and_the_switches():
         "/api/pdf/health",
         "/api/ai/ats-rule",
     }
-    assert {"PAPER_FETCH", "ENFORCE_IDEMPOTENCY", "ENFORCE_QUOTA", "SIGNUPS"} <= set(gates.BY_NAME)
+    assert {
+        "PAPER_FETCH",
+        "PROVIDER_PRIVATE_NETWORK",
+        "ENFORCE_IDEMPOTENCY",
+        "ENFORCE_QUOTA",
+        "SIGNUPS",
+    } <= set(gates.BY_NAME)
 
 
-def test_written_defaults_keep_current_behavior():
+def test_written_defaults_keep_routes_on_and_outbound_reach_off():
+    # Route gates keep each route serving and enforcement starts off.
+    # The paper fetch and private provider addresses start disabled
+    # (#1 stage 2).
     resolved = gates.load({}, gates.RUNNER)
     assert [n for n in resolved] == [g.name for g in RUNNER_GATES]
     for name, r in resolved.items():
         assert r.source == "default"
-        expected = "off" if name.startswith("ENFORCE_") else "enabled"
+        if name.startswith("ENFORCE_"):
+            expected = "off"
+        elif name in ("PAPER_FETCH", "PROVIDER_PRIVATE_NETWORK"):
+            expected = "disabled"
+        else:
+            expected = "enabled"
         assert r.value == expected, name
     assert gates.load({}, gates.POCKETBASE)["SIGNUPS"] == gates.Resolved("enabled", "default")
     assert gates.load({}, gates.FRONTEND)["SIGNUPS"] == gates.Resolved("enabled", "default")

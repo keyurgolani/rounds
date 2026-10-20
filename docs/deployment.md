@@ -66,7 +66,7 @@ PocketBase applies migrations automatically:
 2. Consolidated shared data seed.
 3. Optional admin bootstrap from `PB_ADMIN_EMAIL` and `PB_ADMIN_PASSWORD`.
 
-Admin UI is available at `https://<your-domain>/_/`.
+The admin UI isn't served on your domain. [PocketBase Admin Access](operations.md#pocketbase-admin-access) shows how to reach it.
 
 ## Backups
 

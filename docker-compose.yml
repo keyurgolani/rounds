@@ -24,7 +24,9 @@ services:
     ports:
       - "${RUNNER_PORT:-3099}:8000"
     volumes:
-      - ./backend:/app
+      # Read-only, so candidate code can't write the runner's source
+      # (backend/app/sandbox.py); --reload only reads.
+      - ./backend:/app:ro
     environment:
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-*}
       - PDF_RENDERER_URL=${PDF_RENDERER_URL:-http://pdf-renderer:4000}
@@ -46,6 +48,7 @@ services:
       - ROUNDS_GATE_PDF_HEALTH=${ROUNDS_GATE_PDF_HEALTH:-}
       - ROUNDS_GATE_ATS_RULE=${ROUNDS_GATE_ATS_RULE:-}
       - ROUNDS_GATE_PAPER_FETCH=${ROUNDS_GATE_PAPER_FETCH:-}
+      - ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK=${ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK:-}
       - ROUNDS_GATE_ENFORCE_IDEMPOTENCY=${ROUNDS_GATE_ENFORCE_IDEMPOTENCY:-}
       - ROUNDS_GATE_ENFORCE_QUOTA=${ROUNDS_GATE_ENFORCE_QUOTA:-}
     depends_on:

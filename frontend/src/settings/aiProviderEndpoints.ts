@@ -134,21 +134,21 @@ export const POPULAR_ENDPOINTS: EndpointPreset[] = [
     label: 'Ollama (local)',
     base_url: 'http://localhost:11434/v1',
     kind: 'openai-compatible',
-    hint: 'Local Ollama daemon. Any pulled model is available.',
+    hint: 'Ollama on your network. The runner refuses localhost, so use the machine’s LAN address; the server allows private addresses only with ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK enabled.',
   },
   {
     id: 'vllm-local',
     label: 'vLLM (local)',
     base_url: 'http://localhost:8000/v1',
     kind: 'openai-compatible',
-    hint: 'Local vLLM server (default port).',
+    hint: 'vLLM on your network (default port). The runner refuses localhost, so use the machine’s LAN address; the server allows private addresses only with ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK enabled.',
   },
   {
     id: 'lmstudio-local',
     label: 'LM Studio (local)',
     base_url: 'http://localhost:1234/v1',
     kind: 'openai-compatible',
-    hint: 'Local LM Studio inference server.',
+    hint: 'LM Studio on your network. The runner refuses localhost, so use the machine’s LAN address; the server allows private addresses only with ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK enabled.',
   },
 
   // ---- Anthropic-compatible --------------------------------------------

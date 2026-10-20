@@ -19,6 +19,8 @@ spec:
       labels:
         app: frontend
     spec:
+      # Nothing here calls the Kubernetes API.
+      automountServiceAccountToken: false
       containers:
         - name: frontend
           image: ghcr.io/your-org/rounds-frontend:1.0.0

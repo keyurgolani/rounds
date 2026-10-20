@@ -141,7 +141,7 @@ def test_chat_route_rejects_invalid_slug_pattern(client):
     assert res.status_code == 422  # Pydantic validation
 
 
-def test_grade_route_runs_checkpoints_and_calls_ai(client, monkeypatch):
+def test_grade_route_runs_checkpoints_and_calls_ai(client, monkeypatch, signed_in):
     # Bypass auth + provider config by mocking the helpers.
     async def fake_user(_):
         return {"id": "u1", "token": "t"}
@@ -170,7 +170,7 @@ def test_grade_route_runs_checkpoints_and_calls_ai(client, monkeypatch):
          patch("routers.ai_coding.pb_get", fake_pb_get), \
          patch("routers.ai_coding._active_text_config", fake_cfg), \
          patch("routers.ai_coding._call_complete", fake_complete):
-        res = client.post("/api/ai-coding/grade", json={
+        res = client.post("/api/ai-coding/grade", headers=signed_in, json={
             "round_slug": "test-round",
             "files": {"a.py": "pass"},
             "ai_chats": [],
@@ -181,7 +181,7 @@ def test_grade_route_runs_checkpoints_and_calls_ai(client, monkeypatch):
     assert body["test_results"][0]["passed"] is True
 
 
-def test_grade_route_merges_hidden_files_during_grade(client):
+def test_grade_route_merges_hidden_files_during_grade(client, signed_in):
     """Hidden test files materialized only when grading — not visible to
     the candidate or to /run-project. Asserts that a hidden test that
     references a marker file (provided in hidden_files) actually runs."""
@@ -220,7 +220,7 @@ def test_grade_route_merges_hidden_files_during_grade(client):
     with patch("routers.ai_coding.current_user", fake_user), \
          patch("routers.ai_coding.pb_get", fake_pb_get), \
          patch("routers.ai_coding._active_text_config", fake_cfg):
-        res = client.post("/api/ai-coding/grade", json={
+        res = client.post("/api/ai-coding/grade", headers=signed_in, json={
             "round_slug": "t-round",
             "files": {"a.py": "pass"},
             "ai_chats": [],
@@ -402,7 +402,7 @@ def test_chat_route_rejects_partial_override(client):
         assert res.status_code == 422
 
 
-def test_grade_route_records_failure_for_missing_test_command(client):
+def test_grade_route_records_failure_for_missing_test_command(client, signed_in):
     """A seeded checkpoint without a test_command should produce an
     explicit failure in the grade report rather than a silent pass."""
     async def fake_user(_):
@@ -425,7 +425,7 @@ def test_grade_route_records_failure_for_missing_test_command(client):
     with patch("routers.ai_coding.current_user", fake_user), \
          patch("routers.ai_coding.pb_get", fake_pb_get), \
          patch("routers.ai_coding._active_text_config", fake_cfg):
-        res = client.post("/api/ai-coding/grade", json={
+        res = client.post("/api/ai-coding/grade", headers=signed_in, json={
             "round_slug": "broken-round",
             "files": {},
             "ai_chats": [],

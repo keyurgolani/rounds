@@ -32,6 +32,8 @@ data:
   ROUNDS_GATE_ATS_RULE: ""
   # The paper_url fetch in /api/ai/improve: "enabled" or "disabled".
   ROUNDS_GATE_PAPER_FETCH: ""
+  # AI provider base URLs on private addresses: "enabled" or "disabled".
+  ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK: ""
   # Runner admission checks: "off", "observe", or "enforce".
   ROUNDS_GATE_ENFORCE_IDEMPOTENCY: ""
   ROUNDS_GATE_ENFORCE_QUOTA: ""

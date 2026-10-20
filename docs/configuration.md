@@ -92,23 +92,30 @@ Setting both older flags to `true` still works. Frontend hiding is not a securit
 
 ## Gates
 
-Gates are `ROUNDS_GATE_<NAME>` switches with written defaults that keep today's behavior. Compose reads them from the root `.env`, and k8s reads them from the `rounds-gates` ConfigMap in `k8s/gates.yaml`. Three readers share the names: the runner (`backend/app/gates.py`), PocketBase (`pocketbase/pb_hooks/gates.js`), and the frontend through `runtime-config.js`, which publishes only the gates the SPA reads.
+Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads them from the root `.env`, and k8s reads them from the `rounds-gates` ConfigMap in `k8s/gates.yaml`. Three readers share the names: the runner (`backend/app/gates.py`), PocketBase (`pocketbase/pb_hooks/gates.js`), and the frontend through `runtime-config.js`, which publishes only the gates the SPA reads.
 
 | Gate | Values | Default | Read by | Enforced |
 | --- | --- | --- | --- | --- |
 | `ROUNDS_GATE_SIGNUPS` | `enabled`, `disabled` | `enabled` | PocketBase, frontend | yes |
-| `ROUNDS_GATE_RUN` | `enabled`, `disabled` | `enabled` | runner | not yet; once admission lands, a disabled route answers 503 `route_disabled`. `/api/run` |
-| `ROUNDS_GATE_EVALUATE` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/evaluate` |
-| `ROUNDS_GATE_AI_CODING_RUN_PROJECT` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/ai-coding/run-project` |
-| `ROUNDS_GATE_AI_CODING_GRADE` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/ai-coding/grade` |
-| `ROUNDS_GATE_TAKE_HOME_RUN` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/take-home/run` |
-| `ROUNDS_GATE_TAKE_HOME_SUBMIT` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/take-home/submit` |
-| `ROUNDS_GATE_PDF_RENDER` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/pdf/render` |
-| `ROUNDS_GATE_PDF_HEALTH` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/pdf/health` |
-| `ROUNDS_GATE_ATS_RULE` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/ai/ats-rule` |
-| `ROUNDS_GATE_PAPER_FETCH` | `enabled`, `disabled` | `enabled` | runner | not yet; the `paper_url` fetch in `/api/ai/improve` |
-| `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` | `off`, `observe`, `enforce` | `off` | runner | not yet; `Idempotency-Key` checks |
-| `ROUNDS_GATE_ENFORCE_QUOTA` | `off`, `observe`, `enforce` | `off` | runner | not yet; account, deployment, and demo quotas |
+| `ROUNDS_GATE_RUN` | `enabled`, `disabled` | `enabled` | runner | yes; disabled, `/api/run` answers 503 `route_disabled` |
+| `ROUNDS_GATE_EVALUATE` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/evaluate` |
+| `ROUNDS_GATE_AI_CODING_RUN_PROJECT` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/ai-coding/run-project` |
+| `ROUNDS_GATE_AI_CODING_GRADE` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/ai-coding/grade` |
+| `ROUNDS_GATE_TAKE_HOME_RUN` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/take-home/run` |
+| `ROUNDS_GATE_TAKE_HOME_SUBMIT` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/take-home/submit` |
+| `ROUNDS_GATE_PDF_RENDER` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/pdf/render`, and PDF export offers Print instead |
+| `ROUNDS_GATE_PDF_HEALTH` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/pdf/health` |
+| `ROUNDS_GATE_ATS_RULE` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/ai/ats-rule` |
+| `ROUNDS_GATE_PAPER_FETCH` | `enabled`, `disabled` | `disabled` | runner | yes; the `paper_url` fetch in `/api/ai/improve` |
+| `ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK` | `enabled`, `disabled` | `disabled` | runner | yes; AI provider base URLs on private addresses (RFC 1918, RFC 6598, IPv6 ULA) |
+| `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` | `off`, `observe`, `enforce` | `off` | runner | not yet (#1 stage 3); `Idempotency-Key` checks |
+| `ROUNDS_GATE_ENFORCE_QUOTA` | `off`, `observe`, `enforce` | `off` | runner | not yet (#1 stage 3); account, deployment, and demo quotas |
+
+Each route gate is that route's off switch. Set it to `disabled` and restart the runner, and the route answers 503 `route_disabled` before it reads the request; nothing else changes. [The execution runbook](security/execution-runbook.md) covers flipping and confirming each gate and what each error code means.
+
+Two outbound switches start off. `PAPER_FETCH` lets `/api/ai/improve` fetch a publication's `paper_url`. `PROVIDER_PRIVATE_NETWORK` lets an AI provider base URL point at a private address, for a model server on your LAN. Enabled, every account's provider URL can reach this deployment's private network, its own services included, so enable it only when you trust every account. Loopback, link-local, and cloud metadata addresses and service names such as `pocketbase` or `*.svc` stay refused either way, with 403 `destination_denied`.
+
+The runner looks a provider host up once per call, checks every address it gets, and connects only to one of those addresses. When an address refuses the connection or takes more than 3 seconds to connect, the runner tries the next one, all within the call's connect timeout. Provider calls don't follow redirects. The paper fetch gets the same check for the URL and for each of up to 5 redirects, and it refuses private addresses whatever `PROVIDER_PRIVATE_NETWORK` says; a refused paper URL is skipped like any other failed fetch. Provider calls and the paper fetch ignore `HTTP_PROXY` and `HTTPS_PROXY`.
 
 Each reader resolves a gate the same way:
 
