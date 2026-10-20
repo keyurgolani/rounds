@@ -205,23 +205,24 @@ def test_a_child_past_its_time_is_killed_with_its_group(tmp_path):
 
 def test_a_child_that_prints_without_end_never_grows_the_driver(tmp_path):
     # 128 MiB of output. The driver keeps the first CHILD_OUTPUT_MAX bytes
-    # and reads the rest away as it comes, so its own peak memory stays far
-    # below what holding the stream would take. Measured in a fresh process.
+    # and reads the rest away as it comes, so the most it ever allocates
+    # stays far below what holding the stream would take. tracemalloc
+    # counts every allocation in the driver, on every platform, in a fresh
+    # process so nothing else is counted.
     code = (
-        "import json, resource, sys; sys.path.insert(0, sys.argv[1]); import rounds_harness as h; "
+        "import json, sys, tracemalloc; sys.path.insert(0, sys.argv[1]); import rounds_harness as h; "
+        "tracemalloc.start(); "
         "r = h.run_child([sys.executable, '-I', '-c', "
         "'import sys\\nfor _ in range(128): sys.stdout.buffer.write(bytes(1 << 20))'], sys.argv[2], 60); "
-        "print(json.dumps([len(r.stdout.encode()), r.returncode, r.timed_out, "
-        "resource.getrusage(resource.RUSAGE_SELF).ru_maxrss]))"
+        "print(json.dumps([len(r.stdout.encode()), r.returncode, r.timed_out, tracemalloc.get_traced_memory()[1]]))"
     )
     res = subprocess.run(
         [sys.executable, "-I", "-c", code, str(HARNESS_LIB.parent), str(tmp_path)],
         capture_output=True, text=True, timeout=120, check=True,
     )
-    kept, returncode, timed_out, maxrss = json.loads(res.stdout)
+    kept, returncode, timed_out, peak = json.loads(res.stdout)
     assert (kept, returncode, timed_out) == (rounds_harness.CHILD_OUTPUT_MAX, 0, False)
-    peak = maxrss if sys.platform == "darwin" else maxrss * 1024  # bytes on macOS, KiB on Linux
-    assert peak < 64 * 1024 * 1024, peak
+    assert peak < 16 * 1024 * 1024, peak
 
 
 def test_a_child_that_exits_early_keeps_all_its_output(tmp_path):
