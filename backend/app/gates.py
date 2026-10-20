@@ -22,9 +22,10 @@ Resolution, the same in all three readers:
    SPA reads ``VITE_DISABLE_SIGNUPS``, as each does today.
 4. Otherwise the written default applies.
 
-Admission (``app/admission.py``) enforces the route gates, the AI
-router reads ``PAPER_FETCH`` and ``PROVIDER_PRIVATE_NETWORK``, and
-PocketBase and the SPA read ``SIGNUPS``.
+Admission (``app/admission.py``) enforces the route gates and
+``EXECUTION_DEFINITIONS``, the AI router reads ``PAPER_FETCH`` and
+``PROVIDER_PRIVATE_NETWORK``, and PocketBase and the SPA read
+``SIGNUPS``.
 
 TODO(ROUNDS-00A-L01): stage 3 enforces ``ENFORCE_IDEMPOTENCY`` and
 ``ENFORCE_QUOTA``; until then admission passes steps 6 and 7 through.
@@ -47,6 +48,9 @@ FRONTEND = "frontend"
 
 ROUTE_VALUES = ("enabled", "disabled")
 ENFORCEMENT_VALUES = ("off", "observe", "enforce")
+# ROUNDS-00A-L02: step 2 adds enforce. Until then enforce is an unknown
+# value, so the gate closes to disabled.
+DEFINITION_VALUES = ("legacy", "disabled")
 
 _log = logging.getLogger(__name__)
 
@@ -138,6 +142,17 @@ REGISTRY: tuple[Gate, ...] = (
         closed="enforce",
         readers=frozenset({RUNNER}),
         description="Account, deployment, and demo quotas on admitted routes.",
+    ),
+    Gate(
+        name="EXECUTION_DEFINITIONS",
+        values=DEFINITION_VALUES,
+        default="legacy",
+        closed="disabled",
+        readers=frozenset({RUNNER}),
+        description=(
+            "Where the six execution routes get what they run: legacy loads it from "
+            "PocketBase as stage 2 does; disabled answers 503 definitions_disabled."
+        ),
     ),
     Gate(
         name="SIGNUPS",

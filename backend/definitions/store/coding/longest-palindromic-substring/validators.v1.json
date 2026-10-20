@@ -1,0 +1,1 @@
+{"content_version":1,"kind":"coding-validators","network":"none","runtime_profile":"validator-python","schema":"harness-revision/v1","slug":"longest-palindromic-substring","track":"coding","validators":[{"predicate":"lambda inp, out: (isinstance(out, str) and out == out[::-1] and out in inp['s'])","validator_id":"v-d39d326f3f08"}],"variant":null}

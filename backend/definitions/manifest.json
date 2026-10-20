@@ -1,0 +1,4715 @@
+{
+  "schema": "definitions-manifest/v1",
+  "entries": [
+    {
+      "kind": "harness-revision",
+      "track": "ai-coding",
+      "slug": "async-bugs-py",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "retired",
+      "path": null,
+      "checksum": null
+    },
+    {
+      "kind": "harness-revision",
+      "track": "ai-coding",
+      "slug": "cart-bugfix-py",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "retired",
+      "path": null,
+      "checksum": null
+    },
+    {
+      "kind": "harness-revision",
+      "track": "ai-coding",
+      "slug": "hallucinated-http-client",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/ai-coding/hallucinated-http-client/python.v1.json",
+      "checksum": "sha256:dd0511f5e66760f3d348c7c0999c4ece04eeb1ec6fb8bc95cfdfe599cdd9d9ff"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "ai-coding",
+      "slug": "hallucinated-http-client",
+      "variant": "typescript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/ai-coding/hallucinated-http-client/typescript.v1.json",
+      "checksum": "sha256:51aba1da4258245e5caea9136eced34ccef65267f64113adca7b42100f58c073"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "ai-coding",
+      "slug": "log-parser-ts",
+      "variant": "typescript",
+      "content_version": 1,
+      "lifecycle": "retired",
+      "path": null,
+      "checksum": null
+    },
+    {
+      "kind": "harness-revision",
+      "track": "ai-coding",
+      "slug": "rate-limiter-ts",
+      "variant": "typescript",
+      "content_version": 1,
+      "lifecycle": "retired",
+      "path": null,
+      "checksum": null
+    },
+    {
+      "kind": "harness-revision",
+      "track": "ai-coding",
+      "slug": "word-count-py",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "retired",
+      "path": null,
+      "checksum": null
+    },
+    {
+      "kind": "harness-revision",
+      "track": "coding",
+      "slug": "3sum",
+      "variant": null,
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/3sum/validators.v1.json",
+      "checksum": "sha256:08837b2f3f2487bff7a8d805d28349344aa75bed32024b0d3e395379ad0068c5"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "3sum",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/3sum/javascript.v1.json",
+      "checksum": "sha256:b7acccedd65f26635fb1c3f402aee136f126a11190a253af7d73f5b31d44398c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "3sum",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/3sum/python.v1.json",
+      "checksum": "sha256:bc6f645645d6b4db0ec7cb508ad1f85674206d64190e9eccdd3f2e4671e4476f"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "add-two-numbers",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/add-two-numbers/javascript.v1.json",
+      "checksum": "sha256:8a5073606dc7f7dd7602ed9cae936253303d293b52dacddaa23abd2c0bf2093b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "add-two-numbers",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/add-two-numbers/python.v1.json",
+      "checksum": "sha256:f300b2f705346c7a8545a26b653ba466dd2e6b64ffa659176eb5f19dcfc0092d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "alien-dictionary",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/alien-dictionary/javascript.v1.json",
+      "checksum": "sha256:ab1d5be7a1944d74b0bc14dfc76651dc738a98caadb469b4952498209f53db33"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "alien-dictionary",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/alien-dictionary/python.v1.json",
+      "checksum": "sha256:f83f922e8ff19d3df80ea7f7b7b2a1b4b47b890e647094110ae92613e693b256"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "amazon-locker-distance-multi-source-bfs",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/amazon-locker-distance-multi-source-bfs/javascript.v1.json",
+      "checksum": "sha256:50ac6e616ff2c11775672ccd7d5cb6ce6b22f8f1ee29a9b456b16f33916277c6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "amazon-locker-distance-multi-source-bfs",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/amazon-locker-distance-multi-source-bfs/python.v1.json",
+      "checksum": "sha256:e994135f689114c973069d775eac361e9b3b864ff15f2f08bc3b8ba36787490d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "amazon-locker-package-fit",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/amazon-locker-package-fit/javascript.v1.json",
+      "checksum": "sha256:cf4e2937bbb3a8bd1be5f415658fdb5fe42ae14e9ad68f3df9f29cfea65cccee"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "amazon-locker-package-fit",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/amazon-locker-package-fit/python.v1.json",
+      "checksum": "sha256:3deffc40ae66a69690996d48997945b3f895a075ff00a153ed24d387f255cc8d"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "coding",
+      "slug": "amazon-lottery-weighted-random-selection",
+      "variant": null,
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/amazon-lottery-weighted-random-selection/validators.v1.json",
+      "checksum": "sha256:1defe7e67fe53c7c9b6d0709c1c6b140c14a6535e1d3fc013d29bee3a5f030cd"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "amazon-lottery-weighted-random-selection",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/amazon-lottery-weighted-random-selection/javascript.v1.json",
+      "checksum": "sha256:5879a4654d062f4ee41c0eddd4c2aebf25e608788046d499772bab876b0b9e66"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "amazon-lottery-weighted-random-selection",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/amazon-lottery-weighted-random-selection/python.v1.json",
+      "checksum": "sha256:e64a8003ebd195eaf2d7f7685c1ff44b095b647b50232479d84fb759c4f929dc"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "balanced-binary-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/balanced-binary-tree/javascript.v1.json",
+      "checksum": "sha256:a5cd846ca6cd2a16b78167f4aec1def04f421b1591c439496d7f11c154f10cb6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "balanced-binary-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/balanced-binary-tree/python.v1.json",
+      "checksum": "sha256:2953e632a9130b61a3b92c78002e97d14f7d26d27158aed4fe6d23c900833826"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "battleship-game-model",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/battleship-game-model/javascript.v1.json",
+      "checksum": "sha256:eb62a447017ae2f4255a3e6c4dccb88fd414922ef75bff369eab55abf777ed17"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "battleship-game-model",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/battleship-game-model/python.v1.json",
+      "checksum": "sha256:ce5db579aa01ef319ac7259db34a39fc01534d28bb7b86125fb88186f756076f"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "best-time-to-buy-and-sell-stock",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/best-time-to-buy-and-sell-stock/javascript.v1.json",
+      "checksum": "sha256:c69c160596541db3f6a8980520d8d673c9cd53d9dd30c60da13641c38ce77a27"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "best-time-to-buy-and-sell-stock",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/best-time-to-buy-and-sell-stock/python.v1.json",
+      "checksum": "sha256:d8964ba821cc20a33252941140dd46b32cc3b79db6dbbbbb17765ce31bd8b39c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "best-time-to-buy-and-sell-stock-ii",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/best-time-to-buy-and-sell-stock-ii/javascript.v1.json",
+      "checksum": "sha256:861973b7bf7947aab7404e8f72b4819887607c17f5ac94f06bcaf3ff32c02f38"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "best-time-to-buy-and-sell-stock-ii",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/best-time-to-buy-and-sell-stock-ii/python.v1.json",
+      "checksum": "sha256:622a37d6497384326b47e92793141f79dfafe7d767d3009f10afc77f92d82738"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "best-time-to-buy-and-sell-stock-with-cooldown",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/best-time-to-buy-and-sell-stock-with-cooldown/javascript.v1.json",
+      "checksum": "sha256:9de9edbff527d0a7ba39bccd7b33e7e8227c57eb8fbaad653bf8dff28e3950bd"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "best-time-to-buy-and-sell-stock-with-cooldown",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/best-time-to-buy-and-sell-stock-with-cooldown/python.v1.json",
+      "checksum": "sha256:ea2fcbd5a1bab4e61a4636bf6a25f9dbd45f71bba8c60e51d70d9da8a0b1904e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "best-time-to-buy-and-sell-stock-with-transaction-fee",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/best-time-to-buy-and-sell-stock-with-transaction-fee/javascript.v1.json",
+      "checksum": "sha256:04df8d29701e012926323339f81680d5393cb2617ca5615915bee32fb02a944e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "best-time-to-buy-and-sell-stock-with-transaction-fee",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/best-time-to-buy-and-sell-stock-with-transaction-fee/python.v1.json",
+      "checksum": "sha256:8d3f1571b57883b49dd0456982cb7f00208500dd9a9a015c0d33d80ab3922bc0"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-search",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-search/javascript.v1.json",
+      "checksum": "sha256:f0e6f6e4998c6773f124691afb3faddddf7aa4d0c6f1f314979a67eb6304e7bb"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-search",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-search/python.v1.json",
+      "checksum": "sha256:c505db6acfd5a5984ca074723571059dfd4c8d5960473f416bb2b57df89a2d3f"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-tree-inorder-traversal",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-tree-inorder-traversal/javascript.v1.json",
+      "checksum": "sha256:26e33f30f1f567d45c190c4ac5c0b0f89d841e34e9e520aab835d1b14ae4337a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-tree-inorder-traversal",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-tree-inorder-traversal/python.v1.json",
+      "checksum": "sha256:c3823d0079245f428b2efa8858dbed8b354a62dfeab6825a6f0e8f8bca68db85"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-tree-level-order-traversal",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-tree-level-order-traversal/javascript.v1.json",
+      "checksum": "sha256:ebac15758aa1870b493147888af30e75b3a97605d7b3875021506a7204998d14"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-tree-level-order-traversal",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-tree-level-order-traversal/python.v1.json",
+      "checksum": "sha256:3d41a9cf964ea07fb26cd3b9a6872ad5d474afa2bebd4bd21ed4bfe73ac0225c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-tree-maximum-path-sum",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-tree-maximum-path-sum/javascript.v1.json",
+      "checksum": "sha256:c7f600f92daa1b8b7ae5e7534b04c7a4d38d14ce6c75bb179f579f2d08d2c64d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-tree-maximum-path-sum",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-tree-maximum-path-sum/python.v1.json",
+      "checksum": "sha256:6900142e5881d501980b6b9c60a08842e9782a34c32d00b2ade5205d692512d9"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-tree-path-sum-ii",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-tree-path-sum-ii/javascript.v1.json",
+      "checksum": "sha256:e4be8ec5c4040254d43664bc0ae88f2ffcde5367b0d45b81e51f2cd485b033ff"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-tree-path-sum-ii",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-tree-path-sum-ii/python.v1.json",
+      "checksum": "sha256:70f1cdbc35aeef01d24514155307968ce695facf03611f0cf572a1815df76d0d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-tree-right-side-view",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-tree-right-side-view/javascript.v1.json",
+      "checksum": "sha256:cbb2911ba468268304c6e4e2e9c78a18047a7a8a1a4f5f7eb1536b65b5eb1f0b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-tree-right-side-view",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-tree-right-side-view/python.v1.json",
+      "checksum": "sha256:1e238cac72a9508921217156c451852ae86334a2146fcd6c05ee1b71cba89c45"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-tree-zigzag-level-order-traversal",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-tree-zigzag-level-order-traversal/javascript.v1.json",
+      "checksum": "sha256:24b2095397b7ef8e3575b76eab0ea5f8e87291e9f6ecb63611eabda9bec562d3"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "binary-tree-zigzag-level-order-traversal",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/binary-tree-zigzag-level-order-traversal/python.v1.json",
+      "checksum": "sha256:485b5ff1ce48ea5a73e6837cfee651c062b159a226a1d81578f0421f4e90b360"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "book-index-generator",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/book-index-generator/javascript.v1.json",
+      "checksum": "sha256:a688dfdb918a039bcee51217b3c450bc9945d63770bf4e898dcd7120ad84a2e6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "book-index-generator",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/book-index-generator/python.v1.json",
+      "checksum": "sha256:2856e692df8711c433d5552ed6048711ea276bf00fbca74303a58641caab99c5"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "burst-balloons",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/burst-balloons/javascript.v1.json",
+      "checksum": "sha256:69ddccc97489bb39c230b687ccf69f0ff026d4705c930789116d3e3b7eb1b41d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "burst-balloons",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/burst-balloons/python.v1.json",
+      "checksum": "sha256:f850f1a5c3595868adf55df0cc8da82e404aa53094f6c64725896753906ba3a4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "candy-distribution",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/candy-distribution/javascript.v1.json",
+      "checksum": "sha256:5311434c981b4e65f576dad5de16c5fcf627822759ea62a7199aa759dc195944"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "candy-distribution",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/candy-distribution/python.v1.json",
+      "checksum": "sha256:659ce9dddf47375eb9189bfb33f677f92cd758fc81009746e925de9671052a0f"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "change-machine-coin-inventory",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/change-machine-coin-inventory/javascript.v1.json",
+      "checksum": "sha256:bbe72f4dc8c1b21d4e97eb6137261f02c300718aefe169992210c19e5bf3e81b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "change-machine-coin-inventory",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/change-machine-coin-inventory/python.v1.json",
+      "checksum": "sha256:4ab3b52a30b90d7b21a95ca9259f1e5fd6e7ba1a5402ce7bba4ddc779d4285eb"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "cheapest-flights-within-k-stops",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/cheapest-flights-within-k-stops/javascript.v1.json",
+      "checksum": "sha256:cb096adf0baec00d8901c11e5a0da81bc0a46e193928a05668e2c5cb4ef01a77"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "cheapest-flights-within-k-stops",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/cheapest-flights-within-k-stops/python.v1.json",
+      "checksum": "sha256:68a2b7d39eadea93cabb5dc51d5eb57fb5db429e5c313f931ef4a5c64af10266"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "check-permutation",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/check-permutation/javascript.v1.json",
+      "checksum": "sha256:34276dab340430e196fc45f76bd9ce9588f9435e1534b739d19825cca59e7e54"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "check-permutation",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/check-permutation/python.v1.json",
+      "checksum": "sha256:37c72f932298dbce97a782727c71098baf1af4868a47383c08c97190a313074e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "chess-model-move-validation",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/chess-model-move-validation/javascript.v1.json",
+      "checksum": "sha256:d35bbfe5c4977b9476d359d1357a493b53f4f01a5db1f64138fc9622139c5cbf"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "chess-model-move-validation",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/chess-model-move-validation/python.v1.json",
+      "checksum": "sha256:79e97fe199d07d0554ffabeb7df20550da5d795a15662fb614d511abb9b934a2"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "city-traffic-max-edge-load-during-event",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/city-traffic-max-edge-load-during-event/javascript.v1.json",
+      "checksum": "sha256:68615dc860bd55472df8c6a9bfc4838028e3f849ec5f9c3f31eb049eca29dee6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "city-traffic-max-edge-load-during-event",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/city-traffic-max-edge-load-during-event/python.v1.json",
+      "checksum": "sha256:b7a25026f71feb21b027e80980465e84e35b277488ae6ec7c08aba48e688f202"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "climbing-stairs",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/climbing-stairs/javascript.v1.json",
+      "checksum": "sha256:8e3f3fb8e9a1d8e09717a7ce312c51c5b058766046ddb2bcc91e31da3f3f7b9a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "climbing-stairs",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/climbing-stairs/python.v1.json",
+      "checksum": "sha256:b663298c4082153a1962b10fda729532dfa8b55a94e695a30f0586b87a5bf22e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "clone-graph",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/clone-graph/javascript.v1.json",
+      "checksum": "sha256:db5667b7e63bb12134b2279e7fe44c5b2f0d78efd5e62b3b9b19543377cf4942"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "clone-graph",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/clone-graph/python.v1.json",
+      "checksum": "sha256:921a52c42eb6d30f0d475acaef7d0b75db9e44344676432978f5d34e5d0ee6fb"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "coffee-shop-order-system",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/coffee-shop-order-system/javascript.v1.json",
+      "checksum": "sha256:e04febbee952062ec3121a0ecb7316d314438592bba1e5e537cbf086ee55b43e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "coffee-shop-order-system",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/coffee-shop-order-system/python.v1.json",
+      "checksum": "sha256:07b543a415dbda8f2bbe3186f59107b9a010ffc291fdf530813102a34566ac8e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "coin-change-ii",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/coin-change-ii/javascript.v1.json",
+      "checksum": "sha256:0b6f7a3c5359a46717f6154ef141713767e8303003755bb920c89176049d50e6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "coin-change-ii",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/coin-change-ii/python.v1.json",
+      "checksum": "sha256:e31433d5c492721460443959947c211bf971cda8ac5201285d91ae7d82203edc"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "coin-change-minimum-coins-for-amount",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/coin-change-minimum-coins-for-amount/javascript.v1.json",
+      "checksum": "sha256:be11e64633af9d6e5645a95830fc2c2b57fcfc2e4aeada4b39de1e6f28452b28"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "coin-change-minimum-coins-for-amount",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/coin-change-minimum-coins-for-amount/python.v1.json",
+      "checksum": "sha256:d262c4549c6c326e1b3091e0277a02ebae9aff20b4907af6203be46d0657eb5c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "combination-sum",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/combination-sum/javascript.v1.json",
+      "checksum": "sha256:09f458c2cf0809d1263b6744c6028289710c8ea8f4f7f2378ab5b1c5930cc26b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "combination-sum",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/combination-sum/python.v1.json",
+      "checksum": "sha256:43a2e12add4c531a5a2bd19a2ce642beb9a7a170edf81679379b8c077f200258"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "construct-binary-tree-from-preorder-and-inorder-traversal",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/construct-binary-tree-from-preorder-and-inorder-traversal/javascript.v1.json",
+      "checksum": "sha256:71889b96d77b86484874f98896afde3c221bd520f7eba8c9b59216f3cab28be5"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "construct-binary-tree-from-preorder-and-inorder-traversal",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/construct-binary-tree-from-preorder-and-inorder-traversal/python.v1.json",
+      "checksum": "sha256:8803af296af36228ef7c8f4ae74323cd7badfa8368ee15c695a4bbe2535dc355"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "container-with-most-water",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/container-with-most-water/javascript.v1.json",
+      "checksum": "sha256:6b2f804212f4da405dd52445341939a8d5f18812237606a5f0d200d55e90326d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "container-with-most-water",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/container-with-most-water/python.v1.json",
+      "checksum": "sha256:6a21f46d58995ef55f462ff3ec12eeb47b082cbaebefac6dbde378bbe9566a44"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "contains-duplicate",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/contains-duplicate/javascript.v1.json",
+      "checksum": "sha256:8d7d3ea012580263c1e903c36ae3633e6750a8408f3229181a87d193b576a158"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "contains-duplicate",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/contains-duplicate/python.v1.json",
+      "checksum": "sha256:8b1680727433c30d6f6e46fe744493eed21687709341f85feba92daf5fe9231a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "count-negatives-in-a-sorted-matrix",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/count-negatives-in-a-sorted-matrix/javascript.v1.json",
+      "checksum": "sha256:105870b35f8324d725791acfc18aeed41b8262ffcf7c37f3b87ac5db64133021"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "count-negatives-in-a-sorted-matrix",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/count-negatives-in-a-sorted-matrix/python.v1.json",
+      "checksum": "sha256:01276e2ae2873ac2237db6e02905e1d0d44759f76ed565c2d2078dc7fd3fadd6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "count-palindrome-pairs-among-substrings",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/count-palindrome-pairs-among-substrings/javascript.v1.json",
+      "checksum": "sha256:7983bc80c300e8b658fc10d8d2f06e2d37f77394e55ebc104459cc050baa004b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "count-palindrome-pairs-among-substrings",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/count-palindrome-pairs-among-substrings/python.v1.json",
+      "checksum": "sha256:a7233eb89043cab39bb704d90b05dbe72320fc4f6152eed782bbc9c6ab263c9b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "counting-bits",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/counting-bits/javascript.v1.json",
+      "checksum": "sha256:f0d952ce788b1614e12ada8413587235ef86b9f80b555b2ca3ff7e43c7ada62b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "counting-bits",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/counting-bits/python.v1.json",
+      "checksum": "sha256:993703554f01a97e90292074bea0a9f03e4b3d26b55d1aec9e09ba22417a3b55"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "course-schedule",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/course-schedule/javascript.v1.json",
+      "checksum": "sha256:b384445cfa5c642f33e78e97a1e4747a87f024ac8b962a78260d7570757d9191"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "course-schedule",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/course-schedule/python.v1.json",
+      "checksum": "sha256:0386065bd36c41ad68c35f0aa5e0f3713e746fa889514a1d2255fee8ae56ff2b"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "coding",
+      "slug": "course-schedule-ii",
+      "variant": null,
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/course-schedule-ii/validators.v1.json",
+      "checksum": "sha256:a6d7e42127dde80e1b67bb3f2d00d1bc1c523f3092ae8844ed4c4260508af7b9"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "course-schedule-ii",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/course-schedule-ii/javascript.v1.json",
+      "checksum": "sha256:8076f9dba4000c4cb8df947023031ff28ee5285527010c6955314359f4a1b6b5"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "course-schedule-ii",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/course-schedule-ii/python.v1.json",
+      "checksum": "sha256:98ac24cc7f0fe96df4c740419d9644df7e7c87dc2559898c193a1642496d036d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "daily-temperatures",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/daily-temperatures/javascript.v1.json",
+      "checksum": "sha256:b268f3c1cfe5adfac1a6df5361424a7101c5b70da57e07e04625c9ce7ae644a6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "daily-temperatures",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/daily-temperatures/python.v1.json",
+      "checksum": "sha256:f7143a3e5d0b76008fdfd5d9e1613bebc251270d70231eccb824e9f41e0638d0"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "date-map-floor-key-lookup",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/date-map-floor-key-lookup/javascript.v1.json",
+      "checksum": "sha256:714d1ab76e8ca7c7e71a562478c02724292f34cf355f758fe6c1c7389fc7b812"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "date-map-floor-key-lookup",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/date-map-floor-key-lookup/python.v1.json",
+      "checksum": "sha256:70ba6249cfe0be1848c51dbfe12bc3afe35cf9975ecc5c6aeda70473edc80fb3"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "coding",
+      "slug": "deck-of-cards",
+      "variant": null,
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/deck-of-cards/validators.v1.json",
+      "checksum": "sha256:f954b3bccb3b96b2f75fa14566e0a391056f08bcc8de1a2b102f297d602a6074"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "deck-of-cards",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/deck-of-cards/javascript.v1.json",
+      "checksum": "sha256:bef07a943664712b55e864eb3e5791357fdb6cfd28ed6177f1371cd91c9a1263"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "deck-of-cards",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/deck-of-cards/python.v1.json",
+      "checksum": "sha256:b4fc0751376ab89c05898e658c7afe00242a1e870ddbf1a8e37306339346cfd6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "decode-string",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/decode-string/javascript.v1.json",
+      "checksum": "sha256:77f9fd040d687a1a1cf21a5f334d05848e4f917f6019c3cdade305374d209753"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "decode-string",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/decode-string/python.v1.json",
+      "checksum": "sha256:ad263a55c50a0c7780f106c797d8270e87f062cb049d80039706a11a01db03e4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "decode-ways",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/decode-ways/javascript.v1.json",
+      "checksum": "sha256:7e3a08c24cd7890be59eff716546d127dc8b3976cb44d93aa5970ee8d2862057"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "decode-ways",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/decode-ways/python.v1.json",
+      "checksum": "sha256:e2cc439285c15a1e6e63b6bc7b7056add12abd4fd9fe116cedc55a4fa2bec9af"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "diameter-of-binary-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/diameter-of-binary-tree/javascript.v1.json",
+      "checksum": "sha256:ee3a8cba47e4de92a8f68bb4654714749db8faba77c3b83eb434a56218f225c8"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "diameter-of-binary-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/diameter-of-binary-tree/python.v1.json",
+      "checksum": "sha256:02ad32d9756ba5a291e4916a5021c7151a5d27f9cc64e1ffd3c1f2a9b14c0f1c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "dice-rolling-simulator-statistics",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/dice-rolling-simulator-statistics/javascript.v1.json",
+      "checksum": "sha256:fc9bee6bb407ea7718c102d6dc6c27d00b02237d32bf5d5fcb09e68b1294f10e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "dice-rolling-simulator-statistics",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/dice-rolling-simulator-statistics/python.v1.json",
+      "checksum": "sha256:20c706cc40d7b23f6879bd32fd5109779518e9fc40a7d00cb91ca86e5a23f05c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "discount-prices-in-a-sentence",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/discount-prices-in-a-sentence/javascript.v1.json",
+      "checksum": "sha256:0153a2e46dd5caf8ed4600909e5d09b729b729126d98bd85871e6843ff28d915"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "discount-prices-in-a-sentence",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/discount-prices-in-a-sentence/python.v1.json",
+      "checksum": "sha256:a19775cccd6027478c6cf85ba8e3343b1c467e1a5ed365bbc431b8db43c2bac2"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "distinct-subsequences",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/distinct-subsequences/javascript.v1.json",
+      "checksum": "sha256:2c12e6845b7fd1307bd2569c6c8f3ed5a30c854c04050f3b5fe19add245360b9"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "distinct-subsequences",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/distinct-subsequences/python.v1.json",
+      "checksum": "sha256:43e94c7ed801f00a22b2db95ed0f9661495efec5a72d370ecf1ee18e871eee3e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "edit-distance",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/edit-distance/javascript.v1.json",
+      "checksum": "sha256:f51d6efd0df5a635f4891420b35dab1e00083e838aec897f7c0ea3b2423200c7"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "edit-distance",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/edit-distance/python.v1.json",
+      "checksum": "sha256:fbbae042b84cfd77b41f504b9d8f58ab50c4cbf7350c1e2b6d4fef75b9307e53"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "encode-and-decode-strings",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/encode-and-decode-strings/javascript.v1.json",
+      "checksum": "sha256:60880123b1cf5ccda5acf7a2e6decd73a49c57bc4b478eaa0c73c8c0c91d5859"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "encode-and-decode-strings",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/encode-and-decode-strings/python.v1.json",
+      "checksum": "sha256:1225cc217833a6b7c4ca079cf095fc36af72fc613dcadeb419ff0a6f6aea0283"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "escape-maze-with-one-wall-removal",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/escape-maze-with-one-wall-removal/javascript.v1.json",
+      "checksum": "sha256:711fc79821d5bca4a3c490d278aae0c5681e186c44750eacdbb940fd40c3d936"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "escape-maze-with-one-wall-removal",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/escape-maze-with-one-wall-removal/python.v1.json",
+      "checksum": "sha256:d92a5d2839c97159e9deca2c1bcae2a818b88bf72430e2fec4302785f6ea8b28"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "evaluate-reverse-polish-notation",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/evaluate-reverse-polish-notation/javascript.v1.json",
+      "checksum": "sha256:c2c8d2f02d04a8115f28af900c0a5879129a2914b776d5cb3f89e846d32bc389"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "evaluate-reverse-polish-notation",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/evaluate-reverse-polish-notation/python.v1.json",
+      "checksum": "sha256:6e63eb0dbe804d7ea35cb239a8dbf7bdce2fa437c8f922eab4060032f1642952"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "falling-water-trapping-rain-water",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/falling-water-trapping-rain-water/javascript.v1.json",
+      "checksum": "sha256:99abd99968c10ae2f9c19d5be864c813f5cbc853175c5244dc5ffde846ad1d58"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "falling-water-trapping-rain-water",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/falling-water-trapping-rain-water/python.v1.json",
+      "checksum": "sha256:519ebec7ed435983466cdd67522d1681fa8065e974e921cb25384e01cb6b36c7"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "filesystem-search-api",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/filesystem-search-api/javascript.v1.json",
+      "checksum": "sha256:888aaad59393d0f88d7b97db6e7148faed5e4d628972961aa43d481247d6a130"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "filesystem-search-api",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/filesystem-search-api/python.v1.json",
+      "checksum": "sha256:6f29a239adbb77f6301fca153e0e58fd3cdfcb6fc39e95c9d49a7d0cc973c162"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "find-all-anagrams-in-a-string",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/find-all-anagrams-in-a-string/javascript.v1.json",
+      "checksum": "sha256:9a026478fc5d53a1a69687e286e41e4672bcff9c28d0a7111747f236cb03612b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "find-all-anagrams-in-a-string",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/find-all-anagrams-in-a-string/python.v1.json",
+      "checksum": "sha256:8b500a42b743a8df3c73f953f1b2e306a34c6d83e30e1323e5cf5d203700ca8b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "find-median-from-data-stream",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/find-median-from-data-stream/javascript.v1.json",
+      "checksum": "sha256:a76439c32136a6b36643a9ee6192d9e40bedce86fe28256c56da8fa8b7ff5583"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "find-median-from-data-stream",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/find-median-from-data-stream/python.v1.json",
+      "checksum": "sha256:6bb1d3fc01391a684348641960efa24cd2ee7def210da93f929aa5237fdbc2bf"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "find-minimum-in-rotated-sorted-array",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/find-minimum-in-rotated-sorted-array/javascript.v1.json",
+      "checksum": "sha256:c0e79292a067adf94414d0b60d812cbed48bd0c2d280df7ac8e84933d4fbbc21"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "find-minimum-in-rotated-sorted-array",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/find-minimum-in-rotated-sorted-array/python.v1.json",
+      "checksum": "sha256:6332d298cda937dab0ac065d88ba60f4a940df12fe3a90440736013bb59f45ab"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "find-the-duplicate-number",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/find-the-duplicate-number/javascript.v1.json",
+      "checksum": "sha256:0e2df7e212ea4b3cc580d601a8ff5ed06e395309260a3976626e4ad674ffa1fb"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "find-the-duplicate-number",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/find-the-duplicate-number/python.v1.json",
+      "checksum": "sha256:80844504d0ee8fa444789b3e1c7e7812b2ffe406f7de702067cfa17d86cfcc16"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "first-missing-positive",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/first-missing-positive/javascript.v1.json",
+      "checksum": "sha256:d3be6ef2e800c7d0e6372c0e6ac7cf4b90cf7b6d504d0a2cfd29e44da7ce2a6e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "first-missing-positive",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/first-missing-positive/python.v1.json",
+      "checksum": "sha256:d830e3cc46db840885e53335fa972a6fccf94a80cca4696543b86494aa96918c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "first-unique-character-in-stream",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/first-unique-character-in-stream/javascript.v1.json",
+      "checksum": "sha256:85041b6909e7b0e39df651759fb96ceabf407857ba6825acbef413dfea89705d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "first-unique-character-in-stream",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/first-unique-character-in-stream/python.v1.json",
+      "checksum": "sha256:6ecaa8beadc495c2ccfa6809f2c24b816fcae65665d3f07147d287680994f27c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "foldable-binary-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/foldable-binary-tree/javascript.v1.json",
+      "checksum": "sha256:14b7b0f47524b0b4a98a90f0f6f0413f65b9e4302dadd0c014fe716e936241d7"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "foldable-binary-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/foldable-binary-tree/python.v1.json",
+      "checksum": "sha256:7b919ea2ab215ba2dcdbc80f6efe0cad3430064fee8aa70e8570f4c1dfd82b04"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "gas-station",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/gas-station/javascript.v1.json",
+      "checksum": "sha256:bc9e31e1cc573525522a011c92edd6e8753354a97701116ef9c74bb5a4e9b6fa"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "gas-station",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/gas-station/python.v1.json",
+      "checksum": "sha256:4a64b1fa7931c9422a5289f955fa6965b141dfd30eb5b44f667959450b5b142b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "generate-parentheses",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/generate-parentheses/javascript.v1.json",
+      "checksum": "sha256:091a055df36a13ddf4bf0031ff92baf47d171b42f90f7a7bc8ef19e774ff1f2b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "generate-parentheses",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/generate-parentheses/python.v1.json",
+      "checksum": "sha256:97fdff56ae6097a4c1b783c6faf1934cb94205448326049c12096e896bb371a0"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "graph-valid-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/graph-valid-tree/javascript.v1.json",
+      "checksum": "sha256:de2466c0b47e92c46e4c7fda39aadb3414fead86d1dfde0834311270835049a1"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "graph-valid-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/graph-valid-tree/python.v1.json",
+      "checksum": "sha256:48164355f1e030225dd63afb13add9350238ee53e6f3ca7aa9b727a721c74365"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "coding",
+      "slug": "group-anagrams",
+      "variant": null,
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/group-anagrams/validators.v1.json",
+      "checksum": "sha256:df9d1e4d1cf2a5e24799814fde98864690afe8e8d13fc33f70046d978d192a74"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "group-anagrams",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/group-anagrams/javascript.v1.json",
+      "checksum": "sha256:cf54569cdd9bf74e112711a812acb25ec0f25e9d4927753e1d4b37c9f6889f26"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "group-anagrams",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/group-anagrams/python.v1.json",
+      "checksum": "sha256:04787a987203125c37b95d09253ef1e9cf3bdc262db6100243781c1e07db8f31"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "group-isomorphic-words",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/group-isomorphic-words/javascript.v1.json",
+      "checksum": "sha256:c809793b400525d0f9723e939827f54c43d66c7fcaff44c42e4371f749df45c2"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "group-isomorphic-words",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/group-isomorphic-words/python.v1.json",
+      "checksum": "sha256:110019ddd205a576adffa2942c26f262bbe7255b4e4518831b0603841622a1b2"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "hamming-distance-between-dna-strands",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/hamming-distance-between-dna-strands/javascript.v1.json",
+      "checksum": "sha256:16da44905acf438484d23da316a8f77ae990e5393fe9c59da48aaec1b866f44d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "hamming-distance-between-dna-strands",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/hamming-distance-between-dna-strands/python.v1.json",
+      "checksum": "sha256:2c3f6d1e82e4a23137c6ce776211eb1a73976af349a2d25a1777c32254472df6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "hand-of-straights",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/hand-of-straights/javascript.v1.json",
+      "checksum": "sha256:132a9d8f14d8e809daf54f5a39997e12f25331073c8fca61d5849e57d1058fab"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "hand-of-straights",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/hand-of-straights/python.v1.json",
+      "checksum": "sha256:83be3300b9052715f598276afbdab3b05bbf229b21364b70bd36ed67137cccff"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "happy-number",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/happy-number/javascript.v1.json",
+      "checksum": "sha256:28a99fb25040d725113c3d3a23e88ba8a6887d22069fb65840546f35e82b4662"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "happy-number",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/happy-number/python.v1.json",
+      "checksum": "sha256:48a0a7eb85510f7353cf07e3d115c2a3b4c29427b00fc2594065872e5900148c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "house-robber",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/house-robber/javascript.v1.json",
+      "checksum": "sha256:8f4046f2248cfafd79273b2969a6adfda0532d06aacc10176c3ef5a278ec9e65"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "house-robber",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/house-robber/python.v1.json",
+      "checksum": "sha256:1b8831c68f83c89c4a6d06d21953605b0866851d4b6518b79c9eedaab1a8eff4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "house-robber-ii",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/house-robber-ii/javascript.v1.json",
+      "checksum": "sha256:3ca942dcf814d992c2c20df30d674dd252edf385d1ab2f60a0c12ee8bc47c666"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "house-robber-ii",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/house-robber-ii/python.v1.json",
+      "checksum": "sha256:c09216ca985ce899170d60dcb9bdde59a950bfd9af1c102e32eb63239c35f31c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "implement-trie-prefix-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/implement-trie-prefix-tree/javascript.v1.json",
+      "checksum": "sha256:8fe611301579be4b461285e12e2e42f8def5a9887744e97ca56b30af19cbeb2e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "implement-trie-prefix-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/implement-trie-prefix-tree/python.v1.json",
+      "checksum": "sha256:770d0d95e0110af499e5792a7dcb6e5182edb220028ea096c727b264d62c0a06"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "insert-interval",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/insert-interval/javascript.v1.json",
+      "checksum": "sha256:596c1cde93114d88f7636c54678e040c49e630c39ff67f5f11bd730e1ea3d546"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "insert-interval",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/insert-interval/python.v1.json",
+      "checksum": "sha256:37ae7aae78b661252e83e181eeedfb6ea95dd3479d6002a038138e9c8c741832"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "intcode-program-alarm",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/intcode-program-alarm/javascript.v1.json",
+      "checksum": "sha256:6ed695c3f8b10b42f13717424843e8219c87e608505c54fe74b7f546ddea66d4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "intcode-program-alarm",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/intcode-program-alarm/python.v1.json",
+      "checksum": "sha256:e92755a1608f500379223967530e68322a64c7c5e2191cd5bd17ebc251414603"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "interleaving-string",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/interleaving-string/javascript.v1.json",
+      "checksum": "sha256:ad8f42a69c6644100dbe2ef9d8439ae74b7c81fb9105f2ea3195d9884b78d36b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "interleaving-string",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/interleaving-string/python.v1.json",
+      "checksum": "sha256:dc3b3b8f99b19653a6358389d8bd8dbc785a1f678951f16053d68359dbc56c6c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "invert-binary-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/invert-binary-tree/javascript.v1.json",
+      "checksum": "sha256:4dfb0c2d755b270a6ad5dfff51a462030dca202dd3ce8df4ef3bbc83ec1c9213"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "invert-binary-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/invert-binary-tree/python.v1.json",
+      "checksum": "sha256:9509bc16ffa96209feaa66b0d259ec5c3819454900811b6455476c6a5bf93361"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "is-unique",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/is-unique/javascript.v1.json",
+      "checksum": "sha256:69300184ab3ca9c429138e77acf9797c7ba12be3c22f71161ccb518ece1bdd70"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "is-unique",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/is-unique/python.v1.json",
+      "checksum": "sha256:8df420d52158320fe6572ae18c6620b09ef047c9be4313f052c8cbb01611500d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "isbn-10-verifier",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/isbn-10-verifier/javascript.v1.json",
+      "checksum": "sha256:905350d0bac97192d45d0e975fefc6512c3277526af143b17d2d1b81f3dfeeda"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "isbn-10-verifier",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/isbn-10-verifier/python.v1.json",
+      "checksum": "sha256:03ef548ce31f0f79fcf37dfa257c59e87b58a5aa59284c7f0862578edf127f5b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "jump-game",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/jump-game/javascript.v1.json",
+      "checksum": "sha256:002e7e6738d543916574664f5288f9b5dbffde1bfd013def84ca3e6f4e79133d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "jump-game",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/jump-game/python.v1.json",
+      "checksum": "sha256:67c42a1439fb3e7ef2802fa90f34a95d7e017256366f951dd978b0c58724e402"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "jump-game-ii",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/jump-game-ii/javascript.v1.json",
+      "checksum": "sha256:be9b54019af0638877519b64c4fa5daaf4bb5a26f1bf95771e764a9ab4a36aaf"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "jump-game-ii",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/jump-game-ii/python.v1.json",
+      "checksum": "sha256:52bdce0bbadc703358c13db0f9aae9e67333160355c8faad4266fde0fe792d39"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "k-closest-points-to-origin",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/k-closest-points-to-origin/javascript.v1.json",
+      "checksum": "sha256:357af2ef4d4ba5585ecc0cb24f17e8fafc7fb556067400e30bab848e017e1805"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "k-closest-points-to-origin",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/k-closest-points-to-origin/python.v1.json",
+      "checksum": "sha256:549f50668988ae2d2e28f891316d14957dd686baeaff12fed741dad345a67958"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "kmp-pattern-search",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/kmp-pattern-search/javascript.v1.json",
+      "checksum": "sha256:a9fa6449276ec44db52f9484924738dcda7e6cfe02e3048c2f7415f4369afb77"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "kmp-pattern-search",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/kmp-pattern-search/python.v1.json",
+      "checksum": "sha256:fe8a7ddf74e58a076cf0f905038050ad6c1fb9c745831aeb701560ef79011d94"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "knight-minimum-moves-on-chessboard",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/knight-minimum-moves-on-chessboard/javascript.v1.json",
+      "checksum": "sha256:2dd743d8eefe4e969829f9eed5b696d67aa6422cb69b8ccbbca0d4a5641cc28a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "knight-minimum-moves-on-chessboard",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/knight-minimum-moves-on-chessboard/python.v1.json",
+      "checksum": "sha256:1ac2b1088c6b66c1416c88c9844d7f089dd0c013733ed43f8d70f5de563f412b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "koko-eating-bananas",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/koko-eating-bananas/javascript.v1.json",
+      "checksum": "sha256:b5a5b6809fa8b81cd1f3b09eb9e0e0e4564667b2ad146e6d4f3776ee8d5960f5"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "koko-eating-bananas",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/koko-eating-bananas/python.v1.json",
+      "checksum": "sha256:09771c82b1305c2650e98cc4b7abd43a07261353f250510813cbb181dcb4aa38"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "kth-largest-element-in-an-array",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/kth-largest-element-in-an-array/javascript.v1.json",
+      "checksum": "sha256:6a61be3699c0fe409a98d9de7cc6dfa1ceafe605babaca327ed1e65aafe51ba7"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "kth-largest-element-in-an-array",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/kth-largest-element-in-an-array/python.v1.json",
+      "checksum": "sha256:9f996ceeebed94482d496e77e8e6a982a16751bece9bac31d42e0122abce3570"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "kth-smallest-element-in-a-bst",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/kth-smallest-element-in-a-bst/javascript.v1.json",
+      "checksum": "sha256:89c361aaaecd5612efe7b32d5adbf55cd1db09933c6811147a896696d30fc70c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "kth-smallest-element-in-a-bst",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/kth-smallest-element-in-a-bst/python.v1.json",
+      "checksum": "sha256:7d414f9a15634909b233cfee92ed5635f59b62de640dcfe489ba5e2952a5a00d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "largest-24-hour-time-from-digits",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/largest-24-hour-time-from-digits/javascript.v1.json",
+      "checksum": "sha256:0324662e39863e549828cc9b46d2c5acead6dbba443bec7a138271a086306871"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "largest-24-hour-time-from-digits",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/largest-24-hour-time-from-digits/python.v1.json",
+      "checksum": "sha256:96d1e346795148de5e3437491c5f24d1ede976fdffb2daf265d59fd06131308c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "largest-rectangle-in-histogram",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/largest-rectangle-in-histogram/javascript.v1.json",
+      "checksum": "sha256:7db747938e45cf8eecb9edcbb27f0517733ebe0830b0a79166aea22189d61857"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "largest-rectangle-in-histogram",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/largest-rectangle-in-histogram/python.v1.json",
+      "checksum": "sha256:84b634b3398cbef1d39ea02cab45e6b21cd18f7945b82eafc9284ff7f7536365"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "leaderboard-system",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/leaderboard-system/javascript.v1.json",
+      "checksum": "sha256:a2e7eef1e0469f92aff4a2f4fb60a46d751e92ef199418291c90f04ae33a1ef1"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "leaderboard-system",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/leaderboard-system/python.v1.json",
+      "checksum": "sha256:d8c029ce9c0fe938cecd3c58b69756fee9266f1e33237b7d51359a325f28b240"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "letter-combinations-of-a-phone-number",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/letter-combinations-of-a-phone-number/javascript.v1.json",
+      "checksum": "sha256:5abcf44003893daebce29fb218ad8a9812c37e78644bdadd0deda8ec7772c5d1"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "letter-combinations-of-a-phone-number",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/letter-combinations-of-a-phone-number/python.v1.json",
+      "checksum": "sha256:e2f23ec148b6e0dd29c127a81c814e357501f30cf3185f4b4cde28d4935c8863"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "lfu-cache",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/lfu-cache/javascript.v1.json",
+      "checksum": "sha256:6744c1a895e4e104f6419ef7bf3de3aa03b082c1b03e384be174e5a0ba6c342f"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "lfu-cache",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/lfu-cache/python.v1.json",
+      "checksum": "sha256:10aec9fe4cdddcfb60c7b50788966f162724e7a6cbb9800e04736fd9d190dd8c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "linked-list-cycle",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/linked-list-cycle/javascript.v1.json",
+      "checksum": "sha256:c0f255da210ef1484fa261bdce6bf4d167a647f1715f940210c32353ca1d701e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "linked-list-cycle",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/linked-list-cycle/python.v1.json",
+      "checksum": "sha256:38fc4dad174c3941b260dcc66149da4146dad7f17572428a377845212af1bef8"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "linked-list-cycle-ii",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/linked-list-cycle-ii/javascript.v1.json",
+      "checksum": "sha256:f5912f5b8ad76ccaa7e9e0b76858535ebcdb4f83e942375ece656746dccdf5db"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "linked-list-cycle-ii",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/linked-list-cycle-ii/python.v1.json",
+      "checksum": "sha256:528c90e9a5efdca04955d889da5506322a6e167ca3c00e9105f6c95412c362f1"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "longest-common-subsequence",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-common-subsequence/javascript.v1.json",
+      "checksum": "sha256:91ce4026cdc4f2befc617cf2b24da8187c524b21867d6601749488b12e282f0c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "longest-common-subsequence",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-common-subsequence/python.v1.json",
+      "checksum": "sha256:4de9ae3c86f9b1800f79df846354ddc27ae33e0b66ae213956f33da14cbb168e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "longest-consecutive-sequence",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-consecutive-sequence/javascript.v1.json",
+      "checksum": "sha256:a5a295a5c00af82f67acf60d039e7a41bf3161b1cbad4db25aa3c1afb7e07f54"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "longest-consecutive-sequence",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-consecutive-sequence/python.v1.json",
+      "checksum": "sha256:dcdf3bcbda701b905bde6829f8d3206b5a0b1fd5054c33b266e1176b34277e76"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "longest-increasing-path-in-a-matrix",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-increasing-path-in-a-matrix/javascript.v1.json",
+      "checksum": "sha256:7bf284adb3bfa3e020840b9d7dbfe29368a4f71bbf3affab9cb9bfe29cc6e4f4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "longest-increasing-path-in-a-matrix",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-increasing-path-in-a-matrix/python.v1.json",
+      "checksum": "sha256:f8b786bc5dbfd90cf79c4da8aac6dc8ca2651595477d672e3ab2063eb45b8292"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "longest-increasing-subsequence",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-increasing-subsequence/javascript.v1.json",
+      "checksum": "sha256:c4656d0813c20daef7f3f9a3f9718323d0d9a0beb5dc487dea03265e9cc3bf9f"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "longest-increasing-subsequence",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-increasing-subsequence/python.v1.json",
+      "checksum": "sha256:3dc3e57d78940c9219ed87fd6dc68b4e63755513c592105db22f0f3e6b44cb35"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "coding",
+      "slug": "longest-palindromic-substring",
+      "variant": null,
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-palindromic-substring/validators.v1.json",
+      "checksum": "sha256:bdb8e5e655cd4ffe88307813a7a0510b18958522d4d902001a8244ad70f641e8"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "longest-palindromic-substring",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-palindromic-substring/javascript.v1.json",
+      "checksum": "sha256:009767b9080a56c2685477c06c86ec3514204349ba64555876570b0e94b0ef90"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "longest-palindromic-substring",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-palindromic-substring/python.v1.json",
+      "checksum": "sha256:0988cc957a64675ccea1b4a424608e945e807289dc1a3af76b5f6592c4648353"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "longest-substring-without-repeating-characters",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-substring-without-repeating-characters/javascript.v1.json",
+      "checksum": "sha256:2ca1666c8c49a3ab64a998c5530be43b22aefad04a5e4881683948314aba3914"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "longest-substring-without-repeating-characters",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/longest-substring-without-repeating-characters/python.v1.json",
+      "checksum": "sha256:276522a5336a1c999ab1cb68bffe120954702cd74e7feb045b765037e3ae88e5"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "look-and-say-sequence-membership",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/look-and-say-sequence-membership/javascript.v1.json",
+      "checksum": "sha256:6167e7df8091abf59a3a1dbf95eedaa3dd56bdba7db3e2b84a1c4a383c7679f4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "look-and-say-sequence-membership",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/look-and-say-sequence-membership/python.v1.json",
+      "checksum": "sha256:bf605b4e00ffdb7eca46c2584d41a53ba3a48759e0e312c9b50b9cc553423a53"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "lowest-common-ancestor-of-a-binary-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/lowest-common-ancestor-of-a-binary-tree/javascript.v1.json",
+      "checksum": "sha256:ef34fc18ed26b045e9f3d15a04275cb8674cc594013d72d8b5cd2bb4ecfc70fd"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "lowest-common-ancestor-of-a-binary-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/lowest-common-ancestor-of-a-binary-tree/python.v1.json",
+      "checksum": "sha256:a4908e86dfaac3d43b271c2b3d0a11034f40b6763bfb21fafc1aa8edb4b258b9"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "lowest-common-ancestor-of-a-bst",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/lowest-common-ancestor-of-a-bst/javascript.v1.json",
+      "checksum": "sha256:b369a366aee4e1f8287bec7508b0d350588e2e367725620de3c9913e1927b19e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "lowest-common-ancestor-of-a-bst",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/lowest-common-ancestor-of-a-bst/python.v1.json",
+      "checksum": "sha256:7045dfcd4e83d269b2ac4048835b1641f9a37571dd28cc50bbc4888fd26d628e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "lru-cache",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/lru-cache/javascript.v1.json",
+      "checksum": "sha256:858211afb54409dfed7b337b61501d4dd70bac6b505c773185a0d6e444b559c2"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "lru-cache",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/lru-cache/python.v1.json",
+      "checksum": "sha256:4677c37107777b292d9463954c07cebbf5932a81e7d82bbf64196db293b1353d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "max-area-of-island",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/max-area-of-island/javascript.v1.json",
+      "checksum": "sha256:64adc97dde937c02590dc407d4ac973e11a30e557f7c71955aa087b2bff8534d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "max-area-of-island",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/max-area-of-island/python.v1.json",
+      "checksum": "sha256:187cbe2c87d61745be07cdb83b3b696fac4a9fbd290476a517c3d6c84acf6afb"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "max-concurrent-tasks-from-server-log",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/max-concurrent-tasks-from-server-log/javascript.v1.json",
+      "checksum": "sha256:d72bac9de0d0d06b5a4f4a097717ef07fb3169084e2183ea39bf977c413d7401"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "max-concurrent-tasks-from-server-log",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/max-concurrent-tasks-from-server-log/python.v1.json",
+      "checksum": "sha256:6cad11d0445cb8bdf78296baa7a2a11a6044a278ea3efe7a970e515a1b8ab08c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "maximum-depth-of-binary-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/maximum-depth-of-binary-tree/javascript.v1.json",
+      "checksum": "sha256:ec1cb3e0984638d7b5bfd701335ce3d8668a98e9d5a49593ce44cf435fc1fc9f"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "maximum-depth-of-binary-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/maximum-depth-of-binary-tree/python.v1.json",
+      "checksum": "sha256:00ae130ff8db06df161f5a32311754d31798ed6e6ca0cdbb8ec9fb7b26020b9e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "maximum-product-subarray",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/maximum-product-subarray/javascript.v1.json",
+      "checksum": "sha256:5889636c0309cff4caf5737d39b69234117092c0136d409321aa9491e085afe9"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "maximum-product-subarray",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/maximum-product-subarray/python.v1.json",
+      "checksum": "sha256:f30d39780241c55830b449fad217dff0416ab8e16a063052553def838d4ac211"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "maximum-profitable-windows",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/maximum-profitable-windows/javascript.v1.json",
+      "checksum": "sha256:efa439b832f1efe0ea5179fabee5f616441c7b77c46c7c489f792ab16444bb1f"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "maximum-profitable-windows",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/maximum-profitable-windows/python.v1.json",
+      "checksum": "sha256:ab875a14d4ee34c32976ea7497afb6016004c0020836d2c1b17f85a2f8531daf"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "maximum-root-to-leaf-path-sum",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/maximum-root-to-leaf-path-sum/javascript.v1.json",
+      "checksum": "sha256:4f11fb4fbe8aa8e1ade74178cd21d46e059bebfe8a274b08e19ecd2b3041e7ea"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "maximum-root-to-leaf-path-sum",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/maximum-root-to-leaf-path-sum/python.v1.json",
+      "checksum": "sha256:5e25da28ff4ecb2e1dce527c93d79c9298afa17bd83575a0f89beac8647b95f1"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "maximum-subarray",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/maximum-subarray/javascript.v1.json",
+      "checksum": "sha256:d60a728e8e578065e21d14c864f7910e3903ceb79a923c0cd2d14ba7451a4a06"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "maximum-subarray",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/maximum-subarray/python.v1.json",
+      "checksum": "sha256:bc931fe00cee01316546bca7358867b86cd41c3a205183d0628788c042fc46c9"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "median-of-two-sorted-arrays",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/median-of-two-sorted-arrays/javascript.v1.json",
+      "checksum": "sha256:1bde2e1d9f430f906f3cc77e8a24481c129b460259c8641705e98b9e0391ec14"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "median-of-two-sorted-arrays",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/median-of-two-sorted-arrays/python.v1.json",
+      "checksum": "sha256:e7e1e33d932a48d144bab9c1526b74ef453be39b54cea8b4f42f138439ea05c4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "merge-intervals",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/merge-intervals/javascript.v1.json",
+      "checksum": "sha256:01f4f12c79f965ff277e61ae040139b096929859a32b6d3755ecac5ff1db9480"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "merge-intervals",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/merge-intervals/python.v1.json",
+      "checksum": "sha256:7acd4ab9f4d236cf45ffb3cac18764d00829c12ed7f11e11bae4855da4bcffc0"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "merge-k-sorted-lists",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/merge-k-sorted-lists/javascript.v1.json",
+      "checksum": "sha256:f12a8afcdf85fc83d90d64938ecabf0d779c584e1ba25e2780e48ce8390f3e04"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "merge-k-sorted-lists",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/merge-k-sorted-lists/python.v1.json",
+      "checksum": "sha256:1950e493b460060a8469d51ee2b0537d69c44ba752713866d65159a073bec7e6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "merge-overlapping-intervals",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/merge-overlapping-intervals/javascript.v1.json",
+      "checksum": "sha256:0659af812f1334fbe44a1a80aa6cfd30bbaaac22d577b159869b135d2e228c3d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "merge-overlapping-intervals",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/merge-overlapping-intervals/python.v1.json",
+      "checksum": "sha256:a182e23bdb526aec2061715b672a13668404a7a9cad08ff829fd4e741e85f23c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "merge-sorted-notification-lists",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/merge-sorted-notification-lists/javascript.v1.json",
+      "checksum": "sha256:b62ece69056d94589fb20b19f14eacd8ae6ca489d51029d3ec9619e01e92f519"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "merge-sorted-notification-lists",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/merge-sorted-notification-lists/python.v1.json",
+      "checksum": "sha256:c42669823d6ea5ffd6a315cd5b690a1523def03f7f4530bd11def2dc01658250"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "merge-two-sorted-lists",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/merge-two-sorted-lists/javascript.v1.json",
+      "checksum": "sha256:6e99cf828ec5e3d467fc66c5830e315c2ccd27b97b1e4a76f943bdc5c501f0bb"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "merge-two-sorted-lists",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/merge-two-sorted-lists/python.v1.json",
+      "checksum": "sha256:15e653c18da7f01cd8eae014e36a2633341074a15975f0fe406b70b6351207fc"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "merging-k-sorted-data-streams-streaming",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/merging-k-sorted-data-streams-streaming/javascript.v1.json",
+      "checksum": "sha256:0f5dc1896318a222969edb5a2f31865c06fab22f652b97674d2368a006310986"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "merging-k-sorted-data-streams-streaming",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/merging-k-sorted-data-streams-streaming/python.v1.json",
+      "checksum": "sha256:471922ab3c7cda848440a216ca98a1eb67c5209dbbc654e15c1ba3d98b2644c7"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "micro-service-availability-alarm",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/micro-service-availability-alarm/javascript.v1.json",
+      "checksum": "sha256:92fe4ec20376f47dda4e029d88a1cb8be60888f8c45557bdd17243a1a35bd61a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "micro-service-availability-alarm",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/micro-service-availability-alarm/python.v1.json",
+      "checksum": "sha256:fe98ab8fe4d33bd8d27790a727ca0483b9db594790d47bf1d53a72a8c0c051a5"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "min-cost-climbing-stairs",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/min-cost-climbing-stairs/javascript.v1.json",
+      "checksum": "sha256:53034fe77c6478a1d04de11fb374520284955d557718ee8b221740f83777bdc4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "min-cost-climbing-stairs",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/min-cost-climbing-stairs/python.v1.json",
+      "checksum": "sha256:81ac71186db6ab32f703b7b153c1ea137374190c74ff2ce21f5a2ff0c6a47e91"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "min-stack",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/min-stack/javascript.v1.json",
+      "checksum": "sha256:264237b087ab8c7694c349631eff9907cb382c4b9a7bbbdfbd77920da92a1bfc"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "min-stack",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/min-stack/python.v1.json",
+      "checksum": "sha256:9484b1d745ef67bd46c2daaaceb39af475fc4ffee88b73c5d4002b43b37f1704"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "minimum-meeting-rooms",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/minimum-meeting-rooms/javascript.v1.json",
+      "checksum": "sha256:f3c32d94092ff38e9e4ad21068b19f3db862ff783d92fa2b972dad40fb728421"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "minimum-meeting-rooms",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/minimum-meeting-rooms/python.v1.json",
+      "checksum": "sha256:6b8f18daf8662e4915b436733620d1f9116ed8bf8460deeb11cfe580b5c5e92a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "minimum-number-of-arrows-to-burst-balloons",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/minimum-number-of-arrows-to-burst-balloons/javascript.v1.json",
+      "checksum": "sha256:dcfe71edbd83a3c91fb09cd226e0001850e229afc4cec71aa10f0216ed4d3ca2"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "minimum-number-of-arrows-to-burst-balloons",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/minimum-number-of-arrows-to-burst-balloons/python.v1.json",
+      "checksum": "sha256:aaffdb8bcc570aee1505ae3d8539f5665ff4c2c27c8a492841989b74fe89b53b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "minimum-window-substring",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/minimum-window-substring/javascript.v1.json",
+      "checksum": "sha256:b5b9afd9ab36baa03e33cdeb6ee43aa23112dcb3c52f5916c3fa7ca5b3c7edec"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "minimum-window-substring",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/minimum-window-substring/python.v1.json",
+      "checksum": "sha256:c8fd527a36fc4f2580c528c338501043ca86da4987d4697c7b8ebbe9bd177a0b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "missing-number",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/missing-number/javascript.v1.json",
+      "checksum": "sha256:e0d2931b072725a974fb6984996f44a319b5a00f3840b053b51b727c57d8f8eb"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "missing-number",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/missing-number/python.v1.json",
+      "checksum": "sha256:29eff4232651338d1f66a2ca91deec0e70915ec59916670b49c3643f06aed420"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "modal-widget-component-domain-model",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/modal-widget-component-domain-model/javascript.v1.json",
+      "checksum": "sha256:017ba97f90f3def27c20e6ef66ba818bca295c0cec11e2d4314ba9401dac4938"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "modal-widget-component-domain-model",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/modal-widget-component-domain-model/python.v1.json",
+      "checksum": "sha256:6598bc1dc04c56d4c0f532679b69e4cb732dbb7454d9580fd897fdf2ecff9f6e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "most-common-3-page-sequence-in-web-log",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/most-common-3-page-sequence-in-web-log/javascript.v1.json",
+      "checksum": "sha256:cd060ed76b84580500a040271f87b509a83cd78d71864366da0c92fc8cf7d36d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "most-common-3-page-sequence-in-web-log",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/most-common-3-page-sequence-in-web-log/python.v1.json",
+      "checksum": "sha256:f91bf77f81c5433318b7dff7e77a280ad6f92a6b722ea4644fb7ea010cd303a1"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "move-zeroes",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/move-zeroes/javascript.v1.json",
+      "checksum": "sha256:a5c6a782c5bce535c52a94c248c23123b3cf1554988c427182b20c48c57857ec"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "move-zeroes",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/move-zeroes/python.v1.json",
+      "checksum": "sha256:935456fa7dac15c9172bebf4d9159692d909663db02eea05a45163989aa8ff22"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "multiply-strings",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/multiply-strings/javascript.v1.json",
+      "checksum": "sha256:82fa6a8df6fdf1c2ec15cc0c2b835671443d31833f0e6bf13c634b9c9c3de314"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "multiply-strings",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/multiply-strings/python.v1.json",
+      "checksum": "sha256:7e8b51186ea18a9ba179c5fa2d5707bc67a2b48de9e6870d88323b4bd09b8d20"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "nearest-caf-finder",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/nearest-caf-finder/javascript.v1.json",
+      "checksum": "sha256:945b2ceaa0639f44a713fb90ad1c4e5b09d15f9eb50e2156fa305756d0bc3e7b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "nearest-caf-finder",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/nearest-caf-finder/python.v1.json",
+      "checksum": "sha256:877524ca0dd0b1026def0ffa091eaf0829c64153037782eeeda15589e9d497ef"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "network-delay-time",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/network-delay-time/javascript.v1.json",
+      "checksum": "sha256:bbb6301bc81647aace2bc70ed2ce1c51be8e2767ccfb39435c614b0f92250242"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "network-delay-time",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/network-delay-time/python.v1.json",
+      "checksum": "sha256:24ec7c89e3ff484ee9d9d5314e3fd314e82af5f2e8f963cfe630b3be9209d6fd"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "non-overlapping-intervals",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/non-overlapping-intervals/javascript.v1.json",
+      "checksum": "sha256:c73072f291a7d3b8c8cc7bf66177fc341d6cb7db77dc93bd96bfa31a47e72f63"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "non-overlapping-intervals",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/non-overlapping-intervals/python.v1.json",
+      "checksum": "sha256:aa95c014e90d45ab4f0d967b3b2a2b42b945adcfb7713b634106412c169abae7"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "number-of-1-bits",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/number-of-1-bits/javascript.v1.json",
+      "checksum": "sha256:95f70b28fa510af17f10d934072a6b84222924fe232362cbe56e333c9fe40ffa"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "number-of-1-bits",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/number-of-1-bits/python.v1.json",
+      "checksum": "sha256:0cf37bbdc92675ef956b56c019ee4373fea448a6ba4d4e5c70f52fd0cc17c7e7"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "number-of-connected-components-in-an-undirected-graph",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/number-of-connected-components-in-an-undirected-graph/javascript.v1.json",
+      "checksum": "sha256:61db9debb2ec606f371d0f1df83e4f8d5c7bdf81f6760a1dd082032bc8efa8d1"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "number-of-connected-components-in-an-undirected-graph",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/number-of-connected-components-in-an-undirected-graph/python.v1.json",
+      "checksum": "sha256:6cdfc5372421375865286d0fd9e502feebb8baa962e6340e9c453a803049dbe7"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "number-of-islands",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/number-of-islands/javascript.v1.json",
+      "checksum": "sha256:9b1e2251739320988e7b51c33a9c151f8fdf9924aa3c2f28e8a29cdd09337468"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "number-of-islands",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/number-of-islands/python.v1.json",
+      "checksum": "sha256:ce98cddf758a0624ba679af54604f73ac60f8668724b13da60f861603319e6e2"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "number-pad-texting-t9-word-lookup",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/number-pad-texting-t9-word-lookup/javascript.v1.json",
+      "checksum": "sha256:8c7d021472ac65361526c8e4f238c5cf0f43d36b9095f198031c5f1a6322328e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "number-pad-texting-t9-word-lookup",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/number-pad-texting-t9-word-lookup/python.v1.json",
+      "checksum": "sha256:3a04e17538acc06be82dcda91e86e483b155054d8aebc29f211e059d2e042f8a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "org-chart-total-reports",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/org-chart-total-reports/javascript.v1.json",
+      "checksum": "sha256:f5314ea376392f7126d3f851dedd44975fcc97606899f7ce35044cb1549b2f81"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "org-chart-total-reports",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/org-chart-total-reports/python.v1.json",
+      "checksum": "sha256:59997f33e798f0e764967c78345d5a2a64e9b115751448460e26f371c011eb88"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "pacific-atlantic-water-flow",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/pacific-atlantic-water-flow/javascript.v1.json",
+      "checksum": "sha256:b9f8a5445791c857883e90a6169605d2bec717a1373af5033b70c3a8ab3a158c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "pacific-atlantic-water-flow",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/pacific-atlantic-water-flow/python.v1.json",
+      "checksum": "sha256:ec1755d4dd320da408b84136c807eca20304bdf4048e571aa764332792b2b404"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "coding",
+      "slug": "package-manager-install-order",
+      "variant": null,
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/package-manager-install-order/validators.v1.json",
+      "checksum": "sha256:80b7b3d4c383abb29bdcc61c941d97d931a8584781aa3981b5afd697dbf15566"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "package-manager-install-order",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/package-manager-install-order/javascript.v1.json",
+      "checksum": "sha256:6e906569fb7578d0c80389fdc01761bebde1feb60dc8a5bc7710d4bcb39284df"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "package-manager-install-order",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/package-manager-install-order/python.v1.json",
+      "checksum": "sha256:4d44ba0834f44a9cd6687dd2f363ab79d148932545e3759da3ed3ed681e2793f"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "palindrome-linked-list",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/palindrome-linked-list/javascript.v1.json",
+      "checksum": "sha256:340dd44c950435e38d6bd638e1dcb99114336b250d1498b0aba5a5022da52948"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "palindrome-linked-list",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/palindrome-linked-list/python.v1.json",
+      "checksum": "sha256:f952f0f15655ac1f518a00f4f1d6a3266466b49389abd3278ac59cab4da0ad92"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "palindromic-substrings",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/palindromic-substrings/javascript.v1.json",
+      "checksum": "sha256:f78d694f152dd0b4176043c246d843e59fe0fc3b0e9279efcb8561827955f719"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "palindromic-substrings",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/palindromic-substrings/python.v1.json",
+      "checksum": "sha256:11e6a6810332dc5efd5bcc365cffa89a32d6c7a79f576b70801fc23728c0104a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "pangram-detector",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/pangram-detector/javascript.v1.json",
+      "checksum": "sha256:cd585cd2ba9063157414f0cbaba06086b73d294c746e03d7f6655d936eea3b37"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "pangram-detector",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/pangram-detector/python.v1.json",
+      "checksum": "sha256:bfba88bd20df8726210d93be868845a06e0939168030e96912290be25d47a095"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "parking-lot-management-system",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/parking-lot-management-system/javascript.v1.json",
+      "checksum": "sha256:a9f67eb959a19400395fb01c4ab23202b9be1a71eb2b17ccbade73a82aa79b80"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "parking-lot-management-system",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/parking-lot-management-system/python.v1.json",
+      "checksum": "sha256:715e2c3c2b3c7cf44a5247283bba68140ee858fb352bd2d67b53ca2ebdc1953e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "partition-equal-subset-sum",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/partition-equal-subset-sum/javascript.v1.json",
+      "checksum": "sha256:0a937712616ec91b11643928df0debfd50579b59611b7d95947e7e4565987bd8"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "partition-equal-subset-sum",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/partition-equal-subset-sum/python.v1.json",
+      "checksum": "sha256:18e518094c3779eefc03e09b5e0d94469cc1d31f659f3fa265aa57d9ed93383c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "partition-labels",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/partition-labels/javascript.v1.json",
+      "checksum": "sha256:c210edf1d7524f03ad9da16b3bda4ba0ad463b48177c00638f2eb3fca6e85e8a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "partition-labels",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/partition-labels/python.v1.json",
+      "checksum": "sha256:27ec8184125fcfe0b389925eba2f7e948e58ff54105370e1023d761672bb6836"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "coding",
+      "slug": "permutations",
+      "variant": null,
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/permutations/validators.v1.json",
+      "checksum": "sha256:e07aef5b76a87f186455076a72cb4631c441d35f27e789375bc39eaff56ee092"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "permutations",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/permutations/javascript.v1.json",
+      "checksum": "sha256:59e2ca36e3941287907fa3c1b0d892e582c334fc12ea37173e7bfde7ddbbef09"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "permutations",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/permutations/python.v1.json",
+      "checksum": "sha256:124e6b2463c5bac77bc6ae73eaef00a9ff9d63dcbcc48d35a000915c92b9fc47"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "plus-one",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/plus-one/javascript.v1.json",
+      "checksum": "sha256:896724d048c51087bac8df4cd2f5a6524fb408c8ec1398d89e53a826201bc60e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "plus-one",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/plus-one/python.v1.json",
+      "checksum": "sha256:32c1d0bbac3391d61d9be378658d0cea48a3110f7c79343a331e08c203940110"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "pow-x-n",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/pow-x-n/javascript.v1.json",
+      "checksum": "sha256:e947761a22ff05225684723f0cdc5ef7cfa6155ae3be0f95268658c7837f9bbe"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "pow-x-n",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/pow-x-n/python.v1.json",
+      "checksum": "sha256:693079e5b5cb6d5fdc56241ae30c8e0dd9fc9b1f7be7fee3a3f4e0d173207479"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "product-of-array-except-self",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/product-of-array-except-self/javascript.v1.json",
+      "checksum": "sha256:f307feb9d80c8674cec51d64abaa9d5a58fc4c27f62ac5874314d7ff5a4b39e0"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "product-of-array-except-self",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/product-of-array-except-self/python.v1.json",
+      "checksum": "sha256:1a319aa69e97363acd8968358ff27989748a5eed0877e6dc12fb53da6b68f418"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "product-recommendation-distance",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/product-recommendation-distance/javascript.v1.json",
+      "checksum": "sha256:9b2de7eddb9eddd7fc76b613c2cfb969356b00dbf936b0d5b4eaa0bf194fc051"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "product-recommendation-distance",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/product-recommendation-distance/python.v1.json",
+      "checksum": "sha256:ccb5eef9f7fbb5e31216bf73d6cf3efe6985ae3993d7c96b4b18940dc5d36861"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "recently-listened-tracks-widget",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/recently-listened-tracks-widget/javascript.v1.json",
+      "checksum": "sha256:901d8135b6ec18e62bc470781c98b29cbb799cbd2c29878ab691c86fa0faddff"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "recently-listened-tracks-widget",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/recently-listened-tracks-widget/python.v1.json",
+      "checksum": "sha256:46632984a51d0818d0046858358f5fdcb8b3f9aacb5d23a3c4e606430b3abe5a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "redundant-connection",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/redundant-connection/javascript.v1.json",
+      "checksum": "sha256:dcbf25afd3be1d30014289d19482d85f7c9400c031a043740e86294e5497c269"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "redundant-connection",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/redundant-connection/python.v1.json",
+      "checksum": "sha256:998514ddbdc93dfdd050d6ebda88c5d2a700c98992ced4f14e9556c3f5f4b6f7"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "regular-expression-matching",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/regular-expression-matching/javascript.v1.json",
+      "checksum": "sha256:a851c208aee13e3aa674691195b98914def09aa09e3642b0ef31ec89f9fbd5d3"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "regular-expression-matching",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/regular-expression-matching/python.v1.json",
+      "checksum": "sha256:d70ce5eca044c203f83e24f1490d7162ab3355b66a87562d23f037d530dd6fde"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "remove-duplicates-from-sorted-array",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/remove-duplicates-from-sorted-array/javascript.v1.json",
+      "checksum": "sha256:bc896fc9065399ad0f2780d12e25d1c5abc012e48b19acfac31072ed9f252cfa"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "remove-duplicates-from-sorted-array",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/remove-duplicates-from-sorted-array/python.v1.json",
+      "checksum": "sha256:4543fcf08df6f227bd9f2e1c635bb3a3442a085a68ff737366965a03917e1ab4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "remove-nth-node-from-end-of-list",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/remove-nth-node-from-end-of-list/javascript.v1.json",
+      "checksum": "sha256:24814677f77cc98e927509f01432bab325c72d3f3da653ee1610cc07fc83cc37"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "remove-nth-node-from-end-of-list",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/remove-nth-node-from-end-of-list/python.v1.json",
+      "checksum": "sha256:473584bad6dcfd4e06abab6a2cc2eb7a99b2d07f4de3f61317cc751d098f51fb"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "reorder-list",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/reorder-list/javascript.v1.json",
+      "checksum": "sha256:2f96eb4dc206667526ae8536f85242deb9791c7b9833a1bfd53151c005818f2a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "reorder-list",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/reorder-list/python.v1.json",
+      "checksum": "sha256:2ac24fd057f2a8d704df97ce53899bbc4e215c6cef840ca93aef141c56977b04"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "reverse-bits",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/reverse-bits/javascript.v1.json",
+      "checksum": "sha256:74c90a2d22c51f9b68b25a53345b72e73156d914d7d97e23dedc69c93d234eb0"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "reverse-bits",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/reverse-bits/python.v1.json",
+      "checksum": "sha256:a0bee02c18d6fed001c57eb7f36ff40a2612ffd7d4645bc25bb169978fa86d9b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "reverse-integer",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/reverse-integer/javascript.v1.json",
+      "checksum": "sha256:c349af223d1d5f8a735e86ca588ffc95bde0c87b0653a6cc210f672949739736"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "reverse-integer",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/reverse-integer/python.v1.json",
+      "checksum": "sha256:229c4bd8512c47253d8dd583dfef7be954a8fd804731beb87d2df5378ef61cd7"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "reverse-linked-list",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/reverse-linked-list/javascript.v1.json",
+      "checksum": "sha256:c148533d19092bc6651bb86900fe0b65d4bb05f3b4a9b8a69e07285c9793614c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "reverse-linked-list",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/reverse-linked-list/python.v1.json",
+      "checksum": "sha256:32c1d320fe02202e5982230c80aeceee2915bf27361de9c3db0dc4ef07e975e5"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "reverse-nodes-in-k-group",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/reverse-nodes-in-k-group/javascript.v1.json",
+      "checksum": "sha256:a3e5b41bfce5743c73fcad4e21a39a7fd335244063a7ac0ecfc3a17599e86bd4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "reverse-nodes-in-k-group",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/reverse-nodes-in-k-group/python.v1.json",
+      "checksum": "sha256:a1690077b8f68ab72c6837e4b4e174e8f2fd7a5fe3ded56466504cb0e84413bf"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "rna-transcription",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/rna-transcription/javascript.v1.json",
+      "checksum": "sha256:4b65c2c90e7f640d447813057c869f94961136d5c14352452188b0a27298394e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "rna-transcription",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/rna-transcription/python.v1.json",
+      "checksum": "sha256:0bcc3bbd4480ca95134987169e29069cdf154ebf04d6a50a32896fcc8fceb66b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "robot-duel-board-game",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/robot-duel-board-game/javascript.v1.json",
+      "checksum": "sha256:f72ba886a3b00ed52eddf57d6b20c6fd8047ae3ae5d7b4e83a3d9a8d41e47bc3"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "robot-duel-board-game",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/robot-duel-board-game/python.v1.json",
+      "checksum": "sha256:a0eba1120a035124f75c0a45126faa0529d4d432a4cb3c3bb3993169861c41b2"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "rocket-equation-fuel-sum",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/rocket-equation-fuel-sum/javascript.v1.json",
+      "checksum": "sha256:fe815431f17642805b39ea0b89cfb1affd28be46d9e582ebe72e7e08843ea610"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "rocket-equation-fuel-sum",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/rocket-equation-fuel-sum/python.v1.json",
+      "checksum": "sha256:023d069977d9a0d23af7aff169388ea15afe42dba90a46a4d726707b6b942fdf"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "rocket-equation-fuel-sum-with-fuel-mass",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/rocket-equation-fuel-sum-with-fuel-mass/javascript.v1.json",
+      "checksum": "sha256:a578df2b6c2bf7e43402f1c20f8adc55647d5d24cce26d93e384ff20287378a6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "rocket-equation-fuel-sum-with-fuel-mass",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/rocket-equation-fuel-sum-with-fuel-mass/python.v1.json",
+      "checksum": "sha256:3704219bcede59a3ee518c72c3e0879cdc6aafa521e101daef895c7a7ae1da59"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "rotate-image",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/rotate-image/javascript.v1.json",
+      "checksum": "sha256:404ec5cba77a6b33f9c6cddf34a1744f947fd30f8486d5b3b28b0af47b5e2534"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "rotate-image",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/rotate-image/python.v1.json",
+      "checksum": "sha256:3b48b8570aa6c7b8f1c9316101570ab762935aeca7f50e43278e12b1e07a5a5a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "rotting-oranges",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/rotting-oranges/javascript.v1.json",
+      "checksum": "sha256:1713698b93294d4fb75a323684ae8e76827fb9da8d948e0b45e7bc4a41481319"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "rotting-oranges",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/rotting-oranges/python.v1.json",
+      "checksum": "sha256:3fae2ae4a18012a3a6ea1988999ec89cbb0334f695ff8c4da98126d2fd8a16b9"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "same-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/same-tree/javascript.v1.json",
+      "checksum": "sha256:7f0bdcda6591b17c24e9b8599b9124c9bc7b9e55c3bb2abe6e05940fbfa47355"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "same-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/same-tree/python.v1.json",
+      "checksum": "sha256:dc5c64cdf726ee5261bca884c333f6e4b69dc9640eeb1435793fdce6bf70e394"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "search-a-2d-matrix",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/search-a-2d-matrix/javascript.v1.json",
+      "checksum": "sha256:cf9611e7f241f0716242a12ed8430c7c6780d435e425efc9bc4e4142b0fa7254"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "search-a-2d-matrix",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/search-a-2d-matrix/python.v1.json",
+      "checksum": "sha256:5b0ba4a9536d35018613044dcef02f1048010c485d4a7112741bb048d613bf84"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "search-in-rotated-sorted-array",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/search-in-rotated-sorted-array/javascript.v1.json",
+      "checksum": "sha256:89142ba7228323089b755f89752d40a1373f34c457ff079da43dea7acbc9a8b4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "search-in-rotated-sorted-array",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/search-in-rotated-sorted-array/python.v1.json",
+      "checksum": "sha256:f86e268fcd4b74e5ad27067f6b5efd1fc2f8d5be1e39263a65da18e7fba5253b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "serialize-and-deserialize-binary-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/serialize-and-deserialize-binary-tree/javascript.v1.json",
+      "checksum": "sha256:87d9665757abf8256ed22c125cf17b4d4813c5434faca6c9964fd3fe32160124"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "serialize-and-deserialize-binary-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/serialize-and-deserialize-binary-tree/python.v1.json",
+      "checksum": "sha256:6a8a84b42e082d7932c2dfea0257b4caafc1d9252d6c7d47003d468f446d2f3f"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "set-matrix-zeroes",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/set-matrix-zeroes/javascript.v1.json",
+      "checksum": "sha256:7281681659c049507b40b543100a3d941644d2b6a2fc7d70ab1c6e08614011f2"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "set-matrix-zeroes",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/set-matrix-zeroes/python.v1.json",
+      "checksum": "sha256:ca5bb33b51365d107c01bdf1689342eb3cb9ced8db2f6a08ab4f215d6259fc80"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "set-with-expiry",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/set-with-expiry/javascript.v1.json",
+      "checksum": "sha256:824ebef0e9112ddda72b1332102cd5370eddfe61de89c45acf5655912fff3d28"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "set-with-expiry",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/set-with-expiry/python.v1.json",
+      "checksum": "sha256:f51002bb6eedce60021ca45c650af5bca5fe365ad8ba6d84e965d5843f723ae7"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "shortest-path-between-profiles",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/shortest-path-between-profiles/javascript.v1.json",
+      "checksum": "sha256:49a8075702141b261b55c9d4b70a1e2f5fd68dd4584c1654999fe2e58fc7cf3d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "shortest-path-between-profiles",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/shortest-path-between-profiles/python.v1.json",
+      "checksum": "sha256:005a66c7947084854d7cb9890a45288d73b70023e6b6892efd3abb7abed8d95a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "single-number",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/single-number/javascript.v1.json",
+      "checksum": "sha256:322c1454a9ea717e3308512aa493a8744d90f5ea6719b6588fe49dd3195b5bc6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "single-number",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/single-number/python.v1.json",
+      "checksum": "sha256:d0dbbc19a17cbb4abcd835583b7ba1f0c337f410dd42fb552f4dd1212823cbe5"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "sliding-window-maximum",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/sliding-window-maximum/javascript.v1.json",
+      "checksum": "sha256:996c35456b52aa9949c4bacab49b0b54641e2187183c1395b0b6a6f8fcd7023e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "sliding-window-maximum",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/sliding-window-maximum/python.v1.json",
+      "checksum": "sha256:b161e46dcb82c70365f0ee7bb8d91ae375427b8799d40486582c592b96957e2c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "smallest-k-numbers",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/smallest-k-numbers/javascript.v1.json",
+      "checksum": "sha256:fdce82076ffe0fa698ac2aa6f34a0045f42f180e13d260350ff64b02b5a10493"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "smallest-k-numbers",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/smallest-k-numbers/python.v1.json",
+      "checksum": "sha256:9418bf6955b43d4ada6fc958afb55f32e80a76aceb174bd20f2b967103b3ba27"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "sort-colors",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/sort-colors/javascript.v1.json",
+      "checksum": "sha256:3440b21c7a981ba9812b7210aafc764fe0404adf81dd14aa3fb3dd1aa0e011fa"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "sort-colors",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/sort-colors/python.v1.json",
+      "checksum": "sha256:d583b23984ac7f8be2990f980c7ab1aea33598b4c9b5601422430131fef4b0e3"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "sorting-iterators-k-way-merge",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/sorting-iterators-k-way-merge/javascript.v1.json",
+      "checksum": "sha256:0d0cdb34910f32b9713f9b5865c2dbf3e80a531dfa4a7f2a135da262551bcdd0"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "sorting-iterators-k-way-merge",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/sorting-iterators-k-way-merge/python.v1.json",
+      "checksum": "sha256:34948b3bd8733abd70868621492eb2c48f15c9b28a3009c6c026fb55a47bbefd"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "speeding-cars-in-city-grid",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/speeding-cars-in-city-grid/javascript.v1.json",
+      "checksum": "sha256:a146c4c4d22b1f96f1aa84d97b79127138fbbbf71b6661ebcd6726bf14012d1c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "speeding-cars-in-city-grid",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/speeding-cars-in-city-grid/python.v1.json",
+      "checksum": "sha256:61f57f39a9b751a9dab8804269b078d038d73d43a53ed782794c437ee83600cd"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "spell-checker-trie-based",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/spell-checker-trie-based/javascript.v1.json",
+      "checksum": "sha256:e2aca93e4e1c68e3136d6f4ed1a40511acdf453d165279850fae9870e89cd71e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "spell-checker-trie-based",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/spell-checker-trie-based/python.v1.json",
+      "checksum": "sha256:72a0eedc9a9375ae81de5023b43b5886d3699a4c7865e3295e37a7058740e430"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "spiral-matrix",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/spiral-matrix/javascript.v1.json",
+      "checksum": "sha256:1d157fd7d41f415cec208f9db1ac7adc45d199eaf54ed965ae643ba749755ee6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "spiral-matrix",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/spiral-matrix/python.v1.json",
+      "checksum": "sha256:4a7541fcf4e54a12d3942af048884576dc6e01918099f62c6bfa7a3cb7641eb3"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "spreadsheet-cells-formulas-cycles",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/spreadsheet-cells-formulas-cycles/javascript.v1.json",
+      "checksum": "sha256:6edb60ca1c8f17dc5c0db8468b421ddc37cac3fb4916d359b796147593bd4855"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "spreadsheet-cells-formulas-cycles",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/spreadsheet-cells-formulas-cycles/python.v1.json",
+      "checksum": "sha256:2670129038f10667737e2d1456814bfae34cb3b07e71cd1c4a6dcd1a600c9b40"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "stack-from-scratch",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/stack-from-scratch/javascript.v1.json",
+      "checksum": "sha256:4590455aa48e23a919bccf2f55327e70034085ca56c567d5d3c2ad93c8733f14"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "stack-from-scratch",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/stack-from-scratch/python.v1.json",
+      "checksum": "sha256:d960a406ca06a6cb9d07e38ad0260983f5617492ca9ffd65e2a62459f9688d89"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "stock-buy-sell-best-pair-of-days",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/stock-buy-sell-best-pair-of-days/javascript.v1.json",
+      "checksum": "sha256:720eb067d44836a5eea4baad9df3f1d7c39dadc995ff2b1ded25975a693a5e42"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "stock-buy-sell-best-pair-of-days",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/stock-buy-sell-best-pair-of-days/python.v1.json",
+      "checksum": "sha256:d7ad3970ee714c954268e602b0c8553f87821680657eb117b6a581e4bf117deb"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "stock-span",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/stock-span/javascript.v1.json",
+      "checksum": "sha256:276422fe0409fbd1ea447b797187234f5a35b91c32441ec48b2bedb008deeb46"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "stock-span",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/stock-span/python.v1.json",
+      "checksum": "sha256:1d3fd2a8e6e6d9e8ea6177ca4ab58173579cea63ad4449dd911cc0008a395be1"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "string-to-integer-atoi",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/string-to-integer-atoi/javascript.v1.json",
+      "checksum": "sha256:aa677d4aa70d318656fa6d49ccc432dd45af1672ca242c3263aa6fee231bc7ed"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "string-to-integer-atoi",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/string-to-integer-atoi/python.v1.json",
+      "checksum": "sha256:32a6b00af61cb7111b4e2647466c94dc43cdc024ccd1dee3511b9c9e74e5f2d9"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "stringify-looped-graph",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/stringify-looped-graph/javascript.v1.json",
+      "checksum": "sha256:1c255b7eb21406c2dec37ae13e0c606ec18199b5f17e7feb4c9fb6d4eab7cb31"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "stringify-looped-graph",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/stringify-looped-graph/python.v1.json",
+      "checksum": "sha256:03ed43a37c3a221658dd143a30944c12efaea63f419f2749f2da685e6ca5d84b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "subarray-sum-equals-k",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/subarray-sum-equals-k/javascript.v1.json",
+      "checksum": "sha256:5475ff1ff244fbc3ee04086ad6ca0f44f90925eb7001f6629212ed8482e378a6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "subarray-sum-equals-k",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/subarray-sum-equals-k/python.v1.json",
+      "checksum": "sha256:5481ad4960bae41d91b516ec21f02646fa2963b5b283a878d2c39f5bc5ae7f67"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "subsets",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/subsets/javascript.v1.json",
+      "checksum": "sha256:3cb2adb895aa8e0a797c9a076e4cccb920504d83038992d4bb575179abe043cc"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "subsets",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/subsets/python.v1.json",
+      "checksum": "sha256:b92b4464e5e808ef154b4f653a4f838e84d7ceba8273a771c186149db78ea6ad"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "subtree-of-another-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/subtree-of-another-tree/javascript.v1.json",
+      "checksum": "sha256:85fe42aadedacf229ac5e0e87d521dda02418dba04fb9e70ab51c2bd619ee94e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "subtree-of-another-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/subtree-of-another-tree/python.v1.json",
+      "checksum": "sha256:a4741f0cca1a0e23b6c3736689daa53e0d5ba93b349fe30bbd66fe85994323af"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "sum-of-two-integers",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/sum-of-two-integers/javascript.v1.json",
+      "checksum": "sha256:f82410ef447368aea7df09498802540562ab6482e7a45a093cbd8a0e744dc04e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "sum-of-two-integers",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/sum-of-two-integers/python.v1.json",
+      "checksum": "sha256:3f24ef1303793c5b4a41850157217b1f9a434132c7d3b9334a854218c325e153"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "surrounded-regions",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/surrounded-regions/javascript.v1.json",
+      "checksum": "sha256:c523c16f4b0a0feee23e1c4d8c7bc84e9c48f3a209155f5f882acd09d86e0c46"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "surrounded-regions",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/surrounded-regions/python.v1.json",
+      "checksum": "sha256:42a1b5c8875f7b80729e7a2d541b7cc8c385653ca6f1970acd46defeac5dff34"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "symmetric-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/symmetric-tree/javascript.v1.json",
+      "checksum": "sha256:adb415b2c02f0120c3d2a7681a6b31b935bfb39e2b85640b7d95b33347e366a8"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "symmetric-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/symmetric-tree/python.v1.json",
+      "checksum": "sha256:2ecb7323a7be61cd582b453b021153203cbe179bfde3090c64ec4e4560c92a0b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "target-sum",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/target-sum/javascript.v1.json",
+      "checksum": "sha256:1e6358583f5b70b0d278a327d9b68de018bb9a9771f313ad682d3bad3a3d0136"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "target-sum",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/target-sum/python.v1.json",
+      "checksum": "sha256:a726e2f4c762fe9ae901d4ba4499f3b21655f906669832c774e282cc9aa50ac8"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "task-scheduler",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/task-scheduler/javascript.v1.json",
+      "checksum": "sha256:c1c0916b7f66b40b80560299b3253e8162cbfce06e3bfef39111f9b42520d303"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "task-scheduler",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/task-scheduler/python.v1.json",
+      "checksum": "sha256:04586c1e7eb42e721e235dbd3b41c21acbbce325f36ea3148d67056501d33926"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "team-vacation-overlap-risk-periods",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/team-vacation-overlap-risk-periods/javascript.v1.json",
+      "checksum": "sha256:254ce94f8eb4c31783b8ee6c84a29547d2a25ef4d496aaacf2bb85fbcfe8e6a4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "team-vacation-overlap-risk-periods",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/team-vacation-overlap-risk-periods/python.v1.json",
+      "checksum": "sha256:508b9dabe300d19cc324d3e23459480320901d2f153d3f93dc1bf241766c9bdf"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "text-editor-model-composable-elements",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/text-editor-model-composable-elements/javascript.v1.json",
+      "checksum": "sha256:9fbfc03f7332b2deef1b6b7fe523f5c3dc058a7bb5f475e93e43cf589573d961"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "text-editor-model-composable-elements",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/text-editor-model-composable-elements/python.v1.json",
+      "checksum": "sha256:840df08191f2213a67f23e502061a9aaec23842eb199fe838730c427a36e530f"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "time-based-key-value-store",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/time-based-key-value-store/javascript.v1.json",
+      "checksum": "sha256:f8d8917b9aecc59fdfbe5f3bd2cdf22ca5052955f1f2c59e47539ba53db3fcc2"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "time-based-key-value-store",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/time-based-key-value-store/python.v1.json",
+      "checksum": "sha256:9e2f19d90bc2c9aa54ad11351f9c51d47f775028eb116830f077a0d09cd212d6"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "coding",
+      "slug": "top-k-frequent-elements",
+      "variant": null,
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/top-k-frequent-elements/validators.v1.json",
+      "checksum": "sha256:d9a48a5d54e6498e645795b202c28738757affc3dfceb18500d28d35f6830cfe"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "top-k-frequent-elements",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/top-k-frequent-elements/javascript.v1.json",
+      "checksum": "sha256:2eae4f323cb7288bb7df8ff08d68c9599fcc3d6c1bd9bb6176e58ce7edbe7f10"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "top-k-frequent-elements",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/top-k-frequent-elements/python.v1.json",
+      "checksum": "sha256:e7951869b11ad58ce550a71c7c04e12ea37dd3c2abf6f87695ecb4be3d780e36"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "traffic-intersection-crossings",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/traffic-intersection-crossings/javascript.v1.json",
+      "checksum": "sha256:10f17c0fc5dd45fadf9b31416365d9b8dc131c2f1fe16c4629b4efd06f819243"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "traffic-intersection-crossings",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/traffic-intersection-crossings/python.v1.json",
+      "checksum": "sha256:1032b0c12daf396af97b5c32230d27d4aaa0cc1070151f1b37a3c9765500ba70"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "tree-to-first-child-next-sibling-events",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/tree-to-first-child-next-sibling-events/javascript.v1.json",
+      "checksum": "sha256:7891d671bb093df2139be3016241b2da3d3accf900aa1ffcb1a989a2754c981c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "tree-to-first-child-next-sibling-events",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/tree-to-first-child-next-sibling-events/python.v1.json",
+      "checksum": "sha256:c81536ec8d740ec798e8e3f421cd713c1e80305f4142bbbfd790cc405933727b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "trie-prefix-word-count",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/trie-prefix-word-count/javascript.v1.json",
+      "checksum": "sha256:3404b52799ead6262f57985578d5fb835cc81dc240e7f3b36b00dfd66f186437"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "trie-prefix-word-count",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/trie-prefix-word-count/python.v1.json",
+      "checksum": "sha256:4e7276ef3729cf669d461cdb2517e85667b7482b5bfa6e2658f569bdb7fb2da0"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "coding",
+      "slug": "two-sum",
+      "variant": null,
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/two-sum/validators.v1.json",
+      "checksum": "sha256:18ad5c549f571bef53a996cc043ca0648fac94901f00be0c118271abf4ae4bc6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "two-sum",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/two-sum/javascript.v1.json",
+      "checksum": "sha256:8deff0c6914ed0c4db6e8a0947a565fd933f9a1c8c676819c10060aa046dc74c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "two-sum",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/two-sum/python.v1.json",
+      "checksum": "sha256:40901b0cd8ff5308856e666f3dc9e0ee0f26461ce033bc068a2b0f319cf213b1"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "two-sum-ii-input-array-is-sorted",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/two-sum-ii-input-array-is-sorted/javascript.v1.json",
+      "checksum": "sha256:30f30a328c8254b260f77b128904d12a7eccd276efcc151c1c52356e8a961882"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "two-sum-ii-input-array-is-sorted",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/two-sum-ii-input-array-is-sorted/python.v1.json",
+      "checksum": "sha256:aa0427756bf89efc9892934471e6f794eb1947d9ba9455cfb6745b68d625b699"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "unique-linked-list-values",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/unique-linked-list-values/javascript.v1.json",
+      "checksum": "sha256:e78574594a77bed29a7fac7425eadca8fd42cf33388b77a56538d3856c04b85e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "unique-linked-list-values",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/unique-linked-list-values/python.v1.json",
+      "checksum": "sha256:cb839fbc314b5a2211013fcbde4afdb6fcce26cb41f96bb9a2776ec1dc8f109c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "unique-paths",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/unique-paths/javascript.v1.json",
+      "checksum": "sha256:1f2e37df4bb08caf5b94fb16ee7b9b8fbc5226d1bbbacae09466ca8182cb5cd7"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "unique-paths",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/unique-paths/python.v1.json",
+      "checksum": "sha256:e3e80010020e755e65ea100beb808618716af6b1096386d8dbf729021d91d301"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "unix-find-command-composable-matchers",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/unix-find-command-composable-matchers/javascript.v1.json",
+      "checksum": "sha256:337b3f902b6409cea777ada0053dc911aaf2fffe6b116b5f0734d6e005968040"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "unix-find-command-composable-matchers",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/unix-find-command-composable-matchers/python.v1.json",
+      "checksum": "sha256:5398492cfae50558ab6a7b991f3561a1fa6dd87d335cf47f5b8c4a9d6d93fc9d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "urlify",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/urlify/javascript.v1.json",
+      "checksum": "sha256:5f945771e66099fc3713aea903a90af1dbcb62377019139edb39e0bd704b1e98"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "urlify",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/urlify/python.v1.json",
+      "checksum": "sha256:5056c1404927d8ea3c48cd1c5a202b34c4ff501e8097443095eae3ca33891606"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "valid-anagram",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/valid-anagram/javascript.v1.json",
+      "checksum": "sha256:17ceace2bdf9b250900de5dd96f33560ccf82c991aacc430686b08e3c6860228"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "valid-anagram",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/valid-anagram/python.v1.json",
+      "checksum": "sha256:06fe05492e35bffc3594490803d1ca24c58d230fde28f5d329bf04f885e4f9a2"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "valid-palindrome",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/valid-palindrome/javascript.v1.json",
+      "checksum": "sha256:435966e62e7525ff948a0bdd3fe7f084a1307bbe0327722b2ce2050186fdf08b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "valid-palindrome",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/valid-palindrome/python.v1.json",
+      "checksum": "sha256:674f4d583532e6008be18b58c9265f67b1fa795b2ed7ec0ef5dc2649ff55670e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "valid-parentheses",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/valid-parentheses/javascript.v1.json",
+      "checksum": "sha256:c469395ff0c6235c892331cbbc337229e40033eb49b7da3fc35eef9b64ea799c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "valid-parentheses",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/valid-parentheses/python.v1.json",
+      "checksum": "sha256:b9f53f289ba03c90e81cc0c661b6380c350da6589fcbc0186452a43f292f0792"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "valid-sudoku",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/valid-sudoku/javascript.v1.json",
+      "checksum": "sha256:1ae7546b1db31598d8272b871fdd4ddae9e0871e825523b0f3bdc870ef476031"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "valid-sudoku",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/valid-sudoku/python.v1.json",
+      "checksum": "sha256:992037784bc10f111092eedc6a7b1e56a869905918be7ca24c4c33c906f6912e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "validate-binary-search-tree",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/validate-binary-search-tree/javascript.v1.json",
+      "checksum": "sha256:fdd04ee74ae6b3004d4a6acbb68e971213afe12c4c821a357d52555f3125eafe"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "validate-binary-search-tree",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/validate-binary-search-tree/python.v1.json",
+      "checksum": "sha256:76dcba67d378fe3b44539ac62169fcca83507deeb8d4216b927bb4948e46c2c6"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "vending-machine",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/vending-machine/javascript.v1.json",
+      "checksum": "sha256:8f825a5dd9f5a253bc0e4a35e801723458bc39dfebf3872de4e3e7d50416fe7c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "vending-machine",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/vending-machine/python.v1.json",
+      "checksum": "sha256:b40fce8f619a2dc4eac17b0eb2bbd470d7a1eb04fde76058ddf3af7608e8b93f"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "walls-and-gates",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/walls-and-gates/javascript.v1.json",
+      "checksum": "sha256:3505dbed2809a7d257a84ac5e5c66838371ae9a9d6d6675b1e50637d1657831b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "walls-and-gates",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/walls-and-gates/python.v1.json",
+      "checksum": "sha256:bfb0c3e8034b2a1a2b7e3f663127418898db3893893b23d0098ab471a695aab8"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "weighted-matrix-minimum-cost-path",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/weighted-matrix-minimum-cost-path/javascript.v1.json",
+      "checksum": "sha256:ed51cc46a82e2768263305504f0bc15d38992fa5dd99655f30912f6a6d60d4c4"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "weighted-matrix-minimum-cost-path",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/weighted-matrix-minimum-cost-path/python.v1.json",
+      "checksum": "sha256:cf252426e296c0aa5287cba1085e772d135b55bbdf4a218c8446bb5a2248457a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "wildcard-matching",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/wildcard-matching/javascript.v1.json",
+      "checksum": "sha256:7e7290adbe4c332e957b17926be5f3a8ddcab7fc9d4c1763faf7b6476dc470ea"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "wildcard-matching",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/wildcard-matching/python.v1.json",
+      "checksum": "sha256:becedf1797cb042bff7c106f2895b53ae66572e9287a0a8c45935986509aaa8c"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "winnable-path",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/winnable-path/javascript.v1.json",
+      "checksum": "sha256:3afff3361d3f74e0a64597b822c3b97982272bedd25b33eea5c721f3a223bebd"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "winnable-path",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/winnable-path/python.v1.json",
+      "checksum": "sha256:4fab1587ee230d8d4a4f6e7b9aaecf92ecbbad86d28c95d8b4ca1060ab355747"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "coding",
+      "slug": "word-break-sentence-reconstruction",
+      "variant": null,
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/word-break-sentence-reconstruction/validators.v1.json",
+      "checksum": "sha256:b4f2a969b1d1b01f87c647c7a86b876cd6d98ab3eb8bddccce5dc2e23d359e4a"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "word-break-sentence-reconstruction",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/word-break-sentence-reconstruction/javascript.v1.json",
+      "checksum": "sha256:70204b90d6adcdd36013022ca799160d7d4d17e79b6c6335498063fcd174be23"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "word-break-sentence-reconstruction",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/word-break-sentence-reconstruction/python.v1.json",
+      "checksum": "sha256:a55afffb01ee56e0bcd134ac1662fe0cc505d1a557639000fc791369f8494280"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "word-ladder",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/word-ladder/javascript.v1.json",
+      "checksum": "sha256:0ebc2f4da078f960be8f03c02780ad39f87eea056067a5ac05c8863eb046de5e"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "word-ladder",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/word-ladder/python.v1.json",
+      "checksum": "sha256:4a29922477d0cf2b0ae9988044b9848a458e76677e62d2006f82f0b34770101d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "word-search",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/word-search/javascript.v1.json",
+      "checksum": "sha256:4903977194c3e2188b5f4602a03b8c2bbe975580d394ae47ba2680d34880353d"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "word-search",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/word-search/python.v1.json",
+      "checksum": "sha256:5329644a9eba6e3c54be1dbb70f85a0b110756ff9b2c435fcee4407e0acf48ee"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "word-search-ii",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/word-search-ii/javascript.v1.json",
+      "checksum": "sha256:a9895c913bd4677a6d1863c1ee0176955729f84597a232dd1001a846cbeb0ec9"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "word-search-ii",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/word-search-ii/python.v1.json",
+      "checksum": "sha256:dc2581bea1a8a0cad0c157bfd8d950a30d7515f7cd0df2735950d6448e5f7d9b"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "zeitgeist-top-n-most-popular-items",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/zeitgeist-top-n-most-popular-items/javascript.v1.json",
+      "checksum": "sha256:83a5dc996559ae70e5da53bfc5120772f5a4c665e99e61b04e45867f9b545189"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "zeitgeist-top-n-most-popular-items",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/zeitgeist-top-n-most-popular-items/python.v1.json",
+      "checksum": "sha256:f065b6b6d406679efab84bd39a97056188d2190c2d8847c7f533125aa896efde"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "zigzag-string-conversion",
+      "variant": "javascript",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/zigzag-string-conversion/javascript.v1.json",
+      "checksum": "sha256:17b83e512feaf49e4233d31356cc012ddf2011a7d8c49bb71832919c30553780"
+    },
+    {
+      "kind": "test-definition",
+      "track": "coding",
+      "slug": "zigzag-string-conversion",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "active",
+      "path": "store/coding/zigzag-string-conversion/python.v1.json",
+      "checksum": "sha256:c597f600c8b58b0dc39aba4d8bcad06849948e3854d26af80aa16dfce9633c4c"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "take-home",
+      "slug": "csv-summarize-py",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "retired",
+      "path": "store/take-home/csv-summarize-py/python.v1.json",
+      "checksum": "sha256:82f09210d73fc5d259a810e7db8fae9c781014c07dfc7cbfba298d7428122d4b"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "take-home",
+      "slug": "event-bus-ts",
+      "variant": "typescript",
+      "content_version": 1,
+      "lifecycle": "retired",
+      "path": "store/take-home/event-bus-ts/typescript.v1.json",
+      "checksum": "sha256:073cd6e048f0a451d87ea93d510856ea820a84df8db3f458a051b96e2a96cda2"
+    },
+    {
+      "kind": "harness-revision",
+      "track": "take-home",
+      "slug": "kv-store-py",
+      "variant": "python",
+      "content_version": 1,
+      "lifecycle": "retired",
+      "path": "store/take-home/kv-store-py/python.v1.json",
+      "checksum": "sha256:c9e66f1ae866c535fe7c102840ec969b76a0db1371bc5b72aaec3cb670906248"
+    }
+  ]
+}

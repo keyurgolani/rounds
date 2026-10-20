@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rounds:contracts:definitions:manifest:v1",
+  "title": "definitions-manifest/v1",
+  "description": "backend/definitions/manifest.json (ROUNDS-00A-L02): every definition version's identity, lifecycle, file, and checksum. Shipped bytes never change, so a later manifest may only add versions and move a lifecycle forward.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "entries"],
+  "properties": {
+    "schema": { "const": "definitions-manifest/v1" },
+    "entries": { "type": "array", "maxItems": 10000, "items": { "oneOf": [{ "$ref": "#/$defs/stored" }, { "$ref": "#/$defs/payload_free" }] } }
+  },
+  "$defs": {
+    "slug": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "version": { "type": "integer", "minimum": 1, "maximum": 9999 },
+    "variant": { "oneOf": [{ "type": "null" }, { "enum": ["python", "javascript", "typescript"] }] },
+    "stored": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "track", "slug", "variant", "content_version", "lifecycle", "path", "checksum"],
+      "properties": {
+        "kind": { "enum": ["test-definition", "harness-revision"] },
+        "track": { "enum": ["coding", "ai-coding", "take-home"] },
+        "slug": { "$ref": "#/$defs/slug" },
+        "variant": { "$ref": "#/$defs/variant" },
+        "content_version": { "$ref": "#/$defs/version" },
+        "lifecycle": { "enum": ["active", "superseded", "retired"] },
+        "path": { "type": "string", "pattern": "^store/[a-z0-9/._-]+\\.json$" },
+        "checksum": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "payload_free": {
+      "description": "A retired version whose source is gone: it records the identity so requests get definition_retired, with no file.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "track", "slug", "variant", "content_version", "lifecycle", "path", "checksum"],
+      "properties": {
+        "kind": { "enum": ["test-definition", "harness-revision"] },
+        "track": { "enum": ["coding", "ai-coding", "take-home"] },
+        "slug": { "$ref": "#/$defs/slug" },
+        "variant": { "$ref": "#/$defs/variant" },
+        "content_version": { "$ref": "#/$defs/version" },
+        "lifecycle": { "const": "retired" },
+        "path": { "type": "null" },
+        "checksum": { "type": "null" }
+      }
+    }
+  }
+}

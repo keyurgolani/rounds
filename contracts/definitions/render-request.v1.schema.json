@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rounds:contracts:definitions:render-request:v1",
+  "title": "render-request/v1",
+  "description": "A server PDF request (ROUNDS-00A-L02): it names one of #4's immutable snapshots and its checksum, never markup. The margin is the snapshot's spacing.margin, so the request sends margin_mm 0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["snapshot_id", "expected_checksum", "format", "page_size", "margin_mm", "locale", "idempotency_id"],
+  "properties": {
+    "snapshot_id": { "type": "string", "pattern": "^[a-z0-9]{15}$" },
+    "expected_checksum": { "description": "The snapshot's content_checksum.", "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "format": { "const": "pdf" },
+    "page_size": { "const": "A4" },
+    "margin_mm": { "type": "number", "minimum": 0, "maximum": 30 },
+    "locale": { "const": "en" },
+    "idempotency_id": {
+      "description": "The action's command id, a UUIDv7, the same as its Idempotency-Key.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    }
+  }
+}

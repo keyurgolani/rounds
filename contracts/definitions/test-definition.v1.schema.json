@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rounds:contracts:definitions:test-definition:v1",
+  "title": "test-definition/v1",
+  "description": "One version of a coding question's server-owned tests for one language (ROUNDS-00A-L02). Identity is (track, slug, variant, content_version). Cases and expected values stay visible to the candidate; validators live in the question's coding-validators harness revision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "track", "slug", "variant", "content_version", "entry", "cases", "validators"],
+  "properties": {
+    "schema": { "const": "test-definition/v1" },
+    "track": { "const": "coding" },
+    "slug": { "$ref": "#/$defs/slug" },
+    "variant": { "enum": ["python", "javascript"] },
+    "content_version": { "$ref": "#/$defs/version" },
+    "entry": { "$ref": "#/$defs/entry" },
+    "cases": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "#/$defs/case" } },
+    "validators": {
+      "description": "The coding-validators harness revision that holds this version's validator predicates, pinned by checksum, or null when no case uses one.",
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/validators_ref" }]
+    }
+  },
+  "$defs": {
+    "slug": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "version": { "type": "integer", "minimum": 1, "maximum": 9999 },
+    "checksum": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "identifier": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+    "type_label": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_\\[\\]<>(),.: |]+$" },
+    "param": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": { "name": { "$ref": "#/$defs/identifier" }, "type": { "$ref": "#/$defs/type_label" } }
+    },
+    "params": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/param" } },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "params"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "params": { "$ref": "#/$defs/params" },
+        "returns": { "$ref": "#/$defs/type_label" }
+      }
+    },
+    "entry": {
+      "description": "How the runner calls the candidate's code. Every kind but custom, with identifier-only names.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "params"],
+          "properties": {
+            "kind": { "const": "function" },
+            "name": { "$ref": "#/$defs/identifier" },
+            "params": { "$ref": "#/$defs/params" },
+            "returns": { "$ref": "#/$defs/type_label" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "mutates"],
+          "properties": {
+            "kind": { "const": "in_place_mutation" },
+            "name": { "$ref": "#/$defs/identifier" },
+            "params": { "$ref": "#/$defs/params" },
+            "mutates": { "$ref": "#/$defs/identifier" },
+            "returns": { "$ref": "#/$defs/type_label" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "class", "constructor", "methods"],
+          "properties": {
+            "kind": { "const": "class_ops" },
+            "class": { "$ref": "#/$defs/identifier" },
+            "constructor": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["params"],
+              "properties": { "params": { "$ref": "#/$defs/params" } }
+            },
+            "methods": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/$defs/method" } }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "params"],
+          "properties": {
+            "kind": { "const": "linked_list" },
+            "name": { "$ref": "#/$defs/identifier" },
+            "params": { "$ref": "#/$defs/params" },
+            "output_shape": { "enum": ["verbose", "linked_list_array"] }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "params"],
+          "properties": {
+            "kind": { "const": "tree" },
+            "name": { "$ref": "#/$defs/identifier" },
+            "params": { "$ref": "#/$defs/params" },
+            "output_shape": { "enum": ["verbose", "tree_level_order"] }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "params"],
+          "properties": {
+            "kind": { "const": "graph" },
+            "name": { "$ref": "#/$defs/identifier" },
+            "params": { "$ref": "#/$defs/params" },
+            "output_shape": { "enum": ["verbose", "graph_adjacency"] }
+          }
+        }
+      ]
+    },
+    "tag": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "tags", "visibility", "time_class", "input", "expected"],
+      "properties": {
+        "case_id": { "type": "string", "pattern": "^c[0-9]{3}$" },
+        "tags": { "type": "array", "maxItems": 16, "uniqueItems": true, "items": { "$ref": "#/$defs/tag" } },
+        "visibility": { "enum": ["visible", "hidden"] },
+        "time_class": {
+          "description": "standard runs for 3 s and large for 10 s, within the interactive job class.",
+          "enum": ["standard", "large"]
+        },
+        "description": { "type": "string", "maxLength": 2000 },
+        "input": true,
+        "expected": { "$ref": "#/$defs/expected" }
+      }
+    },
+    "valued_matcher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["matcher", "value"],
+      "properties": {
+        "matcher": { "enum": ["exact", "unordered", "unordered_deep", "contains", "subset_of", "superset_of"] },
+        "value": true
+      }
+    },
+    "expected": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["literal"],
+          "properties": { "literal": true }
+        },
+        { "$ref": "#/$defs/valued_matcher" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["matcher", "values"],
+          "properties": { "matcher": { "const": "any_of" }, "values": { "type": "array", "minItems": 1 } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["matcher", "value"],
+          "properties": {
+            "matcher": { "const": "approx" },
+            "value": true,
+            "abs_tol": { "type": "number", "minimum": 0 },
+            "rel_tol": { "type": "number", "minimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["validator_id"],
+          "properties": { "validator_id": { "type": "string", "pattern": "^v-[0-9a-f]{12}$" } }
+        }
+      ]
+    },
+    "validators_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slug", "content_version", "checksum"],
+      "properties": {
+        "slug": { "$ref": "#/$defs/slug" },
+        "content_version": { "$ref": "#/$defs/version" },
+        "checksum": { "$ref": "#/$defs/checksum" }
+      }
+    }
+  }
+}

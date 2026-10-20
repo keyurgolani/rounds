@@ -31,6 +31,8 @@ ENVELOPE_KEYS = ("detail", "code", "correlation_id")
 CODES: dict[str, int] = {
     "payload_too_large": 413,
     "route_disabled": 503,
+    # ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled, with the route gates.
+    "definitions_disabled": 503,
     "unauthenticated": 401,
     "auth_unavailable": 503,
     "not_permitted": 403,
@@ -42,6 +44,12 @@ CODES: dict[str, int] = {
     "demo_limit_reached": 429,
     "quota_unavailable": 503,
     "not_found": 404,
+    # Resolving a server-owned definition (ROUNDS-00A-L02, app.definitions).
+    "definition_not_found": 404,
+    "definition_superseded": 409,
+    "definition_retired": 410,
+    "runtime_unsupported": 422,
+    "definition_integrity_mismatch": 503,
     "worker_unavailable": 503,
     "destination_denied": 403,
 }
@@ -50,6 +58,7 @@ CODES: dict[str, int] = {
 DETAILS: dict[str, str] = {
     "payload_too_large": "The request is larger than this route accepts.",
     "route_disabled": "This is turned off on this server.",
+    "definitions_disabled": "Running and grading practice code is turned off on this server.",
     "unauthenticated": "Sign in to continue.",
     "auth_unavailable": "Sign-in can't be checked right now. Try again shortly.",
     "not_permitted": "This isn't available for this account.",
@@ -61,6 +70,11 @@ DETAILS: dict[str, str] = {
     "demo_limit_reached": "The demo limit is reached for now.",
     "quota_unavailable": "Limits can't be checked right now. Try again shortly.",
     "not_found": "Not found.",
+    "definition_not_found": "This practice item isn't available.",
+    "definition_superseded": "This version was replaced. Reload to get the current one.",
+    "definition_retired": "This practice item was retired.",
+    "runtime_unsupported": "This language isn't supported here.",
+    "definition_integrity_mismatch": "This practice item can't be checked right now. Try again shortly.",
     "worker_unavailable": "The runner is busy or unavailable. Try again shortly.",
     "destination_denied": "This provider address isn't allowed.",
 }

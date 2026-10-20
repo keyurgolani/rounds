@@ -8,25 +8,53 @@
 `error` is non-None only when a matcher could not run (e.g. validator
 raised). Plain pass/fail returns `error=None` — the user's output is
 already shown alongside the rendered expected, so the diff is self-evident.
+
+A `validator` predicate never runs here: `app.validators` hands it to the
+validator process, `python3 -I` with an empty environment
+(ROUNDS-00A-L02). Inside `validator_batch(items)`, every validator case
+in `items` has already been checked in one process, and `match` reads
+those answers instead of starting a process per case.
 """
 from __future__ import annotations
 
+import contextvars
 import json
-from typing import Any, Callable
+from contextlib import contextmanager
+from typing import Any, Callable, Iterator, Sequence
+
+from app import validators
 
 MatchResult = tuple[bool, str | None]
 Matcher = Callable[[dict, Any, Any], MatchResult]
 
-_SAFE_BUILTINS = {
-    "len": len, "range": range, "sum": sum, "set": set, "sorted": sorted,
-    "all": all, "any": any, "abs": abs, "min": min, "max": max,
-    "enumerate": enumerate, "zip": zip, "map": map, "filter": filter,
-    "isinstance": isinstance,
-    "list": list, "tuple": tuple, "dict": dict, "str": str,
-    "int": int, "float": float, "bool": bool,
-    "True": True, "False": False, "None": None,
-}
-_VALIDATOR_GLOBALS = {"__builtins__": _SAFE_BUILTINS}
+_batch: contextvars.ContextVar[dict[str, MatchResult] | None] = contextvars.ContextVar(
+    "rounds_validator_batch", default=None
+)
+
+
+def _is_validator(expected: Any) -> bool:
+    return isinstance(expected, dict) and expected.get("$match") == "validator"
+
+
+def _batch_key(code: str, input: Any, output: Any) -> str:
+    return json.dumps([code, input, output], sort_keys=True)
+
+
+@contextmanager
+def validator_batch(items: Sequence[tuple[Any, Any, Any]]) -> Iterator[None]:
+    """Checks the validator cases among ``(expected, output, input)``
+    items in one validator process; ``match`` inside the block uses them."""
+    pending = [
+        (expected["code"], input, output)
+        for expected, output, input in items
+        if _is_validator(expected) and isinstance(expected.get("code"), str)
+    ]
+    answers = validators.run([validators.Check(code, input, output) for code, input, output in pending])
+    token = _batch.set({_batch_key(*item): answer for item, answer in zip(pending, answers)})
+    try:
+        yield
+    finally:
+        _batch.reset(token)
 
 
 def match(expected: Any, output: Any, input: Any) -> MatchResult:
@@ -134,15 +162,12 @@ def _validator(m: dict, output: Any, input: Any) -> MatchResult:
     code = m.get("code")
     if not isinstance(code, str):
         return (False, "Validator error: missing 'code' string")
-    try:
-        predicate = eval(code, _VALIDATOR_GLOBALS, {})
-    except Exception as e:
-        return (False, f"Validator error: {e}")
-    try:
-        result = predicate(input, output)
-    except Exception as e:
-        return (False, f"Validator error: {e}")
-    return (bool(result), None)
+    answers = _batch.get()
+    if answers is not None:
+        answer = answers.get(_batch_key(code, input, output))
+        if answer is not None:
+            return answer
+    return validators.check_one(code, input, output)
 
 
 _MATCHERS: dict[str, Matcher] = {

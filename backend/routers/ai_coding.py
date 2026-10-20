@@ -105,6 +105,27 @@ def _checkpoints_for(round_row: dict[str, Any], language: str | None) -> tuple[s
     return primary, checkpoints
 
 
+def _submitted_language(round_row: dict[str, Any], files: Dict[str, str]) -> str | None:
+    """The language a grade's files are in, for a round that keeps one
+    checkpoint list per language: the one language whose starter files the
+    submission carries. None, the round's primary language, otherwise.
+
+    A grade names only the round, so this is how it picks its variant
+    until step 2's definition request names it (ROUNDS-00A-L02)."""
+    checkpoints = round_row.get("checkpoints")
+    starters = round_row.get("starter_files")
+    if not isinstance(checkpoints, dict) or not isinstance(starters, dict):
+        return None
+    matches = [
+        language
+        for language, entries in starters.items()
+        if language in checkpoints
+        and isinstance(entries, list)
+        and any(isinstance(e, dict) and e.get("path") in files for e in entries)
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
 @router.post("/run-project", response_model=RunProjectResponse)
 async def run_project_route(request: Request, req: RunProjectRequest) -> RunProjectResponse:
     user = admission.account(request)
@@ -373,9 +394,10 @@ async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[st
     # checkpoints/rubric/hidden_files — those drive grading and must
     # come from the seeded source of truth.
     round_row = await admission.first_item(pb_get, user["token"], "ai_coding_rounds", body.round_slug)
-    checkpoints = round_row.get("checkpoints") or []
+    # A multi-language round keeps its checkpoints per language; grade the
+    # language the files are in.
+    language, checkpoints = _checkpoints_for(round_row, _submitted_language(round_row, body.files))
     rubric = round_row.get("rubric") or {"items": []}
-    language = round_row.get("language") or "python"
 
     async with admission.allocate() as slot:
         test_results = await run_in_threadpool(

@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rounds:contracts:definitions:harness-revision:v1",
+  "title": "harness-revision/v1",
+  "description": "One version of a server-owned harness (ROUNDS-00A-L02): a coding question's validator predicates, an AI-coding round's checkpoint drivers for one language, or a take-home assignment's harness. Harness files never reach the client.",
+  "oneOf": [
+    { "$ref": "#/$defs/coding_validators" },
+    { "$ref": "#/$defs/ai_coding" },
+    { "$ref": "#/$defs/take_home" }
+  ],
+  "$defs": {
+    "slug": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "version": { "type": "integer", "minimum": 1, "maximum": 9999 },
+    "path": {
+      "description": "A relative path with no parent steps.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "contents"],
+      "properties": { "path": { "$ref": "#/$defs/path" }, "contents": { "type": "string", "maxLength": 1048576 } }
+    },
+    "files": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/file" } },
+    "paths": { "type": "array", "maxItems": 200, "uniqueItems": true, "items": { "$ref": "#/$defs/path" } },
+    "argv": {
+      "description": "An argument vector, never a shell: the program is one of the runtime's interpreters.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "prefixItems": [{ "enum": ["python3", "node", "tsx"] }],
+      "items": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^\\u0000]+$" }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "job_class", "wall_s"],
+      "properties": {
+        "argv": { "$ref": "#/$defs/argv" },
+        "job_class": { "enum": ["interactive", "project"] },
+        "wall_s": { "type": "integer", "minimum": 1, "maximum": 120 }
+      }
+    },
+    "result_id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9_.-]*$" },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "weight"],
+      "properties": { "id": { "$ref": "#/$defs/result_id" }, "weight": { "type": "number", "minimum": 0, "maximum": 1 } }
+    },
+    "fd3_checkpoint": {
+      "description": "Results come back as {id, outcome, reason} lines on fd 3. A missing id never passes, and fewer than min_executed results never pass.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "label", "ai_allowed", "run", "grade", "results", "min_executed"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0, "maximum": 31 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "ai_allowed": { "type": "boolean" },
+        "run": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/step" }] },
+        "grade": { "$ref": "#/$defs/step" },
+        "results": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "#/$defs/result" } },
+        "min_executed": { "type": "integer", "minimum": 1, "maximum": 64 }
+      }
+    },
+    "legacy_checkpoint": {
+      "description": "A retired take-home harness that scored itself on stdout. Kept only so retired versions stay on record; nothing runs it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "label", "ai_allowed", "run", "grade", "results", "min_executed"],
+      "properties": {
+        "index": { "const": 0 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "ai_allowed": { "type": "boolean" },
+        "run": { "$ref": "#/$defs/step" },
+        "grade": { "$ref": "#/$defs/step" },
+        "results": { "type": "array", "maxItems": 0 },
+        "min_executed": { "const": 0 }
+      }
+    },
+    "rubric_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "weight", "prompt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/result_id" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "weight": { "type": "number", "minimum": 0, "maximum": 1 },
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 4000 }
+      }
+    },
+    "rubric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": { "items": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/rubric_item" } } }
+    },
+    "validator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validator_id", "predicate"],
+      "properties": {
+        "validator_id": { "type": "string", "pattern": "^v-[0-9a-f]{12}$" },
+        "predicate": {
+          "description": "A Python lambda of (inp, out). It runs only in the validator process: python3 -I, an empty environment, and a short list of builtins.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "pattern": "^lambda inp, out:"
+        }
+      }
+    },
+    "coding_validators": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "kind", "track", "slug", "variant", "content_version", "validators", "runtime_profile", "network"],
+      "properties": {
+        "schema": { "const": "harness-revision/v1" },
+        "kind": { "const": "coding-validators" },
+        "track": { "const": "coding" },
+        "slug": { "$ref": "#/$defs/slug" },
+        "variant": { "description": "Shared by every language of the question.", "type": "null" },
+        "content_version": { "$ref": "#/$defs/version" },
+        "validators": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "#/$defs/validator" } },
+        "runtime_profile": { "const": "validator-python" },
+        "network": { "const": "none" }
+      }
+    },
+    "ai_coding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "kind", "track", "slug", "variant", "content_version", "files", "candidate_paths",
+        "checkpoints", "rubric", "ai_policy", "runtime_profile", "network", "result_protocol"
+      ],
+      "properties": {
+        "schema": { "const": "harness-revision/v1" },
+        "kind": { "const": "ai-coding-checkpoint" },
+        "track": { "const": "ai-coding" },
+        "slug": { "$ref": "#/$defs/slug" },
+        "variant": { "enum": ["python", "typescript"] },
+        "content_version": { "$ref": "#/$defs/version" },
+        "files": { "$ref": "#/$defs/files" },
+        "candidate_paths": { "$ref": "#/$defs/paths" },
+        "checkpoints": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/$defs/fd3_checkpoint" } },
+        "rubric": { "$ref": "#/$defs/rubric" },
+        "ai_policy": { "enum": ["per-checkpoint"] },
+        "runtime_profile": { "enum": ["python-pytest", "node-tsx"] },
+        "network": { "enum": ["none", "job-loopback"] },
+        "result_protocol": { "const": "fd3" }
+      }
+    },
+    "take_home": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "kind", "track", "slug", "variant", "content_version", "files", "candidate_paths",
+        "checkpoints", "rubric", "ai_policy", "runtime_profile", "network", "result_protocol"
+      ],
+      "properties": {
+        "schema": { "const": "harness-revision/v1" },
+        "kind": { "const": "take-home" },
+        "track": { "const": "take-home" },
+        "slug": { "$ref": "#/$defs/slug" },
+        "variant": { "enum": ["python", "typescript"] },
+        "content_version": { "$ref": "#/$defs/version" },
+        "files": { "$ref": "#/$defs/files" },
+        "candidate_paths": { "$ref": "#/$defs/paths" },
+        "checkpoints": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": { "oneOf": [{ "$ref": "#/$defs/fd3_checkpoint" }, { "$ref": "#/$defs/legacy_checkpoint" }] }
+        },
+        "rubric": { "$ref": "#/$defs/rubric" },
+        "ai_policy": { "enum": ["off", "allowed"] },
+        "runtime_profile": { "enum": ["python-pytest", "node-tsx"] },
+        "network": { "enum": ["none", "job-loopback"] },
+        "result_protocol": { "enum": ["fd3", "legacy-stdout"] }
+      }
+    }
+  }
+}

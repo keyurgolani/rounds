@@ -29,9 +29,19 @@ export interface RunnerDenial {
   trigger?: HTMLElement | null;
 }
 
+const TURNED_OFF_CODES = new Set(['route_disabled', 'definitions_disabled']);
 const LIMIT_CODES = new Set(['quota_exceeded', 'demo_limit_reached']);
 const TOO_LARGE_CODES = new Set(['payload_too_large', 'limit_exceeded']);
-const UNAVAILABLE_CODES = new Set(['auth_unavailable', 'quota_unavailable', 'worker_unavailable']);
+// The idempotency refusals clear on another try: the app sends a new
+// Idempotency-Key with each action, and a running one finishes.
+const UNAVAILABLE_CODES = new Set([
+  'auth_unavailable',
+  'quota_unavailable',
+  'worker_unavailable',
+  'idempotency_key_required',
+  'idempotency_mismatch',
+  'already_in_flight',
+]);
 
 export function classifyRunnerError(
   err: unknown,
@@ -40,7 +50,7 @@ export function classifyRunnerError(
   if (!isRunnerError(err)) return null;
   const { status, code } = err;
   let kind: RunnerDenialKind | null = null;
-  if (code === 'route_disabled') kind = 'turned_off';
+  if (code !== null && TURNED_OFF_CODES.has(code)) kind = 'turned_off';
   else if (code === 'unauthenticated' || status === 401) kind = 'sign_in';
   else if ((code !== null && LIMIT_CODES.has(code)) || status === 429) kind = 'limit';
   else if ((code !== null && TOO_LARGE_CODES.has(code)) || status === 413) kind = 'too_large';

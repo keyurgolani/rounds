@@ -3,9 +3,11 @@
 Every decision is one JSON line on stdout. A line carries only the
 allowlisted fields below: a 32-hex correlation id, a keyed account
 pseudonym, the route template, the result code, the quota result, and
-latency. Unknown fields are dropped, and every value has to match its
-field's pattern, so source code, program output, HTML, bearer tokens,
-provider payloads, and raw account ids never reach the log.
+latency. ``definition.*`` lines carry a definition's identity
+(``track/slug/variant@version``), never its content (ROUNDS-00A-L02).
+Unknown fields are dropped, and every value has to match its field's
+pattern, so source code, program output, HTML, bearer tokens, provider
+payloads, and raw account ids never reach the log.
 
 One correlation id covers a request: ``CorrelationIdMiddleware`` mints
 it, puts it on ``request.state.correlation_id`` and the
@@ -175,7 +177,8 @@ def _gate_table(value: Any) -> bool:
     return True
 
 
-EVENTS = frozenset({"decision", "gates"})
+# definition.* lines name a definition by its identity, never its content.
+EVENTS = frozenset({"decision", "gates", "definitions.loaded", "definition.resolved", "definition.rejected"})
 
 FIELDS: dict[str, Callable[[Any], bool]] = {
     "correlation_id": is_correlation_id,
@@ -189,6 +192,12 @@ FIELDS: dict[str, Callable[[Any], bool]] = {
     "latency_ms": _int_between(0, 86_400_000),
     "service": _one_of("runner", "pocketbase", "frontend"),
     "gates": _gate_table,
+    # track/slug/variant@content_version, e.g. coding/two-sum/python@1.
+    "definition": _matches(
+        r"(?:coding|ai-coding|take-home)/[a-z0-9]+(?:-[a-z0-9]+)*/[a-z]{1,16}@[1-9][0-9]{0,3}", 128
+    ),
+    "entries": _int_between(0, 100_000),
+    "mismatched": _int_between(0, 100_000),
 }
 
 

@@ -4,7 +4,9 @@ admission/v1. One chain decides every admitted request before any
 subprocess, sidecar, or provider call, in this order:
 
 1. Byte cap: 413 ``payload_too_large``.
-2. Gate: 503 ``route_disabled``.
+2. Gate: 503 ``route_disabled``; on the six execution routes,
+   ``ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled`` is 503
+   ``definitions_disabled`` (ROUNDS-00A-L02).
 3. Account from the bearer through PocketBase's auth-refresh: 401
    ``unauthenticated``; PocketBase down or 5xx: 503 ``auth_unavailable``.
 4. ``(tier, operation)`` table: 403 ``not_permitted``.
@@ -67,6 +69,9 @@ ROUTES: dict[tuple[str, str], Route] = {
     ("GET", "/api/pdf/health"): Route("PDF_HEALTH", "pdf_health", 0, allocates=False),
     ("POST", "/api/ai/ats-rule"): Route("ATS_RULE", "ats_rule", 1 * MIB, allocates=False),
 }
+
+# The routes that run a definition's code and tests (ROUNDS-00A-L02).
+DEFINITION_OPERATIONS = frozenset({"run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit"})
 
 TIERS = ("standard", "demo")
 # (tier, operation) -> permitted. Every pair is permitted until stage 3
@@ -217,6 +222,8 @@ class AdmissionMiddleware:
         # 2. Gate.
         if not gates.route_enabled(route.gate):
             raise TypedError("route_disabled")
+        if route.operation in DEFINITION_OPERATIONS and gates.value("EXECUTION_DEFINITIONS") == "disabled":
+            raise TypedError("definitions_disabled")
         # 3. Account.
         token = bearer_from(headers)
         if token is None:

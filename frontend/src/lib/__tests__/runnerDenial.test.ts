@@ -31,6 +31,15 @@ describe('classifyRunnerError', () => {
     expect(classifyRunnerError(error)?.kind).toBe(kind);
   });
 
+  it.each([
+    [err(503, 'definitions_disabled'), 'turned_off'],
+    [err(400, 'idempotency_key_required'), 'unavailable'],
+    [err(409, 'idempotency_mismatch'), 'unavailable'],
+    [err(409, 'already_in_flight'), 'unavailable'],
+  ])('maps the definitions gate and the idempotency refusals: %o to %s', (error, kind) => {
+    expect(classifyRunnerError(error)?.kind).toBe(kind);
+  });
+
   it.each([err(400), err(403), err(404), err(409, 'already_completed'), err(422, 'invalid_request')])(
     'leaves %o to the existing error display',
     (error) => {
