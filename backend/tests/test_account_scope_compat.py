@@ -94,7 +94,7 @@ def test_refresh_models_update_does_not_reassign(client):
         return {"id": provider_id, "kind": "openai", "encrypted_key": "enc", "key_iv": "iv",
                 "base_url": "", "models_cache": []}
 
-    async def fake_fetch_models(_kind, _key, _base):
+    async def fake_fetch_models(_kind, _key, _base, **_kwargs):
         return ["model-a", "model-b"]
 
     with patch("routers.ai.current_user", _fake_user), \
@@ -183,12 +183,16 @@ def test_public_view_insert_uses_admin_token_and_names_the_link_owner(client):
 
 
 # ---------------------------------------------------------------------------
-# take_home_attempts (submit; the write is best-effort, so assert the payload
-# rather than the HTTP status)
+# take_home_attempts (submit is an admitted route, so the account comes from
+# admission; the write is best-effort, so assert the payload, not just the
+# HTTP status)
 # ---------------------------------------------------------------------------
 
+# The account conftest's `signed_in` fixture admits (TEST_ACCOUNT_ID there).
+ADMITTED = "u1"
 
-def test_take_home_submit_attempt_names_the_caller(client):
+
+def test_take_home_submit_attempt_names_the_caller(client, signed_in):
     captured = {}
 
     async def fake_pb_get(_token, _path, params=None):
@@ -209,11 +213,10 @@ def test_take_home_submit_attempt_names_the_caller(client):
     async def no_provider(_user):
         raise Exception("no provider")
 
-    with patch("routers.take_home.current_user", _fake_user), \
-         patch("routers.take_home.pb_get", fake_pb_get), \
+    with patch("routers.take_home.pb_get", fake_pb_get), \
          patch("routers.take_home.pb_post", fake_pb_post), \
          patch("routers.take_home._active_text_config", no_provider):
-        res = client.post("/api/take-home/submit", json={
+        res = client.post("/api/take-home/submit", headers=signed_in, json={
             "assignment_slug": "tinytest",
             "files": {"main.py": "# user file"},
             "notes": "n",
@@ -221,5 +224,5 @@ def test_take_home_submit_attempt_names_the_caller(client):
             "duration_ms": 10,
         })
     assert res.status_code == 200
-    assert captured.get("user") == CALLER, f"take_home attempt set user={captured.get('user')!r}"
+    assert captured.get("user") == ADMITTED, f"take_home attempt set user={captured.get('user')!r}"
     assert captured.get("status") == "graded"
