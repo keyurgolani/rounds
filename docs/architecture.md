@@ -1,6 +1,10 @@
 # Architecture
 
-Rounds is a self-hostable interview prep workspace. The app is split into four runtime services: a React frontend, PocketBase for auth and data, a FastAPI runner for code execution and the AI / PDF / share endpoints, and a Node + Puppeteer sidecar that produces high-fidelity PDFs.
+Rounds is a self-hostable career command center that connects a person's canonical professional history and evidence to the opportunities they pursue, the artifacts they submit, the interviews they prepare for, the practice they complete, and the next actions they should take.
+
+The app is split into four runtime services: a React frontend, PocketBase for auth and data, a FastAPI runner for code execution and the AI / PDF / share endpoints, and a Node + Puppeteer sidecar that produces high-fidelity PDFs.
+
+Product and domain names come from the vocabulary registry in [`vocabulary.md`](vocabulary.md). Some names below describe the current code and are scheduled for replacement there.
 
 ## System Overview
 

@@ -1,6 +1,6 @@
-# Rounds — Interview Prep Command Center
+# Rounds: Career Command Center
 
-Rounds is a self-hostable interview prep workspace for system design, coding, behavioral prep, and job-search tracking.
+Rounds is a self-hostable career command center that connects a person's canonical professional history and evidence to the opportunities they pursue, the artifacts they submit, the interviews they prepare for, the practice they complete, and the next actions they should take.
 
 ![Rounds dashboard](docs/screenshots/02-dashboard.png)
 
