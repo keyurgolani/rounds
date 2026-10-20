@@ -1,8 +1,10 @@
 ---
 # Single Ingress in front of the frontend Service. The frontend's own
-# nginx already proxies /api/* and /_/* to the PocketBase and runner
-# Services, so the Ingress doesn't need per-path rules — it just sends
-# all traffic at the frontend.
+# nginx already proxies /api/* to the PocketBase and runner Services
+# (and 404s PocketBase's admin UI and admin APIs), so the Ingress
+# doesn't need per-path rules — it just sends all traffic at the
+# frontend. proxy-body-size matches the largest body the frontend's
+# nginx accepts on any route.
 #
 # Update `host` and the tls block to match your domain + cert-manager
 # issuer. If you're on a cluster without cert-manager, delete the tls
@@ -16,6 +18,7 @@ metadata:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "6m"
 spec:
   ingressClassName: nginx
   tls:
