@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# CI only reads the checkout and runs tests; keep it read-only regardless of
+# the repository's default workflow permissions.
+permissions:
+  contents: read
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
@@ -49,3 +54,23 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements.txt
       - run: python -m pytest . ../pocketbase/tests
+
+  harness:
+    # Two-account account-scope security harness (ROUNDS-00B-L01). Builds the
+    # pocketbase and probe images from this commit, creates two accounts with
+    # generated credentials, and proves that one account cannot read, list, or
+    # delete another's records (plus the signup-disabled hook), failing on any
+    # missing or failed probe result. Docker on ubuntu; locally use Finch.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run two-account harness
+        run: COMPOSE_BIN="docker compose" harness/run.sh
+      - name: Upload receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: account-scope-receipts
+          path: harness/.receipts/
+          if-no-files-found: warn

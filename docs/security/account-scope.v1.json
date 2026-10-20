@@ -1,0 +1,1298 @@
+{
+  "version": "v1",
+  "contract": "account-scope",
+  "audited_revision": "62d4eae",
+  "owner": "Identity, Authorization, and Sharing",
+  "description": "Server-derived account-scope invariant. The server derives the account from @request.auth.id (PocketBase) or pb_auth.current_user (runner); clients never choose or override ownership. This file is the rule table every account-scoped collection must satisfy. A leaf that changes a listed rule or adds a user-owned collection edits its row in the same PR. Read by harness/probes, #172 (authorization matrix), and #1's security inventory.",
+  "deny_contract": {
+    "list": {
+      "status": 200,
+      "guarantee": "owner-filtered list; another account's rows are absent"
+    },
+    "view": {
+      "status": 404,
+      "guarantee": "another account's record is not found"
+    },
+    "update": {
+      "status": 404,
+      "guarantee": "another account's or an anonymous update is not found"
+    },
+    "delete": {
+      "status": 404,
+      "guarantee": "another account's record is not found and is unchanged"
+    },
+    "create_anonymous": {
+      "status": 400,
+      "guarantee": "an anonymous create is rejected"
+    },
+    "oversized_input": {
+      "status": 400,
+      "guarantee": "a JSON field over its maxSize fails validation"
+    },
+    "signup_disabled": {
+      "status": 400,
+      "guarantee": "signup is rejected when ROUNDS_DISABLE_SIGNUPS is set"
+    },
+    "create_foreign_owner": {
+      "status": 400,
+      "guarantee": "a create whose user is not the caller is rejected",
+      "enforced_from": "ROUNDS-00B-L01/S3"
+    },
+    "update_reassign": {
+      "status": 400,
+      "guarantee": "an update that reassigns user is rejected",
+      "enforced_from": "ROUNDS-00B-L01/S3"
+    }
+  },
+  "server_derivation": {
+    "pocketbase": "@request.auth.id",
+    "runner": "backend/app/pb_auth.py:current_user",
+    "superuser_bypass": "superuser requests and $app.dao() writes bypass collection rules; hook routes and the public view-tracking insert rely on this"
+  },
+  "probe_families": {
+    "account-scope.list.cross-account.isolated": {
+      "operation": "list",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "list",
+      "guarantee": "a signed-in account's list never returns another account's rows"
+    },
+    "account-scope.list.anonymous.isolated": {
+      "operation": "list",
+      "actor": "anonymous",
+      "status": "enforced",
+      "deny_key": "list",
+      "guarantee": "an anonymous list returns none of an account's rows"
+    },
+    "account-scope.view.cross-account.denied": {
+      "operation": "view",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "view",
+      "guarantee": "a signed-in account cannot read another account's record by id"
+    },
+    "account-scope.view.anonymous.denied": {
+      "operation": "view",
+      "actor": "anonymous",
+      "status": "enforced",
+      "deny_key": "view",
+      "guarantee": "an anonymous caller cannot read an account's record by id"
+    },
+    "account-scope.update.cross-account.denied": {
+      "operation": "update",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "update",
+      "guarantee": "a signed-in account cannot update another account's record"
+    },
+    "account-scope.update.anonymous.denied": {
+      "operation": "update",
+      "actor": "anonymous",
+      "status": "enforced",
+      "deny_key": "update",
+      "guarantee": "an anonymous caller cannot update an account's record"
+    },
+    "account-scope.delete.cross-account.denied": {
+      "operation": "delete",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "delete",
+      "guarantee": "a signed-in account cannot delete another account's record"
+    },
+    "account-scope.delete.anonymous.denied": {
+      "operation": "delete",
+      "actor": "anonymous",
+      "status": "enforced",
+      "deny_key": "delete",
+      "guarantee": "an anonymous caller cannot delete an account's record"
+    },
+    "account-scope.create.anonymous.denied": {
+      "operation": "create",
+      "actor": "anonymous",
+      "status": "enforced",
+      "deny_key": "create_anonymous",
+      "guarantee": "an anonymous caller cannot create a row"
+    },
+    "account-scope.oversized-input.rejected": {
+      "operation": "create",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "oversized_input",
+      "guarantee": "a JSON field larger than its maxSize is rejected"
+    },
+    "account-scope.signup.disabled.denied": {
+      "operation": "create",
+      "actor": "anonymous",
+      "status": "enforced",
+      "deny_key": "signup_disabled",
+      "guarantee": "signup is rejected when the instance disables signups",
+      "resource": "users"
+    },
+    "account-scope.create.foreign-owner.denied": {
+      "operation": "create",
+      "actor": "authenticated-other",
+      "status": "pending",
+      "deny_key": "create_foreign_owner",
+      "guarantee": "a create whose user is not the caller is rejected",
+      "closed_by": "ROUNDS-00B-L01/S3"
+    },
+    "account-scope.update.reassign-owner.denied": {
+      "operation": "update",
+      "actor": "authenticated-owner",
+      "status": "pending",
+      "deny_key": "update_reassign",
+      "guarantee": "an update that reassigns a row to another account is rejected",
+      "closed_by": "ROUNDS-00B-L01/S3"
+    }
+  },
+  "collections": {
+    "campaigns": {
+      "migration": "1700000000_init_collections.js",
+      "fixture": "campaigns",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "target_companies",
+        "max_bytes": 2000000
+      }
+    },
+    "applications": {
+      "migration": "1700000000_init_collections.js",
+      "fixture": "applications",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "campaign"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "interview_rounds": {
+      "migration": "1700000000_init_collections.js",
+      "fixture": "interview_rounds",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "application",
+        "campaign"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "questions_asked",
+        "max_bytes": 2000000
+      }
+    },
+    "user_progress": {
+      "migration": "1700000000_init_collections.js",
+      "fixture": "user_progress",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "campaign"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "user_preferences": {
+      "migration": "1700000000_init_collections.js",
+      "fixture": "user_preferences",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "current_campaign"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "offers": {
+      "migration": "1700000000_init_collections.js",
+      "fixture": "offers",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "application",
+        "previous_offer"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "trail",
+        "max_bytes": 2000000
+      }
+    },
+    "code_drafts": {
+      "migration": "1700000000_init_collections.js",
+      "fixture": "code_drafts",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "campaign"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "todos": {
+      "migration": "1700000000_init_collections.js",
+      "fixture": "todos",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "campaign"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "mentions",
+        "max_bytes": 2000000
+      }
+    },
+    "resumes": {
+      "migration": "1700000700_resume_studio.js",
+      "fixture": "resumes",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "data",
+        "max_bytes": 2000000
+      }
+    },
+    "resume_variants": {
+      "migration": "1700000700_resume_studio.js",
+      "fixture": "resume_variants",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "resume",
+        "application"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "data",
+        "max_bytes": 2000000
+      }
+    },
+    "resume_versions": {
+      "migration": "1700000700_resume_studio.js",
+      "fixture": "resume_versions",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "resume",
+        "variant"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "data",
+        "max_bytes": 2000000
+      }
+    },
+    "resume_share_links": {
+      "migration": "1700000700_resume_studio.js",
+      "fixture": "resume_share_links",
+      "current_rules": {
+        "list": "user = @request.auth.id || token = @request.query.token",
+        "view": "user = @request.auth.id || token = @request.query.token",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "variant",
+        "resume"
+      ],
+      "exceptions": [
+        {
+          "id": "share-token-read",
+          "closed_by": "ROUNDS-00B-L03/S1",
+          "note": "token = @request.query.token read path and owner edits of token/resume/variant"
+        }
+      ],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "resume_share_views": {
+      "migration": "1700000700_resume_studio.js",
+      "fixture": "resume_share_views",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": null,
+        "update": null
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "link"
+      ],
+      "exceptions": [
+        {
+          "id": "superuser-view-insert",
+          "closed_by": "ROUNDS-00B-L03",
+          "note": "superuser-token insert of view-tracking rows in share.py (then ROUNDS-00B-L06)"
+        }
+      ],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "ai_providers": {
+      "migration": "1700000800_ai_providers.js",
+      "fixture": "ai_providers",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "models_cache",
+        "max_bytes": 2000000
+      }
+    },
+    "ai_settings": {
+      "migration": "1700000800_ai_providers.js",
+      "fixture": "ai_settings",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "text_provider",
+        "vision_provider"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "ai_coding_drafts": {
+      "migration": "1700001100_ai_coding.js",
+      "fixture": "ai_coding_drafts",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "campaign",
+        "round"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "ai_coding_attempts": {
+      "migration": "1700001100_ai_coding.js",
+      "fixture": "ai_coding_attempts",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "campaign",
+        "round"
+      ],
+      "exceptions": [
+        {
+          "id": "client-graded-status",
+          "closed_by": "ROUNDS-00A-L03",
+          "note": "client-written status:'graded' on attempts"
+        }
+      ],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "ai_chats",
+        "max_bytes": 2000000
+      }
+    },
+    "take_home_drafts": {
+      "migration": "1700001300_take_home.js",
+      "fixture": "take_home_drafts",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "campaign",
+        "assignment"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "take_home_attempts": {
+      "migration": "1700001300_take_home.js",
+      "fixture": "take_home_attempts",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "campaign",
+        "assignment"
+      ],
+      "exceptions": [
+        {
+          "id": "client-graded-status",
+          "closed_by": "ROUNDS-00A-L03",
+          "note": "client-written status:'graded' on attempts"
+        }
+      ],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "files",
+        "max_bytes": 2000000
+      }
+    },
+    "question_timers": {
+      "migration": "1700001500_question_timers.js",
+      "fixture": "question_timers",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "experience_jobs": {
+      "migration": "1700002000_experience_entities.js",
+      "fixture": "experience_jobs",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "tags",
+        "max_bytes": 2000000
+      }
+    },
+    "experience_projects": {
+      "migration": "1700002000_experience_entities.js",
+      "fixture": "experience_projects",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "tech_stack",
+        "max_bytes": 2000000
+      }
+    },
+    "experience_anecdotes": {
+      "migration": "1700002000_experience_entities.js",
+      "fixture": "experience_anecdotes",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "tags",
+        "max_bytes": 2000000
+      }
+    },
+    "experience_bullets": {
+      "migration": "1700002000_experience_entities.js",
+      "fixture": "experience_bullets",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "tags",
+        "max_bytes": 2000000
+      }
+    },
+    "exp_job_projects": {
+      "migration": "1700003000_experience_connections.js",
+      "fixture": "exp_job_projects",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "parent",
+        "child"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "exp_job_anecdotes": {
+      "migration": "1700003000_experience_connections.js",
+      "fixture": "exp_job_anecdotes",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "parent",
+        "child"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "exp_job_bullets": {
+      "migration": "1700003000_experience_connections.js",
+      "fixture": "exp_job_bullets",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "parent",
+        "child"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "exp_project_anecdotes": {
+      "migration": "1700003000_experience_connections.js",
+      "fixture": "exp_project_anecdotes",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "parent",
+        "child"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "exp_project_bullets": {
+      "migration": "1700003000_experience_connections.js",
+      "fixture": "exp_project_bullets",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "parent",
+        "child"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "exp_anecdote_bullets": {
+      "migration": "1700003000_experience_connections.js",
+      "fixture": "exp_anecdote_bullets",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "user = @request.auth.id",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "parent",
+        "child"
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied"
+      ]
+    },
+    "users": {
+      "migration": "1700000000_init_collections.js",
+      "fixture": "users",
+      "current_rules": {
+        "list": "id = @request.auth.id",
+        "view": "id = @request.auth.id",
+        "create": "",
+        "update": "id = @request.auth.id",
+        "delete": "id = @request.auth.id",
+        "manage": null
+      },
+      "target_rules": {},
+      "target_rule_migration": null,
+      "hook": "pb_hooks/main.pb.js",
+      "relation_exceptions": [],
+      "exceptions": [
+        {
+          "id": "demo-flag-writers",
+          "closed_by": "ROUNDS-00A-L01",
+          "note": "a users hook locks is_demo and the demo flags and retires their client writers"
+        }
+      ],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.signup.disabled.denied"
+      ]
+    }
+  }
+}
