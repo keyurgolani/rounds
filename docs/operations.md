@@ -107,6 +107,10 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml logs -f pocketbase
 ```
 
+### Cross-owner relation scan
+
+Before upgrading to the release that tightens the account-scope rules, scan a copy of `pb_data` for relations that point at another account's records and hand the report to the relation quarantine work. The scan is read-only and runs on the backup from step 2, never on the live volume. The exact commands, what the report holds, and how long to keep it are in [docs/security/cross-owner-scan.md](security/cross-owner-scan.md).
+
 ## Smoke Test Checklist
 
 After deploy or restore, verify:
