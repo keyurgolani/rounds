@@ -20,7 +20,9 @@ type Expected = readonly [collection: string, op: Recorded['op'], user: 'caller'
 
 const fake = vi.hoisted(() => {
   const recorded: Recorded[] = [];
-  const state = { authId: '', existing: {} as Record<string, Row>, seq: 0 };
+  // `failRead` makes lookups on a collection fail with that HTTP status, for
+  // the paths that must not read a failed lookup as "no row yet".
+  const state = { authId: '', existing: {} as Record<string, Row>, failRead: {} as Record<string, number>, seq: 0 };
   const STAMP = '2026-10-20 00:00:00.000Z';
 
   // The SDK sends a plain body as JSON, so a key left `undefined` never
@@ -35,12 +37,18 @@ const fake = vi.hoisted(() => {
     const row = state.existing[name];
     return row ? { collectionName: name, ...row, user: state.authId } : null;
   };
+  const failIfAsked = (name: string) => {
+    const status = state.failRead[name];
+    if (status) throw Object.assign(new Error('Something went wrong while processing your request.'), { status, data: {} });
+  };
   const readOne = async (name: string): Promise<Row> => {
+    failIfAsked(name);
     const row = read(name);
     if (!row) throw notFound();
     return row;
   };
   const readAll = (name: string): Row[] => {
+    failIfAsked(name);
     const row = read(name);
     return row ? [row] : [];
   };
@@ -179,6 +187,7 @@ beforeEach(() => {
   // caller's id would stamp the wrong account.
   fake.state.authId = `caller-${++signIns}`;
   fake.state.existing = {};
+  fake.state.failRead = {};
   fake.state.seq = 0;
   fake.recorded.length = 0;
 });
@@ -308,6 +317,19 @@ async function changeThemeWhileSignedIn() {
   await settle(); // AuthProvider's token refresh and ThemeProvider's preference load
   await settle(() => theme.result.current.setTweak('theme', 'dark'));
   await waitFor(() => expect(fake.recorded).toHaveLength(1), { timeout: 2000 }); // the sync is debounced
+  theme.unmount();
+}
+
+async function switchAccountsBeforeTheSyncRuns() {
+  const theme = renderHook(() => useTheme(), { wrapper: SignedIn });
+  await settle();
+  await settle(() => theme.result.current.setTweak('theme', 'dark'));
+  // Another account signs in inside the 300 ms debounce window.
+  fake.state.authId = `${fake.state.authId}-then-another-account`;
+  await settle(() => {});
+  await act(async () => {
+    await new Promise((done) => setTimeout(done, 450)); // well past the debounce
+  });
   theme.unmount();
 }
 
@@ -703,6 +725,25 @@ const WRITE_PATHS: Record<string, Branch[]> = {
       run: changeThemeWhileSignedIn,
       writes: [['user_preferences', 'create', 'caller']],
     },
+    {
+      when: 'skips the write when another account signed in before it ran',
+      run: () => upsertThemePreferences('an-earlier-account', TWEAKS),
+      writes: [],
+    },
+    {
+      when: 'skips the write when nobody is signed in by the time it runs',
+      run: () => {
+        const tweakedBy = fake.state.authId;
+        fake.state.authId = '';
+        return upsertThemePreferences(tweakedBy, TWEAKS);
+      },
+      writes: [],
+    },
+    {
+      when: 'drops a ThemeProvider tweak whose account changed before the debounced sync ran',
+      run: switchAccountsBeforeTheSyncRuns,
+      writes: [],
+    },
   ],
 };
 
@@ -781,6 +822,24 @@ describe('DataSection import', () => {
       ['user_progress', 'create', 'caller'],
       ['code_drafts', 'create', 'caller'],
     ]);
+  });
+});
+
+// ---- Theme sync lookup ----------------------------------------------
+
+describe('theme sync', () => {
+  it('reports whether it wrote', async () => {
+    await expect(upsertThemePreferences(fake.state.authId, TWEAKS)).resolves.toBe(true);
+    await expect(upsertThemePreferences('an-earlier-account', TWEAKS)).resolves.toBe(false);
+  });
+
+  it('does not read a failed lookup as a missing row', async () => {
+    // A lookup that fails for any reason but not-found must not fall through
+    // to a create: the row may exist, and the unique index on user would
+    // reject a second one.
+    fake.state.failRead = { user_preferences: 500 };
+    await expect(upsertThemePreferences(fake.state.authId, TWEAKS)).rejects.toMatchObject({ status: 500 });
+    expect(fake.recorded).toEqual([]);
   });
 });
 

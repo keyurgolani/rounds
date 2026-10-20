@@ -131,22 +131,36 @@ function tweaksToDb(t: Tweaks): DbPrefs {
   };
 }
 
-// Find-or-create the caller's single user_preferences row. Stamps `user` with
-// the caller's own id on both the create and the update, which is what the
-// account-scope create and update rules require. Exported so the account-scope
-// compatibility test can exercise the real theme-sync write path; the provider
-// wraps it in the debounce and swallows errors.
-export async function upsertThemePreferences(userId: string, t: Tweaks): Promise<void> {
-  const payload = { user: userId, ...tweaksToDb(t) };
-  const existing = await pb
-    .collection('user_preferences')
-    .getFirstListItem(`user = "${userId}"`)
-    .catch(() => null);
+function isNotFound(err: unknown): boolean {
+  return (err as { status?: number } | null)?.status === 404;
+}
+
+// Find-or-create the caller's single user_preferences row. `tweakedBy` is the
+// account the tweaks were made under. The provider debounces this, so a sign-out
+// or sign-in can land before it runs; it reads who is signed in now and skips
+// the write unless that is still `tweakedBy`, so one account's tweaks are never
+// saved to another's row or sent under another's token. It stamps `user` with
+// that id on both the create and the update, which is what the account-scope
+// create and update rules require. Only a not-found lookup means there is no
+// row yet; any other error is thrown rather than read as "create one". Returns
+// whether it wrote. Exported so the account-scope compatibility test can
+// exercise the real theme-sync write; the provider swallows its errors.
+export async function upsertThemePreferences(tweakedBy: string, t: Tweaks): Promise<boolean> {
+  const signedIn = pb.authStore.record?.id;
+  if (!signedIn || signedIn !== tweakedBy) return false;
+  const payload = { user: signedIn, ...tweaksToDb(t) };
+  let existing: { id: string } | null = null;
+  try {
+    existing = await pb.collection('user_preferences').getFirstListItem(`user = "${signedIn}"`);
+  } catch (err) {
+    if (!isNotFound(err)) throw err;
+  }
   if (existing) {
     await pb.collection('user_preferences').update(existing.id, payload);
   } else {
     await pb.collection('user_preferences').create(payload);
   }
+  return true;
 }
 
 function dbToTweaks(row: Partial<DbPrefs>): Partial<Tweaks> {
