@@ -55,6 +55,7 @@ Each row restates the leaf's current body. The leaf confirms or corrects its row
 | --- | --- | --- | --- | --- |
 | #1 S3 | Caller | `admit`, `settle`, and `finish` in `pb_hooks/admission.js`, from the routes in `pb_hooks/admission.pb.js` under `/api/rounds/admission/` | `admission_commands`, `admission_counters`, `admission_leases` | caller's bearer and `ROUNDS_ADMISSION_SECRET` |
 | #1 S3 | System hook | the `rounds_admission_sweep` `cronAdd` job in `pb_hooks/admission.pb.js`, which runs `sweep` in `pb_hooks/admission.js` | deletes expired `admission_*` rows; marks `in_flight` commands without a live lease `failed_infrastructure` | none |
+| #2 | Migration | `1700006200_definitions_expand.js` at start | `definition_migration_journal`, and `definition_version` (and `definition_case_ids` on coding) on `coding_questions`, `ai_coding_rounds`, `take_home_assignments` | none |
 | #3 | Caller | `enqueue` and owner `cancel` in `pb_hooks/execution.pb.js`, under `/api/rounds/execution/` | `execution_jobs`, and the `job_id` on #1's admission row | caller's bearer |
 | #3 | Service | `execution_service`, one record (`execution-worker`): `claim`, `heartbeat`, `complete`, `reap` | `execution_jobs`, `execution_attempts`, `execution_envelopes`, and the graded rows in `ai_coding_attempts` and `take_home_attempts`, which `complete` writes with the envelope | `ROUNDS_EXECUTION_SECRET` |
 | #3 | System hook | `onBeforeServe` in `pb_hooks/execution.pb.js`, which creates `execution-worker` or resets its password | `execution_service` | `ROUNDS_EXECUTION_SECRET` |

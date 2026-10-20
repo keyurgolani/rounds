@@ -1,0 +1,7 @@
+{
+  "$comment": "Compile-time metadata for backend/definitions/build.py; not shipped as a harness file.",
+  "grade": { "argv": ["python3", "-I", "harness/checkpoint_0/grade.py"], "wall_s": 45 },
+  "results": [{ "id": "fetch_user_against_real_server", "weight": 1.0 }],
+  "min_executed": 1,
+  "network": "job-loopback"
+}

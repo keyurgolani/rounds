@@ -25,7 +25,7 @@ describe('runner', () => {
     assert.match(summary, /terms: \d+ /);
     assert.match(summary, /adapters: \d+ /);
     assert.match(summary, /open ratified-here items: decisions G6, G7, G8, G9/);
-    assert.match(summary, /43 live, 3 historical/);
+    assert.match(summary, /44 live, 3 historical/);
   });
 
   it('fails on drift in a generated file and --write repairs it', async () => {

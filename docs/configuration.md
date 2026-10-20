@@ -113,6 +113,7 @@ Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads the
 | `ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK` | `enabled`, `disabled` | `disabled` | runner | yes; AI provider base URLs on private addresses (RFC 1918, RFC 6598, IPv6 ULA) |
 | `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` | `off`, `observe`, `enforce` | `observe` | runner | `enforce` only; `Idempotency-Key` checks and replays on the admitted routes |
 | `ROUNDS_GATE_ENFORCE_QUOTA` | `off`, `observe`, `enforce` | `observe` | runner | `enforce` only; account, deployment, and demo quotas on the admitted routes |
+| `ROUNDS_GATE_EXECUTION_DEFINITIONS` | `legacy`, `disabled` | `legacy` | runner | `legacy` loads run, evaluate, grade, run-project, and take-home from PocketBase as before; `disabled` answers 503 `definitions_disabled` on those six routes and keeps every draft. (`enforce`, which serves only compiled definitions, arrives in #2 step 2; an unknown value closes to `disabled`.) |
 
 Each route gate is that route's off switch. Set it to `disabled` and restart the runner, and the route answers 503 `route_disabled` before it reads the request; nothing else changes. [The execution runbook](security/execution-runbook.md) covers flipping and confirming each gate and what each error code means.
 

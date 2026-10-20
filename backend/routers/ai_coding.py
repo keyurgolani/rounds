@@ -112,6 +112,27 @@ def _checkpoints_for(round_row: dict[str, Any], language: str | None) -> tuple[s
     return primary, checkpoints
 
 
+def _submitted_language(round_row: dict[str, Any], files: Dict[str, str]) -> str | None:
+    """The language a grade's files are in, for a round that keeps one
+    checkpoint list per language: the one language whose starter files the
+    submission carries. None, the round's primary language, otherwise.
+
+    A grade names only the round, so this is how it picks its variant
+    until step 2's definition request names it (ROUNDS-00A-L02)."""
+    checkpoints = round_row.get("checkpoints")
+    starters = round_row.get("starter_files")
+    if not isinstance(checkpoints, dict) or not isinstance(starters, dict):
+        return None
+    matches = [
+        language
+        for language, entries in starters.items()
+        if language in checkpoints
+        and isinstance(entries, list)
+        and any(isinstance(e, dict) and e.get("path") in files for e in entries)
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
 @router.post("/run-project", response_model=RunProjectResponse)
 async def run_project_route(request: Request, req: RunProjectRequest) -> RunProjectResponse:
     await admission.begin(request, req, wall_seconds=RUN_PROJECT_TIMEOUT_S)
@@ -166,6 +187,10 @@ class ChatRequest(BaseModel):
     # into the round-lookup filter.
     round_slug: str = Field(pattern=r"^[a-z0-9-]+$")
     checkpoint_index: int = Field(ge=0)
+    # Multi-language rounds keep one checkpoint list per language. Left
+    # out, it's the one language whose starter files ``files`` carries,
+    # or the round's primary language.
+    language: str | None = Field(default=None, pattern=limits.LANGUAGE_PATTERN)
     provider_id: str | None = None
     model: str | None = None
     messages: List[ChatMessage]
@@ -209,28 +234,36 @@ class AICodingModel(BaseModel):
     model: str
 
 
-async def _enforce_ai_allowed(token: str, slug: str, idx: int) -> None:
+async def _enforce_ai_allowed(token: str, body: "ChatRequest") -> None:
     """403 if the round's checkpoint disallows AI. Defense-in-depth — the
     UI already disables the chat input, but the endpoint must not trust
-    the client."""
+    the client. A multi-language round's checkpoint is looked up in the
+    request's language, the way run-project and grade look it up."""
     data = await pb_get(
         token,
         "/api/collections/ai_coding_rounds/records",
-        params={"filter": f"slug='{slug}'", "perPage": 1},
+        params={"filter": f"slug='{body.round_slug}'", "perPage": 1},
     )
     items = (data or {}).get("items") or []
     if not items:
         raise HTTPException(status_code=404, detail="Round not found.")
-    checkpoints = items[0].get("checkpoints") or []
-    if idx >= len(checkpoints):
+    round_row = items[0] if isinstance(items[0], dict) else {}
+    try:
+        _language, checkpoints = _checkpoints_for(
+            round_row, body.language or _submitted_language(round_row, body.files)
+        )
+    except TypedError:
+        raise HTTPException(status_code=400, detail="Invalid checkpoint index.") from None
+    if body.checkpoint_index >= len(checkpoints):
         raise HTTPException(status_code=400, detail="Invalid checkpoint index.")
-    if not checkpoints[idx].get("ai_allowed"):
+    checkpoint = checkpoints[body.checkpoint_index]
+    if not isinstance(checkpoint, dict) or not checkpoint.get("ai_allowed"):
         raise HTTPException(status_code=403, detail="AI is disabled for this checkpoint.")
 
 
 @router.post("/chat")
 async def chat(body: ChatRequest, user: dict = Depends(_auth_user)) -> StreamingResponse:
-    await _enforce_ai_allowed(user["token"], body.round_slug, body.checkpoint_index)
+    await _enforce_ai_allowed(user["token"], body)
     cfg = await _resolve_text_cfg(user, body.provider_id, body.model)
 
     file_context = json.dumps(body.files)[:60_000]  # cap to avoid blowing token budget
@@ -278,7 +311,7 @@ async def edit(body: ChatRequest, user: dict = Depends(_auth_user)) -> Streaming
     optional and present only when the model output couldn't be
     parsed as a JSON patch array.
     """
-    await _enforce_ai_allowed(user["token"], body.round_slug, body.checkpoint_index)
+    await _enforce_ai_allowed(user["token"], body)
     cfg = await _resolve_text_cfg(user, body.provider_id, body.model)
 
     file_context = json.dumps(body.files)[:60_000]
@@ -386,9 +419,11 @@ async def grade(request: Request, body: GradeRequest, user: dict = Depends(_auth
     # checkpoints/rubric/hidden_files — those drive grading and must
     # come from the seeded source of truth.
     round_row = await admission.first_item(pb_get, user["token"], "ai_coding_rounds", body.round_slug)
-    checkpoints = round_row.get("checkpoints") or []
+    # A multi-language round keeps its checkpoints per language; grade the
+    # language the files are in.
+    language, checkpoints = _checkpoints_for(round_row, _submitted_language(round_row, body.files))
     rubric = round_row.get("rubric") or {"items": []}
-    language = round_row.get("language") or "python"
+    # `language` and `checkpoints` already come from _checkpoints_for above.
     graded = len(checkpoints) if isinstance(checkpoints, (list, dict)) else 0
     if graded > GRADE_MAX_CHECKPOINTS:
         raise TypedError("invalid_request", "This round can't be graded here.")

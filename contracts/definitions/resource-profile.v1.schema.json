@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rounds:contracts:definitions:resource-profile:v1",
+  "title": "resource-profile/v1",
+  "description": "The limits one execution job runs under (ROUNDS-00A-L02). Each maximum here is the spec's ceiling, so no profile can go past it; #5 and #6 benchmark the values a profile actually sets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "profile_id", "snippet_bytes", "project_files", "project_bytes", "stdin_bytes", "processes",
+    "memory_bytes", "output_bytes", "job_classes"
+  ],
+  "properties": {
+    "schema": { "const": "resource-profile/v1" },
+    "profile_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+    "snippet_bytes": { "type": "integer", "minimum": 1, "maximum": 262144 },
+    "project_files": { "type": "integer", "minimum": 1, "maximum": 200 },
+    "project_bytes": { "type": "integer", "minimum": 1, "maximum": 5242880 },
+    "stdin_bytes": {
+      "description": "Proposed: 256 KiB, sized for the 200,010-byte large case.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 262144
+    },
+    "processes": { "type": "integer", "minimum": 1, "maximum": 64 },
+    "memory_bytes": { "type": "integer", "minimum": 1, "maximum": 536870912 },
+    "output_bytes": { "type": "integer", "minimum": 1, "maximum": 262144 },
+    "job_classes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interactive", "project"],
+      "properties": {
+        "interactive": { "$ref": "#/$defs/job_class", "description": "Coding run and evaluate, and the AI-coding visible run." },
+        "project": { "$ref": "#/$defs/job_class_project", "description": "Grade and take-home." }
+      }
+    }
+  },
+  "$defs": {
+    "job_class": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wall_s_max"],
+      "properties": { "wall_s_max": { "type": "integer", "minimum": 1, "maximum": 10 } }
+    },
+    "job_class_project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wall_s_max"],
+      "properties": { "wall_s_max": { "type": "integer", "minimum": 1, "maximum": 120 } }
+    }
+  }
+}

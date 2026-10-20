@@ -52,7 +52,8 @@ export function classifyRunnerError(
   if (!isRunnerError(err)) return null;
   const { status, code } = err;
   let kind: RunnerDenialKind | null = null;
-  if (code === 'route_disabled') kind = 'turned_off';
+  // definitions_disabled is ROUNDS_GATE_EXECUTION_DEFINITIONS turned off.
+  if (code === 'route_disabled' || code === 'definitions_disabled') kind = 'turned_off';
   else if (code === 'unauthenticated' || status === 401) kind = 'sign_in';
   else if ((code !== null && LIMIT_CODES.has(code)) || status === 429) kind = 'limit';
   else if ((code !== null && TOO_LARGE_CODES.has(code)) || status === 413) kind = 'too_large';

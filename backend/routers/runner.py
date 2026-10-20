@@ -4,10 +4,12 @@ owns now that content and user data live in PocketBase.
 Both routes are admitted (``app.admission``). The caller names a
 question by slug and sends only code and input; the entry, test cases,
 and expected values load from ``coding_questions`` with the caller's
-token, and validators come only from that stored data.
+token, and validators come only from that stored data. Validators run
+in the validator process (``app.validators``), never in this one.
 
-TODO(ROUNDS-00A-L02): #2's server-owned Test Definitions replace the
-caller-token lookup, and validators leave the API process.
+TODO(ROUNDS-00A-L02): step 2 resolves a compiled Test Definition
+(``app.definitions``) at ``ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce``
+in place of the caller-token lookup.
 """
 from __future__ import annotations
 
@@ -19,7 +21,7 @@ from app import admission
 from app.errors import TypedError
 from app.limits import EVALUATE_MAX_CASES
 from app.pb_auth import pb_get
-from matchers import match
+from matchers import match, validator_batch
 from runner import run_one
 from schemas import (
     CodeEvaluateRequest,
@@ -98,11 +100,8 @@ def _timeout_for(tc) -> int:
 
 
 def _evaluate(code, language, entry_dict, selected, slot) -> CodeEvaluateResult:
-    results = []
-    passed = 0
-    failed = 0
-    for i, tc in selected:
-        outcome = run_one(
+    outcomes = [
+        run_one(
             code,
             language,
             entry_dict,
@@ -110,11 +109,25 @@ def _evaluate(code, language, entry_dict, selected, slot) -> CodeEvaluateResult:
             timeout_s=_timeout_for(tc),
             sandbox=slot,
         )
+        for _i, tc in selected
+    ]
+    returned = [
+        (tc.get("expected"), outcome.return_value, tc.get("input", {}))
+        for (_i, tc), outcome in zip(selected, outcomes)
+        if outcome.error is None
+    ]
+    results = []
+    passed = 0
+    failed = 0
+    # The validator cases among them run in one validator process.
+    with validator_batch(returned):
+        checked = [
+            (False, None) if outcome.error is not None
+            else match(tc.get("expected"), outcome.return_value, tc.get("input", {}))
+            for (_i, tc), outcome in zip(selected, outcomes)
+        ]
+    for (i, tc), outcome, (case_passed, matcher_error) in zip(selected, outcomes, checked):
         expected = tc.get("expected")
-        if outcome.error is not None:
-            case_passed, matcher_error = False, None
-        else:
-            case_passed, matcher_error = match(expected, outcome.return_value, tc.get("input", {}))
         results.append(
             EvaluateCaseResult(
                 index=i,

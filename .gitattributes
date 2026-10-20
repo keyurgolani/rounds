@@ -1,0 +1,5 @@
+# Compiled definitions (ROUNDS-00A-L02): each file is the exact RFC 8785
+# bytes its manifest checksum covers, so git never converts line endings
+# in them. backend/definitions/build.py writes them; review the sources.
+backend/definitions/store/** -text -diff linguist-generated=true
+backend/definitions/manifest.json linguist-generated=true

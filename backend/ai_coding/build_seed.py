@@ -30,6 +30,7 @@ For multi-language rounds the emitted row carries:
 
 For single-language rounds the legacy flat-array shape is preserved.
 """
+import hashlib
 import json
 import pathlib
 
@@ -132,54 +133,122 @@ def collect_round(d: pathlib.Path) -> dict:
     return manifest
 
 
-def main():
-    rounds = [collect_round(d) for d in sorted(ROOT.iterdir()) if d.is_dir()]
+# ROUNDS-00A-L02: the committed 1700001200_ai_coding_seed.js stays the v1
+# seed (the legacy runtime still reads it); build.py compiles the same
+# sources into the server-owned harness revisions. When a round's compiled
+# definition advances past version 1, this builder emits a NEW,
+# presentation-only migration that upserts the round's display fields and
+# sets that round's own definition_version, never deleting a row. What
+# runs and how it scores live only in the compiled revision, so the row
+# carries no test command, hidden files, or test globs. At version 1 there
+# is nothing to add, so it writes nothing.
+DEFINITIONS_MANIFEST = pathlib.Path(__file__).resolve().parents[2] / "backend" / "definitions" / "manifest.json"
+MIGRATIONS = pathlib.Path(__file__).resolve().parents[2] / "pocketbase" / "pb_migrations"
+PRESENTATION_NAME = "ai_coding_presentation"
+PRESENTATION_FIELDS = ("title", "difficulty", "language", "languages", "description", "starter_files", "checkpoints",
+                       "rubric", "topics", "companies")
+# What a checkpoint shows; its test command, globs, and hidden files don't
+# belong on a presentation row.
+CHECKPOINT_FIELDS = ("label", "prompt", "ai_allowed")
+
+
+def active_versions(manifest_path: pathlib.Path, track: str) -> dict[str, int]:
+    """Each slug's active content version for ``track`` in the compiled
+    manifest. Every variant of a slug shares its version."""
+    if not manifest_path.exists():
+        return {}
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    out: dict[str, int] = {}
+    for e in manifest.get("entries", []):
+        if e.get("track") == track and e.get("lifecycle") == "active":
+            out[e["slug"]] = max(out.get(e["slug"], 0), e["content_version"])
+    return out
+
+
+def _display_checkpoints(checkpoints):
+    def one(cp):
+        return {k: cp[k] for k in CHECKPOINT_FIELDS if k in cp} if isinstance(cp, dict) else cp
+
+    if isinstance(checkpoints, dict):
+        return {lang: [one(cp) for cp in cps] for lang, cps in checkpoints.items()}
+    return [one(cp) for cp in checkpoints or []]
+
+
+def presentation_row(round_row: dict, version: int) -> dict:
+    """The display fields of a collected round, at its own version."""
+    row = {k: round_row[k] for k in PRESENTATION_FIELDS if k in round_row}
+    if "checkpoints" in row:
+        row["checkpoints"] = _display_checkpoints(row["checkpoints"])
+    return {"definition_version": version, **row, "slug": round_row["slug"]}
+
+
+def presentation_path(rows: list[dict], migrations: pathlib.Path = MIGRATIONS) -> pathlib.Path | None:
+    """Where the migration for these rounds' versions goes, or None when
+    one for exactly these versions is already there. Each version bump
+    gets a new file, numbered after every migration in the directory, so
+    a migration that may have been applied is never written again."""
+    versions = sorted((r["slug"], r["definition_version"]) for r in rows)
+    stamp = hashlib.sha256(json.dumps(versions).encode("utf-8")).hexdigest()[:12]
+    name = f"{PRESENTATION_NAME}_{stamp}.js"
+    if any(migrations.glob(f"*_{name}")):
+        return None
+    numbers = [int(p.name.split("_", 1)[0]) for p in migrations.glob("*.js") if p.name.split("_", 1)[0].isdigit()]
+    return migrations / f"{max(numbers, default=0) + 1}_{name}"
+
+
+def presentation_migration(rows: list[dict]) -> str:
+    """A presentation-only upsert migration for ``rows``, each already at
+    its own definition_version. It updates an existing row by slug or
+    creates one, and never deletes; down() leaves every row in place."""
     body = "/// <reference path=\"../pb_data/types.d.ts\" />\n\n"
-    body += f"const ROUNDS = {json.dumps(rounds, indent=2)};\n\n"
+    body += f"const ROUNDS = {json.dumps(rows, indent=2)};\n\n"
     body += """\
 migrate(
   (db) => {
     const dao = new Dao(db);
     const coll = dao.findCollectionByNameOrId("ai_coding_rounds");
     for (const r of ROUNDS) {
-      // Upsert: drop any existing row with this slug so the seed is
-      // idempotent across re-applies (the previous strategy of
-      // "skip on collision" left old rows with stale checkpoints).
+      // Upsert in place: update the existing row or create it. Never
+      // delete, so drafts and attempts that relate to it survive.
+      let rec;
       try {
-        const old = dao.findFirstRecordByData("ai_coding_rounds", "slug", r.slug);
-        dao.deleteRecord(old);
-      } catch (_) { /* not present */ }
-      const rec = new Record(coll, {
-        slug: r.slug,
-        title: r.title,
-        difficulty: r.difficulty,
-        // For multi-language rounds `language` is the primary (first
-        // entry of manifest.languages); the full set is derivable from
-        // Object.keys(checkpoints) when checkpoints is a map.
-        language: r.language,
-        description: r.description,
-        starter_files: r.starter_files,
-        checkpoints: r.checkpoints,
-        rubric: r.rubric,
-        topics: r.topics,
-        companies: r.companies,
-      });
+        rec = dao.findFirstRecordByData("ai_coding_rounds", "slug", r.slug);
+      } catch (_) {
+        rec = new Record(coll, { slug: r.slug });
+      }
+      for (const [key, value] of Object.entries(r)) rec.set(key, value);
       dao.saveRecord(rec);
     }
   },
-  (db) => {
-    const dao = new Dao(db);
-    for (const r of ROUNDS) {
-      try {
-        const rec = dao.findFirstRecordByData("ai_coding_rounds", "slug", r.slug);
-        dao.deleteRecord(rec);
-      } catch (_) { /* ignore */ }
-    }
+  (_db) => {
+    // Presentation-only and forward-safe: a version bump never deletes a
+    // row, so there is nothing to undo.
   },
 );
 """
-    OUT.write_text(body)
-    print(f"Wrote {OUT}")
+    return body
+
+
+def main():
+    versions = active_versions(DEFINITIONS_MANIFEST, "ai-coding")
+    rows = []
+    for d in sorted(ROOT.iterdir()):
+        if not d.is_dir():
+            continue
+        round_row = collect_round(d)
+        version = versions.get(round_row["slug"], 1)
+        if version > 1:
+            rows.append(presentation_row(round_row, version))
+    if not rows:
+        print("ai_coding presentation: every round is at version 1, the committed seed (1700001200); nothing to emit.")
+        return
+    path = presentation_path(rows, MIGRATIONS)
+    if path is None:
+        print("ai_coding presentation: a migration for these versions is already there; nothing to emit.")
+        return
+    with open(path, "x", encoding="utf-8") as out:
+        out.write(presentation_migration(rows))
+    print(f"Wrote {path}")
 
 
 if __name__ == "__main__":

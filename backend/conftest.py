@@ -4,6 +4,10 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+# Generated contract bindings, not tests: test_definition.py there is the
+# test-definition/v1 schema's types (scripts/definitions_bindings.py).
+collect_ignore_glob = ["app/contracts/*"]
+
 
 @pytest.fixture(scope="session")
 def client():

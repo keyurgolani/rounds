@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp
 
-from app import admission, errors, gates, obs
+from app import admission, definitions, errors, gates, obs
 from routers import ai, ai_coding, pdf, runner, sd_practice, share, take_home
 
 
@@ -13,6 +13,9 @@ from routers import ai, ai_coding, pdf, runner, sd_practice, share, take_home
 async def lifespan(_app: FastAPI):
     # Gates are read once per process; the startup log lists each value.
     gates.init()
+    # Every stored definition's checksum is checked once per process; a
+    # mismatch logs definition.rejected and that version fails closed.
+    definitions.init()
     yield
 
 

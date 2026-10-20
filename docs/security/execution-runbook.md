@@ -36,6 +36,16 @@ In-flight runs finish or time out. Runner logs stay as receipts.
 2. Confirm the startup line shows the gate `enabled`.
 3. Run the route once from the app as a signed-in account: a coding run, a test run, an AI-coding run and submit, a take-home run and submit, a PDF export, or an ATS score. Each should answer 200 and write a `decision` line with status 200 and no code.
 
+## Compiled Definitions
+
+`ROUNDS_GATE_EXECUTION_DEFINITIONS` selects where the six execution routes (run, evaluate, grade, run-project, take-home run and submit) get what they run. It is `legacy` by default.
+
+- `legacy`: each route loads its question, round, or assignment from PocketBase with the caller's token, as before #2. The compiled definitions in the image are verified at startup but not served yet.
+- `disabled`: the six routes answer 503 `definitions_disabled` before any lookup, and every draft is kept. Use it to stop all execution in one place without touching the per-route gates.
+- An unknown value (including `enforce`, which #2 step 2 adds) closes to `disabled` and logs an error, so a typo never opens execution.
+
+At startup the runner reads `backend/definitions/manifest.json` (mode 0400 in the image) and checks every shipped version's bytes against its checksum. It logs one `definitions.loaded` line with `entries` and `mismatched`; `mismatched` should be 0. A version whose file is missing or altered is the only one that fails, with `definition_integrity_mismatch`, and the rest keep serving. A manifest that's missing, isn't JSON, or isn't the manifest's shape leaves no definitions at all: the runner logs one `definition.rejected` line with `definition_integrity_mismatch` and no `definitions.loaded` line, keeps starting, and the legacy routes keep serving.
+
 ## Error Codes
 
 Typed errors answer `{"detail", "code", "correlation_id"}`. `detail` is a fixed sentence that never repeats request content. The same `correlation_id` is in the `X-Correlation-Id` header and in the request's `decision` line, so a support id from the app finds the log line. The steps are admission's order.
@@ -44,6 +54,7 @@ Typed errors answer `{"detail", "code", "correlation_id"}`. `detail` is a fixed 
 | --- | --- | --- | --- | --- |
 | `payload_too_large` | 413 | 1 | The body is over the route's cap, at nginx, the Ingress, or the runner | The app shows too large; trim the input |
 | `route_disabled` | 503 | 2 | The route's gate is off | Turn it back on when it's safe |
+| `definitions_disabled` | 503 | 2 | `ROUNDS_GATE_EXECUTION_DEFINITIONS` is `disabled`, so the six execution routes are off | Set it to `legacy` (or leave it unset) and restart; drafts are kept |
 | `unauthenticated` | 401 | 3 | No usable bearer, or PocketBase refused it | The app asks the person to sign in again |
 | `auth_unavailable` | 503 | 3, 8 | PocketBase is down or answered 5xx while checking the account or reading a record | Check PocketBase from the runner (Dependency Checks) |
 | `not_permitted` | 403 | 4 | The account's tier can't use this operation | Every tier and operation is permitted; the demo tier's limits are its quota |
@@ -57,6 +68,11 @@ Typed errors answer `{"detail", "code", "correlation_id"}`. `detail` is a fixed 
 | `demo_limit_reached` | 429 | 7 | The shared demo limit is reached | The app shows limit reached and the wait from `Retry-After` |
 | `quota_unavailable` | 503 | 7 | The admission store didn't answer while a gate enforces, or the runner has no usable `ROUNDS_ADMISSION_SECRET` | Check PocketBase, the admission routes, and the runner key (Dependency Checks) |
 | `not_found` | 404 | 8 | The question, round, checkpoint, assignment, or campaign is missing or belongs to another account | None; the caller named something it can't use |
+| `definition_not_found` | 404 | definition lookup | No active definition for the request's `(track, slug, variant, version)`; the same for an unknown slug, variant, or version | None; the caller named a definition that isn't shipped (only reachable at `EXECUTION_DEFINITIONS=enforce`, #2 step 2) |
+| `definition_superseded` | 409 | definition lookup | The named version was replaced; the error names the active version | The app reloads to the current version and retries once |
+| `definition_retired` | 410 | definition lookup | The named definition was retired; nothing runs | None; the item is gone. Drafts stay |
+| `runtime_unsupported` | 422 | definition lookup | This runner has no runtime for the named variant; the error names the variants it does have | Use a supported variant, or deploy a runner with that runtime |
+| `definition_integrity_mismatch` | 503 | startup and definition lookup | A shipped definition file is missing or its bytes don't match the manifest checksum | Redeploy a clean image; the alert names the version. See Alerts |
 | `worker_unavailable` | 503 | 9, or after admission | Every in-flight slot on this replica is busy, or the PDF renderer was unreachable, failed, opened no page within 2 s, or didn't answer within 25 s | The app retries with the same key, keeps the draft, and shows unavailable if it persists; check the renderer |
 | `render_timeout` | 422 | after admission | The renderer reported that the document didn't load or print within its budget (13 s to load, 8 s to print) | The app shows the error; simplify the document. The content decides this, so it keeps its charge and the app doesn't retry it |
 | `destination_denied` | 403 | provider calls | An AI provider base URL points at a refused address | Use a public provider URL, or the LAN address with `ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK` |
@@ -122,6 +138,7 @@ Proposed thresholds, from the `decision` lines:
 
 1. `auth_unavailable`, `quota_unavailable`, or `worker_unavailable` on more than 5% of a route's requests for 5 minutes. In observe mode, count `"would_deny":"quota_unavailable"` and `"quota":"unavailable"` too.
 2. Any 5xx after admission: a `decision` line with status 500 or higher and no code.
+3. A `definitions.loaded` line with `mismatched` above 0, or any `definition.rejected` line with `code":"definition_integrity_mismatch"`: a shipped definition in that image is missing or altered. Redeploy a clean image built from a tagged release; the line's `definition` names the version.
 
 ## Dependency Checks
 

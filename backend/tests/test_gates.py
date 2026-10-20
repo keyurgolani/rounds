@@ -77,6 +77,9 @@ def test_written_defaults_keep_routes_on_and_outbound_reach_off():
             expected = "observe"
         elif name in ("PAPER_FETCH", "PROVIDER_PRIVATE_NETWORK"):
             expected = "disabled"
+        elif name == "EXECUTION_DEFINITIONS":
+            # #2 step 1 keeps stage 2's server-loaded path.
+            expected = "legacy"
         else:
             expected = "enabled"
         assert r.value == expected, name

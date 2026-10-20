@@ -12,6 +12,7 @@ function err(status: number, code: string | null = null, extra: Partial<{ retryA
 describe('classifyRunnerError', () => {
   it.each([
     [err(503, 'route_disabled'), 'turned_off'],
+    [err(503, 'definitions_disabled'), 'turned_off'],
     [err(0, 'unauthenticated'), 'sign_in'],
     [err(401), 'sign_in'],
     [err(429, 'quota_exceeded'), 'limit'],
