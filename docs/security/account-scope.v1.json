@@ -180,11 +180,7 @@
       ],
       "oversized_probe": {
         "field": "target_companies",
-        "max_bytes": 2000000,
-        "base": {
-          "name": "oversized",
-          "slug": "oversized-campaign"
-        }
+        "max_bytes": 2000000
       }
     },
     "applications": {
@@ -253,8 +249,13 @@
         "account-scope.delete.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
-      ]
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "questions_asked",
+        "max_bytes": 2000000
+      }
     },
     "user_progress": {
       "migration": "1700000000_init_collections.js",
@@ -356,8 +357,13 @@
         "account-scope.delete.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
-      ]
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "trail",
+        "max_bytes": 2000000
+      }
     },
     "code_drafts": {
       "migration": "1700000000_init_collections.js",
@@ -424,8 +430,13 @@
         "account-scope.delete.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
-      ]
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "mentions",
+        "max_bytes": 2000000
+      }
     },
     "resumes": {
       "migration": "1700000700_resume_studio.js",
@@ -461,12 +472,7 @@
       ],
       "oversized_probe": {
         "field": "data",
-        "max_bytes": 2000000,
-        "base": {
-          "name": "oversized",
-          "slug": "oversized-resume"
-        },
-        "as_string": true
+        "max_bytes": 2000000
       }
     },
     "resume_variants": {
@@ -501,8 +507,13 @@
         "account-scope.delete.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
-      ]
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "data",
+        "max_bytes": 2000000
+      }
     },
     "resume_versions": {
       "migration": "1700000700_resume_studio.js",
@@ -536,8 +547,13 @@
         "account-scope.delete.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
-      ]
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "data",
+        "max_bytes": 2000000
+      }
     },
     "resume_share_links": {
       "migration": "1700000700_resume_studio.js",
@@ -649,8 +665,13 @@
         "account-scope.delete.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
-      ]
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "models_cache",
+        "max_bytes": 2000000
+      }
     },
     "ai_settings": {
       "migration": "1700000800_ai_providers.js",
@@ -760,8 +781,13 @@
         "account-scope.delete.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
-      ]
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "ai_chats",
+        "max_bytes": 2000000
+      }
     },
     "take_home_drafts": {
       "migration": "1700001300_take_home.js",
@@ -836,8 +862,13 @@
         "account-scope.delete.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
-      ]
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "files",
+        "max_bytes": 2000000
+      }
     },
     "question_timers": {
       "migration": "1700001500_question_timers.js",
@@ -905,12 +936,7 @@
       ],
       "oversized_probe": {
         "field": "tags",
-        "max_bytes": 2000000,
-        "base": {
-          "company": "Acme",
-          "role": "Engineer",
-          "start_date": "2020-01-01 00:00:00.000Z"
-        }
+        "max_bytes": 2000000
       }
     },
     "experience_projects": {
@@ -942,8 +968,13 @@
         "account-scope.delete.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
-      ]
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "tech_stack",
+        "max_bytes": 2000000
+      }
     },
     "experience_anecdotes": {
       "migration": "1700002000_experience_entities.js",
@@ -974,8 +1005,13 @@
         "account-scope.delete.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
-      ]
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "tags",
+        "max_bytes": 2000000
+      }
     },
     "experience_bullets": {
       "migration": "1700002000_experience_entities.js",
@@ -1006,8 +1042,13 @@
         "account-scope.delete.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied"
-      ]
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.oversized-input.rejected"
+      ],
+      "oversized_probe": {
+        "field": "tags",
+        "max_bytes": 2000000
+      }
     },
     "exp_job_projects": {
       "migration": "1700003000_experience_connections.js",

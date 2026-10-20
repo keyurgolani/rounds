@@ -94,28 +94,35 @@ def delete_anonymous_denied(pb, collection, a, b, expected) -> Receipt:
                    expected, resp.status, ok, resp.elapsed_ms, "" if ok else f"delete={resp.status} owner_view={still.status}")
 
 
-def create_anonymous_denied(pb, collection, a, b, expected) -> Receipt:
-    # An anonymous create with no bearer, naming account A as the owner. The
-    # createRule requires an authenticated caller, so this is denied today
-    # (and no row is written). A missing-field validation error would also be
-    # the same denial status; either way the create does not succeed.
-    resp = pb.create(collection, None, {"user": a.user_id})
+def create_anonymous_denied(pb, collection, payload, expected) -> Receipt:
+    # An anonymous create with a complete, valid, non-colliding body (built by
+    # factory.fresh_payload). Because field, relation, and uniqueness
+    # validation all pass, the only thing left to stop the write is the
+    # createRule. A rule denial returns the deny-contract status with an empty
+    # `data`; a field or uniqueness failure returns the same status with a
+    # populated `data`, so we require `data` to be empty to prove the rule ran.
+    resp = pb.create(collection, None, payload)
+    data = resp.body.get("data") if isinstance(resp.body, dict) else None
+    ok = resp.status == expected and data == {}
+    detail = "" if ok else f"status={resp.status} data={list((data or {}).keys())}"
     return Receipt("account-scope.create.anonymous.denied", collection, "create", "anonymous",
-                   expected, resp.status, resp.status == expected, resp.elapsed_ms)
+                   expected, resp.status, ok, resp.elapsed_ms, detail)
 
 
-def oversized_input_rejected(pb, collection, a, cfg, expected) -> Receipt:
-    field = cfg["field"]
-    filler = "z" * (int(cfg["max_bytes"]) + 4096)
-    value = filler if cfg.get("as_string") else [filler]
-    payload = {"user": a.user_id, **cfg.get("base", {}), field: value}
-    resp = pb.create(collection, a.token, payload)
+def oversized_input_rejected(pb, collection, token, payload, field, expected) -> Receipt:
+    # An owner create whose body is valid except that one JSON field exceeds
+    # its maxSize. PocketBase rejects it with a per-field size error.
+    resp = pb.create(collection, token, payload)
     field_err = ""
     if isinstance(resp.body, dict):
         field_err = ((resp.body.get("data") or {}).get(field) or {}).get("code", "")
     ok = resp.status == expected and field_err == "validation_json_size_limit"
     return Receipt("account-scope.oversized-input.rejected", collection, "create", "authenticated-owner",
-                   expected, resp.status, ok, resp.elapsed_ms, "" if ok else f"field_code={field_err!r}")
+                   expected, resp.status, ok, resp.elapsed_ms, "" if ok else f"status={resp.status} field_code={field_err!r}")
+
+
+def oversized_filler(max_bytes: int) -> list:
+    return ["z" * (int(max_bytes) + 4096)]
 
 
 def signup_disabled_denied(pb, expected) -> Receipt:
@@ -127,8 +134,9 @@ def signup_disabled_denied(pb, expected) -> Receipt:
 
 
 # Registry of IMPLEMENTED families. Pending families are deliberately absent.
-# The uniform ones take (pb, collection, a, b, expected); oversized and the
-# signup hook are dispatched separately by run.py.
+# The uniform ones take (pb, collection, a, b, expected); create-anonymous,
+# oversized, and the signup hook need extra inputs and are dispatched
+# separately by run.py.
 MAIN_FAMILIES: dict[str, Callable] = {
     "account-scope.list.cross-account.isolated": list_cross_account_isolated,
     "account-scope.list.anonymous.isolated": list_anonymous_isolated,
@@ -138,9 +146,9 @@ MAIN_FAMILIES: dict[str, Callable] = {
     "account-scope.update.anonymous.denied": update_anonymous_denied,
     "account-scope.delete.cross-account.denied": delete_cross_account_denied,
     "account-scope.delete.anonymous.denied": delete_anonymous_denied,
-    "account-scope.create.anonymous.denied": create_anonymous_denied,
 }
 
+CREATE_ANON_FAMILY = "account-scope.create.anonymous.denied"
 OVERSIZED_FAMILY = "account-scope.oversized-input.rejected"
 HOOK_FAMILIES: dict[str, Callable] = {
     "account-scope.signup.disabled.denied": signup_disabled_denied,
@@ -148,4 +156,6 @@ HOOK_FAMILIES: dict[str, Callable] = {
 
 # Every family this harness knows how to run. The verdict cross-checks this
 # against the policy: a family the policy marks "pending" must not be here.
-IMPLEMENTED_FAMILIES = set(MAIN_FAMILIES) | {OVERSIZED_FAMILY} | set(HOOK_FAMILIES)
+IMPLEMENTED_FAMILIES = (
+    set(MAIN_FAMILIES) | {CREATE_ANON_FAMILY, OVERSIZED_FAMILY} | set(HOOK_FAMILIES)
+)

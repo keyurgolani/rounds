@@ -162,3 +162,67 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
 
     # users: the account's own record id, for the users isolation probes.
     ids["users"] = uid
+
+
+def fresh_payload(
+    collection: str,
+    owner_id: str,
+    a: Account,
+    b: Account,
+    content: dict[str, str],
+    suffix: str,
+) -> dict[str, Any]:
+    """A complete, valid, non-colliding create payload for `collection`.
+
+    Used by the anonymous-create and oversized-input probes, which need a
+    body that passes field, relation, and uniqueness validation so that the
+    only thing left to decide the request is the createRule (anonymous) or the
+    field-size check (oversized). ``owner_id`` is the ``user`` value: the
+    anonymous probe uses a no-rows account so there is no per-user uniqueness
+    collision, and relations point at account `a`'s seeded rows (they only
+    need to exist). Junctions pair one of `a`'s endpoints with one of `b`'s so
+    the (parent, child) pair is novel and does not collide with a seeded row.
+    Unique scalar fields carry ``suffix`` so repeated runs do not collide.
+
+    This lists the same required fields as ``seed_account``; keep the two in
+    step. The harness run exercises both, so a drift shows up as a failed
+    probe rather than a silent gap.
+    """
+    s = suffix
+    base: dict[str, Any] = {"user": owner_id}
+    extra: dict[str, Any] = {
+        "campaigns": {"name": "probe", "slug": f"probe-{s}"},
+        "applications": {"company": "Acme", "role": "Engineer", "campaign": a.ids["campaigns"]},
+        "interview_rounds": {"application": a.ids["applications"], "round_type": "technical"},
+        "user_progress": {"question_type": "coding", "question_slug": f"probe-{s}"},
+        "user_preferences": {"theme": "light"},
+        "offers": {"application": a.ids["applications"], "status": "pending"},
+        "code_drafts": {"campaign": a.ids["campaigns"], "question": f"probe-{s}", "language": "python", "code": "x=1"},
+        "todos": {"campaign": a.ids["campaigns"], "body": "probe"},
+        "resumes": {"name": "probe", "slug": f"probe-{s}"},
+        "resume_variants": {"resume": a.ids["resumes"], "name": "variant"},
+        "resume_versions": {"resume": a.ids["resumes"]},
+        "resume_share_links": {"resume": a.ids["resumes"], "token": f"probe-{s}"},
+        "resume_share_views": {"link": a.ids["resume_share_links"]},
+        "ai_providers": {"kind": "openai", "label": "provider"},
+        "ai_settings": {},
+        "ai_coding_drafts": {"round": content["round"], "file_path": f"probe-{s}.py", "contents": "x=1"},
+        "ai_coding_attempts": {"round": content["round"], "status": "in-progress", "current_checkpoint": 0},
+        "take_home_drafts": {"assignment": content["assignment"], "file_path": f"probe-{s}.py", "contents": "x=1"},
+        "take_home_attempts": {"assignment": content["assignment"], "status": "in-progress"},
+        "question_timers": {"question_type": "coding", "question_slug": f"probe-{s}", "accumulated_ms": 0},
+        "experience_jobs": {"company": "Acme", "role": "Engineer", "start_date": _DATE},
+        "experience_projects": {"title": "project", "start_date": _DATE},
+        "experience_anecdotes": {"title": "anecdote", "date": _DATE},
+        "experience_bullets": {"title": "bullet", "date": _DATE},
+        "exp_job_projects": {"parent": a.ids["experience_jobs"], "child": b.ids["experience_projects"]},
+        "exp_job_anecdotes": {"parent": a.ids["experience_jobs"], "child": b.ids["experience_anecdotes"]},
+        "exp_job_bullets": {"parent": a.ids["experience_jobs"], "child": b.ids["experience_bullets"]},
+        "exp_project_anecdotes": {"parent": a.ids["experience_projects"], "child": b.ids["experience_anecdotes"]},
+        "exp_project_bullets": {"parent": a.ids["experience_projects"], "child": b.ids["experience_bullets"]},
+        "exp_anecdote_bullets": {"parent": a.ids["experience_anecdotes"], "child": b.ids["experience_bullets"]},
+    }
+    if collection not in extra:
+        raise RuntimeError(f"fresh_payload: no recipe for {collection}")
+    base.update(extra[collection])
+    return base

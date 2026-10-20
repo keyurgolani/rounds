@@ -20,9 +20,11 @@ import pytest
 PROBES = Path(__file__).resolve().parents[1].parent / "harness" / "probes"
 sys.path.insert(0, str(PROBES))
 
+import factory  # noqa: E402
 import families  # noqa: E402
 import policy  # noqa: E402
 import run  # noqa: E402
+from pbclient import Response  # noqa: E402
 from receipts import Receipt  # noqa: E402
 
 ENFORCED = "account-scope.view.cross-account.denied"
@@ -245,3 +247,93 @@ def test_readback_flags_a_missing_collection():
     writer = CapturingWriter()
     run._readback(FakePB([]), doc, "admin", writer)
     assert not writer.receipts[0].passed and "collection-missing" in writer.receipts[0].detail
+
+
+# --------------------------------------------------------------------------
+# factory.fresh_payload and the create-anonymous / oversized probes
+# --------------------------------------------------------------------------
+
+STANDARD_COLLECTIONS = [
+    "campaigns", "applications", "interview_rounds", "user_progress",
+    "user_preferences", "offers", "code_drafts", "todos", "resumes",
+    "resume_variants", "resume_versions", "resume_share_links",
+    "resume_share_views", "ai_providers", "ai_settings", "ai_coding_drafts",
+    "ai_coding_attempts", "take_home_drafts", "take_home_attempts",
+    "question_timers", "experience_jobs", "experience_projects",
+    "experience_anecdotes", "experience_bullets", "exp_job_projects",
+    "exp_job_anecdotes", "exp_job_bullets", "exp_project_anecdotes",
+    "exp_project_bullets", "exp_anecdote_bullets",
+]
+
+
+def _default_policy_path() -> str:
+    return str(Path(__file__).resolve().parents[1].parent / "docs" / "security" / "account-scope.v1.json")
+
+
+def _acct(tag: str) -> "factory.Account":
+    a = factory.Account(tag=tag, email=f"{tag}@x", password="pw")
+    a.user_id = f"uid-{tag}"
+    for c in STANDARD_COLLECTIONS:
+        a.ids[c] = f"{tag}-{c}-id"
+    a.ids["users"] = a.user_id
+    return a
+
+
+def test_fresh_payload_has_a_recipe_for_every_standard_collection():
+    a, b = _acct("a"), _acct("b")
+    content = {"round": "round-id", "assignment": "assignment-id"}
+    policy_collections = {
+        n for n in policy.load(_default_policy_path())["collections"] if n != "users"
+    }
+    assert set(STANDARD_COLLECTIONS) == policy_collections
+    for name in STANDARD_COLLECTIONS:
+        payload = factory.fresh_payload(name, "owner-id", a, b, content, "sfx")
+        assert payload["user"] == "owner-id"
+        assert isinstance(payload, dict)
+
+
+def test_fresh_payload_pairs_junctions_across_accounts_to_avoid_collisions():
+    a, b = _acct("a"), _acct("b")
+    content = {"round": "round-id", "assignment": "assignment-id"}
+    p = factory.fresh_payload("exp_job_projects", "owner-id", a, b, content, "sfx")
+    assert p["parent"] == a.ids["experience_jobs"]
+    assert p["child"] == b.ids["experience_projects"]
+
+
+def test_fresh_payload_rejects_an_unknown_collection():
+    a, b = _acct("a"), _acct("b")
+    content = {"round": "round-id", "assignment": "assignment-id"}
+    with pytest.raises(RuntimeError, match="no recipe"):
+        factory.fresh_payload("not_a_collection", "owner-id", a, b, content, "sfx")
+
+
+class _CreatePB:
+    def __init__(self, status: int, body: Any):
+        self._status, self._body = status, body
+        self.calls = []
+
+    def create(self, collection, token, payload):
+        self.calls.append((collection, token))
+        return Response(status=self._status, body=self._body, elapsed_ms=1)
+
+
+def test_create_anonymous_passes_only_on_a_rule_denial_with_empty_data():
+    pb = _CreatePB(400, {"code": 400, "message": "Failed to create record.", "data": {}})
+    r = families.create_anonymous_denied(pb, "campaigns", {"user": "x"}, 400)
+    assert r.passed and pb.calls == [("campaigns", None)]
+
+
+def test_create_anonymous_fails_on_a_field_validation_400():
+    # A validation 400 (populated data) must not count: the rule was not reached.
+    pb = _CreatePB(400, {"data": {"slug": {"code": "validation_required"}}})
+    r = families.create_anonymous_denied(pb, "campaigns", {"user": "x"}, 400)
+    assert not r.passed and "slug" in r.detail
+
+
+def test_oversized_passes_only_on_a_json_size_error_for_the_field():
+    good = _CreatePB(400, {"data": {"data": {"code": "validation_json_size_limit"}}})
+    assert families.oversized_input_rejected(good, "resumes", "tok", {"user": "x"}, "data", 400).passed
+    wrong = _CreatePB(400, {"data": {"name": {"code": "validation_required"}}})
+    assert not families.oversized_input_rejected(wrong, "resumes", "tok", {"user": "x"}, "data", 400).passed
+    created = _CreatePB(200, {"id": "rec"})
+    assert not families.oversized_input_rejected(created, "resumes", "tok", {"user": "x"}, "data", 400).passed

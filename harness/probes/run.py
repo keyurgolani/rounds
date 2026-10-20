@@ -21,7 +21,10 @@ from __future__ import annotations
 import os
 import sys
 
+import secrets
+
 import families
+import factory
 import policy
 from factory import Account, ensure_content_fixtures, make_account, register, seed_account
 from pbclient import PBClient
@@ -133,6 +136,12 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
     register(pb, b)
     seed_account(pb, a, content, admin_token)
     seed_account(pb, b, content, admin_token)
+    # A third account that signs up but seeds nothing. The anonymous-create
+    # probe owns its payload with this account so there is no per-user
+    # uniqueness collision (it owns no rows), leaving the createRule as the
+    # only thing that can deny the write.
+    c = make_account("c")
+    register(pb, c)
 
     fam = doc["probe_families"]
     for name, row in doc["collections"].items():
@@ -142,8 +151,14 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
             expected = _expected_status(doc, pid)
             if pid in families.MAIN_FAMILIES:
                 writer.write(families.MAIN_FAMILIES[pid](pb, name, a, b, expected))
+            elif pid == families.CREATE_ANON_FAMILY:
+                payload = factory.fresh_payload(name, c.user_id, a, b, content, secrets.token_hex(6))
+                writer.write(families.create_anonymous_denied(pb, name, payload, expected))
             elif pid == families.OVERSIZED_FAMILY:
-                writer.write(families.oversized_input_rejected(pb, name, a, row["oversized_probe"], expected))
+                field = row["oversized_probe"]["field"]
+                payload = factory.fresh_payload(name, a.user_id, a, b, content, secrets.token_hex(6))
+                payload[field] = families.oversized_filler(row["oversized_probe"]["max_bytes"])
+                writer.write(families.oversized_input_rejected(pb, name, a.token, payload, field, expected))
             # hook-phase families are handled in run_hook
 
     _readback(pb, doc, admin_token, writer)
@@ -234,7 +249,7 @@ def run_verdict(doc: dict, receipts_path: str) -> int:
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("usage: run.py {main|hook|verdict}", file=sys.stderr)  # scan: added by stage 2
+        print("usage: run.py {main|hook|verdict}", file=sys.stderr)
         return 2
     phase = sys.argv[1]
     policy_path = os.environ.get("POLICY_PATH", "/policy/account-scope.v1.json")
