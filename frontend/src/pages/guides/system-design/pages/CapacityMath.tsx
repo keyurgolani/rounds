@@ -13,7 +13,7 @@ import {
   readStored,
   writeStored,
   type CapacityInputs,
-} from './capacityMath';
+} from './capacityMathModel';
 
 type Props = {
   config: TrackConfig;
