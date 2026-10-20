@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   compute, DEFAULT_INPUTS, readStored, writeStored,
-} from '../system-design/pages/capacityMath';
+} from '../system-design/pages/capacityMathModel';
 
 const STORAGE_KEY = 'rounds:guide:capacity-math';
 
