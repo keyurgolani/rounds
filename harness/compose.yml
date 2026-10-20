@@ -17,7 +17,7 @@ services:
   pocketbase:
     build:
       context: ../pocketbase
-    image: rounds-9s1-pocketbase:test
+    image: ${IMAGE_PREFIX:-rounds-9s1}-pocketbase:test
     # Named volume like prod, so recreating the container with signups
     # disabled keeps the accounts and rows created in the main phase.
     # `compose down -v` (the launcher's teardown) removes it.
@@ -43,7 +43,7 @@ services:
   runner:
     build:
       context: ../backend
-    image: rounds-9s1-runner:test
+    image: ${IMAGE_PREFIX:-rounds-9s1}-runner:test
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-}
@@ -62,7 +62,7 @@ services:
   frontend:
     build:
       context: ../frontend
-    image: rounds-9s1-frontend:test
+    image: ${IMAGE_PREFIX:-rounds-9s1}-frontend:test
     ports:
       - "127.0.0.1:${HTTP_HOST_PORT:-8380}:80"
     depends_on:
@@ -74,7 +74,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.probes
-    image: rounds-9s1-probes:test
+    image: ${IMAGE_PREFIX:-rounds-9s1}-probes:test
     environment:
       - POCKETBASE_URL=http://pocketbase:8090
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}

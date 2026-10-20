@@ -5,7 +5,8 @@
 #   1. bring PocketBase up with signups enabled
 #   2. main phase   — create two accounts, seed fixtures, run enforced probes,
 #                     read the live rules back against the policy table
-#   3. recreate PocketBase with signups disabled (volume persists)
+#   3. recreate PocketBase with signups disabled; the named pb_data volume
+#      keeps the accounts and rows from phase 2 across the restart
 #   4. hook phase   — signup-disabled probe
 #   5. verdict      — require every enforced result + rule read-back to pass,
 #                     and no pending family to leak; print pass/fail counts
@@ -14,8 +15,13 @@
 # directly on the compose network so the flow is identical under Finch
 # (nerdctl) and Docker and needs no TTY.
 #
+# Everything (image tags, network, volume) derives from the compose project
+# name, so two runs with different COMPOSE_PROJECT values do not collide on
+# this shared machine. Teardown removes the images this run built.
+#
 # Local (Finch, default):      harness/run.sh
 # CI (Docker on ubuntu):       COMPOSE_BIN="docker compose" harness/run.sh
+# Isolated concurrent run:     COMPOSE_PROJECT=rounds-9s1-b PB_HOST_PORT=8490 harness/run.sh
 set -euo pipefail
 
 HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,15 +33,20 @@ CONTAINER_BIN="${CONTAINER_BIN:-${COMPOSE_BIN%% *}}"
 PROJECT="${COMPOSE_PROJECT:-rounds-9s1}"
 COMPOSE_FILE="${HARNESS_DIR}/compose.yml"
 NETWORK="${PROJECT}_default"
-PROBE_IMAGE="rounds-9s1-probes:test"
+# Image tags, network, and volume all derive from the project name.
+export IMAGE_PREFIX="${PROJECT}"
+PROBE_IMAGE="${IMAGE_PREFIX}-probes:test"
+BUILT_IMAGES="${IMAGE_PREFIX}-pocketbase:test ${IMAGE_PREFIX}-probes:test ${IMAGE_PREFIX}-runner:test ${IMAGE_PREFIX}-frontend:test"
 
 PB_ADMIN_EMAIL_V="${PB_ADMIN_EMAIL:-ops@harness.test}"
 PB_ADMIN_PASSWORD_V="${PB_ADMIN_PASSWORD:-harness-admin-pw-123}"
 
-# Published PocketBase 0.22.22 release-zip digests (checksums.txt), recorded
-# in the receipt as the verified binary digest for the built architecture.
-PB_SHA256_AMD64="330714769484fcc77306ab9f14c25e9f4d9b4ffd8b5b16385a70199db4206978"
-PB_SHA256_ARM64="a1c99caa1099de61968b66a4be536f7d85969d01ea4f8ae7e21c85194dbcc79f"
+# The verified PocketBase binary digest comes from the Dockerfile's ARGs, the
+# one source of truth, rather than a copy kept in sync here. Prod/CI build
+# amd64; a native arm64 developer build records the arm64 digest.
+DOCKERFILE="${ROOT}/pocketbase/Dockerfile"
+PB_SHA256_AMD64="$(sed -n 's/^ARG PB_SHA256=\(.*\)$/\1/p' "${DOCKERFILE}")"
+PB_SHA256_ARM64="$(sed -n 's/^ARG PB_SHA256_ARM64=\(.*\)$/\1/p' "${DOCKERFILE}")"
 case "$(uname -m)" in
   arm64|aarch64) PB_BINARY_ARCH="arm64"; PB_BINARY_SHA256="${PB_SHA256_ARM64}" ;;
   *)             PB_BINARY_ARCH="amd64"; PB_BINARY_SHA256="${PB_SHA256_AMD64}" ;;
@@ -49,11 +60,12 @@ compose() { ${COMPOSE_BIN} -p "${PROJECT}" -f "${COMPOSE_FILE}" "$@"; }
 cleanup() {
   echo "--- tearing down harness stack ---"
   compose down -v --remove-orphans >/dev/null 2>&1 || true
+  ${CONTAINER_BIN} rmi ${BUILT_IMAGES} >/dev/null 2>&1 || true
   rm -f "${HARNESS_DIR}/.env"
 }
 trap cleanup EXIT
 
-set_signups() { printf 'ROUNDS_DISABLE_SIGNUPS=%s\n' "$1" > "${HARNESS_DIR}/.env"; }
+set_signups() { printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\n' "${IMAGE_PREFIX}" "$1" > "${HARNESS_DIR}/.env"; }
 
 probe() {
   local phase="$1"
@@ -79,10 +91,10 @@ rm -rf "${HARNESS_DIR}/.receipts"
 mkdir -p "${HARNESS_DIR}/.receipts"
 
 echo "--- building pocketbase + probes images ---"
+set_signups false
 compose build pocketbase probes
 
 echo "--- phase 1: PocketBase up (signups enabled) ---"
-set_signups false
 compose up -d pocketbase
 
 echo "--- phase 2: main (accounts, fixtures, enforced probes, rule read-back) ---"
