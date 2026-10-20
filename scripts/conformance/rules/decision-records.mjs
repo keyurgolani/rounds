@@ -29,6 +29,8 @@ export function recordFiles(ctx) {
   return ctx.files().filter((f) => path.posix.dirname(f) === DECISIONS_DIR && /^DR-.*\.json$/.test(path.posix.basename(f))).sort();
 }
 
+// TODO(ROUNDS-01-L02): match on the package key #16's packages.json settles
+// on; until then an entry's id, name, or service counts.
 function packageIds(ctx) {
   if (!ctx.exists(PACKAGES_PATH)) return null;
   try {

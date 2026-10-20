@@ -82,6 +82,8 @@ export function migrationFiles(ctx) {
 }
 
 // Collection lifecycle events in migration order, from `up` bodies only.
+// TODO(ROUNDS-32-L01): collection extraction moves to #155's store registry
+// once it lands (DR-0001 C5); the rule then reads collections from there.
 export function collectionEvents(ctx) {
   const events = [];
   for (const file of migrationFiles(ctx)) {

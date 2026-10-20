@@ -19,6 +19,8 @@ function leafLabel(leafIds, ref) {
 
 // ------------------------------------------------------------- labels.ts
 
+// TODO(ROUNDS-34-L08): #182's shared contracts package generates labels.ts
+// from terms.json; this renderer goes when it does.
 export function renderLabelsTs(terms) {
   const all = terms.terms || [];
   const userFacing = all.filter((t) => t.visibility === 'user-facing' && t.label);
