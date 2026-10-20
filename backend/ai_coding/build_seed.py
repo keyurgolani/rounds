@@ -132,54 +132,75 @@ def collect_round(d: pathlib.Path) -> dict:
     return manifest
 
 
-def main():
-    rounds = [collect_round(d) for d in sorted(ROOT.iterdir()) if d.is_dir()]
+# ROUNDS-00A-L02: the committed 1700001200_ai_coding_seed.js stays the v1
+# seed (the legacy runtime still reads it); build.py compiles the same
+# sources into the server-owned harness revisions. When a round's compiled
+# definition advances past version 1, this builder emits a NEW,
+# presentation-only migration that upserts the round's display fields and
+# sets definition_version, never deleting a row. At version 1 there is
+# nothing to add, so it writes nothing.
+DEFINITIONS_MANIFEST = pathlib.Path(__file__).resolve().parents[2] / "backend" / "definitions" / "manifest.json"
+PRESENTATION_OUT = (
+    pathlib.Path(__file__).resolve().parents[2] / "pocketbase" / "pb_migrations" / "1700006300_ai_coding_presentation.js"
+)
+PRESENTATION_FIELDS = ("title", "difficulty", "language", "description", "starter_files", "checkpoints", "rubric",
+                       "topics", "companies")
+
+
+def active_version(manifest_path: pathlib.Path, track: str) -> int:
+    """The highest active content version for ``track`` in the compiled
+    manifest, or 1 when there's nothing past the committed seed."""
+    if not manifest_path.exists():
+        return 1
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    versions = [e["content_version"] for e in manifest.get("entries", [])
+                if e.get("track") == track and e.get("lifecycle") == "active"]
+    return max(versions, default=1)
+
+
+def presentation_migration(rows: list[dict], version: int) -> str:
+    """A presentation-only upsert migration for ``rows`` at ``version``. It
+    updates an existing row by slug or creates one, sets definition_version,
+    and never deletes; down() leaves every row in place."""
+    display = [{"definition_version": version, **{k: r.get(k) for k in PRESENTATION_FIELDS}, "slug": r["slug"]}
+               for r in rows]
     body = "/// <reference path=\"../pb_data/types.d.ts\" />\n\n"
-    body += f"const ROUNDS = {json.dumps(rounds, indent=2)};\n\n"
+    body += f"const ROUNDS = {json.dumps(display, indent=2)};\n\n"
     body += """\
 migrate(
   (db) => {
     const dao = new Dao(db);
     const coll = dao.findCollectionByNameOrId("ai_coding_rounds");
     for (const r of ROUNDS) {
-      // Upsert: drop any existing row with this slug so the seed is
-      // idempotent across re-applies (the previous strategy of
-      // "skip on collision" left old rows with stale checkpoints).
+      // Upsert in place: update the existing row or create it. Never
+      // delete, so drafts and attempts that relate to it survive.
+      let rec;
       try {
-        const old = dao.findFirstRecordByData("ai_coding_rounds", "slug", r.slug);
-        dao.deleteRecord(old);
-      } catch (_) { /* not present */ }
-      const rec = new Record(coll, {
-        slug: r.slug,
-        title: r.title,
-        difficulty: r.difficulty,
-        // For multi-language rounds `language` is the primary (first
-        // entry of manifest.languages); the full set is derivable from
-        // Object.keys(checkpoints) when checkpoints is a map.
-        language: r.language,
-        description: r.description,
-        starter_files: r.starter_files,
-        checkpoints: r.checkpoints,
-        rubric: r.rubric,
-        topics: r.topics,
-        companies: r.companies,
-      });
+        rec = dao.findFirstRecordByData("ai_coding_rounds", "slug", r.slug);
+      } catch (_) {
+        rec = new Record(coll, { slug: r.slug });
+      }
+      for (const [key, value] of Object.entries(r)) rec.set(key, value);
       dao.saveRecord(rec);
     }
   },
-  (db) => {
-    const dao = new Dao(db);
-    for (const r of ROUNDS) {
-      try {
-        const rec = dao.findFirstRecordByData("ai_coding_rounds", "slug", r.slug);
-        dao.deleteRecord(rec);
-      } catch (_) { /* ignore */ }
-    }
+  (_db) => {
+    // Presentation-only and forward-safe: a version bump never deletes a
+    // row, so there is nothing to undo.
   },
 );
 """
-    OUT.write_text(body)
-    print(f"Wrote {OUT}")
+    return body
+
+
+def main():
+    version = active_version(DEFINITIONS_MANIFEST, "ai-coding")
+    if version <= 1:
+        print("ai_coding presentation: version 1 is the committed seed (1700001200); nothing to emit.")
+        return
+    rounds = [collect_round(d) for d in sorted(ROOT.iterdir()) if d.is_dir()]
+    PRESENTATION_OUT.write_text(presentation_migration(rounds, version))
+    print(f"Wrote {PRESENTATION_OUT}")
 
 
 if __name__ == "__main__":

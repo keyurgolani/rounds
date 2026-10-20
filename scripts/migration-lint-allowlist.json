@@ -1,5 +1,15 @@
 {
   "$comment": "Reviewed exceptions for scripts/lint_migrations.py. Each entry names one migration, the rules it may break, the issue that needs it, who reviewed it, and the SHA-256 of the reviewed file, so any later edit needs a new review. See docs/development.md#migrations.",
   "version": 1,
-  "entries": []
+  "entries": [
+    {
+      "path": "pocketbase/pb_migrations/1700006200_definitions_expand.js",
+      "rules": ["rewrites-rows"],
+      "sha256": "bfbc7dba0f614fec82ce08b3d44d78e2387729f6e61da1f94abaa0f8e9a5088e",
+      "issue": "#2",
+      "reason": "Annotates each presentation row with its definition version and records a definition_migration_journal row; it adds columns and a journal and deletes no row. Touched rows and dispositions are in the manifest.",
+      "reviewed_by": "pending owner review",
+      "manifest": "pocketbase/migration-manifests/1700006200_definitions_expand.json"
+    }
+  ]
 }

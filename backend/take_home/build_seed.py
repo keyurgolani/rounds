@@ -60,56 +60,87 @@ def collect_assignment(d: pathlib.Path) -> dict:
     }
 
 
-def main() -> None:
+# ROUNDS-00A-L02: the three assignments under assignments/ are retired, so
+# they compile only as retired definitions (build.py RETIRED_TAKE_HOME) and
+# this builder emits nothing for them. The committed 1700001400 seed stays
+# as it is. A future, non-retired assignment with a compiled take-home
+# definition past version 1 gets a presentation-only upsert migration here,
+# never a delete.
+DEFINITIONS_MANIFEST =pathlib.Path(__file__).resolve().parents[2] / "backend" / "definitions" / "manifest.json"
+PRESENTATION_OUT = (
+    pathlib.Path(__file__).resolve().parents[2] / "pocketbase" / "pb_migrations" / "1700006400_take_home_presentation.js"
+)
+PRESENTATION_FIELDS = ("title", "difficulty", "language", "entrypoint", "time_budget_min", "ai_policy", "prompt_md",
+                       "starter_files", "harness_files", "rubric", "topics", "companies")
+
+
+def _manifest_entries() -> list[dict]:
+    if not DEFINITIONS_MANIFEST.exists():
+        return []
+    return json.loads(DEFINITIONS_MANIFEST.read_text(encoding="utf-8")).get("entries", [])
+
+
+def live_assignments() -> list[dict]:
+    """The assignments whose take-home definition is active (not retired).
+    Every current assignment is retired, so this is empty."""
+    retired = {e["slug"] for e in _manifest_entries() if e.get("track") == "take-home" and e.get("lifecycle") == "retired"}
+    active = {e["slug"]: e["content_version"] for e in _manifest_entries()
+              if e.get("track") == "take-home" and e.get("lifecycle") == "active"}
     if not ROOT.exists():
-        # No assignments authored yet — emit an empty seed so the
-        # migration applies cleanly.
-        rows: list[dict] = []
-    else:
-        rows = [collect_assignment(d) for d in sorted(ROOT.iterdir()) if d.is_dir()]
+        return []
+    out = []
+    for d in sorted(ROOT.iterdir()):
+        if not d.is_dir():
+            continue
+        slug = json.loads((d / "manifest.json").read_text(encoding="utf-8"))["slug"]
+        if slug in retired or slug not in active:
+            continue
+        row = collect_assignment(d)
+        row["definition_version"] = active[slug]
+        out.append(row)
+    return out
+
+
+def presentation_migration(rows: list[dict]) -> str:
+    """A presentation-only upsert migration for ``rows``. It updates a row
+    by slug or creates it, never deletes; down() leaves every row."""
+    display = [{"definition_version": r["definition_version"],
+                **{k: r.get(k) for k in PRESENTATION_FIELDS}, "slug": r["slug"]} for r in rows]
     body = "/// <reference path=\"../pb_data/types.d.ts\" />\n\n"
-    body += f"const ASSIGNMENTS = {json.dumps(rows, indent=2)};\n\n"
+    body += f"const ASSIGNMENTS = {json.dumps(display, indent=2)};\n\n"
     body += """\
 migrate(
   (db) => {
     const dao = new Dao(db);
     const coll = dao.findCollectionByNameOrId("take_home_assignments");
     for (const a of ASSIGNMENTS) {
+      // Upsert in place: update the existing row or create it. Never
+      // delete, so drafts and attempts survive.
+      let rec;
       try {
-        const old = dao.findFirstRecordByData("take_home_assignments", "slug", a.slug);
-        dao.deleteRecord(old);
-      } catch (_) { /* not present */ }
-      const rec = new Record(coll, {
-        slug: a.slug,
-        title: a.title,
-        difficulty: a.difficulty,
-        language: a.language,
-        entrypoint: a.entrypoint,
-        time_budget_min: a.time_budget_min,
-        ai_policy: a.ai_policy,
-        prompt_md: a.prompt_md,
-        starter_files: a.starter_files,
-        harness_files: a.harness_files,
-        rubric: a.rubric,
-        topics: a.topics,
-        companies: a.companies,
-      });
+        rec = dao.findFirstRecordByData("take_home_assignments", "slug", a.slug);
+      } catch (_) {
+        rec = new Record(coll, { slug: a.slug });
+      }
+      for (const [key, value] of Object.entries(a)) rec.set(key, value);
       dao.saveRecord(rec);
     }
   },
-  (db) => {
-    const dao = new Dao(db);
-    for (const a of ASSIGNMENTS) {
-      try {
-        const rec = dao.findFirstRecordByData("take_home_assignments", "slug", a.slug);
-        dao.deleteRecord(rec);
-      } catch (_) { /* ignore */ }
-    }
+  (_db) => {
+    // Presentation-only and forward-safe: nothing to undo.
   },
 );
 """
-    OUT.write_text(body, encoding="utf-8")
-    print(f"Wrote {OUT}")
+    return body
+
+
+def main() -> None:
+    rows = live_assignments()
+    if not rows:
+        print("take_home presentation: every assignment is retired; nothing to emit.")
+        return
+    PRESENTATION_OUT.write_text(presentation_migration(rows), encoding="utf-8")
+    print(f"Wrote {PRESENTATION_OUT}")
 
 
 if __name__ == "__main__":

@@ -116,6 +116,23 @@ The lint can't prove the review happened. It runs from the pull request's own ch
 
 [#156](https://github.com/keyurgolani/rounds/issues/156)'s migration framework and [#157](https://github.com/keyurgolani/rounds/issues/157)'s restore rehearsal replace this lint.
 
+A migration that rewrites rows records what it touches in a committed manifest under `pocketbase/migration-manifests/`, and its allowlist entry's `manifest` key names that file. `1700006200_definitions_expand.js` and its manifest are the first pair.
+
+## Server-Owned Definitions
+
+The executable tests, harnesses, and renderer contract are compiled from the seed sources into committed files under `backend/definitions/`, not read from PocketBase rows. The compiler is `backend/definitions/build.py`:
+
+```sh
+python3 backend/definitions/build.py           # rewrite backend/definitions/ from the sources
+python3 backend/definitions/build.py --check    # exit 1 if the committed output is stale
+```
+
+It reads the coding seeds, the AI-coding rounds, and the take-home assignments and writes `manifest.json` (every version's identity, lifecycle, path, and `sha256:` checksum over its RFC 8785 bytes) and one file per version under `store/`. Shipped bytes never change: a changed source adds the next version and supersedes the old one, and only a manifest edit retires a version. The schemas live in `contracts/definitions/`; `scripts/definitions_bindings.py --check` proves the committed Python and TypeScript bindings still match them. The backend suite runs both `--check`s, and the `definitions` CI job (`scripts/definitions_manifest_check.py`) rejects any manifest change other than new versions and forward lifecycle moves.
+
+When a definition advances past version 1, `backend/ai_coding/build_seed.py` and `backend/take_home/build_seed.py` emit a new presentation-only upsert migration (never a delete) for the display rows; at version 1 the committed seed migrations already cover them, so the builders emit nothing.
+
+The runner verifies every shipped version's checksum at startup and serves them only at `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce` (see the [execution runbook](security/execution-runbook.md#compiled-definitions)); the default `legacy` keeps the PocketBase path.
+
 ## Adding Pages
 
 1. Add the route component under `frontend/src/pages/`.
