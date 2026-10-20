@@ -1,0 +1,419 @@
+{
+  "$schema": "./decision-record.schema.json",
+  "id": "DR-0002",
+  "title": "Source-of-truth and package-boundary matrix",
+  "leaf": "ROUNDS-01-L02",
+  "status": "ratified",
+  "owner": "Product Architecture",
+  "approver": "keyurgolani",
+  "approvalRef": {
+    "pr": 194,
+    "governedFiles": [
+      {"path":"contracts/authority/matrix.json","sha256":"f0bf42b750e1097b03bae08c5b516cd7989ab6b23caf67b601e1d4b83881b4bc"},
+      {"path":"contracts/authority/packages.json","sha256":"10eb81e982e6d0461dd99a80b78f0b12d639819f771d1eee75a6c97ea2a9fbc7"},
+      {"path":"contracts/authority/owner-labels.json","sha256":"f260e1d2d3cc6572c9c9456bb0d4886483bf8b989c9ebaabe68d2e188e31d800"},
+      {"path":"contracts/authority/baseline-stores.json","sha256":"a04b3674b6ce1445ca5ec27609f1f1b237fecf43b2d7d5494d75b34ef0913f11"}
+    ]
+  },
+  "ratifiedOn": "2026-10-20",
+  "compatibility": "additive",
+  "revision": 1,
+  "supersedes": null,
+  "consumers": [
+    "ROUNDS-00A-L01",
+    "ROUNDS-00A-L02",
+    "ROUNDS-00A-L03",
+    "ROUNDS-00A-L04",
+    "ROUNDS-00A-L05",
+    "ROUNDS-00A-L06",
+    "ROUNDS-00B-L03",
+    "ROUNDS-00B-L04",
+    "ROUNDS-00B-L06",
+    "ROUNDS-00B-L07",
+    "ROUNDS-01-L03",
+    "ROUNDS-02-L01",
+    "ROUNDS-02-L02",
+    "ROUNDS-02-L03",
+    "ROUNDS-02-L04",
+    "ROUNDS-02-L05",
+    "ROUNDS-03-L01",
+    "ROUNDS-03-L02",
+    "ROUNDS-03-L03",
+    "ROUNDS-03-L04",
+    "ROUNDS-04-L01",
+    "ROUNDS-04-L04",
+    "ROUNDS-05-L01",
+    "ROUNDS-05-L02",
+    "ROUNDS-05-L03",
+    "ROUNDS-05-L04",
+    "ROUNDS-05-L05",
+    "ROUNDS-06-L01",
+    "ROUNDS-06-L02",
+    "ROUNDS-06-L03",
+    "ROUNDS-07-L01",
+    "ROUNDS-07-L02",
+    "ROUNDS-07-L05",
+    "ROUNDS-08-L05",
+    "ROUNDS-09-L02",
+    "ROUNDS-10-L01",
+    "ROUNDS-10-L02",
+    "ROUNDS-11-L01",
+    "ROUNDS-12-L01",
+    "ROUNDS-12-L03",
+    "ROUNDS-14-L01",
+    "ROUNDS-14-L02",
+    "ROUNDS-14-L03",
+    "ROUNDS-14-L04",
+    "ROUNDS-14-L05",
+    "ROUNDS-14-L07",
+    "ROUNDS-15-L01",
+    "ROUNDS-15-L03",
+    "ROUNDS-15-L04",
+    "ROUNDS-16-L01",
+    "ROUNDS-16-L03",
+    "ROUNDS-16-L04",
+    "ROUNDS-17-L01",
+    "ROUNDS-17-L02",
+    "ROUNDS-17-L03",
+    "ROUNDS-18-L03",
+    "ROUNDS-18-L04",
+    "ROUNDS-18-L05",
+    "ROUNDS-19-L01",
+    "ROUNDS-19-L02",
+    "ROUNDS-19-L04",
+    "ROUNDS-20-L01",
+    "ROUNDS-20-L03",
+    "ROUNDS-21-L01",
+    "ROUNDS-22-L01",
+    "ROUNDS-22-L02",
+    "ROUNDS-22-L05",
+    "ROUNDS-23-L01",
+    "ROUNDS-23-L03",
+    "ROUNDS-23-L04",
+    "ROUNDS-24-L01",
+    "ROUNDS-25-L01",
+    "ROUNDS-25-L02",
+    "ROUNDS-25-L03",
+    "ROUNDS-26-L01",
+    "ROUNDS-26-L02",
+    "ROUNDS-26-L04",
+    "ROUNDS-27-L01",
+    "ROUNDS-28-L01",
+    "ROUNDS-28-L02",
+    "ROUNDS-28-L06",
+    "ROUNDS-29-L01",
+    "ROUNDS-29-L02",
+    "ROUNDS-29-L03",
+    "ROUNDS-30-L02",
+    "ROUNDS-30-L03",
+    "ROUNDS-30-L04",
+    "ROUNDS-31-L01",
+    "ROUNDS-31-L02",
+    "ROUNDS-31-L03",
+    "ROUNDS-31-L04",
+    "ROUNDS-31-L05",
+    "ROUNDS-31-L06",
+    "ROUNDS-31-L07",
+    "ROUNDS-31-L08",
+    "ROUNDS-31-L09",
+    "ROUNDS-32-L01",
+    "ROUNDS-32-L04",
+    "ROUNDS-32-L05",
+    "ROUNDS-32-L06",
+    "ROUNDS-32-L07",
+    "ROUNDS-32-L08",
+    "ROUNDS-32-L09",
+    "ROUNDS-32-L10",
+    "ROUNDS-33-L02",
+    "ROUNDS-34-L03",
+    "ROUNDS-34-L08"
+  ],
+  "prerequisites": ["ROUNDS-01-L01"],
+  "authorityBoundary": "contracts/authority/matrix.json",
+  "affectedPackages": [
+    "Transaction-owning Command Gateway",
+    "Account Service",
+    "Career Profile Service",
+    "Identity Directory for Organization and Person",
+    "Opportunity and Pursuit Service",
+    "Interview Process Service",
+    "Artifact Service",
+    "Practice Service",
+    "Action Service",
+    "Capture and Ingestion Service",
+    "Revision and Audit Service",
+    "Search Service",
+    "Read Model and Recommendation Service",
+    "Career Pack Registry",
+    "Public Share Capability Service",
+    "Execution Control Plane",
+    "Ephemeral Execution Worker pool",
+    "Provider Gateway"
+  ],
+  "versioning": "contracts/authority/matrix.json and this record share one revision counter, so a row is cited as DR-0002@<revision>:<row-id>. A change to a row's command owner, target authority, privacy floor or visibility, scope, or package is breaking and gives the row the new revision; filling a pending cell or adding a row is additive. The check compares matrix.json with the base branch (AUTH_REVISION_NOT_BUMPED, AUTH_COMPATIBILITY_UNDECLARED, AUTH_ROW_REMOVED). A store's rows in baseline-stores.json count as matrix content: adding one is additive and dropping one is breaking. A ratified revision pins the SHA-256 of matrix.json, packages.json, owner-labels.json, and baseline-stores.json, so an unapproved edit fails DR_APPROVAL_STALE.",
+  "supersession": "A ratified revision is never edited. A changed decision gets a new revision that names the prior one in supersedes (DR-0002@<n>) and gives supersessionReason; citers of changed breaking rows re-cite, and #17's LEAF_GATE_SUPERSEDED flags stale citations. An unratified revision can be reverted.",
+  "context": "Issue #16 (ROUNDS-01-L02). Spec lines refer to rounds-review docs/superpowers/specs/2026-10-18-rounds-review-board-design.md; code citations are lines at 62d4eae. D8 is an orchestrator decision under the owner's delegation.",
+  "securityConsequences": {
+    "account": "No runtime or privilege change. Every account-scoped row inherits the server-derived account scope (#9, ROUNDS-00B-L01); #172 (ROUNDS-34-L03) registers each row's authorization.",
+    "privacy": "Each account row names a privacy floor from spec 2142-2148; #72 (ROUNDS-14-L01) may only tighten it. Secret rows (sessions, provider credentials, share bearer digests) have only verifier or gateway consumers.",
+    "secret": "Secrets appear by name and location only (AI_KEY_SECRET, PB_ADMIN_PASSWORD, resume_share_links.token, pocketbase_auth). The demo row cites its quota fields (1700000600_demo_user.js:15-17), never its credential lines. The check fails a citation of a credential line, any credential value the audited revision assigns, and secret-shaped strings in these files.",
+    "publicBoundary": "Every row lists a public-share entry: the consumer, or n/a with the reason. Career Profile, Directory, and Artifact rows reach a public capability only through a frozen Share Projection (#93), Legacy Artifact Snapshots only through a contained capability (#11), and share capability metadata only through the public renderer. Secret rows and the server-only Test Definition, Harness Revision, and Artifact Renderer Contract rows have only verifier or gateway consumers."
+  },
+  "decisions": [
+    {
+      "id": "M1",
+      "title": "One row per durable concept and relation",
+      "status": "ratified",
+      "sources": ["spec 775-811","spec 1917-1935","spec 1968-1998"],
+      "decision": "The 31 spec rows (spec 781-811) keep their five columns verbatim, and every row adds: id, revision, compatibility, scope (account, platform-global, or pack-owned), a #15 term, a command owner (one service and the owning leaf), commands, baseline writers at 62d4eae, exactly one target authority, storage (pending #18), a privacy floor (account rows) or visibility (platform and pack rows), a ledger disposition, transfer and projection blocks, typed consumers, a package, and the nine registration columns. A cell holds a value, pending:<leaf-id>, n/a:<reason>, or blocked:OD-<n>. Rows with pending cells are citable and closed to implementation until the leaf fills them; blocked rows are not citable. A target names one record, and no two rows share one. A browser cache row has no authority of its own: its target is n/a and yields_to names the row it copies (draft-caches yields to practice-draft, job-description-cache to opportunity).",
+      "alternatives": [
+        {
+          "option": "Free-form ownership prose per leaf",
+          "reason": "Leaves already disagree; nothing machine-checkable would stop a second writer."
+        },
+        {
+          "option": "One row per collection",
+          "reason": "Collections are #155's stores; several mix concepts (applications holds Opportunity and Pursuit)."
+        }
+      ],
+      "consequences": "Implementers find a concept's single writer, read models, privacy floor, package, and retirement in one place and cite it as DR-0002@<revision>:<row-id>.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one with a new revision."
+    },
+    {
+      "id": "M2",
+      "title": "Baseline writers sit apart from the one target authority",
+      "status": "ratified",
+      "sources": ["spec 2637-2647"],
+      "decision": "baseline_writers lists the modules and lines that write each store at 62d4eae; target_authority names the one writable authority the row moves to. When more than one module writes a store, each of those writers names the conflicts that cover it, and so does a derived consumer that writes its source. Each conflict has a disposition and resolving leaves, and it exempts only the writers that name it, so a new second writer on the same row still fails. A registry defined in code names its store bundled:<registry>, so copies of one registry in several modules count as several writers. A row has one writable authority at any revision: the legacy writer until its transfer leaf switches it, then the target. Compatibility adapters read, shadow, or compare, and never write.",
+      "alternatives": [
+        {
+          "option": "Reject any row with two writers",
+          "reason": "Every conflicted baseline row (C1 to C17) would fail, so the matrix could not describe today."
+        },
+        {"option":"Exempt a whole row once it names a conflict","reason":"A new second writer on that row would pass unnoticed."}
+      ],
+      "consequences": "Rule 2 fails a second writer that names no conflict; rule 1 fails a second target authority on a row, and the cross-row check fails one authority claimed by two rows.",
+      "migrationImpact": "Each conflict names the leaf that resolves it; nothing moves here.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one with a new revision."
+    },
+    {
+      "id": "M3",
+      "title": "Baseline conflicts C1 to C17",
+      "status": "ratified",
+      "sources": ["issue #16 C1-C13"],
+      "decision": "C1 to C13 are flagged as the issue lists them. Building the matrix found four more second writers at 62d4eae, flagged as C14 (the SPA and the runner both write ai_settings), C15 (both create and delete resume_share_links), C16 (the demo reset deletes nine collections' rows from the client), and C17 (four modules each define their own copy of the pursuit stage list), each with its disposition and resolving leaf.",
+      "alternatives": [{"option":"Leave C14 to C17 out","reason":"Rule 2 would fail, or the matrix would hide a second writer."}],
+      "consequences": "Each resolving leaf removes its conflict's second writer. The conflicts stay listed as facts about 62d4eae, and the check requires C1 to C13 while the matrix audits that revision.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one with a new revision."
+    },
+    {
+      "id": "M4",
+      "title": "Spec rows that split",
+      "status": "ratified",
+      "sources": ["spec 782","spec 783","spec 810"],
+      "decision": "Three spec rows hold aggregates with different owners, so each splits and every part keeps the spec text: 782 into professional identity, Career Profile contact points (Private, #24), and Person contact points (Third-party personal, #27); 783 into employment (#31) and projects (#32); 810 into Share Capability metadata (Private, #11), bearer digests (Secret, #12), and Share Projection content (#93).",
+      "alternatives": [{"option":"One owner per spec row","reason":"A row has one command owner, and these concepts have two or three."}],
+      "consequences": "Each part carries its own owner, privacy floor, and consumers.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one with a new revision."
+    },
+    {
+      "id": "M5",
+      "title": "Rows beyond the issue's list",
+      "status": "ratified",
+      "sources": ["spec 1917-1935","issue #16 Rows added"],
+      "decision": "Durable concepts the issue's list does not name get rows too, so every leaf's owner sentence names a row: execution admission (#1) and execution attempts (#3), Capture Items (#50), Processing Attempts (#54), typed relations (#37), evidence gap maps (#139), Today hides and reminder acknowledgments (#144; Recommendation accept, dismiss, and snooze stay on #140's row, spec 801), ATS analysis (#86), resume autosave drafts (#83), export and restore (#91, #92), view state (browser sort, filter, width, and focus keys, #158), pasted job description caches (#158, yielding to the Opportunity that #95 owns, read by #86 and #87), and status registries (#48).",
+      "alternatives": [
+        {
+          "option": "Only the listed rows",
+          "reason": "Rule 9 would fail every browser key family that is view state, and several owner sentences would name no row."
+        }
+      ],
+      "consequences": "Every baseline store has a row, and each owner sentence names its rows or says the leaf owns none.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one with a new revision."
+    },
+    {
+      "id": "M6",
+      "title": "Storage, projections, and privacy are enforced elsewhere",
+      "status": "ratified",
+      "sources": ["spec 1937-1947","spec 1982-1998","spec 2139-2148"],
+      "decision": "storage is pending:ROUNDS-02-L01 until #18 assigns a store. Projection blocks name sources, watermark, stale and degraded behavior, and one projector, and every source lists the read model as a consumer; #23 (ROUNDS-02-L06) and #146 (ROUNDS-31-L01) enforce them at runtime. Privacy floors use the five spec class names; #72 (ROUNDS-14-L01) owns class definitions, sink policy, and the field map, which may only tighten a floor, and loosening one needs a breaking revision.",
+      "alternatives": [
+        {"option":"Assign stores now","reason":"#18 owns the database decision."},
+        {"option":"Restate privacy rules here","reason":"#72 owns them; two copies would drift."}
+      ],
+      "consequences": "Filling storage or the registration columns is additive, so citations hold.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one with a new revision."
+    },
+    {
+      "id": "M7",
+      "title": "Boundary with #155",
+      "status": "ratified",
+      "sources": ["issue #155"],
+      "decision": "This matrix owns concept-level rows and dispositions. baseline-stores.json lists every collection and browser key family at 62d4eae with its rows; #155 (ROUNDS-32-L01) seeds its store registry from it, maps every store, field, and key to a row, and repoints rule 9 at that registry.",
+      "alternatives": [{"option":"Map fields here","reason":"#155 owns the field-level inventory; this leaf stays at concept level."}],
+      "consequences": "A store with no row fails rule 9 until #155 takes the check over.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one with a new revision."
+    },
+    {
+      "id": "L1",
+      "title": "Owner labels map to services",
+      "status": "ratified",
+      "sources": ["spec 1917-1935","issue #16 Command-owner labels"],
+      "decision": "owner-labels.json maps each of the 36 catalog owner labels to one service package, none (UI, composition, and program labels own no commands), or per-row; AI Trust Platform maps to D8's Provider Gateway. Six labels take per-row services: Portability and Sharing, Read Platform, Identity and Career Profile; Identity, Authorization, and Sharing; Domain Platform; and Relationships and Networking. A row whose command owner is a leaf of a capability must take that label's service for it.",
+      "alternatives": [{"option":"One service per label","reason":"Six labels own rows in different services."}],
+      "consequences": "owner-sentence-corrections.json rewrites the 101 templated owner sentences to name rows and the owning leaf, for #17's re-authorization.",
+      "migrationImpact": "No issue body is edited here.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one with a new revision."
+    },
+    {
+      "id": "V1",
+      "title": "Row compatibility and revisions",
+      "status": "ratified",
+      "sources": ["issue #16 AC 9"],
+      "decision": "The matrix revision equals DR-0002's. Each changed row declares compatibility. A change to a row's command owner, target authority, privacy floor or visibility, scope, or package is breaking: the row takes the new matrix revision, so only that row's citers re-cite. Filling a pending cell or adding a row is additive. Rows are superseded, never deleted.",
+      "alternatives": [{"option":"One compatibility flag for the whole matrix","reason":"One breaking row would reblock every citer."}],
+      "consequences": "The check compares matrix.json with the base branch.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one with a new revision."
+    },
+    {
+      "id": "G1",
+      "title": "Export gate at ROUNDS-01 closure",
+      "status": "ratified",
+      "sources": ["spec 3194-3219","spec 3232-3236","DR-0001 correction C1"],
+      "decision": "The universal gate of spec 3194-3219 (database and transaction ADR, ERD, command schemas, authorization matrix, Audit Entry and Domain Event catalogue, and the rest of that list) is a ROUNDS-01 closure gate, as DR-0001 correction C1 recorded. Its producers are #17 to #22 (ROUNDS-01-L03, ROUNDS-02-L01 to L05), #172 (ROUNDS-34-L03), and each contract leaf. This leaf creates part of that gate, so it is not blocked by it (spec 3232-3236): it merges on #15 (ROUNDS-01-L01), its only prerequisite, and its rollout gate opens once #15 is complete, current, and verified.",
+      "alternatives": [
+        {"option":"Gate this merge on the export gate","reason":"The gate needs #18, which depends on this leaf, so it could never open."}
+      ],
+      "consequences": "Rollout: ratify matrix revision 1 with conformance green on main, then unblock only the leaves whose prerequisites include ROUNDS-01-L02.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one with a new revision."
+    },
+    {
+      "id": "D8",
+      "title": "Provider Gateway, an 18th logical service",
+      "status": "ratified",
+      "sources": ["orchestrator decision D8 under the owner's delegation","spec 808","spec 1937-1938","owner direction [83]"],
+      "decision": "Provider invocation gets an 18th logical service, the Provider Gateway (package provider-gateway). It owns Provider Invocation Intent, Outcome, and Receipt and Staged Provider Results, and it is the only user of the account AI credential store. Spec 808 names \"Provider gateway only\" as the credential's consumer, and that gateway is not one of the 17 services; every AI capability calls it; service boundaries describe ownership and contracts, not deployments (spec 1937-1938); and the owner asks for shared building blocks to be abstracted and reused [83]. The AI Trust Platform label maps to it, so its five rows (AI provider credential, AI role settings, Generation Proposal, Staged Provider Result, Provider Invocation Receipt) take it, and #73 (ROUNDS-14-L02) owns invocation and the keyring.",
+      "alternatives": [
+        {
+          "option": "One of the 17 (the Account Service holds the secret store)",
+          "reason": "Splits the credential from the invocations and receipts that use it, and every AI capability would call into the Account Service."
+        },
+        {"option":"Leave OD-1 blocked","reason":"Five rows stay uncitable, and #73 to #75 and #180 have no service."}
+      ],
+      "consequences": "packages.json lists 18 packages, and the 18th names this decision. The five AI Trust Platform rows are citable.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "A superseding revision can fold the gateway into one of the 17; the five rows would take that service as a breaking change."
+    },
+    {
+      "id": "OD-1",
+      "title": "Service for provider invocation",
+      "status": "ratified",
+      "sources": ["spec 808","spec 1917-1935","DR-0002 D8"],
+      "decision": "Settled by D8, an orchestrator decision under the owner's delegation: provider invocation is the 18th logical service, the Provider Gateway. The issue proposed no default.",
+      "alternatives": [{"option":"One of the 17","reason":"D8 explains why not."}],
+      "consequences": "The five AI Trust Platform rows take the Provider Gateway and are citable.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one with a new revision.",
+      "od": {"state":"settled","basis":"DR-0002 D8, an orchestrator decision under the owner's delegation"}
+    },
+    {
+      "id": "OD-2",
+      "title": "Career Activity has one owner",
+      "status": "ratified",
+      "sources": ["rounds-review PRODUCT.md:67-70","spec 488-500","spec 1495-1510"],
+      "decision": "Settled by the approved direction: PRODUCT.md lines 67-70 make Career Activity the sole mutable authority for scheduled and completed interviews, conversations, follow-ups, submissions, milestones, and other dated occurrences. #107 (ROUNDS-22-L02) owns the aggregate in the Interview Process Service; #112 (ROUNDS-23-L02, conversations) and #88 (ROUNDS-17-L04, submissions) register kinds and call its commands.",
+      "alternatives": [{"option":"Separate conversation and submission aggregates","reason":"PRODUCT.md:67-70 rules it out."}],
+      "consequences": "The Career Activity rows are citable; #103, #106, #112, #113, and #116 unblock on this point.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one with a new revision.",
+      "od": {"state":"settled","basis":"rounds-review PRODUCT.md:67-70"}
+    },
+    {
+      "id": "OD-3",
+      "title": "Projector for the Preparation plan read model",
+      "status": "ratified-here",
+      "sources": ["spec 1968-1980","catalog #152"],
+      "decision": "Default taken from the issue: #152 (ROUNDS-31-L07), filed as a second Today read model, is retargeted to the Preparation plan read model (spec 1977), so each of the nine read models has one projector. #143 (ROUNDS-30-L02) keeps Today.",
+      "alternatives": [{"option":"Keep #152 on Today","reason":"Two Today projectors and none for the Preparation plan."}],
+      "consequences": "The Preparation plan row names #152 as projector.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "The owner can move the projector in a superseding revision.",
+      "od": {"state":"default-taken","default":"retarget #152 to the Preparation plan"}
+    },
+    {
+      "id": "OD-4",
+      "title": "Pack activation scope",
+      "status": "ratified-here",
+      "sources": ["spec 809","catalog #40"],
+      "decision": "Default taken: spec 809 allows \"Account or deployment Pack Activation\", and #40's approved scope is \"activate per account\", so the Pack Activation row is account-scoped: the deployment installs a pack once, and each account enables it, on by default for first-party packs.",
+      "alternatives": [{"option":"Deployment-only activation","reason":"Drops the approved per-account enablement."}],
+      "consequences": "The row's scope is account.",
+      "migrationImpact": "None. No stored data changes; each row's transfer leaf moves its data.",
+      "rollbackImpact": "A superseding revision can make activation deployment-only.",
+      "od": {"state":"default-taken","default":"per-account enablement over a deployment installation"}
+    },
+    {
+      "id": "OD-5",
+      "title": "Login streak",
+      "status": "draft",
+      "sources": ["spec 366","issue #24 owner input 2"],
+      "decision": "Open. #24 asks whether the login streak stays, moves to Account, or retires. Until the owner decides it stays a browser cache (rounds.loginStreak.v1, with and without the user id) that #158 (ROUNDS-32-L04) keeps and exports; its row is blocked:OD-5.",
+      "alternatives": [
+        {"option":"Move it to an Account preference","reason":"The owner's call (#24)."},
+        {"option":"Retire it","reason":"The owner's call (#24)."}
+      ],
+      "consequences": "The login streak row is not citable until the owner decides.",
+      "migrationImpact": "None until decided.",
+      "rollbackImpact": "Deciding is additive for other rows.",
+      "od": {"state":"blocked","default":"stays a #158 cache"}
+    }
+  ],
+  "corrections": [
+    {
+      "id": "R1",
+      "title": "The #18 and #36 edges",
+      "detail": "Through #17's re-authorization, #18 (ROUNDS-02-L01) depends on #15, this leaf, #9's harness (ROUNDS-00B-L01), and #1's stage 3 (ROUNDS-00A-L01/S3) instead of #17, and #36 (ROUNDS-06-L01) depends on this leaf.",
+      "citedBy": ["ROUNDS-01-L03","ROUNDS-02-L01","ROUNDS-06-L01"]
+    },
+    {
+      "id": "R2",
+      "title": "Owner sentences in 101 bodies",
+      "detail": "contracts/authority/owner-sentence-corrections.json rewrites each templated \"<label> is the only command or contract owner\" sentence to name the DR-0002 rows and owning leaf, or to say the leaf owns no row.",
+      "citedBy": ["ROUNDS-01-L03"]
+    },
+    {
+      "id": "R3",
+      "title": "#152 retarget",
+      "detail": "OD-3's default moves #152 (ROUNDS-31-L07) from a second Today read model to the Preparation plan read model.",
+      "citedBy": ["ROUNDS-31-L07"]
+    }
+  ],
+  "departures": [
+    {
+      "id": "P1",
+      "title": "Conflicts beyond C13",
+      "detail": "C14 to C17 are second writers at 62d4eae that the issue does not list (M3).",
+      "citedBy": ["ROUNDS-14-L02","ROUNDS-00B-L03","ROUNDS-00B-L07","ROUNDS-20-L01"]
+    },
+    {
+      "id": "P2",
+      "title": "Rows beyond the issue's list",
+      "detail": "M5 adds rows for durable concepts the issue does not list, so every store and owner sentence has a row.",
+      "citedBy": ["ROUNDS-01-L03"]
+    },
+    {
+      "id": "P3",
+      "title": "An 18th service",
+      "detail": "D8 adds the Provider Gateway beyond the 17 services of spec 1917-1935, for spec 808's provider gateway.",
+      "citedBy": ["ROUNDS-14-L02","ROUNDS-14-L03","ROUNDS-14-L04","ROUNDS-14-L07"]
+    }
+  ]
+}

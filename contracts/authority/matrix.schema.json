@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/authority/matrix.schema.json",
+  "title": "Source-of-truth and package-boundary matrix",
+  "description": "Shape of contracts/authority/matrix.json (ROUNDS-01-L02, DR-0002). Cross-field rules (one target authority, flagged baseline conflicts, Secret consumers, transfers, projections, label mapping, revisions) live in scripts/conformance/rules/authority.mjs.",
+  "type": "object",
+  "required": ["registry", "revision", "compatibility", "decisionRecord", "auditedRevision", "spec", "readModels", "conflicts", "relations", "rows"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string" },
+    "registry": { "const": "rounds-authority-matrix" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "compatibility": { "enum": ["additive", "breaking"] },
+    "decisionRecord": { "const": "DR-0002" },
+    "auditedRevision": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "spec": {
+      "type": "object",
+      "required": ["source", "authorityMatrix", "services", "readModels", "authorityRowsSha256"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "authorityMatrix": { "type": "string", "pattern": "^\\d+-\\d+$" },
+        "services": { "type": "string", "pattern": "^\\d+-\\d+$" },
+        "readModels": { "type": "string", "pattern": "^\\d+-\\d+$" },
+        "authorityRowsSha256": {
+          "description": "SHA-256 of spec 781-811, one line per row with its five cells joined by \" | \", so an edited spec column fails without a rounds-review checkout.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "readModels": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "row"],
+        "additionalProperties": false,
+        "properties": { "name": { "type": "string", "minLength": 1 }, "row": { "$ref": "#/$defs/rowId" } }
+      }
+    },
+    "conflicts": { "type": "array", "items": { "$ref": "#/$defs/conflict" } },
+    "relations": { "type": "array", "items": { "$ref": "#/$defs/relation" } },
+    "rows": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/row" } }
+  },
+  "$defs": {
+    "rowId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+    "leafId": { "type": "string", "pattern": "^ROUNDS-\\d{2}[A-Z]?-L\\d{2}$" },
+    "cellNote": {
+      "description": "A cell that is not a value: pending:<leaf-id> (that leaf fills it), n/a:<reason>, or blocked:OD-<n> (an open owner decision).",
+      "type": "string",
+      "pattern": "^(pending:ROUNDS-\\d{2}[A-Z]?-L\\d{2}|n/a:\\S.*|blocked:OD-\\d+)$"
+    },
+    "cellText": {
+      "description": "A value, or a cell note.",
+      "type": "string",
+      "minLength": 1
+    },
+    "citation": {
+      "type": "object",
+      "required": ["path", "lines"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "lines": { "type": "string", "pattern": "^\\d+(-\\d+)?$" },
+        "anchor": { "type": "string", "minLength": 1 }
+      }
+    },
+    "writer": {
+      "type": "object",
+      "required": ["store", "path", "lines", "location"],
+      "additionalProperties": false,
+      "properties": {
+        "store": {
+          "description": "A collection or browser key family in baseline-stores.json, a glob over collections (exp_*), or bundled:<registry> for a registry defined in code.",
+          "type": "string",
+          "minLength": 1
+        },
+        "path": { "type": "string", "minLength": 1 },
+        "lines": { "type": "string", "pattern": "^\\d+(-\\d+)?$" },
+        "anchor": { "description": "Text on the first cited line at the audited revision.", "type": "string", "minLength": 1 },
+        "location": { "enum": ["frontend", "backend", "backend/pdf_renderer", "pocketbase", "browser-storage"] },
+        "role": { "enum": ["derived-consumer"] },
+        "conflicts": {
+          "description": "The row's conflicts that cover this writer. Required when more than one module writes the store, or the writer is a derived consumer; a conflict exempts only the writers that name it.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^C\\d+$" }
+        },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    },
+    "specColumns": {
+      "type": "object",
+      "required": ["information", "authority", "mutability", "delete_merge", "consumers"],
+      "properties": {
+        "line": { "type": "integer", "minimum": 1 },
+        "information": { "type": "string", "minLength": 1 },
+        "authority": { "type": "string", "minLength": 1 },
+        "mutability": { "type": "string", "minLength": 1 },
+        "delete_merge": { "type": "string", "minLength": 1 },
+        "consumers": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "owner": {
+      "description": "{ service, leaf }, or a cell note when the row takes no commands or waits on an owner decision.",
+      "type": ["object", "string"],
+      "required": ["service", "leaf"],
+      "additionalProperties": false,
+      "properties": {
+        "service": { "type": "string", "minLength": 1 },
+        "leaf": { "$ref": "#/$defs/leafId" }
+      },
+      "pattern": "^(pending:ROUNDS-\\d{2}[A-Z]?-L\\d{2}|n/a:\\S.*|blocked:OD-\\d+)$"
+    },
+    "target": {
+      "description": "Exactly one writable authority: { record, location }, or a cell note.",
+      "type": ["object", "string", "array"],
+      "required": ["record", "location"],
+      "additionalProperties": false,
+      "properties": {
+        "record": { "type": "string", "minLength": 1 },
+        "location": { "enum": ["server", "browser-storage"] }
+      },
+      "pattern": "^(pending:ROUNDS-\\d{2}[A-Z]?-L\\d{2}|n/a:\\S.*|blocked:OD-\\d+)$"
+    },
+    "consumer": {
+      "type": "object",
+      "required": ["type", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["read-model", "search-index", "log-trace", "public-share", "export", "remote-ai", "verifier", "gateway", "ui-direct-read"] },
+        "name": { "type": "string", "minLength": 1 },
+        "leaf": { "$ref": "#/$defs/leafId" }
+      }
+    },
+    "transfer": {
+      "type": "object",
+      "required": ["leaf", "window", "retirement", "rollback"],
+      "additionalProperties": false,
+      "properties": {
+        "leaf": { "$ref": "#/$defs/leafId" },
+        "mapping": { "$ref": "#/$defs/leafId" },
+        "window": { "$ref": "#/$defs/cellText" },
+        "retirement": { "$ref": "#/$defs/cellText" },
+        "rollback": { "$ref": "#/$defs/cellText" }
+      }
+    },
+    "projection": {
+      "type": "object",
+      "required": ["projector", "sources", "watermark", "stale", "degraded"],
+      "additionalProperties": false,
+      "properties": {
+        "projector": { "$ref": "#/$defs/leafId" },
+        "sources": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/rowId" } },
+        "watermark": { "type": "string", "minLength": 1 },
+        "stale": { "type": "string", "minLength": 1 },
+        "degraded": { "type": "string", "minLength": 1 }
+      }
+    },
+    "conflict": {
+      "type": "object",
+      "required": ["id", "title", "evidence", "rows", "disposition", "resolvingLeaves"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^C\\d+$" },
+        "title": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/citation" } },
+        "rows": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/rowId" } },
+        "disposition": { "type": "string", "pattern": "^(INT|CUR)-\\d{2}$" },
+        "resolvingLeaves": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/leafId" } },
+        "blockedBy": { "type": "string", "pattern": "^OD-\\d+$" },
+        "foundHere": { "description": "A baseline conflict the matrix found beyond the issue's C1 to C13.", "type": "boolean" }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "required": ["id", "from", "to", "owner_row"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/rowId" },
+        "from": { "$ref": "#/$defs/rowId" },
+        "to": { "$ref": "#/$defs/rowId" },
+        "owner_row": { "type": "string", "minLength": 1 },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    },
+    "row": {
+      "type": "object",
+      "required": [
+        "id", "revision", "compatibility", "scope", "term", "command_owner", "commands", "baseline_writers", "target_authority",
+        "storage", "disposition", "conflicts", "consumers", "package",
+        "purge", "export", "search", "health", "impact", "authz", "field_map", "inventory", "projector"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/rowId" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "compatibility": { "enum": ["additive", "breaking"] },
+        "spec": { "$ref": "#/$defs/specColumns" },
+        "summary": { "$ref": "#/$defs/specColumns" },
+        "split": { "type": "string", "minLength": 1 },
+        "scope": { "enum": ["account", "platform-global", "pack-owned"] },
+        "term": { "type": "string", "minLength": 1 },
+        "command_owner": { "$ref": "#/$defs/owner" },
+        "commands": { "type": ["array", "string"], "minLength": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]+$" } },
+        "baseline_writers": { "type": "array", "items": { "$ref": "#/$defs/writer" } },
+        "target_authority": { "$ref": "#/$defs/target" },
+        "yields_to": {
+          "description": "For a browser cache with no authority of its own (target_authority n/a): the row whose server authority it copies and yields to.",
+          "$ref": "#/$defs/rowId"
+        },
+        "storage": { "$ref": "#/$defs/cellText" },
+        "privacy_floor": { "enum": ["Private", "Sensitive", "Third-party personal", "Secret", "Share Projection"] },
+        "visibility": { "enum": ["public-ui", "authed-readable", "server-only"] },
+        "disposition": { "type": "string", "minLength": 1 },
+        "conflicts": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^C\\d+$" } },
+        "transfer": { "$ref": "#/$defs/transfer" },
+        "projection": { "$ref": "#/$defs/projection" },
+        "consumers": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/consumer" } },
+        "package": { "type": "string", "minLength": 1 },
+        "purge": { "$ref": "#/$defs/cellText" },
+        "export": { "$ref": "#/$defs/cellText" },
+        "search": { "$ref": "#/$defs/cellText" },
+        "health": { "$ref": "#/$defs/cellText" },
+        "impact": { "$ref": "#/$defs/cellText" },
+        "authz": { "$ref": "#/$defs/cellText" },
+        "field_map": { "$ref": "#/$defs/cellText" },
+        "inventory": { "$ref": "#/$defs/cellText" },
+        "projector": { "$ref": "#/$defs/cellText" }
+      }
+    }
+  }
+}

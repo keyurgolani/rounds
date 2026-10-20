@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/authority/baseline-stores.schema.json",
+  "title": "Baseline stores",
+  "description": "Shape of contracts/authority/baseline-stores.json (ROUNDS-01-L02), generated from the audited revision. rows and note are the hand-written parts.",
+  "type": "object",
+  "required": ["registry", "auditedRevision", "counts", "purgeSites", "stores"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string" },
+    "registry": { "const": "rounds-baseline-stores" },
+    "auditedRevision": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "counts": {
+      "type": "object",
+      "required": ["collections", "browserKeyFamilies"],
+      "additionalProperties": false,
+      "properties": { "collections": { "type": "integer", "minimum": 0 }, "browserKeyFamilies": { "type": "integer", "minimum": 0 } }
+    },
+    "purgeSites": { "type": "array", "items": { "$ref": "#/$defs/site" } },
+    "stores": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "name", "rows"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^(collection|browser-key):.+$" },
+          "kind": { "enum": ["collection", "browser-key"] },
+          "name": { "type": "string", "minLength": 1 },
+          "created": { "$ref": "#/$defs/site" },
+          "api": { "enum": ["localStorage", "sessionStorage"] },
+          "writes": { "type": "array", "items": { "$ref": "#/$defs/site" } },
+          "reads": { "type": "array", "items": { "$ref": "#/$defs/site" } },
+          "rows": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" } },
+          "note": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "site": { "type": "string", "pattern": "^[^:]+:\\d+$" }
+  }
+}

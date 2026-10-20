@@ -6,6 +6,8 @@ The app is split into four runtime services: a React frontend, PocketBase for au
 
 Product and domain names come from the vocabulary registry in [`vocabulary.md`](vocabulary.md). Some names below describe the current code and are scheduled for replacement there.
 
+Who owns each durable concept is in the source-of-truth and package-boundary matrix, [`authority.md`](authority.md): every concept's one command owner, target authority, read models, privacy floor, package, and retirement plan, and the baseline conflicts in the code described below.
+
 ## System Overview
 
 ```text

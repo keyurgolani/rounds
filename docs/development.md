@@ -129,15 +129,20 @@ The lint can't prove the review happened. It runs from the pull request's own ch
 
 Product and domain names live in `contracts/vocabulary/terms.json`, and [vocabulary.md](vocabulary.md) explains how to use and change them. Baseline names that differ are listed in `contracts/vocabulary/adapters.json` with the leaf that retires them. Decision records live in `docs/decisions/`.
 
+Who may write each durable concept lives in `contracts/authority/matrix.json` (DR-0002), and [authority.md](authority.md) explains how to read, cite, and change it. Before writing a collection or browser storage key, find its row there and write only through that row's command owner.
+
 The conformance rules in `scripts/conformance/rules/` check all of this with Node 22 and no install step:
 
 ```sh
 node --test scripts/conformance          # rule tests
 node scripts/conformance/run.mjs         # every rule; exits 1 on any finding
-node scripts/conformance/run.mjs --write # regenerate labels.ts, vocabulary.md, and the owner corrections file
+node scripts/conformance/run.mjs --write # regenerate labels.ts, vocabulary.md, authority.md, baseline-stores.json, and the owner corrections file
+node scripts/conformance/run.mjs --review ../rounds-review  # also check spec rows, services, the ledger pin, and owner labels
 ```
 
-The vocabulary rule compares `terms.json` with `--base` (default `origin/main`; CI passes the branch a pull request targets, such as `origin/next`); pass `--base none` when that ref isn't fetched. An unknown `--rule` exits 2. A new name in a navigation label, Command Center entry, page header, route, collection, or stored value needs a term label or an adapter entry; the finding says which.
+The vocabulary and authority rules compare `terms.json` and `matrix.json` with `--base` (default `origin/main`; CI passes the branch a pull request targets, such as `origin/next`); pass `--base none` when that ref isn't fetched. An unknown `--rule` exits 2. A new name in a navigation label, Command Center entry, page header, route, collection, or stored value needs a term label or an adapter entry; the finding says which.
+
+The authority rule reads the audited revision (`62d4eae`) through git, so it needs full history (`fetch-depth: 0` in CI). A changed matrix row takes the new matrix revision and declares its `compatibility`; a change to a row's command owner, target authority, privacy floor or visibility, scope, or package is `breaking`. `baseline-stores.json` is generated from the audited revision; only each store's `rows` and `note` are written by hand, and `--write` keeps them.
 
 ## Adding Guide Content
 

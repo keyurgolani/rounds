@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/authority/owner-sentence-corrections.schema.json",
+  "title": "Owner-sentence corrections",
+  "description": "Shape of contracts/authority/owner-sentence-corrections.json (ROUNDS-01-L02): the templated owner sentence of each filed body, rewritten to name DR-0002 rows and the owning leaf, for #17's re-authorization.",
+  "type": "object",
+  "required": ["registry", "matrixRevision", "entries"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string" },
+    "registry": { "const": "rounds-owner-sentence-corrections" },
+    "matrixRevision": { "type": "integer", "minimum": 1 },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["issue", "leaf", "label", "kind", "original", "rows", "corrected"],
+        "additionalProperties": false,
+        "properties": {
+          "issue": { "type": "integer", "minimum": 1 },
+          "leaf": { "type": "string", "pattern": "^ROUNDS-\\d{2}[A-Z]?-L\\d{2}$" },
+          "label": { "type": "string", "minLength": 1 },
+          "kind": {
+            "description": "owner: the leaf is the command owner of exactly these rows. adds: the leaf adds behavior on rows another leaf owns. none: the leaf owns no row.",
+            "enum": ["owner", "adds", "none"]
+          },
+          "original": { "type": "string", "pattern": "^- .+ is the only command or contract owner for \".+\"; callers cannot write durable state around it\\.$" },
+          "rows": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" } },
+          "corrected": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

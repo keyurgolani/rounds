@@ -3,8 +3,8 @@
 // these semantic checks: leaf references resolve in leaf-ids.json, a ratified
 // record names its approver and pins each governed file's SHA-256, supersedes
 // points at a prior revision with a reason, DR-0002 and DR-0003 belong to
-// ROUNDS-01-L02 and ROUNDS-01-L03, and affected packages exist in #16's
-// contracts/authority/packages.json once that file lands.
+// ROUNDS-01-L02 and ROUNDS-01-L03, and affected packages name a package in
+// #16's contracts/authority/packages.json by id or spec service.
 
 import path from 'node:path';
 import { createContext, finding, jsonLine, sha256 } from '../lib/context.mjs';
@@ -29,19 +29,23 @@ export function recordFiles(ctx) {
   return ctx.files().filter((f) => path.posix.dirname(f) === DECISIONS_DIR && /^DR-.*\.json$/.test(path.posix.basename(f))).sort();
 }
 
-// TODO(ROUNDS-01-L02): match on the package key #16's packages.json settles
-// on; until then an entry's id, name, or service counts.
-function packageIds(ctx) {
+// The packages a record may name in affectedPackages: each entry of #16's
+// packages.json by its id or its spec service name (DR-0001 lists service
+// names). Returns null before that file exists, and { error } when it can't
+// be read, so a broken file never reads as "every package is unknown".
+export function packageNames(ctx) {
   if (!ctx.exists(PACKAGES_PATH)) return null;
+  let data;
   try {
-    const data = ctx.readJson(PACKAGES_PATH);
-    const list = Array.isArray(data) ? data : data.packages || [];
-    const ids = new Set();
-    for (const p of list) for (const k of ['id', 'name', 'service']) if (typeof p?.[k] === 'string') ids.add(p[k]);
-    return ids;
-  } catch {
-    return new Set();
+    data = ctx.readJson(PACKAGES_PATH);
+  } catch (err) {
+    return { error: `${PACKAGES_PATH} is not valid JSON: ${err.message}` };
   }
+  const names = new Set();
+  for (const p of Array.isArray(data?.packages) ? data.packages : []) {
+    for (const k of ['id', 'service']) if (typeof p?.[k] === 'string') names.add(p[k]);
+  }
+  return { names, count: Array.isArray(data?.packages) ? data.packages.length : 0 };
 }
 
 export function check(repoRoot, ctx = createContext(repoRoot)) {
@@ -53,7 +57,8 @@ export function check(repoRoot, ctx = createContext(repoRoot)) {
     return [finding('DR_RECORD_INVALID', SCHEMA_PATH, 1, `${SCHEMA_PATH} is missing or invalid: ${err.message}`)];
   }
   const resolveLeaf = leafResolver(loadLeafIds(ctx));
-  const packages = packageIds(ctx);
+  const packages = packageNames(ctx);
+  if (packages?.error) findings.push(finding('DR_UNKNOWN_PACKAGE', PACKAGES_PATH, 1, `${packages.error}; affected packages are unchecked`));
   const records = new Map();
   const parsed = [];
 
@@ -129,9 +134,9 @@ export function check(repoRoot, ctx = createContext(repoRoot)) {
       if (ids.has(d.id)) push('DR_RECORD_INVALID', ['decisions', i], `${record.id} decision ${d.id} is listed twice`);
       ids.add(d.id);
     });
-    if (packages) {
+    if (packages?.names) {
       for (const pkg of record.affectedPackages || []) {
-        if (!packages.has(pkg)) push('DR_UNKNOWN_PACKAGE', ['affectedPackages'], `${record.id} affected package "${pkg}" is not in ${PACKAGES_PATH}`);
+        if (!packages.names.has(pkg)) push('DR_UNKNOWN_PACKAGE', ['affectedPackages'], `${record.id} affected package "${pkg}" is neither a package id nor a service in ${PACKAGES_PATH}`);
       }
     }
   }
@@ -149,6 +154,7 @@ export function summary(repoRoot, ctx = createContext(repoRoot)) {
       lines.push(`${file}: unreadable`);
     }
   }
-  lines.push(ctx.exists(PACKAGES_PATH) ? `affected packages checked against ${PACKAGES_PATH}` : `affected packages not checked: ${PACKAGES_PATH} does not exist yet (#16)`);
+  const packages = packageNames(ctx);
+  lines.push(packages?.names ? `affected packages checked against ${PACKAGES_PATH} (${packages.count} packages, by id or service)` : `affected packages not checked: ${packages?.error || `${PACKAGES_PATH} does not exist`}`);
   return lines;
 }

@@ -1,0 +1,170 @@
+{
+  "$schema": "./packages.schema.json",
+  "registry": "rounds-packages",
+  "description": "One package per service: the 17 spec services (spec 1919-1935) and the Provider Gateway that DR-0002 D8 adds for spec 808. A package is the code module that owns its rows' commands; a package beyond the spec list names the DR-0002 decision that adds it. baseline_locations are paths at the audited revision; #18 (ROUNDS-02-L01) sets target_path.",
+  "auditedRevision": "62d4eae",
+  "packages": [
+    {
+      "id": "command-gateway",
+      "service": "Transaction-owning Command Gateway",
+      "spec": "spec 1919",
+      "baseline_locations": "n/a:no command path at the audited revision; #19 (ROUNDS-02-L02) builds it",
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "account",
+      "service": "Account Service",
+      "spec": "spec 1920",
+      "baseline_locations": [
+        "frontend/src/auth/",
+        "frontend/src/pages/Profile.tsx",
+        "frontend/src/pages/Settings.tsx",
+        "frontend/src/theme/ThemeProvider.tsx",
+        "frontend/src/settings/DataSection.tsx",
+        "pocketbase/pb_hooks/main.pb.js",
+        "pocketbase/pb_migrations/1700000600_demo_user.js"
+      ],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "career-profile",
+      "service": "Career Profile Service",
+      "spec": "spec 1921",
+      "baseline_locations": ["frontend/src/experience/","frontend/src/pages/Profile.tsx"],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "identity-directory",
+      "service": "Identity Directory for Organization and Person",
+      "spec": "spec 1922",
+      "baseline_locations": "n/a:organizations and people are free-text fields on other records at the audited revision",
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "opportunity-pursuit",
+      "service": "Opportunity and Pursuit Service",
+      "spec": "spec 1923",
+      "baseline_locations": [
+        "frontend/src/applications/api.ts",
+        "frontend/src/pages/Applications.tsx",
+        "frontend/src/pages/ApplicationDetail.tsx",
+        "frontend/src/campaign/"
+      ],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "interview-process",
+      "service": "Interview Process Service",
+      "spec": "spec 1924",
+      "baseline_locations": ["frontend/src/applications/RoundCard.tsx","frontend/src/applications/interviewTypes.ts"],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "artifact",
+      "service": "Artifact Service",
+      "spec": "spec 1925",
+      "baseline_locations": ["frontend/src/features/resume/","backend/routers/pdf.py"],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "practice",
+      "service": "Practice Service",
+      "spec": "spec 1926",
+      "baseline_locations": [
+        "frontend/src/pages/coding/",
+        "frontend/src/pages/ai-coding/",
+        "frontend/src/pages/take-home/",
+        "frontend/src/pages/sd-practice/",
+        "frontend/src/hooks/usePracticeStatus.ts",
+        "frontend/src/hooks/progressApi.ts",
+        "frontend/src/lib/codeDraftsApi.ts",
+        "backend/routers/take_home.py",
+        "backend/routers/ai_coding.py",
+        "backend/routers/sd_practice.py"
+      ],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "action",
+      "service": "Action Service",
+      "spec": "spec 1927",
+      "baseline_locations": ["frontend/src/todos/","frontend/src/pages/Todos.tsx"],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "capture-ingestion",
+      "service": "Capture and Ingestion Service",
+      "spec": "spec 1928",
+      "baseline_locations": ["frontend/src/experience/ImportReview.tsx","backend/routers/ai.py"],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "revision-audit",
+      "service": "Revision and Audit Service",
+      "spec": "spec 1929",
+      "baseline_locations": "n/a:no change sets, audit entries, or events at the audited revision",
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "search",
+      "service": "Search Service",
+      "spec": "spec 1930",
+      "baseline_locations": "n/a:search and filters run in the browser over loaded lists at the audited revision",
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "read-model",
+      "service": "Read Model and Recommendation Service",
+      "spec": "spec 1931",
+      "baseline_locations": ["frontend/src/components/dashboard/"],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "career-pack-registry",
+      "service": "Career Pack Registry",
+      "spec": "spec 1932",
+      "baseline_locations": [
+        "frontend/src/content/api.ts",
+        "frontend/src/pages/guides/",
+        "pocketbase/seeds/",
+        "pocketbase/pb_migrations/1700000100_seed_data.js"
+      ],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "public-share",
+      "service": "Public Share Capability Service",
+      "spec": "spec 1933",
+      "baseline_locations": ["backend/routers/share.py","frontend/src/features/resume/share/"],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "execution-control-plane",
+      "service": "Execution Control Plane",
+      "spec": "spec 1934",
+      "baseline_locations": ["backend/main.py","backend/routers/runner.py","backend/app/"],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "execution-worker",
+      "service": "Ephemeral Execution Worker pool",
+      "spec": "spec 1935",
+      "baseline_locations": ["backend/drivers/","backend/ai_coding/","backend/take_home/","backend/pdf_renderer/"],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "provider-gateway",
+      "service": "Provider Gateway",
+      "spec": "spec 808",
+      "decision": "D8",
+      "baseline_locations": [
+        "backend/routers/ai.py",
+        "backend/app/crypto.py",
+        "frontend/src/settings/AISection.tsx",
+        "frontend/src/settings/aiProviderEndpoints.ts",
+        "pocketbase/pb_migrations/1700000800_ai_providers.js"
+      ],
+      "target_path": "pending:ROUNDS-02-L01"
+    }
+  ]
+}
