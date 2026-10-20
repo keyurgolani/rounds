@@ -1,0 +1,18 @@
+{
+  "description": "Internal terms and default user-facing labels, rounds-review spec lines 1000-1014, transcribed verbatim.",
+  "rows": [
+    {"line": 1002, "term": "Career Profile", "label": "Career Profile"},
+    {"line": 1003, "term": "Opportunity", "label": "Opportunity or Role"},
+    {"line": 1004, "term": "Pursuit", "label": "Application, Opportunity, or Pipeline item according to stage"},
+    {"line": 1005, "term": "Artifact Edition", "label": "Resume, Cover Letter, Interview Brief, or Material"},
+    {"line": 1006, "term": "Artifact Revision", "label": "Version or Submitted version"},
+    {"line": 1007, "term": "Extracted Claim", "label": "Proposed change"},
+    {"line": 1008, "term": "Generation Proposal", "label": "Writing suggestion"},
+    {"line": 1009, "term": "Transaction Change Set", "label": "Saved changes"},
+    {"line": 1010, "term": "Profile Revision", "label": "Profile update"},
+    {"line": 1011, "term": "Career Activity", "label": "Interview, Conversation, Follow-up, or Activity"},
+    {"line": 1012, "term": "Campaign/Goal", "label": "Campaign"},
+    {"line": 1013, "term": "Practice Attempt", "label": "Attempt"},
+    {"line": 1014, "term": "Readiness Snapshot", "label": "Readiness"}
+  ]
+}
