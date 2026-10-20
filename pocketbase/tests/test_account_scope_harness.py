@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -311,26 +312,37 @@ def test_fresh_payload_rejects_an_unknown_collection():
 
 
 class _CreatePB:
-    def __init__(self, status: int, body: Any):
+    def __init__(self, status: int, body: Any, owner_rows: int = 0):
         self._status, self._body = status, body
+        self.owner_rows = owner_rows
         self.calls = []
 
     def create(self, collection, token, payload):
         self.calls.append((collection, token))
         return Response(status=self._status, body=self._body, elapsed_ms=1)
 
+    def listing(self, collection, token=None, params=None):
+        # The superuser's owner-count read.
+        return Response(status=200, body={"items": [], "totalItems": self.owner_rows}, elapsed_ms=1)
+
 
 def test_create_anonymous_passes_only_on_a_rule_denial_with_empty_data():
     pb = _CreatePB(400, {"code": 400, "message": "Failed to create record.", "data": {}})
-    r = families.create_anonymous_denied(pb, "campaigns", {"user": "x"}, 400)
+    r = families.create_anonymous_denied(pb, "campaigns", {"user": "x"}, "admin", "uid-c", 400)
     assert r.passed and pb.calls == [("campaigns", None)]
 
 
 def test_create_anonymous_fails_on_a_field_validation_400():
     # A validation 400 (populated data) must not count: the rule was not reached.
     pb = _CreatePB(400, {"data": {"slug": {"code": "validation_required"}}})
-    r = families.create_anonymous_denied(pb, "campaigns", {"user": "x"}, 400)
+    r = families.create_anonymous_denied(pb, "campaigns", {"user": "x"}, "admin", "uid-c", 400)
     assert not r.passed and "slug" in r.detail
+
+
+def test_create_anonymous_fails_if_a_row_was_left_under_the_owner():
+    pb = _CreatePB(400, {"data": {}}, owner_rows=1)
+    r = families.create_anonymous_denied(pb, "campaigns", {"user": "x"}, "admin", "uid-c", 400)
+    assert not r.passed and "rows_under_owner=1" in r.detail
 
 
 def test_oversized_passes_only_on_a_json_size_error_for_the_field():
@@ -474,3 +486,270 @@ def test_superuser_create_accepted_passes_on_success_and_fails_on_forbidden():
     assert families.create_superuser_accepted(ok, "resume_share_views", "admin", {"user": "uid-a"}, 200).passed
     denied = _ProbePB(create=Response(403, {}, 1))
     assert not families.create_superuser_accepted(denied, "resume_share_views", "admin", {"user": "uid-a"}, 200).passed
+
+
+# --------------------------------------------------------------------------
+# stage-4 enumeration, inference, replay, and degraded families
+# --------------------------------------------------------------------------
+
+
+class _StatefulPB:
+    """A fake PocketBase holding one record per (collection, id), so the
+    owner's before/after snapshot and foreign-versus-missing answers are real
+    comparisons. `leak` makes a named operation succeed on a foreign record."""
+
+    NOT_FOUND = {"code": 404, "message": "The requested resource wasn't found.", "data": {}}
+
+    def __init__(self, records: dict, owner_token: str, leak: str = ""):
+        self.records = {k: dict(v) for k, v in records.items()}
+        self.owner_token = owner_token
+        self.leak = leak
+
+    def _find(self, collection, record_id):
+        return self.records.get((collection, record_id))
+
+    def view(self, collection, record_id, token=None):
+        rec = self._find(collection, record_id)
+        if rec is None or (token != self.owner_token and self.leak != "view"):
+            return Response(404, dict(self.NOT_FOUND), 1)
+        return Response(200, dict(rec), 1)
+
+    def update(self, collection, record_id, payload, token=None):
+        rec = self._find(collection, record_id)
+        if rec is None or (token != self.owner_token and self.leak != "update"):
+            return Response(404, dict(self.NOT_FOUND), 1)
+        rec["updated"] = rec.get("updated", "") + "+"
+        return Response(200, dict(rec), 1)
+
+    def delete(self, collection, record_id, token=None):
+        rec = self._find(collection, record_id)
+        if rec is None or (token != self.owner_token and self.leak != "delete"):
+            return Response(404, dict(self.NOT_FOUND), 1)
+        del self.records[(collection, record_id)]
+        return Response(204, None, 1)
+
+    def listing(self, collection, token=None, params=None):
+        flt = (params or {}).get("filter", "")
+        items = []
+        if self.leak == "list":
+            items = [dict(r) for (c, rid), r in self.records.items() if c == collection and rid in flt]
+        return Response(200, {"items": items, "totalItems": len(items)}, 1)
+
+
+def _accounts():
+    a, b = _acct("a"), _acct("b")
+    a.token, b.token = "a-token", "b-token"
+    return a, b
+
+
+def _pb_with_a_record(leak=""):
+    a, b = _accounts()
+    pb = _StatefulPB({("campaigns", a.ids["campaigns"]): {"id": a.ids["campaigns"], "user": a.user_id, "updated": "t0"}},
+                     owner_token=a.token, leak=leak)
+    return pb, a, b
+
+
+@pytest.mark.parametrize("fn,leak", [
+    (families.update_cross_account_denied, "update"),
+    (families.delete_cross_account_denied, "delete"),
+])
+def test_a_denied_write_passes_only_if_the_record_is_unchanged(fn, leak):
+    pb, a, b = _pb_with_a_record()
+    assert fn(pb, "campaigns", a, b, 404).passed
+    leaky, a, b = _pb_with_a_record(leak=leak)
+    r = fn(leaky, "campaigns", a, b, 404)
+    assert not r.passed and "unchanged=False" in r.detail
+
+
+class _ViewSeq(_ProbePB):
+    """Answers views in order, so a probe's before and after reads can differ."""
+
+    def __init__(self, views, **kw):
+        super().__init__(**kw)
+        self._views = list(views)
+
+    def view(self, collection, record_id, token=None):
+        self.calls.append(("view", collection, record_id, token))
+        return self._views.pop(0)
+
+
+def test_reassign_denied_fails_when_another_field_changed():
+    pb = _ViewSeq([Response(200, {"id": "x", "user": "uid-a", "name": "old"}, 1),
+                   Response(200, {"id": "x", "user": "uid-a", "name": "new"}, 1)],
+                  update=Response(404, {}, 1))
+    r = families.update_reassign_denied(pb, "campaigns", "rec", "uid-b", "a-token", "admin", "uid-a", 404)
+    assert not r.passed and "unchanged=False" in r.detail
+
+
+def test_server_only_update_denied_fails_when_the_row_changed():
+    pb = _ViewSeq([Response(200, {"id": "x", "updated": "t0"}, 1), Response(200, {"id": "x", "updated": "t1"}, 1)],
+                  update=Response(403, {}, 1))
+    r = families.update_server_only_denied(pb, "resume_share_views", "rec", "a-token", 403)
+    assert not r.passed and "unchanged=False" in r.detail
+
+
+def test_list_filter_isolated_passes_when_filters_return_nothing():
+    pb, a, b = _pb_with_a_record()
+    assert families.list_filter_isolated(pb, "campaigns", a, b, 200).passed
+
+
+def test_list_filter_isolated_fails_when_a_filter_returns_a_foreign_row():
+    pb, a, b = _pb_with_a_record(leak="list")
+    r = families.list_filter_isolated(pb, "campaigns", a, b, 200)
+    assert not r.passed and "rows=1" in r.detail
+
+
+@pytest.mark.parametrize("fn,op", [
+    (families.view_foreign_or_missing, "view"),
+    (families.update_foreign_or_missing, "update"),
+    (families.delete_foreign_or_missing, "delete"),
+])
+def test_foreign_and_missing_records_must_answer_alike(fn, op):
+    pb, a, b = _pb_with_a_record()
+    assert fn(pb, "campaigns", a, b, 404).passed
+    leaky, a, b = _pb_with_a_record(leak=op)
+    assert not fn(leaky, "campaigns", a, b, 404).passed
+
+
+def test_foreign_or_missing_fails_when_the_bodies_differ():
+    pb, a, b = _pb_with_a_record()
+    real_view = pb.view
+
+    def view(collection, record_id, token=None):
+        resp = real_view(collection, record_id, token)
+        if record_id != a.ids["campaigns"] and resp.status == 404:
+            return Response(404, {"code": 404, "message": "Missing.", "data": {}}, 1)
+        return resp
+
+    pb.view = view
+    r = families.view_foreign_or_missing(pb, "campaigns", a, b, 404)
+    assert not r.passed and "same_body=False" in r.detail
+
+
+def test_missing_record_ids_are_well_formed_and_fresh():
+    ids = {families.missing_record_id() for _ in range(50)}
+    assert len(ids) == 50 and all(re.fullmatch(r"[a-z0-9]{15}", i) for i in ids)
+
+
+def test_replayed_denied_create_passes_when_every_copy_is_denied():
+    pb = _ProbePB(create=Response(400, {"message": "Failed to create record.", "data": {}}, 1), listing=_count(0))
+    r = families.create_replayed_denied(pb, "campaigns", "b-token", {"user": "uid-c"}, "admin", "uid-c", 400)
+    assert r.passed and sum(1 for c in pb.calls if c[0] == "create") == 3
+
+
+def test_replayed_denied_create_fails_when_a_later_copy_gets_through():
+    responses = [Response(400, {"data": {}}, 1), Response(400, {"data": {}}, 1), Response(200, {"id": "x"}, 1)]
+
+    class _Seq(_ProbePB):
+        def create(self, collection, token, payload):
+            self.calls.append(("create", collection, token, dict(payload)))
+            return responses.pop(0)
+
+    pb = _Seq(listing=_count(1))
+    r = families.create_replayed_denied(pb, "campaigns", "b-token", {"user": "uid-c"}, "admin", "uid-c", 400)
+    assert not r.passed and "statuses=[400, 400, 200]" in r.detail
+
+
+def test_nonexistent_owner_denied_compares_status_and_rows_only():
+    # A validation body (the named user does not exist) still passes: only the
+    # status and the row count are compared; the body is a #13 exception.
+    pb = _ProbePB(create=Response(400, {"data": {"user": {"code": "validation_missing_rel_records"}}}, 1),
+                  listing=_count(0))
+    assert families.create_nonexistent_owner_denied(pb, "campaigns", "b-token", {"user": "m"}, "admin", "m", 400).passed
+    leaked = _ProbePB(create=Response(400, {"data": {}}, 1), listing=_count(1))
+    assert not families.create_nonexistent_owner_denied(leaked, "campaigns", "b-token", {"user": "m"}, "admin", "m", 400).passed
+
+
+class _FrontendPB:
+    def __init__(self, resp):
+        self.resp, self.calls = resp, []
+
+    def post(self, path, body, token=None):
+        self.calls.append((path, token))
+        return self.resp
+
+
+def test_degraded_runner_passes_only_on_the_typed_auth_unavailable():
+    ok = _FrontendPB(Response(503, {"code": "auth_unavailable", "detail": "x", "correlation_id": "c"}, 1))
+    r = families.runner_fails_closed_without_pocketbase(ok, "take_home_attempts", 503)
+    assert r.passed and ok.calls[0][0] == "/api/take-home/submit"
+    for bad in (Response(500, {"detail": "Internal Server Error"}, 1), Response(200, {"id": "x"}, 1),
+                Response(503, {"code": "route_disabled"}, 1)):
+        assert not families.runner_fails_closed_without_pocketbase(_FrontendPB(bad), "take_home_attempts", 503).passed
+
+
+# --------------------------------------------------------------------------
+# verdict: deployment checks and receipt shape
+# --------------------------------------------------------------------------
+
+
+DEPLOY_CHECK = "deployment.proxy.admin-ui.denied"
+
+
+def _doc_with_deploy_check():
+    d = minimal_doc()
+    d["deployment_checks"] = {DEPLOY_CHECK: {"guarantee": "g"}}
+    return d
+
+
+def test_verdict_requires_a_passing_receipt_for_each_deployment_check(tmp_path):
+    path = tmp_path / "r.jsonl"
+    write_receipts(path, baseline_rows())
+    assert run.run_verdict(_doc_with_deploy_check(), str(path)) == 1  # missing
+    write_receipts(path, baseline_rows() + [receipt(DEPLOY_CHECK, "/_/", passed=False)])
+    assert run.run_verdict(_doc_with_deploy_check(), str(path)) == 1  # failed
+    write_receipts(path, baseline_rows() + [receipt(DEPLOY_CHECK, "/_/")])
+    assert run.run_verdict(_doc_with_deploy_check(), str(path)) == 0
+
+
+def test_verdict_fails_when_receipts_have_different_fields(tmp_path):
+    path = tmp_path / "r.jsonl"
+    odd = receipt(ENFORCED, "campaigns")
+    odd["extra"] = "x"
+    write_receipts(path, [odd, receipt(run.READBACK_PROBE, "campaigns")])
+    assert run.run_verdict(minimal_doc(), str(path)) == 1
+
+
+# --------------------------------------------------------------------------
+# the committed policy: coverage per actor, operation, and resource state
+# --------------------------------------------------------------------------
+
+
+def test_every_collection_covers_each_actor_operation_and_resource_state():
+    doc = policy.load(_default_policy_path())
+    reads = {
+        "account-scope.list.cross-account.isolated", "account-scope.list.anonymous.isolated",
+        "account-scope.list.filter.isolated", "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied", "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.cross-account.denied", "account-scope.delete.anonymous.denied",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
+    }
+    owned_writes = {
+        "account-scope.create.anonymous.denied", "account-scope.create.foreign-owner.denied",
+        "account-scope.create.nonexistent-owner.denied", "account-scope.create.replayed-denied.denied",
+        "account-scope.update.cross-account.denied", "account-scope.update.anonymous.denied",
+        "account-scope.update.foreign-or-missing.indistinguishable", "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
+    }
+    server_only = {"account-scope.create.server-only.denied", "account-scope.update.server-only.denied",
+                   "account-scope.create.superuser.accepted"}
+    for name, row in doc["collections"].items():
+        probes = set(row["probes"])
+        assert reads <= probes, (name, sorted(reads - probes))
+        if name == "resume_share_views":
+            assert server_only <= probes, name
+        elif name != "users":
+            assert owned_writes <= probes, (name, sorted(owned_writes - probes))
+
+
+def test_no_collection_keeps_the_old_any_signed_in_create_rule():
+    doc = policy.load(_default_policy_path())
+    for name, row in doc["collections"].items():
+        assert row["current_rules"].get("create") != '@request.auth.id != ""', name
+
+
+def test_open_exceptions_name_their_closing_leaf():
+    doc = policy.load(_default_policy_path())
+    ids = {e["id"] for e in doc["open_exceptions"]}
+    assert {"timing", "error-shapes", "owner-id-create-shape"} <= ids
+    assert all(e["closed_by"].startswith("ROUNDS-") for e in doc["open_exceptions"])

@@ -52,6 +52,86 @@
     "superuser_create": {
       "status": 200,
       "guarantee": "the superuser view-tracking insert succeeds"
+    },
+    "auth_unavailable": {
+      "status": 503,
+      "guarantee": "the runner refuses with auth_unavailable when it cannot verify the caller"
+    }
+  },
+  "open_exceptions": [
+    {
+      "id": "timing",
+      "closed_by": "ROUNDS-00B-L05",
+      "note": "response timing is not compared between another account's records and missing ones"
+    },
+    {
+      "id": "error-shapes",
+      "closed_by": "ROUNDS-00B-L05",
+      "note": "error shapes beyond the user id case are not compared"
+    },
+    {
+      "id": "owner-id-create-shape",
+      "closed_by": "ROUNDS-00B-L05",
+      "note": "a create naming a missing owner and one naming another account are both denied with the same status (account-scope.create.nonexistent-owner.denied); PocketBase checks that the named user exists before the create rule runs, so the error bodies are not compared here"
+    }
+  ],
+  "deployment_checks": {
+    "deployment.proxy.admin-ui.denied": {
+      "guarantee": "the PocketBase admin UI is not served at the public URL"
+    },
+    "deployment.proxy.admin-api.denied": {
+      "guarantee": "the PocketBase admin API, including admin login, is not reachable at the public URL"
+    },
+    "deployment.proxy.settings-api.denied": {
+      "guarantee": "PocketBase settings are not reachable at the public URL"
+    },
+    "deployment.proxy.backups-api.denied": {
+      "guarantee": "PocketBase backups are not reachable at the public URL"
+    },
+    "deployment.proxy.logs-api.denied": {
+      "guarantee": "PocketBase logs are not reachable at the public URL"
+    },
+    "deployment.proxy.collection-metadata.denied": {
+      "guarantee": "collection schema routes are not reachable at the public URL"
+    },
+    "deployment.proxy.admission-hooks.denied": {
+      "guarantee": "the admission hook routes are not reachable at the public URL"
+    },
+    "deployment.proxy.execute.gone": {
+      "guarantee": "/api/execute no longer reaches a code runner"
+    },
+    "deployment.proxy.health.open": {
+      "guarantee": "the health route still reaches PocketBase"
+    },
+    "deployment.proxy.records.open": {
+      "guarantee": "record routes still reach PocketBase"
+    },
+    "deployment.proxy.auth.open": {
+      "guarantee": "auth routes still reach PocketBase"
+    },
+    "deployment.proxy.oauth-redirect.open": {
+      "guarantee": "the OAuth redirect route still reaches PocketBase"
+    },
+    "deployment.proxy.realtime.open": {
+      "guarantee": "the realtime stream still reaches PocketBase"
+    },
+    "deployment.proxy.files.open": {
+      "guarantee": "file routes still reach PocketBase"
+    },
+    "deployment.proxy.oversized-body.rejected": {
+      "guarantee": "a body over the default 1 MiB cap gets the typed 413"
+    },
+    "deployment.credentials.defaults.rejected": {
+      "guarantee": "no shipped default login authenticates as an admin"
+    },
+    "deployment.credentials.admin-passwords.rejected": {
+      "guarantee": "no admin account accepts a shipped default password"
+    },
+    "deployment.rules.match": {
+      "guarantee": "the collection rules match the account-scope rule table"
+    },
+    "deployment.admins.present": {
+      "guarantee": "at least one admin exists, so first-admin setup is closed"
     }
   },
   "server_derivation": {
@@ -182,6 +262,57 @@
       "deny_key": "superuser_create",
       "guarantee": "the superuser view-tracking insert still succeeds",
       "resource": "resume_share_views"
+    },
+    "account-scope.list.filter.isolated": {
+      "operation": "list",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "list",
+      "guarantee": "a list filtered on another account's record or account id returns none of its rows"
+    },
+    "account-scope.view.foreign-or-missing.indistinguishable": {
+      "operation": "view",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "view",
+      "guarantee": "reading another account's record answers exactly like reading one that does not exist"
+    },
+    "account-scope.update.foreign-or-missing.indistinguishable": {
+      "operation": "update",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "update",
+      "guarantee": "updating another account's record answers exactly like updating one that does not exist"
+    },
+    "account-scope.delete.foreign-or-missing.indistinguishable": {
+      "operation": "delete",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "delete",
+      "guarantee": "deleting another account's record answers exactly like deleting one that does not exist"
+    },
+    "account-scope.create.replayed-denied.denied": {
+      "operation": "create",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "create_foreign_owner",
+      "guarantee": "replaying a denied foreign-owner create is denied every time and leaves no row"
+    },
+    "account-scope.create.nonexistent-owner.denied": {
+      "operation": "create",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "create_foreign_owner",
+      "guarantee": "a create naming an owner that does not exist is denied with the same status and leaves no row"
+    },
+    "account-scope.runner.pocketbase-unreachable.fails-closed": {
+      "operation": "create",
+      "actor": "unverified",
+      "status": "enforced",
+      "deny_key": "auth_unavailable",
+      "guarantee": "with PocketBase unreachable a runner write fails closed before it writes",
+      "resource": "take_home_attempts",
+      "route": "/api/take-home/submit"
     }
   },
   "collections": {
@@ -211,12 +342,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -252,12 +389,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "interview_rounds": {
@@ -289,12 +432,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -330,12 +479,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "user_preferences": {
@@ -366,12 +521,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "offers": {
@@ -403,12 +564,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -444,12 +611,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "todos": {
@@ -480,12 +653,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -519,12 +698,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -561,12 +746,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -603,12 +794,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -651,12 +848,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "resume_share_views": {
@@ -693,6 +896,9 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.create.server-only.denied",
         "account-scope.update.server-only.denied",
         "account-scope.create.superuser.accepted"
@@ -724,12 +930,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -766,12 +978,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "ai_coding_drafts": {
@@ -803,12 +1021,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "ai_coding_attempts": {
@@ -846,12 +1070,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -888,12 +1118,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "take_home_attempts": {
@@ -931,13 +1167,20 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
-        "account-scope.oversized-input.rejected"
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.oversized-input.rejected",
+        "account-scope.runner.pocketbase-unreachable.fails-closed"
       ],
       "oversized_probe": {
         "field": "files",
@@ -970,12 +1213,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "experience_jobs": {
@@ -1004,12 +1253,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -1043,12 +1298,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -1082,12 +1343,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -1121,12 +1388,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected"
       ],
       "oversized_probe": {
@@ -1163,12 +1436,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "exp_job_anecdotes": {
@@ -1200,12 +1479,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "exp_job_bullets": {
@@ -1237,12 +1522,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "exp_project_anecdotes": {
@@ -1274,12 +1565,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "exp_project_bullets": {
@@ -1311,12 +1608,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "exp_anecdote_bullets": {
@@ -1348,12 +1651,18 @@
         "account-scope.view.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.update.cross-account.denied",
         "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted"
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied"
       ]
     },
     "users": {
@@ -1388,7 +1697,11 @@
         "account-scope.update.anonymous.denied",
         "account-scope.delete.cross-account.denied",
         "account-scope.delete.anonymous.denied",
-        "account-scope.signup.disabled.denied"
+        "account-scope.signup.disabled.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
+        "account-scope.update.foreign-or-missing.indistinguishable"
       ]
     }
   }

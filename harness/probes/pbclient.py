@@ -152,3 +152,8 @@ class PBClient:
         return self._request(
             "GET", "/api/collections", token=admin_token, params={"perPage": 200}
         )
+
+    # -- other routes -----------------------------------------------------
+    def post(self, path: str, body: dict[str, Any], token: str | None = None) -> Response:
+        """POST JSON to any route on this base URL (the runner, through nginx)."""
+        return self._request("POST", path, token=token, json_body=body)
