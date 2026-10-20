@@ -127,3 +127,26 @@ def test_the_runner_app_installs_the_envelope_and_correlation_ids():
     assert HEX32.fullmatch(res.headers[obs.CORRELATION_HEADER])
     exposed = {h.strip().lower() for h in res.headers["access-control-expose-headers"].split(",")}
     assert {"retry-after", obs.CORRELATION_HEADER.lower()} <= exposed
+
+
+def test_an_uncaught_exception_answers_500_with_one_correlation_id(monkeypatch):
+    # PocketBase unreachable inside current_user raises past every
+    # handler, so Starlette's error handler writes the 500.
+    import httpx
+
+    from main import app
+    from routers import ai
+
+    async def unreachable(_request):
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(ai, "current_user", unreachable)
+    with TestClient(app, raise_server_exceptions=False) as c:
+        res = c.get("/api/ai/providers")
+        ok = c.get("/health")
+    assert res.status_code == 500
+    (cid,) = res.headers.get_list(obs.CORRELATION_HEADER)
+    assert HEX32.fullmatch(cid)
+    assert "connection refused" not in res.text
+    (ok_cid,) = ok.headers.get_list(obs.CORRELATION_HEADER)
+    assert HEX32.fullmatch(ok_cid) and ok_cid != cid
