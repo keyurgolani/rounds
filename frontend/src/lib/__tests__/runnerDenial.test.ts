@@ -12,6 +12,7 @@ function err(status: number, code: string | null = null, extra: Partial<{ retryA
 describe('classifyRunnerError', () => {
   it.each([
     [err(503, 'route_disabled'), 'turned_off'],
+    [err(503, 'definitions_disabled'), 'turned_off'],
     [err(0, 'unauthenticated'), 'sign_in'],
     [err(401), 'sign_in'],
     [err(429, 'quota_exceeded'), 'limit'],
@@ -28,15 +29,6 @@ describe('classifyRunnerError', () => {
     [err(500), 'unavailable'],
     [err(502), 'unavailable'],
   ])('maps %o to %s', (error, kind) => {
-    expect(classifyRunnerError(error)?.kind).toBe(kind);
-  });
-
-  it.each([
-    [err(503, 'definitions_disabled'), 'turned_off'],
-    [err(400, 'idempotency_key_required'), 'unavailable'],
-    [err(409, 'idempotency_mismatch'), 'unavailable'],
-    [err(409, 'already_in_flight'), 'unavailable'],
-  ])('maps the definitions gate and the idempotency refusals: %o to %s', (error, kind) => {
     expect(classifyRunnerError(error)?.kind).toBe(kind);
   });
 

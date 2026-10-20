@@ -1,0 +1,15 @@
+{
+  "schema": "resource-profile/v1",
+  "profile_id": "execution-default",
+  "snippet_bytes": 262144,
+  "project_files": 200,
+  "project_bytes": 5242880,
+  "stdin_bytes": 262144,
+  "processes": 64,
+  "memory_bytes": 536870912,
+  "output_bytes": 262144,
+  "job_classes": {
+    "interactive": { "wall_s_max": 10 },
+    "project": { "wall_s_max": 120 }
+  }
+}

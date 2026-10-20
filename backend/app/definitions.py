@@ -89,6 +89,25 @@ def _sha256(data: bytes) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
+def _runtime_of(document: Any) -> str | None:
+    """What a version needs to run: a coding variant, or a harness
+    revision's runtime profile."""
+    if not isinstance(document, dict):
+        return None
+    if document.get("schema") == "test-definition/v1":
+        return f"coding:{document.get('variant')}"
+    profile = document.get("runtime_profile")
+    return profile if isinstance(profile, str) else None
+
+
+def _supported(runtime: str | None) -> bool:
+    if runtime is None:
+        return False
+    if runtime.startswith("coding:"):
+        return runtime[len("coding:"):] in CODING_VARIANTS
+    return runtime in RUNTIME_PROFILES
+
+
 def _parse_entry(raw: Any) -> Entry:
     if not isinstance(raw, dict):
         raise ValueError("entry is not an object")
@@ -115,11 +134,15 @@ class Store:
         self.root = root
         self.entries: dict[tuple[str, Identity], Entry] = {}
         self.mismatched: set[tuple[str, Identity]] = set()
+        # Each verified version's runtime: a coding variant or a harness
+        # revision's runtime_profile.
+        self.runtimes: dict[tuple[str, Identity], str | None] = {}
         self.loaded = False
 
     def load(self) -> "Store":
         self.entries.clear()
         self.mismatched.clear()
+        self.runtimes.clear()
         self.loaded = False
         try:
             manifest = json.loads((self.root / MANIFEST_NAME).read_bytes())
@@ -137,10 +160,19 @@ class Store:
             obs.emit("definition.rejected", code="definition_integrity_mismatch", service="runner")
             return self
         for key, entry in self.entries.items():
-            if entry.path is not None and self._read(entry) is None:
+            if entry.path is None:
+                continue
+            data = self._read(entry)
+            try:
+                document = json.loads(data) if data is not None else None
+            except ValueError:
+                document = None
+            if document is None:
                 self.mismatched.add(key)
                 obs.emit("definition.rejected", definition=entry.identity.label(),
                          code="definition_integrity_mismatch", service="runner")
+                continue
+            self.runtimes[key] = _runtime_of(document)
         self.loaded = True
         obs.emit("definitions.loaded", entries=len(self.entries), mismatched=len(self.mismatched), service="runner")
         return self
@@ -183,11 +215,12 @@ class Store:
             self.mismatched.add((kind, identity))
             raise self._reject(identity, route, TypedError("definition_integrity_mismatch"))
         document = json.loads(data)
-        if not self._runtime_supported(document):
+        if not _supported(_runtime_of(document)):
             others = sorted({
                 i.variant for (k, i), e in self.entries.items()
                 if k == kind and i.track == track and i.slug == slug and e.lifecycle == "active"
                 and i.variant is not None and i.variant != variant
+                and (k, i) not in self.mismatched and _supported(self.runtimes.get((k, i)))
             })
             detail = f"This language isn't supported here. Try {', '.join(others)}." if others else None
             raise self._reject(identity, route, TypedError("runtime_unsupported", detail))
@@ -204,12 +237,6 @@ class Store:
         if data is None:
             raise self._reject(identity, None, TypedError("definition_integrity_mismatch"))
         return json.loads(data)
-
-    @staticmethod
-    def _runtime_supported(document: dict[str, Any]) -> bool:
-        if document.get("schema") == "test-definition/v1":
-            return document.get("variant") in CODING_VARIANTS
-        return document.get("runtime_profile") in RUNTIME_PROFILES
 
     @staticmethod
     def _reject(identity: Identity, route: str | None, err: TypedError) -> TypedError:
