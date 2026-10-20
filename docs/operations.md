@@ -167,12 +167,14 @@ There is no rollback. Account isolation is forward-only: `migrate down` keeps th
 
 ### Deployment verification
 
-`harness/verify_deployment.py` checks a deployment you operate. It only reads: every request is a read, a login that should fail, or a request nginx refuses on its headers alone. It prints no email, password, or token. It needs Python 3.9 or newer and nothing else; run it from a checkout of this repository.
+`harness/verify_deployment.py` checks a deployment you operate. It only reads: every request is a read, a login that should fail, or a request nginx refuses on its headers alone. It prints no email, password, or token, and it never uses `http_proxy` or any other environment proxy. It needs Python 3.9 or newer and nothing else; run it from a checkout of this repository.
 
 - `--url`: through the public URL, the routes nginx must answer itself (`/_/`, `/api/admins`, `/api/settings`, `/api/backups`, `/api/logs`, collection schema routes, `/api/rounds/admission/`) never reach PocketBase or the runner; `/api/execute` is gone; record, auth, OAuth redirect, realtime, file, and health routes still reach PocketBase; and a body over the 1 MiB cap gets the typed 413.
-- `--pb-url`: at PocketBase's own port, the development default admin login and the demo account's login fail as an admin.
-- `--admin-email`, with the password in `PB_ADMIN_PASSWORD`: the live rules match `docs/security/account-scope.v1.json`, and no admin account accepts a shipped default password. These are reads with your admin login.
-- `--db`: on a `pb_data` copy taken with PocketBase stopped (the cross-owner scan's copy), the rules match the table and at least one admin exists, so PocketBase's first-admin setup is closed.
+- `--pb-url`: at PocketBase's own port, the development default admin login and the demo account's login fail as an admin. This URL carries your admin password and token, so it must be `https` or a loopback address such as `http://127.0.0.1:8090`; `--allow-insecure` lifts that for a private network you trust.
+- `--admin-email`, with the password in `PB_ADMIN_PASSWORD`: the live rules match the rule table, and no admin account accepts a shipped default password. These are reads with your admin login.
+- `--db`: on a `pb_data` copy taken with PocketBase stopped (the cross-owner scan's copy), the rules match the rule table and at least one admin exists, so PocketBase's first-admin setup is closed.
+
+The rule table is `docs/security/account-scope.v1.json` in the checkout you run from; `--policy` names another copy, and is only accepted with `--admin-email` or `--db`, which supply the rules to compare.
 
 First check that PocketBase answers inside its container, then reach its port as in [PocketBase Admin Access](#pocketbase-admin-access) and run the checks:
 
@@ -182,14 +184,18 @@ read -rs PB_ADMIN_PASSWORD && export PB_ADMIN_PASSWORD   # your admin's password
 python3 harness/verify_deployment.py \
   --url https://your-domain \
   --pb-url http://127.0.0.1:8090 \
-  --admin-email you@example.com \
-  --policy docs/security/account-scope.v1.json
-python3 harness/verify_deployment.py \
-  --db ~/rounds-scan/pb_data/data.db \
-  --policy docs/security/account-scope.v1.json
+  --admin-email you@example.com
+python3 harness/verify_deployment.py --db ~/rounds-scan/pb_data/data.db
 ```
 
-It prints one `PASS` or `FAIL` line per check and exits `0` when all pass, `1` on any failure, and `2` when it can't run. A failed proxy check means nginx isn't running this repository's `frontend/nginx.conf`. A failed credential check means an admin still uses a default; change that admin's password in the admin UI. A missing admin leaves PocketBase's first-admin setup open; create an admin as above. The harness runs the same checks through its own nginx frontend on every CI run.
+It prints one line per check and exits `0` when nothing failed, `1` on any failure, and `2` on a usage or configuration error (after printing the results it already had).
+
+1. `FAIL` on a denied or open route: the public URL isn't served through this repository's `frontend/nginx.conf`.
+2. `INCONCLUSIVE` on the 413 check: a buffering proxy in front of the frontend waits for the whole body, so the frontend's own cap can't be seen from the public URL. The Kubernetes ingress in `k8s/ingress.yaml` does this, since ingress-nginx buffers request bodies by default and the ingress allows up to 6 MiB. Check the frontend directly through a port-forward instead: `kubectl -n rounds port-forward svc/frontend 8080:80`, then `--url http://127.0.0.1:8080`.
+3. `FAIL` on a credential check: an admin still uses a default; change that admin's password in the admin UI.
+4. `FAIL` on the admin check: PocketBase's first-admin setup is open; create an admin as above.
+
+The harness runs the same checks through its own nginx frontend on every CI run, where nginx is the first hop and an inconclusive check fails the run.
 
 ## Smoke Test Checklist
 
