@@ -28,7 +28,11 @@ WORK="${HARNESS_DIR}/.migcheck/$$-$(date +%s)"
 BUILT_IMAGE=""
 
 cleanup() {
-  rm -rf "${WORK}"
+  # The containers write pb_data as root on a Linux host; the scratch
+  # directories are this user's, so the files can still be removed. Never let
+  # cleanup change the check's exit code.
+  rm -rf "${WORK}" 2>/dev/null || true
+  rmdir "${HARNESS_DIR}/.migcheck" 2>/dev/null || true
   [ -n "${BUILT_IMAGE}" ] && ${CONTAINER_BIN} rmi "${BUILT_IMAGE}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
