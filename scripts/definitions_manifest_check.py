@@ -94,13 +94,33 @@ def compare(base: dict | None, head: dict, head_files: dict[str, str | None]) ->
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    """A git command's result, its output as bytes so a blob's checksum is
+    over exactly what's stored."""
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True)
+
+
+def _commit(repo: Path, rev: str) -> str:
+    """``rev`` as a commit id, or CheckError when it doesn't name one, so a
+    base that can't be read is never taken for one without a manifest."""
+    done = _git(repo, "rev-parse", "--verify", "--quiet", "--end-of-options", f"{rev}^{{commit}}")
+    if done.returncode != 0:
+        raise CheckError(f"can't read revision {rev!r}")
+    return done.stdout.decode("ascii").strip()
 
 
 def _manifest_at(repo: Path, rev: str) -> dict | None:
-    done = _git(repo, "show", f"{rev}:{MANIFEST_PATH}")
+    """The manifest at ``rev``, or None when that commit has no manifest
+    file. A revision that can't be read, or a manifest that can't be,
+    is a CheckError."""
+    commit = _commit(repo, rev)
+    listed = _git(repo, "ls-tree", "-z", "--name-only", commit, "--", MANIFEST_PATH)
+    if listed.returncode != 0:
+        raise CheckError(f"can't list {MANIFEST_PATH} at {rev}")
+    if not listed.stdout:
+        return None  # a base that predates the manifest
+    done = _git(repo, "show", f"{commit}:{MANIFEST_PATH}")
     if done.returncode != 0:
-        return None  # the base predates the manifest
+        raise CheckError(f"can't read {MANIFEST_PATH} at {rev}")
     try:
         return json.loads(done.stdout)
     except ValueError as err:
@@ -112,16 +132,16 @@ def _store_checksums_at(repo: Path, rev: str) -> dict[str, str]:
     bytes, so an entry can be checked against the file actually shipped."""
     import hashlib
 
-    listing = _git(repo, "ls-tree", "-r", "-z", "--name-only", rev, "--", STORE_PREFIX)
+    commit = _commit(repo, rev)
+    listing = _git(repo, "ls-tree", "-r", "-z", "--name-only", commit, "--", STORE_PREFIX)
     if listing.returncode != 0:
-        return {}
+        raise CheckError(f"can't list {STORE_PREFIX} at {rev}")
     out: dict[str, str] = {}
-    for path in (p for p in listing.stdout.split("\0") if p.endswith(".json")):
-        blob = _git(repo, "show", f"{rev}:{path}")
+    for path in (p for p in listing.stdout.decode("utf-8").split("\0") if p.endswith(".json")):
+        blob = _git(repo, "show", f"{commit}:{path}")
         if blob.returncode != 0:
-            continue
-        data = blob.stdout.encode("utf-8")
-        out[path[len(STORE_PREFIX) - len("store/"):]] = "sha256:" + hashlib.sha256(data).hexdigest()
+            raise CheckError(f"can't read {path} at {rev}")
+        out[path[len(STORE_PREFIX) - len("store/"):]] = "sha256:" + hashlib.sha256(blob.stdout).hexdigest()
     return out
 
 

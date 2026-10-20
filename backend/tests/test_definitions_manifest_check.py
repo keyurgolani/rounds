@@ -122,3 +122,61 @@ def test_the_script_runs_over_git_and_passes_for_this_branch():
     )
     assert res.returncode == 0, res.stderr
     assert "versions, 0 added" in res.stdout
+
+
+# ---- reading the base ------------------------------------------------------------
+
+
+def _repo(tmp_path: Path, stored: bytes = b'{"a":1}') -> Path:
+    """A repository whose first commit predates the manifest and whose
+    second adds it with one stored version."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def vcs(*args: str) -> None:
+        subprocess.run(["git", "-C", str(repo), "-c", "user.email=check@example.invalid", "-c", "user.name=check",
+                        "-c", "commit.gpgsign=false", *args], check=True, capture_output=True)
+
+    vcs("init", "-q")
+    (repo / "README").write_text("x\n")
+    vcs("add", "README")
+    vcs("commit", "-q", "-m", "first")
+    store = repo / "backend" / "definitions" / "store" / "coding" / "two-sum"
+    store.mkdir(parents=True)
+    (store / "python.v1.json").write_bytes(stored)
+    shipped = manifest(entry(checksum=canonical.checksum_bytes(stored)))
+    (repo / "backend" / "definitions" / "manifest.json").write_text(json.dumps(shipped))
+    vcs("add", "-A")
+    vcs("commit", "-q", "-m", "second")
+    return repo
+
+
+def _run(repo: Path, base: str, head: str = "HEAD") -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(SCRIPT), "--base", base, "--head", head, "--repo", str(repo)],
+                          capture_output=True, text=True, timeout=60)
+
+
+def test_a_base_that_predates_the_manifest_only_checks_the_head(tmp_path):
+    res = _run(_repo(tmp_path), "HEAD~1")
+    assert res.returncode == 0, res.stderr
+    assert "1 versions, 1 added" in res.stdout
+
+
+@pytest.mark.parametrize("base", ["no-such-rev", "HEAD~5"], ids=["unknown", "past-the-root"])
+def test_a_base_that_cant_be_read_stops_the_check(tmp_path, base):
+    # Never taken for a base without a manifest, which would skip every
+    # immutability check.
+    res = _run(_repo(tmp_path), base)
+    assert res.returncode == 2
+    assert "can't read revision" in res.stderr
+
+
+def test_a_head_that_cant_be_read_stops_the_check(tmp_path):
+    res = _run(_repo(tmp_path), "HEAD~1", head="no-such-rev")
+    assert res.returncode == 2
+
+
+def test_stored_checksums_are_over_the_exact_bytes(tmp_path):
+    # A line ending that a text read would rewrite still matches its checksum.
+    res = _run(_repo(tmp_path, stored=b'{"a":\r\n1}'), "HEAD~1")
+    assert res.returncode == 0, res.stderr

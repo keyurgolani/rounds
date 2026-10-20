@@ -29,7 +29,7 @@
       "content_version": 1,
       "lifecycle": "active",
       "path": "store/ai-coding/hallucinated-http-client/python.v1.json",
-      "checksum": "sha256:dd0511f5e66760f3d348c7c0999c4ece04eeb1ec6fb8bc95cfdfe599cdd9d9ff"
+      "checksum": "sha256:159a0b7654b821a1191a8ff59854ee93e520302eb9fd5bcbb943c3ec34f9d6df"
     },
     {
       "kind": "harness-revision",
@@ -39,7 +39,7 @@
       "content_version": 1,
       "lifecycle": "active",
       "path": "store/ai-coding/hallucinated-http-client/typescript.v1.json",
-      "checksum": "sha256:51aba1da4258245e5caea9136eced34ccef65267f64113adca7b42100f58c073"
+      "checksum": "sha256:b177c415c67d5a78b43f7aa0cccafa91d0b331cd46d80fe15a189e646bfa229c"
     },
     {
       "kind": "harness-revision",

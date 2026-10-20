@@ -231,7 +231,8 @@
       "word-search-ii",
       "zeitgeist-top-n-most-popular-items",
       "zigzag-string-conversion"
-    ]
+    ],
+    "definition_not_found": "any slug not listed, such as a question an admin added"
   },
   "ai_coding_rounds": {
     "active": {
@@ -249,7 +250,8 @@
         "rate-limiter-ts",
         "word-count-py"
       ]
-    }
+    },
+    "definition_not_found": "any slug not listed as active or retired"
   },
   "take_home_assignments": {
     "retired": {

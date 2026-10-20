@@ -509,11 +509,31 @@ def test_a_file_changed_or_removed_after_startup_fails_closed(store):
     assert _code(lambda: loaded.resolve("coding", "two-sum", "javascript", 1)).code == "definition_integrity_mismatch"
 
 
+def _entry_with(**fields) -> dict:
+    good = {"kind": "test-definition", "track": "coding", "slug": "two-sum", "variant": "python",
+            "content_version": 1, "lifecycle": "active", "path": "store/coding/two-sum/python.v1.json",
+            "checksum": "sha256:" + "0" * 64}
+    return {"schema": "definitions-manifest/v1", "entries": [{**good, **fields}]}
+
+
 @pytest.mark.parametrize(
     "manifest",
     [None, "not json", {"schema": "something-else/v1", "entries": []},
-     {"schema": "definitions-manifest/v1", "entries": [{"kind": "test-definition"}]}],
-    ids=["missing", "not-json", "wrong-schema", "bad-entry"],
+     {"schema": "definitions-manifest/v1", "entries": [{"kind": "test-definition"}]},
+     {"schema": "definitions-manifest/v1"},
+     {"schema": "definitions-manifest/v1", "entries": 7},
+     {"schema": "definitions-manifest/v1", "entries": {"two-sum": {}}},
+     {"schema": "definitions-manifest/v1", "entries": "two-sum"},
+     _entry_with(track=["coding"]),
+     _entry_with(kind={"test-definition": 1}),
+     _entry_with(variant=["python"]),
+     _entry_with(lifecycle=["active"]),
+     _entry_with(path=["store/x.json"]),
+     _entry_with(checksum=7),
+     '{"schema": "definitions-manifest/v1", "entries": ' + "[" * 100_000 + "]" * 100_000 + "}"],
+    ids=["missing", "not-json", "wrong-schema", "bad-entry", "no-entries", "entries-a-number", "entries-an-object",
+         "entries-a-string", "track-a-list", "kind-an-object", "variant-a-list", "lifecycle-a-list", "path-a-list",
+         "checksum-a-number", "deep-nesting"],
 )
 def test_an_unusable_manifest_leaves_nothing_to_resolve(tmp_path, capsys, manifest):
     if manifest is not None:
@@ -522,6 +542,16 @@ def test_an_unusable_manifest_leaves_nothing_to_resolve(tmp_path, capsys, manife
     assert not loaded.loaded and not loaded.entries
     assert events(capsys.readouterr().out, "definition.rejected")[0]["code"] == "definition_integrity_mismatch"
     assert _code(lambda: loaded.resolve("coding", "two-sum", "python", 1)).code == "definition_not_found"
+
+
+def test_a_malformed_manifest_never_stops_the_runner_starting(tmp_path, monkeypatch):
+    # init() is what startup calls: it answers an empty store, and the
+    # store a request asks for afterwards is that one, not an exception.
+    (tmp_path / "manifest.json").write_text(json.dumps(_entry_with(track=["coding"])))
+    monkeypatch.setattr(definitions, "_store", None)
+    loaded = definitions.init(tmp_path)
+    assert loaded.entries == {} and definitions.store() is loaded
+    monkeypatch.setattr(definitions, "_store", None)
 
 
 def test_a_manifest_listing_a_version_twice_is_unusable(store):

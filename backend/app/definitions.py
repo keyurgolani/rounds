@@ -2,11 +2,12 @@
 
 ``init()`` runs at startup: it reads ``backend/definitions/manifest.json``
 (``/app/definitions`` in the image, mode 0400) and checks every stored
-version's bytes against its checksum. A missing or unreadable manifest
-leaves the store empty, and a file that's missing or doesn't match makes
-that version answer 503 ``definition_integrity_mismatch``; each logs a
-``definition.rejected`` line. Startup goes on either way, so legacy
-routes keep serving while an operator repairs the image.
+version's bytes against its checksum. A manifest that's missing, isn't
+JSON, or isn't the manifest's shape in any way leaves the store empty, and
+a file that's missing or doesn't match makes that version answer 503
+``definition_integrity_mismatch``; each logs a ``definition.rejected``
+line. Startup goes on either way, so legacy routes keep serving while an
+operator repairs the image.
 
 ``resolve()`` turns a request's ``{track, slug, variant, version}`` into
 one ``active``, checksum-verified definition, rereading its file each
@@ -109,20 +110,27 @@ def _supported(runtime: str | None) -> bool:
 
 
 def _parse_entry(raw: Any) -> Entry:
+    """One manifest entry, or ValueError for anything that isn't one.
+    Every field's type is checked before it's compared or hashed, so a
+    wrong shape is a ValueError, never a TypeError."""
     if not isinstance(raw, dict):
         raise ValueError("entry is not an object")
     kind, track, slug = raw.get("kind"), raw.get("track"), raw.get("slug")
     variant, version, lifecycle = raw.get("variant"), raw.get("content_version"), raw.get("lifecycle")
     path, checksum = raw.get("path"), raw.get("checksum")
+    if not isinstance(kind, str) or not isinstance(track, str) or not isinstance(lifecycle, str):
+        raise ValueError("kind, track, and lifecycle must be strings")
     if kind not in ("test-definition", "harness-revision") or track not in TRACK_KIND:
         raise ValueError("unknown kind or track")
     if not isinstance(slug, str) or not slug or not (variant is None or isinstance(variant, str)):
         raise ValueError("bad slug or variant")
     if not isinstance(version, int) or isinstance(version, bool) or version < 1 or lifecycle not in LIFECYCLES:
         raise ValueError("bad version or lifecycle")
+    if not (path is None or isinstance(path, str)) or not (checksum is None or isinstance(checksum, str)):
+        raise ValueError("path and checksum must be strings")
     if (path is None) != (checksum is None) or (path is None and lifecycle != "retired"):
         raise ValueError("only a retired version may have no file")
-    if path is not None and (not isinstance(path, str) or not path.startswith("store/") or ".." in path.split("/")):
+    if path is not None and (not path.startswith("store/") or ".." in path.split("/")):
         raise ValueError("bad path")
     return Entry(kind, Identity(track, slug, variant, version), lifecycle, path, checksum)
 
@@ -148,13 +156,18 @@ class Store:
             manifest = json.loads((self.root / MANIFEST_NAME).read_bytes())
             if not isinstance(manifest, dict) or manifest.get("schema") != "definitions-manifest/v1":
                 raise ValueError("not a definitions-manifest/v1")
-            for raw in manifest.get("entries") or []:
+            entries = manifest.get("entries")
+            if not isinstance(entries, list):
+                raise ValueError("entries is not a list")
+            for raw in entries:
                 entry = _parse_entry(raw)
                 key = (entry.kind, entry.identity)
                 if key in self.entries:
                     raise ValueError(f"{entry.identity.label()} is listed twice")
                 self.entries[key] = entry
-        except (OSError, ValueError) as err:
+        except (OSError, ValueError, TypeError, RecursionError) as err:
+            # Anything that keeps the manifest from parsing leaves no
+            # definitions; it never stops the runner from starting.
             self.entries.clear()
             _log.error("definitions: manifest unusable: %s", type(err).__name__)
             obs.emit("definition.rejected", code="definition_integrity_mismatch", service="runner")
@@ -165,7 +178,7 @@ class Store:
             data = self._read(entry)
             try:
                 document = json.loads(data) if data is not None else None
-            except ValueError:
+            except (ValueError, RecursionError):
                 document = None
             if document is None:
                 self.mismatched.add(key)

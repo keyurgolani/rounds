@@ -187,6 +187,10 @@ class ChatRequest(BaseModel):
     # into the round-lookup filter.
     round_slug: str = Field(pattern=r"^[a-z0-9-]+$")
     checkpoint_index: int = Field(ge=0)
+    # Multi-language rounds keep one checkpoint list per language. Left
+    # out, it's the one language whose starter files ``files`` carries,
+    # or the round's primary language.
+    language: str | None = Field(default=None, pattern=limits.LANGUAGE_PATTERN)
     provider_id: str | None = None
     model: str | None = None
     messages: List[ChatMessage]
@@ -230,28 +234,36 @@ class AICodingModel(BaseModel):
     model: str
 
 
-async def _enforce_ai_allowed(token: str, slug: str, idx: int) -> None:
+async def _enforce_ai_allowed(token: str, body: "ChatRequest") -> None:
     """403 if the round's checkpoint disallows AI. Defense-in-depth — the
     UI already disables the chat input, but the endpoint must not trust
-    the client."""
+    the client. A multi-language round's checkpoint is looked up in the
+    request's language, the way run-project and grade look it up."""
     data = await pb_get(
         token,
         "/api/collections/ai_coding_rounds/records",
-        params={"filter": f"slug='{slug}'", "perPage": 1},
+        params={"filter": f"slug='{body.round_slug}'", "perPage": 1},
     )
     items = (data or {}).get("items") or []
     if not items:
         raise HTTPException(status_code=404, detail="Round not found.")
-    checkpoints = items[0].get("checkpoints") or []
-    if idx >= len(checkpoints):
+    round_row = items[0] if isinstance(items[0], dict) else {}
+    try:
+        _language, checkpoints = _checkpoints_for(
+            round_row, body.language or _submitted_language(round_row, body.files)
+        )
+    except TypedError:
+        raise HTTPException(status_code=400, detail="Invalid checkpoint index.") from None
+    if body.checkpoint_index >= len(checkpoints):
         raise HTTPException(status_code=400, detail="Invalid checkpoint index.")
-    if not checkpoints[idx].get("ai_allowed"):
+    checkpoint = checkpoints[body.checkpoint_index]
+    if not isinstance(checkpoint, dict) or not checkpoint.get("ai_allowed"):
         raise HTTPException(status_code=403, detail="AI is disabled for this checkpoint.")
 
 
 @router.post("/chat")
 async def chat(body: ChatRequest, user: dict = Depends(_auth_user)) -> StreamingResponse:
-    await _enforce_ai_allowed(user["token"], body.round_slug, body.checkpoint_index)
+    await _enforce_ai_allowed(user["token"], body)
     cfg = await _resolve_text_cfg(user, body.provider_id, body.model)
 
     file_context = json.dumps(body.files)[:60_000]  # cap to avoid blowing token budget
@@ -299,7 +311,7 @@ async def edit(body: ChatRequest, user: dict = Depends(_auth_user)) -> Streaming
     optional and present only when the model output couldn't be
     parsed as a JSON patch array.
     """
-    await _enforce_ai_allowed(user["token"], body.round_slug, body.checkpoint_index)
+    await _enforce_ai_allowed(user["token"], body)
     cfg = await _resolve_text_cfg(user, body.provider_id, body.model)
 
     file_context = json.dumps(body.files)[:60_000]

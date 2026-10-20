@@ -64,6 +64,13 @@ def test_the_retired_slug_sets_match_the_touched_row_manifest(src, touched):
     assert set(_string_array(src, "RETIRED_TAKE_HOME")) == set(touched["take_home_assignments"]["retired"]["slugs"])
 
 
+def test_the_active_slug_sets_match_the_touched_row_manifest(src, touched):
+    # Only these slugs map to active version 1; any other row is left
+    # unversioned and resolves to definition_not_found.
+    assert _string_array(src, "ACTIVE_CODING") == sorted(touched["coding_questions"]["slugs"])
+    assert _string_array(src, "ACTIVE_AI_CODING") == sorted(touched["ai_coding_rounds"]["active"]["slugs"])
+
+
 def test_the_touched_manifest_matches_the_definitions_manifest(touched):
     man = json.loads((ROOT / "backend" / "definitions" / "manifest.json").read_text())
     active_coding = {e["slug"] for e in man["entries"]
@@ -141,6 +148,7 @@ function baseDb(extra) {
   };
   if (extra === "legacy") {
     rows.ai_coding_rounds.push(makeRow("ai_coding_rounds", { id: "a2", slug: "word-count-py" }));
+    rows.ai_coding_rounds.push(makeRow("ai_coding_rounds", { id: "a3", slug: "admin-added-round" }));
     rows.take_home_assignments.push(makeRow("take_home_assignments", { id: "t1", slug: "kv-store-py" }));
     rows.take_home_assignments.push(makeRow("take_home_assignments", { id: "t2", slug: "brand-new" }));
   }
@@ -190,7 +198,6 @@ def test_a_fresh_database_maps_coding_and_the_active_round(run):
     assert fresh["hasJournal"] is True
     coding = {r["slug"]: r for r in fresh["rows"]["coding_questions"]}
     assert coding["two-sum"]["v"] == 1 and coding["two-sum"]["caseIds"] == ["c000", "c001"]
-    assert coding["mystery-op"]["v"] == 1 and coding["mystery-op"]["caseIds"] == []
     (round_,) = fresh["rows"]["ai_coding_rounds"]
     assert round_["v"] == 1
     dispositions = {(j["collection"], j["slug"]): j["disposition"] for j in fresh["journal"]}
@@ -198,17 +205,33 @@ def test_a_fresh_database_maps_coding_and_the_active_round(run):
     assert dispositions[("coding_questions", "two-sum")] == "active"
 
 
+def test_a_question_the_manifest_doesnt_compile_is_left_unversioned(run):
+    # An admin-added question has no definition: no version, no case ids,
+    # and a definition-not-found journal row, so step 2 answers
+    # definition_not_found rather than running it.
+    fresh = run["fresh"]
+    coding = {r["slug"]: r for r in fresh["rows"]["coding_questions"]}
+    assert coding["mystery-op"]["v"] is None and coding["mystery-op"]["caseIds"] is None
+    journal = {(j["collection"], j["slug"]): (j["disposition"], j["definition_version"]) for j in fresh["journal"]}
+    assert journal[("coding_questions", "mystery-op")] == ("definition-not-found", 0)
+    # Every row still gets a journal row, mapped or not.
+    assert len(fresh["journal"]) == sum(len(rows) for rows in fresh["rows"].values())
+
+
 def test_a_pre_2026_05_16_database_retires_the_removed_samples(run):
     legacy = run["legacy"]
     dispositions = {(j["collection"], j["slug"]): (j["disposition"], j["definition_version"]) for j in legacy["journal"]}
     assert dispositions[("ai_coding_rounds", "word-count-py")] == ("retired", 1)
+    # A round with no definition is left unversioned and not-found too.
+    assert dispositions[("ai_coding_rounds", "admin-added-round")] == ("definition-not-found", 0)
+    assert {r["slug"]: r["v"] for r in legacy["rows"]["ai_coding_rounds"]}["admin-added-round"] is None
     assert dispositions[("take_home_assignments", "kv-store-py")] == ("retired", 1)
     # A take-home with no definition is left unversioned and not-found.
     assert dispositions[("take_home_assignments", "brand-new")] == ("definition-not-found", 0)
     rows = {r["slug"]: r for r in legacy["rows"]["take_home_assignments"]}
     assert rows["kv-store-py"]["v"] == 1 and rows["brand-new"]["v"] is None
     # Every row still present: nothing deleted or recreated.
-    assert len(legacy["rows"]["ai_coding_rounds"]) == 2
+    assert len(legacy["rows"]["ai_coding_rounds"]) == 3
     assert len(legacy["rows"]["take_home_assignments"]) == 2
 
 

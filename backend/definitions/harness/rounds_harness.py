@@ -23,15 +23,19 @@ import json
 import os
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
 
 RESULT_FD = 3
 OUTCOMES = ("passed", "failed", "not-run")
 REASONS = ("ok", "assertion", "exception", "timeout", "no-result", "bad-result")
+PR_GET_DUMPABLE = 3
 PR_SET_DUMPABLE = 4
 CHILD_PATH = "/usr/local/bin:/usr/bin:/bin"
 # The most of a child's output a driver keeps to read its answer.
 CHILD_OUTPUT_MAX = 256 * 1024
+# How much of the child's output one read takes.
+CHILD_READ_CHUNK = 64 * 1024
 
 
 class Unprotected(RuntimeError):
@@ -50,15 +54,13 @@ def protect() -> bool:
 
 
 def dumpable() -> bool | None:
-    """This process's dumpable flag from /proc, or None outside Linux."""
-    try:
-        with open("/proc/self/status", encoding="ascii") as status:
-            for line in status:
-                if line.startswith("Dumpable:"):
-                    return line.split()[1] != "0"
-    except OSError:
+    """This process's dumpable flag, as prctl(PR_GET_DUMPABLE) reports it,
+    or None outside Linux or when the kernel won't say."""
+    if not sys.platform.startswith("linux"):
         return None
-    return None
+    libc = ctypes.CDLL(None, use_errno=True)
+    flag = libc.prctl(PR_GET_DUMPABLE, 0, 0, 0, 0)
+    return None if flag < 0 else flag != 0
 
 
 class Channel:
@@ -90,7 +92,11 @@ class ChildResult:
 def run_child(argv: list[str], cwd: str, timeout_s: float) -> ChildResult:
     """Runs the candidate's side of a check in its own session. Only
     stdin, stdout, and stderr reach the child, its environment is a PATH
-    and a HOME, and on timeout its whole process group is killed."""
+    and a HOME, and on timeout its whole process group is killed.
+
+    Its output is read as it comes, and only the first CHILD_OUTPUT_MAX
+    bytes are kept; the rest is read and dropped, so a child that prints
+    without end can't grow the driver."""
     proc = subprocess.Popen(
         argv,
         cwd=cwd,
@@ -101,15 +107,39 @@ def run_child(argv: list[str], cwd: str, timeout_s: float) -> ChildResult:
         close_fds=True,
         start_new_session=True,
     )
+    kept = bytearray()
+    fd = proc.stdout.fileno()
+
+    def drain() -> None:
+        while True:
+            try:
+                chunk = os.read(fd, CHILD_READ_CHUNK)
+            except OSError:
+                return
+            if not chunk:
+                return
+            room = CHILD_OUTPUT_MAX - len(kept)
+            if room > 0:
+                kept.extend(chunk[:room])
+
+    reader = threading.Thread(target=drain, daemon=True)
+    reader.start()
+    timed_out = False
     try:
-        out, _ = proc.communicate(timeout=timeout_s)
+        proc.wait(timeout=timeout_s)
     except subprocess.TimeoutExpired:
-        _kill_group(proc)
-        proc.communicate()
-        return ChildResult(None, "", True)
+        timed_out = True
     finally:
+        # Anything the child left running goes with it, which also closes
+        # the pipe's other end so the reader sees its end.
         _kill_group(proc)
-    stdout = out[:CHILD_OUTPUT_MAX].decode("utf-8", errors="replace")
+        proc.wait()
+        reader.join(timeout=5)
+    if not reader.is_alive():
+        proc.stdout.close()
+    if timed_out:
+        return ChildResult(None, "", True)
+    stdout = bytes(kept).decode("utf-8", errors="replace")
     return ChildResult(proc.returncode, stdout, False)
 
 

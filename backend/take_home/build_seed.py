@@ -5,6 +5,7 @@ assignment.
 Usage:  python3 backend/take_home/build_seed.py
 Output: pocketbase/pb_migrations/1700001400_take_home_seed.js
 """
+import hashlib
 import json
 import pathlib
 
@@ -65,13 +66,14 @@ def collect_assignment(d: pathlib.Path) -> dict:
 # this builder emits nothing for them. The committed 1700001400 seed stays
 # as it is. A future, non-retired assignment with a compiled take-home
 # definition past version 1 gets a presentation-only upsert migration here,
-# never a delete.
-DEFINITIONS_MANIFEST =pathlib.Path(__file__).resolve().parents[2] / "backend" / "definitions" / "manifest.json"
-PRESENTATION_OUT = (
-    pathlib.Path(__file__).resolve().parents[2] / "pocketbase" / "pb_migrations" / "1700006400_take_home_presentation.js"
-)
-PRESENTATION_FIELDS = ("title", "difficulty", "language", "entrypoint", "time_budget_min", "ai_policy", "prompt_md",
-                       "starter_files", "harness_files", "rubric", "topics", "companies")
+# at its own version, never a delete. What runs and how it scores live
+# only in the compiled revision, so the row carries no entrypoint or
+# harness files.
+DEFINITIONS_MANIFEST = pathlib.Path(__file__).resolve().parents[2] / "backend" / "definitions" / "manifest.json"
+MIGRATIONS = pathlib.Path(__file__).resolve().parents[2] / "pocketbase" / "pb_migrations"
+PRESENTATION_NAME = "take_home_presentation"
+PRESENTATION_FIELDS = ("title", "difficulty", "language", "time_budget_min", "ai_policy", "prompt_md",
+                       "starter_files", "rubric", "topics", "companies")
 
 
 def _manifest_entries() -> list[dict]:
@@ -101,11 +103,31 @@ def live_assignments() -> list[dict]:
     return out
 
 
+def presentation_row(row: dict) -> dict:
+    """The display fields of a collected assignment, at its own version."""
+    return {"definition_version": row["definition_version"],
+            **{k: row[k] for k in PRESENTATION_FIELDS if k in row}, "slug": row["slug"]}
+
+
+def presentation_path(rows: list[dict], migrations: pathlib.Path = MIGRATIONS) -> pathlib.Path | None:
+    """Where the migration for these assignments' versions goes, or None
+    when one for exactly these versions is already there. Each version
+    bump gets a new file, numbered after every migration in the
+    directory, so a migration that may have been applied is never written
+    again."""
+    versions = sorted((r["slug"], r["definition_version"]) for r in rows)
+    stamp = hashlib.sha256(json.dumps(versions).encode("utf-8")).hexdigest()[:12]
+    name = f"{PRESENTATION_NAME}_{stamp}.js"
+    if any(migrations.glob(f"*_{name}")):
+        return None
+    numbers = [int(p.name.split("_", 1)[0]) for p in migrations.glob("*.js") if p.name.split("_", 1)[0].isdigit()]
+    return migrations / f"{max(numbers, default=0) + 1}_{name}"
+
+
 def presentation_migration(rows: list[dict]) -> str:
     """A presentation-only upsert migration for ``rows``. It updates a row
     by slug or creates it, never deletes; down() leaves every row."""
-    display = [{"definition_version": r["definition_version"],
-                **{k: r.get(k) for k in PRESENTATION_FIELDS}, "slug": r["slug"]} for r in rows]
+    display = [presentation_row(r) for r in rows]
     body = "/// <reference path=\"../pb_data/types.d.ts\" />\n\n"
     body += f"const ASSIGNMENTS = {json.dumps(display, indent=2)};\n\n"
     body += """\
@@ -139,8 +161,13 @@ def main() -> None:
     if not rows:
         print("take_home presentation: every assignment is retired; nothing to emit.")
         return
-    PRESENTATION_OUT.write_text(presentation_migration(rows), encoding="utf-8")
-    print(f"Wrote {PRESENTATION_OUT}")
+    path = presentation_path(rows, MIGRATIONS)
+    if path is None:
+        print("take_home presentation: a migration for these versions is already there; nothing to emit.")
+        return
+    with open(path, "x", encoding="utf-8") as out:
+        out.write(presentation_migration(rows))
+    print(f"Wrote {path}")
 
 
 if __name__ == "__main__":
