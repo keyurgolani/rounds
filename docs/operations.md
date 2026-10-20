@@ -157,12 +157,39 @@ Deploying the release that carries it:
 3. Note the accepted and denied create and update requests per collection and status in the PocketBase request logs over the retained window (5 days by default). Read them in the admin UI's Logs view, reached as in "PocketBase Admin Access" below.
 4. Deploy. The migration applies on start. If one of its collections is missing, it fails whole: PocketBase logs `Failed to apply migration 1700006000_account_scope_rules.js`, changes no rule, and exits without serving, and under `restart: unless-stopped` it keeps restarting. Go back to the previous image tag while you find out why the collection is missing.
 5. Compare the same counts daily for 7 days. Create or update denials rising on a collection is the alert.
+6. Run [deployment verification](#deployment-verification) and clear every `FAIL`.
 
 If a rule turns out too tight and a legitimate flow starts getting denied, fix it forward with a new migration that corrects that collection's rule. If a rule is too loose and a probe or the scan finds a foreign write, lock that collection with `pocketbase/levers/lock_collection.template.js` until the fix ships; it sets create and update to `null` so only the superuser can write. Lift the lock with the corrected rule, or with `pocketbase/levers/restore_collection.template.js` when the rules themselves were right.
 
 After the release, review each account's `ai_providers.base_url` and any `encrypted_key`/`key_iv` pair shared across accounts. Users are not forced to re-confirm their providers.
 
-There is no rollback. Account isolation is forward-only: `migrate down` keeps the rules, and a bad rule is repaired with a forward fix or the lever above, never by reverting. `harness/migration_check.sh` exercises the migration, the fail-whole behavior, and both levers.
+There is no rollback. Account isolation is forward-only: `migrate down` keeps the rules, and a bad rule is repaired with a forward fix or the lever above, never by reverting. Don't use [Rolling back](#rolling-back) to undo these rules either: restoring the pre-upgrade archive brings the old rules back with the old data. `harness/migration_check.sh` exercises the migration, the fail-whole behavior, and both levers.
+
+### Deployment verification
+
+`harness/verify_deployment.py` checks a deployment you operate. It only reads: every request is a read, a login that should fail, or a request nginx refuses on its headers alone. It prints no email, password, or token. It needs Python 3.9 or newer and nothing else; run it from a checkout of this repository.
+
+- `--url`: through the public URL, the routes nginx must answer itself (`/_/`, `/api/admins`, `/api/settings`, `/api/backups`, `/api/logs`, collection schema routes, `/api/rounds/admission/`) never reach PocketBase or the runner; `/api/execute` is gone; record, auth, OAuth redirect, realtime, file, and health routes still reach PocketBase; and a body over the 1 MiB cap gets the typed 413.
+- `--pb-url`: at PocketBase's own port, the development default admin login and the demo account's login fail as an admin.
+- `--admin-email`, with the password in `PB_ADMIN_PASSWORD`: the live rules match `docs/security/account-scope.v1.json`, and no admin account accepts a shipped default password. These are reads with your admin login.
+- `--db`: on a `pb_data` copy taken with PocketBase stopped (the cross-owner scan's copy), the rules match the table and at least one admin exists, so PocketBase's first-admin setup is closed.
+
+First check that PocketBase answers inside its container, then reach its port as in [PocketBase Admin Access](#pocketbase-admin-access) and run the checks:
+
+```sh
+docker compose -f docker-compose.prod.yml exec pocketbase wget -qO- http://127.0.0.1:8090/api/health
+read -rs PB_ADMIN_PASSWORD && export PB_ADMIN_PASSWORD   # your admin's password, kept out of shell history
+python3 harness/verify_deployment.py \
+  --url https://your-domain \
+  --pb-url http://127.0.0.1:8090 \
+  --admin-email you@example.com \
+  --policy docs/security/account-scope.v1.json
+python3 harness/verify_deployment.py \
+  --db ~/rounds-scan/pb_data/data.db \
+  --policy docs/security/account-scope.v1.json
+```
+
+It prints one `PASS` or `FAIL` line per check and exits `0` when all pass, `1` on any failure, and `2` when it can't run. A failed proxy check means nginx isn't running this repository's `frontend/nginx.conf`. A failed credential check means an admin still uses a default; change that admin's password in the admin UI. A missing admin leaves PocketBase's first-admin setup open; create an admin as above. The harness runs the same checks through its own nginx frontend on every CI run.
 
 ## Smoke Test Checklist
 
