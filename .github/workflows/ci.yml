@@ -72,5 +72,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: account-scope-receipts
-          path: harness/.receipts/receipts.jsonl
+          path: harness/.receipts/
           if-no-files-found: warn

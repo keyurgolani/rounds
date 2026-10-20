@@ -10,8 +10,10 @@
 #
 # Credentials here are obvious non-secret test placeholders. The probe
 # runner generates its own per-run account credentials and never uses the
-# demo password. Host ports bind to 127.0.0.1 and are only for debugging;
-# the probes reach services by their compose network names.
+# demo password. No service publishes a host port: everything talks over the
+# compose network (the probe container joins it), so two runs with different
+# project names never collide on a port. To poke a service while debugging,
+# add a `ports:` line or use `compose exec`.
 
 services:
   pocketbase:
@@ -27,8 +29,6 @@ services:
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
       - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
-    ports:
-      - "127.0.0.1:${PB_HOST_PORT:-8390}:8090"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/api/health >/dev/null 2>&1 || exit 1"]
       interval: 3s
@@ -51,8 +51,6 @@ services:
       - AI_KEY_SECRET=${AI_KEY_SECRET:-rounds-dev-key-DO-NOT-USE-IN-PROD}
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
-    ports:
-      - "127.0.0.1:${RUNNER_HOST_PORT:-8300}:8000"
     depends_on:
       pocketbase:
         condition: service_healthy
@@ -63,8 +61,6 @@ services:
     build:
       context: ../frontend
     image: ${IMAGE_PREFIX:-rounds-9s1}-frontend:test
-    ports:
-      - "127.0.0.1:${HTTP_HOST_PORT:-8380}:80"
     depends_on:
       - pocketbase
       - runner
