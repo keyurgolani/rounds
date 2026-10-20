@@ -19,15 +19,20 @@ the probe families that apply to it. Expected statuses come from the policy's
 The harness runs every probe family whose guarantee the current rules already
 enforce, once per collection it applies to:
 
-- a signed-in account's list never returns another account's rows;
+- a signed-in account's list never returns another account's rows, including
+  under a filter naming another account's record or account id;
 - an anonymous list returns none of an account's rows;
 - a signed-in account cannot read, update, or delete another account's record
-  by id, and the record survives;
+  by id, and the record comes out exactly as it was;
 - an anonymous caller cannot read, update, or delete an account's record by id;
+- reading, updating, or deleting another account's record answers exactly like
+  the same request on a record that does not exist;
 - an anonymous create of a complete, valid row is rejected by the create rule
-  (not by field validation);
+  (not by field validation), and no row is left;
 - a signed-in account's create of a row owned by another account is rejected
-  by the create rule, and no row is left under that owner;
+  by the create rule, and no row is left under that owner; replaying it is
+  rejected every time, and naming an owner that does not exist is rejected
+  with the same status;
 - an update that moves a row to another account is rejected, and the row keeps
   its owner;
 - an account's own update still succeeds, both leaving `user` out and resending
@@ -37,8 +42,20 @@ enforce, once per collection it applies to:
 - a JSON field larger than its `maxSize` is rejected, on every collection that
   has one;
 - signup is rejected when the instance disables signups;
+- with PocketBase unreachable, a runner write through nginx fails closed with
+  503 `auth_unavailable` before the route runs;
 - the live collection rules read back equal the rule table exactly (including
   the `users` manage rule).
+
+It also runs the operator's deployment verifier,
+[`verify_deployment.py`](verify_deployment.py), through the stack's real nginx
+frontend and at PocketBase's own port: the routes nginx answers itself never
+reach PocketBase or the runner, the routes it leaves open still work, a body
+over the 1 MiB cap gets the typed 413, no shipped default login or password
+opens an admin account, the live rules and the run's `pb_data` match the table,
+and an admin exists. Each check needs a passing receipt, as the policy's
+`deployment_checks` lists. The policy's `open_exceptions` name what stays open
+at this revision (timing and error shapes, for `ROUNDS-00B-L05`).
 
 A guarantee whose fix has not landed yet is listed in the policy as `pending`
 with the leaf and stage that closes it, and carries no probe here: its probes
@@ -53,8 +70,8 @@ rules, a missing collection fails it whole, and the write-lock lever in
 [`pocketbase/levers/`](../pocketbase/levers/) locks a collection until a forward
 fix restores it.
 
-After the verdict, the harness stops PocketBase and runs the read-only
-cross-owner relation scan
+With PocketBase stopped, the harness runs the read-only cross-owner relation
+scan
 ([`pocketbase/tools/scan_cross_owner.py`](../pocketbase/tools/scan_cross_owner.py),
 [docs](../docs/security/cross-owner-scan.md)) against the run's `pb_data`
 volume, mounted read-only in a container with no network. It checks that the
@@ -77,12 +94,15 @@ COMPOSE_BIN="docker compose" harness/run.sh
 COMPOSE_PROJECT=rounds-9s1-b harness/run.sh
 ```
 
-The launcher builds the pocketbase and probe images, brings PocketBase up,
-runs the main probe phase, recreates PocketBase with signups disabled (the
-named `pb_data` volume keeps the run's accounts and rows), runs the
-signup-hook probe, prints the verdict (pass / expected-fail / fail counts),
-runs the cross-owner scan check, and tears the stack down, removing the images
-it built. Its exit code is non-zero on any failed or missing result.
+The launcher builds the pocketbase, probe, runner, and frontend images, brings
+PocketBase up, runs the main probe phase, recreates PocketBase with signups
+disabled (the named `pb_data` volume keeps the run's accounts and rows), runs
+the signup-hook probe, brings the runner and nginx frontend up and runs the
+deployment verifier through them, stops PocketBase for the degraded probe,
+runs the verifier's checks and the cross-owner scan on the run's `pb_data`,
+prints the verdict (pass / expected-fail / fail counts), and tears the stack
+down, removing the images it built. Its exit code is non-zero on any failed or
+missing result.
 
 No service publishes a host port; the probes reach services over the compose
 network. Image tags, network, volume, the compose env file, and the receipts
