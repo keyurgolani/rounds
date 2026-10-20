@@ -1,0 +1,487 @@
+{
+  "$schema": "./decision-record.schema.json",
+  "id": "DR-0001",
+  "title": "Product vocabulary and user-facing language",
+  "leaf": "ROUNDS-01-L01",
+  "status": "ratified",
+  "owner": "Product Architecture",
+  "approver": "keyurgolani",
+  "approvalRef": {
+    "pr": 188,
+    "governedFiles": [
+      {
+        "path": "contracts/vocabulary/terms.json",
+        "sha256": "0f71669d0f0c120d1ff05c868ca57a2f254cd36c594d3bcbda9febce44d33d7e"
+      }
+    ]
+  },
+  "ratifiedOn": "2026-10-20",
+  "compatibility": "additive",
+  "revision": 1,
+  "supersedes": null,
+  "consumers": [
+    "ROUNDS-01-L02",
+    "ROUNDS-01-L03",
+    "ROUNDS-02-L01",
+    "ROUNDS-02-L03",
+    "ROUNDS-02-L04",
+    "ROUNDS-03-L01",
+    "ROUNDS-07-L01",
+    "ROUNDS-07-L04",
+    "ROUNDS-08-L01",
+    "ROUNDS-08-L02",
+    "ROUNDS-08-L04",
+    "ROUNDS-08-L05",
+    "ROUNDS-09-L01",
+    "ROUNDS-09-L04",
+    "ROUNDS-10-L02",
+    "ROUNDS-12-L01",
+    "ROUNDS-12-L03",
+    "ROUNDS-13-L07",
+    "ROUNDS-14-L01",
+    "ROUNDS-16-L01",
+    "ROUNDS-16-L02",
+    "ROUNDS-16-L04",
+    "ROUNDS-17-L02",
+    "ROUNDS-17-L04",
+    "ROUNDS-20-L01",
+    "ROUNDS-21-L01",
+    "ROUNDS-22-L02",
+    "ROUNDS-23-L01",
+    "ROUNDS-23-L02",
+    "ROUNDS-23-L03",
+    "ROUNDS-24-L01",
+    "ROUNDS-24-L02",
+    "ROUNDS-27-L01",
+    "ROUNDS-27-L03",
+    "ROUNDS-27-L04",
+    "ROUNDS-29-L01",
+    "ROUNDS-29-L02",
+    "ROUNDS-30-L04",
+    "ROUNDS-31-L09",
+    "ROUNDS-32-L01",
+    "ROUNDS-32-L02",
+    "ROUNDS-33-L01",
+    "ROUNDS-33-L03",
+    "ROUNDS-34-L01",
+    "ROUNDS-34-L04",
+    "ROUNDS-34-L06",
+    "ROUNDS-03-L04",
+    "ROUNDS-14-L07",
+    "ROUNDS-34-L08"
+  ],
+  "prerequisites": [],
+  "authorityBoundary": "contracts/vocabulary/terms.json",
+  "affectedPackages": [
+    "Transaction-owning Command Gateway",
+    "Account Service",
+    "Career Profile Service",
+    "Identity Directory for Organization and Person",
+    "Opportunity and Pursuit Service",
+    "Interview Process Service",
+    "Artifact Service",
+    "Practice Service",
+    "Action Service",
+    "Capture and Ingestion Service",
+    "Revision and Audit Service",
+    "Search Service",
+    "Read Model and Recommendation Service",
+    "Career Pack Registry",
+    "Public Share Capability Service",
+    "Execution Control Plane",
+    "Ephemeral Execution Worker pool"
+  ],
+  "versioning": "contracts/vocabulary/terms.json and this record share one revision counter, so vocabulary@<n> is DR-0001@<n>. Any change to terms.json takes a new revision marked additive (new terms, aliases, or label options) or breaking (a removed or renamed term, alias, or label option, or a changed visibility). The check compares terms.json with main: a change that keeps main's revision fails VOCAB_REVISION_NOT_BUMPED, a removal not marked breaking fails VOCAB_COMPATIBILITY_UNDECLARED, and a breaking revision keeps a term adapter entry for each removed name. A ratified revision pins the SHA-256 of terms.json in approvalRef, so an unapproved edit fails DR_APPROVAL_STALE.",
+  "supersession": "A ratified revision is never edited. A wrong decision gets a new revision that names the prior one in supersedes (DR-0001@<n>) and gives supersessionReason; consumers re-cite, and #17's LEAF_GATE_SUPERSEDED flags citations of a superseded breaking revision. An unratified revision can be reverted.",
+  "context": "The vocabulary lived only in the rounds-review spec. This record makes the registry the one source for product and domain names: terms.json (governed here), adapters.json (baseline names and the leaves that retire them), leaf-ids.json (every citable leaf ID), and the generated docs/vocabulary.md and frontend/src/vocabulary/labels.ts.",
+  "securityConsequences": {
+    "account": "No runtime or account-scope change. Definitions restate spec 384-391: every canonical record belongs to a server-derived account.",
+    "privacy": "The five privacy classes are named here and defined by #72 (ROUNDS-14-L01); nothing here relaxes a class. Term examples must be synthetic.",
+    "secret": "Secret appears only as a privacy class (spec 2147). The check rejects bearer-shaped tokens, /r/ share URLs, and email addresses outside example.com in term examples, and no secret value is recorded.",
+    "publicBoundary": "Share Capability is labeled \"Share link\"; nothing here changes what a public share resolves (spec 2584-2636). The repository is public, and the registry holds only names, definitions, and paths."
+  },
+  "decisions": [
+    {
+      "id": "T1",
+      "title": "Transcribe the approved spec; spec text wins",
+      "status": "ratified",
+      "sources": [
+        "spec 221-228",
+        "spec 415-425",
+        "spec 623-645",
+        "spec 752-811",
+        "spec 815-840",
+        "spec 966-1017",
+        "spec 2491-2636"
+      ],
+      "decision": "Terms, definitions, and labels are transcribed from spec 221-228, 415-425, 623-645, 752-811, 815-840, 966-1017, and 2491-2636, and only the gaps below are decided here. Where rounds-review src/data/glossary.ts differs, spec text wins: glossary.ts drops \"according to stage\" from the Pursuit label (spec 1004), and the registry keeps it.",
+      "alternatives": [
+        {
+          "option": "Use glossary.ts as the label source",
+          "reason": "It drops \"according to stage\" (spec 1004) and returns the internal term for an unknown name, which the label contract forbids."
+        },
+        {
+          "option": "Write fresh definitions",
+          "reason": "No approval basis; the spec is the approved artifact."
+        }
+      ],
+      "consequences": "Every term cites the spec lines it comes from. A later spec change reaches the registry only through a new revision.",
+      "migrationImpact": "None. No stored data changes.",
+      "rollbackImpact": "Revert an unratified revision; supersede a ratified one."
+    },
+    {
+      "id": "G1",
+      "title": "Name every version in the authority matrix",
+      "status": "ratified",
+      "sources": ["spec 754-764", "spec 779-811"],
+      "decision": "The revision vocabulary (spec 754-764) adds the matrix versions: Opportunity Revision (786), Relation Version (793), Edition Version (794), Preference Version (802), Key Version (808), Activation Version (809), Capability Version (810), Projection Watermark (800, 811), and Algorithm Version (800, 801; also 811's \"Projector version\"). Entity Version aliases 781's \"Provider/session version\" and 782's \"Profile/Entity Version\"; Aggregate Revision aliases 789's \"Expected-version command history\" and 790's \"Append-only accepted revision\".",
+      "alternatives": [
+        {
+          "option": "Keep only the nine terms in spec 754-764",
+          "reason": "Matrix cells (781-811) would name versions no term defines, and #16's rows cite terms."
+        },
+        {
+          "option": "Fold every version into Entity Version",
+          "reason": "Watermarks and algorithm versions are not concurrency tokens; one name would hide different rules."
+        }
+      ],
+      "consequences": "Each version cell in #16's matrix resolves to a term. The added versions are internal or inspection-only and carry no label.",
+      "migrationImpact": "None. Leaves that implement a version use these names.",
+      "rollbackImpact": "Superseding revision; removed names keep adapter entries."
+    },
+    {
+      "id": "G2",
+      "title": "Interview Round and Practice Item",
+      "status": "ratified",
+      "sources": ["spec 488-503", "spec 1497", "spec 1587"],
+      "decision": "Interview Round is a Career Activity kind (spec 1497): \"Interview Round\" resolves to Career Activity, labeled with the kind option \"Interview\". Practice Item is pack-owned practice content keyed (pack, track, slug) per #39 (ROUNDS-07-L01), and #130 (ROUNDS-28-L01) owns the term. ai_coding_rounds rows are Practice Items.",
+      "alternatives": [
+        {
+          "option": "Make Interview Round its own aggregate",
+          "reason": "Career Activity is the sole mutable authority for schedules (spec 488-503); a second aggregate recreates the split."
+        },
+        {
+          "option": "Treat AI-coding rounds as interview rounds",
+          "reason": "They are practice content, not dated occurrences."
+        }
+      ],
+      "consequences": "\"Round\" alone is never a label. interview_rounds maps to Career Activity and ai_coding_rounds to Practice Item.",
+      "migrationImpact": "#110 (ROUNDS-22-L05) migrates interview rounds; #43 (ROUNDS-07-L05) adopts the content collections.",
+      "rollbackImpact": "Superseding revision."
+    },
+    {
+      "id": "G3",
+      "title": "Claim and Attempt",
+      "status": "ratified",
+      "sources": ["spec 834", "spec 1013", "spec 706", "spec 803", "spec 1168"],
+      "decision": "\"Claim\" aliases Extracted Claim (spec 834). \"Attempt\" labels only Practice Attempt (spec 1013). Execution Attempt (#3, ROUNDS-00A-L03) and Processing Attempt (spec 706, 803, 1168) are inspection-only.",
+      "alternatives": [
+        {
+          "option": "Label every attempt \"Attempt\"",
+          "reason": "Three different records would share one user-facing word."
+        },
+        {
+          "option": "Register Claim as its own term",
+          "reason": "Spec 834's Claim is the platform name of the same record."
+        }
+      ],
+      "consequences": "A usage rule rejects \"Attempt\" as a label on any other term.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "Superseding revision."
+    },
+    {
+      "id": "G4",
+      "title": "The Profile page is Account",
+      "status": "ratified",
+      "sources": ["spec 405-406", "spec 987"],
+      "decision": "The current Profile page is Account (spec 405, 987). \"Profile\" alone is never a label; Career Profile is the only profile.",
+      "alternatives": [
+        {
+          "option": "Keep \"Profile\" for the account page",
+          "reason": "Spec 405-406 and 987 move it to Account and keep professional facts in Career Profile."
+        },
+        {"option": "Label the page \"Your profile\"", "reason": "Same collision with Career Profile."}
+      ],
+      "consequences": "The Profile page header, its menu item, and the /profile and /settings segments get adapters that #178 retires.",
+      "migrationImpact": "#178 replaces the copy; #25 (ROUNDS-03-L02) decides users.name, users.bio, and users.target.",
+      "rollbackImpact": "Superseding revision."
+    },
+    {
+      "id": "G5",
+      "title": "Labels the spec gives two terms",
+      "status": "ratified",
+      "sources": ["spec 418", "spec 1003", "spec 1004"],
+      "decision": "sharedLabels holds every option the spec gives two terms: \"Role\" (Opportunity 1003, Engagement 418) and \"Opportunity\" (Opportunity 1003, Pursuit 1004). \"Role\" stays as written, and SCR-ROLE asks the owner for distinct labels.",
+      "alternatives": [
+        {
+          "option": "Relabel Engagement now",
+          "reason": "That departs from spec text, so it goes to the owner as a spec-change request."
+        },
+        {"option": "Reject every duplicate label", "reason": "The spec itself shares these two."}
+      ],
+      "consequences": "The duplicate-label check exempts exactly these pairs.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "Superseding revision once the owner rules on SCR-ROLE."
+    },
+    {
+      "id": "G6",
+      "title": "Workspace means the Opportunity Workspace",
+      "status": "ratified-here",
+      "sources": ["spec 989", "spec 1433", "spec 978"],
+      "decision": "In UI copy, \"workspace\" means only the Opportunity Workspace (spec 989, 1433).",
+      "alternatives": [
+        {
+          "option": "Keep \"workspace\" for campaigns",
+          "reason": "Spec 978 and 295-296 make a campaign a lens, not a workspace boundary."
+        },
+        {"option": "Ban the word", "reason": "The spec names the Opportunity Workspace."}
+      ],
+      "consequences": "Baseline campaign copy that says workspace (the Command Center entry, docs/architecture.md) gets adapters, and a usage rule rejects \"workspace\" in any other label.",
+      "migrationImpact": "None; retiring leaves rewrite the copy.",
+      "rollbackImpact": "The owner can change it; a superseding revision updates the rule and its adapters."
+    },
+    {
+      "id": "G7",
+      "title": "Setting, Provider, Capability, and X or Y",
+      "status": "ratified-here",
+      "sources": ["spec 400-403", "spec 425", "spec 802", "spec 862"],
+      "decision": "Account preferences are labeled \"Setting\"; \"Preference\" stays with the profile construct (Preference or Constraint). \"Provider\" is always qualified: Sign-in provider, AI provider, Calendar provider. In UI copy, \"Capability\" means only Share Capability. In \"X or Y\", the first name is canonical and the second is a label option.",
+      "alternatives": [
+        {
+          "option": "Use \"Preference\" for both",
+          "reason": "The profile construct (spec 425) and Account preference (spec 802) would collide."
+        },
+        {
+          "option": "Allow a bare \"Provider\"",
+          "reason": "Sign-in, AI, and calendar providers are different things with different privacy rules."
+        },
+        {
+          "option": "Use \"Capability\" for pack required capabilities in UI copy",
+          "reason": "That is an internal manifest field (spec 862)."
+        }
+      ],
+      "consequences": "Labels Setting, Sign-in provider, AI provider, and Calendar provider; usage rules reject bare Preference, Provider, and Capability labels.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "The owner can change it; superseding revision."
+    },
+    {
+      "id": "G8",
+      "title": "Labels for terms the spec leaves unlabeled",
+      "status": "ratified-here",
+      "sources": ["spec 966-974", "spec 995-1017"],
+      "decision": "A user-facing term the spec does not label takes its canonical term, a spec 966-974 destination, or its baseline label. Share Capability keeps the baseline \"Share link\".",
+      "alternatives": [
+        {"option": "Invent new labels", "reason": "No approval basis."},
+        {
+          "option": "Leave them unlabeled and fall back to the internal term",
+          "reason": "The label contract has no internal-term fallback."
+        }
+      ],
+      "consequences": "Every user-facing term has a label, and label() never returns an internal name.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "The owner can change any label; a superseding revision keeps adapters for the old ones."
+    },
+    {
+      "id": "G9",
+      "title": "Software Engineering track names",
+      "status": "ratified-here",
+      "sources": ["spec 855", "spec 935-951"],
+      "decision": "System Design, Coding, AI-Assisted Coding, Take-Home, and Behavioral live in a provisional pack.software-engineering namespace, with baseline spellings (\"AI Assisted Coding\", \"Real World Problems\", \"Real-World Problem\", real-world, builder, system) as aliases, until #39 takes the namespace over under pack ID software-engineering.",
+      "alternatives": [
+        {
+          "option": "Make track names platform terms",
+          "reason": "Practice tracks belong to a pack (spec 855, 937-943), and a non-engineering pack must not inherit them."
+        },
+        {"option": "Wait for #39", "reason": "Surfaces and adapters need the names now."}
+      ],
+      "consequences": "Track labels are namespaced, and the pack-collision check applies to them.",
+      "migrationImpact": "#39 adopts the namespace; #43 maps track and round-type keys.",
+      "rollbackImpact": "Superseding revision; #39 can rename with adapters."
+    },
+    {
+      "id": "G10",
+      "title": "Disposition vocabulary",
+      "status": "ratified",
+      "sources": ["spec 335-337", "spec 341-374", "spec 2664-2670"],
+      "decision": "Features take Preserve, Transform, or owner-approved Retire (spec 335-337) plus an optional qualifier (spec 341-374). Data items take migrate, archive, rebuild, reconcile, or drop (spec 2666-2670). For #155 (ROUNDS-32-L01): bridge is migrate with a time-bounded adapter the transferring leaf owns, quarantine is archive, and retire is an owner-approved drop.",
+      "alternatives": [
+        {
+          "option": "One flat list for features and items",
+          "reason": "The two levels answer different questions: a feature can Transform while its items migrate, rebuild, or archive."
+        },
+        {
+          "option": "Keep the catalog words",
+          "reason": "bridge, quarantine, and retire are not spec dispositions."
+        }
+      ],
+      "consequences": "The disposition parser reads all 34 ledger rows as Preserve or Transform plus a qualifier.",
+      "migrationImpact": "#155's inventory rows use the item values.",
+      "rollbackImpact": "Superseding revision."
+    },
+    {
+      "id": "G11",
+      "title": "Data-preserving clean cutover",
+      "status": "ratified",
+      "sources": ["spec 2637-2647"],
+      "decision": "\"Data-preserving clean cutover\" follows spec 2637-2647: one bounded context at a time, one writable authority per converted concept, an explicit retirement criterion, and a time-bounded compatibility window. The two shipped migration comments that use the unqualified phrase for a drop with no data migration are allowlisted, not edited, because #1's lint (ROUNDS-00A-L01) bars editing shipped migrations. A new unqualified use fails.",
+      "alternatives": [
+        {"option": "Edit the shipped comments", "reason": "Shipped migrations are immutable."},
+        {
+          "option": "Ignore the baseline usage",
+          "reason": "It names data loss after the approved strategy, which means the opposite."
+        }
+      ],
+      "consequences": "VOCAB_CUTOVER_UNQUALIFIED fails a new unqualified use outside the allowlist.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "Superseding revision."
+    },
+    {
+      "id": "G12",
+      "title": "Containment terms",
+      "status": "ratified",
+      "sources": ["spec 623-645", "spec 2491-2636", "spec 3212"],
+      "decision": "The five containment terms (Legacy Artifact Snapshot, Test Definition, Harness Revision, Artifact Renderer Contract, Share Capability) come from spec 623-645, 2491-2636, and 3212. If #2, #3, #4, or #11 merges first with a different shipped name, the registry adopts it and lists each difference as a spec-change item. At revision 1 none of them has merged and no containment collection exists (the only ROUNDS-00 work on next comes from #1 and #9), so the spec names stand and there is no spec-change item.",
+      "alternatives": [
+        {"option": "Wait for the containment leaves", "reason": "They need names to cite now."},
+        {"option": "Shorter names", "reason": "The spec names are approved."}
+      ],
+      "consequences": "Containment leaves cite these term IDs. Execution Attempt (#3) is inspection-only under G3.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "A containment leaf that ships another name supersedes this revision with a spec-change item."
+    },
+    {
+      "id": "P1",
+      "title": "Positioning",
+      "status": "ratified",
+      "sources": ["rounds-review PRODUCT.md:45-48"],
+      "decision": "The positioning statement is PRODUCT.md line 45, and its title form is \"Career Command Center\". This leaf rewrites README.md lines 1 and 3 and docs/architecture.md line 3 to it. frontend/index.html:17, Login.tsx:239, and SHOWCASE.md:3 keep adapter entries until #164 (ROUNDS-32-L10).",
+      "alternatives": [
+        {
+          "option": "Keep the interview-prep positioning",
+          "reason": "PRODUCT.md positions Rounds as a career command center."
+        },
+        {
+          "option": "Rewrite all six lines here",
+          "reason": "Two are UI strings that retiring leaves own, and this leaf changes no UI string."
+        }
+      ],
+      "consequences": "VOCAB_POSITIONING_STALE fails a positioning line that matches neither the statement nor its adapter entry.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "Revert the two doc lines; the adapters stay."
+    },
+    {
+      "id": "A1",
+      "title": "Coverage set and adapter entries",
+      "status": "ratified",
+      "sources": ["spec 335-374", "spec 2637-2647"],
+      "decision": "Every coverage-set name maps to a term label or an adapter entry: the 40 live and 3 historical collections, the user_progress.question_type and status values, the INTERVIEW_TYPES keys of interview_rounds.round_type, runner router prefixes and /health, literal App.tsx segments, Layout navigation labels and Command Center entries, literal eyebrow and title props at the 24 AppHeader call sites, and the six positioning lines. Retiring leaves: #110 for interview_rounds and its round types, #178 for the Profile and Settings pages, #43 for the nine content collections it adopts, the owning surface leaf for page, shell, and Command Center copy, and #164 by default. #25 decides users.target.",
+      "alternatives": [
+        {
+          "option": "Rename baseline names here",
+          "reason": "Retiring leaves do that; renaming here would break stored data and links."
+        },
+        {"option": "Check only new names", "reason": "Baseline collisions would stay invisible."}
+      ],
+      "consequences": "VOCAB_UNCOVERED_NAME fails a new uncovered name; add the adapter entry, never loosen the rule. VOCAB_ADAPTER_STALE fails an entry whose name is gone, so the retiring leaf removes it.",
+      "migrationImpact": "None. Adapter entries change no stored data.",
+      "rollbackImpact": "Adapter entries are data outside the governed file; edit or revert them without a new vocabulary revision."
+    },
+    {
+      "id": "L1",
+      "title": "Label module",
+      "status": "ratified",
+      "sources": ["spec 995-1017"],
+      "decision": "frontend/src/vocabulary/labels.ts exports a TermId union of user-facing terms, label(termId, { option, count }), inspectionTerms for inspection surfaces (spec 1016-1017), and specLabels with the spec 1000-1014 labels as written. There is no internal-term fallback: an unknown or internal term throws. New UI code imports it; existing copy keeps its adapter until its retiring leaf replaces it.",
+      "alternatives": [
+        {
+          "option": "Port glossary.ts's userFacingLabel",
+          "reason": "It returns the internal term for an unknown name."
+        },
+        {"option": "Rewrite existing copy now", "reason": "Out of scope; retiring leaves own each surface."}
+      ],
+      "consequences": "labels.ts changes no rendered string until a surface imports it. #173 checks rendered strings and #170 checks UI literals for internal terms.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "Regenerate from the previous revision."
+    }
+  ],
+  "corrections": [
+    {
+      "id": "C1",
+      "title": "Move the export gate to ROUNDS-01 closure",
+      "detail": "The filed export gate (database ADR and ERD; command contracts; authorization matrix, Audit Entry, and event catalogue; product and leaf non-goals plus a reference issue) comes from #18 to #22 (ROUNDS-02-L01 to L05) and the rest of #17's gate table. #18's filed edge on #17 closes a cycle through this leaf, so per spec 3195-3197 (\"before completing ROUNDS-01\") the gate moves to ROUNDS-01 closure for #15 to #17.",
+      "citedBy": ["ROUNDS-01-L02", "ROUNDS-01-L03"]
+    },
+    {
+      "id": "C2",
+      "title": "Make this leaf a prerequisite wherever a body lists it",
+      "detail": "Every revised body that lists ROUNDS-01-L01 gets it as a prerequisite, not only #16 and #17. #17's docs/program/leaf-dag.json carries the full edge list.",
+      "citedBy": ["ROUNDS-01-L03"]
+    },
+    {
+      "id": "C3",
+      "title": "#170 adopts the conformance job",
+      "detail": "#170 (ROUNDS-34-L01) adopts this job and rule interface, adds the internal-term rule, and takes #8's (ROUNDS-00A-L08) job, alert, and ruleset entry as containment-corpus.",
+      "citedBy": ["ROUNDS-34-L01", "ROUNDS-00A-L08"]
+    },
+    {
+      "id": "C4",
+      "title": "Stage labels and routes have their own owners",
+      "detail": "#99 (ROUNDS-20-L01) owns the stage-to-label mapping. #165 (ROUNDS-33-L01) owns routes and takes labels from here.",
+      "citedBy": ["ROUNDS-20-L01", "ROUNDS-33-L01"]
+    },
+    {
+      "id": "C5",
+      "title": "The collection rule moves to #155",
+      "detail": "The collection extraction in rules/vocabulary.mjs moves to #155 (ROUNDS-32-L01) once its store registry lands.",
+      "citedBy": ["ROUNDS-32-L01"]
+    },
+    {
+      "id": "C6",
+      "title": "Spec-change requests and ratified-here decisions",
+      "detail": "The Role and Submission spec-change requests (SCR-ROLE, SCR-SUBMISSION) and every ratified-here decision (G6 to G9) need the owner to approve or change them.",
+      "citedBy": ["ROUNDS-17-L04", "ROUNDS-22-L02"]
+    }
+  ],
+  "specChangeRequests": [
+    {
+      "id": "SCR-ROLE",
+      "title": "Distinct labels for Opportunity and Engagement",
+      "detail": "Spec 1003 labels Opportunity \"Opportunity or Role\" and spec 418 names the profile construct \"Engagement or Role\", so \"Role\" names two things. The owner picks distinct labels; until then both keep \"Role\" (G5).",
+      "citedBy": ["ROUNDS-19-L01", "ROUNDS-05-L01"]
+    },
+    {
+      "id": "SCR-SUBMISSION",
+      "title": "Add \"Submission\" to the Career Activity labels",
+      "detail": "#88 (ROUNDS-17-L04) and #107 (ROUNDS-22-L02) label material-submission activities \"Submission\", which spec 1011 (\"Interview, Conversation, Follow-up, or Activity\") lacks; #107 also has no follow-up kind because #113 uses Actions. labels.ts carries spec 1011 as written until the owner amends it.",
+      "citedBy": ["ROUNDS-17-L04", "ROUNDS-22-L02"]
+    }
+  ],
+  "departures": [
+    {
+      "id": "D1",
+      "title": "Issue drafts (original AC 2)",
+      "detail": "Original AC 2 asks issue drafts to use the same definitions. This leaf edits no issue body; filed bodies that use other names reach the owner through #17's re-authorization, which imports this file (re-authorization item 7).",
+      "citedBy": ["ROUNDS-01-L03"]
+    },
+    {
+      "id": "D2",
+      "title": "Positioning title form",
+      "detail": "PRODUCT.md line 45 gives the statement. Titles use its noun phrase, \"Career Command Center\": README.md line 1 now, and the index.html and Login.tsx targets later."
+    },
+    {
+      "id": "D3",
+      "title": "Spec over glossary.ts",
+      "detail": "rounds-review src/data/glossary.ts drops \"according to stage\" from the Pursuit label and falls back to the internal term. The registry keeps spec 1004's text, and label() has no fallback."
+    },
+    {
+      "id": "D4",
+      "title": "Layout and Command Center coverage",
+      "detail": "The check reads Layout's navigation labels, user-menu destinations, and sidebar headings, and each Command Center entry's label and description. Accessible names and the forms inside Command Center views are outside it; #173 checks rendered strings."
+    },
+    {
+      "id": "D5",
+      "title": "Retiring leaves beyond the three the body names",
+      "detail": "Besides #110, #178, and the #164 default, adapters name #43 for the nine content collections it adopts and the owning surface leaf for page, shell, and Command Center copy (#26, #81, #101, #105, #128, #132 to #136, #166, #168), per #165's and #168's ownership lists."
+    }
+  ]
+}

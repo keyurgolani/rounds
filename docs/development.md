@@ -87,6 +87,21 @@ Use the PocketBase SDK directly only in infrastructure-level code such as auth, 
 3. Add navigation in `frontend/src/components/Layout.tsx` when the page should be globally reachable.
 4. Fetch data through `api/client.ts` unless there is a strong reason not to.
 5. Add tests under the nearest `__tests__/` directory when behavior is non-trivial.
+6. Take user-visible names from `frontend/src/vocabulary/labels.ts` (`label('extracted-claim')`), not string literals. See [vocabulary.md](vocabulary.md).
+
+## Product Vocabulary And Conformance
+
+Product and domain names live in `contracts/vocabulary/terms.json`, and [vocabulary.md](vocabulary.md) explains how to use and change them. Baseline names that differ are listed in `contracts/vocabulary/adapters.json` with the leaf that retires them. Decision records live in `docs/decisions/`.
+
+The conformance rules in `scripts/conformance/rules/` check all of this with Node 22 and no install step:
+
+```sh
+node --test scripts/conformance          # rule tests
+node scripts/conformance/run.mjs         # every rule; exits 1 on any finding
+node scripts/conformance/run.mjs --write # regenerate labels.ts, vocabulary.md, and the owner corrections file
+```
+
+The vocabulary rule compares `terms.json` with `--base` (default `origin/main`; CI passes the branch a pull request targets, such as `origin/next`); pass `--base none` when that ref isn't fetched. An unknown `--rule` exits 2. A new name in a navigation label, Command Center entry, page header, route, collection, or stored value needs a term label or an adapter entry; the finding says which.
 
 ## Adding Guide Content
 
@@ -138,6 +153,13 @@ cd frontend
 npm run typecheck
 npm test
 npm run build
+```
+
+For any change, from the repository root:
+
+```sh
+node --test scripts/conformance
+node scripts/conformance/run.mjs
 ```
 
 For backend runner work:

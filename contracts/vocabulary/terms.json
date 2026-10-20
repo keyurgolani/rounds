@@ -1,0 +1,1761 @@
+{
+  "$schema": "./terms.schema.json",
+  "registry": "rounds-product-vocabulary",
+  "revision": 1,
+  "compatibility": "additive",
+  "decisionRecord": "DR-0001",
+  "description": "The product vocabulary: every name a user sees and every domain term an implementer uses. vocabulary@<n> is DR-0001@<n>. Generated views: docs/vocabulary.md and frontend/src/vocabulary/labels.ts (node scripts/conformance/run.mjs --write).",
+  "positioning": {
+    "statement": "Rounds is a self-hostable career command center that connects a person's canonical professional history and evidence to the opportunities they pursue, the artifacts they submit, the interviews they prepare for, the practice they complete, and the next actions they should take.",
+    "title": "Career Command Center",
+    "source": "rounds-review PRODUCT.md:45-48"
+  },
+  "categories": [
+    {"id": "account", "name": "Account"},
+    {"id": "career-profile", "name": "Career Profile"},
+    {"id": "facts", "name": "Facts"},
+    {"id": "evidence", "name": "Evidence"},
+    {"id": "sources", "name": "Sources"},
+    {"id": "revisions", "name": "Revisions"},
+    {"id": "organizations", "name": "Organizations"},
+    {"id": "people", "name": "People"},
+    {"id": "opportunities", "name": "Opportunities"},
+    {"id": "pursuits", "name": "Pursuits"},
+    {"id": "activities", "name": "Activities"},
+    {"id": "actions", "name": "Actions"},
+    {"id": "artifacts", "name": "Artifacts"},
+    {"id": "practice", "name": "Practice"},
+    {"id": "packs", "name": "Packs"}
+  ],
+  "namespaces": [
+    {
+      "id": "platform",
+      "description": "Stable platform terms. Career packs cannot redefine them (spec 815-840)."
+    },
+    {
+      "id": "pack.software-engineering",
+      "status": "provisional",
+      "owningLeaf": "ROUNDS-07-L01",
+      "decision": "G9",
+      "description": "Provisional namespace for the Software Engineering pack until #39 takes it over under pack ID software-engineering."
+    }
+  ],
+  "coreConcepts": {
+    "source": "spec 221-228",
+    "terms": [
+      "account",
+      "career-profile",
+      "organization",
+      "person",
+      "opportunity",
+      "pursuit",
+      "career-activity",
+      "interview-process",
+      "offer",
+      "campaign-goal",
+      "action",
+      "practice-attempt",
+      "artifact-edition",
+      "source-document",
+      "extracted-claim",
+      "generation-proposal",
+      "provider-invocation-receipt",
+      "transaction-change-set",
+      "audit-entry",
+      "domain-event"
+    ]
+  },
+  "platformCore": {
+    "source": "spec 815-840",
+    "names": [
+      {"name": "Account", "terms": ["account"]},
+      {"name": "Career Profile identity", "terms": ["career-profile"]},
+      {"name": "Organization", "terms": ["organization"]},
+      {"name": "Person", "terms": ["person"]},
+      {"name": "Opportunity", "terms": ["opportunity"]},
+      {"name": "Pursuit", "terms": ["pursuit"]},
+      {"name": "Career Activity", "terms": ["career-activity"]},
+      {"name": "Interview Process", "terms": ["interview-process"]},
+      {"name": "Offer", "terms": ["offer"]},
+      {"name": "Campaign/Goal", "terms": ["campaign-goal"]},
+      {"name": "Practice Attempt envelope", "terms": ["practice-attempt"]},
+      {"name": "Audit Entry and Domain Event envelopes", "terms": ["audit-entry", "domain-event"]},
+      {"name": "Action", "terms": ["action"]},
+      {"name": "Artifact Edition envelope", "terms": ["artifact-edition"]},
+      {"name": "Source Document", "terms": ["source-document"]},
+      {"name": "Claim", "terms": ["extracted-claim"]},
+      {"name": "Staged Provider Result", "terms": ["staged-provider-result"]},
+      {"name": "Provider Invocation Receipt", "terms": ["provider-invocation-receipt"]},
+      {"name": "Revision", "terms": []},
+      {"name": "authorization", "terms": []},
+      {"name": "provenance", "terms": []},
+      {"name": "transaction semantics", "terms": []}
+    ]
+  },
+  "sharedLabels": [
+    {
+      "label": "Role",
+      "terms": ["opportunity", "engagement"],
+      "cites": ["spec 1003", "spec 418"],
+      "decision": "G5",
+      "specChangeRequest": "SCR-ROLE"
+    },
+    {
+      "label": "Opportunity",
+      "terms": ["opportunity", "pursuit"],
+      "cites": ["spec 1003", "spec 1004"],
+      "decision": "G5"
+    }
+  ],
+  "usageRules": [
+    {
+      "id": "attempt",
+      "decision": "G3",
+      "pattern": "^attempts?$",
+      "allowedTerms": ["practice-attempt"],
+      "rule": "\"Attempt\" labels only Practice Attempt. Execution Attempt and Processing Attempt are inspection-only."
+    },
+    {
+      "id": "profile",
+      "decision": "G4",
+      "pattern": "^profiles?$",
+      "allowedTerms": [],
+      "rule": "\"Profile\" alone is never a label. The Profile page is Account; Career Profile is the only profile."
+    },
+    {
+      "id": "workspace",
+      "decision": "G6",
+      "pattern": "\\bworkspaces?\\b",
+      "allowedTerms": ["opportunity-workspace"],
+      "rule": "In UI copy, \"workspace\" means only the Opportunity Workspace."
+    },
+    {
+      "id": "preference",
+      "decision": "G7",
+      "pattern": "^preferences?$",
+      "allowedTerms": ["preference"],
+      "rule": "Account preferences are labeled \"Setting\"; \"Preference\" stays with the profile construct."
+    },
+    {
+      "id": "provider",
+      "decision": "G7",
+      "pattern": "^providers?$",
+      "allowedTerms": [],
+      "rule": "\"Provider\" is always qualified: Sign-in provider, AI provider, Calendar provider."
+    },
+    {
+      "id": "capability",
+      "decision": "G7",
+      "pattern": "\\bcapabilit(y|ies)\\b",
+      "allowedTerms": ["share-capability"],
+      "rule": "In UI copy, \"Capability\" means only Share Capability."
+    }
+  ],
+  "dispositions": {
+    "decision": "G10",
+    "feature": {
+      "source": "spec 335-337, 341-374",
+      "values": [
+        {"value": "Preserve", "meaning": "Behavior remains recognizably intact."},
+        {"value": "Transform", "meaning": "The capability remains but its model or interaction changes."},
+        {
+          "value": "Retire",
+          "meaning": "Requires explicit owner approval and a replacement or migration statement.",
+          "requiresOwnerApproval": true
+        }
+      ],
+      "qualifier": "Optional text after the value, such as \"and harden\" or \"without loss\"."
+    },
+    "item": {
+      "source": "spec 2649-2673",
+      "values": [
+        {"value": "migrate", "meaning": "Migrate with a field-level algorithm."},
+        {"value": "archive", "meaning": "Preserve as an immutable opaque archive."},
+        {"value": "rebuild", "meaning": "Rebuild deterministically."},
+        {"value": "reconcile", "meaning": "Re-enter through a client-assisted reconciliation flow."},
+        {
+          "value": "drop",
+          "meaning": "Intentionally drop, only after explicit owner approval.",
+          "requiresOwnerApproval": true
+        }
+      ],
+      "catalogWords": [
+        {
+          "word": "bridge",
+          "value": "migrate",
+          "condition": "with a time-bounded adapter the transferring leaf owns"
+        },
+        {"word": "quarantine", "value": "archive"},
+        {"word": "retire", "value": "drop", "condition": "only with owner approval"}
+      ]
+    }
+  },
+  "cutover": {
+    "term": "Data-preserving clean cutover",
+    "decision": "G11",
+    "source": "spec 2637-2647",
+    "definition": "The transformation moves one bounded context at a time. Temporary expand/contract schemas, compatibility adapters, shadow reads, and migration comparison are allowed. Each converted concept has one writable authority, an explicit retirement criterion, and a time-bounded compatibility window. This avoids both permanent dual-writing and one high-risk whole-product cutover.",
+    "allowlist": [
+      {
+        "path": "pocketbase/pb_migrations/1700004100_drop_legacy_anecdotes.js",
+        "line": 3,
+        "reason": "Shipped migration comment for a drop with no data migration. Shipped migrations are never edited."
+      },
+      {
+        "path": "pocketbase/pb_migrations/1700005100_drop_resume_bullets.js",
+        "line": 3,
+        "reason": "Shipped migration comment for a drop with no data migration. Shipped migrations are never edited."
+      }
+    ]
+  },
+  "terms": [
+    {
+      "id": "account",
+      "term": "Account",
+      "category": "account",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Owns authentication identity, security controls, provider connections, product preferences, appearance preferences, locale and accessibility preferences, and data-retention preferences. It does not own professional history or target-opportunity facts; the current Profile page becomes Account.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "account", "singular": "Account", "plural": "Accounts"}],
+        "default": "account",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-03-L01",
+      "source": "spec 393-406"
+    },
+    {
+      "id": "account-preference",
+      "term": "Account preference",
+      "category": "account",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "A product, appearance, locale and accessibility, or data-retention preference owned by Account, including the current campaign selection, which only sets query defaults.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "setting", "singular": "Setting", "plural": "Settings"}],
+        "default": "setting",
+        "mappingOwner": null,
+        "basis": "G7"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-03-L04",
+      "source": "spec 400-403, 802"
+    },
+    {
+      "id": "account-and-settings",
+      "term": "Account and Settings",
+      "category": "account",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Primary navigation destination for Account identity, security controls, provider connections, and Account preferences, kept separate from professional profile editing.",
+      "label": {
+        "axis": "none",
+        "options": [
+          {
+            "key": "account-and-settings",
+            "singular": "Account and Settings",
+            "plural": "Account and Settings"
+          }
+        ],
+        "default": "account-and-settings",
+        "mappingOwner": null,
+        "basis": "spec 966-974"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-03-L04",
+      "source": "spec 966-974, 983, 987"
+    },
+    {
+      "id": "sign-in-provider",
+      "term": "Sign-in provider",
+      "category": "account",
+      "namespace": "platform",
+      "status": "ratified-here",
+      "visibility": "user-facing",
+      "definition": "An external identity provider an Account signs in with, such as an OAuth provider. \"Provider\" is always qualified.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "sign-in-provider", "singular": "Sign-in provider", "plural": "Sign-in providers"}],
+        "default": "sign-in-provider",
+        "mappingOwner": null,
+        "basis": "G7"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-03-L01",
+      "source": "spec 397, 781; G7"
+    },
+    {
+      "id": "ai-provider",
+      "term": "AI provider",
+      "category": "account",
+      "namespace": "platform",
+      "status": "ratified-here",
+      "visibility": "user-facing",
+      "definition": "An AI model provider connection the Account configures. Its credential lives in the account secret store and is used only through the provider gateway. \"Provider\" is always qualified.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "ai-provider", "singular": "AI provider", "plural": "AI providers"}],
+        "default": "ai-provider",
+        "mappingOwner": null,
+        "basis": "G7"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L04",
+      "source": "spec 399, 808; G7"
+    },
+    {
+      "id": "calendar-provider",
+      "term": "Calendar provider",
+      "category": "account",
+      "namespace": "platform",
+      "status": "ratified-here",
+      "visibility": "user-facing",
+      "definition": "An external calendar service reached through the calendar connector contract. Continuous synchronization is a separate integration workstream. \"Provider\" is always qualified.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "calendar-provider", "singular": "Calendar provider", "plural": "Calendar providers"}],
+        "default": "calendar-provider",
+        "mappingOwner": null,
+        "basis": "G7"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-22-L02",
+      "source": "spec 1911-1913; G7"
+    },
+    {
+      "id": "privacy-class",
+      "term": "Privacy class",
+      "category": "account",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "One of the five normative classes (Private, Sensitive, Third-party personal, Secret, Share Projection) that set what may reach remote AI, search, logs and traces, public share, and export, local draft, and backup. A career pack may make a rule stricter but cannot relax it.",
+      "definedBy": ["ROUNDS-14-L01"],
+      "label": {
+        "axis": "none",
+        "options": [{"key": "privacy-class", "singular": "Privacy class", "plural": "Privacy classes"}],
+        "default": "privacy-class",
+        "mappingOwner": null,
+        "basis": "spec 2142"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L01",
+      "source": "spec 2139-2148"
+    },
+    {
+      "id": "privacy-private",
+      "term": "Private",
+      "category": "account",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Private, the default: profile facts, opportunities, actions, and ordinary practice. Remote AI needs per-request consent after a payload preview; search and index stay inside the owning account; logs and traces carry metadata and opaque IDs only; public share only through a separately reviewed Share Projection; account export, account-namespaced local drafts, and encrypted backup are allowed.",
+      "definedBy": ["ROUNDS-14-L01"],
+      "label": {
+        "axis": "none",
+        "options": [{"key": "private", "singular": "Private", "plural": "Private"}],
+        "default": "private",
+        "mappingOwner": null,
+        "basis": "spec 2142-2148"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L01",
+      "source": "spec 2144"
+    },
+    {
+      "id": "privacy-sensitive",
+      "term": "Sensitive",
+      "category": "account",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Compensation, immigration, accommodation, private feedback, and protected demographics. Remote AI is off by default with a separate field-level confirmation for one invocation; search is off by default or masked with explicit opt-in; logs and traces carry no field values or reversible identifiers; excluded from public share by default, and sharing needs a separate confirmation and a scoped snapshot; protected export only, with encrypted local draft and backup.",
+      "definedBy": ["ROUNDS-14-L01"],
+      "label": {
+        "axis": "none",
+        "options": [{"key": "sensitive", "singular": "Sensitive", "plural": "Sensitive"}],
+        "default": "sensitive",
+        "mappingOwner": null,
+        "basis": "spec 2142-2148"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L01",
+      "source": "spec 2145"
+    },
+    {
+      "id": "privacy-third-party-personal",
+      "term": "Third-party personal",
+      "category": "account",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Recruiter, interviewer, and contact identity, messages, and notes about another person. Remote AI is off by default with purpose-specific confirmation; search stays account-local; logs and traces carry minimized pseudonymous IDs; excluded from public share unless that exact field is intentionally published; included in full account export with a warning, with encrypted local draft and backup.",
+      "definedBy": ["ROUNDS-14-L01"],
+      "label": {
+        "axis": "none",
+        "options": [
+          {
+            "key": "third-party-personal",
+            "singular": "Third-party personal",
+            "plural": "Third-party personal"
+          }
+        ],
+        "default": "third-party-personal",
+        "mappingOwner": null,
+        "basis": "spec 2142-2148"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L01",
+      "source": "spec 2146"
+    },
+    {
+      "id": "privacy-secret",
+      "term": "Secret",
+      "category": "account",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Provider credentials, reset and session tokens, share bearer material, and encryption keys. Never sent to remote AI, indexed, logged, or shared. Excluded from normal export and browser storage; only an explicit rewrapped secret export; encrypted backup with separate key custody.",
+      "definedBy": ["ROUNDS-14-L01"],
+      "label": {
+        "axis": "none",
+        "options": [{"key": "secret", "singular": "Secret", "plural": "Secret"}],
+        "default": "secret",
+        "mappingOwner": null,
+        "basis": "spec 2142-2148"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L01",
+      "source": "spec 2147"
+    },
+    {
+      "id": "privacy-share-projection",
+      "term": "Share Projection",
+      "category": "account",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Owner-reviewed fields from one immutable Artifact Revision. Never part of remote AI resolution; not added to public indexing; an aggregate view event only when enabled; shared only through its scoped capability; exportable immutable bytes with no browser draft and an encrypted backup of the owner record.",
+      "definedBy": ["ROUNDS-14-L01"],
+      "label": {
+        "axis": "none",
+        "options": [{"key": "share-projection", "singular": "Share Projection", "plural": "Share Projection"}],
+        "default": "share-projection",
+        "mappingOwner": null,
+        "basis": "spec 2142-2148"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L01",
+      "source": "spec 2148"
+    },
+    {
+      "id": "career-profile",
+      "term": "Career Profile",
+      "category": "career-profile",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "The aggregate root for canonical professional facts. It references typed records rather than storing one undifferentiated document. Profile records support stable identity, revision history, source provenance, confidence when derived, relationships, visibility and privacy classification, and career-pack extensions.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "career-profile", "singular": "Career Profile", "plural": "Career Profiles"}],
+        "default": "career-profile",
+        "mappingOwner": null,
+        "basis": "spec 1002",
+        "specLabel": "Career Profile"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-03-L01",
+      "source": "spec 408-435, 1002"
+    },
+    {
+      "id": "professional-identity",
+      "term": "Professional Identity",
+      "category": "career-profile",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Career Profile construct for how the person is identified professionally: professional name and headline (one per Career Profile).",
+      "label": {
+        "axis": "none",
+        "options": [
+          {
+            "key": "professional-identity",
+            "singular": "Professional Identity",
+            "plural": "Professional Identities"
+          }
+        ],
+        "default": "professional-identity",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-03-L01",
+      "source": "spec 415, 782"
+    },
+    {
+      "id": "contact-point",
+      "term": "Contact Point",
+      "category": "career-profile",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Career Profile construct for one typed way to reach the person, such as email, phone, or location; one Career Profile has many.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "contact-point", "singular": "Contact Point", "plural": "Contact Points"}],
+        "default": "contact-point",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-03-L01",
+      "source": "spec 416, 782"
+    },
+    {
+      "id": "external-profile",
+      "term": "External Profile",
+      "category": "career-profile",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Career Profile construct for an external profile or link, such as a portfolio or public code profile.",
+      "label": {
+        "axis": "none",
+        "options": [
+          {"key": "external-profile", "singular": "External Profile", "plural": "External Profiles"},
+          {"key": "link", "singular": "Link", "plural": "Links"}
+        ],
+        "default": "external-profile",
+        "mappingOwner": null,
+        "basis": "G7 first name canonical",
+        "specLabel": "External Profile or Link"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-05-L04",
+      "source": "spec 417"
+    },
+    {
+      "id": "engagement",
+      "term": "Engagement",
+      "category": "career-profile",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Career Profile construct for employment or another engagement the person held; employment and project facts are many Career Profile records.",
+      "label": {
+        "axis": "none",
+        "options": [
+          {"key": "engagement", "singular": "Engagement", "plural": "Engagements"},
+          {"key": "role", "singular": "Role", "plural": "Roles"}
+        ],
+        "default": "engagement",
+        "mappingOwner": null,
+        "basis": "G7 first name canonical",
+        "specLabel": "Engagement or Role"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-05-L01",
+      "source": "spec 418, 783"
+    },
+    {
+      "id": "project",
+      "term": "Project",
+      "category": "career-profile",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Career Profile construct for a project or work sample.",
+      "label": {
+        "axis": "none",
+        "options": [
+          {"key": "project", "singular": "Project", "plural": "Projects"},
+          {"key": "work-sample", "singular": "Work Sample", "plural": "Work Samples"}
+        ],
+        "default": "project",
+        "mappingOwner": null,
+        "basis": "G7 first name canonical",
+        "specLabel": "Project or Work Sample"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-05-L02",
+      "source": "spec 419, 783"
+    },
+    {
+      "id": "achievement",
+      "term": "Achievement",
+      "category": "career-profile",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Career Profile construct for an achievement or the evidence behind it.",
+      "label": {
+        "axis": "none",
+        "options": [
+          {"key": "achievement", "singular": "Achievement", "plural": "Achievements"},
+          {"key": "evidence", "singular": "Evidence", "plural": "Evidence"}
+        ],
+        "default": "achievement",
+        "mappingOwner": null,
+        "basis": "G7 first name canonical",
+        "specLabel": "Achievement or Evidence"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-05-L02",
+      "source": "spec 420"
+    },
+    {
+      "id": "narrative",
+      "term": "Narrative",
+      "category": "career-profile",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Career Profile construct for a professional narrative or story, including behavioral stories.",
+      "label": {
+        "axis": "none",
+        "options": [
+          {"key": "narrative", "singular": "Narrative", "plural": "Narratives"},
+          {"key": "story", "singular": "Story", "plural": "Stories"}
+        ],
+        "default": "narrative",
+        "mappingOwner": null,
+        "basis": "G7 first name canonical",
+        "specLabel": "Narrative or Story"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-05-L03",
+      "source": "spec 421"
+    },
+    {
+      "id": "skill",
+      "term": "Skill",
+      "category": "career-profile",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Career Profile construct for a skill or competency; packs add profession-specific facets.",
+      "label": {
+        "axis": "none",
+        "options": [
+          {"key": "skill", "singular": "Skill", "plural": "Skills"},
+          {"key": "competency", "singular": "Competency", "plural": "Competencies"}
+        ],
+        "default": "skill",
+        "mappingOwner": null,
+        "basis": "G7 first name canonical",
+        "specLabel": "Skill or Competency"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-05-L04",
+      "source": "spec 422"
+    },
+    {
+      "id": "education",
+      "term": "Education",
+      "category": "career-profile",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Career Profile construct for education or a credential.",
+      "label": {
+        "axis": "none",
+        "options": [
+          {"key": "education", "singular": "Education", "plural": "Education"},
+          {"key": "credential", "singular": "Credential", "plural": "Credentials"}
+        ],
+        "default": "education",
+        "mappingOwner": null,
+        "basis": "G7 first name canonical",
+        "specLabel": "Education or Credential"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-05-L01",
+      "source": "spec 423"
+    },
+    {
+      "id": "publication",
+      "term": "Publication",
+      "category": "career-profile",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Career Profile construct for a publication.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "publication", "singular": "Publication", "plural": "Publications"}],
+        "default": "publication",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-05-L01",
+      "source": "spec 424"
+    },
+    {
+      "id": "preference",
+      "term": "Preference",
+      "category": "career-profile",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Career Profile construct for a job-search preference or constraint, such as target role, location, or work policy. Account preferences are a different term (Setting).",
+      "label": {
+        "axis": "none",
+        "options": [
+          {"key": "preference", "singular": "Preference", "plural": "Preferences"},
+          {"key": "constraint", "singular": "Constraint", "plural": "Constraints"}
+        ],
+        "default": "preference",
+        "mappingOwner": null,
+        "basis": "G7 first name canonical",
+        "specLabel": "Preference or Constraint"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-03-L01",
+      "source": "spec 425"
+    },
+    {
+      "id": "extracted-claim",
+      "term": "Extracted Claim",
+      "category": "facts",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "A proposed fact or relationship: target entity kind, target field or relation, proposed value, create, update, relate, or conflict action, exact source span, source document, confidence, candidate duplicate matches, current canonical value, review decision, and transformation and version metadata.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "proposed-change", "singular": "Proposed change", "plural": "Proposed changes"}],
+        "default": "proposed-change",
+        "mappingOwner": null,
+        "basis": "spec 1007",
+        "specLabel": "Proposed change"
+      },
+      "aliases": ["Claim"],
+      "owningLeaf": "ROUNDS-11-L01",
+      "source": "spec 659-673, 834, 1007"
+    },
+    {
+      "id": "provider-invocation-intent",
+      "term": "Provider Invocation Intent",
+      "category": "evidence",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "An immutable record committed before any provider egress: purpose and capability; account, command, source, Processing Attempt, and retry-lineage identifiers; consent, privacy-, retention-, and redaction-policy versions; the exact source-version vector; outbound payload digest; provider endpoint identity, model revision, parameters, prompt-contract version, tool policy, and provider idempotency key; authorization; and intended retention. No network request occurs until the Intent commit succeeds.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L02",
+      "source": "spec 693-714, 726"
+    },
+    {
+      "id": "provider-invocation-outcome",
+      "term": "Provider Invocation Outcome",
+      "category": "evidence",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "An immutable record linked to one Intent, committed after response, failure, cancellation, or reconciliation and before any result is applied: provider request and response identifiers and digests, dispatch, response, and persistence timestamps, succeeded, failed, canceled, or unknown-after-egress state, failure class and token accounting, a Staged Provider Result ID for every success, and final retention.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L02",
+      "source": "spec 700-701, 716-724"
+    },
+    {
+      "id": "provider-invocation-receipt",
+      "term": "Provider Invocation Receipt",
+      "category": "evidence",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "Logical envelope of an immutable pre-egress Intent and immutable post-egress Outcome for one model attempt. It proves what policy and inputs governed one invocation without retaining sensitive plaintext.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L02",
+      "source": "spec 693-701, 745-747, 761-762"
+    },
+    {
+      "id": "source-document",
+      "term": "Source Document",
+      "category": "sources",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Preserves material submitted for parsing or reference: file or pasted text, source URL and retrieval metadata, media type, checksum, retention and privacy policy, extraction status, parser and model version, and previous processing attempts.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "source-document", "singular": "Source Document", "plural": "Source Documents"}],
+        "default": "source-document",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-10-L01",
+      "source": "spec 646-657"
+    },
+    {
+      "id": "processing-attempt",
+      "term": "Processing Attempt",
+      "category": "sources",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "One durable parsing, OCR, URL retrieval, repository analysis, extraction, or reprocessing attempt, in queued, leased, succeeded, failed, canceled, superseded, or stale state, with source checksum, idempotency key, lease, bounded retry, and cancellation.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-10-L02",
+      "source": "spec 706, 803, 1165-1180"
+    },
+    {
+      "id": "staged-provider-result",
+      "term": "Staged Provider Result",
+      "category": "sources",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "The privacy-classed, encrypted, retention-bounded normalized result of one successful provider response, linked to one Outcome: versioned extraction or generation payload, source anchors, validation result, response digest, and the deterministic seed that recreates identical claims or proposals without another provider call.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L03",
+      "source": "spec 723, 726-738, 806, 835"
+    },
+    {
+      "id": "capture-center",
+      "term": "Capture Center",
+      "category": "sources",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "The one capture surface, opened from every page and the Command Center, through which manual entry, natural-language quick capture, paste, files, job-posting URLs, JSON Resume, LinkedIn export, GitHub, and later pack sources feed the common command and ingestion model. Source material is preserved even when extraction fails.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "capture", "singular": "Capture", "plural": "Captures"}],
+        "default": "capture",
+        "mappingOwner": null,
+        "basis": "spec 979"
+      },
+      "aliases": ["Global Capture"],
+      "owningLeaf": "ROUNDS-09-L01",
+      "source": "spec 209-213, 979, 1073-1113"
+    },
+    {
+      "id": "entity-version",
+      "term": "Entity Version",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "Concurrency token for one mutable record.",
+      "label": null,
+      "aliases": ["Provider/session version", "Profile/Entity Version"],
+      "owningLeaf": "ROUNDS-02-L03",
+      "source": "spec 754, 781-782"
+    },
+    {
+      "id": "aggregate-revision",
+      "term": "Aggregate Revision",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "Ordered domain state for one aggregate.",
+      "label": null,
+      "aliases": ["Expected-version command history", "Append-only accepted revision"],
+      "owningLeaf": "ROUNDS-02-L04",
+      "source": "spec 755, 789-790"
+    },
+    {
+      "id": "transaction-change-set",
+      "term": "Transaction Change Set",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "One atomic command result that may touch multiple aggregates, identified by account and command ID. Rolling back creates a compensating change set against current expected versions; it never rewinds history blindly.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "saved-changes", "singular": "Saved changes", "plural": "Saved changes"}],
+        "default": "saved-changes",
+        "mappingOwner": null,
+        "basis": "spec 1009",
+        "specLabel": "Saved changes"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-02-L04",
+      "source": "spec 756-757, 772-773, 1009"
+    },
+    {
+      "id": "profile-revision",
+      "term": "Profile Revision",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Named Career Profile change set.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "profile-update", "singular": "Profile update", "plural": "Profile updates"}],
+        "default": "profile-update",
+        "mappingOwner": null,
+        "basis": "spec 1010",
+        "specLabel": "Profile update"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-03-L01",
+      "source": "spec 758, 1010"
+    },
+    {
+      "id": "offer-revision",
+      "term": "Offer Revision",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Immutable complete offer terms. Each accepted change to an Offer creates one, containing the complete terms, source, actor, timestamp, deadline, and prior revision.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "offer-revision", "singular": "Offer Revision", "plural": "Offer Revisions"}],
+        "default": "offer-revision",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-24-L01",
+      "source": "spec 518-522, 760, 791"
+    },
+    {
+      "id": "audit-entry",
+      "term": "Audit Entry",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "Immutable record of an authorized mutation: what changed, who or what requested it, authorization context, previous and current versions, and the transaction change set. It is not the user-facing Interview Round or Offer model.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-02-L04",
+      "source": "spec 560-563, 569, 763"
+    },
+    {
+      "id": "domain-event",
+      "term": "Domain Event",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "internal",
+      "definition": "Immutable outbox and integration message emitted after the same transaction commits, with schema version, aggregate sequence, causation ID, correlation ID, account scope, and change-set position.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-02-L05",
+      "source": "spec 565-569, 764"
+    },
+    {
+      "id": "opportunity-revision",
+      "term": "Opportunity Revision",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "Revision of an Opportunity's role posting and job description. One Opportunity may have many source revisions; a referenced revision is retained when the Opportunity is archived.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-19-L01",
+      "source": "spec 786; G1"
+    },
+    {
+      "id": "relation-version",
+      "term": "Relation Version",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "internal",
+      "definition": "Version of one typed relation, such as Pursuit-to-Campaign membership, which changes only by explicit detach.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-06-L01",
+      "source": "spec 793; G1"
+    },
+    {
+      "id": "edition-version",
+      "term": "Edition Version",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "internal",
+      "definition": "Version of an Artifact Edition's wording overrides; removing an override affects future revisions only.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-15-L01",
+      "source": "spec 794; G1"
+    },
+    {
+      "id": "preference-version",
+      "term": "Preference Version",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "internal",
+      "definition": "Version of one Account preference, such as the current campaign selection.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-03-L04",
+      "source": "spec 802; G1"
+    },
+    {
+      "id": "key-version",
+      "term": "Key Version",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "internal",
+      "definition": "Version of a key in the account secret store; revoking it crypto-deletes what it protected.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L02",
+      "source": "spec 808; G1"
+    },
+    {
+      "id": "capability-version",
+      "term": "Capability Version",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "internal",
+      "definition": "Version of one Share Capability; revocation and expiry take effect immediately.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-00B-L03",
+      "source": "spec 810; G1"
+    },
+    {
+      "id": "activation-version",
+      "term": "Activation Version",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "internal",
+      "definition": "Activation and version state of one Pack Activation.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-07-L02",
+      "source": "spec 809; G1"
+    },
+    {
+      "id": "projection-watermark",
+      "term": "Projection Watermark",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "internal",
+      "definition": "Freshness position of a derived read model, Readiness Snapshot, or search index against its sources.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-02-L06",
+      "source": "spec 800, 811; G1"
+    },
+    {
+      "id": "algorithm-version",
+      "term": "Algorithm Version",
+      "category": "revisions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "internal",
+      "definition": "Version of the algorithm or projector that derived a read model, Readiness Snapshot, Recommendation, or search index.",
+      "label": null,
+      "aliases": ["Projector version"],
+      "owningLeaf": "ROUNDS-02-L06",
+      "source": "spec 800-801, 811; G1"
+    },
+    {
+      "id": "organization",
+      "term": "Organization",
+      "category": "organizations",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Represents a company, school, publisher, community, or other organization once. History, education, opportunities, contacts, interviews, publications, and offers reference it. Organization identity permits aliases and merge history.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "organization", "singular": "Organization", "plural": "Organizations"}],
+        "default": "organization",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": ["Company"],
+      "owningLeaf": "ROUNDS-04-L01",
+      "source": "spec 437-443, 784"
+    },
+    {
+      "id": "person",
+      "term": "Person",
+      "category": "people",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Represents a recruiter, referrer, interviewer, hiring manager, colleague, or other professional contact once. The relationship to a pursuit or interview event carries the contextual role, rather than one string encoding role and timezone.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "person", "singular": "Person", "plural": "People"}],
+        "default": "person",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": ["Contact"],
+      "owningLeaf": "ROUNDS-04-L01",
+      "source": "spec 445-451, 785"
+    },
+    {
+      "id": "opportunity",
+      "term": "Opportunity",
+      "category": "opportunities",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Owns the target organization, role or title, canonical job posting, source URL, job description, location and work policy, compensation range when known, extracted requirements, source revision, and archival state. Multiple source documents may contribute to one opportunity.",
+      "label": {
+        "axis": "none",
+        "options": [
+          {"key": "opportunity", "singular": "Opportunity", "plural": "Opportunities"},
+          {"key": "role", "singular": "Role", "plural": "Roles"}
+        ],
+        "default": "opportunity",
+        "mappingOwner": null,
+        "basis": "spec 1003",
+        "specLabel": "Opportunity or Role"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-19-L01",
+      "source": "spec 453-468, 786, 1003"
+    },
+    {
+      "id": "opportunity-workspace",
+      "term": "Opportunity Workspace",
+      "category": "opportunities",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "The continuous workspace for one opportunity. A persistent header shows organization, role, pursuit stage, important date, next action, source state, and campaign lens; sections (Overview, Process, Preparation, Materials, People, Actions, Activity) keep the opportunity context and reference facts rather than copying them. In UI copy, \"workspace\" means only this.",
+      "label": {
+        "axis": "none",
+        "options": [
+          {
+            "key": "opportunity-workspace",
+            "singular": "Opportunity Workspace",
+            "plural": "Opportunity Workspaces"
+          }
+        ],
+        "default": "opportunity-workspace",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": ["Workspace"],
+      "owningLeaf": "ROUNDS-21-L01",
+      "source": "spec 981-982, 988-989, 1433-1456; G6"
+    },
+    {
+      "id": "pursuit",
+      "term": "Pursuit",
+      "category": "pursuits",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "The user's active or historical relationship with an opportunity. Owns pipeline stage, stage history, dates, disposition, user notes, campaign membership, priority and fit assessment, and relations to people, materials, actions, interview process, and offers. \"Application\" remains valid user-facing language once a pursuit has been submitted; wishlist and networking stages exist before an application does.",
+      "label": {
+        "axis": "stage",
+        "options": [
+          {"key": "application", "singular": "Application", "plural": "Applications"},
+          {"key": "opportunity", "singular": "Opportunity", "plural": "Opportunities"},
+          {"key": "pipeline-item", "singular": "Pipeline item", "plural": "Pipeline items"}
+        ],
+        "default": "application",
+        "mappingOwner": ["ROUNDS-20-L01"],
+        "basis": "spec 1004",
+        "specLabel": "Application, Opportunity, or Pipeline item according to stage"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-19-L02",
+      "source": "spec 470-486, 787, 1004"
+    },
+    {
+      "id": "interview-process",
+      "term": "Interview Process",
+      "category": "pursuits",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Owns only the structured hiring-process definition for one Pursuit: optional loops or stages, ordered references to interview Career Activities, default round types and expected signals, default preparation context, and derived progress and outcome summaries. It owns no writable schedule, participant, debrief, outcome, or reschedule history.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "interview-process", "singular": "Interview Process", "plural": "Interview Processes"}],
+        "default": "interview-process",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-22-L01",
+      "source": "spec 505-516, 788"
+    },
+    {
+      "id": "offer",
+      "term": "Offer",
+      "category": "pursuits",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "The current comparable negotiation aggregate; zero or more per Pursuit. Each accepted change creates an immutable Offer Revision. Offer state and Pursuit state connect through explicit transition rules; one component never silently rewrites another's status.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "offer", "singular": "Offer", "plural": "Offers"}],
+        "default": "offer",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-24-L01",
+      "source": "spec 518-525, 791"
+    },
+    {
+      "id": "campaign-goal",
+      "term": "Campaign/Goal",
+      "category": "pursuits",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "A user-defined planning goal and time box: name and intent, date range, lifecycle, target criteria, explicit Pursuit membership, optional preparation objective, display preferences, and progress projections. It is a lens over canonical records; interview rounds, Actions, and attempts derive campaign context through their owning Pursuit or an explicit goal relation.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "campaign", "singular": "Campaign", "plural": "Campaigns"}],
+        "default": "campaign",
+        "mappingOwner": null,
+        "basis": "spec 1012",
+        "specLabel": "Campaign"
+      },
+      "aliases": ["Campaign or Goal", "Goal"],
+      "owningLeaf": "ROUNDS-25-L01",
+      "source": "spec 527-542, 792-793, 978, 1012"
+    },
+    {
+      "id": "pipeline",
+      "term": "Pipeline",
+      "category": "pursuits",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Primary navigation destination for Pursuits: stage-based and list views from one pursuit model, opportunity source health, fit and priority, campaign lenses, saved filters, clear wishlist, networking, and application semantics, and degraded-data indicators. Applications and separate round management become Pipeline and the Opportunity Workspace.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "pipeline", "singular": "Pipeline", "plural": "Pipelines"}],
+        "default": "pipeline",
+        "mappingOwner": null,
+        "basis": "spec 966-974"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-20-L03",
+      "source": "spec 966-974, 988-989, 1413-1431"
+    },
+    {
+      "id": "career-activity",
+      "term": "Career Activity",
+      "category": "activities",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "A stateful, user-facing occurrence and the sole mutable authority for its schedule, lifecycle, participants, debrief, outcome, and correction history, such as a scheduled interview round, conversation, follow-up, material submission, milestone, or professional event. Changes go through versioned domain commands, and history is append-only. An Interview Round is a Career Activity kind.",
+      "label": {
+        "axis": "kind",
+        "options": [
+          {"key": "interview", "singular": "Interview", "plural": "Interviews"},
+          {"key": "conversation", "singular": "Conversation", "plural": "Conversations"},
+          {"key": "follow-up", "singular": "Follow-up", "plural": "Follow-ups"},
+          {"key": "activity", "singular": "Activity", "plural": "Activities"}
+        ],
+        "default": "activity",
+        "mappingOwner": ["ROUNDS-22-L02"],
+        "basis": "spec 1011",
+        "specLabel": "Interview, Conversation, Follow-up, or Activity"
+      },
+      "aliases": ["Interview Round"],
+      "owningLeaf": "ROUNDS-22-L02",
+      "source": "spec 488-503, 789-790, 1011, 1497; G2"
+    },
+    {
+      "id": "action",
+      "term": "Action",
+      "category": "actions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Owns work to be done: title and body, status, due date and optional schedule, priority, effort estimate, recurrence when supported, relations to canonical entities, origin or recommendation reason, and completion effect. Rich-text mentions may render relations, but text does not own relationship identity. Todos become Actions.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "action", "singular": "Action", "plural": "Actions"}],
+        "default": "action",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": ["Task"],
+      "owningLeaf": "ROUNDS-26-L01",
+      "source": "spec 571-586, 797, 991"
+    },
+    {
+      "id": "recommendation",
+      "term": "Recommendation",
+      "category": "actions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "A stable recommendation identity derived from an input vector and algorithm version. It can expire or be dismissed, snoozed, or invalidated, and feeds Today and Action creation; it becomes an Action only when accepted.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "recommendation", "singular": "Recommendation", "plural": "Recommendations"}],
+        "default": "recommendation",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-29-L03",
+      "source": "spec 801, 1646-1647"
+    },
+    {
+      "id": "today",
+      "term": "Today",
+      "category": "actions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Primary navigation destination that explains the few actions that matter, why they matter, and what changes when they are completed: a short prioritized narrative queue, not a card index of every subsystem.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "today", "singular": "Today", "plural": "Today"}],
+        "default": "today",
+        "mappingOwner": null,
+        "basis": "spec 966-974"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-30-L04",
+      "source": "spec 230-233, 966-974, 1625-1647"
+    },
+    {
+      "id": "command-center",
+      "term": "Command Center",
+      "category": "actions",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Keyboard entry point for universal search, create and capture, navigation, domain commands, recent entities, campaign lens switching, and pending import review. Quick and full forms use the same field definitions and commands.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "command-center", "singular": "Command Center", "plural": "Command Centers"}],
+        "default": "command-center",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-27-L03",
+      "source": "spec 979, 1668-1687"
+    },
+    {
+      "id": "artifact-edition",
+      "term": "Artifact Edition",
+      "category": "artifacts",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "A purposeful edition such as a resume, cover letter, interview brief, portfolio selection, or future career-pack artifact. Owns artifact type, purpose, target opportunity or audience, selected profile facts, order and grouping, explicit wording overrides, design and template configuration, source profile revision, generated output revisions, submission and freeze state, and export and share history. An edition does not become a second editable career database. Resume Studio and cover-letter generation become Materials.",
+      "label": {
+        "axis": "kind",
+        "options": [
+          {"key": "resume", "singular": "Resume", "plural": "Resumes"},
+          {"key": "cover-letter", "singular": "Cover Letter", "plural": "Cover Letters"},
+          {"key": "interview-brief", "singular": "Interview Brief", "plural": "Interview Briefs"},
+          {"key": "material", "singular": "Material", "plural": "Materials"}
+        ],
+        "default": "material",
+        "mappingOwner": null,
+        "basis": "spec 1005",
+        "specLabel": "Resume, Cover Letter, Interview Brief, or Material"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-15-L01",
+      "source": "spec 588-607, 794, 990, 1005"
+    },
+    {
+      "id": "artifact-revision",
+      "term": "Artifact Revision",
+      "category": "artifacts",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Immutable materialized content and renderer contract: content snapshot, source entity-version map, accepted override values, opportunity revision, template, renderer, font, and asset versions, locale and pagination inputs, byte checksums for retained exports, and creation, submission, and share metadata. A submitted material and a public share always reference one exact Artifact Revision.",
+      "label": {
+        "axis": "submission-state",
+        "options": [
+          {"key": "version", "singular": "Version", "plural": "Versions"},
+          {"key": "submitted-version", "singular": "Submitted version", "plural": "Submitted versions"}
+        ],
+        "default": "version",
+        "mappingOwner": ["ROUNDS-15-L03", "ROUNDS-17-L04"],
+        "basis": "spec 1006",
+        "specLabel": "Version or Submitted version"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-15-L01",
+      "source": "spec 609-621, 759, 795, 1006"
+    },
+    {
+      "id": "generation-proposal",
+      "term": "Generation Proposal",
+      "category": "artifacts",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "AI-authored wording or synthesis, which is not an Extracted Claim. It records task and target artifact, source entity-version map, supporting passages or facts, generated text, model and provider and prompt-contract version, unsupported-claim warnings, reviewer edits, accept or reject decision, and the resulting Artifact Revision when accepted.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "writing-suggestion", "singular": "Writing suggestion", "plural": "Writing suggestions"}],
+        "default": "writing-suggestion",
+        "mappingOwner": null,
+        "basis": "spec 1008",
+        "specLabel": "Writing suggestion"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-14-L07",
+      "source": "spec 675-691, 805, 1008"
+    },
+    {
+      "id": "legacy-artifact-snapshot",
+      "term": "Legacy Artifact Snapshot",
+      "category": "artifacts",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "A strictly transitional containment bridge: immutable and account-scoped, created only by an authenticated server command after verifying ownership of the current resume, variant, or version, materialized from server-read legacy records and never caller-authored HTML. It stores legacy source IDs and versions, sanitized content, bounded render options, template, font, asset, and renderer versions, and an output checksum or retained bytes; it cannot be edited or treated as canonical career data and is rendered or shared only through the contained worker and capability contracts. ROUNDS-15 migrates each one to an Artifact Revision and retires it once nothing references it.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-00A-L04",
+      "source": "spec 623-644, 796; G12"
+    },
+    {
+      "id": "artifact-renderer-contract",
+      "term": "Artifact Renderer Contract",
+      "category": "artifacts",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "The trusted, versioned, server-owned contract through which the server materializes markup to render an Artifact Edition, Artifact Revision, or Legacy Artifact Snapshot. The public API never accepts caller-authored HTML, JavaScript, browser flags, filesystem paths, network policy, or renderer commands.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-00A-L02",
+      "source": "spec 2540-2562, 3212; G12"
+    },
+    {
+      "id": "share-capability",
+      "term": "Share Capability",
+      "category": "artifacts",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "A narrow, unguessable read capability scoped to one immutable Artifact Revision or containment-era Legacy Artifact Snapshot. Only a keyed digest of the bearer token is stored, cleartext bearer material is disclosed once, and expiry, password policy, revocation, and view policy are recorded. It never grants administrative record access, and revocation invalidates it immediately.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "share-link", "singular": "Share link", "plural": "Share links"}],
+        "default": "share-link",
+        "mappingOwner": null,
+        "basis": "G8 baseline label"
+      },
+      "aliases": ["Public share"],
+      "owningLeaf": "ROUNDS-00B-L03",
+      "source": "spec 810, 2584-2636; G12"
+    },
+    {
+      "id": "practice-item",
+      "term": "Practice Item",
+      "category": "practice",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Pack-owned practice content keyed (pack, track, slug). A Practice Attempt pins one Practice Item and its career-pack version. AI-coding rounds are Practice Items.",
+      "definedBy": ["ROUNDS-07-L01"],
+      "label": {
+        "axis": "none",
+        "options": [{"key": "practice-item", "singular": "Practice Item", "plural": "Practice Items"}],
+        "default": "practice-item",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": ["Question", "Problem", "Assignment"],
+      "owningLeaf": "ROUNDS-28-L01",
+      "source": "spec 548, 1587; G2"
+    },
+    {
+      "id": "practice-draft",
+      "term": "Practice Draft",
+      "category": "practice",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Mutable work in progress on a Practice Item, kept separate from immutable attempts.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "practice-draft", "singular": "Practice Draft", "plural": "Practice Drafts"}],
+        "default": "practice-draft",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-28-L01",
+      "source": "spec 558, 798"
+    },
+    {
+      "id": "practice-session",
+      "term": "Practice Session",
+      "category": "practice",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "An active practice session, such as a running timer, kept as a mutable record separate from immutable attempts.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "practice-session", "singular": "Practice Session", "plural": "Practice Sessions"}],
+        "default": "practice-session",
+        "mappingOwner": null,
+        "basis": "G8 canonical term"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-28-L01",
+      "source": "spec 558, 798"
+    },
+    {
+      "id": "practice-attempt",
+      "term": "Practice Attempt",
+      "category": "practice",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "An immutable result tied to a Practice Item and career-pack version, candidate inputs and durable work artifacts, server-owned harness and test version, execution-environment version, result and evidence, feedback, duration and timestamps, opportunity and campaign context, and causation and correlation identifiers.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "attempt", "singular": "Attempt", "plural": "Attempts"}],
+        "default": "attempt",
+        "mappingOwner": null,
+        "basis": "spec 1013",
+        "specLabel": "Attempt"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-28-L01",
+      "source": "spec 544-558, 799, 1013"
+    },
+    {
+      "id": "execution-attempt",
+      "term": "Execution Attempt",
+      "category": "practice",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "One server-side run or evaluation of candidate code under the execution-control protocol and its durable result envelope. It is not a Practice Attempt.",
+      "definedBy": ["ROUNDS-00A-L03"],
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-00A-L03",
+      "source": "spec 2493-2519; G3"
+    },
+    {
+      "id": "test-definition",
+      "term": "Test Definition",
+      "category": "practice",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "A server-owned, immutable, versioned definition of the tests an execution request is evaluated against. Clients send candidate source and structured input only, never shell commands, executable validators, hidden tests, or expected-result code.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-00A-L02",
+      "source": "spec 1729, 2493-2516, 3212; G12"
+    },
+    {
+      "id": "harness-revision",
+      "term": "Harness Revision",
+      "category": "practice",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "A server-owned, immutable, versioned harness. Any expressive validator runs inside the same isolated worker as candidate code, never through eval in the API or control plane.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-00A-L02",
+      "source": "spec 1729, 2500, 2517-2519, 3212; G12"
+    },
+    {
+      "id": "readiness-snapshot",
+      "term": "Readiness Snapshot",
+      "category": "practice",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "A versioned, pack-owned readiness projection with a projection watermark and algorithm version, rebuilt or purged deterministically and read by Today and the preparation plan.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "readiness", "singular": "Readiness", "plural": "Readiness"}],
+        "default": "readiness",
+        "mappingOwner": null,
+        "basis": "spec 1014",
+        "specLabel": "Readiness"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-29-L01",
+      "source": "spec 800, 1014"
+    },
+    {
+      "id": "practice",
+      "term": "Practice",
+      "category": "practice",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "user-facing",
+      "definition": "Primary navigation destination for the career-pack practice tracks, Practice Items and Attempts, opportunity context, preparation plans, readiness, history, and feedback. Existing strong practice pages stay recognizable behind the pack contract.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "practice", "singular": "Practice", "plural": "Practice"}],
+        "default": "practice",
+        "mappingOwner": null,
+        "basis": "spec 966-974"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-28-L08",
+      "source": "spec 950-951, 966-974, 1584-1593"
+    },
+    {
+      "id": "career-pack",
+      "term": "Career Pack",
+      "category": "packs",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "A trusted, reviewed bundle shipped at build time that extends the stable platform core through a versioned manifest: extension schemas, field definitions, validators, relation types, editors and renderers, import aliases, interview-process and round types, practice tracks, attempt schemas, artifact projectors, readiness signals, recommendation contributors, search contributions, migrations, and required capabilities. Packs cannot redefine platform terms.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-07-L01",
+      "source": "spec 813-887"
+    },
+    {
+      "id": "pack-activation",
+      "term": "Pack Activation",
+      "category": "packs",
+      "namespace": "platform",
+      "status": "ratified",
+      "visibility": "inspection-only",
+      "definition": "Account or deployment activation of a pack manifest already shipped with the deployment, atomic across platform contract, schema and handlers, editors and renderers, migrations, projectors, and search contributions. State is inactive, migrating, active, read-only, incompatible, or failed; deactivation keeps pack data read-only.",
+      "label": null,
+      "aliases": [],
+      "owningLeaf": "ROUNDS-07-L02",
+      "source": "spec 809, 864-882"
+    },
+    {
+      "id": "track-system-design",
+      "term": "System Design",
+      "category": "packs",
+      "namespace": "pack.software-engineering",
+      "key": "system-design",
+      "status": "ratified-here",
+      "visibility": "user-facing",
+      "definition": "Software Engineering practice track for system design guides, questions, diagrams, practice canvas, status, drafts, and timers.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "system-design", "singular": "System Design", "plural": "System Design"}],
+        "default": "system-design",
+        "mappingOwner": null,
+        "basis": "G9"
+      },
+      "aliases": ["system"],
+      "owningLeaf": "ROUNDS-07-L01",
+      "source": "spec 352, 940; G9"
+    },
+    {
+      "id": "track-coding",
+      "term": "Coding",
+      "category": "packs",
+      "namespace": "pack.software-engineering",
+      "key": "coding",
+      "status": "ratified-here",
+      "visibility": "user-facing",
+      "definition": "Software Engineering practice track for coding lists, the editor, drafts, focus mode, custom runs, evaluation, status, and timers.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "coding", "singular": "Coding", "plural": "Coding"}],
+        "default": "coding",
+        "mappingOwner": null,
+        "basis": "G9"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-07-L01",
+      "source": "spec 353, 939; G9"
+    },
+    {
+      "id": "track-ai-coding",
+      "term": "AI-Assisted Coding",
+      "category": "packs",
+      "namespace": "pack.software-engineering",
+      "key": "ai-coding",
+      "status": "ratified-here",
+      "visibility": "user-facing",
+      "definition": "Software Engineering practice track for AI-assisted coding files, checkpoints, chat and edit, runner, grade, drafts, and attempts.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "ai-coding", "singular": "AI-Assisted Coding", "plural": "AI-Assisted Coding"}],
+        "default": "ai-coding",
+        "mappingOwner": null,
+        "basis": "G9"
+      },
+      "aliases": ["AI Assisted Coding", "ai-assisted-coding"],
+      "owningLeaf": "ROUNDS-07-L01",
+      "source": "spec 354, 942; G9"
+    },
+    {
+      "id": "track-take-home",
+      "term": "Take-Home",
+      "category": "packs",
+      "namespace": "pack.software-engineering",
+      "key": "take-home",
+      "status": "ratified-here",
+      "visibility": "user-facing",
+      "definition": "Software Engineering practice track for real-world and take-home prompts, files, harness, AI policy, rubric, drafts, and attempts.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "take-home", "singular": "Take-Home", "plural": "Take-Home"}],
+        "default": "take-home",
+        "mappingOwner": null,
+        "basis": "G9"
+      },
+      "aliases": ["Real World Problems", "Real-World Problem", "real-world", "builder"],
+      "owningLeaf": "ROUNDS-07-L01",
+      "source": "spec 355, 943; G9"
+    },
+    {
+      "id": "track-behavioral",
+      "term": "Behavioral",
+      "category": "packs",
+      "namespace": "pack.software-engineering",
+      "key": "behavioral",
+      "status": "ratified-here",
+      "visibility": "user-facing",
+      "definition": "Software Engineering practice track for behavioral guides, questions, categories, story links, status, and timers.",
+      "label": {
+        "axis": "none",
+        "options": [{"key": "behavioral", "singular": "Behavioral", "plural": "Behavioral"}],
+        "default": "behavioral",
+        "mappingOwner": null,
+        "basis": "G9"
+      },
+      "aliases": [],
+      "owningLeaf": "ROUNDS-07-L01",
+      "source": "spec 356, 941; G9"
+    }
+  ]
+}
