@@ -397,6 +397,26 @@ def test_foreign_owner_denied_fails_if_a_row_was_planted():
     assert not r.passed and "rows_under_owner=1" in r.detail
 
 
+def test_foreign_owner_denied_fails_when_the_superuser_listing_errors():
+    # The create was denied correctly, but the no-row-planted check couldn't
+    # run: that must fail the probe, not pass it on a count of zero.
+    pb = _ProbePB(create=Response(400, {"data": {}}, 1), listing=Response(500, {"message": "x"}, 1))
+    r = families.create_foreign_owner_denied(pb, "campaigns", "b-token", {"user": "uid-c"}, "admin", "uid-c", 400)
+    assert not r.passed and "listing status=500" in r.detail
+
+
+def test_foreign_owner_denied_fails_when_the_listing_is_not_a_page():
+    pb = _ProbePB(create=Response(400, {"data": {}}, 1), listing=Response(200, None, 1))
+    r = families.create_foreign_owner_denied(pb, "campaigns", "b-token", {"user": "uid-c"}, "admin", "uid-c", 400)
+    assert not r.passed and "rows_under_owner=unknown" in r.detail
+
+
+def test_server_only_create_denied_fails_when_the_superuser_listing_errors():
+    pb = _ProbePB(create=Response(403, {}, 1), listing=Response(401, {"message": "x"}, 1))
+    r = families.create_server_only_denied(pb, "resume_share_views", "b-token", {"user": "uid-c"}, "admin", "uid-c", 403)
+    assert not r.passed and "listing status=401" in r.detail
+
+
 def test_foreign_owner_denied_fails_on_a_validation_400_with_populated_data():
     pb = _ProbePB(create=Response(400, {"data": {"slug": {"code": "validation_required"}}}, 1), listing=_count(0))
     r = families.create_foreign_owner_denied(pb, "campaigns", "b-token", {"user": "uid-c"}, "admin", "uid-c", 400)

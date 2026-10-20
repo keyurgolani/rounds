@@ -123,19 +123,29 @@ def oversized_filler(max_bytes: int) -> list:
     return ["z" * (int(max_bytes) + 4096)]
 
 
-def _admin_owner_count(pb, collection, admin_token, owner_id) -> int:
-    """How many rows the superuser sees owned by ``owner_id``.
+def _admin_owner_count(pb, collection, admin_token, owner_id) -> tuple[int | None, int]:
+    """How many rows the superuser sees owned by ``owner_id``, and the listing's status.
 
-    A denied create or a denied reassign must leave no row behind, not just
-    return an error status. The owner used for this check is a no-rows account,
-    so a clean deny leaves the count at zero.
+    A denied create must leave no row behind, not just return an error status.
+    The owner used for this check is a no-rows account, so a clean deny leaves
+    the count at zero. The count is None when the superuser listing fails or
+    doesn't return a page, so a probe that needs it fails instead of passing on
+    a check it never made.
     """
     resp = pb.listing(collection, token=admin_token, params={"filter": f'user = "{owner_id}"'})
-    body = resp.body if isinstance(resp.body, dict) else {}
-    total = body.get("totalItems")
+    if resp.status != 200 or not isinstance(resp.body, dict):
+        return None, resp.status
+    total = resp.body.get("totalItems")
     if isinstance(total, int):
-        return total
-    return len(body.get("items") or [])
+        return total, resp.status
+    items = resp.body.get("items")
+    return (len(items) if isinstance(items, list) else None), resp.status
+
+
+def _owner_count_detail(count, listing_status) -> str:
+    if count is None:
+        return f"rows_under_owner=unknown (listing status={listing_status})"
+    return f"rows_under_owner={count}"
 
 
 def create_foreign_owner_denied(pb, collection, caller_token, payload, admin_token, owner_id, expected) -> Receipt:
@@ -147,9 +157,11 @@ def create_foreign_owner_denied(pb, collection, caller_token, payload, admin_tok
     # `data`); the superuser then confirms no row was planted under that owner.
     resp = pb.create(collection, caller_token, payload)
     data = resp.body.get("data") if isinstance(resp.body, dict) else None
-    leaked = _admin_owner_count(pb, collection, admin_token, owner_id)
+    leaked, listing_status = _admin_owner_count(pb, collection, admin_token, owner_id)
     ok = resp.status == expected and data == {} and leaked == 0
-    detail = "" if ok else f"status={resp.status} data={list((data or {}).keys())} rows_under_owner={leaked}"
+    detail = "" if ok else (
+        f"status={resp.status} data={list((data or {}).keys())} {_owner_count_detail(leaked, listing_status)}"
+    )
     return Receipt("account-scope.create.foreign-owner.denied", collection, "create", "authenticated-other",
                    expected, resp.status, ok, resp.elapsed_ms, detail)
 
@@ -186,9 +198,9 @@ def create_server_only_denied(pb, collection, caller_token, payload, admin_token
     # so denying it proves the rule admits no client; the superuser then
     # confirms no row was planted under the named owner.
     resp = pb.create(collection, caller_token, payload)
-    leaked = _admin_owner_count(pb, collection, admin_token, owner_id)
+    leaked, listing_status = _admin_owner_count(pb, collection, admin_token, owner_id)
     ok = resp.status == expected and leaked == 0
-    detail = "" if ok else f"status={resp.status} rows_under_owner={leaked}"
+    detail = "" if ok else f"status={resp.status} {_owner_count_detail(leaked, listing_status)}"
     return Receipt("account-scope.create.server-only.denied", collection, "create", "authenticated-other",
                    expected, resp.status, ok, resp.elapsed_ms, detail)
 
