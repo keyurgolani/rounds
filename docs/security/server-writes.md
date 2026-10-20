@@ -13,8 +13,8 @@ A server-only collection has `null` client create, update, and delete rules. At 
 | System hook | A PocketBase handler with no caller token: a boot hook (`onBeforeServe`), a `cronAdd` job, or an anonymous hook route. A Service leaf that creates or resets its record at boot registers that hook too. | its leaf, in the registry below |
 
 1. No Service credential goes into the runner's environment before #1's stage 2 ships the minimal child environment. Until then, candidate code can read that environment.
-2. A model hook (`onModel*`) that writes a server-only row rides on the write that fired it. Its leaf lists it in its registry row.
-3. Migrations run inside PocketBase at start with no token. One that writes rows into a server-only collection gets a registry row too, as #10's and #14's do. #156 and #1's stage 5 lint cover migration safety.
+2. A model hook (`onModel*`), or a library called inside another writer's transaction, rides on that write when it writes a server-only row. Its leaf lists it in its registry row.
+3. Migrations run inside PocketBase at start with no token. One that writes rows into a server-only collection gets a registry row too, as #10's, #14's, #73's, and #177's do. #156 and #1's stage 5 lint cover migration safety.
 
 ## Superuser Token
 
@@ -46,26 +46,30 @@ Each row restates the leaf's current body. The leaf confirms or corrects its row
 | --- | --- | --- | --- | --- |
 | #1 S3 | Caller | `pb_hooks/admission.js`, under `/api/rounds/admission/` | `admission_commands`, `admission_counters`, `admission_leases` | caller's bearer |
 | #3 | Caller | `enqueue` and owner `cancel` in `pb_hooks/execution.pb.js`, under `/api/rounds/execution/` | `execution_jobs`, and the `job_id` on #1's admission row | caller's bearer |
-| #3 | Service | `execution_service`, one record (`execution-worker`): `claim`, `heartbeat`, `complete`, `reap` | `execution_jobs`, `execution_attempts`, `execution_envelopes` | `ROUNDS_EXECUTION_SECRET` |
+| #3 | Service | `execution_service`, one record (`execution-worker`): `claim`, `heartbeat`, `complete`, `reap` | `execution_jobs`, `execution_attempts`, `execution_envelopes`, and the graded rows in `ai_coding_attempts` and `take_home_attempts`, which `complete` writes with the envelope | `ROUNDS_EXECUTION_SECRET` |
 | #3 | System hook | `onBeforeServe` in `pb_hooks/execution.pb.js`, which creates `execution-worker` or resets its password | `execution_service` | `ROUNDS_EXECUTION_SECRET` |
 | #4 | Caller | `POST /api/rounds/legacy-snapshots`, which the runner calls with the caller's bearer | `legacy_artifact_snapshots`, and it completes the `admission_commands` row | caller's bearer |
 | #6 | Service | `execution_service` `claim` and `complete` for render jobs | the render output record and its PDF | `ROUNDS_EXECUTION_SECRET` |
 | #10 | Migration, then operator | the quarantine migration at start; replay through the admin API | `relation_quarantine`, `relation_quarantine_reports` | none for the migration; superuser for replay |
-| #11 S2 | Caller | the owner's `POST /api/rounds/share/capabilities/:id/revoke`, plus an `onModelAfterDelete` hook on `resumes` and `resume_variants` that revokes on delete | `share_capabilities` | caller's bearer |
+| #11 S2 | Caller | the owner's `POST /api/rounds/share/capabilities/:id/revoke` | `share_capabilities` | caller's bearer |
+| #11 S2 | Model hook | `onModelAfterDelete` on `resumes` and `resume_variants`, which revokes; `onModelBeforeDelete` on `users`, which deletes the account's capabilities in the same transaction | `share_capabilities` | rides on the delete |
 | #12 | Caller | `POST /api/rounds/share/capabilities` and `POST /api/rounds/share/capabilities/:id/rotate`, each through `pb_hooks/admission.js` | `share_capabilities`, the `share_secret_state` latch, admission rows | caller's bearer |
 | #12 | Service | `share_resolvers`, one record: `POST /api/rounds/share/lookup` | `share_throttle` | `ROUNDS_SHARE_RESOLVER_PASSWORD` |
 | #14 | Migration | M1 | `legacy_share_migration` | none |
+| #22 | Library | `pb_hooks/lib/outbox.js`, which #21's transaction writer calls before commit | `domain_outbox` | rides on #21's write |
 | #22 | Service | `dispatcher_service`: routes under `/api/outbox/` | `outbox_cursors`, `outbox_watermarks`, `outbox_parked`, and the relay lease in `platform_leases` | `ROUNDS_DISPATCHER_SECRET` |
 | #54 | Caller and Service | `pb_hooks/processing.pb.js`: `enqueue`, `cancel`, and `retry` with the caller's bearer; `checkpoint`, `block`, and `complete` as `execution_service` | `processing_*` | caller's bearer; `ROUNDS_EXECUTION_SECRET` |
 | #56 | Service | #54's `complete`, as `execution_service` | `processing_extraction_outputs` | `ROUNDS_EXECUTION_SECRET` |
 | #73 | Service | `ai_gateway`, one record, scoped to the bearer's account | `ai_providers`, `ai_credentials`, `ai_provider_models`, Intent records | `ROUNDS_AI_GATEWAY_SECRET` |
 | #73 | System hook | `onBeforeServe`, which seeds the `ai_gateway` record | `ai_gateway` | `ROUNDS_AI_GATEWAY_SECRET` |
+| #73 | Migration | step 3, which moves the legacy ciphertext and model caches out of `ai_providers` | `ai_credentials_legacy`, `ai_provider_models` | none |
 | #76 | Model hook | `onModelBeforeDelete` on each classed collection; retention purges run as #22's `dispatcher_service` | `deletion_journal` | rides on the delete |
 | #80 | set by #80 | the backfill and deltas, per account through #19 | `legacy_material_blocks` | never the superuser |
 | #91 | Service | the export pool as `execution_service`, through `pb_hooks/account_export.pb.js` | `account_exports` | `ROUNDS_EXECUTION_SECRET` |
 | #93 | Service | `share_resolvers`: `POST /api/rounds/share/view` | `share_view_counters` | `ROUNDS_SHARE_RESOLVER_PASSWORD` |
 | #130, #133, #134, #135 | Service | `execution_service`, inside #3's `complete`, calling #130's `AttachFeedback` | Feedback on Attempts | `ROUNDS_EXECUTION_SECRET` |
 | #161 | set by #161 | written once at the seal, per account through #19 | `legacy_share_history` | never the superuser |
+| #177 | Migration | stage 2's state migration, one `demo` row per demo account | `account_system_state` | none |
 | #177 | System hook | `demo.pb.js`: `onBeforeServe`, the `cronAdd` sweep, and the anonymous `POST /api/rounds/demo/sessions` | demo `users`, `account_system_state`, and the deployment `demo-session-create` bucket in `admission_counters` through `pb_hooks/admission.js` | none |
 | #177 | Caller | `POST /api/rounds/demo/sessions/end` | deletes the demo caller's account and files | caller's bearer |
 
@@ -86,6 +90,7 @@ Each row restates the leaf's current body. The leaf confirms or corrects its row
 | [#14](https://github.com/keyurgolani/rounds/issues/14) | `ROUNDS-00B-L06` | Migrate legacy shares and prove immediate revocation |
 | [#18](https://github.com/keyurgolani/rounds/issues/18) | `ROUNDS-02-L01` | Ratify the canonical database and transaction-owner ADR |
 | [#19](https://github.com/keyurgolani/rounds/issues/19) | `ROUNDS-02-L02` | Build the account-authorized domain command gateway |
+| [#21](https://github.com/keyurgolani/rounds/issues/21) | `ROUNDS-02-L04` | Persist transactional change sets, revisions, and audit entries |
 | [#22](https://github.com/keyurgolani/rounds/issues/22) | `ROUNDS-02-L05` | Publish domain events through a transactional outbox |
 | [#54](https://github.com/keyurgolani/rounds/issues/54) | `ROUNDS-10-L02` | Define durable Processing Jobs and adapter versioning |
 | [#56](https://github.com/keyurgolani/rounds/issues/56) | `ROUNDS-10-L04` | Build the extraction adapter registry and reprocessing flow |
