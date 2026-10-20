@@ -1,0 +1,917 @@
+{
+  "$schema": "./owner-sentence-corrections.schema.json",
+  "registry": "rounds-owner-sentence-corrections",
+  "description": "The templated \"<label> is the only command or contract owner\" sentence in 101 filed bodies, rewritten to name the DR-0002 rows and the owning leaf. #17 (ROUNDS-01-L03) carries these into the owner's re-authorization; no issue body is edited here.",
+  "matrixRevision": 1,
+  "entries": [
+    {
+      "issue": 1,
+      "leaf": "ROUNDS-00A-L01",
+      "label": "Execution and Rendering Platform",
+      "kind": "owner",
+      "original": "- Execution and Rendering Platform is the only command or contract owner for \"authentication, authorization, and quota enforcement for execution and render routes\"; callers cannot write durable state around it.",
+      "rows": ["execution-admission"],
+      "corrected": "- #1 (ROUNDS-00A-L01) is the command owner of `execution-admission` in DR-0002@1 (Execution Control Plane); callers cannot write durable state around it."
+    },
+    {
+      "issue": 8,
+      "leaf": "ROUNDS-00A-L08",
+      "label": "Execution and Rendering Platform",
+      "kind": "none",
+      "original": "- Execution and Rendering Platform is the only command or contract owner for \"adversarial execution and rendering conformance suites\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #8 (ROUNDS-00A-L08) owns no row in DR-0002@1: its suites test the rows #1, #2, and #3 own. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 9,
+      "leaf": "ROUNDS-00B-L01",
+      "label": "Identity, Authorization, and Sharing",
+      "kind": "none",
+      "original": "- Identity, Authorization, and Sharing is the only command or contract owner for \"server-derived account-scope invariant\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #9 (ROUNDS-00B-L01) owns no row in DR-0002@1: the account-scope invariant applies to every account-scoped row, and #172 (ROUNDS-34-L03) registers each row's authorization in the authz column. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 10,
+      "leaf": "ROUNDS-00B-L02",
+      "label": "Identity, Authorization, and Sharing",
+      "kind": "none",
+      "original": "- Identity, Authorization, and Sharing is the only command or contract owner for \"authorization for typed relations and merges\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #10 (ROUNDS-00B-L02) owns no row in DR-0002@1: it authorizes the relation and merge commands of `typed-relation`, `organization`, and `person`. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 11,
+      "leaf": "ROUNDS-00B-L03",
+      "label": "Identity, Authorization, and Sharing",
+      "kind": "owner",
+      "original": "- Identity, Authorization, and Sharing is the only command or contract owner for \"immutable artifact share capabilities\"; callers cannot write durable state around it.",
+      "rows": ["share-capability-metadata"],
+      "corrected": "- #11 (ROUNDS-00B-L03) is the command owner of `share-capability-metadata` in DR-0002@1 (Public Share Capability Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 12,
+      "leaf": "ROUNDS-00B-L04",
+      "label": "Identity, Authorization, and Sharing",
+      "kind": "owner",
+      "original": "- Identity, Authorization, and Sharing is the only command or contract owner for \"one-time share secret delivery, password protection, and rotation\"; callers cannot write durable state around it.",
+      "rows": ["share-bearer-digest"],
+      "corrected": "- #12 (ROUNDS-00B-L04) is the command owner of `share-bearer-digest` in DR-0002@1 (Public Share Capability Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 13,
+      "leaf": "ROUNDS-00B-L05",
+      "label": "Identity, Authorization, and Sharing",
+      "kind": "none",
+      "original": "- Identity, Authorization, and Sharing is the only command or contract owner for \"complete two-account IDOR and disclosure suite\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #13 (ROUNDS-00B-L05) owns no row in DR-0002@1: its suite tests every row's two-account isolation. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 19,
+      "leaf": "ROUNDS-02-L02",
+      "label": "Domain Platform",
+      "kind": "none",
+      "original": "- Domain Platform is the only command or contract owner for \"account-authorized domain command gateway\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #19 (ROUNDS-02-L02) owns no row in DR-0002@1: it owns command dispatch and the command registry; each command type belongs to the one row that lists it. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 20,
+      "leaf": "ROUNDS-02-L03",
+      "label": "Domain Platform",
+      "kind": "owner",
+      "original": "- Domain Platform is the only command or contract owner for \"expected versions, idempotency, and conflict results\"; callers cannot write durable state around it.",
+      "rows": ["idempotency-record"],
+      "corrected": "- #20 (ROUNDS-02-L03) is the command owner of `idempotency-record` in DR-0002@1 (Transaction-owning Command Gateway); callers cannot write durable state around it."
+    },
+    {
+      "issue": 21,
+      "leaf": "ROUNDS-02-L04",
+      "label": "Domain Platform",
+      "kind": "owner",
+      "original": "- Domain Platform is the only command or contract owner for \"transactional change sets, revisions, and audit entries\"; callers cannot write durable state around it.",
+      "rows": ["audit-entry-change-set"],
+      "corrected": "- #21 (ROUNDS-02-L04) is the command owner of `audit-entry-change-set` in DR-0002@1 (Revision and Audit Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 22,
+      "leaf": "ROUNDS-02-L05",
+      "label": "Domain Platform",
+      "kind": "owner",
+      "original": "- Domain Platform is the only command or contract owner for \"domain events through a transactional outbox\"; callers cannot write durable state around it.",
+      "rows": ["domain-event"],
+      "corrected": "- #22 (ROUNDS-02-L05) is the command owner of `domain-event` in DR-0002@1 (Revision and Audit Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 23,
+      "leaf": "ROUNDS-02-L06",
+      "label": "Domain Platform",
+      "kind": "none",
+      "original": "- Domain Platform is the only command or contract owner for \"checkpointed projectors and consistency envelopes\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #23 (ROUNDS-02-L06) owns no row in DR-0002@1: it owns the checkpoint and envelope contract that every read-model row's projection uses. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 24,
+      "leaf": "ROUNDS-03-L01",
+      "label": "Identity and Career Profile",
+      "kind": "owner",
+      "original": "- Identity and Career Profile is the only command or contract owner for \"Account and Career Profile aggregate contracts\"; callers cannot write durable state around it.",
+      "rows": ["authentication-identity","professional-identity","profile-contact-point"],
+      "corrected": "- #24 (ROUNDS-03-L01) is the command owner of `authentication-identity`, `professional-identity`, `profile-contact-point` in DR-0002@1 (Account Service, Career Profile Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 27,
+      "leaf": "ROUNDS-04-L01",
+      "label": "Directory",
+      "kind": "owner",
+      "original": "- Directory is the only command or contract owner for \"Organization and Person aggregates\"; callers cannot write durable state around it.",
+      "rows": ["organization","person","person-contact-point"],
+      "corrected": "- #27 (ROUNDS-04-L01) is the command owner of `organization`, `person`, `person-contact-point` in DR-0002@1 (Identity Directory for Organization and Person); callers cannot write durable state around it."
+    },
+    {
+      "issue": 28,
+      "leaf": "ROUNDS-04-L02",
+      "label": "Directory",
+      "kind": "adds",
+      "original": "- Directory is the only command or contract owner for \"identity resolution and duplicate-candidate scoring\"; callers cannot write durable state around it.",
+      "rows": ["organization","person"],
+      "corrected": "- #28 (ROUNDS-04-L02) adds identity resolution and duplicate-candidate scoring on `organization`, `person` in DR-0002@1 (Identity Directory for Organization and Person), whose command owner is #27 (ROUNDS-04-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 29,
+      "leaf": "ROUNDS-04-L03",
+      "label": "Directory",
+      "kind": "adds",
+      "original": "- Directory is the only command or contract owner for \"merge redirects, correction history, and privacy tombstones\"; callers cannot write durable state around it.",
+      "rows": ["organization","person"],
+      "corrected": "- #29 (ROUNDS-04-L03) adds merge, correction, and privacy-tombstone commands on `organization`, `person` in DR-0002@1 (Identity Directory for Organization and Person), whose command owner is #27 (ROUNDS-04-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 31,
+      "leaf": "ROUNDS-05-L01",
+      "label": "Career Profile",
+      "kind": "owner",
+      "original": "- Career Profile is the only command or contract owner for \"career history, education, and publication contracts\"; callers cannot write durable state around it.",
+      "rows": ["employment-facts","education","publication"],
+      "corrected": "- #31 (ROUNDS-05-L01) is the command owner of `employment-facts`, `education`, `publication` in DR-0002@1 (Career Profile Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 32,
+      "leaf": "ROUNDS-05-L02",
+      "label": "Career Profile",
+      "kind": "owner",
+      "original": "- Career Profile is the only command or contract owner for \"projects, achievements, and evidence contracts\"; callers cannot write durable state around it.",
+      "rows": ["project-facts","achievement"],
+      "corrected": "- #32 (ROUNDS-05-L02) is the command owner of `project-facts`, `achievement` in DR-0002@1 (Career Profile Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 33,
+      "leaf": "ROUNDS-05-L03",
+      "label": "Career Profile",
+      "kind": "owner",
+      "original": "- Career Profile is the only command or contract owner for \"professional stories and behavioral evidence\"; callers cannot write durable state around it.",
+      "rows": ["story"],
+      "corrected": "- #33 (ROUNDS-05-L03) is the command owner of `story` in DR-0002@1 (Career Profile Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 34,
+      "leaf": "ROUNDS-05-L04",
+      "label": "Career Profile",
+      "kind": "owner",
+      "original": "- Career Profile is the only command or contract owner for \"skills, links, and profession-extension contracts\"; callers cannot write durable state around it.",
+      "rows": ["skill","link"],
+      "corrected": "- #34 (ROUNDS-05-L04) is the command owner of `skill`, `link` in DR-0002@1 (Career Profile Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 36,
+      "leaf": "ROUNDS-06-L01",
+      "label": "Relationship Platform",
+      "kind": "adds",
+      "original": "- Relationship Platform is the only command or contract owner for \"typed relationship registry and invariants\"; callers cannot write durable state around it.",
+      "rows": ["typed-relation"],
+      "corrected": "- #36 (ROUNDS-06-L01) adds the typed relationship registry that keys each relation type to its owning row on `typed-relation` in DR-0002@1 (Transaction-owning Command Gateway), whose command owner is #37 (ROUNDS-06-L02); callers cannot write durable state around it."
+    },
+    {
+      "issue": 37,
+      "leaf": "ROUNDS-06-L02",
+      "label": "Relationship Platform",
+      "kind": "owner",
+      "original": "- Relationship Platform is the only command or contract owner for \"authorized relationship command and query service\"; callers cannot write durable state around it.",
+      "rows": ["typed-relation"],
+      "corrected": "- #37 (ROUNDS-06-L02) is the command owner of `typed-relation` in DR-0002@1 (Transaction-owning Command Gateway); callers cannot write durable state around it."
+    },
+    {
+      "issue": 39,
+      "leaf": "ROUNDS-07-L01",
+      "label": "Career Pack Platform",
+      "kind": "owner",
+      "original": "- Career Pack Platform is the only command or contract owner for \"Career Pack specification\"; callers cannot write durable state around it.",
+      "rows": ["practice-item-content","practice-guides","pack-round-types"],
+      "corrected": "- #39 (ROUNDS-07-L01) is the command owner of `practice-item-content`, `practice-guides`, `pack-round-types` in DR-0002@1 (Career Pack Registry); callers cannot write durable state around it."
+    },
+    {
+      "issue": 40,
+      "leaf": "ROUNDS-07-L02",
+      "label": "Career Pack Platform",
+      "kind": "owner",
+      "original": "- Career Pack Platform is the only command or contract owner for \"trusted pack discovery, activation, and lifecycle\"; callers cannot write durable state around it.",
+      "rows": ["pack-activation"],
+      "corrected": "- #40 (ROUNDS-07-L02) is the command owner of `pack-activation` in DR-0002@1 (Career Pack Registry); callers cannot write durable state around it."
+    },
+    {
+      "issue": 41,
+      "leaf": "ROUNDS-07-L03",
+      "label": "Career Pack Platform",
+      "kind": "none",
+      "original": "- Career Pack Platform is the only command or contract owner for \"namespaced pack storage and typed relationships\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #41 (ROUNDS-07-L03) owns no row in DR-0002@1: it owns the pack-namespaced storage contract that the pack-owned rows use. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 42,
+      "leaf": "ROUNDS-07-L04",
+      "label": "Career Pack Platform",
+      "kind": "none",
+      "original": "- Career Pack Platform is the only command or contract owner for \"non-shipping conformance fixture pack\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #42 (ROUNDS-07-L04) owns no row in DR-0002@1: its fixture pack never ships. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 44,
+      "leaf": "ROUNDS-08-L01",
+      "label": "Interaction Platform",
+      "kind": "none",
+      "original": "- Interaction Platform is the only command or contract owner for \"reusable field and validation contract\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #44 (ROUNDS-08-L01) owns no row in DR-0002@1: Interaction Platform owns no commands; the field contract validates every row's commands. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 53,
+      "leaf": "ROUNDS-10-L01",
+      "label": "Source Processing",
+      "kind": "owner",
+      "original": "- Source Processing is the only command or contract owner for \"Source Document, Source Anchor, and retention contracts\"; callers cannot write durable state around it.",
+      "rows": ["source-document"],
+      "corrected": "- #53 (ROUNDS-10-L01) is the command owner of `source-document` in DR-0002@1 (Capture and Ingestion Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 54,
+      "leaf": "ROUNDS-10-L02",
+      "label": "Source Processing",
+      "kind": "owner",
+      "original": "- Source Processing is the only command or contract owner for \"durable Processing Jobs and adapter versioning\"; callers cannot write durable state around it.",
+      "rows": ["processing-attempt"],
+      "corrected": "- #54 (ROUNDS-10-L02) is the command owner of `processing-attempt` in DR-0002@1 (Capture and Ingestion Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 55,
+      "leaf": "ROUNDS-10-L03",
+      "label": "Source Processing",
+      "kind": "adds",
+      "original": "- Source Processing is the only command or contract owner for \"URL retrieval and file parsing\"; callers cannot write durable state around it.",
+      "rows": ["source-document","processing-attempt"],
+      "corrected": "- #55 (ROUNDS-10-L03) adds URL retrieval and file parsing on `source-document`, `processing-attempt` in DR-0002@1 (Capture and Ingestion Service), whose command owner is #53 (ROUNDS-10-L01) and #54 (ROUNDS-10-L02); callers cannot write durable state around it."
+    },
+    {
+      "issue": 56,
+      "leaf": "ROUNDS-10-L04",
+      "label": "Source Processing",
+      "kind": "adds",
+      "original": "- Source Processing is the only command or contract owner for \"extraction adapter registry and reprocessing flow\"; callers cannot write durable state around it.",
+      "rows": ["processing-attempt"],
+      "corrected": "- #56 (ROUNDS-10-L04) adds the extraction adapter registry and reprocessing on `processing-attempt` in DR-0002@1 (Capture and Ingestion Service), whose command owner is #54 (ROUNDS-10-L02); callers cannot write durable state around it."
+    },
+    {
+      "issue": 57,
+      "leaf": "ROUNDS-11-L01",
+      "label": "Claims and Provenance",
+      "kind": "owner",
+      "original": "- Claims and Provenance is the only command or contract owner for \"immutable Extracted Claim and source-anchor schemas\"; callers cannot write durable state around it.",
+      "rows": ["extracted-claim"],
+      "corrected": "- #57 (ROUNDS-11-L01) is the command owner of `extracted-claim` in DR-0002@1 (Capture and Ingestion Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 58,
+      "leaf": "ROUNDS-11-L02",
+      "label": "Claims and Provenance",
+      "kind": "adds",
+      "original": "- Claims and Provenance is the only command or contract owner for \"deterministic normalization and candidate matching\"; callers cannot write durable state around it.",
+      "rows": ["extracted-claim"],
+      "corrected": "- #58 (ROUNDS-11-L02) adds normalization and candidate matching on `extracted-claim` in DR-0002@1 (Capture and Ingestion Service), whose command owner is #57 (ROUNDS-11-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 59,
+      "leaf": "ROUNDS-11-L03",
+      "label": "Claims and Provenance",
+      "kind": "adds",
+      "original": "- Claims and Provenance is the only command or contract owner for \"field and relationship conflicts\"; callers cannot write durable state around it.",
+      "rows": ["extracted-claim"],
+      "corrected": "- #59 (ROUNDS-11-L03) adds field and relationship conflict records on `extracted-claim` in DR-0002@1 (Capture and Ingestion Service), whose command owner is #57 (ROUNDS-11-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 60,
+      "leaf": "ROUNDS-11-L04",
+      "label": "Claims and Provenance",
+      "kind": "adds",
+      "original": "- Claims and Provenance is the only command or contract owner for \"claim lineage through review and commit\"; callers cannot write durable state around it.",
+      "rows": ["extracted-claim"],
+      "corrected": "- #60 (ROUNDS-11-L04) adds claim lineage through review and commit on `extracted-claim` in DR-0002@1 (Capture and Ingestion Service), whose command owner is #57 (ROUNDS-11-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 64,
+      "leaf": "ROUNDS-12-L04",
+      "label": "Claims and Career Profile",
+      "kind": "none",
+      "original": "- Claims and Career Profile is the only command or contract owner for \"one atomic revision with history and rollback\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #64 (ROUNDS-12-L04) owns no row in DR-0002@1: it commits accepted claims as one change set across the Career Profile rows through their owners' commands. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 65,
+      "leaf": "ROUNDS-13-L01",
+      "label": "Profile Bootstrap",
+      "kind": "none",
+      "original": "- Profile Bootstrap is the only command or contract owner for \"source-adapter bootstrap framework\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #65 (ROUNDS-13-L01) owns no row in DR-0002@1: it builds the bootstrap framework; adapters write Source Documents and claims through #53's and #57's commands. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 66,
+      "leaf": "ROUNDS-13-L02",
+      "label": "Profile Bootstrap",
+      "kind": "none",
+      "original": "- Profile Bootstrap is the only command or contract owner for \"resume file bootstrap\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #66 (ROUNDS-13-L02) owns no row in DR-0002@1: its adapter writes through #53's and #57's commands. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 67,
+      "leaf": "ROUNDS-13-L03",
+      "label": "Profile Bootstrap",
+      "kind": "none",
+      "original": "- Profile Bootstrap is the only command or contract owner for \"JSON Resume bootstrap and portable mapping\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #67 (ROUNDS-13-L03) owns no row in DR-0002@1: its adapter writes through #53's and #57's commands. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 68,
+      "leaf": "ROUNDS-13-L04",
+      "label": "Profile Bootstrap",
+      "kind": "none",
+      "original": "- Profile Bootstrap is the only command or contract owner for \"professional-network export bootstrap\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #68 (ROUNDS-13-L04) owns no row in DR-0002@1: its adapter writes through #53's and #57's commands. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 69,
+      "leaf": "ROUNDS-13-L05",
+      "label": "Profile Bootstrap",
+      "kind": "none",
+      "original": "- Profile Bootstrap is the only command or contract owner for \"GitHub profile and repository bootstrap\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #69 (ROUNDS-13-L05) owns no row in DR-0002@1: its adapter writes through #53's and #57's commands. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 70,
+      "leaf": "ROUNDS-13-L06",
+      "label": "Profile Bootstrap",
+      "kind": "none",
+      "original": "- Profile Bootstrap is the only command or contract owner for \"pasted-history and freeform bootstrap\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #70 (ROUNDS-13-L06) owns no row in DR-0002@1: its adapter writes through #53's and #57's commands. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 73,
+      "leaf": "ROUNDS-14-L02",
+      "label": "AI Trust Platform",
+      "kind": "owner",
+      "original": "- AI Trust Platform is the only command or contract owner for \"Provider Invocation Intent and authorization\"; callers cannot write durable state around it.",
+      "rows": ["provider-invocation-receipt","ai-provider-credential"],
+      "corrected": "- #73 (ROUNDS-14-L02) is the command owner of `provider-invocation-receipt`, `ai-provider-credential` in DR-0002@1 (service blocked:OD-1); callers cannot write durable state around it."
+    },
+    {
+      "issue": 74,
+      "leaf": "ROUNDS-14-L03",
+      "label": "AI Trust Platform",
+      "kind": "owner",
+      "original": "- AI Trust Platform is the only command or contract owner for \"provider outcomes and reconcile late or duplicate responses\"; callers cannot write durable state around it.",
+      "rows": ["staged-provider-result"],
+      "corrected": "- #74 (ROUNDS-14-L03) is the command owner of `staged-provider-result` in DR-0002@1 (service blocked:OD-1); callers cannot write durable state around it."
+    },
+    {
+      "issue": 76,
+      "leaf": "ROUNDS-14-L05",
+      "label": "AI Trust Platform",
+      "kind": "none",
+      "original": "- AI Trust Platform is the only command or contract owner for \"deletion, purge, backup expiry, and restore suppression\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #76 (ROUNDS-14-L05) owns no row in DR-0002@1: it owns the purge registry that every row's purge column names. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 77,
+      "leaf": "ROUNDS-15-L01",
+      "label": "Materials",
+      "kind": "owner",
+      "original": "- Materials is the only command or contract owner for \"Artifact Edition, selection, override, and revision contracts\"; callers cannot write durable state around it.",
+      "rows": ["artifact-edition"],
+      "corrected": "- #77 (ROUNDS-15-L01) is the command owner of `artifact-edition` in DR-0002@1 (Artifact Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 78,
+      "leaf": "ROUNDS-15-L02",
+      "label": "Materials",
+      "kind": "none",
+      "original": "- Materials is the only command or contract owner for \"projection and materialization engine\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #78 (ROUNDS-15-L02) owns no row in DR-0002@1: the materialization engine derives rendered material from `artifact-edition` and writes nothing. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 79,
+      "leaf": "ROUNDS-15-L03",
+      "label": "Materials",
+      "kind": "owner",
+      "original": "- Materials is the only command or contract owner for \"freeze, immutable revision, and submission semantics\"; callers cannot write durable state around it.",
+      "rows": ["artifact-revision"],
+      "corrected": "- #79 (ROUNDS-15-L03) is the command owner of `artifact-revision` in DR-0002@1 (Artifact Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 82,
+      "leaf": "ROUNDS-16-L02",
+      "label": "Resume Studio",
+      "kind": "adds",
+      "original": "- Resume Studio is the only command or contract owner for \"canonical fact selection, ordering, and explicit overrides\"; callers cannot write durable state around it.",
+      "rows": ["artifact-edition"],
+      "corrected": "- #82 (ROUNDS-16-L02) adds fact selection, ordering, and explicit overrides on `artifact-edition` in DR-0002@1 (Artifact Service), whose command owner is #77 (ROUNDS-15-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 85,
+      "leaf": "ROUNDS-17-L01",
+      "label": "Opportunity Materials",
+      "kind": "adds",
+      "original": "- Opportunity Materials is the only command or contract owner for \"opportunity-linked Artifact Edition workflows\"; callers cannot write durable state around it.",
+      "rows": ["artifact-edition"],
+      "corrected": "- #85 (ROUNDS-17-L01) adds opportunity-linked edition workflows (C1) on `artifact-edition` in DR-0002@1 (Artifact Service), whose command owner is #77 (ROUNDS-15-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 86,
+      "leaf": "ROUNDS-17-L02",
+      "label": "Opportunity Materials",
+      "kind": "owner",
+      "original": "- Opportunity Materials is the only command or contract owner for \"ATS analysis as evidence-linked guidance\"; callers cannot write durable state around it.",
+      "rows": ["ats-analysis"],
+      "corrected": "- #86 (ROUNDS-17-L02) is the command owner of `ats-analysis` in DR-0002@1 (Artifact Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 87,
+      "leaf": "ROUNDS-17-L03",
+      "label": "Opportunity Materials",
+      "kind": "adds",
+      "original": "- Opportunity Materials is the only command or contract owner for \"cover-letter and tailoring proposals\"; callers cannot write durable state around it.",
+      "rows": ["artifact-edition"],
+      "corrected": "- #87 (ROUNDS-17-L03) adds cover-letter and tailoring proposals on `artifact-edition` in DR-0002@1 (Artifact Service), whose command owner is #77 (ROUNDS-15-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 88,
+      "leaf": "ROUNDS-17-L04",
+      "label": "Opportunity Materials",
+      "kind": "adds",
+      "original": "- Opportunity Materials is the only command or contract owner for \"immutable submitted-material history\"; callers cannot write durable state around it.",
+      "rows": ["career-activity-schedule"],
+      "corrected": "- #88 (ROUNDS-17-L04) adds the material-submission kind and its commands on `career-activity-schedule` in DR-0002@1 (Interview Process Service), whose command owner is #107 (ROUNDS-22-L02); callers cannot write durable state around it."
+    },
+    {
+      "issue": 89,
+      "leaf": "ROUNDS-18-L01",
+      "label": "Portability and Sharing",
+      "kind": "none",
+      "original": "- Portability and Sharing is the only command or contract owner for \"deterministic artifact export contracts\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #89 (ROUNDS-18-L01) owns no row in DR-0002@1: export records belong to `artifact-revision` (#79). It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 90,
+      "leaf": "ROUNDS-18-L02",
+      "label": "Portability and Sharing",
+      "kind": "none",
+      "original": "- Portability and Sharing is the only command or contract owner for \"standards-compatible resume import and export\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #90 (ROUNDS-18-L02) owns no row in DR-0002@1: resume import and export write through `artifact-edition` and the Career Profile rows. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 91,
+      "leaf": "ROUNDS-18-L03",
+      "label": "Portability and Sharing",
+      "kind": "owner",
+      "original": "- Portability and Sharing is the only command or contract owner for \"complete versioned account export\"; callers cannot write durable state around it.",
+      "rows": ["account-export"],
+      "corrected": "- #91 (ROUNDS-18-L03) is the command owner of `account-export` in DR-0002@1 (Account Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 93,
+      "leaf": "ROUNDS-18-L05",
+      "label": "Portability and Sharing",
+      "kind": "owner",
+      "original": "- Portability and Sharing is the only command or contract owner for \"revocable public artifact sharing\"; callers cannot write durable state around it.",
+      "rows": ["share-projection","share-view"],
+      "corrected": "- #93 (ROUNDS-18-L05) is the command owner of `share-projection`, `share-view` in DR-0002@1 (Public Share Capability Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 94,
+      "leaf": "ROUNDS-18-L06",
+      "label": "Portability and Sharing",
+      "kind": "adds",
+      "original": "- Portability and Sharing is the only command or contract owner for \"immutable submitted and shared revisions\"; callers cannot write durable state around it.",
+      "rows": ["artifact-revision"],
+      "corrected": "- #94 (ROUNDS-18-L06) adds the submitted and shared revision guarantees on `artifact-revision` in DR-0002@1 (Artifact Service), whose command owner is #79 (ROUNDS-15-L03); callers cannot write durable state around it."
+    },
+    {
+      "issue": 95,
+      "leaf": "ROUNDS-19-L01",
+      "label": "Opportunity and Pursuit",
+      "kind": "owner",
+      "original": "- Opportunity and Pursuit is the only command or contract owner for \"Opportunity aggregate and source refresh\"; callers cannot write durable state around it.",
+      "rows": ["opportunity"],
+      "corrected": "- #95 (ROUNDS-19-L01) is the command owner of `opportunity` in DR-0002@1 (Opportunity and Pursuit Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 96,
+      "leaf": "ROUNDS-19-L02",
+      "label": "Opportunity and Pursuit",
+      "kind": "owner",
+      "original": "- Opportunity and Pursuit is the only command or contract owner for \"Pursuit lifecycle and transitions\"; callers cannot write durable state around it.",
+      "rows": ["pursuit"],
+      "corrected": "- #96 (ROUNDS-19-L02) is the command owner of `pursuit` in DR-0002@1 (Opportunity and Pursuit Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 97,
+      "leaf": "ROUNDS-19-L03",
+      "label": "Opportunity and Pursuit",
+      "kind": "none",
+      "original": "- Opportunity and Pursuit is the only command or contract owner for \"pursuit context without duplicate ownership\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #97 (ROUNDS-19-L03) owns no row in DR-0002@1: pursuit context links records through `typed-relation`; it owns no copy of them. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 100,
+      "leaf": "ROUNDS-20-L02",
+      "label": "Pursuit Lifecycle",
+      "kind": "adds",
+      "original": "- Pursuit Lifecycle is the only command or contract owner for \"transition command service and history\"; callers cannot write durable state around it.",
+      "rows": ["pursuit"],
+      "corrected": "- #100 (ROUNDS-20-L02) adds the transition command service and history on `pursuit` in DR-0002@1 (Opportunity and Pursuit Service), whose command owner is #96 (ROUNDS-19-L02); callers cannot write durable state around it."
+    },
+    {
+      "issue": 106,
+      "leaf": "ROUNDS-22-L01",
+      "label": "Interview Process",
+      "kind": "owner",
+      "original": "- Interview Process is the only command or contract owner for \"Interview Process, stage, and round contracts\"; callers cannot write durable state around it.",
+      "rows": ["interview-process"],
+      "corrected": "- #106 (ROUNDS-22-L01) is the command owner of `interview-process` in DR-0002@1 (Interview Process Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 107,
+      "leaf": "ROUNDS-22-L02",
+      "label": "Interview Process",
+      "kind": "owner",
+      "original": "- Interview Process is the only command or contract owner for \"Career Activity as the scheduling authority\"; callers cannot write durable state around it.",
+      "rows": ["career-activity-schedule","career-activity-outcome","career-activity-kinds"],
+      "corrected": "- #107 (ROUNDS-22-L02) is the command owner of `career-activity-schedule`, `career-activity-outcome`, `career-activity-kinds` in DR-0002@1 (Interview Process Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 108,
+      "leaf": "ROUNDS-22-L03",
+      "label": "Interview Process",
+      "kind": "adds",
+      "original": "- Interview Process is the only command or contract owner for \"preparation context per interview round\"; callers cannot write durable state around it.",
+      "rows": ["interview-process"],
+      "corrected": "- #108 (ROUNDS-22-L03) adds the default preparation context per round (spec 512) on `interview-process` in DR-0002@1 (Interview Process Service), whose command owner is #106 (ROUNDS-22-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 111,
+      "leaf": "ROUNDS-23-L01",
+      "label": "Relationships and Networking",
+      "kind": "owner",
+      "original": "- Relationships and Networking is the only command or contract owner for \"contextual person roles and relationship history\"; callers cannot write durable state around it.",
+      "rows": ["person-role"],
+      "corrected": "- #111 (ROUNDS-23-L01) is the command owner of `person-role` in DR-0002@1 (Identity Directory for Organization and Person); callers cannot write durable state around it."
+    },
+    {
+      "issue": 112,
+      "leaf": "ROUNDS-23-L02",
+      "label": "Relationships and Networking",
+      "kind": "adds",
+      "original": "- Relationships and Networking is the only command or contract owner for \"conversations and contact activities\"; callers cannot write durable state around it.",
+      "rows": ["career-activity-schedule"],
+      "corrected": "- #112 (ROUNDS-23-L02) adds the conversation kind and its commands (OD-2) on `career-activity-schedule` in DR-0002@1 (Interview Process Service), whose command owner is #107 (ROUNDS-22-L02); callers cannot write durable state around it."
+    },
+    {
+      "issue": 113,
+      "leaf": "ROUNDS-23-L03",
+      "label": "Relationships and Networking",
+      "kind": "owner",
+      "original": "- Relationships and Networking is the only command or contract owner for \"referral and follow-up workflows\"; callers cannot write durable state around it.",
+      "rows": ["referral"],
+      "corrected": "- #113 (ROUNDS-23-L03) is the command owner of `referral` in DR-0002@1 (Opportunity and Pursuit Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 115,
+      "leaf": "ROUNDS-24-L01",
+      "label": "Offers",
+      "kind": "owner",
+      "original": "- Offers is the only command or contract owner for \"Offer and immutable Offer Revision contracts\"; callers cannot write durable state around it.",
+      "rows": ["offer"],
+      "corrected": "- #115 (ROUNDS-24-L01) is the command owner of `offer` in DR-0002@1 (Opportunity and Pursuit Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 116,
+      "leaf": "ROUNDS-24-L02",
+      "label": "Offers",
+      "kind": "adds",
+      "original": "- Offers is the only command or contract owner for \"negotiation and deadline workflows\"; callers cannot write durable state around it.",
+      "rows": ["offer"],
+      "corrected": "- #116 (ROUNDS-24-L02) adds negotiation steps and deadline state on `offer` in DR-0002@1 (Opportunity and Pursuit Service), whose command owner is #115 (ROUNDS-24-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 118,
+      "leaf": "ROUNDS-24-L04",
+      "label": "Offers",
+      "kind": "adds",
+      "original": "- Offers is the only command or contract owner for \"offer decisions and pursuit effects\"; callers cannot write durable state around it.",
+      "rows": ["offer"],
+      "corrected": "- #118 (ROUNDS-24-L04) adds offer decision commands on `offer` in DR-0002@1 (Opportunity and Pursuit Service), whose command owner is #115 (ROUNDS-24-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 119,
+      "leaf": "ROUNDS-25-L01",
+      "label": "Campaigns",
+      "kind": "owner",
+      "original": "- Campaigns is the only command or contract owner for \"campaign goals, time boxes, and membership lenses\"; callers cannot write durable state around it.",
+      "rows": ["campaign-definition","campaign-membership"],
+      "corrected": "- #119 (ROUNDS-25-L01) is the command owner of `campaign-definition`, `campaign-membership` in DR-0002@1 (Opportunity and Pursuit Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 120,
+      "leaf": "ROUNDS-25-L02",
+      "label": "Campaigns",
+      "kind": "none",
+      "original": "- Campaigns is the only command or contract owner for \"consistent campaign planning and reporting\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #120 (ROUNDS-25-L02) owns no row in DR-0002@1: it owns the campaign reporting projection over `campaign-definition` and `campaign-membership`. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 122,
+      "leaf": "ROUNDS-26-L01",
+      "label": "Actions",
+      "kind": "owner",
+      "original": "- Actions is the only command or contract owner for \"native Action aggregate and lifecycle\"; callers cannot write durable state around it.",
+      "rows": ["action"],
+      "corrected": "- #122 (ROUNDS-26-L01) is the command owner of `action` in DR-0002@1 (Action Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 123,
+      "leaf": "ROUNDS-26-L02",
+      "label": "Actions",
+      "kind": "owner",
+      "original": "- Actions is the only command or contract owner for \"Actions to canonical context and portable references\"; callers cannot write durable state around it.",
+      "rows": ["action-mention"],
+      "corrected": "- #123 (ROUNDS-26-L02) is the command owner of `action-mention` in DR-0002@1 (Action Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 124,
+      "leaf": "ROUNDS-26-L03",
+      "label": "Actions",
+      "kind": "adds",
+      "original": "- Actions is the only command or contract owner for \"recurrence, suggestions, and completion effects\"; callers cannot write durable state around it.",
+      "rows": ["action"],
+      "corrected": "- #124 (ROUNDS-26-L03) adds recurrence, suggestions, and completion effects on `action` in DR-0002@1 (Action Service), whose command owner is #122 (ROUNDS-26-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 128,
+      "leaf": "ROUNDS-27-L03",
+      "label": "Command Center",
+      "kind": "none",
+      "original": "- Command Center is the only command or contract owner for \"allowlisted command registry and preview\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #128 (ROUNDS-27-L03) owns no row in DR-0002@1: Command Center owns no commands; its registry dispatches to each row's owner. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 129,
+      "leaf": "ROUNDS-27-L04",
+      "label": "Command Center",
+      "kind": "none",
+      "original": "- Command Center is the only command or contract owner for \"optional natural-language command parsing safely\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #129 (ROUNDS-27-L04) owns no row in DR-0002@1: Command Center owns no commands; parsed commands go through #128 to each row's owner. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 130,
+      "leaf": "ROUNDS-28-L01",
+      "label": "Practice Platform and Software Engineering Pack",
+      "kind": "owner",
+      "original": "- Practice Platform and Software Engineering Pack is the only command or contract owner for \"shared Practice Item, Attempt, Progress, and Feedback contracts\"; callers cannot write durable state around it.",
+      "rows": ["practice-draft","practice-attempt","practice-progress"],
+      "corrected": "- #130 (ROUNDS-28-L01) is the command owner of `practice-draft`, `practice-attempt`, `practice-progress` in DR-0002@1 (Practice Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 131,
+      "leaf": "ROUNDS-28-L02",
+      "label": "Practice Platform and Software Engineering Pack",
+      "kind": "none",
+      "original": "- Practice Platform and Software Engineering Pack is the only command or contract owner for \"draft-first offline journal and reconciliation\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #131 (ROUNDS-28-L02) owns no row in DR-0002@1: the browser draft journal is the `draft-caches` row, which takes no commands. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 138,
+      "leaf": "ROUNDS-29-L01",
+      "label": "Preparation Guidance",
+      "kind": "owner",
+      "original": "- Preparation Guidance is the only command or contract owner for \"versioned readiness snapshot inputs and outputs\"; callers cannot write durable state around it.",
+      "rows": ["readiness"],
+      "corrected": "- #138 (ROUNDS-29-L01) is the command owner of `readiness` in DR-0002@1 (Read Model and Recommendation Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 139,
+      "leaf": "ROUNDS-29-L02",
+      "label": "Preparation Guidance",
+      "kind": "owner",
+      "original": "- Preparation Guidance is the only command or contract owner for \"explainable opportunity-to-evidence gap mapping\"; callers cannot write durable state around it.",
+      "rows": ["evidence-gap-map"],
+      "corrected": "- #139 (ROUNDS-29-L02) is the command owner of `evidence-gap-map` in DR-0002@1 (Read Model and Recommendation Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 140,
+      "leaf": "ROUNDS-29-L03",
+      "label": "Preparation Guidance",
+      "kind": "owner",
+      "original": "- Preparation Guidance is the only command or contract owner for \"editable preparation plans and native Actions\"; callers cannot write durable state around it.",
+      "rows": ["recommendation"],
+      "corrected": "- #140 (ROUNDS-29-L03) is the command owner of `recommendation` in DR-0002@1 (Read Model and Recommendation Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 141,
+      "leaf": "ROUNDS-29-L04",
+      "label": "Preparation Guidance",
+      "kind": "adds",
+      "original": "- Preparation Guidance is the only command or contract owner for \"plans after attempts, feedback, schedule, and source changes\"; callers cannot write durable state around it.",
+      "rows": ["recommendation"],
+      "corrected": "- #141 (ROUNDS-29-L04) adds replanning, plan diffs, and the plan change log on `recommendation` in DR-0002@1 (Read Model and Recommendation Service), whose command owner is #140 (ROUNDS-29-L03); callers cannot write durable state around it."
+    },
+    {
+      "issue": 142,
+      "leaf": "ROUNDS-30-L01",
+      "label": "Today",
+      "kind": "adds",
+      "original": "- Today is the only command or contract owner for \"attention candidates, priority policy, and explanation contract\"; callers cannot write durable state around it.",
+      "rows": ["today-read-model"],
+      "corrected": "- #142 (ROUNDS-30-L01) adds attention candidates and the priority policy on `today-read-model` in DR-0002@1 (Read Model and Recommendation Service), whose command owner is #143 (ROUNDS-30-L02); callers cannot write durable state around it."
+    },
+    {
+      "issue": 143,
+      "leaf": "ROUNDS-30-L02",
+      "label": "Today",
+      "kind": "owner",
+      "original": "- Today is the only command or contract owner for \"server-side Today read model\"; callers cannot write durable state around it.",
+      "rows": ["today-read-model"],
+      "corrected": "- #143 (ROUNDS-30-L02) is the command owner of `today-read-model` in DR-0002@1 (Read Model and Recommendation Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 144,
+      "leaf": "ROUNDS-30-L03",
+      "label": "Today",
+      "kind": "owner",
+      "original": "- Today is the only command or contract owner for \"accept, dismiss, snooze, and act workflows\"; callers cannot write durable state around it.",
+      "rows": ["today-item-state"],
+      "corrected": "- #144 (ROUNDS-30-L03) is the command owner of `today-item-state` in DR-0002@1 (Read Model and Recommendation Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 146,
+      "leaf": "ROUNDS-31-L01",
+      "label": "Read Platform",
+      "kind": "none",
+      "original": "- Read Platform is the only command or contract owner for \"account-scoped projection framework\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #146 (ROUNDS-31-L01) owns no row in DR-0002@1: it owns the projection framework that every read-model row registers with. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 147,
+      "leaf": "ROUNDS-31-L02",
+      "label": "Read Platform",
+      "kind": "owner",
+      "original": "- Read Platform is the only command or contract owner for \"Career Profile read model\"; callers cannot write durable state around it.",
+      "rows": ["career-profile-read-model"],
+      "corrected": "- #147 (ROUNDS-31-L02) is the command owner of `career-profile-read-model` in DR-0002@1 (Read Model and Recommendation Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 148,
+      "leaf": "ROUNDS-31-L03",
+      "label": "Read Platform",
+      "kind": "owner",
+      "original": "- Read Platform is the only command or contract owner for \"Pipeline read model\"; callers cannot write durable state around it.",
+      "rows": ["pipeline-read-model"],
+      "corrected": "- #148 (ROUNDS-31-L03) is the command owner of `pipeline-read-model` in DR-0002@1 (Read Model and Recommendation Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 149,
+      "leaf": "ROUNDS-31-L04",
+      "label": "Read Platform",
+      "kind": "owner",
+      "original": "- Read Platform is the only command or contract owner for \"Opportunity Workspace read model\"; callers cannot write durable state around it.",
+      "rows": ["opportunity-workspace-read-model"],
+      "corrected": "- #149 (ROUNDS-31-L04) is the command owner of `opportunity-workspace-read-model` in DR-0002@1 (Read Model and Recommendation Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 150,
+      "leaf": "ROUNDS-31-L05",
+      "label": "Read Platform",
+      "kind": "owner",
+      "original": "- Read Platform is the only command or contract owner for \"Materials read model\"; callers cannot write durable state around it.",
+      "rows": ["material-use-read-model"],
+      "corrected": "- #150 (ROUNDS-31-L05) is the command owner of `material-use-read-model` in DR-0002@1 (Read Model and Recommendation Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 151,
+      "leaf": "ROUNDS-31-L06",
+      "label": "Read Platform",
+      "kind": "adds",
+      "original": "- Read Platform is the only command or contract owner for \"Practice and readiness read model\"; callers cannot write durable state around it.",
+      "rows": ["readiness"],
+      "corrected": "- #151 (ROUNDS-31-L06) adds the readiness projector on `readiness` in DR-0002@1 (Read Model and Recommendation Service), whose command owner is #138 (ROUNDS-29-L01); callers cannot write durable state around it."
+    },
+    {
+      "issue": 152,
+      "leaf": "ROUNDS-31-L07",
+      "label": "Read Platform",
+      "kind": "owner",
+      "original": "- Read Platform is the only command or contract owner for \"Today read model\"; callers cannot write durable state around it.",
+      "rows": ["preparation-plan-read-model"],
+      "corrected": "- #152 (ROUNDS-31-L07) is the command owner of `preparation-plan-read-model` in DR-0002@1 (Read Model and Recommendation Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 153,
+      "leaf": "ROUNDS-31-L08",
+      "label": "Read Platform",
+      "kind": "owner",
+      "original": "- Read Platform is the only command or contract owner for \"universal search projections\"; callers cannot write durable state around it.",
+      "rows": ["search-index"],
+      "corrected": "- #153 (ROUNDS-31-L08) is the command owner of `search-index` in DR-0002@1 (Search Service); callers cannot write durable state around it."
+    },
+    {
+      "issue": 157,
+      "leaf": "ROUNDS-32-L03",
+      "label": "Transformation Migration",
+      "kind": "none",
+      "original": "- Transformation Migration is the only command or contract owner for \"encrypted backup, restore, and rollback rehearsal\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #157 (ROUNDS-32-L03) owns no row in DR-0002@1: Transformation Migration owns no commands; backup and restore copy every row. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 170,
+      "leaf": "ROUNDS-34-L01",
+      "label": "Quality and Release Engineering",
+      "kind": "none",
+      "original": "- Quality and Release Engineering is the only command or contract owner for \"early security and architecture contract harnesses\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #170 (ROUNDS-34-L01) owns no row in DR-0002@1: Quality and Release Engineering owns no commands; its harnesses check every row. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 171,
+      "leaf": "ROUNDS-34-L02",
+      "label": "Quality and Release Engineering",
+      "kind": "none",
+      "original": "- Quality and Release Engineering is the only command or contract owner for \"representative migration and recovery fixtures\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #171 (ROUNDS-34-L02) owns no row in DR-0002@1: Quality and Release Engineering owns no commands; its fixtures exercise every row. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 172,
+      "leaf": "ROUNDS-34-L03",
+      "label": "Quality and Release Engineering",
+      "kind": "none",
+      "original": "- Quality and Release Engineering is the only command or contract owner for \"authorization and privacy verification matrix\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #172 (ROUNDS-34-L03) owns no row in DR-0002@1: Quality and Release Engineering owns no commands; it registers each row's authorization in the authz column. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 173,
+      "leaf": "ROUNDS-34-L04",
+      "label": "Quality and Release Engineering",
+      "kind": "none",
+      "original": "- Quality and Release Engineering is the only command or contract owner for \"browser, accessibility, responsive, and visual infrastructure\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #173 (ROUNDS-34-L04) owns no row in DR-0002@1: Quality and Release Engineering owns no commands. It writes only through the commands of the rows it uses."
+    },
+    {
+      "issue": 176,
+      "leaf": "ROUNDS-34-L07",
+      "label": "Quality and Release Engineering",
+      "kind": "none",
+      "original": "- Quality and Release Engineering is the only command or contract owner for \"final release runner and fresh-self-host proof\"; callers cannot write durable state around it.",
+      "rows": [],
+      "corrected": "- #176 (ROUNDS-34-L07) owns no row in DR-0002@1: Quality and Release Engineering owns no commands. It writes only through the commands of the rows it uses."
+    }
+  ]
+}

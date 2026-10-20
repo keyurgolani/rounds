@@ -1,0 +1,314 @@
+{
+  "$schema": "./disposition-ledger.schema.json",
+  "registry": "rounds-disposition-ledger",
+  "description": "The 34 intent and current-feature ledger rows (spec 341-374), pinned from rounds-review src/data/dispositionLedger.ts. A matrix row's disposition names one of these IDs, or new-platform-concept tied to INT-02 or INT-03.",
+  "pin": {"source":"rounds-review src/data/dispositionLedger.ts","sha256":"e4ebe160ed175fa090bf83e20afe91a7e67d2e28a416fa9c783b46f62282f75c","spec":"spec 341-374","rows":34},
+  "rows": [
+    {
+      "id": "INT-01",
+      "intent": "One cohesive end-user platform",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-01","ROUNDS-21","ROUNDS-30","ROUNDS-33"],
+      "proof": "End-to-end scenario and guided review",
+      "spec": "spec 341"
+    },
+    {
+      "id": "INT-02",
+      "intent": "Deduplicate concepts represented on multiple surfaces",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-01","ROUNDS-02","ROUNDS-03","ROUNDS-04","ROUNDS-05","ROUNDS-06","ROUNDS-15","ROUNDS-19"],
+      "proof": "Follow-the-fact comparison",
+      "spec": "spec 342"
+    },
+    {
+      "id": "INT-03",
+      "intent": "Native reusable building blocks",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-02","ROUNDS-06","ROUNDS-07","ROUNDS-08"],
+      "proof": "Contract and reuse demonstrations",
+      "spec": "spec 343"
+    },
+    {
+      "id": "INT-04",
+      "intent": "Unified inputs for shared details",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-08","ROUNDS-09","ROUNDS-10","ROUNDS-11","ROUNDS-12","ROUNDS-13","ROUNDS-27"],
+      "proof": "Quick, full, inline, and import parity",
+      "spec": "spec 344"
+    },
+    {
+      "id": "INT-05",
+      "intent": "AI-parsed and imported profile creation",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-09","ROUNDS-10","ROUNDS-11","ROUNDS-12","ROUNDS-13","ROUNDS-14"],
+      "proof": "Bootstrap, grounding, conflict, and failure",
+      "spec": "spec 345"
+    },
+    {
+      "id": "INT-06",
+      "intent": "Future profession extensibility",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-07"],
+      "proof": "Software Engineering plus a non-shipping fixture pack",
+      "spec": "spec 346"
+    },
+    {
+      "id": "CUR-01",
+      "intent": "Account identity, authentication, signup, OAuth, and logout",
+      "class": "preserve",
+      "disposition": "Preserve and harden",
+      "proposals": ["ROUNDS-00B","ROUNDS-03","ROUNDS-34"],
+      "proof": "Auth, session, and account-isolation tests",
+      "spec": "spec 347"
+    },
+    {
+      "id": "CUR-02",
+      "intent": "Profile name, target, and bio",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-03","ROUNDS-05"],
+      "proof": "Migration and authority comparison",
+      "spec": "spec 348"
+    },
+    {
+      "id": "CUR-03",
+      "intent": "Appearance settings",
+      "class": "preserve",
+      "disposition": "Preserve and consolidate",
+      "proposals": ["ROUNDS-08","ROUNDS-33"],
+      "proof": "Wide and narrow theme fixtures",
+      "spec": "spec 349"
+    },
+    {
+      "id": "CUR-04",
+      "intent": "AI providers, models, credentials, and role settings",
+      "class": "preserve",
+      "disposition": "Preserve and harden",
+      "proposals": ["ROUNDS-00B","ROUNDS-14","ROUNDS-34"],
+      "proof": "Secret, provider, retention, and deletion tests",
+      "spec": "spec 350"
+    },
+    {
+      "id": "CUR-05",
+      "intent": "Data export, import, delete, and custody controls",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-00B","ROUNDS-18","ROUNDS-32","ROUNDS-34"],
+      "proof": "Complete-account round trip and purge",
+      "spec": "spec 351"
+    },
+    {
+      "id": "CUR-06",
+      "intent": "System Design guide, diagrams, drafts, status, and timers",
+      "class": "preserve",
+      "disposition": "Preserve and integrate",
+      "proposals": ["ROUNDS-07","ROUNDS-28","ROUNDS-29"],
+      "proof": "Durable-artifact and recovery matrix",
+      "spec": "spec 352"
+    },
+    {
+      "id": "CUR-07",
+      "intent": "Coding practice, editor, drafts, run, and evaluation",
+      "class": "preserve",
+      "disposition": "Preserve and secure",
+      "proposals": ["ROUNDS-00A","ROUNDS-07","ROUNDS-28","ROUNDS-29"],
+      "proof": "Sandbox, draft, result, and recovery tests",
+      "spec": "spec 353"
+    },
+    {
+      "id": "CUR-08",
+      "intent": "AI-assisted coding projects, chat, grade, and attempts",
+      "class": "preserve",
+      "disposition": "Preserve and secure",
+      "proposals": ["ROUNDS-00A","ROUNDS-07","ROUNDS-14","ROUNDS-28","ROUNDS-29"],
+      "proof": "Auth, sandbox, attempt migration, and model failure",
+      "spec": "spec 354"
+    },
+    {
+      "id": "CUR-09",
+      "intent": "Take-home prompts, files, harness, rubric, and attempts",
+      "class": "preserve",
+      "disposition": "Preserve and secure",
+      "proposals": ["ROUNDS-00A","ROUNDS-07","ROUNDS-14","ROUNDS-28","ROUNDS-29"],
+      "proof": "Server-owned harness, sandbox, and recovery",
+      "spec": "spec 355"
+    },
+    {
+      "id": "CUR-10",
+      "intent": "Behavioral questions, stories, status, and timers",
+      "class": "preserve",
+      "disposition": "Preserve and integrate",
+      "proposals": ["ROUNDS-05","ROUNDS-06","ROUNDS-07","ROUNDS-28","ROUNDS-29"],
+      "proof": "Story and evidence relation migration",
+      "spec": "spec 356"
+    },
+    {
+      "id": "CUR-11",
+      "intent": "Experience timeline, jobs, projects, anecdotes, bullets, and connections",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-05","ROUNDS-06","ROUNDS-13","ROUNDS-32"],
+      "proof": "Field-level disposition and relationship migration",
+      "spec": "spec 357"
+    },
+    {
+      "id": "CUR-12",
+      "intent": "Experience file and paste AI import",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-09","ROUNDS-10","ROUNDS-11","ROUNDS-12","ROUNDS-13"],
+      "proof": "Source retention, dedupe, and atomic commit",
+      "spec": "spec 358"
+    },
+    {
+      "id": "CUR-13",
+      "intent": "Applications list, stages, details, notes, and job description",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-19","ROUNDS-20","ROUNDS-21"],
+      "proof": "Opportunity and Pursuit mapping",
+      "spec": "spec 359"
+    },
+    {
+      "id": "CUR-14",
+      "intent": "Interview rounds, grouping, schedule, notes, and outcomes",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-22","ROUNDS-23"],
+      "proof": "Process, timezone, reschedule, and debrief tests",
+      "spec": "spec 360"
+    },
+    {
+      "id": "CUR-15",
+      "intent": "Offer terms, versions, deadlines, comparison, and decision",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-20","ROUNDS-24"],
+      "proof": "Revision, privacy, and transition tests",
+      "spec": "spec 361"
+    },
+    {
+      "id": "CUR-16",
+      "intent": "Campaign targets, dates, status, colors, and reporting",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-25"],
+      "proof": "Goal and lens lifecycle",
+      "spec": "spec 362"
+    },
+    {
+      "id": "CUR-17",
+      "intent": "Todos, priorities, due dates, and mentions",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-06","ROUNDS-26"],
+      "proof": "Native relations and completion effects",
+      "spec": "spec 363"
+    },
+    {
+      "id": "CUR-18",
+      "intent": "Resume templates, editors, tailoring, history, export, and sharing",
+      "class": "transform",
+      "disposition": "Transform without loss",
+      "proposals": ["ROUNDS-15","ROUNDS-16","ROUNDS-17","ROUNDS-18"],
+      "proof": "Reproducible artifact and migration matrix",
+      "spec": "spec 364"
+    },
+    {
+      "id": "CUR-19",
+      "intent": "Cover-letter generation",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-14","ROUNDS-17"],
+      "proof": "Grounding and unsupported-claim gate",
+      "spec": "spec 365"
+    },
+    {
+      "id": "CUR-20",
+      "intent": "Dashboard readiness, pipeline, interviews, coverage, and todos",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-29","ROUNDS-30","ROUNDS-31"],
+      "proof": "Prioritization, health, empty, and degraded tests",
+      "spec": "spec 366"
+    },
+    {
+      "id": "CUR-21",
+      "intent": "Command Center launcher and quick actions",
+      "class": "transform",
+      "disposition": "Transform",
+      "proposals": ["ROUNDS-08","ROUNDS-27"],
+      "proof": "Shared command and keyboard tests",
+      "spec": "spec 367"
+    },
+    {
+      "id": "CUR-22",
+      "intent": "Practice progress, drafts, timers, attempts, and local state",
+      "class": "transform",
+      "disposition": "Transform without loss",
+      "proposals": ["ROUNDS-28","ROUNDS-32"],
+      "proof": "Machine-readable local and server disposition",
+      "spec": "spec 368"
+    },
+    {
+      "id": "CUR-23",
+      "intent": "Public resume links, passwords, views, expiry, and revocation",
+      "class": "transform",
+      "disposition": "Transform and harden",
+      "proposals": ["ROUNDS-00B","ROUNDS-18"],
+      "proof": "Two-account IDOR and immutable-revision tests",
+      "spec": "spec 369"
+    },
+    {
+      "id": "CUR-24",
+      "intent": "Public demo, limits, and reset behavior",
+      "class": "preserve",
+      "disposition": "Preserve and harden",
+      "proposals": ["ROUNDS-00A","ROUNDS-00B","ROUNDS-34"],
+      "proof": "Server-enforced limits and reset isolation",
+      "spec": "spec 370"
+    },
+    {
+      "id": "CUR-25",
+      "intent": "PDF rendering and exported bytes",
+      "class": "transform",
+      "disposition": "Preserve only after containment and make reproducible",
+      "proposals": ["ROUNDS-00A","ROUNDS-15","ROUNDS-18","ROUNDS-34"],
+      "proof": "Auth, isolation, script denial, and deterministic bytes",
+      "spec": "spec 371"
+    },
+    {
+      "id": "CUR-26",
+      "intent": "Search, sort, filters, saved context, and infinite lists",
+      "class": "preserve",
+      "disposition": "Preserve and unify",
+      "proposals": ["ROUNDS-27","ROUNDS-31","ROUNDS-33"],
+      "proof": "URL state, scope, and accessibility",
+      "spec": "spec 372"
+    },
+    {
+      "id": "CUR-27",
+      "intent": "Self-host deployment, backup, restore, and upgrades",
+      "class": "transform",
+      "disposition": "Transform and prove",
+      "proposals": ["ROUNDS-00A","ROUNDS-00B","ROUNDS-32","ROUNDS-34"],
+      "proof": "Fresh install, backup, restore, and upgrade gates",
+      "spec": "spec 373"
+    },
+    {
+      "id": "CUR-28",
+      "intent": "Candidate-code execution and grading",
+      "class": "transform",
+      "disposition": "Preserve only after containment",
+      "proposals": ["ROUNDS-00A","ROUNDS-28","ROUNDS-34"],
+      "proof": "Escape, exfiltration, DoS, and cleanup tests",
+      "spec": "spec 374"
+    }
+  ]
+}

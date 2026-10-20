@@ -52,25 +52,35 @@ function readQuoted(src, i) {
 }
 
 function readTemplate(src, i) {
-  // src[i] is the opening backtick. Returns { value, end, hasExpressions }.
+  // src[i] is the opening backtick. Returns { value, end, hasExpressions,
+  // parts }, where parts alternates literal text and `${...}` source.
   let j = i + 1;
   let value = '';
+  let chunk = '';
+  const parts = [];
   let hasExpressions = false;
   while (j < src.length && src[j] !== '`') {
     if (src[j] === '\\' && j + 1 < src.length) {
       value += src[j + 1];
+      chunk += src[j + 1];
       j += 2;
       continue;
     }
     if (src[j] === '$' && src[j + 1] === '{') {
       hasExpressions = true;
-      j = skipBalancedCode(src, j + 1);
+      if (chunk) parts.push({ text: chunk });
+      chunk = '';
+      const close = skipBalancedCode(src, j + 1);
+      parts.push({ expr: src.slice(j + 2, close - 1) });
+      j = close;
       continue;
     }
     value += src[j];
+    chunk += src[j];
     j++;
   }
-  return { value, end: Math.min(j + 1, src.length), hasExpressions };
+  if (chunk) parts.push({ text: chunk });
+  return { value, end: Math.min(j + 1, src.length), hasExpressions, parts };
 }
 
 function readRegex(src, i) {
@@ -161,8 +171,8 @@ export function tokenize(src) {
       continue;
     }
     if (ch === '`') {
-      const { value, end, hasExpressions } = readTemplate(src, i);
-      push({ type: 'template', value, hasExpressions, start: i, end });
+      const { value, end, hasExpressions, parts } = readTemplate(src, i);
+      push({ type: 'template', value, hasExpressions, parts, start: i, end });
       i = end;
       continue;
     }

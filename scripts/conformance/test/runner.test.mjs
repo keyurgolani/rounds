@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { parseArgs, runConformance } from '../run.mjs';
-import { REPO_ROOT, cleanup, codes, editText, fixture, tempDir } from './helpers.mjs';
+import { REPO_ROOT, cleanup, codes, editJson, editText, fixture, tempDir } from './helpers.mjs';
 
 after(cleanup);
 
@@ -13,7 +13,7 @@ const allFindings = (results) => results.flatMap((r) => r.findings);
 describe('runner', () => {
   it('runs every rule clean on the repository with no drift', async () => {
     const results = await runConformance({ ...parseArgs([]), root: REPO_ROOT, base: 'none' });
-    assert.deepEqual(results.map((r) => r.id).sort(), ['decision-records', 'vocabulary']);
+    assert.deepEqual(results.map((r) => r.id).sort(), ['authority', 'decision-records', 'vocabulary']);
     assert.deepEqual(allFindings(results), []);
     for (const r of results) assert.deepEqual(r.written, []);
   });
@@ -30,13 +30,47 @@ describe('runner', () => {
 
   it('fails on drift in a generated file and --write repairs it', async () => {
     const dir = fixture((d) => editText(d, 'docs/vocabulary.md', (s) => `${s}\nhand edit\n`));
-    const drift = await runConformance({ ...parseArgs([]), root: dir, base: 'none' });
+    const drift = await runConformance({ ...parseArgs([]), root: dir, base: 'none', treeRoot: REPO_ROOT });
     assert.deepEqual(codes(allFindings(drift)), ['CONFORMANCE_DRIFT']);
     fs.rmSync(path.join(dir, 'frontend/src/vocabulary/labels.ts'));
-    const written = await runConformance({ ...parseArgs(['--write']), root: dir, base: 'none' });
+    const written = await runConformance({ ...parseArgs(['--write']), root: dir, base: 'none', treeRoot: REPO_ROOT });
     assert.deepEqual(written.find((r) => r.id === 'vocabulary').written.sort(), ['docs/vocabulary.md', 'frontend/src/vocabulary/labels.ts']);
-    const clean = await runConformance({ ...parseArgs([]), root: dir, base: 'none' });
+    const clean = await runConformance({ ...parseArgs([]), root: dir, base: 'none', treeRoot: REPO_ROOT });
     assert.deepEqual(allFindings(clean), []);
+  });
+
+  it('regenerates docs/authority.md and baseline-stores.json, keeping each store\'s rows and note', async () => {
+    const STORES = 'contracts/authority/baseline-stores.json';
+    let key = -1;
+    const dir = fixture((d) => {
+      editText(d, 'docs/authority.md', (s) => `${s}\nhand edit\n`);
+      editJson(d, STORES, (b) => {
+        key = b.stores.findIndex((s) => s.kind === 'browser-key' && s.writes.length);
+        b.stores[key].writes = [];
+        b.stores[0].note = 'Kept across regeneration.';
+      });
+    });
+    const opts = { root: dir, base: 'none', treeRoot: REPO_ROOT, rules: ['authority'] };
+    const drift = await runConformance({ ...parseArgs([]), ...opts });
+    assert.deepEqual(drift[0].findings.map((f) => `${f.code} ${f.path}`).sort(), [`CONFORMANCE_DRIFT ${STORES}`, 'CONFORMANCE_DRIFT docs/authority.md']);
+    const written = await runConformance({ ...parseArgs(['--write']), ...opts });
+    assert.deepEqual(written[0].written.sort(), [STORES, 'docs/authority.md']);
+    const after = JSON.parse(fs.readFileSync(path.join(dir, STORES), 'utf8'));
+    const repo = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, STORES), 'utf8'));
+    assert.deepEqual(after.stores[key].writes, repo.stores[key].writes);
+    assert.equal(after.stores[0].note, 'Kept across regeneration.');
+    assert.deepEqual(after.stores.map((s) => s.rows), repo.stores.map((s) => s.rows));
+    assert.deepEqual(allFindings(await runConformance({ ...parseArgs([]), ...opts })), []);
+  });
+
+  it('prints the matrix revision, blocked rows with their decisions, and pending counts by leaf', async () => {
+    const results = await runConformance({ ...parseArgs(['--rule', 'authority']), root: REPO_ROOT, base: 'none' });
+    const summary = results[0].summary.join('\n');
+    assert.match(summary, /matrix revision 1 \(DR-0002@1 /);
+    assert.match(summary, /blocked rows: 6 \(OD-1: ai-provider-credential, .*; OD-5: login-streak\)/);
+    assert.match(summary, /pending cells by leaf \(\d+ cells, \d+ leaves\): ROUNDS-02-L01 84, /);
+    assert.match(summary, /40 collections and 82 browser key families at 62d4eae/);
+    assert.equal(parseArgs(['--review', 'some/dir']).review, path.resolve('some/dir'));
   });
 
   it('rejects a rule that breaks the interface or names an unknown owning leaf', async () => {
@@ -60,7 +94,7 @@ describe('runner', () => {
     }
     assert.ok(failed, 'the run fails');
     assert.equal(failed.status, 2);
-    assert.match(failed.stderr, /unknown rule vocabulry; rules are decision-records, vocabulary/);
+    assert.match(failed.stderr, /unknown rule vocabulry; rules are authority, decision-records, vocabulary/);
   });
 
   it('compares with the branch a pull request targets, and runs on pushes to next', () => {
@@ -77,7 +111,7 @@ describe('runner', () => {
   it('exits 1 with path:line findings and 0 when clean', () => {
     const script = path.join(REPO_ROOT, 'scripts/conformance/run.mjs');
     const ok = execFileSync(process.execPath, [script, '--base', 'none'], { cwd: REPO_ROOT, encoding: 'utf8', env: { ...process.env, GITHUB_ACTIONS: '' } });
-    assert.match(ok, /conformance: 2 rule\(s\), 0 finding\(s\)/);
+    assert.match(ok, /conformance: 3 rule\(s\), 0 finding\(s\)/);
     const dir = fixture((d) => editText(d, 'README.md', (s) => s.replace(/^Rounds is a self-hostable career command center.*$/m, 'Rounds is a tool.')));
     let failed = null;
     try {

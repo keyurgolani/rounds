@@ -84,18 +84,121 @@ function gitShow(root, ref, rel) {
   }
 }
 
+// A read-only view of the repository at a git revision: files() lists its
+// paths and read(rel) returns content (null when absent). One `git ls-tree`
+// and one `git cat-file --batch` per prefetch keep it to a few processes.
+// A commit never changes, so its view is shared by every context in the
+// process, and a ref that is a commit hash resolves once.
+const GIT_TREES = new Map();
+const COMMIT_HASH = /^[0-9a-f]{7,40}$/;
+function gitTree(root, ref) {
+  const hashKey = COMMIT_HASH.test(ref) ? `${root}\0${ref}` : null;
+  if (hashKey && GIT_TREES.has(hashKey)) return GIT_TREES.get(hashKey);
+  let commit;
+  try {
+    commit = execFileSync('git', ['-C', root, 'rev-parse', '--verify', '--quiet', `${ref}^{commit}`], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return { ok: false, ref, reason: `cannot resolve ${ref}; fetch full history (actions/checkout fetch-depth: 0)` };
+  }
+  const key = `${root}\0${commit}`;
+  if (!GIT_TREES.has(key)) GIT_TREES.set(key, buildGitTree(root, ref, commit));
+  if (hashKey) GIT_TREES.set(hashKey, GIT_TREES.get(key));
+  return GIT_TREES.get(key);
+}
+
+function buildGitTree(root, ref, commit) {
+  const list = execFileSync('git', ['-C', root, 'ls-tree', '-r', '-z', '--name-only', commit], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    maxBuffer: 64 * 1024 * 1024,
+  }).split('\0').filter(Boolean).sort();
+  const present = new Set(list);
+  const cache = new Map();
+  const prefetch = (rels) => {
+    const wanted = rels.filter((rel) => present.has(rel) && !cache.has(rel));
+    if (!wanted.length) return;
+    const out = execFileSync('git', ['-C', root, 'cat-file', '--batch'], {
+      input: wanted.map((rel) => `${commit}:${rel}`).join('\n') + '\n',
+      stdio: ['pipe', 'pipe', 'ignore'],
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    let pos = 0;
+    for (const rel of wanted) {
+      const nl = out.indexOf(10, pos);
+      const header = out.subarray(pos, nl).toString('utf8');
+      const size = Number(header.split(' ')[2]);
+      if (!Number.isFinite(size) || header.endsWith('missing')) { cache.set(rel, null); pos = nl + 1; continue; }
+      cache.set(rel, out.subarray(nl + 1, nl + 1 + size).toString('utf8').replace(/\r\n/g, '\n'));
+      pos = nl + 1 + size + 1;
+    }
+  };
+  return {
+    ok: true,
+    ref,
+    commit,
+    files: () => list,
+    exists: (rel) => present.has(rel),
+    prefetch,
+    read(rel) {
+      if (!present.has(rel)) return null;
+      if (!cache.has(rel)) prefetch([rel]);
+      return cache.get(rel);
+    },
+  };
+}
+
+// A tree from an in-memory map or a directory on disk, for fixtures.
+function fixtureTree(ref, source) {
+  if (source && typeof source === 'object' && source.files) {
+    const files = source.files;
+    const list = Object.keys(files).sort();
+    return {
+      ok: true, ref, commit: ref, files: () => list, prefetch: () => {},
+      exists: (rel) => Object.prototype.hasOwnProperty.call(files, rel),
+      read: (rel) => (Object.prototype.hasOwnProperty.call(files, rel) ? files[rel] : null),
+    };
+  }
+  const dir = path.resolve(source.dir);
+  const list = walk(dir);
+  const present = new Set(list);
+  return {
+    ok: true, ref, commit: ref, files: () => list, prefetch: () => {},
+    exists: (rel) => present.has(rel),
+    read: (rel) => (present.has(rel) ? fs.readFileSync(path.join(dir, rel), 'utf8').replace(/\r\n/g, '\n') : null),
+  };
+}
+
 // options.base: a git ref (default 'origin/main'), 'none' for no base, or an
 // object { files: { [rel]: content } } that tests use instead of git.
 // options.catalogPath: optional path to the rounds-review capabilities.json.
+// options.reviewRoot: optional rounds-review checkout (catalog, ledger, spec).
+// options.trees: { [ref]: { files } | { dir } } replaces git for tree(ref).
+// options.treeRoot: the work tree that tree(ref) reads revisions from
+// (default repoRoot), so a fixture directory can still read pinned revisions
+// of the real repository.
 export function createContext(repoRoot, options = {}) {
   const root = path.resolve(repoRoot);
   const cache = new Map();
+  const trees = new Map();
   let fileList = null;
   const baseOption = options.base === undefined ? 'origin/main' : options.base;
+  const reviewRoot = options.reviewRoot ? path.resolve(options.reviewRoot) : null;
   const ctx = {
     root,
     baseRef: typeof baseOption === 'string' ? baseOption : 'fixture',
-    catalogPath: options.catalogPath || null,
+    reviewRoot,
+    catalogPath: options.catalogPath || (reviewRoot ? path.join(reviewRoot, 'src/data/capabilities.json') : null),
+    // The repository at a pinned revision (the audited baseline).
+    tree(ref) {
+      if (!trees.has(ref)) {
+        const override = options.trees && options.trees[ref];
+        trees.set(ref, override ? fixtureTree(ref, override) : gitTree(options.treeRoot ? path.resolve(options.treeRoot) : root, ref));
+      }
+      return trees.get(ref);
+    },
     abs: (rel) => path.join(root, rel),
     exists: (rel) => fs.existsSync(path.join(root, rel)),
     read(rel) {

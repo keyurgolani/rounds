@@ -2,7 +2,7 @@
 // Repository conformance runner (ROUNDS-01-L01). Node 22 built-ins only; no
 // install step.
 //
-//   node scripts/conformance/run.mjs [--write] [--rule <id>] [--base <ref>|none] [--catalog <path>] [--root <dir>]
+//   node scripts/conformance/run.mjs [--write] [--rule <id>] [--base <ref>|none] [--catalog <path>] [--review <dir>] [--root <dir>]
 //
 // Loads every scripts/conformance/rules/*.mjs. A rule exports:
 //   id, owningLeaf, check(repoRoot) -> [{ code, path, line, message }]
@@ -10,7 +10,9 @@
 // (each also takes the shared context as a second argument). Without --write the
 // runner regenerates in memory and fails on drift; --write writes the files.
 // --base is the ref revision checks compare with (default origin/main);
-// --catalog verifies the leaf-ID pin against rounds-review's capabilities.json.
+// --catalog verifies the leaf-ID pin against rounds-review's capabilities.json;
+// --review names a rounds-review checkout, which also sets the catalog and
+// lets the authority rule check the spec rows, services, and ledger pin.
 // Exits 1 when any rule reports a finding.
 
 import fs from 'node:fs';
@@ -24,13 +26,14 @@ const REPO_ROOT = path.resolve(HERE, '..', '..');
 const RULES_DIR = path.join(HERE, 'rules');
 
 export function parseArgs(argv) {
-  const opts = { write: false, rules: [], base: undefined, catalog: undefined, root: REPO_ROOT };
+  const opts = { write: false, rules: [], base: undefined, catalog: undefined, review: undefined, root: REPO_ROOT };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--write') opts.write = true;
     else if (a === '--rule') opts.rules.push(argv[++i]);
     else if (a === '--base') opts.base = argv[++i];
     else if (a === '--catalog') opts.catalog = argv[++i];
+    else if (a === '--review') opts.review = path.resolve(argv[++i]);
     else if (a === '--root') opts.root = path.resolve(argv[++i]);
     else if (a === '--help' || a === '-h') opts.help = true;
     else throw new Error(`unknown argument ${a}`);
@@ -49,6 +52,9 @@ export async function runConformance(opts) {
   const ctx = createContext(opts.root, {
     base: opts.base === undefined ? process.env.CONFORMANCE_BASE || 'origin/main' : opts.base,
     catalogPath: opts.catalog || process.env.ROUNDS_REVIEW_CATALOG || null,
+    reviewRoot: opts.review || process.env.ROUNDS_REVIEW_ROOT || null,
+    // Tests run a fixture copy while pinned revisions still come from the repository.
+    treeRoot: opts.treeRoot,
   });
   const resolveLeaf = leafResolver(loadLeafIds(ctx));
   const results = [];
@@ -123,7 +129,7 @@ if (isMain) {
     process.exit(2);
   }
   if (opts.help) {
-    console.log('usage: node scripts/conformance/run.mjs [--write] [--rule <id>] [--base <ref>|none] [--catalog <capabilities.json>] [--root <dir>]');
+    console.log('usage: node scripts/conformance/run.mjs [--write] [--rule <id>] [--base <ref>|none] [--catalog <capabilities.json>] [--review <rounds-review>] [--root <dir>]');
     process.exit(0);
   }
   let results;

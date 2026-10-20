@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/authority/disposition-ledger.schema.json",
+  "title": "Disposition ledger",
+  "description": "Shape of contracts/authority/disposition-ledger.json (ROUNDS-01-L02): the 34 INT and CUR rows, pinned from rounds-review.",
+  "type": "object",
+  "required": ["registry", "pin", "rows"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string" },
+    "registry": { "const": "rounds-disposition-ledger" },
+    "pin": {
+      "type": "object",
+      "required": ["source", "sha256", "spec", "rows"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "spec": { "type": "string", "pattern": "^spec \\d+-\\d+$" },
+        "rows": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "rows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "intent", "class", "disposition", "proposals", "proof", "spec"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^(INT|CUR)-\\d{2}$" },
+          "intent": { "type": "string", "minLength": 1 },
+          "class": { "enum": ["preserve", "transform"] },
+          "disposition": { "type": "string", "minLength": 1 },
+          "proposals": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^ROUNDS-\\d{2}[A-Z]?$" } },
+          "proof": { "type": "string", "minLength": 1 },
+          "spec": { "type": "string", "pattern": "^spec \\d+$" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "$schema": "./owner-labels.schema.json",
+  "registry": "rounds-owner-labels",
+  "description": "Each capability owner label (the catalog's \"owner\") mapped to one spec service, none (UI, composition, and program labels own no commands), blocked:OD-1, or per-row, where rows lists the service each row of that label takes. A row whose command owner is a leaf of the capability must take that service (DR-0002 L1).",
+  "labels": [
+    {"capability":"ROUNDS-00A","label":"Execution and Rendering Platform","service":"execution-control-plane"},
+    {
+      "capability": "ROUNDS-00B",
+      "label": "Identity, Authorization, and Sharing",
+      "service": "per-row",
+      "rows": {"share-capability-metadata":"public-share","share-bearer-digest":"public-share","demo-state":"account"}
+    },
+    {"capability":"ROUNDS-01","label":"Product Architecture","service":"none"},
+    {
+      "capability": "ROUNDS-02",
+      "label": "Domain Platform",
+      "service": "per-row",
+      "rows": {"idempotency-record":"command-gateway","audit-entry-change-set":"revision-audit","domain-event":"revision-audit"}
+    },
+    {
+      "capability": "ROUNDS-03",
+      "label": "Identity and Career Profile",
+      "service": "per-row",
+      "rows": {
+        "authentication-identity": "account",
+        "account-session": "account",
+        "appearance": "account",
+        "current-campaign": "account",
+        "professional-identity": "career-profile",
+        "profile-contact-point": "career-profile"
+      }
+    },
+    {"capability":"ROUNDS-04","label":"Directory","service":"identity-directory"},
+    {"capability":"ROUNDS-05","label":"Career Profile","service":"career-profile"},
+    {
+      "capability": "ROUNDS-06",
+      "label": "Relationship Platform",
+      "service": "command-gateway",
+      "note": "a relation joins two aggregates, so its commands sit in the gateway"
+    },
+    {"capability":"ROUNDS-07","label":"Career Pack Platform","service":"career-pack-registry"},
+    {"capability":"ROUNDS-08","label":"Interaction Platform","service":"none"},
+    {"capability":"ROUNDS-09","label":"Capture","service":"capture-ingestion"},
+    {"capability":"ROUNDS-10","label":"Source Processing","service":"capture-ingestion"},
+    {"capability":"ROUNDS-11","label":"Claims and Provenance","service":"capture-ingestion"},
+    {"capability":"ROUNDS-12","label":"Claims and Career Profile","service":"career-profile"},
+    {"capability":"ROUNDS-13","label":"Profile Bootstrap","service":"capture-ingestion"},
+    {
+      "capability": "ROUNDS-14",
+      "label": "AI Trust Platform",
+      "service": "blocked:OD-1",
+      "note": "spec 808's \"Provider gateway\" is not one of the 17 services; #73 (ROUNDS-14-L02) keeps the keyring"
+    },
+    {"capability":"ROUNDS-15","label":"Materials","service":"artifact"},
+    {"capability":"ROUNDS-16","label":"Resume Studio","service":"artifact"},
+    {"capability":"ROUNDS-17","label":"Opportunity Materials","service":"artifact"},
+    {
+      "capability": "ROUNDS-18",
+      "label": "Portability and Sharing",
+      "service": "artifact",
+      "rows": {"account-export":"account","account-restore":"account","share-projection":"public-share","share-view":"public-share"}
+    },
+    {"capability":"ROUNDS-19","label":"Opportunity and Pursuit","service":"opportunity-pursuit"},
+    {"capability":"ROUNDS-20","label":"Pursuit Lifecycle","service":"opportunity-pursuit"},
+    {"capability":"ROUNDS-21","label":"Opportunity Experience","service":"none"},
+    {
+      "capability": "ROUNDS-22",
+      "label": "Interview Process",
+      "service": "interview-process",
+      "note": "hosts the Interview Process and Career Activity aggregates (OD-2)"
+    },
+    {
+      "capability": "ROUNDS-23",
+      "label": "Relationships and Networking",
+      "service": "per-row",
+      "rows": {"person-role":"identity-directory","referral":"opportunity-pursuit"},
+      "note": "conversations are a Career Activity kind on #107's rows (OD-2)"
+    },
+    {"capability":"ROUNDS-24","label":"Offers","service":"opportunity-pursuit"},
+    {"capability":"ROUNDS-25","label":"Campaigns","service":"opportunity-pursuit"},
+    {"capability":"ROUNDS-26","label":"Actions","service":"action"},
+    {"capability":"ROUNDS-27","label":"Command Center","service":"none"},
+    {"capability":"ROUNDS-28","label":"Practice Platform and Software Engineering Pack","service":"practice"},
+    {"capability":"ROUNDS-29","label":"Preparation Guidance","service":"read-model"},
+    {"capability":"ROUNDS-30","label":"Today","service":"read-model"},
+    {"capability":"ROUNDS-31","label":"Read Platform","service":"read-model","rows":{"search-index":"search"}},
+    {"capability":"ROUNDS-32","label":"Transformation Migration","service":"none"},
+    {"capability":"ROUNDS-33","label":"Product Design System","service":"none"},
+    {"capability":"ROUNDS-34","label":"Quality and Release Engineering","service":"none"}
+  ]
+}

@@ -8,6 +8,7 @@ import { REPO_ROOT, cleanup, codes, ctxFor, editJson, fixture, readJson, writeJs
 
 const DR = 'docs/decisions/DR-0001-product-vocabulary.json';
 const SCHEMA = 'docs/decisions/decision-record.schema.json';
+const DR2 = 'docs/decisions/DR-0002-authority-matrix.json';
 
 after(cleanup);
 
@@ -105,11 +106,61 @@ describe('decision records: architecture', () => {
     only(run(dir), 'DR_DUPLICATE_ID');
   });
 
-  it('checks affected packages once contracts/authority/packages.json exists', () => {
-    const dr = readJson(REPO_ROOT, DR);
-    const known = fixture((d) => writeJson(d, 'contracts/authority/packages.json', { packages: dr.affectedPackages.map((name) => ({ id: name.toLowerCase().replace(/[^a-z]+/g, '-'), service: name })) }));
-    assert.deepEqual(run(known), []);
-    const missing = fixture((d) => writeJson(d, 'contracts/authority/packages.json', { packages: dr.affectedPackages.slice(1).map((name) => ({ service: name })) }));
-    only(run(missing), 'DR_UNKNOWN_PACKAGE');
+  it('checks affected packages against contracts/authority/packages.json by id or service', () => {
+    assert.deepEqual(run(fixture()), []);
+    assert.deepEqual(run(editDr((r) => { r.affectedPackages = ['account', 'Career Profile Service', 'read-model']; })), []);
+    const unknown = run(editDr((r) => { r.affectedPackages.push('Billing Service'); }));
+    only(unknown, 'DR_UNKNOWN_PACKAGE');
+    assert.match(unknown[0].message, /"Billing Service" is neither a package id nor a service/);
+  });
+
+  // packages.json is governed by DR-0002, so these fixtures make DR-0002 a draft.
+  const withPackages = (write) => fixture((d) => {
+    editJson(d, DR2, (r) => { r.status = 'draft'; r.approvalRef = null; delete r.ratifiedOn; });
+    write(d);
+  });
+
+  it('reports an unreadable packages.json once instead of failing every package', () => {
+    const findings = run(withPackages((d) => fs.writeFileSync(path.join(d, 'contracts/authority/packages.json'), '{ not json')));
+    only(findings, 'DR_UNKNOWN_PACKAGE');
+    assert.equal(findings.length, 1);
+    assert.match(findings[0].message, /packages\.json is not valid JSON: .*; affected packages are unchecked$/);
+  });
+
+  it('skips the package check before packages.json exists', () => {
+    const dir = withPackages((d) => {
+      fs.rmSync(path.join(d, 'contracts/authority/packages.json'));
+      editJson(d, DR, (r) => { r.affectedPackages = ['Not A Package Yet']; });
+    });
+    assert.deepEqual(run(dir), []);
+    const known = withPackages((d) => writeJson(d, 'contracts/authority/packages.json', { packages: [{ id: 'not-a-package-yet', service: 'Not A Package Yet' }] }));
+    only(run(known), 'DR_UNKNOWN_PACKAGE');
+  });
+});
+
+describe('decision records: DR-0002', () => {
+  const editDr2 = (fn) => fixture((d) => editJson(d, DR2, fn));
+
+  it('records one owner, the authority boundary, alternatives, consequences, packages, versioning, supersession, and OD-1 to OD-5', () => {
+    const dr = readJson(REPO_ROOT, DR2);
+    assert.equal(dr.owner, 'Product Architecture');
+    assert.equal(dr.authorityBoundary, 'contracts/authority/matrix.json');
+    assert.equal(dr.affectedPackages.length, 17);
+    assert.deepEqual(dr.prerequisites, ['ROUNDS-01-L01']);
+    assert.match(dr.versioning, /DR-0002@<revision>:<row-id>/);
+    assert.ok(dr.supersession.length > 0);
+    assert.deepEqual(dr.decisions.filter((d) => /^OD-\d$/.test(d.id)).map((d) => d.id), ['OD-1', 'OD-2', 'OD-3', 'OD-4', 'OD-5']);
+    for (const d of dr.decisions) {
+      assert.ok(d.alternatives.length >= 1, d.id);
+      for (const k of ['consequences', 'migrationImpact', 'rollbackImpact']) assert.ok(d[k].length > 0, `${d.id} ${k}`);
+    }
+  });
+
+  it('fails DR-0002 without an owner, boundary, alternative, consequence, or supersession rule', () => {
+    only(run(editDr2((r) => { delete r.owner; })), 'DR_RECORD_INCOMPLETE');
+    only(run(editDr2((r) => { delete r.authorityBoundary; })), 'DR_RECORD_INCOMPLETE');
+    only(run(editDr2((r) => { r.decisions[0].alternatives = []; })), 'DR_RECORD_INCOMPLETE');
+    only(run(editDr2((r) => { delete r.decisions[1].consequences; })), 'DR_RECORD_INCOMPLETE');
+    only(run(editDr2((r) => { delete r.supersession; })), 'DR_RECORD_INCOMPLETE');
   });
 });

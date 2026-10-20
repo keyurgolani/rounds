@@ -10,13 +10,13 @@ import { createContext } from '../lib/context.mjs';
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
-const COPY_DIRS = ['contracts/vocabulary', 'docs/decisions', 'pocketbase/pb_migrations', 'backend/routers'];
+const COPY_DIRS = ['contracts/vocabulary', 'contracts/authority', 'docs/decisions', 'pocketbase/pb_migrations', 'backend/routers'];
 const COPY_FILES = [
   'backend/main.py', 'frontend/src/App.tsx', 'frontend/src/components/Layout.tsx', 'frontend/src/command-center/registry.tsx',
   'frontend/src/applications/interviewTypes.ts', 'frontend/src/auth/AuthProvider.tsx', 'frontend/index.html',
   'frontend/src/pages/Login.tsx', 'README.md', 'docs/architecture.md', 'SHOWCASE.md',
   // Generated outputs, for drift checks.
-  'docs/vocabulary.md', 'frontend/src/vocabulary/labels.ts',
+  'docs/vocabulary.md', 'frontend/src/vocabulary/labels.ts', 'docs/authority.md',
 ];
 
 function appHeaderFiles() {
@@ -90,8 +90,9 @@ export function editText(dir, rel, fn) {
 }
 
 // No base ref unless a test passes one: { files: { 'contracts/vocabulary/terms.json': '...' } }.
+// Pinned revisions (the audited baseline) come from the real repository.
 export function ctxFor(dir, options = {}) {
-  return createContext(dir, { base: { files: {} }, ...options });
+  return createContext(dir, { base: { files: {} }, treeRoot: REPO_ROOT, ...options });
 }
 
 export const codes = (findings) => [...new Set(findings.map((f) => f.code))].sort();
