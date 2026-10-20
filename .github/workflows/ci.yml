@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# CI only reads the checkout and runs tests; keep it read-only regardless of
+# the repository's default workflow permissions.
+permissions:
+  contents: read
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
