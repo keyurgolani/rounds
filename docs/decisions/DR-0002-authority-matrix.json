@@ -3,10 +3,18 @@
   "id": "DR-0002",
   "title": "Source-of-truth and package-boundary matrix",
   "leaf": "ROUNDS-01-L02",
-  "status": "draft",
+  "status": "ratified",
   "owner": "Product Architecture",
   "approver": "keyurgolani",
-  "approvalRef": null,
+  "approvalRef": {
+    "pr": 194,
+    "governedFiles": [
+      {"path":"contracts/authority/matrix.json","sha256":"9548dac669ea31882013a88715a9996e2d0dfc4447023931bf1d556f447e4ef2"},
+      {"path":"contracts/authority/packages.json","sha256":"8ffb6e823298ed9f1bda647018edd3dc5090b1572644734e8d5c65ff9cf0950d"},
+      {"path":"contracts/authority/owner-labels.json","sha256":"8d55d891ad42f0dbb56f4c8d7c2447434be86b71fa34c4e1d88a3462a7e0ff51"}
+    ]
+  },
+  "ratifiedOn": "2026-10-20",
   "compatibility": "additive",
   "revision": 1,
   "supersedes": null,
