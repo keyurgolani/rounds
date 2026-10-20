@@ -53,6 +53,10 @@ export async function runConformance(opts) {
   const resolveLeaf = leafResolver(loadLeafIds(ctx));
   const results = [];
   const all = await loadRules(opts.rulesDir);
+  const unknown = opts.rules.filter((id) => !all.some(({ mod }) => mod.id === id));
+  if (unknown.length) {
+    throw new Error(`unknown rule ${unknown.join(', ')}; rules are ${all.map(({ mod }) => mod.id).join(', ')}`);
+  }
   for (const { file, mod } of all) {
     if (opts.rules.length && !opts.rules.includes(mod.id)) continue;
     const findings = [];
@@ -122,7 +126,13 @@ if (isMain) {
     console.log('usage: node scripts/conformance/run.mjs [--write] [--rule <id>] [--base <ref>|none] [--catalog <capabilities.json>] [--root <dir>]');
     process.exit(0);
   }
-  const results = await runConformance(opts);
+  let results;
+  try {
+    results = await runConformance(opts);
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
   const total = report(results, { annotate: process.env.GITHUB_ACTIONS === 'true' });
   process.exit(total ? 1 : 0);
 }

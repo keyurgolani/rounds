@@ -49,6 +49,31 @@ describe('runner', () => {
     assert.deepEqual(byId, { bad: ['CONFORMANCE_RULE_INVALID'], unowned: ['CONFORMANCE_RULE_INVALID'], ok: ['X_FOUND'] });
   });
 
+  it('rejects an unknown --rule instead of skipping it', async () => {
+    await assert.rejects(runConformance({ ...parseArgs(['--rule', 'vocabulary', '--rule', 'no-such-rule']), root: REPO_ROOT, base: 'none' }), /unknown rule no-such-rule/);
+    const script = path.join(REPO_ROOT, 'scripts/conformance/run.mjs');
+    let failed = null;
+    try {
+      execFileSync(process.execPath, [script, '--base', 'none', '--rule', 'vocabulry'], { cwd: REPO_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (err) {
+      failed = err;
+    }
+    assert.ok(failed, 'the run fails');
+    assert.equal(failed.status, 2);
+    assert.match(failed.stderr, /unknown rule vocabulry; rules are decision-records, vocabulary/);
+  });
+
+  it('compares with the branch a pull request targets, and runs on pushes to next', () => {
+    const ci = fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/ci.yml'), 'utf8');
+    const job = ci.slice(ci.indexOf('\n  conformance:'), ci.indexOf('\n  harness:'));
+    assert.match(job, /BASE_REF: \$\{\{ github\.base_ref \|\| 'main' \}\}/);
+    assert.match(job, /run\.mjs --base "origin\/\$\{BASE_REF\}"/);
+    assert.match(job, /git fetch --no-tags origin "\+refs\/heads\/\$\{BASE_REF\}:refs\/remotes\/origin\/\$\{BASE_REF\}"/);
+    assert.doesNotMatch(job, /--base origin\/main/);
+    assert.match(job, /fetch-depth: 0/);
+    assert.match(ci, /push:\n(?:\s+#.*\n)?\s+branches: \[main, next\]/);
+  });
+
   it('exits 1 with path:line findings and 0 when clean', () => {
     const script = path.join(REPO_ROOT, 'scripts/conformance/run.mjs');
     const ok = execFileSync(process.execPath, [script, '--base', 'none'], { cwd: REPO_ROOT, encoding: 'utf8', env: { ...process.env, GITHUB_ACTIONS: '' } });

@@ -3,7 +3,8 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    # next runs the same checks after each merge; no job here publishes.
+    branches: [main, next]
 
 # CI only reads the checkout and runs tests; keep it read-only regardless of
 # the repository's default workflow permissions.
@@ -59,8 +60,9 @@ jobs:
     # Repository conformance rules (ROUNDS-01-L01): the product vocabulary
     # registry and its coverage of baseline names, decision records, and
     # generated-file drift. Node 22 built-ins only, so there is no install
-    # step. The full fetch gives the vocabulary check origin/main to compare
-    # revisions with. Fix drift with `node scripts/conformance/run.mjs --write`.
+    # step. Revision checks compare with the branch a pull request targets
+    # (main for pushes), so the full fetch keeps that branch's history.
+    # Fix drift with `node scripts/conformance/run.mjs --write`.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -75,7 +77,11 @@ jobs:
       - name: Rule tests
         run: node --test scripts/conformance
       - name: Conformance
-        run: node scripts/conformance/run.mjs --base origin/main
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          node scripts/conformance/run.mjs --base "origin/${BASE_REF}"
 
   harness:
     # Two-account account-scope security harness (ROUNDS-00B-L01). Builds the

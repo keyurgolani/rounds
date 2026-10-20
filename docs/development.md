@@ -101,7 +101,7 @@ node scripts/conformance/run.mjs         # every rule; exits 1 on any finding
 node scripts/conformance/run.mjs --write # regenerate labels.ts, vocabulary.md, and the owner corrections file
 ```
 
-The vocabulary rule compares `terms.json` with `origin/main`; pass `--base none` when that ref isn't fetched. A new name in a navigation label, Command Center entry, page header, route, collection, or stored value needs a term label or an adapter entry; the finding says which.
+The vocabulary rule compares `terms.json` with `--base` (default `origin/main`; CI passes the branch a pull request targets, such as `origin/next`); pass `--base none` when that ref isn't fetched. An unknown `--rule` exits 2. A new name in a navigation label, Command Center entry, page header, route, collection, or stored value needs a term label or an adapter entry; the finding says which.
 
 ## Adding Guide Content
 
