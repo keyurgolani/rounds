@@ -7,9 +7,10 @@ volume mounted read-only:
 
 1. The clean data has no findings, and the policy's relation table matches
    the relation fields in the live schema.
-2. On a fixture copy, one relation is pointed at another account's record
-   with a direct SQLite write (fixture only, never through the API); the
-   scan reports exactly that row.
+2. On a fixture copy, the same direct cross-owner SQLite write is first
+   confirmed to be aborted by the transactional backstop, then (with that
+   backstop dropped on the throwaway copy only) one relation is pointed at
+   another account's record so the scan reports exactly that row.
 3. Reports carry no field values or account ids, are private to the
    operator, have a stable checksum, and are refused inside ``pb_data``.
 
@@ -85,7 +86,15 @@ def _sensitive_strings(db: Path) -> list[str]:
 
 
 def _plant_cross_owner(db: Path) -> dict:
-    """Point one account's todo at another account's campaign (fixture only)."""
+    """Point one account's todo at another account's campaign (fixture only).
+
+    The 1700007000 relation-endpoint triggers abort exactly this direct
+    cross-owner write, which is the transactional backstop they exist for. We
+    first confirm the trigger blocks the write, then drop the ``rel_authz_*``
+    triggers on this throwaway fixture copy so the pre-migration cross-owner
+    row can be recreated for the scan to detect. Dropping them here never
+    touches the real volume, which is mounted read-only.
+    """
     conn = sqlite3.connect(str(db))
     try:
         todo_id, todo_owner = conn.execute(
@@ -94,11 +103,25 @@ def _plant_cross_owner(db: Path) -> dict:
         campaign_id = conn.execute(
             "SELECT id FROM campaigns WHERE user != ? ORDER BY id LIMIT 1", (todo_owner,)
         ).fetchone()[0]
+        trigger_blocked = False
+        try:
+            conn.execute("UPDATE todos SET campaign = ? WHERE id = ?", (campaign_id, todo_id))
+        except sqlite3.Error:
+            trigger_blocked = True
+            conn.rollback()
+        triggers = [
+            r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'rel_authz_%'"
+            )
+        ]
+        for name in triggers:
+            conn.execute(f'DROP TRIGGER IF EXISTS "{name}"')
         conn.execute("UPDATE todos SET campaign = ? WHERE id = ?", (campaign_id, todo_id))
         conn.commit()
     finally:
         conn.close()
-    return {"record_id": todo_id, "target_id": campaign_id}
+    return {"record_id": todo_id, "target_id": campaign_id,
+            "trigger_blocked": trigger_blocked, "triggers_dropped": len(triggers)}
 
 
 def main() -> int:
@@ -149,6 +172,8 @@ def main() -> int:
         and findings[0]["owner"] != findings[0]["target_owner"]
     )
     c.check("scan.cross-owner-relation.reported", ok, f"exit={code} findings={len(findings)}")
+    c.check("scan.cross-owner-trigger.blocks-direct-write", planted.get("trigger_blocked") is True,
+            f"direct cross-owner write was not aborted (triggers_dropped={planted.get('triggers_dropped')})")
 
     # 3. Report hygiene.
     leaked = []

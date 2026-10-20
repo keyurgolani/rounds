@@ -63,7 +63,10 @@ with the leaf and stage that closes it, and carries no probe here: its probes
 land in the pull request that fixes it. The run fails if a pending family ever
 gains an implementation or produces a receipt, so the policy row and its probe
 flip together. Stage 3 of `ROUNDS-00B-L01` closed the last pending families, so
-none remain.
+none remain. `ROUNDS-00B-L02` adds the enforced typed-relation endpoint
+families: a write may point a relation only at a target the same account owns,
+and a foreign target reads the same as a nonexistent one, so both are denied
+alike.
 
 `harness/migration_check.sh` checks the rule migration itself in one-off
 `pocketbase migrate up` containers: the migration produces the rule table's
@@ -77,10 +80,13 @@ scan
 [docs](../docs/security/cross-owner-scan.md)) against the run's `pb_data`
 volume, mounted read-only in a container with no network. It checks that the
 clean data has no findings, that the policy's relation table matches the live
-schema, that a relation pointed at another account's record in a fixture copy
-(a direct SQLite write to the copy, never through the API) is reported, and
-that reports carry no account ids, are private, have a stable checksum, and are
-refused inside `pb_data`.
+schema, and that a relation pointed at another account's record in a fixture
+copy (a direct SQLite write to the copy, never through the API) is reported.
+The same direct cross-owner write is first confirmed to be aborted by the
+`ROUNDS-00B-L02` relation-endpoint triggers (the transactional backstop), which
+are then dropped on the throwaway copy only so the pre-migration row can be
+planted for the scan to detect. It also checks that reports carry no account
+ids, are private, have a stable checksum, and are refused inside `pb_data`.
 
 ## Running it
 

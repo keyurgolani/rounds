@@ -6,7 +6,10 @@ owner's own update is proven to still succeed. This is the PR that tightens the
 create and update rules (ROUNDS-00B-L01 stage 3), so the foreign-owner and
 reassign deny families land here together with the rule migration (orchestrator
 decision D4: a gap's probes land in the PR that closes it); the PR proves the
-negative control locally, that they fail on the pre-migration rules.
+negative control locally, that they fail on the pre-migration rules. The
+typed-relation endpoint families (ROUNDS-00B-L02) extend the same pattern to
+relation targets: a write may only point a typed relation at a target the same
+account owns, and a foreign target reads the same as a nonexistent one.
 
 Expected statuses come from the policy's deny_contract, never hard-coded, so
 changing the contract changes what the probes require.
@@ -109,8 +112,9 @@ def delete_anonymous_denied(pb, collection, a, b, expected) -> Receipt:
 def create_anonymous_denied(pb, collection, payload, admin_token, owner_id, expected) -> Receipt:
     # An anonymous create with a complete, valid, non-colliding body (built by
     # factory.fresh_payload). Because field, relation, and uniqueness
-    # validation all pass, the only thing left to stop the write is the
-    # createRule. A rule denial returns the deny-contract status with an empty
+    # validation all pass, the write is rejected only because an anonymous
+    # caller is not allowed to create the row. A rule denial returns the
+    # deny-contract status with an empty
     # `data`; a field or uniqueness failure returns the same status with a
     # populated `data`, so we require `data` to be empty to prove the rule ran.
     # The superuser then confirms no row was left under the named owner.
@@ -176,7 +180,8 @@ def create_foreign_owner_denied(pb, collection, caller_token, payload, admin_tok
     # An authenticated account tries to create a row owned by someone else. The
     # body is complete and valid (factory.fresh_payload) and names a different,
     # no-rows account as `user`, so field, relation, and uniqueness validation
-    # all pass and only the createRule can stop the write. A rule denial is the
+    # all pass and the write is rejected only because the caller does not own
+    # the row it claims to create. A rule denial is the
     # deny-contract status with empty `data` (a validation failure populates
     # `data`); the superuser then confirms no row was planted under that owner.
     resp = pb.create(collection, caller_token, payload)
@@ -355,6 +360,154 @@ def create_nonexistent_owner_denied(pb, collection, caller_token, payload, admin
                    expected, resp.status, ok, resp.elapsed_ms, detail)
 
 
+# --------------------------------------------------------------------------
+# typed-relation endpoint families (ROUNDS-00B-L02)
+# --------------------------------------------------------------------------
+# Each collection declares its typed relation endpoints in the policy
+# (`relation_endpoints`: a list of {field, target}). These families prove that
+# a write may only point a typed relation at a target the same account owns.
+# A foreign-but-existing target is a valid, existing record, so the probe
+# proves the guarantee holds for it exactly as for a target that does not
+# exist: both are denied, and denied alike.
+# One receipt per (collection, family) aggregates every endpoint; the detail
+# names an offending field but never an id or a value.
+
+
+def _relation_create_denied(pb, collection, endpoints, owner, foreign, content,
+                            admin_token, caller_token, probe_id, actor, expected) -> Receipt:
+    # For each endpoint, build an all-own base for `owner` (so only the relation
+    # is wrong; passing `owner` as both of fresh_payload's accounts points every
+    # relation, including a junction's two endpoints, at `owner`'s own seeded
+    # rows), point that one field at `foreign`'s target, and require a
+    # rule-shaped denial (empty `data`) that leaves `owner`'s row count
+    # unchanged. `caller_token` is the owner's own token for a client create and
+    # the superuser token for an admin create.
+    import factory
+    if not endpoints:
+        return Receipt(probe_id, collection, "create", actor, expected, expected, False, 0,
+                       "no relation endpoints declared")
+    problems: list[str] = []
+    first_status = expected
+    elapsed = 0
+    for ep in endpoints:
+        f, t = ep["field"], ep["target"]
+        payload = factory.fresh_payload(collection, owner.user_id, owner, owner, content, secrets.token_hex(6))
+        payload[f] = foreign.ids[t]
+        before, _ = _admin_owner_count(pb, collection, admin_token, owner.user_id)
+        resp = pb.create(collection, caller_token, payload)
+        after, lstatus = _admin_owner_count(pb, collection, admin_token, owner.user_id)
+        data = resp.body.get("data") if isinstance(resp.body, dict) else None
+        first_status = resp.status
+        elapsed = resp.elapsed_ms
+        ok = resp.status == expected and data == {} and before is not None and after == before
+        if not ok:
+            problems.append(f"field={f} status={resp.status} data={list((data or {}).keys())} "
+                            f"rows={before}->{after} {_owner_count_detail(after, lstatus)}")
+    return Receipt(probe_id, collection, "create", actor, expected, first_status,
+                   not problems, elapsed, "; ".join(problems))
+
+
+def create_relation_foreign_denied(pb, collection, endpoints, caller, foreign, content, admin_token, expected) -> Receipt:
+    return _relation_create_denied(
+        pb, collection, endpoints, caller, foreign, content, admin_token, caller.token,
+        "account-scope.create.relation-foreign.denied", "authenticated-owner", expected)
+
+
+def create_relation_superuser_denied(pb, collection, endpoints, owner, foreign, content, admin_token, expected) -> Receipt:
+    return _relation_create_denied(
+        pb, collection, endpoints, owner, foreign, content, admin_token, admin_token,
+        "account-scope.create.relation-superuser.denied", "superuser", expected)
+
+
+def create_relation_foreign_or_missing_indistinguishable(pb, collection, endpoints, caller, foreign, content, expected) -> Receipt:
+    # A foreign-but-existing target and a target that no record has are denied
+    # with the same status and the same parsed body, so the answer says nothing
+    # about whether the foreign record exists.
+    import factory
+    if not endpoints:
+        return Receipt("account-scope.create.relation-foreign-or-missing.indistinguishable", collection, "create",
+                       "authenticated-owner", expected, expected, False, 0, "no relation endpoints declared")
+    problems: list[str] = []
+    first_status = expected
+    elapsed = 0
+    for ep in endpoints:
+        f, t = ep["field"], ep["target"]
+        p_foreign = factory.fresh_payload(collection, caller.user_id, caller, caller, content, secrets.token_hex(6))
+        p_foreign[f] = foreign.ids[t]
+        p_missing = factory.fresh_payload(collection, caller.user_id, caller, caller, content, secrets.token_hex(6))
+        p_missing[f] = missing_record_id()
+        r_foreign = pb.create(collection, caller.token, p_foreign)
+        r_missing = pb.create(collection, caller.token, p_missing)
+        same = r_foreign.status == r_missing.status and r_foreign.body == r_missing.body
+        first_status = r_foreign.status
+        elapsed = r_foreign.elapsed_ms
+        ok = r_foreign.status == expected and same
+        if not ok:
+            problems.append(f"field={f} foreign={r_foreign.status} missing={r_missing.status} "
+                            f"same_body={r_foreign.body == r_missing.body}")
+    return Receipt("account-scope.create.relation-foreign-or-missing.indistinguishable", collection, "create",
+                   "authenticated-owner", expected, first_status, not problems, elapsed, "; ".join(problems))
+
+
+def _relation_update_attempt(pb, collection, rid, caller_token, field, value):
+    before = pb.view(collection, rid, token=caller_token)
+    resp = pb.update(collection, rid, {field: value}, token=caller_token)
+    after = pb.view(collection, rid, token=caller_token)
+    unchanged = before.status == 200 and after.status == 200 and before.body == after.body
+    return resp, unchanged
+
+
+def update_relation_foreign_denied(pb, collection, endpoints, caller, foreign, expected) -> Receipt:
+    # The owner points one of its own row's relations at another account's
+    # record. The guarantee is that this repoint is rejected: the write is not
+    # found and the row is left exactly as it was.
+    if not endpoints:
+        return Receipt("account-scope.update.relation-foreign.denied", collection, "update",
+                       "authenticated-owner", expected, expected, False, 0, "no relation endpoints declared")
+    problems: list[str] = []
+    first_status = expected
+    elapsed = 0
+    rid = caller.ids[collection]
+    for ep in endpoints:
+        f, t = ep["field"], ep["target"]
+        resp, unchanged = _relation_update_attempt(pb, collection, rid, caller.token, f, foreign.ids[t])
+        data = resp.body.get("data") if isinstance(resp.body, dict) else None
+        first_status = resp.status
+        elapsed = resp.elapsed_ms
+        ok = resp.status == expected and unchanged and data == {}
+        if not ok:
+            problems.append(f"field={f} status={resp.status} unchanged={unchanged} data={list((data or {}).keys())}")
+    return Receipt("account-scope.update.relation-foreign.denied", collection, "update",
+                   "authenticated-owner", expected, first_status, not problems, elapsed, "; ".join(problems))
+
+
+def update_relation_foreign_or_missing_indistinguishable(pb, collection, endpoints, caller, foreign, expected) -> Receipt:
+    if not endpoints:
+        return Receipt("account-scope.update.relation-foreign-or-missing.indistinguishable", collection, "update",
+                       "authenticated-owner", expected, expected, False, 0, "no relation endpoints declared")
+    problems: list[str] = []
+    first_status = expected
+    elapsed = 0
+    rid = caller.ids[collection]
+    for ep in endpoints:
+        f, t = ep["field"], ep["target"]
+        before = pb.view(collection, rid, token=caller.token)
+        r_foreign = pb.update(collection, rid, {f: foreign.ids[t]}, token=caller.token)
+        mid = pb.view(collection, rid, token=caller.token)
+        r_missing = pb.update(collection, rid, {f: missing_record_id()}, token=caller.token)
+        after = pb.view(collection, rid, token=caller.token)
+        same = r_foreign.status == r_missing.status and r_foreign.body == r_missing.body
+        unchanged = (before.status == 200 and before.body == mid.body == after.body)
+        first_status = r_foreign.status
+        elapsed = r_foreign.elapsed_ms
+        ok = r_foreign.status == expected and same and unchanged
+        if not ok:
+            problems.append(f"field={f} foreign={r_foreign.status} missing={r_missing.status} "
+                            f"same_body={r_foreign.body == r_missing.body} unchanged={unchanged}")
+    return Receipt("account-scope.update.relation-foreign-or-missing.indistinguishable", collection, "update",
+                   "authenticated-owner", expected, first_status, not problems, elapsed, "; ".join(problems))
+
+
 def runner_fails_closed_without_pocketbase(frontend: PBClient, collection, expected) -> Receipt:
     # PocketBase is stopped; the runner and the nginx frontend are up. A
     # take-home submit (a runner write) through nginx must fail closed: the
@@ -422,6 +575,13 @@ SUPERUSER_CREATE_FAMILY = "account-scope.create.superuser.accepted"
 # token, and the claimed owner.
 REPLAY_FAMILY = "account-scope.create.replayed-denied.denied"
 NONEXISTENT_OWNER_FAMILY = "account-scope.create.nonexistent-owner.denied"
+# Typed-relation endpoint families (ROUNDS-00B-L02). Dispatched by run.py with
+# the collection's relation_endpoints list and the two accounts.
+RELATION_CREATE_FOREIGN_FAMILY = "account-scope.create.relation-foreign.denied"
+RELATION_CREATE_INDISTINGUISHABLE_FAMILY = "account-scope.create.relation-foreign-or-missing.indistinguishable"
+RELATION_SUPERUSER_CREATE_FAMILY = "account-scope.create.relation-superuser.denied"
+RELATION_UPDATE_FOREIGN_FAMILY = "account-scope.update.relation-foreign.denied"
+RELATION_UPDATE_INDISTINGUISHABLE_FAMILY = "account-scope.update.relation-foreign-or-missing.indistinguishable"
 HOOK_FAMILIES: dict[str, Callable] = {
     "account-scope.signup.disabled.denied": signup_disabled_denied,
 }
@@ -445,6 +605,11 @@ IMPLEMENTED_FAMILIES = (
         SUPERUSER_CREATE_FAMILY,
         REPLAY_FAMILY,
         NONEXISTENT_OWNER_FAMILY,
+        RELATION_CREATE_FOREIGN_FAMILY,
+        RELATION_CREATE_INDISTINGUISHABLE_FAMILY,
+        RELATION_SUPERUSER_CREATE_FAMILY,
+        RELATION_UPDATE_FOREIGN_FAMILY,
+        RELATION_UPDATE_INDISTINGUISHABLE_FAMILY,
     }
     | set(HOOK_FAMILIES)
     | set(DEGRADED_FAMILIES)
