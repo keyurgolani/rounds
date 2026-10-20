@@ -376,7 +376,7 @@
       "namespace": "platform",
       "status": "ratified",
       "visibility": "user-facing",
-      "definition": "Compensation, immigration, accommodation, private feedback, and protected demographics. Remote AI is off by default with a separate field-level confirmation for one invocation; search is off by default or masked with explicit opt-in; logs and traces carry no field values or reversible identifiers; excluded from public share by default; protected export only, with encrypted local draft and backup.",
+      "definition": "Compensation, immigration, accommodation, private feedback, and protected demographics. Remote AI is off by default with a separate field-level confirmation for one invocation; search is off by default or masked with explicit opt-in; logs and traces carry no field values or reversible identifiers; excluded from public share by default, and sharing needs a separate confirmation and a scoped snapshot; protected export only, with encrypted local draft and backup.",
       "definedBy": ["ROUNDS-14-L01"],
       "label": {
         "axis": "none",
