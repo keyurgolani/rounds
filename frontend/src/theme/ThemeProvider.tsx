@@ -131,6 +131,24 @@ function tweaksToDb(t: Tweaks): DbPrefs {
   };
 }
 
+// Find-or-create the caller's single user_preferences row. Stamps `user` with
+// the caller's own id on both the create and the update, which is what the
+// account-scope create and update rules require. Exported so the account-scope
+// compatibility test can exercise the real theme-sync write path; the provider
+// wraps it in the debounce and swallows errors.
+export async function upsertThemePreferences(userId: string, t: Tweaks): Promise<void> {
+  const payload = { user: userId, ...tweaksToDb(t) };
+  const existing = await pb
+    .collection('user_preferences')
+    .getFirstListItem(`user = "${userId}"`)
+    .catch(() => null);
+  if (existing) {
+    await pb.collection('user_preferences').update(existing.id, payload);
+  } else {
+    await pb.collection('user_preferences').create(payload);
+  }
+}
+
 function dbToTweaks(row: Partial<DbPrefs>): Partial<Tweaks> {
   const out: Partial<Tweaks> = {};
   if (row.theme) out.theme = row.theme as Theme;
@@ -265,16 +283,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   if (!debouncedUpsertRef.current) {
     debouncedUpsertRef.current = debounce(async (userId: string, t: Tweaks) => {
       try {
-        const payload = { user: userId, ...tweaksToDb(t) };
-        const existing = await pb
-          .collection('user_preferences')
-          .getFirstListItem(`user = "${userId}"`)
-          .catch(() => null);
-        if (existing) {
-          await pb.collection('user_preferences').update(existing.id, payload);
-        } else {
-          await pb.collection('user_preferences').create(payload);
-        }
+        await upsertThemePreferences(userId, t);
       } catch (err) {
         console.error('[ThemeProvider] PocketBase upsert failed:', err);
       }
