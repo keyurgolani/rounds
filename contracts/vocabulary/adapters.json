@@ -1,0 +1,1320 @@
+{
+  "$schema": "./adapters.schema.json",
+  "registry": "rounds-vocabulary-adapters",
+  "description": "Baseline names that differ from contracts/vocabulary/terms.json. Each entry maps a legacy name to a term (termId) or to the leaf that decides its term (decidedBy), gives the label it becomes (targetLabel, null when not yet decided or not user-facing), and names the leaf that settles it (retiringLeaf): renames it, removes it, or confirms it as a canonical internal name. Remove an entry in the PR that retires its name.",
+  "adapters": [
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700001100_ai_coding.js", "lines": "101"},
+      "legacyName": "ai_coding_attempts",
+      "termId": "practice-attempt",
+      "targetLabel": "Attempt",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700001100_ai_coding.js", "lines": "64"},
+      "legacyName": "ai_coding_drafts",
+      "termId": "practice-draft",
+      "targetLabel": "Practice Draft",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700001100_ai_coding.js", "lines": "37"},
+      "legacyName": "ai_coding_rounds",
+      "termId": "practice-item",
+      "targetLabel": "Practice Item",
+      "retiringLeaf": "ROUNDS-07-L05"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000800_ai_providers.js", "lines": "43"},
+      "legacyName": "ai_providers",
+      "termId": "ai-provider",
+      "targetLabel": "AI provider",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000700_resume_studio.js", "lines": "198"},
+      "legacyName": "ai_settings",
+      "termId": "account-preference",
+      "targetLabel": "Settings",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "223"},
+      "legacyName": "anecdotes",
+      "termId": "narrative",
+      "targetLabel": "Story",
+      "retiringLeaf": "ROUNDS-32-L10",
+      "historical": true,
+      "note": "Dropped at pocketbase/pb_migrations/1700004100_drop_legacy_anecdotes.js:26 with no data migration."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "306"},
+      "legacyName": "applications",
+      "termId": "pursuit",
+      "targetLabel": "Application",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "112"},
+      "legacyName": "behavioral_categories",
+      "decidedBy": "ROUNDS-07-L05",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-07-L05"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "204"},
+      "legacyName": "behavioral_guides",
+      "decidedBy": "ROUNDS-07-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-07-L05"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "132"},
+      "legacyName": "behavioral_questions",
+      "termId": "practice-item",
+      "targetLabel": "Practice Item",
+      "retiringLeaf": "ROUNDS-07-L05"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "269"},
+      "legacyName": "campaigns",
+      "termId": "campaign-goal",
+      "targetLabel": "Campaign",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "555"},
+      "legacyName": "code_drafts",
+      "termId": "practice-draft",
+      "targetLabel": "Practice Draft",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "191"},
+      "legacyName": "coding_guides",
+      "decidedBy": "ROUNDS-07-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-07-L05"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "74"},
+      "legacyName": "coding_questions",
+      "termId": "practice-item",
+      "targetLabel": "Practice Item",
+      "retiringLeaf": "ROUNDS-07-L05"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700003000_experience_connections.js", "lines": "20-29"},
+      "legacyName": "exp_anecdote_bullets",
+      "decidedBy": "ROUNDS-06-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10",
+      "note": "Created in a loop over this junction list; the name is not a literal at the new Collection call."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700003000_experience_connections.js", "lines": "20-29"},
+      "legacyName": "exp_job_anecdotes",
+      "decidedBy": "ROUNDS-06-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10",
+      "note": "Created in a loop over this junction list; the name is not a literal at the new Collection call."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700003000_experience_connections.js", "lines": "20-29"},
+      "legacyName": "exp_job_bullets",
+      "decidedBy": "ROUNDS-06-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10",
+      "note": "Created in a loop over this junction list; the name is not a literal at the new Collection call."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700003000_experience_connections.js", "lines": "20-29"},
+      "legacyName": "exp_job_projects",
+      "decidedBy": "ROUNDS-06-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10",
+      "note": "Created in a loop over this junction list; the name is not a literal at the new Collection call."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700003000_experience_connections.js", "lines": "20-29"},
+      "legacyName": "exp_project_anecdotes",
+      "decidedBy": "ROUNDS-06-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10",
+      "note": "Created in a loop over this junction list; the name is not a literal at the new Collection call."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700003000_experience_connections.js", "lines": "20-29"},
+      "legacyName": "exp_project_bullets",
+      "decidedBy": "ROUNDS-06-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10",
+      "note": "Created in a loop over this junction list; the name is not a literal at the new Collection call."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700002000_experience_entities.js", "lines": "106"},
+      "legacyName": "experience_anecdotes",
+      "termId": "narrative",
+      "targetLabel": "Story",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700002000_experience_entities.js", "lines": "143"},
+      "legacyName": "experience_bullets",
+      "termId": "achievement",
+      "targetLabel": "Achievement",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700001300_experience_items.js", "lines": "12"},
+      "legacyName": "experience_items",
+      "termId": "career-profile",
+      "targetLabel": "Career Profile",
+      "retiringLeaf": "ROUNDS-32-L10",
+      "historical": true,
+      "note": "Dropped at pocketbase/pb_migrations/1700002000_experience_entities.js:17 with no data migration."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700002000_experience_entities.js", "lines": "24"},
+      "legacyName": "experience_jobs",
+      "termId": "engagement",
+      "targetLabel": "Engagement",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700002000_experience_entities.js", "lines": "66"},
+      "legacyName": "experience_projects",
+      "termId": "project",
+      "targetLabel": "Project",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "340"},
+      "legacyName": "interview_rounds",
+      "termId": "career-activity",
+      "targetLabel": "Interview",
+      "retiringLeaf": "ROUNDS-22-L05"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "487"},
+      "legacyName": "offers",
+      "termId": "offer",
+      "targetLabel": "Offer",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700001500_question_timers.js", "lines": "21"},
+      "legacyName": "question_timers",
+      "termId": "practice-session",
+      "targetLabel": "Practice Session",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000700_resume_studio.js", "lines": "164"},
+      "legacyName": "resume_bullets",
+      "termId": "achievement",
+      "targetLabel": "Achievement",
+      "retiringLeaf": "ROUNDS-32-L10",
+      "historical": true,
+      "note": "Dropped at pocketbase/pb_migrations/1700005100_drop_resume_bullets.js:10 with no data migration."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000700_resume_studio.js", "lines": "231"},
+      "legacyName": "resume_share_links",
+      "termId": "share-capability",
+      "targetLabel": "Share link",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000700_resume_studio.js", "lines": "265"},
+      "legacyName": "resume_share_views",
+      "decidedBy": "ROUNDS-18-L05",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000700_resume_studio.js", "lines": "79"},
+      "legacyName": "resume_variants",
+      "termId": "artifact-edition",
+      "targetLabel": "Resume",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000700_resume_studio.js", "lines": "126"},
+      "legacyName": "resume_versions",
+      "termId": "artifact-revision",
+      "targetLabel": "Version",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000700_resume_studio.js", "lines": "50"},
+      "legacyName": "resumes",
+      "termId": "artifact-edition",
+      "targetLabel": "Resume",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "176"},
+      "legacyName": "system_design_guides",
+      "decidedBy": "ROUNDS-07-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-07-L05"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "35"},
+      "legacyName": "system_design_questions",
+      "termId": "practice-item",
+      "targetLabel": "Practice Item",
+      "retiringLeaf": "ROUNDS-07-L05"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700001300_take_home.js", "lines": "37"},
+      "legacyName": "take_home_assignments",
+      "termId": "practice-item",
+      "targetLabel": "Practice Item",
+      "retiringLeaf": "ROUNDS-07-L05"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700001300_take_home.js", "lines": "109"},
+      "legacyName": "take_home_attempts",
+      "termId": "practice-attempt",
+      "targetLabel": "Attempt",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700001300_take_home.js", "lines": "72"},
+      "legacyName": "take_home_drafts",
+      "termId": "practice-draft",
+      "targetLabel": "Practice Draft",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "590"},
+      "legacyName": "todos",
+      "termId": "action",
+      "targetLabel": "Action",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "440"},
+      "legacyName": "user_preferences",
+      "termId": "account-preference",
+      "targetLabel": "Settings",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "398"},
+      "legacyName": "user_progress",
+      "decidedBy": "ROUNDS-28-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "25"},
+      "legacyName": "users",
+      "termId": "account",
+      "targetLabel": "Account",
+      "retiringLeaf": "ROUNDS-32-L10",
+      "note": "Built-in PocketBase auth collection; migrations extend it."
+    },
+    {
+      "kind": "field",
+      "source": {"path": "frontend/src/auth/AuthProvider.tsx", "lines": "297-301"},
+      "legacyName": "users.name",
+      "decidedBy": "ROUNDS-03-L02",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-03-L02",
+      "note": "Written by the Profile page; #25 decides each value's Account or Career Profile disposition."
+    },
+    {
+      "kind": "field",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "26"},
+      "legacyName": "users.bio",
+      "decidedBy": "ROUNDS-03-L02",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-03-L02",
+      "note": "Written by the Profile page; #25 decides each value's Account or Career Profile disposition."
+    },
+    {
+      "kind": "field",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "27"},
+      "legacyName": "users.target",
+      "decidedBy": "ROUNDS-03-L02",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-03-L02",
+      "note": "Written by the Profile page; #25 decides each value's Account or Career Profile disposition."
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "416"},
+      "field": "user_progress.question_type",
+      "legacyName": "system",
+      "termId": "track-system-design",
+      "targetLabel": "System Design",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "416"},
+      "field": "user_progress.question_type",
+      "legacyName": "coding",
+      "termId": "track-coding",
+      "targetLabel": "Coding",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "416"},
+      "field": "user_progress.question_type",
+      "legacyName": "behavioral",
+      "termId": "track-behavioral",
+      "targetLabel": "Behavioral",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "pocketbase/pb_migrations/1700001100_ai_coding.js", "lines": "31"},
+      "field": "user_progress.question_type",
+      "legacyName": "ai-coding",
+      "termId": "track-ai-coding",
+      "targetLabel": "AI-Assisted Coding",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "pocketbase/pb_migrations/1700001300_take_home.js", "lines": "31"},
+      "field": "user_progress.question_type",
+      "legacyName": "take-home",
+      "termId": "track-take-home",
+      "targetLabel": "Take-Home",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "422"},
+      "field": "user_progress.status",
+      "legacyName": "todo",
+      "decidedBy": "ROUNDS-28-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "422"},
+      "field": "user_progress.status",
+      "legacyName": "in-progress",
+      "decidedBy": "ROUNDS-28-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "422"},
+      "field": "user_progress.status",
+      "legacyName": "mastered",
+      "decidedBy": "ROUNDS-28-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "frontend/src/applications/interviewTypes.ts", "lines": "37"},
+      "field": "interview_rounds.round_type",
+      "legacyName": "intro",
+      "decidedBy": "ROUNDS-22-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-22-L05"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "frontend/src/applications/interviewTypes.ts", "lines": "39"},
+      "field": "interview_rounds.round_type",
+      "legacyName": "coding",
+      "decidedBy": "ROUNDS-07-L05",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-22-L05"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "frontend/src/applications/interviewTypes.ts", "lines": "45"},
+      "field": "interview_rounds.round_type",
+      "legacyName": "ai-assisted-coding",
+      "decidedBy": "ROUNDS-07-L05",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-22-L05"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "frontend/src/applications/interviewTypes.ts", "lines": "51"},
+      "field": "interview_rounds.round_type",
+      "legacyName": "system",
+      "decidedBy": "ROUNDS-07-L05",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-22-L05"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "frontend/src/applications/interviewTypes.ts", "lines": "57"},
+      "field": "interview_rounds.round_type",
+      "legacyName": "ai-native-system",
+      "decidedBy": "ROUNDS-07-L05",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-22-L05"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "frontend/src/applications/interviewTypes.ts", "lines": "63"},
+      "field": "interview_rounds.round_type",
+      "legacyName": "behavioral",
+      "decidedBy": "ROUNDS-07-L05",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-22-L05"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "frontend/src/applications/interviewTypes.ts", "lines": "69"},
+      "field": "interview_rounds.round_type",
+      "legacyName": "ai-native-behavioral",
+      "decidedBy": "ROUNDS-07-L05",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-22-L05"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "frontend/src/applications/interviewTypes.ts", "lines": "75"},
+      "field": "interview_rounds.round_type",
+      "legacyName": "real-world",
+      "decidedBy": "ROUNDS-07-L05",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-22-L05"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "frontend/src/applications/interviewTypes.ts", "lines": "81"},
+      "field": "interview_rounds.round_type",
+      "legacyName": "take-home",
+      "decidedBy": "ROUNDS-07-L05",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-22-L05"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "frontend/src/applications/interviewTypes.ts", "lines": "86"},
+      "field": "interview_rounds.round_type",
+      "legacyName": "onsite",
+      "decidedBy": "ROUNDS-22-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-22-L05"
+    },
+    {
+      "kind": "stored-value",
+      "source": {"path": "frontend/src/applications/interviewTypes.ts", "lines": "96"},
+      "field": "interview_rounds.round_type",
+      "legacyName": "phone",
+      "decidedBy": "ROUNDS-22-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-22-L05"
+    },
+    {
+      "kind": "api-route",
+      "source": {"path": "backend/routers/runner.py", "lines": "15"},
+      "legacyName": "/api",
+      "termId": "execution-attempt",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "api-route",
+      "source": {"path": "backend/routers/pdf.py", "lines": "18"},
+      "legacyName": "/api/pdf",
+      "termId": "artifact-renderer-contract",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "api-route",
+      "source": {"path": "backend/routers/ai.py", "lines": "47"},
+      "legacyName": "/api/ai",
+      "decidedBy": "ROUNDS-14-L06",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "api-route",
+      "source": {"path": "backend/routers/ai_coding.py", "lines": "33"},
+      "legacyName": "/api/ai-coding",
+      "termId": "track-ai-coding",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "api-route",
+      "source": {"path": "backend/routers/sd_practice.py", "lines": "48"},
+      "legacyName": "/api/sd-practice",
+      "termId": "track-system-design",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "api-route",
+      "source": {"path": "backend/routers/share.py", "lines": "36"},
+      "legacyName": "/api/share",
+      "termId": "share-capability",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "api-route",
+      "source": {"path": "backend/routers/take_home.py", "lines": "26"},
+      "legacyName": "/api/take-home",
+      "termId": "track-take-home",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "api-route",
+      "source": {"path": "backend/main.py", "lines": "37"},
+      "legacyName": "/health",
+      "decidedBy": "ROUNDS-34-L05",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-34-L05"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "35"},
+      "legacyName": "login",
+      "termId": "account",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "36"},
+      "legacyName": "signup",
+      "termId": "account",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "37"},
+      "legacyName": "r",
+      "termId": "share-capability",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "48,49"},
+      "legacyName": "dashboard",
+      "termId": "today",
+      "targetLabel": "Today",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "50,51,52,53,54,55"},
+      "legacyName": "system-design",
+      "termId": "track-system-design",
+      "targetLabel": "System Design",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "50,52,53,56,58,59,61,63,64,66,67,68,69,71"},
+      "legacyName": "guide",
+      "decidedBy": "ROUNDS-07-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "51,57,62"},
+      "legacyName": "questions",
+      "termId": "practice-item",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "54,55,60,65"},
+      "legacyName": "question",
+      "termId": "practice-item",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "55"},
+      "legacyName": "guidance",
+      "decidedBy": "ROUNDS-33-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "56,57,58,59,60"},
+      "legacyName": "coding",
+      "termId": "track-coding",
+      "targetLabel": "Coding",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "61,62,63,64,65"},
+      "legacyName": "behavioral",
+      "termId": "track-behavioral",
+      "targetLabel": "Behavioral",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "66,67,72,73"},
+      "legacyName": "ai-coding",
+      "termId": "track-ai-coding",
+      "targetLabel": "AI-Assisted Coding",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "68,69,70"},
+      "legacyName": "builder",
+      "termId": "track-take-home",
+      "targetLabel": "Take-Home",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "70,71,74,75"},
+      "legacyName": "take-home",
+      "termId": "track-take-home",
+      "targetLabel": "Take-Home",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "73"},
+      "legacyName": "round",
+      "termId": "practice-item",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "75"},
+      "legacyName": "assignment",
+      "termId": "practice-item",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "76,77,78,83,84,85"},
+      "legacyName": "applications",
+      "termId": "pipeline",
+      "targetLabel": "Pipeline",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "77,84"},
+      "legacyName": "new",
+      "decidedBy": "ROUNDS-33-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "83,84,85"},
+      "legacyName": "interviews",
+      "termId": "career-activity",
+      "targetLabel": "Interviews",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "86,87"},
+      "legacyName": "campaigns",
+      "termId": "campaign-goal",
+      "targetLabel": "Campaigns",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "88"},
+      "legacyName": "todos",
+      "termId": "action",
+      "targetLabel": "Actions",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "89,90"},
+      "legacyName": "resumes",
+      "termId": "artifact-edition",
+      "targetLabel": "Materials",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "91"},
+      "legacyName": "profile",
+      "termId": "account",
+      "targetLabel": "Account",
+      "retiringLeaf": "ROUNDS-03-L04"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "92"},
+      "legacyName": "settings",
+      "termId": "account-and-settings",
+      "targetLabel": "Account and Settings",
+      "retiringLeaf": "ROUNDS-03-L04"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "93,94,95,97,98,99,100"},
+      "legacyName": "experience",
+      "termId": "career-profile",
+      "targetLabel": "Career Profile",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "94,97,98,99,100"},
+      "legacyName": "list",
+      "decidedBy": "ROUNDS-33-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "95"},
+      "legacyName": "arrange",
+      "decidedBy": "ROUNDS-33-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "97"},
+      "legacyName": "anecdotes",
+      "termId": "narrative",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "98"},
+      "legacyName": "bullets",
+      "termId": "achievement",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "99"},
+      "legacyName": "projects",
+      "termId": "project",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "route-segment",
+      "source": {"path": "frontend/src/App.tsx", "lines": "100"},
+      "legacyName": "jobs",
+      "termId": "engagement",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/components/Layout.tsx", "lines": "49,533"},
+      "legacyName": "AI Assisted Coding",
+      "termId": "track-ai-coding",
+      "targetLabel": "AI-Assisted Coding",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/components/Layout.tsx", "lines": "50,534"},
+      "legacyName": "Real World Problems",
+      "termId": "track-take-home",
+      "targetLabel": "Take-Home",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/components/Layout.tsx", "lines": "58,536"},
+      "legacyName": "Applications",
+      "termId": "pipeline",
+      "targetLabel": "Pipeline",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/components/Layout.tsx", "lines": "59"},
+      "legacyName": "Todos",
+      "termId": "action",
+      "targetLabel": "Actions",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/components/Layout.tsx", "lines": "60"},
+      "legacyName": "Resumes",
+      "termId": "artifact-edition",
+      "targetLabel": "Materials",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/components/Layout.tsx", "lines": "61"},
+      "legacyName": "Experience",
+      "termId": "career-profile",
+      "targetLabel": "Career Profile",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/components/Layout.tsx", "lines": "537"},
+      "legacyName": "Todo",
+      "termId": "action",
+      "targetLabel": "Actions",
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/components/Layout.tsx", "lines": "446,662"},
+      "legacyName": "Profile",
+      "termId": "account",
+      "targetLabel": "Account",
+      "retiringLeaf": "ROUNDS-03-L04"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/components/Layout.tsx", "lines": "149"},
+      "legacyName": "Track",
+      "decidedBy": "ROUNDS-33-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-33-L02"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "41"},
+      "legacyName": "Add todo",
+      "termId": "action",
+      "targetLabel": "Add action",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "42"},
+      "legacyName": "Capture a quick task in the current campaign.",
+      "termId": "action",
+      "targetLabel": "Capture a quick action in the current campaign.",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "48"},
+      "legacyName": "Add application",
+      "termId": "opportunity",
+      "targetLabel": "Add opportunity",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "49"},
+      "legacyName": "Create a company and role in the active campaign.",
+      "termId": "opportunity",
+      "targetLabel": "Create an opportunity in the active campaign.",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "55"},
+      "legacyName": "Add round",
+      "termId": "career-activity",
+      "targetLabel": "Add interview",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "56"},
+      "legacyName": "Log a new round under an existing application.",
+      "termId": "career-activity",
+      "targetLabel": "Log an interview for an existing application.",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "62"},
+      "legacyName": "New resume",
+      "termId": "artifact-edition",
+      "targetLabel": "New resume",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "63"},
+      "legacyName": "Create a blank resume in Resume Studio and start editing.",
+      "termId": "artifact-edition",
+      "targetLabel": "Create a blank resume in Materials and start editing.",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "72"},
+      "legacyName": "New anecdote",
+      "termId": "narrative",
+      "targetLabel": "New story",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "73"},
+      "legacyName": "Open the anecdote editor with a blank STAR story.",
+      "termId": "narrative",
+      "targetLabel": "Open the story editor with a blank STAR story.",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "81"},
+      "legacyName": "Practice coding",
+      "termId": "track-coding",
+      "targetLabel": "Practice coding",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "82"},
+      "legacyName": "Open the coding question list with practice-status filter.",
+      "termId": "track-coding",
+      "targetLabel": "Open the coding question list with practice-status filter.",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "90"},
+      "legacyName": "Practice system design",
+      "termId": "track-system-design",
+      "targetLabel": "Practice system design",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "91"},
+      "legacyName": "Open the system design problem list.",
+      "termId": "track-system-design",
+      "targetLabel": "Open the system design problem list.",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "99"},
+      "legacyName": "Practice behavioral",
+      "termId": "track-behavioral",
+      "targetLabel": "Practice behavioral",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "100"},
+      "legacyName": "Open the behavioral question list.",
+      "termId": "track-behavioral",
+      "targetLabel": "Open the behavioral question list.",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "109"},
+      "legacyName": "Switch workspace or create a new campaign.",
+      "termId": "campaign-goal",
+      "targetLabel": "Switch campaign or create a new one.",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "115"},
+      "legacyName": "Theme",
+      "termId": "account-preference",
+      "targetLabel": "Theme",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "ui-string",
+      "source": {"path": "frontend/src/command-center/registry.tsx", "lines": "116"},
+      "legacyName": "Customize colors, fonts, corners, density, and layout.",
+      "termId": "account-preference",
+      "targetLabel": "Customize colors, fonts, corners, density, and layout.",
+      "retiringLeaf": "ROUNDS-27-L03"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/experience/ExperiencePage.tsx", "lines": "476"},
+      "prop": "eyebrow",
+      "legacyName": "Track · Experience",
+      "termId": "career-profile",
+      "targetLabel": "Career Profile",
+      "retiringLeaf": "ROUNDS-03-L03"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/experience/ExperiencePage.tsx", "lines": "477"},
+      "prop": "title",
+      "legacyName": "Experience",
+      "termId": "career-profile",
+      "targetLabel": "Career Profile",
+      "retiringLeaf": "ROUNDS-03-L03"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/ApplicationDetail.tsx", "lines": "104"},
+      "prop": "title",
+      "legacyName": "Application not found",
+      "termId": "opportunity-workspace",
+      "targetLabel": "Opportunity not found",
+      "retiringLeaf": "ROUNDS-21-L04"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/Applications.tsx", "lines": "165"},
+      "prop": "eyebrow",
+      "legacyName": "Track · Pipeline",
+      "termId": "pipeline",
+      "targetLabel": "Pipeline",
+      "retiringLeaf": "ROUNDS-20-L03"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/Applications.tsx", "lines": "166"},
+      "prop": "title",
+      "legacyName": "Applications",
+      "termId": "pipeline",
+      "targetLabel": "Pipeline",
+      "retiringLeaf": "ROUNDS-20-L03"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/BehavioralList.tsx", "lines": "365"},
+      "prop": "eyebrow",
+      "legacyName": "Track 03 · Behavioral",
+      "termId": "track-behavioral",
+      "targetLabel": "Practice · Behavioral",
+      "retiringLeaf": "ROUNDS-28-L07"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/CodingList.tsx", "lines": "143"},
+      "prop": "eyebrow",
+      "legacyName": "Track 02 · Coding",
+      "termId": "track-coding",
+      "targetLabel": "Practice · Coding",
+      "retiringLeaf": "ROUNDS-28-L04"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/NewApplication.tsx", "lines": "71"},
+      "prop": "eyebrow",
+      "legacyName": "Track · New company",
+      "termId": "opportunity",
+      "targetLabel": "Pipeline · New opportunity",
+      "retiringLeaf": "ROUNDS-20-L03"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/NewApplication.tsx", "lines": "72"},
+      "prop": "title",
+      "legacyName": "Add an application",
+      "termId": "opportunity",
+      "targetLabel": "Add an opportunity",
+      "retiringLeaf": "ROUNDS-20-L03"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/Profile.tsx", "lines": "21"},
+      "prop": "eyebrow",
+      "legacyName": "Account · Profile",
+      "termId": "account",
+      "targetLabel": "Account",
+      "retiringLeaf": "ROUNDS-03-L04"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/Profile.tsx", "lines": "22"},
+      "prop": "title",
+      "legacyName": "Your profile",
+      "termId": "account",
+      "targetLabel": "Account",
+      "retiringLeaf": "ROUNDS-03-L04"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/ResumesList.tsx", "lines": "127"},
+      "prop": "eyebrow",
+      "legacyName": "Track · Resume Studio",
+      "termId": "artifact-edition",
+      "targetLabel": "Materials",
+      "retiringLeaf": "ROUNDS-16-L01"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/Settings.tsx", "lines": "29"},
+      "prop": "eyebrow",
+      "legacyName": "Account · Preferences",
+      "termId": "account-preference",
+      "targetLabel": "Account and Settings",
+      "retiringLeaf": "ROUNDS-03-L04"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/SystemDesignList.tsx", "lines": "114"},
+      "prop": "eyebrow",
+      "legacyName": "Track 01 · System Design",
+      "termId": "track-system-design",
+      "targetLabel": "Practice · System Design",
+      "retiringLeaf": "ROUNDS-28-L03"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/Todos.tsx", "lines": "156"},
+      "prop": "eyebrow",
+      "legacyName": "Track · Quick capture",
+      "termId": "action",
+      "targetLabel": "Actions",
+      "retiringLeaf": "ROUNDS-33-L04"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/Todos.tsx", "lines": "157"},
+      "prop": "title",
+      "legacyName": "Todos",
+      "termId": "action",
+      "targetLabel": "Actions",
+      "retiringLeaf": "ROUNDS-33-L04"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/ai-coding/AICodingList.tsx", "lines": "138"},
+      "prop": "eyebrow",
+      "legacyName": "Track 04 · AI Assisted Coding",
+      "termId": "track-ai-coding",
+      "targetLabel": "Practice · AI-Assisted Coding",
+      "retiringLeaf": "ROUNDS-28-L05"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/ai-coding/AICodingList.tsx", "lines": "139"},
+      "prop": "title",
+      "legacyName": "AI Assisted Coding",
+      "termId": "track-ai-coding",
+      "targetLabel": "AI-Assisted Coding",
+      "retiringLeaf": "ROUNDS-28-L05"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/take-home/TakeHomeList.tsx", "lines": "157"},
+      "prop": "eyebrow",
+      "legacyName": "Track 05 · Real World Problems",
+      "termId": "track-take-home",
+      "targetLabel": "Practice · Take-Home",
+      "retiringLeaf": "ROUNDS-28-L06"
+    },
+    {
+      "kind": "app-header",
+      "source": {"path": "frontend/src/pages/take-home/TakeHomeList.tsx", "lines": "158"},
+      "prop": "title",
+      "legacyName": "Real World Problems",
+      "termId": "track-take-home",
+      "targetLabel": "Take-Home",
+      "retiringLeaf": "ROUNDS-28-L06"
+    },
+    {
+      "kind": "positioning",
+      "source": {"path": "frontend/index.html", "lines": "17"},
+      "legacyName": "<title>Rounds — Interview Prep</title>",
+      "decidedBy": "ROUNDS-01-L01",
+      "targetLabel": "<title>Rounds: Career Command Center</title>",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "positioning",
+      "source": {"path": "frontend/src/pages/Login.tsx", "lines": "239"},
+      "legacyName": "<div className=\"eyebrow mb-2\">Rounds · interview prep</div>",
+      "decidedBy": "ROUNDS-01-L01",
+      "targetLabel": "<div className=\"eyebrow mb-2\">Rounds · Career Command Center</div>",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "positioning",
+      "source": {"path": "SHOWCASE.md", "lines": "3"},
+      "legacyName": "A tour of Rounds, the self-hostable interview-prep command center: one calm, editorial workspace for **System Design**, **Coding**, **AI-Assisted Coding**, **Real-World Problems**, and **Behavioral** practice — plus a pipeline tracker for companies, rounds, and resumes.",
+      "decidedBy": "ROUNDS-01-L01",
+      "targetLabel": "Rounds is a self-hostable career command center that connects a person's canonical professional history and evidence to the opportunities they pursue, the artifacts they submit, the interviews they prepare for, the practice they complete, and the next actions they should take.",
+      "retiringLeaf": "ROUNDS-32-L10"
+    },
+    {
+      "kind": "doc",
+      "source": {"path": "docs/architecture.md", "lines": "58"},
+      "legacyName": "campaign-scoped workspace state",
+      "termId": "campaign-goal",
+      "targetLabel": "campaign lens state",
+      "retiringLeaf": "ROUNDS-34-L06",
+      "note": "A Campaign is a lens, not a workspace (spec 978; G6)."
+    },
+    {
+      "kind": "doc",
+      "source": {"path": "docs/architecture.md", "lines": "87"},
+      "legacyName": "workspace boundary",
+      "termId": "campaign-goal",
+      "targetLabel": "planning lens",
+      "retiringLeaf": "ROUNDS-34-L06",
+      "note": "A Campaign is a lens, not a workspace (spec 978; G6)."
+    }
+  ]
+}

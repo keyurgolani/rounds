@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/vocabulary/terms.schema.json",
+  "title": "Product vocabulary registry",
+  "description": "Shape of contracts/vocabulary/terms.json (ROUNDS-01-L01). The conformance rule scripts/conformance/rules/vocabulary.mjs validates it against this schema, then checks references, collisions, coverage, and revisions.",
+  "type": "object",
+  "required": ["registry", "revision", "compatibility", "decisionRecord", "positioning", "categories", "namespaces", "coreConcepts", "platformCore", "sharedLabels", "usageRules", "dispositions", "cutover", "terms"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string" },
+    "registry": { "const": "rounds-product-vocabulary" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "compatibility": { "enum": ["additive", "breaking"] },
+    "decisionRecord": { "type": "string", "pattern": "^DR-\\d{4}$" },
+    "positioning": {
+      "type": "object",
+      "required": ["statement", "title", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "statement": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "minItems": 15,
+      "maxItems": 15,
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "additionalProperties": false,
+        "properties": { "id": { "$ref": "#/$defs/kebab" }, "name": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "namespaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/namespace" },
+          "status": { "enum": ["provisional"] },
+          "owningLeaf": { "type": "string" },
+          "decision": { "type": "string" },
+          "description": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "coreConcepts": {
+      "type": "object",
+      "required": ["source", "terms"],
+      "additionalProperties": false,
+      "properties": { "source": { "type": "string" }, "terms": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/kebab" } } }
+    },
+    "platformCore": {
+      "type": "object",
+      "required": ["source", "names"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string" },
+        "names": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "terms"],
+            "additionalProperties": false,
+            "properties": { "name": { "type": "string", "minLength": 1 }, "terms": { "type": "array", "items": { "$ref": "#/$defs/kebab" } } }
+          }
+        }
+      }
+    },
+    "sharedLabels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "terms", "cites", "decision"],
+        "additionalProperties": false,
+        "properties": {
+          "label": { "type": "string", "minLength": 1 },
+          "terms": { "type": "array", "minItems": 2, "uniqueItems": true, "items": { "$ref": "#/$defs/kebab" } },
+          "cites": { "type": "array", "minItems": 2, "items": { "type": "string", "minLength": 1 } },
+          "decision": { "type": "string" },
+          "specChangeRequest": { "type": "string" }
+        }
+      }
+    },
+    "usageRules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "decision", "pattern", "allowedTerms", "rule"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/kebab" },
+          "decision": { "type": "string" },
+          "pattern": { "type": "string", "minLength": 1 },
+          "allowedTerms": { "type": "array", "items": { "$ref": "#/$defs/kebab" } },
+          "rule": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "dispositions": {
+      "type": "object",
+      "required": ["decision", "feature", "item"],
+      "additionalProperties": false,
+      "properties": {
+        "decision": { "type": "string" },
+        "feature": {
+          "type": "object",
+          "required": ["source", "values", "qualifier"],
+          "additionalProperties": false,
+          "properties": {
+            "source": { "type": "string" },
+            "values": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/dispositionValue" } },
+            "qualifier": { "type": "string" }
+          }
+        },
+        "item": {
+          "type": "object",
+          "required": ["source", "values", "catalogWords"],
+          "additionalProperties": false,
+          "properties": {
+            "source": { "type": "string" },
+            "values": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/dispositionValue" } },
+            "catalogWords": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["word", "value"],
+                "additionalProperties": false,
+                "properties": { "word": { "type": "string" }, "value": { "type": "string" }, "condition": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "cutover": {
+      "type": "object",
+      "required": ["term", "decision", "source", "definition", "allowlist"],
+      "additionalProperties": false,
+      "properties": {
+        "term": { "type": "string" },
+        "decision": { "type": "string" },
+        "source": { "type": "string" },
+        "definition": { "type": "string", "minLength": 1 },
+        "allowlist": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "line", "reason"],
+            "additionalProperties": false,
+            "properties": { "path": { "type": "string" }, "line": { "type": "integer", "minimum": 1 }, "reason": { "type": "string", "minLength": 1 } }
+          }
+        }
+      }
+    },
+    "terms": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/term" } }
+  },
+  "$defs": {
+    "kebab": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+    "namespace": { "type": "string", "pattern": "^(platform|pack\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)$" },
+    "dispositionValue": {
+      "type": "object",
+      "required": ["value", "meaning"],
+      "additionalProperties": false,
+      "properties": { "value": { "type": "string", "minLength": 1 }, "meaning": { "type": "string", "minLength": 1 }, "requiresOwnerApproval": { "type": "boolean" } }
+    },
+    "labelOption": {
+      "type": "object",
+      "required": ["key", "singular", "plural"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "$ref": "#/$defs/kebab" },
+        "singular": { "type": "string", "minLength": 1 },
+        "plural": { "type": "string", "minLength": 1 }
+      }
+    },
+    "label": {
+      "description": "Null for inspection-only and internal terms. A stage or submission-state axis needs a mapping owner; the rule checks that and the default.",
+      "type": ["object", "null"],
+      "required": ["axis", "options", "default", "mappingOwner", "basis"],
+      "additionalProperties": false,
+      "properties": {
+        "axis": { "enum": ["none", "stage", "kind", "submission-state"] },
+        "options": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/labelOption" } },
+        "default": { "$ref": "#/$defs/kebab" },
+        "mappingOwner": { "type": ["array", "null"], "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "basis": { "type": "string", "minLength": 1 },
+        "specLabel": { "type": "string", "minLength": 1 }
+      }
+    },
+    "term": {
+      "description": "A term needs definition, definedBy, or both, and a label exactly when it is user-facing; the rule checks both.",
+      "type": "object",
+      "required": ["id", "term", "category", "namespace", "status", "visibility", "label", "aliases", "owningLeaf", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/kebab" },
+        "term": { "type": "string", "minLength": 1 },
+        "category": { "$ref": "#/$defs/kebab" },
+        "namespace": { "$ref": "#/$defs/namespace" },
+        "key": { "$ref": "#/$defs/kebab" },
+        "status": { "enum": ["ratified", "ratified-here"] },
+        "visibility": { "enum": ["user-facing", "inspection-only", "internal"] },
+        "definition": { "type": "string", "minLength": 1 },
+        "definedBy": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "label": { "$ref": "#/$defs/label" },
+        "aliases": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "examples": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "owningLeaf": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/vocabulary/adapters.schema.json",
+  "title": "Vocabulary adapter entries",
+  "description": "Shape of contracts/vocabulary/adapters.json (ROUNDS-01-L01): one entry per baseline name that differs from the registry, with the leaf that retires it.",
+  "type": "object",
+  "required": ["registry", "adapters"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string" },
+    "registry": { "const": "rounds-vocabulary-adapters" },
+    "adapters": { "type": "array", "items": { "$ref": "#/$defs/adapter" } }
+  },
+  "$defs": {
+    "adapter": {
+      "type": "object",
+      "required": ["kind", "source", "legacyName", "targetLabel", "retiringLeaf"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["collection", "field", "stored-value", "api-route", "route-segment", "ui-string", "app-header", "positioning", "doc", "term"] },
+        "source": {
+          "type": "object",
+          "required": ["path"],
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "lines": { "type": "string", "pattern": "^\\d+(-\\d+)?(,\\d+(-\\d+)?)*$" },
+            "revision": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "field": { "type": "string", "pattern": "^[a-z_]+\\.[a-z_]+$" },
+        "prop": { "enum": ["eyebrow", "title"] },
+        "legacyName": { "type": "string", "minLength": 1 },
+        "termId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+        "decidedBy": { "type": "string", "minLength": 1 },
+        "targetLabel": { "type": ["string", "null"], "minLength": 1 },
+        "retiringLeaf": { "type": "string", "minLength": 1 },
+        "historical": { "type": "boolean" },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
