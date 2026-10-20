@@ -29,6 +29,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable
 
+import anyio
 import httpx
 from fastapi import HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -328,4 +329,7 @@ async def allocate() -> AsyncIterator[sandbox.Sandbox]:
     try:
         yield slot
     finally:
-        await run_in_threadpool(_pool.release, slot)
+        # A cancelled anyio scope cancels every await inside it, this one
+        # included, so the cleanup is shielded or the slot would leak.
+        with anyio.CancelScope(shield=True):
+            await run_in_threadpool(_pool.release, slot)

@@ -14,6 +14,7 @@ import threading
 import time
 import urllib.request
 
+import anyio
 import httpx
 import pytest
 from fastapi import HTTPException
@@ -620,6 +621,34 @@ def test_a_slot_is_cleaned_up_and_freed_when_the_run_raises(monkeypatch):
 
     with pytest.raises(Tripped):
         asyncio.run(go())
+    assert len(released) == 1 and pool.in_use() == before
+
+
+@pytest.mark.parametrize("how", ["move_on_after", "task_group"])
+def test_a_request_cancelled_mid_run_still_cleans_up_and_frees_its_slot(monkeypatch, how):
+    # anyio cancellation stays in force inside the cancelled scope, so an
+    # unshielded await in the cleanup would be cancelled before it started.
+    pool = admission.pool()
+    released = []
+    real_release = pool.release
+    monkeypatch.setattr(pool, "release", lambda slot: (released.append(slot.index), real_release(slot)))
+    before = pool.in_use()
+
+    async def handler():
+        async with admission.allocate():
+            await anyio.sleep(10)
+
+    async def go():
+        if how == "move_on_after":
+            with anyio.move_on_after(0.05):
+                await handler()
+        else:
+            async with anyio.create_task_group() as group:
+                group.start_soon(handler)
+                await anyio.sleep(0.05)
+                group.cancel_scope.cancel()
+
+    anyio.run(go)
     assert len(released) == 1 and pool.in_use() == before
 
 

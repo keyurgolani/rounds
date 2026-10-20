@@ -34,8 +34,9 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import socket
+import time
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Iterable
+from typing import Any, Awaitable, Callable, Iterable, Iterator
 from urllib.parse import urlsplit
 
 import httpx
@@ -217,14 +218,41 @@ def inner_transport(host: str) -> httpx.AsyncBaseTransport:
     return httpx.AsyncHTTPTransport()
 
 
+# Every vetted address but the last gets at most this long to connect, so
+# one that never answers (an unrouted IPv6 address, say) hands over to the
+# next. All of them together stay within the request's connect timeout.
+ADDRESS_CONNECT_S = 3.0
+monotonic = time.monotonic
+
+
+def _connect_budgets(overall: float | None, count: int) -> Iterator[float | None]:
+    """The connect timeout for each address in turn: the short budget for
+    every address but the last, which gets what's left. Stops when the
+    overall timeout is spent. A single address keeps the whole timeout."""
+    started: float | None = None
+    for index in range(count):
+        is_last = index == count - 1
+        if overall is None:
+            yield None if is_last else ADDRESS_CONNECT_S
+            continue
+        if started is None:
+            started, remaining = monotonic(), overall
+        else:
+            remaining = overall - (monotonic() - started)
+        if remaining <= 0:
+            return
+        yield remaining if is_last else min(ADDRESS_CONNECT_S, remaining)
+
+
 class PinnedTransport(httpx.AsyncBaseTransport):
     """Sends each request to a vetted address of its host: one the caller
     vetted, or one this transport vets on the host's first request. The
     request goes out with the name in its Host header, and TLS checks
     the certificate against the name. An address that refuses the
-    connection falls through to the next vetted one. The client's own
-    request keeps its URL, so a relative redirect resolves against the
-    name, not the address."""
+    connection or doesn't connect within its budget falls through to the
+    next vetted one, within the request's overall connect timeout. The
+    client's own request keeps its URL, so a relative redirect resolves
+    against the name, not the address."""
 
     def __init__(self, known: Iterable[Destination] = (), private_ok: bool | None = None) -> None:
         self._vetted = {(d.host, d.port): d for d in known}
@@ -250,21 +278,26 @@ class PinnedTransport(httpx.AsyncBaseTransport):
         extensions = dict(request.extensions)
         if url.scheme == "https":
             extensions["sni_hostname"] = destination.host
-        last = len(destination.addresses) - 1
-        for index, address in enumerate(destination.addresses):
+        timeouts = dict(extensions.get("timeout") or {})
+        failure: httpx.TransportError | None = None
+        budgets = _connect_budgets(timeouts.get("connect"), len(destination.addresses))
+        for address, budget in zip(destination.addresses, budgets):
             pinned = httpx.Request(
                 request.method,
                 url.copy_with(host=str(address)),
                 headers=request.headers,
                 stream=request.stream,
-                extensions=extensions,
+                extensions={**extensions, "timeout": {**timeouts, "connect": budget}},
             )
             try:
                 return await inner.handle_async_request(pinned)
-            except httpx.ConnectError:
-                if index == last:
-                    raise
-        raise _deny()  # unreachable: a vetted destination has an address
+            except (httpx.ConnectError, httpx.ConnectTimeout) as err:
+                failure = err
+        if isinstance(failure, httpx.ConnectError):
+            raise failure
+        raise httpx.ConnectTimeout(
+            f"no checked address of {destination.host} connected within the connect timeout", request=request
+        ) from failure
 
     async def aclose(self) -> None:
         for inner in self._inner.values():

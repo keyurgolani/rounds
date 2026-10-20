@@ -424,20 +424,90 @@ def test_testing_a_provider_looks_it_up_once(client, monkeypatch, private_networ
     assert resolves.asked == ["models.example.com"]
 
 
-def test_a_refused_address_falls_through_to_the_next_checked_one(private_network, resolves, wire):
+@pytest.mark.parametrize("failure", [httpx.ConnectError, httpx.ConnectTimeout])
+def test_an_address_that_refuses_or_times_out_falls_through_to_the_next_checked_one(private_network, resolves, wire, failure):
     from routers import ai
 
     resolves.answers["models.example.com"] = [PUBLIC, PUBLIC_2]
 
     def respond(request):
         if request.url.host == PUBLIC:
-            raise httpx.ConnectError("connection refused")
+            raise failure("no connection")
         return httpx.Response(200, json=MESSAGES_REPLY)
 
     wire.respond = respond
     text = asyncio.run(ai._call_complete("anthropic-compatible", "m", "test-key", PROVIDER_URL, system="s", messages=[]))
     assert text == "PONG"
     assert [r.url.host for r in wire.sent] == [PUBLIC, PUBLIC_2]
+
+
+class ConnectClock:
+    """Stands in for monotonic time: an address that times out uses up its
+    whole connect budget."""
+
+    def __init__(self, monkeypatch) -> None:
+        self.now = 1000.0
+        monkeypatch.setattr(destinations, "monotonic", lambda: self.now)
+
+    def time_out(self, request: httpx.Request):
+        self.now += request.extensions["timeout"]["connect"]
+        raise httpx.ConnectTimeout("connect timed out")
+
+
+def _get(timeout) -> int:
+    async def go():
+        async with destinations.client(timeout=timeout) as http:
+            return (await http.get(f"{PROVIDER_URL}/models")).status_code
+
+    return asyncio.run(go())
+
+
+def test_a_first_address_that_times_out_gets_a_short_budget_and_the_next_gets_the_rest(monkeypatch, private_network, resolves, wire):
+    resolves.answers["models.example.com"] = [PUBLIC, PUBLIC_2]
+    clock = ConnectClock(monkeypatch)
+
+    def respond(request):
+        if request.url.host == PUBLIC:
+            clock.time_out(request)
+        return httpx.Response(200)
+
+    wire.respond = respond
+    assert _get(httpx.Timeout(20.0, connect=10.0)) == 200
+    budgets = [(r.url.host, r.extensions["timeout"]["connect"]) for r in wire.sent]
+    assert budgets == [(PUBLIC, destinations.ADDRESS_CONNECT_S), (PUBLIC_2, 10.0 - destinations.ADDRESS_CONNECT_S)]
+    # Only the connect budget changes per address.
+    assert {r.extensions["timeout"]["read"] for r in wire.sent} == {20.0}
+
+
+def test_every_address_together_stays_within_the_connect_timeout(monkeypatch, private_network, resolves, wire):
+    resolves.answers["models.example.com"] = [PUBLIC, PUBLIC_2, "93.184.216.36"]
+    clock = ConnectClock(monkeypatch)
+    wire.respond = clock.time_out
+    with pytest.raises(httpx.ConnectTimeout):
+        _get(httpx.Timeout(20.0, connect=5.0))
+    # 3 s on the first, the remaining 2 s on the second, nothing left for the third.
+    assert [r.extensions["timeout"]["connect"] for r in wire.sent] == [3.0, 2.0]
+    assert clock.now - 1000.0 == 5.0
+
+
+def test_without_a_connect_timeout_only_the_last_address_waits_unbounded(monkeypatch, private_network, resolves, wire):
+    resolves.answers["models.example.com"] = [PUBLIC, PUBLIC_2]
+    clock = ConnectClock(monkeypatch)
+
+    def respond(request):
+        if request.url.host == PUBLIC:
+            clock.time_out(request)
+        return httpx.Response(200)
+
+    wire.respond = respond
+    assert _get(None) == 200
+    assert [r.extensions["timeout"]["connect"] for r in wire.sent] == [destinations.ADDRESS_CONNECT_S, None]
+
+
+def test_a_single_address_keeps_the_whole_connect_timeout(private_network, resolves, wire):
+    resolves.answers["models.example.com"] = [PUBLIC]
+    assert _get(httpx.Timeout(20.0, connect=10.0)) == 200
+    assert [r.extensions["timeout"]["connect"] for r in wire.sent] == [10.0]
 
 
 def test_a_client_that_follows_redirects_checks_every_hop(private_network, resolves, wire):
@@ -587,4 +657,36 @@ def test_a_pinned_tls_connection_checks_the_certificate_against_the_name(tmp_pat
     else:
         with pytest.raises(httpx.ConnectError):
             asyncio.run(go())
+    assert resolves.asked == []
+
+
+def test_a_real_connection_moves_on_from_an_address_that_never_answers(monkeypatch, resolves):
+    # 192.0.2.1 is reserved for documentation, so nothing answers it: the
+    # connect either times out within its budget or fails outright, and the
+    # next address serves the request well inside the overall timeout.
+    monkeypatch.setattr(destinations, "ADDRESS_CONNECT_S", 0.3)
+
+    async def handle(reader, writer):
+        try:
+            await reader.readuntil(b"\r\n\r\n")
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+            await writer.drain()
+        finally:
+            writer.close()
+
+    async def go():
+        server = await asyncio.start_server(handle, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        addresses = (ipaddress.ip_address("192.0.2.1"), ipaddress.ip_address("127.0.0.1"))
+        started = asyncio.get_running_loop().time()
+        try:
+            async with destinations.client(destinations.Destination("models.test", port, addresses), timeout=httpx.Timeout(10.0, connect=5.0)) as http:
+                response = await http.get(f"http://models.test:{port}/")
+        finally:
+            server.close()
+        return response.text, asyncio.get_running_loop().time() - started
+
+    text, elapsed = asyncio.run(go())
+    assert text == "ok"
+    assert elapsed < 2.5
     assert resolves.asked == []
