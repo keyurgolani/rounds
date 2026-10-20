@@ -18,9 +18,9 @@ the channel, and the server computes ``passed`` and ``score`` itself:
 - ``score`` is the passed results' share of the weights, clamped to 0 to
   1, and 0 when fewer than ``min_executed`` executed.
 
-TODO(ROUNDS-00A-L02): step 2's grade and take-home routes score through
-this at ``ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce``; until then only the
-tests call it. TODO(ROUNDS-00A-L03): #3 classes ``not-run`` results.
+At ``ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`` the grade and take-home
+routes score every checkpoint through this (``app.execution.grade``).
+TODO(ROUNDS-00A-L03): #3 classes ``not-run`` results.
 """
 from __future__ import annotations
 
@@ -86,16 +86,21 @@ def _parse(channel: bytes, expected_ids: frozenset[str]) -> dict[str, Result] | 
     return reported
 
 
-def score(channel: bytes, expected: Sequence[dict[str, Any]], min_executed: int) -> Score:
+def score(channel: bytes, expected: Sequence[dict[str, Any]], min_executed: int,
+          missing_reason: str = "no-result") -> Score:
     """Scores ``channel`` against a checkpoint's ``results`` and
-    ``min_executed`` from its harness revision."""
+    ``min_executed`` from its harness revision. An expected id that isn't
+    reported is ``not-run`` with ``missing_reason``: ``timeout`` when the
+    step ran out of time, ``no-result`` otherwise."""
+    if missing_reason not in ("no-result", "timeout"):
+        raise ValueError("unknown missing reason")
     ids = [str(r["id"]) for r in expected]
     weights = {str(r["id"]): float(r["weight"]) for r in expected}
     reported = _parse(channel, frozenset(ids))
     malformed = reported is None
     results = tuple(
         Result(rid, "not-run", "bad-result") if reported is None
-        else reported.get(rid, Result(rid, "not-run", "no-result"))
+        else reported.get(rid, Result(rid, "not-run", missing_reason))
         for rid in ids
     )
     executed = sum(1 for r in results if r.outcome in EXECUTED)

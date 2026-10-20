@@ -224,6 +224,11 @@ restart_runners
 capture_gates emergency-enable
 capture_gates emergency-enable runner-b
 probe emergency-enable
+# TODO(ROUNDS-00A-L02): before step 3 makes legacy act as disabled, a
+# phase here restarts the runners and nginx with
+# ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce and runs the six routes on
+# definition requests through nginx: both AI-coding variants and a
+# test-only take-home definition. Step 2's route tests run in process.
 compose stop runner runner-b frontend
 compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
 

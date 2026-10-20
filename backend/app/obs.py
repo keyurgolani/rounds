@@ -204,6 +204,9 @@ FIELDS: dict[str, Callable[[Any], bool]] = {
     ),
     "entries": _int_between(0, 100_000),
     "mismatched": _int_between(0, 100_000),
+    # The request field a definition.rejected line counts, such as
+    # test_command for legacy_request_rejected: a field name, never a value.
+    "field": _matches(r"[a-z][a-z0-9_]{0,31}", 32),
 }
 
 

@@ -150,6 +150,25 @@ export function useAICodingDrafts(round: AICodingRound | null, campaignId?: stri
     });
   }
 
+  /** Saves every changed file now, so a reload keeps it. */
+  async function saveNow() {
+    if (!round) return;
+    const dirty = Array.from(dirtyRef.current);
+    dirtyRef.current.clear();
+    await Promise.all(
+      dirty.map((path) =>
+        upsertDraft({
+          roundId: round.id,
+          campaignId,
+          filePath: path,
+          contents: filesRef.current[path] ?? '',
+        }).catch(() => {
+          dirtyRef.current.add(path);
+        }),
+      ),
+    );
+  }
+
   /** Discard every saved draft on the server and rehydrate local
    *  state from the round's starter files. The caller is expected
    *  to confirm the destructive intent first. */
@@ -177,5 +196,6 @@ export function useAICodingDrafts(round: AICodingRound | null, campaignId?: stri
     hydrated,
     resetToStarter,
     persistImmediately,
+    saveNow,
   };
 }

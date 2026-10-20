@@ -98,6 +98,25 @@ export function useTakeHomeDrafts(
     });
   }
 
+  /** Saves every changed file now, so a reload keeps it. */
+  async function saveNow() {
+    if (!assignment) return;
+    const dirty = Array.from(dirtyRef.current);
+    dirtyRef.current.clear();
+    await Promise.all(
+      dirty.map((path) =>
+        upsertDraft({
+          assignmentId: assignment.id,
+          campaignId,
+          filePath: path,
+          contents: filesRef.current[path] ?? '',
+        }).catch(() => {
+          dirtyRef.current.add(path);
+        }),
+      ),
+    );
+  }
+
   /** Discard every saved draft on the server and rehydrate local
    *  state from the assignment's starter files. Caller confirms first. */
   async function resetToStarter() {
@@ -114,5 +133,5 @@ export function useTakeHomeDrafts(
     setSavedFiles(starter);
   }
 
-  return { files, savedFiles, setFile, hydrated, resetToStarter };
+  return { files, savedFiles, setFile, hydrated, resetToStarter, saveNow };
 }

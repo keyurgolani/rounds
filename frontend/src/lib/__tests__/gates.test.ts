@@ -51,8 +51,25 @@ describe('resolveGate', () => {
   });
 
   it('the registry the SPA ships has only gates it reads', () => {
-    expect(Object.keys(registry.gates)).toEqual(['SIGNUPS']);
+    expect(Object.keys(registry.gates)).toEqual(['EXECUTION_DEFINITIONS', 'SIGNUPS']);
     expect(registry.prefix).toBe('ROUNDS_GATE_');
+  });
+
+  // The runner and the SPA read the same value, so their request shapes
+  // switch together (ROUNDS-00A-L02).
+  it('execution definitions default to legacy and take enforce', () => {
+    expect(resolveGate('EXECUTION_DEFINITIONS', {})).toEqual({ value: 'legacy', source: 'default' });
+    expect(resolveGate('EXECUTION_DEFINITIONS', { ROUNDS_GATE_EXECUTION_DEFINITIONS: 'Enforce' })).toEqual({
+      value: 'enforce',
+      source: 'env',
+    });
+  });
+
+  it.each(['enforced', 'on', 'true'])('an execution definitions value it does not know closes: %s', (raw) => {
+    expect(resolveGate('EXECUTION_DEFINITIONS', { ROUNDS_GATE_EXECUTION_DEFINITIONS: raw })).toEqual({
+      value: 'disabled',
+      source: 'invalid',
+    });
   });
 });
 
@@ -69,7 +86,11 @@ describe('readGateEnv', () => {
 
   it('reads only the keys the registry names', () => {
     (window as unknown as ConfigWindow).__ROUNDS_CONFIG__ = { ROUNDS_GATE_SIGNUPS: 'disabled', OTHER: 'x' };
-    expect(Object.keys(readGateEnv()).sort()).toEqual(['ROUNDS_GATE_SIGNUPS', 'VITE_DISABLE_SIGNUPS']);
+    expect(Object.keys(readGateEnv()).sort()).toEqual([
+      'ROUNDS_GATE_EXECUTION_DEFINITIONS',
+      'ROUNDS_GATE_SIGNUPS',
+      'VITE_DISABLE_SIGNUPS',
+    ]);
   });
 });
 

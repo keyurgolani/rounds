@@ -43,6 +43,10 @@ CODES: dict[str, int] = {
     "not_permitted": 403,
     "limit_exceeded": 413,
     "invalid_request": 422,
+    # A request shape from before ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce
+    # (ROUNDS-00A-L02): its detail names the field, and the app asks for a
+    # reload.
+    "legacy_request_rejected": 422,
     "idempotency_key_required": 400,
     "already_completed": 409,
     "idempotency_mismatch": 409,
@@ -56,6 +60,8 @@ CODES: dict[str, int] = {
     "definition_superseded": 409,
     "definition_retired": 410,
     "runtime_unsupported": 422,
+    "path_not_allowed": 422,
+    "case_unknown": 422,
     "definition_integrity_mismatch": 503,
     "worker_unavailable": 503,
     "render_timeout": 422,
@@ -72,6 +78,7 @@ DETAILS: dict[str, str] = {
     "not_permitted": "This isn't available for this account.",
     "limit_exceeded": "Part of the request is over its size limit.",
     "invalid_request": "The request doesn't match what this route accepts.",
+    "legacy_request_rejected": "This page is out of date. Reload it to continue.",
     "idempotency_key_required": "This request needs an Idempotency-Key.",
     "already_completed": "This request already ran.",
     "idempotency_mismatch": "This Idempotency-Key was already used for a different request.",
@@ -84,6 +91,8 @@ DETAILS: dict[str, str] = {
     "definition_superseded": "This version was replaced. Reload to get the current one.",
     "definition_retired": "This practice item was retired.",
     "runtime_unsupported": "This language isn't supported here.",
+    "path_not_allowed": "A file in this submission can't be sent. Rename or remove it and try again.",
+    "case_unknown": "Part of this request isn't in the current version. Reload to get it.",
     "definition_integrity_mismatch": "This practice item can't be checked right now. Try again shortly.",
     "worker_unavailable": "The runner is busy or unavailable. Try again shortly.",
     "render_timeout": "This document took too long to render. Simplify it and try again.",
@@ -183,14 +192,19 @@ async def replayed_handler(_request: Request, exc: Replayed) -> JSONResponse:
     return JSONResponse(exc.body, status_code=exc.status, headers={REPLAY_HEADER: "true"})
 
 
+def validation_code(errs: list[dict[str, Any]]) -> str:
+    """The typed code for a request model's validation errors: 413
+    ``limit_exceeded`` when a field is over its limit, 422
+    ``invalid_request`` otherwise."""
+    return "limit_exceeded" if any(err.get("type") == LIMIT_ERROR_TYPE for err in errs) else "invalid_request"
+
+
 async def validation_error_handler(request: Request, exc: RequestValidationError):
     from app import admission
 
     if admission.state(request) is None:
         return await request_validation_exception_handler(request, exc)
-    over_limit = any(err.get("type") == LIMIT_ERROR_TYPE for err in exc.errors())
-    code = "limit_exceeded" if over_limit else "invalid_request"
-    return typed_response(request, TypedError(code))
+    return typed_response(request, TypedError(validation_code(list(exc.errors()))))
 
 
 def install(app: FastAPI) -> None:

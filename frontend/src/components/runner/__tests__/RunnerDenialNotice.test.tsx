@@ -4,6 +4,12 @@
 
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+
+const reloadPage = vi.hoisted(() => vi.fn());
+vi.mock('../../../lib/definitions', async (importOriginal) => ({
+  ...((await importOriginal()) as Record<string, unknown>),
+  reloadPage,
+}));
 import { render, screen, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -113,6 +119,55 @@ describe('RunnerDenialNotice', () => {
 
   it('offers no actions for run surfaces besides signing in', () => {
     renderNotice(<RunnerDenialNotice denial={denial('unavailable')} action="run" onPrint={vi.fn()} />);
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+});
+
+describe('definition states (ROUNDS-00A-L02)', () => {
+  const DEFINITION_CASES: Array<[RunnerDenialKind, RunnerAction, string, RegExp]> = [
+    ['reload', 'tests', 'Reload to continue', /This page is out of date\. No tests ran\. Your code is still here\./],
+    ['retired', 'grade', 'Retired', /This practice item was retired, so it no longer runs\. Your files and notes are still here\./],
+    ['not_found', 'run', 'Not on this server', /doesn't have this practice item in this language\. Nothing ran\./],
+  ];
+
+  it.each(DEFINITION_CASES)('%s reads as a titled message', (kind, action, title, body) => {
+    renderNotice(<RunnerDenialNotice denial={denial(kind)} action={action} />);
+    const region = screen.getByRole('status');
+    expect(within(region).getByText(title)).toBeInTheDocument();
+    expect(region.textContent).toMatch(body);
+    expect(region.querySelector('[data-denial]')).toHaveAttribute('data-denial', kind);
+  });
+
+  it.each([
+    ['unsupported', "This language isn't supported here. Try javascript."],
+    ['path_not_allowed', 'A file uses a path the grader owns. Rename or remove it and try again.'],
+  ] as const)("%s shows the server's fixed sentence", (kind, detail) => {
+    renderNotice(<RunnerDenialNotice denial={denial(kind, { detail })} action="grade" />);
+    expect(screen.getByRole('status')).toHaveTextContent(`${detail} Nothing was graded. Your files and notes are still here.`);
+  });
+
+  it('offers a keyboard-reachable Reload that runs what the page passes', async () => {
+    const user = userEvent.setup();
+    const onReload = vi.fn();
+    renderNotice(<RunnerDenialNotice denial={denial('reload')} action="run" onReload={onReload} />);
+    const reload = screen.getByRole('button', { name: 'Reload' });
+    await user.tab();
+    expect(reload).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onReload).toHaveBeenCalledTimes(1);
+    expect(reloadPage).not.toHaveBeenCalled();
+  });
+
+  it('reloads the page itself when no handler is passed', async () => {
+    const user = userEvent.setup();
+    reloadPage.mockClear();
+    renderNotice(<RunnerDenialNotice denial={denial('reload')} action="tests" />);
+    await user.click(screen.getByRole('button', { name: 'Reload' }));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['retired', 'not_found', 'unsupported', 'path_not_allowed'] as const)('%s offers no Reload', (kind) => {
+    renderNotice(<RunnerDenialNotice denial={denial(kind)} action="run" />);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });

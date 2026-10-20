@@ -49,9 +49,10 @@ The harness (`harness/run.sh`) does this whole cycle on every CI run: it restart
 
 ## Compiled Definitions
 
-`ROUNDS_GATE_EXECUTION_DEFINITIONS` selects where the six execution routes (run, evaluate, grade, run-project, take-home run and submit) get what they run. It is `legacy` by default.
+`ROUNDS_GATE_EXECUTION_DEFINITIONS` selects where the six execution routes (run, evaluate, grade, run-project, take-home run and submit) get what they run. It is `legacy` by default. The runner and the frontend both read it, the frontend through `runtime-config.js`, so the app's requests change shape with the runner's. Set it once, in `.env` or the `rounds-gates` ConfigMap, and restart both.
 
-- `legacy`: each route loads its question, round, or assignment from PocketBase with the caller's token, as before #2. The compiled definitions in the image are verified at startup but not served yet.
+- `legacy`: each route loads its question, round, or assignment from PocketBase with the caller's token, as before #2. The compiled definitions in the image are verified at startup and served only at `enforce`.
+- `enforce`: the six routes take only definition requests. `definition` names one compiled version, `{track, slug, variant, version}`, which the runner resolves to an active, checksum-verified file before anything runs, and the rest of the request is the candidate's code, files, and inputs. The entry, cases, harness, time limits, and scoring all come from that file. A field from an older request shape answers 422 `legacy_request_rejected`, naming the field, and the app asks for a reload that saves the draft first. A version that was replaced answers 409 `definition_superseded`; the app rereads the item and retries once. A submission's files can't use the harness's paths, test or package configuration, Python startup files, or a library module's name (422 `path_not_allowed`). Grades and take-home runs answer each result's outcome and the server's score, never what the harness printed. Every seeded take-home assignment is retired, so take-home answers 410 `definition_retired`, and coding compiles Python and JavaScript only, so a Java run answers 404 `definition_not_found`.
 - `disabled`: the six routes answer 503 `definitions_disabled` before any lookup, and every draft is kept. Use it to stop all execution in one place without touching the per-route gates. To confirm it, name each of the six with that code:
 
   ```sh
@@ -66,7 +67,9 @@ The harness (`harness/run.sh`) does this whole cycle on every CI run: it restart
   ```
 
   After you set it back, `--admission` without those names passes again.
-- An unknown value (including `enforce`, which #2 step 2 adds) closes to `disabled` and logs an error, so a typo never opens execution.
+- An unknown value closes to `disabled` and logs an error, so a typo never opens execution.
+
+To turn on `enforce`, set it and restart the runner and the frontend. The runner's gates line shows `"EXECUTION_DEFINITIONS":{"source":"env","value":"enforce"}`, which the verifier checks with `--gates-log runner.log --expect-gate EXECUTION_DEFINITIONS=enforce`, and the frontend's start log shows `runtime-config: ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`. `--admission` passes as before, since every route still refuses an anonymous caller before it reads the body. A tab opened before the switch gets `legacy_request_rejected` and a Reload button. To go back, set `legacy`, or leave it empty, and restart both; nothing in PocketBase changes, and drafts and attempts stay. A tab opened while it was `enforce` gets `invalid_request` until it reloads.
 
 At startup the runner reads `backend/definitions/manifest.json` (mode 0400 in the image) and checks every shipped version's bytes against its checksum. It logs one `definitions.loaded` line with `entries` and `mismatched`; `mismatched` should be 0. A version whose file is missing or altered is the only one that fails, with `definition_integrity_mismatch`, and the rest keep serving. A manifest that's missing, isn't JSON, or isn't the manifest's shape leaves no definitions at all: the runner logs one `definition.rejected` line with `definition_integrity_mismatch` and no `definitions.loaded` line, keeps starting, and the legacy routes keep serving.
 
@@ -83,7 +86,8 @@ Typed errors answer `{"detail", "code", "correlation_id"}`. `detail` is a fixed 
 | `auth_unavailable` | 503 | 3, 8 | PocketBase is down or answered 5xx while checking the account or reading a record | Check PocketBase from the runner (Dependency Checks) |
 | `not_permitted` | 403 | 4 | The account's tier can't use this operation | Every tier and operation is permitted; the demo tier's limits are its quota |
 | `limit_exceeded` | 413 | 5 | A field is over its limit (Limits) | The app shows too large |
-| `invalid_request` | 422 | 5, 8 | An unknown or malformed field, the request shape an older tab sends, or a stored definition this runner can't run, such as a `custom` entry | Reload the page; for a stored definition, fix the record |
+| `invalid_request` | 422 | 5, 8 | An unknown or malformed field, a definition request at `legacy` (a tab from an `enforce` deployment), or a stored definition this runner can't run, such as a `custom` entry | Reload the page; for a stored definition, fix the record |
+| `legacy_request_rejected` | 422 | 5 | At `EXECUTION_DEFINITIONS=enforce`, a field from an older request shape or one that would choose what runs; `detail` names the field | The app asks for a reload and saves the draft first |
 | `idempotency_key_required` | 400 | 6 | No `Idempotency-Key`, or one that isn't a UUIDv7, while `ENFORCE_IDEMPOTENCY` enforces | The app shows unavailable; reload the page, since the app sends one key per action |
 | `already_completed` | 409 | 6 | The command already completed and no response was kept: a PDF render, or a result over 256 KiB | The app shows unavailable; the next try gets a new key |
 | `idempotency_mismatch` | 409 | 6 | The key was used for a different request or route | The app shows unavailable; the next try gets a new key |
@@ -92,10 +96,12 @@ Typed errors answer `{"detail", "code", "correlation_id"}`. `detail` is a fixed 
 | `demo_limit_reached` | 429 | 7 | The shared demo limit is reached | The app shows limit reached and the wait from `Retry-After` |
 | `quota_unavailable` | 503 | 7 | The admission store didn't answer while a gate enforces, or the runner has no usable `ROUNDS_ADMISSION_SECRET` | Check PocketBase, the admission routes, and the runner key (Dependency Checks) |
 | `not_found` | 404 | 8 | The question, round, checkpoint, assignment, or campaign is missing or belongs to another account | None; the caller named something it can't use |
-| `definition_not_found` | 404 | definition lookup | No active definition for the request's `(track, slug, variant, version)`; the same for an unknown slug, variant, or version | None; the caller named a definition that isn't shipped (only reachable at `EXECUTION_DEFINITIONS=enforce`, #2 step 2) |
-| `definition_superseded` | 409 | definition lookup | The named version was replaced; the error names the active version | The app reloads to the current version and retries once |
+| `definition_not_found` | 404 | definition lookup | No active definition for the request's `(track, slug, variant, version)`; the same for an unknown slug, variant, or version, a Java coding run included | None; the caller named a definition that isn't shipped (only at `EXECUTION_DEFINITIONS=enforce`) |
+| `definition_superseded` | 409 | definition lookup | The named version was replaced; the error names the active version | The app rereads the item and retries once with its current version; a second refusal asks for a reload |
 | `definition_retired` | 410 | definition lookup | The named definition was retired; nothing runs | None; the item is gone. Drafts stay |
 | `runtime_unsupported` | 422 | definition lookup | This runner has no runtime for the named variant; the error names the variants it does have | Use a supported variant, or deploy a runner with that runtime |
+| `case_unknown` | 422 | definition lookup | An evaluate named a case id, or a run-project a checkpoint, that the resolved version doesn't have | The app asks for a reload |
+| `path_not_allowed` | 422 | after definition lookup | A submitted file uses a harness path, test or package configuration, a Python startup file, or a library module's name; `detail` is a fixed sentence for the kind, never the path | Rename or remove the file; drafts stay |
 | `definition_integrity_mismatch` | 503 | startup and definition lookup | A shipped definition file is missing or its bytes don't match the manifest checksum | Redeploy a clean image; the alert names the version. See Alerts |
 | `worker_unavailable` | 503 | 9, or after admission | Every in-flight slot on this replica is busy, or the PDF renderer was unreachable, failed, opened no page within 2 s, or didn't answer within 25 s | The app retries with the same key, keeps the draft, and shows unavailable if it persists; check the renderer |
 | `render_timeout` | 422 | after admission | The renderer reported that the document didn't load or print within its budget (13 s to load, 8 s to print) | The app shows the error; simplify the document. The content decides this, so it keeps its charge and the app doesn't retry it |

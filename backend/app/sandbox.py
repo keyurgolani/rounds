@@ -32,6 +32,7 @@ import shutil
 import signal
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -163,6 +164,9 @@ class _Drain(threading.Thread):
     def text(self) -> str:
         return b"".join(self._chunks).decode("utf-8", errors="replace")
 
+    def chunks(self) -> list[bytes]:
+        return list(self._chunks)
+
 
 def run(
     cmd: Sequence[str],
@@ -201,6 +205,62 @@ def run(
     if not exited:
         raise subprocess.TimeoutExpired(list(cmd), timeout_s, output=stdout, stderr=stderr)
     return subprocess.CompletedProcess(list(cmd), proc.returncode, stdout, stderr)
+
+
+# Puts the result channel's write end at fd 3, then execs the step, so the
+# step starts with stdin, stdout, stderr, and the channel only.
+_AT_CHANNEL_FD = (
+    "import os, sys\n"
+    "fd = int(sys.argv[1])\n"
+    "if fd != 3:\n"
+    "    os.dup2(fd, 3)\n"
+    "    os.close(fd)\n"
+    "os.execvp(sys.argv[2], sys.argv[2:])\n"
+)
+
+
+def run_with_channel(
+    cmd: Sequence[str],
+    *,
+    cwd: str,
+    env: Mapping[str, str],
+    timeout_s: float,
+    sandbox: Sandbox,
+    channel_max: int,
+) -> tuple[bytes, bool]:
+    """Run ``cmd`` contained, like ``run``, with the write end of a fresh
+    pipe at fd 3 (ROUNDS-00A-L02's result channel). Its stdout and stderr
+    go nowhere. Returns what came back on the pipe, at most
+    ``channel_max + 1`` bytes so an over-long channel shows, and whether
+    the step ran out of time."""
+    read_end, write_end = os.pipe()
+    kwargs: dict = {
+        "cwd": cwd,
+        "env": dict(env),
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "stdin": subprocess.DEVNULL,
+        "start_new_session": True,
+        "pass_fds": (write_end,),
+    }
+    if sandbox.uid is not None:
+        kwargs.update(user=sandbox.uid, group=sandbox.gid, extra_groups=[], umask=0o077)
+    try:
+        proc = subprocess.Popen([sys.executable, "-I", "-S", "-c", _AT_CHANNEL_FD, str(write_end), *cmd], **kwargs)
+    except BaseException:
+        os.close(read_end)
+        raise
+    finally:
+        os.close(write_end)
+    drain = _Drain(os.fdopen(read_end, "rb"), channel_max + 1)
+    drain.start()
+    exited = False
+    try:
+        exited = _wait(proc, timeout_s)
+    finally:
+        _end(proc, sandbox)
+    drain.join(DRAIN_GRACE_S)
+    return b"".join(drain.chunks()), not exited
 
 
 def _wait(proc: subprocess.Popen, timeout_s: float) -> bool:

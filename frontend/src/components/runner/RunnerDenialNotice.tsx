@@ -1,6 +1,9 @@
 // Denial states for the runner surfaces (ROUNDS-00A-L01): sign in
 // again, limit reached with the wait, turned off, unavailable with the
-// draft kept, too large, and not available for this account.
+// draft kept, too large, and not available for this account. The
+// definition states (ROUNDS-00A-L02) add reload for an out-of-date page,
+// with a Reload button that saves the draft first when the page passes
+// `onReload`, and retired, not here, unsupported, and file not allowed.
 //
 // The live region is always in the DOM, so screen readers announce a
 // denial when it appears. The notice never takes focus. If the action
@@ -12,16 +15,22 @@
 import { useEffect, type CSSProperties } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
+  Archive,
   CloudOff,
+  FileX,
   Hourglass,
+  Languages,
   Lock,
   LogIn,
   PowerOff,
   Printer,
+  RotateCw,
   Scaling,
+  SearchX,
   type LucideIcon,
 } from 'lucide-react';
 import { formatWait, type RunnerDenial, type RunnerDenialKind } from '../../lib/runnerDenial';
+import { reloadPage } from '../../lib/definitions';
 
 export type RunnerAction = 'run' | 'tests' | 'grade' | 'pdf';
 
@@ -70,6 +79,11 @@ const ICONS: Record<RunnerDenialKind, LucideIcon> = {
   unavailable: CloudOff,
   too_large: Scaling,
   not_permitted: Lock,
+  reload: RotateCw,
+  retired: Archive,
+  not_found: SearchX,
+  unsupported: Languages,
+  path_not_allowed: FileX,
 };
 
 function copyFor(denial: RunnerDenial, action: RunnerAction): { title: string; body: string } {
@@ -105,6 +119,31 @@ function copyFor(denial: RunnerDenial, action: RunnerAction): { title: string; b
         title: 'Not available',
         body: `${text.subject} isn't available for this account.`,
       };
+    case 'reload':
+      return {
+        title: 'Reload to continue',
+        body: `This page is out of date. ${text.none} ${text.kept}`,
+      };
+    case 'retired':
+      return {
+        title: 'Retired',
+        body: `This practice item was retired, so it no longer runs. ${text.kept}`,
+      };
+    case 'not_found':
+      return {
+        title: 'Not on this server',
+        body: `This server doesn't have this practice item in this language. ${text.none} ${text.kept}`,
+      };
+    case 'unsupported':
+      return {
+        title: 'Language not supported',
+        body: `${denial.detail ?? "This language isn't supported here."} ${text.none} ${text.kept}`,
+      };
+    case 'path_not_allowed':
+      return {
+        title: 'File not allowed',
+        body: `${denial.detail ?? "A file in this submission can't be sent."} ${text.none} ${text.kept}`,
+      };
   }
 }
 
@@ -113,6 +152,9 @@ interface RunnerDenialNoticeProps {
   action: RunnerAction;
   /** PDF export offers browser printing when the server can't render. */
   onPrint?: () => void;
+  /** What Reload does for an out-of-date page; pages save the draft
+   *  first. Defaults to reloading the page. */
+  onReload?: () => void | Promise<void>;
   signInHref?: string;
   /** Classes for the live region, which is always in the DOM. */
   className?: string;
@@ -124,6 +166,7 @@ export function RunnerDenialNotice({
   denial,
   action,
   onPrint,
+  onReload,
   signInHref = '/login',
   className,
   contentStyle,
@@ -187,8 +230,18 @@ export function RunnerDenialNotice({
                 Reference {denial.correlationId.slice(0, 8)}
               </span>
             )}
-            {(denial.kind === 'sign_in' || offerPrint) && (
+            {(denial.kind === 'sign_in' || denial.kind === 'reload' || offerPrint) && (
               <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                {denial.kind === 'reload' && (
+                  <button
+                    type="button"
+                    onClick={() => void (onReload ? onReload() : reloadPage())}
+                    style={actionStyle}
+                  >
+                    <RotateCw aria-hidden="true" size={12} strokeWidth={1.8} />
+                    Reload
+                  </button>
+                )}
                 {denial.kind === 'sign_in' && (
                   <Link
                     to={signInHref}

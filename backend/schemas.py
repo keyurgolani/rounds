@@ -3,12 +3,16 @@ PocketBase (pocketbase/pb_migrations/) when the data layer migrated.
 
 Request models follow admission/v1: they refuse unknown fields, and a
 caller never supplies the entry, test cases, or expected values. Those
-load on the server (routers/runner.py)."""
+load on the server (routers/runner.py): from PocketBase at
+``ROUNDS_GATE_EXECUTION_DEFINITIONS=legacy``, and from the compiled test
+definition a ``Definition*Request`` names at ``enforce``."""
+import re
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app import limits
+from app.execution import DefinitionRef
 from app.limits import StrictModel
 
 
@@ -46,6 +50,24 @@ class CodeRunRequest(StrictModel):
         return limits.check_json(v, limits.RUN_INPUT_BYTES, "input")
 
 
+class DefinitionRunRequest(StrictModel):
+    """A run at enforce: the definition, the code, and one input."""
+
+    definition: DefinitionRef
+    code: str
+    input: Dict[str, Any]
+
+    @field_validator("code")
+    @classmethod
+    def _code_size(cls, v: str) -> str:
+        return limits.check_text(v, limits.SNIPPET_CODE_BYTES, "code")
+
+    @field_validator("input")
+    @classmethod
+    def _input_size(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        return limits.check_json(v, limits.RUN_INPUT_BYTES, "input")
+
+
 class CodeRunResult(BaseModel):
     stdout: str
     stderr: str
@@ -53,6 +75,8 @@ class CodeRunResult(BaseModel):
     error: Optional[str] = None
     duration_ms: int
     truncated: bool = False
+    # The definition this ran, at enforce, for #3 to store.
+    definition: Optional[Dict[str, Any]] = None
 
 
 class EvaluateFilter(StrictModel):
@@ -88,6 +112,40 @@ class CodeEvaluateRequest(StrictModel):
         return limits.check_text(v, limits.SNIPPET_CODE_BYTES, "code")
 
 
+CASE_ID_PATTERN = r"^c[0-9]{3}$"
+
+
+class DefinitionEvaluateRequest(StrictModel):
+    """An evaluate at enforce: the definition, the code, and which of its
+    cases to run, by id or tag. Left out, every case runs."""
+
+    definition: DefinitionRef
+    code: str
+    case_ids: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+
+    @field_validator("code")
+    @classmethod
+    def _code_size(cls, v: str) -> str:
+        return limits.check_text(v, limits.SNIPPET_CODE_BYTES, "code")
+
+    @field_validator("case_ids")
+    @classmethod
+    def _case_ids(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None and len(v) > limits.EVALUATE_MAX_CASES:
+            raise limits.over_limit("case_ids")
+        if v is not None and any(re.fullmatch(CASE_ID_PATTERN, case_id) is None for case_id in v):
+            raise ValueError("case ids look like c000")
+        return v
+
+    @field_validator("tags")
+    @classmethod
+    def _tag_limits(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None and (len(v) > limits.EVALUATE_MAX_CASES or any(len(tag) > 64 for tag in v)):
+            raise limits.over_limit("tags")
+        return v
+
+
 class EvaluateCaseResult(BaseModel):
     index: int
     passed: bool
@@ -97,9 +155,13 @@ class EvaluateCaseResult(BaseModel):
     expected: Any = None
     error: Optional[str] = None
     duration_ms: int = 0
+    # The definition's case id, at enforce.
+    case_id: Optional[str] = None
 
 
 class CodeEvaluateResult(BaseModel):
     passed: int
     failed: int
     results: List[EvaluateCaseResult]
+    # The definition these cases came from, at enforce.
+    definition: Optional[Dict[str, Any]] = None

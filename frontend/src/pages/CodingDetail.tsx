@@ -38,6 +38,7 @@ import {
   classifyRunnerError,
   type RunnerDenial,
 } from '../lib/runnerDenial';
+import { reloadPage, retrySuperseded } from '../lib/definitions';
 
 interface CQ {
   id: number;
@@ -64,6 +65,10 @@ interface CQ {
   time_complexity: string;
   space_complexity: string;
   entry: Entry;
+  /** The compiled test definition's version and case ids
+   *  (ROUNDS-00A-L02); runs name them at enforce. */
+  definition_version?: number | null;
+  definition_case_ids?: string[] | null;
 }
 
 const LANGUAGES = [
@@ -144,6 +149,10 @@ export default function CodingDetail() {
 
   const lastSyncedRef = useRef<{ code: string; lang: string; qid: string | number; draftId: string | null } | null>(null);
   const starterRef = useRef<string>('');
+  // The definition version runs name: the row's, until a superseded
+  // answer rereads it. Rereading leaves the question, results, and code
+  // alone.
+  const definitionVersionRef = useRef<number | null | undefined>(undefined);
 
   const { currentId: campaignId } = useCampaign();
 
@@ -151,9 +160,17 @@ export default function CodingDetail() {
     if (!slug) return;
     getCodingQuestion<CQ>(slug)
       .then((data) => {
+        definitionVersionRef.current = data.definition_version;
         setQ(data);
       })
       .finally(() => setLoading(false));
+  }, [slug]);
+
+  const rereadDefinitionVersion = useCallback(async () => {
+    if (!slug) return undefined;
+    const fresh = await getCodingQuestion<CQ>(slug);
+    definitionVersionRef.current = fresh.definition_version;
+    return fresh.definition_version;
   }, [slug]);
 
   // Reset run/eval results when language or question changes.
@@ -267,6 +284,30 @@ export default function CodingDetail() {
     };
   }, [q, campaignId]);
 
+  // Before a reload the denial asks for, the code goes to the draft the
+  // page loads first, so it survives the reload.
+  const reloadKeepingDraft = useCallback(async () => {
+    const last = lastSyncedRef.current;
+    if (q) saveLocal(userId, q.id, lang, codeRef.current);
+    if (q && campaignId && last && codeRef.current !== last.code) {
+      try {
+        if (codeRef.current === starterRef.current) {
+          if (last.draftId) await deleteCodeDraft(last.draftId);
+        } else {
+          await upsertCodeDraft({
+            campaign_id: campaignId,
+            question: String(q.id),
+            language: last.lang,
+            code: codeRef.current,
+          });
+        }
+      } catch {
+        /* the local copy is kept */
+      }
+    }
+    reloadPage();
+  }, [q, lang, userId, campaignId]);
+
   // Escape key closes the open mobile sheet (common bottom-sheet UX).
   // Desktop ignores the state entirely so this is a no-op there.
   useEffect(() => {
@@ -311,12 +352,18 @@ export default function CodingDetail() {
       // also confuse the Esc handler when exiting focus.
       if (!focus) setMobileSheet('results');
       try {
-        const res = await runCode({
-          question_slug: q.slug,
-          language: lang === 'javascript' ? 'javascript' : lang,
-          code,
-          input,
-        });
+        const res = await retrySuperseded(
+          definitionVersionRef.current,
+          (version) =>
+            runCode({
+              question_slug: q.slug,
+              language: lang === 'javascript' ? 'javascript' : lang,
+              code,
+              input,
+              definition_version: version,
+            }),
+          rereadDefinitionVersion,
+        );
         setRunResult(res);
         setSideTab('run');
       } catch (e) {
@@ -338,7 +385,7 @@ export default function CodingDetail() {
         setRunning(false);
       }
     },
-    [q, code, lang, focus]
+    [q, code, lang, focus, rereadDefinitionVersion]
   );
 
   const handleEvaluate = useCallback(
@@ -351,12 +398,19 @@ export default function CodingDetail() {
       // See handleRun above — skip the mobile-sheet pop in focus mode.
       if (!focus) setMobileSheet('results');
       try {
-        const res = await evaluateCode({
-          question_slug: q.slug,
-          language: lang === 'javascript' ? 'javascript' : lang,
-          code,
-          filter,
-        });
+        const res = await retrySuperseded(
+          definitionVersionRef.current,
+          (version) =>
+            evaluateCode({
+              question_slug: q.slug,
+              language: lang === 'javascript' ? 'javascript' : lang,
+              code,
+              filter,
+              definition_version: version,
+              definition_case_ids: q.definition_case_ids,
+            }),
+          rereadDefinitionVersion,
+        );
         setEvalResults((prev) => {
           if (!prev) return res;
           const merged = [...prev.results];
@@ -379,7 +433,7 @@ export default function CodingDetail() {
         setRunning(false);
       }
     },
-    [q, code, lang, focus]
+    [q, code, lang, focus, rereadDefinitionVersion]
   );
 
   if (loading) {
@@ -551,6 +605,7 @@ export default function CodingDetail() {
             <RunnerDenialNotice
               denial={runDenial?.denial ?? null}
               action={runDenial?.action ?? 'tests'}
+              onReload={reloadKeepingDraft}
               className="flex-shrink-0"
               contentStyle={{ margin: '8px 12px' }}
             />
@@ -700,6 +755,7 @@ export default function CodingDetail() {
                 <RunnerDenialNotice
                   denial={runDenial?.denial ?? null}
                   action={runDenial?.action ?? 'run'}
+                  onReload={reloadKeepingDraft}
                   className="flex-shrink-0"
                   contentStyle={{ margin: '12px 12px 0' }}
                 />

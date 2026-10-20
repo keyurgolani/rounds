@@ -46,6 +46,16 @@ export interface TestCase {
   tags?: string[];
 }
 
+/** The compiled definition a response came from, at
+ *  ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce. */
+export interface DefinitionReceipt {
+  track: string;
+  slug: string;
+  variant: string | null;
+  content_version: number;
+  checksum: string;
+}
+
 export interface CodeRunResult {
   stdout: string;
   stderr: string;
@@ -53,10 +63,13 @@ export interface CodeRunResult {
   error: string | null;
   duration_ms: number;
   truncated: boolean;
+  definition?: DefinitionReceipt | null;
 }
 
 export interface EvaluateCaseResult {
   index: number;
+  /** The compiled case id, at enforce. */
+  case_id?: string | null;
   passed: boolean;
   description: string;
   tags: string[];
@@ -70,6 +83,7 @@ export interface CodeEvaluateResult {
   passed: number;
   failed: number;
   results: EvaluateCaseResult[];
+  definition?: DefinitionReceipt | null;
 }
 
 export interface EvaluateFilter {

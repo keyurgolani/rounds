@@ -3,6 +3,12 @@
   "prefix": "ROUNDS_GATE_",
   "truthy": ["true", "1", "yes"],
   "gates": {
+    "EXECUTION_DEFINITIONS": {
+      "values": ["legacy", "enforce", "disabled"],
+      "default": "legacy",
+      "closed": "disabled",
+      "aliases": []
+    },
     "SIGNUPS": {
       "values": ["enabled", "disabled"],
       "default": "enabled",

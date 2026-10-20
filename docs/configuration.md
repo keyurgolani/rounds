@@ -113,7 +113,7 @@ Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads the
 | `ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK` | `enabled`, `disabled` | `disabled` | runner | yes; AI provider base URLs on private addresses (RFC 1918, RFC 6598, IPv6 ULA) |
 | `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` | `off`, `observe`, `enforce` | `observe` | runner | `enforce` only; `Idempotency-Key` checks and replays on the admitted routes |
 | `ROUNDS_GATE_ENFORCE_QUOTA` | `off`, `observe`, `enforce` | `observe` | runner | `enforce` only; account, deployment, and demo quotas on the admitted routes |
-| `ROUNDS_GATE_EXECUTION_DEFINITIONS` | `legacy`, `disabled` | `legacy` | runner | `legacy` loads run, evaluate, grade, run-project, and take-home from PocketBase as before; `disabled` answers 503 `definitions_disabled` on those six routes and keeps every draft. (`enforce`, which serves only compiled definitions, arrives in #2 step 2; an unknown value closes to `disabled`.) |
+| `ROUNDS_GATE_EXECUTION_DEFINITIONS` | `legacy`, `enforce`, `disabled` | `legacy` | runner, frontend | `legacy` loads run, evaluate, grade, run-project, and take-home from PocketBase as before; `enforce` takes only requests that name a compiled definition, which the app then sends, and runs only that definition; `disabled` answers 503 `definitions_disabled` on those six routes and keeps every draft. An unknown value closes to `disabled`. Restart the runner and the frontend together when it changes. |
 
 Each route gate is that route's off switch. Set it to `disabled` and restart the runner, and the route answers 503 `route_disabled` before it reads the request; nothing else changes. [The execution runbook](security/execution-runbook.md) covers flipping and confirming each gate and what each error code means.
 
@@ -130,7 +130,7 @@ Each reader resolves a gate the same way:
 3. A blank gate falls back to the reader's alias when the alias is `true`, `1`, or `yes`. Only `SIGNUPS` has aliases: PocketBase reads `ROUNDS_DISABLE_SIGNUPS` and the frontend reads `VITE_DISABLE_SIGNUPS`.
 4. Otherwise the default applies.
 
-A process reads its gates once at startup, so a change needs a restart. The runner and PocketBase each log one JSON line with every gate they read, its value, and where the value came from (`default`, `env`, `alias`, or `invalid`). The frontend container passes the SPA only the gates it reads, today `ROUNDS_GATE_SIGNUPS`, and logs each value it passes. Runner and PocketBase gates never reach the browser. Gate values aren't secret, so never put a secret in one.
+A process reads its gates once at startup, so a change needs a restart. The runner and PocketBase each log one JSON line with every gate they read, its value, and where the value came from (`default`, `env`, `alias`, or `invalid`). The frontend container passes the SPA only the gates it reads, today `ROUNDS_GATE_SIGNUPS` and `ROUNDS_GATE_EXECUTION_DEFINITIONS`, and logs each value it passes. Runner and PocketBase gates never reach the browser. Gate values aren't secret, so never put a secret in one.
 
 ## PocketBase Admin Bootstrap
 
@@ -165,6 +165,6 @@ The published frontend image generates `/runtime-config.js` at container startup
 - `VITE_DISABLE_SIGNUPS`
 - `VITE_OAUTH_GOOGLE_ENABLED`
 - `VITE_OAUTH_GITHUB_ENABLED`
-- the gates the SPA reads, today `ROUNDS_GATE_SIGNUPS`
+- the gates the SPA reads, today `ROUNDS_GATE_SIGNUPS` and `ROUNDS_GATE_EXECUTION_DEFINITIONS`
 
 If you build the frontend outside the provided Docker image, make sure your deployment preserves the same runtime config behavior or sets the matching Vite build-time variables.
