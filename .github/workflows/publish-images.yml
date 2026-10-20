@@ -1,23 +1,62 @@
 name: Publish Docker Images
 
+# Release guard (ROUNDS-00A-L01 stage 5). A push to main publishes edge and
+# sha-<short>. Only a vX.Y.Z tag publishes X.Y.Z, X.Y, vX.Y.Z, and latest,
+# and only once CI passed on a push of that exact commit to main. No other
+# branch publishes, and there's no manual trigger; to retry, re-run the
+# workflow run from the Actions tab.
 on:
   push:
     branches: [main]
     tags: ['v*']
-  workflow_dispatch:
 
-env:
-  GHCR_REGISTRY: ghcr.io
-  DOCKERHUB_NAMESPACE: keyurgolani
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+permissions:
+  contents: read
 
 jobs:
+  plan:
+    # Decides what this push may publish. For a release tag it waits for CI
+    # on the tagged commit and fails closed, so nothing publishes.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      channel: ${{ steps.plan.outputs.channel }}
+      latest: ${{ steps.plan.outputs.latest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check what this push may publish
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release_gate.py
+
   publish:
+    needs: plan
+    if: needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    env:
+      GHCR_REGISTRY: ghcr.io
+      DOCKERHUB_NAMESPACE: keyurgolani
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      # The one tag policy both registries use. edge and sha-<short> come
+      # only from main; the version tags and latest only from a release tag
+      # the plan job cleared, and latest only for the highest stable version.
+      IMAGE_TAGS: |
+        type=raw,value=edge,enable=${{ needs.plan.outputs.channel == 'edge' }}
+        type=sha,prefix=sha-,enable=${{ needs.plan.outputs.channel == 'edge' }}
+        type=semver,pattern={{version}},enable=${{ needs.plan.outputs.channel == 'release' }}
+        type=semver,pattern={{major}}.{{minor}},enable=${{ needs.plan.outputs.channel == 'release' }}
+        type=ref,event=tag,enable=${{ needs.plan.outputs.channel == 'release' }}
+        type=raw,value=latest,enable=${{ needs.plan.outputs.latest == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -64,13 +103,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.GHCR_REGISTRY }}/${{ github.repository }}-${{ matrix.image }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=sha-
+          flavor: latest=false
+          tags: ${{ env.IMAGE_TAGS }}
 
       - name: Build and push ${{ matrix.service }} to GHCR
         uses: docker/build-push-action@v6
@@ -89,13 +123,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/rounds-${{ matrix.image }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=sha-
+          flavor: latest=false
+          tags: ${{ env.IMAGE_TAGS }}
 
       - name: Build and push ${{ matrix.service }} to Docker Hub
         if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''

@@ -1,0 +1,387 @@
+"""Release guard (ROUNDS-00A-L01 stage 5).
+
+Pushes to main publish edge and sha-<short>. Only a v* tag publishes the
+version tags and latest, and only after CI passed on a push of that exact
+commit to main; the gate fails closed. Pull requests into main and next
+lint their migration changes."""
+from __future__ import annotations
+
+import importlib.util
+import io
+import json
+import sys
+import urllib.error
+from pathlib import Path
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[2]
+WORKFLOWS = ROOT / ".github" / "workflows"
+_spec = importlib.util.spec_from_file_location("release_gate", ROOT / "scripts" / "release_gate.py")
+gate = importlib.util.module_from_spec(_spec)
+sys.modules["release_gate"] = gate
+_spec.loader.exec_module(gate)
+
+REPO = "keyurgolani/rounds"
+SHA = "a" * 40
+OTHER_SHA = "b" * 40
+
+
+def _workflow(name: str) -> dict:
+    data = yaml.safe_load((WORKFLOWS / name).read_text())
+    # YAML 1.1 reads the bare key `on` as True.
+    data["on"] = data.pop(True, data.get("on"))
+    return data
+
+
+# ---- the publishing workflow ---------------------------------------------------------------
+
+
+def test_every_workflow_parses():
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        assert isinstance(yaml.safe_load(path.read_text()), dict), path.name
+
+
+def test_publishing_runs_only_on_pushes_to_main_and_v_tags():
+    workflow = _workflow("publish-images.yml")
+    assert workflow["on"] == {"push": {"branches": ["main"], "tags": ["v*"]}}
+    assert "workflow_dispatch" not in (WORKFLOWS / "publish-images.yml").read_text()
+    assert workflow["permissions"] == {"contents": "read"}
+
+
+def test_the_plan_job_gates_publishing_and_holds_no_publishing_rights():
+    jobs = _workflow("publish-images.yml")["jobs"]
+    plan, publish = jobs["plan"], jobs["publish"]
+    assert plan["permissions"] == {"actions": "read", "contents": "read"}
+    assert "secrets." not in json.dumps(plan)
+    assert [s.get("run") for s in plan["steps"] if "run" in s] == ["python3 scripts/release_gate.py"]
+    assert publish["needs"] == "plan"
+    assert publish["if"] == "needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release'"
+    assert publish["permissions"] == {"contents": "read", "packages": "write"}
+    assert set(jobs) == {"plan", "publish"}
+
+
+def test_edge_and_sha_come_only_from_main_and_latest_only_from_a_cleared_release():
+    publish = _workflow("publish-images.yml")["jobs"]["publish"]
+    assert publish["env"]["IMAGE_TAGS"].splitlines() == [
+        "type=raw,value=edge,enable=${{ needs.plan.outputs.channel == 'edge' }}",
+        "type=sha,prefix=sha-,enable=${{ needs.plan.outputs.channel == 'edge' }}",
+        "type=semver,pattern={{version}},enable=${{ needs.plan.outputs.channel == 'release' }}",
+        "type=semver,pattern={{major}}.{{minor}},enable=${{ needs.plan.outputs.channel == 'release' }}",
+        "type=ref,event=tag,enable=${{ needs.plan.outputs.channel == 'release' }}",
+        "type=raw,value=latest,enable=${{ needs.plan.outputs.latest == 'true' }}",
+    ]
+    metadata = [s for s in publish["steps"] if str(s.get("uses", "")).startswith("docker/metadata-action")]
+    assert len(metadata) == 2
+    for step in metadata:
+        assert step["with"]["flavor"] == "latest=false"
+        assert step["with"]["tags"] == "${{ env.IMAGE_TAGS }}"
+    text = (WORKFLOWS / "publish-images.yml").read_text()
+    assert "is_default_branch" not in text and "event=branch" not in text
+
+
+def test_docker_hub_stays_optional():
+    steps = {s.get("name"): s for s in _workflow("publish-images.yml")["jobs"]["publish"]["steps"]}
+    configured = "env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''"
+    assert steps["Log in to Docker Hub"]["if"] == configured
+    assert steps["Build and push ${{ matrix.service }} to Docker Hub"]["if"] == configured
+    assert steps["Docker Hub publish skipped"]["if"] == "env.DOCKERHUB_USERNAME == '' || env.DOCKERHUB_TOKEN == ''"
+
+
+# ---- installs pin the tag they run -----------------------------------------------------------
+
+
+def test_compose_takes_one_image_tag_and_defaults_to_latest():
+    compose = yaml.safe_load((ROOT / "docker-compose.prod.yml").read_text())
+    images = {name: svc["image"] for name, svc in compose["services"].items() if "image" in svc}
+    assert set(images) == {"frontend", "pocketbase", "runner", "pdf-renderer"}
+    for name, image in images.items():
+        variable = "ROUNDS_" + name.upper().replace("-", "_") + "_IMAGE"
+        assert image == f"${{{variable}:-keyurgolani/rounds-{name}:${{ROUNDS_IMAGE_TAG:-latest}}}}", name
+
+
+def test_k8s_pins_every_deployment_image_in_one_place():
+    kustomization = yaml.safe_load((ROOT / "k8s" / "kustomization.yaml").read_text())
+    pins = {entry["name"]: entry["newTag"] for entry in kustomization["images"]}
+    images = []
+    for manifest in kustomization["resources"]:
+        for doc in yaml.safe_load_all((ROOT / "k8s" / manifest).read_text()):
+            if doc and doc.get("kind") == "Deployment":
+                images += [c["image"] for c in doc["spec"]["template"]["spec"]["containers"]]
+    assert len(images) == 3
+    for image in images:
+        name, _, tag = image.rpartition(":")
+        # The pin repeats the manifests' tag, so applying the base runs what it ran before.
+        assert pins.get(name) == tag, image
+    assert set(pins) == {image.rpartition(":")[0] for image in images}
+
+
+# ---- the migration lint job ------------------------------------------------------------------
+
+
+def test_pull_requests_into_main_and_next_lint_their_migrations_read_only():
+    workflow = _workflow("ci.yml")
+    assert "pull_request" in workflow["on"]
+    assert workflow["permissions"] == {"contents": "read"}
+    job = workflow["jobs"]["migrations"]
+    assert job["if"] == "github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'next')"
+    assert "permissions" not in job and "secrets." not in json.dumps(job)
+    checkout = job["steps"][0]
+    assert checkout["uses"] == "actions/checkout@v4"
+    assert checkout["with"] == {"fetch-depth": 0, "persist-credentials": False}
+    assert job["steps"][-1]["run"] == "python scripts/lint_migrations.py --base HEAD^1 --head HEAD"
+
+
+# ---- the release gate ------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "tag, version",
+    [
+        ("v1.2.3", ((1, 2, 3), True)),
+        ("v0.10.0", ((0, 10, 0), True)),
+        ("v2.0.0-rc.1", ((2, 0, 0), False)),
+        ("v1.2", None),
+        ("1.2.3", None),
+        ("v01.2.3", None),
+        ("v1.2.3+build", None),
+        ("v1.2.3-", None),
+        ("vnext", None),
+    ],
+)
+def test_release_tags_are_strict_semver(tag, version):
+    assert gate.release_version(tag) == version
+
+
+@pytest.mark.parametrize(
+    "tag, tags, moves",
+    [
+        ("v1.2.0", ["v1.0.0", "v1.1.5", "v1.2.0"], True),
+        ("v1.10.0", ["v1.9.0", "v1.10.0"], True),
+        ("v1.0.1", ["v1.1.0", "v1.0.1"], False),
+        ("v2.0.0-rc.1", ["v1.0.0", "v2.0.0-rc.1"], False),
+        ("v1.1.0", ["v1.1.0", "v2.0.0-rc.1", "not-a-release"], True),
+    ],
+)
+def test_latest_moves_only_to_the_highest_stable_version(tag, tags, moves):
+    assert gate.moves_latest(tag, tags) is moves
+
+
+def _run(status="completed", conclusion="success", sha=SHA, event="push", branch="main", repo=REPO):
+    return {"head_sha": sha, "event": event, "head_branch": branch, "status": status, "conclusion": conclusion,
+            "head_repository": {"full_name": repo}}
+
+
+@pytest.mark.parametrize(
+    "runs, state",
+    [
+        ([_run()], "passed"),
+        ([_run(conclusion="failure"), _run()], "passed"),
+        ([_run(status="in_progress", conclusion=None)], "running"),
+        ([_run(status="queued", conclusion=None), _run(conclusion="failure")], "running"),
+        ([_run(conclusion="failure")], "failed"),
+        ([_run(conclusion="cancelled")], "failed"),
+        ([], "missing"),
+        ([_run(sha=OTHER_SHA)], "missing"),
+        ([_run(event="pull_request")], "missing"),
+        ([_run(branch="next")], "missing"),
+        ([_run(repo="someone/fork")], "missing"),
+    ],
+)
+def test_only_a_successful_push_run_on_main_for_the_exact_commit_passes(runs, state):
+    assert gate.ci_state(runs, SHA, REPO) == state
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.slept: list[float] = []
+
+    def time(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+def _wait(states: list[list[dict]], **limits):
+    clock = Clock()
+    answers = iter(states)
+    last = states[-1]
+    gate.wait_for_ci(lambda: next(answers, last), SHA, REPO, clock=clock.time, sleep=clock.sleep, **limits)
+    return clock
+
+
+def test_the_gate_waits_while_ci_runs_then_passes():
+    clock = _wait([[_run(status="in_progress", conclusion=None)]] * 3 + [[_run()]], poll_s=30)
+    assert clock.slept == [30, 30, 30]
+
+
+@pytest.mark.parametrize(
+    "states, message",
+    [
+        ([[_run(conclusion="failure")]], "didn't pass"),
+        ([[]], "never ran"),
+        ([[_run(status="in_progress", conclusion=None)]], "still running"),
+    ],
+)
+def test_the_gate_fails_closed(states, message):
+    with pytest.raises(gate.GateError, match=message):
+        _wait(states, wait_s=300, appear_s=60, poll_s=30)
+
+
+def test_a_run_that_shows_up_late_still_counts():
+    clock = _wait([[], [], [_run()]], appear_s=300, poll_s=30)
+    assert clock.slept == [30, 30]
+
+
+class FakeApi:
+    def __init__(self, runs: list[dict], tags: list[str]) -> None:
+        self.runs, self.tags = runs, tags
+        self.calls: list[tuple[str, dict]] = []
+
+    def __call__(self, path: str, params: dict) -> list:
+        self.calls.append((path, params))
+        if path.endswith("/runs"):
+            return [{"total_count": len(self.runs), "workflow_runs": self.runs}]
+        if "/git/matching-refs/tags/" in path:
+            return [[{"ref": f"refs/tags/{t}"} for t in self.tags]]
+        raise AssertionError(path)
+
+
+def _decide(ref, api, event=None, event_name="push", sha=SHA):
+    clock = Clock()
+    return gate.decide(event_name, event or {}, ref, sha, REPO, api, wait_s=60, appear_s=30, poll_s=30,
+                       clock=clock.time, sleep=clock.sleep)
+
+
+def test_a_push_to_main_publishes_edge_without_asking_github():
+    api = FakeApi([], [])
+    assert _decide("refs/heads/main", api) == {"channel": "edge", "latest": "false"}
+    assert api.calls == []
+
+
+def test_a_release_tag_publishes_once_ci_passed_on_that_commit():
+    api = FakeApi([_run()], ["v1.0.0", "v1.1.0"])
+    assert _decide("refs/tags/v1.1.0", api) == {"channel": "release", "latest": "true"}
+    path, params = api.calls[0]
+    assert path == f"repos/{REPO}/actions/workflows/ci.yml/runs"
+    assert params == {"head_sha": SHA, "event": "push", "branch": "main", "per_page": "100"}
+
+
+@pytest.mark.parametrize("tag", ["v1.0.1", "v2.0.0-rc.1"])
+def test_an_older_or_pre_release_tag_leaves_latest_alone(tag):
+    api = FakeApi([_run()], ["v1.1.0", tag])
+    assert _decide(f"refs/tags/{tag}", api) == {"channel": "release", "latest": "false"}
+
+
+@pytest.mark.parametrize(
+    "ref, event_name",
+    [
+        ("refs/heads/next", "push"),
+        ("refs/heads/feature", "push"),
+        ("refs/tags/vnext", "push"),
+        ("refs/tags/release-1", "push"),
+        ("refs/heads/main", "workflow_dispatch"),
+        ("refs/tags/v1.0.0", "workflow_dispatch"),
+    ],
+)
+def test_anything_else_publishes_nothing_and_fails(ref, event_name):
+    api = FakeApi([_run()], ["v1.0.0"])
+    with pytest.raises(gate.GateError):
+        _decide(ref, api, event_name=event_name)
+    assert api.calls == []
+
+
+def test_a_tag_whose_commit_ci_never_passed_fails():
+    api = FakeApi([_run(sha=OTHER_SHA), _run(conclusion="failure")], ["v1.0.0"])
+    with pytest.raises(gate.GateError, match="didn't pass"):
+        _decide("refs/tags/v1.0.0", api)
+
+
+def test_a_deleted_tag_publishes_nothing():
+    api = FakeApi([_run()], [])
+    assert _decide("refs/tags/v1.0.0", api, event={"deleted": True}) == {"channel": "none", "latest": "false"}
+    assert api.calls == []
+
+
+@pytest.mark.parametrize("sha", ["", "abc", "A" * 40])
+def test_a_malformed_commit_fails(sha):
+    with pytest.raises(gate.GateError):
+        _decide("refs/tags/v1.0.0", FakeApi([_run(sha=sha)], []), sha=sha)
+
+
+# ---- the GitHub client -----------------------------------------------------------------------
+
+
+class FakeResponse(io.BytesIO):
+    def __init__(self, body, link: str = "") -> None:
+        super().__init__(json.dumps(body).encode())
+        self.headers = {"Link": link} if link else {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+
+def test_the_client_follows_pages_only_on_the_api_host(monkeypatch):
+    base = "https://api.github.com"
+    pages = {
+        f"{base}/repos/{REPO}/x?per_page=100": FakeResponse([1], link=f'<{base}/repos/{REPO}/x?page=2>; rel="next"'),
+        f"{base}/repos/{REPO}/x?page=2": FakeResponse([2]),
+    }
+    seen: list = []
+
+    def urlopen(request, timeout):
+        seen.append((request.full_url, request.get_header("Authorization")))
+        return pages[request.full_url]
+
+    monkeypatch.setattr(gate.urllib.request, "urlopen", urlopen)
+    assert gate.github_api(base, "test-token")(f"repos/{REPO}/x", {"per_page": "100"}) == [[1], [2]]
+    assert [auth for _url, auth in seen] == ["Bearer test-token"] * 2
+
+    elsewhere = FakeResponse([1], link='<https://example.com/steal>; rel="next"')
+    monkeypatch.setattr(gate.urllib.request, "urlopen", lambda request, timeout: elsewhere)
+    with pytest.raises(gate.GateError, match="paginated unexpectedly"):
+        gate.github_api(base, "test-token")(f"repos/{REPO}/x", {})
+
+
+def test_a_failed_lookup_or_a_missing_token_fails_closed(monkeypatch):
+    def refuse(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, None)
+
+    monkeypatch.setattr(gate.urllib.request, "urlopen", refuse)
+    with pytest.raises(gate.GateError, match="lookup failed"):
+        gate.github_api("https://api.github.com", "test-token")("repos/x/y/z", {})
+    with pytest.raises(gate.GateError, match="GH_TOKEN"):
+        gate.github_api("https://api.github.com", "")("repos/x/y/z", {})
+
+
+def test_main_writes_the_outputs_for_a_push_to_main(tmp_path, monkeypatch, capsys):
+    output, event = tmp_path / "output", tmp_path / "event.json"
+    event.write_text("{}")
+    for key, value in {
+        "GITHUB_EVENT_NAME": "push", "GITHUB_EVENT_PATH": str(event), "GITHUB_REF": "refs/heads/main",
+        "GITHUB_SHA": SHA, "GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": str(output),
+    }.items():
+        monkeypatch.setenv(key, value)
+    assert gate.main() == 0
+    assert output.read_text() == "channel=edge\nlatest=false\n"
+
+
+def test_main_fails_without_outputs_when_the_gate_refuses(tmp_path, monkeypatch, capsys):
+    output, event = tmp_path / "output", tmp_path / "event.json"
+    event.write_text("{}")
+    for key, value in {
+        "GITHUB_EVENT_NAME": "push", "GITHUB_EVENT_PATH": str(event), "GITHUB_REF": "refs/tags/v1.0.0",
+        "GITHUB_SHA": SHA, "GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": str(output),
+    }.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    assert gate.main() == 1
+    assert not output.exists()
+    assert capsys.readouterr().out.startswith("::error::")

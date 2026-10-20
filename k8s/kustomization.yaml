@@ -10,3 +10,15 @@ resources:
   - runner.yaml
   - frontend.yaml
   - ingress.yaml
+
+# The image tag every Deployment runs, in one place: the k8s counterpart of
+# ROUNDS_IMAGE_TAG. Pin newTag to a release and set newName to your
+# registry's image (for example ghcr.io/keyurgolani/rounds-runner). Upgrade
+# or roll back by changing newTag; see docs/operations.md#upgrades.
+images:
+  - name: ghcr.io/your-org/rounds-frontend
+    newTag: "1.0.0"
+  - name: ghcr.io/your-org/rounds-pocketbase
+    newTag: "1.0.0"
+  - name: ghcr.io/your-org/rounds-runner
+    newTag: "1.0.0"
