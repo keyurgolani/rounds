@@ -145,7 +145,8 @@ describe('decision records: DR-0002', () => {
     const dr = readJson(REPO_ROOT, DR2);
     assert.equal(dr.owner, 'Product Architecture');
     assert.equal(dr.authorityBoundary, 'contracts/authority/matrix.json');
-    assert.equal(dr.affectedPackages.length, 17);
+    assert.equal(dr.affectedPackages.length, 18);
+    assert.ok(dr.affectedPackages.includes('Provider Gateway'));
     assert.deepEqual(dr.prerequisites, ['ROUNDS-01-L01']);
     assert.match(dr.versioning, /DR-0002@<revision>:<row-id>/);
     assert.ok(dr.supersession.length > 0);

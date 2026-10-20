@@ -13,7 +13,7 @@
 import { createContext } from '../lib/context.mjs';
 import { prettyJson } from '../lib/pretty-json.mjs';
 import {
-  AUTHORITY_MD, BASELINE_STORES_PATH, OPEN_DECISIONS, auditedTree, blockedRows, checkCells, checkCitations, checkCommands,
+  AUTHORITY_MD, BASELINE_STORES_PATH, OPEN_DECISIONS, auditedTree, blockedRows, checkAuthorities, checkCells, checkCitations, checkCommands,
   checkConflicts, checkCorrections, checkExamples, checkIdentity, checkLedger, checkOpenDecisions, checkOwnerLabels, checkPackages,
   checkReadModels, checkRelations, checkRevision, checkRows, checkSecrets, checkSpecRows, checkStores, checkWriters, loadAuthority, pendingByLeaf,
 } from '../lib/authority/matrix.mjs';
@@ -34,6 +34,7 @@ function analyze(ctx) {
   checkSpecRows(ctx, A);
   checkCells(A);
   checkRows(A);
+  checkAuthorities(A);
   checkWriters(A);
   checkConflicts(A);
   checkRelations(A);

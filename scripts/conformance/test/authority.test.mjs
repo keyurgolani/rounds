@@ -116,13 +116,31 @@ describe('authority: matrix content', () => {
       // Removing the flag fails the check.
       const dir = editMatrix((x) => {
         x.conflicts = x.conflicts.filter((y) => y.id !== id);
-        for (const r of x.rows) r.conflicts = r.conflicts.filter((y) => y !== id);
+        for (const r of x.rows) {
+          r.conflicts = r.conflicts.filter((y) => y !== id);
+          for (const w of r.baseline_writers) if (w.conflicts) w.conflicts = w.conflicts.filter((y) => y !== id);
+          for (const w of r.baseline_writers) if (w.conflicts && !w.conflicts.length) delete w.conflicts;
+        }
       });
       const found = codes(run(dir));
       assert.ok(found.includes('AUTH_CONFLICT_MISSING'), JSON.stringify(found));
       assert.deepEqual(found.filter((x) => x !== 'AUTH_CONFLICT_MISSING' && x !== 'AUTH_UNFLAGGED_WRITERS'), []);
     });
   }
+
+  it('requires C1 to C13 when the audited revision is written in full', () => {
+    const full = '62d4eaeaecf601da836afa1981adc0b1ae2db16a';
+    const audit = (d) => { for (const f of [MATRIX, STORES, PACKAGES]) editJson(d, f, (x) => { x.auditedRevision = full; }); };
+    assert.deepEqual(run(fixture(audit)), []);
+    const dir = fixture((d) => {
+      audit(d);
+      editJson(d, MATRIX, (x) => {
+        x.conflicts = x.conflicts.filter((c) => c.id !== 'C9');
+        for (const r of x.rows) r.conflicts = r.conflicts.filter((c) => c !== 'C9');
+      });
+    });
+    only(run(dir), 'AUTH_CONFLICT_MISSING');
+  });
 
   it('records the conflicts found beyond the issue as foundHere', () => {
     assert.deepEqual(m.conflicts.filter((c) => c.foundHere).map((c) => c.id), ['C14', 'C15', 'C16', 'C17']);
@@ -137,10 +155,14 @@ describe('authority: matrix content', () => {
     for (const x of m.readModels) for (const k of ['watermark', 'stale', 'degraded']) assert.ok(row(m, x.row).projection[k], `${x.name} ${k}`);
   });
 
-  it('applies the open decisions: OD-2 settled, OD-3 and OD-4 defaults, OD-1 and OD-5 blocked', () => {
+  it('applies the open decisions: OD-1 settled by D8, OD-2 settled, OD-3 and OD-4 defaults, OD-5 blocked', () => {
     const dr = repo(DR);
     const od = Object.fromEntries(dr.decisions.filter((d) => d.od).map((d) => [d.id, d.od.state]));
-    assert.deepEqual(od, { 'OD-1': 'blocked', 'OD-2': 'settled', 'OD-3': 'default-taken', 'OD-4': 'default-taken', 'OD-5': 'blocked' });
+    assert.deepEqual(od, { 'OD-1': 'settled', 'OD-2': 'settled', 'OD-3': 'default-taken', 'OD-4': 'default-taken', 'OD-5': 'blocked' });
+    assert.match(dr.decisions.find((d) => d.id === 'OD-1').od.basis, /D8/);
+    const d8 = dr.decisions.find((d) => d.id === 'D8');
+    assert.equal(d8.status, 'ratified');
+    assert.match(d8.sources.join(' '), /orchestrator decision D8 under the owner's delegation/);
     assert.match(dr.decisions.find((d) => d.id === 'OD-2').od.basis, /PRODUCT\.md:67-70/);
     for (const id of ['career-activity-schedule', 'career-activity-outcome', 'career-activity-kinds']) {
       assert.deepEqual(row(m, id).command_owner, { service: 'interview-process', leaf: 'ROUNDS-22-L02' });
@@ -150,8 +172,11 @@ describe('authority: matrix content', () => {
     assert.equal(row(m, 'login-streak').command_owner, 'blocked:OD-5');
     assert.equal(row(m, 'login-streak').disposition, 'CUR-20');
     for (const id of ['ai-provider-credential', 'ai-role-settings', 'generation-proposal', 'staged-provider-result', 'provider-invocation-receipt']) {
-      assert.equal(row(m, id).command_owner.service, 'blocked:OD-1', id);
+      assert.equal(row(m, id).command_owner.service, 'provider-gateway', id);
+      assert.equal(row(m, id).package, 'provider-gateway', id);
+      assert.doesNotMatch(JSON.stringify(row(m, id)), /blocked:/, id);
     }
+    assert.deepEqual(m.rows.filter((r) => JSON.stringify(r).includes('blocked:')).map((r) => r.id), ['login-streak']);
   });
 
   it('maps all 36 owner labels as #16 lists them', () => {
@@ -159,7 +184,7 @@ describe('authority: matrix content', () => {
     assert.equal(labels.length, 36);
     const svc = Object.fromEntries(labels.map((l) => [l.label, l.service]));
     for (const l of ['Product Architecture', 'Product Design System', 'Interaction Platform', 'Command Center', 'Opportunity Experience', 'Transformation Migration', 'Quality and Release Engineering']) assert.equal(svc[l], 'none', l);
-    assert.equal(svc['AI Trust Platform'], 'blocked:OD-1');
+    assert.equal(svc['AI Trust Platform'], 'provider-gateway');
     const expected = {
       'Pursuit Lifecycle': 'opportunity-pursuit', Campaigns: 'opportunity-pursuit', Offers: 'opportunity-pursuit',
       Capture: 'capture-ingestion', 'Source Processing': 'capture-ingestion', 'Claims and Provenance': 'capture-ingestion', 'Profile Bootstrap': 'capture-ingestion',
@@ -185,11 +210,42 @@ describe('authority: matrix content', () => {
     assert.equal(c.matrixRevision, m.revision);
   });
 
-  it('lists one package per spec service with its target path pending #18', () => {
+  it('lists one package per spec service, plus D8\'s Provider Gateway, with target paths pending #18', () => {
     const p = repo(PACKAGES).packages;
-    assert.equal(p.length, 17);
-    assert.deepEqual(p.map((x) => x.spec), Array.from({ length: 17 }, (_, i) => `spec ${1919 + i}`));
+    assert.equal(p.length, 18);
+    assert.deepEqual(p.filter((x) => !x.decision).map((x) => x.spec), Array.from({ length: 17 }, (_, i) => `spec ${1919 + i}`));
+    assert.deepEqual(p.filter((x) => x.decision).map((x) => [x.id, x.service, x.spec, x.decision]), [['provider-gateway', 'Provider Gateway', 'spec 808', 'D8']]);
     for (const x of p) assert.equal(x.target_path, 'pending:ROUNDS-02-L01');
+  });
+
+  it('gives Recommendation dispositions one owner and keeps #144 to Today hides and reminder acknowledgments', () => {
+    const text = (r) => JSON.stringify(r.spec || r.summary);
+    assert.deepEqual(m.rows.filter((r) => /snooze/i.test(text(r))).map((r) => r.id), ['recommendation']);
+    assert.doesNotMatch(text(row(m, 'today-item-state')), /accept|dismiss|snooze/i);
+    assert.match(row(m, 'today-item-state').summary.information, /hides and reminder acknowledgments/);
+    const c144 = repo(CORRECTIONS).entries.find((e) => e.issue === 144);
+    assert.deepEqual(c144.rows, ['today-item-state']);
+    assert.match(c144.corrected, /#140's \(ROUNDS-29-L03\) commands on `recommendation`/);
+  });
+
+  it('routes the pasted job description caches to the Opportunity and the draft journal to the Practice Draft', () => {
+    const jd = row(m, 'job-description-cache');
+    assert.equal(jd.yields_to, 'opportunity');
+    assert.match(jd.target_authority, /^n\/a:/);
+    assert.deepEqual([jd.transfer.leaf, jd.transfer.mapping], ['ROUNDS-32-L04', 'ROUNDS-19-L01']);
+    assert.deepEqual(jd.consumers.filter((c) => c.leaf).map((c) => c.leaf), ['ROUNDS-17-L02', 'ROUNDS-17-L03']);
+    assert.deepEqual(jd.baseline_writers.map((w) => w.store), ['rounds.resume.ats.*.jd', 'rounds.resume.tailor.*.jd']);
+    const drafts = row(m, 'draft-caches');
+    assert.equal(drafts.yields_to, 'practice-draft');
+    assert.deepEqual(drafts.baseline_writers, []);
+    const stores = repo(STORES).stores;
+    for (const k of ['rounds.resume.ats.*.jd', 'rounds.resume.tailor.*.jd']) assert.deepEqual(stores.find((x) => x.name === k).rows, ['job-description-cache']);
+  });
+
+  it('names a distinct target authority on every row, each one record', () => {
+    const targets = m.rows.filter((r) => typeof r.target_authority === 'object').map((r) => `${r.target_authority.record.toLowerCase()}@${r.target_authority.location}`);
+    assert.equal(new Set(targets).size, targets.length);
+    for (const t of targets) assert.doesNotMatch(t, /[,;]| or /);
   });
 
   it('lists the 40 live collections and every browser key family, including the SDK auth store', () => {
@@ -215,6 +271,28 @@ describe('authority: matrix content', () => {
 describe('authority: rules 1 to 12, one negative control each', () => {
   it('rule 1: two target authorities', () => {
     only(run(editRow('offer', (r) => { r.target_authority = [r.target_authority, { record: 'Offer copy', location: 'server' }]; })), 'AUTH_TWO_AUTHORITIES');
+    only(run(editRow('offer', (r) => { r.target_authority.record = 'Offer, Offer copy'; })), 'AUTH_TWO_AUTHORITIES');
+    only(run(editRow('offer', (r) => { r.target_authority.record = 'Offer or Pursuit'; })), 'AUTH_TWO_AUTHORITIES');
+  });
+
+  it('rule 1 across rows: one authority claimed by two rows', () => {
+    const findings = run(editMatrix((m) => {
+      const o = row(m, 'offer');
+      const { spec, transfer, ...copy } = o;
+      m.rows.push({
+        ...copy, id: 'offer-copy', summary: { information: 'A second offer record', authority: 'Offer', mutability: 'Entity Version', delete_merge: 'Tombstone', consumers: 'None' },
+        command_owner: { service: 'opportunity-pursuit', leaf: 'ROUNDS-24-L03' }, commands: 'pending:ROUNDS-24-L03', baseline_writers: [], conflicts: [],
+        consumers: [{ type: 'public-share', name: 'n/a:not shared' }], projector: 'n/a:no read model consumes it', search: 'n/a:not indexed',
+      });
+    }));
+    only(findings, 'AUTH_AUTHORITY_SHARED');
+    assert.match(findings[0].message, /offer-copy and offer both claim "Offer and Offer Revision"/);
+  });
+
+  it('rule 1: a cache yields to one server row and claims no authority', () => {
+    only(run(editRow('draft-caches', (r) => { r.yields_to = 'no-such-row'; })), 'AUTH_UNRESOLVED_REF');
+    only(run(editRow('draft-caches', (r) => { r.yields_to = 'view-state'; })), 'AUTH_UNRESOLVED_REF');
+    only(run(editRow('draft-caches', (r) => { r.target_authority = { record: 'Practice draft cache', location: 'server' }; })), 'AUTH_TWO_AUTHORITIES');
   });
 
   it('rule 2: a second writer module, or a derived consumer, with no conflict', () => {
@@ -228,6 +306,16 @@ describe('authority: rules 1 to 12, one negative control each', () => {
       m.conflicts = m.conflicts.filter((c) => c.id !== 'C7');
       row(m, 'resume-autosave').conflicts = [];
     })), 'AUTH_UNFLAGGED_WRITERS');
+  });
+
+  it('rule 2: a conflict exempts only the writers that name it', () => {
+    const extra = (m) => ({ ...row(m, 'interview-process').baseline_writers[0] });
+    // appearance names C5 and C16, and offer only C16; a new module on either still fails.
+    only(run(editMatrix((m) => { row(m, 'appearance').baseline_writers.push({ ...extra(m), store: 'user_preferences' }); })), 'AUTH_UNFLAGGED_WRITERS');
+    only(run(editMatrix((m) => { row(m, 'offer').baseline_writers.push({ ...extra(m), store: 'offers' }); })), 'AUTH_UNFLAGGED_WRITERS');
+    only(run(editRow('offer', (r) => { delete r.baseline_writers[0].conflicts; })), 'AUTH_UNFLAGGED_WRITERS');
+    only(run(editRow('offer', (r) => { r.baseline_writers[0].conflicts = ['C16', 'C5']; })), 'AUTH_CONFLICT_UNFLAGGED');
+    only(run(editRow('offer', (r) => { r.baseline_writers[0].conflicts = ['C16', 'C99']; })), 'AUTH_UNRESOLVED_REF');
   });
 
   it('rule 3: a relation with no owning row', () => {
@@ -321,6 +409,29 @@ describe('authority: rules 1 to 12, one negative control each', () => {
       assert.deepEqual(run(fixture((d) => { bump(d); editJson(d, MATRIX, (m) => { row(m, 'view-state').revision = 2; }); }), added), []);
     });
 
+    it('checks the hand-written baseline store rows against the base', () => {
+      const withStores = (fn) => {
+        const st = repo(STORES);
+        fn(st);
+        return { base: { files: { [MATRIX]: JSON.stringify(repo(MATRIX)), [STORES]: JSON.stringify(st) } } };
+      };
+      const offers = (st) => st.stores.find((x) => x.name === 'offers');
+      const added = fixture((d) => editJson(d, STORES, (st) => { offers(st).rows.push('pursuit'); }));
+      only(run(added, withStores(() => {})), 'AUTH_REVISION_NOT_BUMPED');
+      const addedBumped = fixture((d) => { bump(d); editJson(d, STORES, (st) => { offers(st).rows.push('pursuit'); }); });
+      assert.deepEqual(run(addedBumped, withStores(() => {})), []);
+      // Dropping a row from a store re-homes it, which is breaking.
+      const dropped = withStores((st) => { offers(st).rows.push('pursuit'); });
+      only(run(fixture((d) => bump(d)), dropped), 'AUTH_COMPATIBILITY_UNDECLARED');
+      assert.deepEqual(run(fixture((d) => bump(d, 'breaking')), dropped), []);
+    });
+
+    it('fails a ratified DR-0002 that leaves a governed file unpinned', () => {
+      const dr = repo(DR);
+      assert.deepEqual(dr.approvalRef.governedFiles.map((g) => g.path), [MATRIX, PACKAGES, LABELS, STORES]);
+      only(run(fixture((d) => editJson(d, DR, (r) => { r.approvalRef.governedFiles = r.approvalRef.governedFiles.filter((g) => g.path !== STORES); }))), 'AUTH_APPROVAL_INCOMPLETE');
+    });
+
     it('fails closed when the base cannot be read, and when DR-0002 disagrees', () => {
       only(run(fixture(), { base: 'no-such-ref' }), 'AUTH_REVISION_UNAVAILABLE');
       only(run(fixture((d) => editJson(d, DR, (r) => { r.revision = 2; }))), 'AUTH_REVISION_MISMATCH');
@@ -388,6 +499,26 @@ describe('authority: coverage of the audited revision', () => {
 
   it('fails closed when the audited revision cannot be read', () => {
     only(run(fixture(), { treeRoot: tempDir() }), 'AUTH_REVISION_UNAVAILABLE');
+  });
+
+  it('recreates a missing baseline-stores.json with every store and no rows', () => {
+    const dir = fixture((d) => fs.rmSync(path.join(d, STORES)));
+    const missing = run(dir);
+    includes(missing, 'AUTH_SHAPE_INVALID');
+    assert.match(missing.find((f) => f.code === 'AUTH_SHAPE_INVALID').message, /baseline-stores\.json is missing/);
+    const out = authority.generate(dir, ctxFor(dir)).find((o) => o.path === STORES);
+    assert.ok(out, 'generate recreates the file');
+    const doc = JSON.parse(out.content);
+    assert.deepEqual(doc.counts, { collections: 40, browserKeyFamilies: 82 });
+    assert.ok(doc.stores.every((x) => Array.isArray(x.rows) && !x.rows.length));
+    fs.writeFileSync(path.join(dir, STORES), out.content);
+    includes(run(dir), 'AUTH_STORE_NO_ROW');
+  });
+
+  it('keeps an unreadable baseline-stores.json for a person to fix', () => {
+    const dir = fixture((d) => fs.writeFileSync(path.join(d, STORES), '{ not json'));
+    only(run(dir), 'AUTH_SHAPE_INVALID');
+    assert.equal(authority.generate(dir, ctxFor(dir)).find((o) => o.path === STORES), undefined);
   });
 });
 
@@ -465,11 +596,19 @@ describe('authority: security', () => {
   });
 });
 
+describe('authority: packages beyond the spec services', () => {
+  it('needs a ratified DR-0002 decision for a package beyond the 17 spec services', () => {
+    only(run(fixture((d) => editJson(d, PACKAGES, (p) => { p.packages.find((x) => x.id === 'provider-gateway').decision = 'D99'; }))), 'AUTH_UNRESOLVED_REF');
+    only(run(fixture((d) => editJson(d, PACKAGES, (p) => { delete p.packages.find((x) => x.id === 'provider-gateway').decision; }))), 'AUTH_PACKAGE_MISMATCH');
+    only(run(fixture((d) => editJson(d, DR, (r) => { r.decisions.find((x) => x.id === 'D8').status = 'draft'; }))), 'AUTH_PACKAGE_MISMATCH');
+  });
+});
+
 describe('authority: open decisions, labels, and corrections', () => {
   it('fails a missing OD entry, a cell blocked on a settled decision, and a mismatched status', () => {
     only(run(fixture((d) => editJson(d, DR, (r) => { r.decisions = r.decisions.filter((x) => x.id !== 'OD-3'); }))), 'AUTH_OD_MISSING');
     only(run(fixture((d) => editJson(d, DR, (r) => { Object.assign(r.decisions.find((x) => x.id === 'OD-5'), { status: 'ratified', od: { state: 'settled', basis: 'owner decision' } }); }))), 'AUTH_OD_SETTLED_BLOCKED');
-    only(run(fixture((d) => editJson(d, DR, (r) => { r.decisions.find((x) => x.id === 'OD-1').status = 'ratified'; }))), 'AUTH_OD_MISSING');
+    only(run(fixture((d) => editJson(d, DR, (r) => { r.decisions.find((x) => x.id === 'OD-1').status = 'draft'; }))), 'AUTH_OD_MISSING');
     only(run(editRow('offer', (r) => { r.impact = 'blocked:OD-9'; })), 'AUTH_OD_MISSING');
   });
 
@@ -506,7 +645,7 @@ describe('authority: --review against rounds-review', () => {
     const m = repo(MATRIX);
     const lines = Array.from({ length: 2000 }, () => '');
     for (const r of m.rows.filter((x) => x.spec)) lines[r.spec.line - 1] = `| ${r.spec.information} | ${r.spec.authority} | ${r.spec.mutability} | ${r.spec.delete_merge} | ${r.spec.consumers} |`;
-    for (const p of repo(PACKAGES).packages) lines[Number(p.spec.slice(5)) - 1] = `- ${p.service}`;
+    for (const p of repo(PACKAGES).packages.filter((x) => !x.decision)) lines[Number(p.spec.slice(5)) - 1] = `- ${p.service}`;
     if (edit.spec) edit.spec(lines);
     fs.mkdirSync(path.join(dir, path.dirname(REVIEW_SPEC)), { recursive: true });
     fs.writeFileSync(path.join(dir, REVIEW_SPEC), lines.join('\n'));
@@ -560,6 +699,6 @@ describe('authority: schemas', () => {
     only(run(editRow('offer', (r) => { r.scope = 'global'; })), 'AUTH_SHAPE_INVALID');
     only(run(editRow('offer', (r) => { r.consumers.find((c) => c.type === 'export').type = 'webhook'; })), 'AUTH_SHAPE_INVALID');
     only(run(fixture((d) => editJson(d, PACKAGES, (p) => { p.packages[0].target_path = ''; }))), 'AUTH_EMPTY_CELL');
-    only(run(editMatrix((m) => { m.rows.push({ ...row(m, 'referral') }); })), 'AUTH_DUPLICATE_ID');
+    only(run(editMatrix((m) => { m.rows.push({ ...row(m, 'referral'), target_authority: { record: 'Referral copy', location: 'server' } }); })), 'AUTH_DUPLICATE_ID');
   });
 });

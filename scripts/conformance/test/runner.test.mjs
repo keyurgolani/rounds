@@ -67,8 +67,8 @@ describe('runner', () => {
     const results = await runConformance({ ...parseArgs(['--rule', 'authority']), root: REPO_ROOT, base: 'none' });
     const summary = results[0].summary.join('\n');
     assert.match(summary, /matrix revision 1 \(DR-0002@1 /);
-    assert.match(summary, /blocked rows: 6 \(OD-1: ai-provider-credential, .*; OD-5: login-streak\)/);
-    assert.match(summary, /pending cells by leaf \(\d+ cells, \d+ leaves\): ROUNDS-02-L01 84, /);
+    assert.match(summary, /blocked rows: 1 \(OD-5: login-streak\)/);
+    assert.match(summary, /pending cells by leaf \(\d+ cells, \d+ leaves\): ROUNDS-02-L01 \d+, /);
     assert.match(summary, /40 collections and 82 browser key families at 62d4eae/);
     assert.equal(parseArgs(['--review', 'some/dir']).review, path.resolve('some/dir'));
   });

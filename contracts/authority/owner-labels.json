@@ -1,7 +1,7 @@
 {
   "$schema": "./owner-labels.schema.json",
   "registry": "rounds-owner-labels",
-  "description": "Each capability owner label (the catalog's \"owner\") mapped to one spec service, none (UI, composition, and program labels own no commands), blocked:OD-1, or per-row, where rows lists the service each row of that label takes. A row whose command owner is a leaf of the capability must take that service (DR-0002 L1).",
+  "description": "Each capability owner label (the catalog's \"owner\") mapped to one service package, none (UI, composition, and program labels own no commands), blocked:OD-<n> while an owner decision is open, or per-row, where rows lists the service each row of that label takes. A row whose command owner is a leaf of the capability must take that service (DR-0002 L1).",
   "labels": [
     {"capability":"ROUNDS-00A","label":"Execution and Rendering Platform","service":"execution-control-plane"},
     {
@@ -48,8 +48,8 @@
     {
       "capability": "ROUNDS-14",
       "label": "AI Trust Platform",
-      "service": "blocked:OD-1",
-      "note": "spec 808's \"Provider gateway\" is not one of the 17 services; #73 (ROUNDS-14-L02) keeps the keyring"
+      "service": "provider-gateway",
+      "note": "DR-0002 D8: spec 808's provider gateway is an 18th logical service; #73 (ROUNDS-14-L02) owns invocation and keeps the keyring"
     },
     {"capability":"ROUNDS-15","label":"Materials","service":"artifact"},
     {"capability":"ROUNDS-16","label":"Resume Studio","service":"artifact"},

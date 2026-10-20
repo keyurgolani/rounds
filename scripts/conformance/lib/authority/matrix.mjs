@@ -21,6 +21,9 @@ export const LEDGER_PATH = 'contracts/authority/disposition-ledger.json';
 export const CORRECTIONS_PATH = 'contracts/authority/owner-sentence-corrections.json';
 export const DR_PATH = 'docs/decisions/DR-0002-authority-matrix.json';
 export const AUTHORITY_MD = 'docs/authority.md';
+// The files a ratified DR-0002 pins: everything a person writes that the
+// matrix depends on.
+export const GOVERNED_FILES = [MATRIX_PATH, PACKAGES_PATH, OWNER_LABELS_PATH, BASELINE_STORES_PATH];
 const TERMS_PATH = 'contracts/vocabulary/terms.json';
 const ADAPTERS_PATH = 'contracts/vocabulary/adapters.json';
 
@@ -42,8 +45,9 @@ export const SPEC_READ_MODELS = [
   'Preparation plan', 'Readiness', 'Search index', 'Data Health',
 ];
 // Issue #16's C1 to C13 are facts about the audited revision, so they stay
-// flagged while the matrix audits it.
-export const BASELINE_CONFLICTS = { revision: '62d4eae', ids: Array.from({ length: 13 }, (_, i) => `C${i + 1}`) };
+// flagged while the matrix audits it, written short or in full.
+export const BASELINE_CONFLICTS = { revision: '62d4eaeaecf601da836afa1981adc0b1ae2db16a', ids: Array.from({ length: 13 }, (_, i) => `C${i + 1}`) };
+export const auditsBaseline = (rev) => typeof rev === 'string' && rev.length >= 7 && BASELINE_CONFLICTS.revision.startsWith(rev.toLowerCase());
 export const OPEN_DECISIONS = ['OD-1', 'OD-2', 'OD-3', 'OD-4', 'OD-5'];
 const OD_STATUS = { blocked: 'draft', settled: 'ratified', 'default-taken': 'ratified-here' };
 // rounds-review files that --review checks.
@@ -56,6 +60,8 @@ const PROJECTION_CONSUMERS = new Set(['read-model', 'search-index']);
 // Changing any of these on a row is breaking (#16 AC 9).
 export const BREAKING_FIELDS = ['command_owner', 'target_authority', 'privacy_floor', 'visibility', 'scope', 'package'];
 const NEW_CONCEPT = /^new-platform-concept:(INT-02|INT-03)$/;
+// A target names one record; a comma, a semicolon, or "or" lists several.
+const MULTI_AUTHORITY = /[,;]|\bor\b/i;
 
 const PENDING = /^pending:(ROUNDS-\d{2}[A-Z]?-L\d{2})$/;
 const BLOCKED = /^blocked:(OD-\d+)$/;
@@ -282,7 +288,7 @@ export function checkSpecRows(ctx, A) {
       }
     }
   }
-  for (const p of A.packageList) {
+  for (const p of A.packageList.filter((x) => x.decision === undefined)) {
     const n = Number(String(p.spec || '').replace(/^spec /, ''));
     const text = (lines[n - 1] || '').replace(/^-\s*/, '').trim();
     if (text !== p.service) A.push('AUTH_PACKAGE_MISMATCH', PACKAGES_PATH, ['packages', A.packageList.indexOf(p), 'service'], `${p.id} names service "${p.service}", but ${p.spec} reads "${text}"`);
@@ -339,8 +345,18 @@ export function checkRows(A) {
     // Rules 1 and 6: exactly one target authority, never browser storage.
     if (Array.isArray(r.target_authority)) {
       A.push('AUTH_TWO_AUTHORITIES', MATRIX_PATH, at('target_authority'), `${r.id} lists ${r.target_authority.length} target authorities; a row has exactly one writable authority at any revision`);
-    } else if (isObject(r.target_authority) && r.target_authority.location === 'browser-storage') {
-      A.push('AUTH_BROWSER_AUTHORITY', MATRIX_PATH, at('target_authority', 'location'), `${r.id} names browser storage as its target authority; browser storage holds only account-namespaced preferences, drafts, and caches that yield to the server (spec 2005-2007)`);
+    } else if (isObject(r.target_authority)) {
+      if (typeof r.target_authority.record === 'string' && MULTI_AUTHORITY.test(r.target_authority.record)) {
+        A.push('AUTH_TWO_AUTHORITIES', MATRIX_PATH, at('target_authority', 'record'), `${r.id} target "${r.target_authority.record}" names more than one authority; a row has exactly one, so split the row`);
+      }
+      if (r.target_authority.location === 'browser-storage') A.push('AUTH_BROWSER_AUTHORITY', MATRIX_PATH, at('target_authority', 'location'), `${r.id} names browser storage as its target authority; browser storage holds only account-namespaced preferences, drafts, and caches that yield to the server (spec 2005-2007)`);
+    }
+    // A cache with no authority of its own names the row it yields to.
+    if (r.yields_to !== undefined) {
+      const to = A.row(r.yields_to);
+      if (!to) A.push('AUTH_UNRESOLVED_REF', MATRIX_PATH, at('yields_to'), `${r.id} yields to ${r.yields_to}, which is not a row`);
+      else if (!isObject(to.target_authority) || to.target_authority.location !== 'server') A.push('AUTH_UNRESOLVED_REF', MATRIX_PATH, at('yields_to'), `${r.id} yields to ${r.yields_to}, which has no server authority`);
+      if (!(typeof r.target_authority === 'string' && NA.test(r.target_authority))) A.push('AUTH_TWO_AUTHORITIES', MATRIX_PATH, at('target_authority'), `${r.id} yields to ${r.yields_to} and so has no authority of its own; its target is n/a:<reason>`);
     }
     // Scope decides privacy floor or visibility.
     if (r.scope === 'account') {
@@ -390,24 +406,47 @@ export function checkRows(A) {
   }
 }
 
+// Rule 1 across rows: one writable authority belongs to one row.
+export function checkAuthorities(A) {
+  const seen = new Map();
+  for (const r of A.rows) {
+    const t = r.target_authority;
+    if (!isObject(t) || typeof t.record !== 'string') continue;
+    const key = `${t.record.trim().toLowerCase()}\0${t.location}`;
+    if (seen.has(key)) A.push('AUTH_AUTHORITY_SHARED', MATRIX_PATH, ['rows', list(A.matrix?.rows).indexOf(r), 'target_authority'], `${r.id} and ${seen.get(key)} both claim "${t.record}" (${t.location}); one writable authority belongs to one row`);
+    else seen.set(key, r.id);
+  }
+}
+
 // ------------------------------------------------- writers and conflicts
 
-// Rule 2: a store with writers in more than one module, or a derived
-// consumer writing its source, needs a conflict naming the row.
+// Rule 2: when more than one module writes a store, each of those writers
+// names a conflict of its row that covers it, and so does a derived consumer
+// writing its source. A conflict exempts only the writers that name it, so a
+// new second writer on an already-flagged row still fails.
 export function checkWriters(A) {
   for (const r of A.rows) {
+    const writers = list(r.baseline_writers);
+    const at = (w) => A.where(r.id, 'baseline_writers', writers.indexOf(w));
     const byStore = new Map();
-    for (const w of list(r.baseline_writers).filter(isObject)) {
+    for (const w of writers.filter(isObject)) {
       if (!byStore.has(w.store)) byStore.set(w.store, []);
       byStore.get(w.store).push(w);
+      list(w.conflicts).forEach((id) => {
+        const c = A.conflict.get(id);
+        if (!c) A.push('AUTH_UNRESOLVED_REF', MATRIX_PATH, at(w), `${r.id} writer ${w.path}:${w.lines} names conflict ${id}, which the matrix does not list`);
+        else if (!list(r.conflicts).includes(id) || !list(c.rows).includes(r.id)) A.push('AUTH_CONFLICT_UNFLAGGED', MATRIX_PATH, at(w), `${r.id} writer ${w.path}:${w.lines} names ${id}, but ${id} and ${r.id} do not name each other`);
+      });
     }
-    const flagged = list(r.conflicts).some((id) => list(A.conflict.get(id)?.rows).includes(r.id));
-    for (const [store, writers] of byStore) {
-      const modules = [...new Set(writers.map((w) => w.path))];
-      const derived = writers.filter((w) => w.role === 'derived-consumer');
-      if ((modules.length > 1 || derived.length) && !flagged) {
-        const why = derived.length ? `a derived consumer (${derived[0].path}:${derived[0].lines}) writes it` : `${modules.length} modules write it (${modules.join(', ')})`;
-        A.push('AUTH_UNFLAGGED_WRITERS', MATRIX_PATH, A.where(r.id, 'baseline_writers'), `${r.id}: ${why} for store ${store}, and no conflict names the row; add a conflict with its disposition and resolving leaf`);
+    const covered = (w) => list(w.conflicts).some((id) => list(r.conflicts).includes(id) && list(A.conflict.get(id)?.rows).includes(r.id));
+    for (const [store, ws] of byStore) {
+      const modules = [...new Set(ws.map((w) => w.path))];
+      for (const w of ws) {
+        const derived = w.role === 'derived-consumer';
+        if ((modules.length > 1 || derived) && !covered(w)) {
+          const why = derived ? 'as a derived consumer' : `beside ${modules.filter((p) => p !== w.path).join(', ')}`;
+          A.push('AUTH_UNFLAGGED_WRITERS', MATRIX_PATH, at(w), `${r.id}: ${w.path}:${w.lines} writes store ${store} ${why}, and names no conflict that covers it; name one with its disposition and resolving leaf`);
+        }
       }
     }
   }
@@ -431,9 +470,9 @@ export function checkConflicts(A) {
     if (typeof c.disposition === 'string' && !A.ledgerIds.has(c.disposition)) A.push('AUTH_UNRESOLVED_REF', MATRIX_PATH, at(c, 'disposition'), `${c.id} disposition ${c.disposition} is not a ${LEDGER_PATH} row`);
     if (!BASELINE_CONFLICTS.ids.includes(c.id) && c.foundHere !== true) A.push('AUTH_SHAPE_INVALID', MATRIX_PATH, at(c), `${c.id} is beyond #16's C1 to C13, so it is marked foundHere`);
   }
-  if (A.matrix?.auditedRevision === BASELINE_CONFLICTS.revision) {
+  if (auditsBaseline(A.matrix?.auditedRevision)) {
     for (const id of BASELINE_CONFLICTS.ids) {
-      if (!A.conflict.has(id)) A.push('AUTH_CONFLICT_MISSING', MATRIX_PATH, ['conflicts'], `${id} (#16's baseline conflict at ${BASELINE_CONFLICTS.revision}) is not flagged with its rows, disposition, and resolving leaves`);
+      if (!A.conflict.has(id)) A.push('AUTH_CONFLICT_MISSING', MATRIX_PATH, ['conflicts'], `${id} (#16's baseline conflict at ${BASELINE_CONFLICTS.revision.slice(0, 7)}) is not flagged with its rows, disposition, and resolving leaves`);
     }
   }
 }
@@ -493,12 +532,21 @@ export function checkReadModels(A) {
 
 // ------------------------------------------------------- packages, labels
 
+// One package per spec service (spec 1919-1935), plus any package a ratified
+// DR-0002 decision adds (D8 adds the Provider Gateway for spec 808).
 export function checkPackages(A) {
   const count = SPEC_SERVICES.to - SPEC_SERVICES.from + 1;
-  if (A.packages && A.packageList.length !== count) A.push('AUTH_PACKAGE_MISMATCH', PACKAGES_PATH, ['packages'], `${PACKAGES_PATH} lists ${A.packageList.length} packages; the spec names ${count} services (spec ${SPEC_SERVICES.from}-${SPEC_SERVICES.to}), one package each`);
+  const spec = A.packageList.filter((p) => p.decision === undefined);
+  if (A.packages && spec.length !== count) A.push('AUTH_PACKAGE_MISMATCH', PACKAGES_PATH, ['packages'], `${PACKAGES_PATH} lists ${spec.length} packages for spec services; the spec names ${count} (spec ${SPEC_SERVICES.from}-${SPEC_SERVICES.to}), one package each, and any other package names the DR-0002 decision that adds it`);
   A.packageList.forEach((p, i) => {
+    if (p.decision !== undefined) {
+      const d = A.decisions.get(p.decision);
+      if (!d) A.push('AUTH_UNRESOLVED_REF', PACKAGES_PATH, ['packages', i, 'decision'], `${p.id} names DR-0002 decision ${p.decision}, which DR-0002 does not record`);
+      else if (d.status !== 'ratified') A.push('AUTH_PACKAGE_MISMATCH', PACKAGES_PATH, ['packages', i, 'decision'], `${p.id} rests on ${p.decision}, which is ${d.status}; a package beyond the spec's services needs a ratified decision`);
+      return;
+    }
     const n = Number(String(p.spec || '').replace(/^spec /, ''));
-    if (!(n >= SPEC_SERVICES.from && n <= SPEC_SERVICES.to)) A.push('AUTH_PACKAGE_MISMATCH', PACKAGES_PATH, ['packages', i, 'spec'], `${p.id} cites ${p.spec}, outside the service list (spec ${SPEC_SERVICES.from}-${SPEC_SERVICES.to})`);
+    if (!(n >= SPEC_SERVICES.from && n <= SPEC_SERVICES.to)) A.push('AUTH_PACKAGE_MISMATCH', PACKAGES_PATH, ['packages', i, 'spec'], `${p.id} cites ${p.spec}, outside the service list (spec ${SPEC_SERVICES.from}-${SPEC_SERVICES.to}); a package beyond it names the DR-0002 decision that adds it`);
   });
   for (const f of [PACKAGES_PATH, BASELINE_STORES_PATH]) {
     const data = f === PACKAGES_PATH ? A.packages : A.stores;
@@ -720,7 +768,9 @@ export function checkStores(A, tree) {
     if (!list(s.rows).length) A.push('AUTH_STORE_NO_ROW', BASELINE_STORES_PATH, ['stores', i, 'rows'], `${s.id} has no row; name the DR-0002 rows it holds`);
     for (const id of list(s.rows)) if (!A.row(id)) A.push('AUTH_UNRESOLVED_REF', BASELINE_STORES_PATH, ['stores', i, 'rows'], `${s.id} names row ${id}, which does not exist`);
   });
-  for (const r of A.rows) {
+  // An unreadable or missing file is reported on load; its writers are not
+  // reported again one by one.
+  for (const r of A.stores ? A.rows : []) {
     list(r.baseline_writers).forEach((w, k) => {
       if (!isObject(w) || typeof w.store !== 'string' || w.store.startsWith('bundled:')) return;
       const at = A.where(r.id, 'baseline_writers', k, 'store');
@@ -731,8 +781,10 @@ export function checkStores(A, tree) {
       for (const s of entries) if (!list(s.rows).includes(r.id)) A.push('AUTH_STORE_NO_ROW', BASELINE_STORES_PATH, ['stores', A.storeList.indexOf(s), 'rows'], `${s.id} does not list ${r.id}, which writes it (${w.path}:${w.lines})`);
     });
   }
-  if (!tree || !A.stores) return null;
+  if (!tree) return null;
   const extracted = treeFacts(tree, A.adapters).stores;
+  // A missing or unreadable file is reported on load; --write recreates a missing one.
+  if (!A.stores) return extracted;
   const declared = new Set(A.storeList.map((s) => s.id));
   const found = new Set(extracted.stores.map((s) => s.id));
   for (const s of extracted.stores) {
@@ -912,7 +964,7 @@ export function checkRevision(ctx, A) {
   }
   if (dr?.status === 'ratified' && dr.approvalRef) {
     const pinned = new Set(list(dr.approvalRef.governedFiles).map((g) => g?.path));
-    for (const f of [MATRIX_PATH, PACKAGES_PATH, OWNER_LABELS_PATH]) if (!pinned.has(f)) A.push('AUTH_APPROVAL_INCOMPLETE', DR_PATH, ['approvalRef'], `ratified DR-0002 does not pin ${f}`);
+    for (const f of GOVERNED_FILES) if (!pinned.has(f)) A.push('AUTH_APPROVAL_INCOMPLETE', DR_PATH, ['approvalRef'], `ratified DR-0002 does not pin ${f}`);
   }
   for (const r of A.rows) {
     if (Number.isInteger(r.revision) && r.revision > cur.revision) A.push('AUTH_REVISION_MISMATCH', MATRIX_PATH, A.where(r.id, 'revision'), `${r.id} is at revision ${r.revision}, past the matrix's ${cur.revision}`);
@@ -968,7 +1020,41 @@ export function checkRevision(ctx, A) {
     const now = A.relations.find((y) => y.id === id);
     if (!now || now.owner_row !== x.owner_row) breaking = true;
   }
+  // The hand-written rows of each baseline store are part of the matrix: a
+  // change needs a new revision, and dropping a row from a store is breaking.
+  const stores = storeRowChanges(ctx, A);
+  for (const c of stores) {
+    changed = true;
+    if (!(cur.revision > prev.revision)) A.push('AUTH_REVISION_NOT_BUMPED', BASELINE_STORES_PATH, ['stores', c.index, 'rows'], `${c.id} rows changed since ${ctx.baseRef}; raise the matrix revision above ${prev.revision}`);
+    if (c.dropped.length) {
+      breaking = true;
+      if (cur.compatibility !== 'breaking') A.push('AUTH_COMPATIBILITY_UNDECLARED', BASELINE_STORES_PATH, ['stores', c.index, 'rows'], `${c.id} drops ${c.dropped.join(', ')}, which is breaking, but revision ${cur.revision} is marked ${cur.compatibility}`);
+    }
+  }
   if (changed && !(cur.revision > prev.revision)) A.push('AUTH_REVISION_NOT_BUMPED', MATRIX_PATH, ['revision'], `the matrix changed since ${ctx.baseRef} but keeps revision ${cur.revision}; raise it above ${prev.revision} here and in DR-0002`);
   if (breaking && cur.compatibility !== 'breaking') A.push('AUTH_COMPATIBILITY_UNDECLARED', MATRIX_PATH, ['compatibility'], `revision ${cur.revision} makes a breaking change but is marked ${cur.compatibility}`);
-  return { base: changed ? 'changed' : 'unchanged', baseRevision: prev.revision, changedRows };
+  return { base: changed ? 'changed' : 'unchanged', baseRevision: prev.revision, changedRows, changedStores: stores.map((c) => c.id) };
+}
+
+// Stores whose hand-written rows differ from the base branch.
+function storeRowChanges(ctx, A) {
+  if (!A.stores) return [];
+  const base = ctx.readBase(BASELINE_STORES_PATH);
+  if (!base.ok || base.content === null) return [];
+  let prev;
+  try {
+    prev = JSON.parse(base.content);
+  } catch {
+    return [];
+  }
+  const before = new Map(list(prev?.stores).filter(isObject).map((s) => [s.id, list(s.rows)]));
+  const out = [];
+  A.storeList.forEach((s) => {
+    const was = before.get(s.id);
+    if (!was) return;
+    const now = list(s.rows);
+    if (canonical([...was].sort()) === canonical([...now].sort())) return;
+    out.push({ id: s.id, index: list(A.stores.stores).indexOf(s), dropped: was.filter((id) => !now.includes(id)) });
+  });
+  return out;
 }

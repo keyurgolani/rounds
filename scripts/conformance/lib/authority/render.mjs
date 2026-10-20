@@ -9,8 +9,8 @@ const code = (s) => (s === null || s === undefined || s === '' ? '' : `\`${Strin
 
 // The rules the check enforces, in #16's order, then the supporting checks.
 export const RULES = [
-  ['1', 'A row names more than one target authority.', 'AUTH_TWO_AUTHORITIES'],
-  ['2', 'A store has writers in more than one module, or a derived consumer writes it, and no conflict with a disposition and resolving leaf names the row.', 'AUTH_UNFLAGGED_WRITERS'],
+  ['1', 'A row names more than one target authority, a target names several records, a cache row claims an authority, or two rows claim one authority.', 'AUTH_TWO_AUTHORITIES, AUTH_AUTHORITY_SHARED'],
+  ['2', 'A writer of a store that more than one module writes, or a derived consumer, names no conflict of its row that covers it. A conflict exempts only the writers that name it.', 'AUTH_UNFLAGGED_WRITERS'],
   ['3', 'A relation has no owning row.', 'AUTH_RELATION_UNOWNED'],
   ['4', 'A Secret row has a consumer other than a verifier or gateway.', 'AUTH_SECRET_CONSUMER'],
   ['5', 'A row has no disposition, or one that is neither a ledger row nor new-platform-concept:INT-02 or INT-03.', 'AUTH_NO_DISPOSITION'],
@@ -53,7 +53,7 @@ export function renderAuthorityMd(A) {
   p(`- Before you write a store, find its row here or in [\`baseline-stores.json\`](../contracts/authority/baseline-stores.json), and write only through that row's command owner. Cite the row in your leaf's \`consumes\` as \`DR-0002@<revision>:<row-id>\`, for example \`${record}:appearance\`.`);
   p('- A cell holds a value, `pending:<leaf-id>` (that leaf fills it; the row is citable and stays closed to implementation until then), `n/a:<reason>`, or `blocked:OD-<n>` (an open owner decision; the row is not citable, and the cell holds only its row).');
   p('- A row has one writable authority at any revision: its legacy writer until the transfer leaf switches it, then the target. Compatibility adapters read, shadow, or compare, never write (spec 2641-2644). Browser storage holds only account-namespaced preferences, drafts, and caches that yield to the server (spec 2005-2007).');
-  p('- To change a row, edit `matrix.json`, give the row the new matrix revision and its `compatibility`, raise `revision` in the matrix and in DR-0002, regenerate, and get the record re-approved (its `approvalRef` pins the SHA-256 of `matrix.json`, `packages.json`, and `owner-labels.json`). Changing a row\'s command owner, target authority, privacy floor or visibility, scope, or package is breaking, and only that row\'s citers re-cite. Filling a pending cell or adding a row is additive. Rows are superseded, never deleted.');
+  p('- To change a row, edit `matrix.json`, give the row the new matrix revision and its `compatibility`, raise `revision` in the matrix and in DR-0002, regenerate, and get the record re-approved (its `approvalRef` pins the SHA-256 of `matrix.json`, `packages.json`, `owner-labels.json`, and `baseline-stores.json`). Changing a row\'s command owner, target authority, privacy floor or visibility, scope, or package is breaking, and only that row\'s citers re-cite. Filling a pending cell or adding a row is additive. A store\'s `rows` in `baseline-stores.json` count too: adding one is additive and dropping one is breaking. Rows are superseded, never deleted.');
   p('- #155 (ROUNDS-32-L01) maps every store, field, and key to a row, and #18 (ROUNDS-02-L01) assigns each row its storage. #72 (ROUNDS-14-L01) owns privacy classes, sink policy, and the field map, which only tightens a floor; loosening one needs a breaking revision.');
   p('- Check with `node scripts/conformance/run.mjs` and `node --test scripts/conformance` (Node 22, no install). `--review <rounds-review>` also checks the spec rows verbatim, the ledger pin, and the owner labels against the catalog. `--write` regenerates this file and `baseline-stores.json`, keeping each store\'s rows and note.', '');
 
@@ -94,7 +94,7 @@ export function renderAuthorityMd(A) {
     for (const r of rows) {
       const concept = (r.spec || r.summary || {}).information;
       const owner = r.command_owner && typeof r.command_owner === 'object' ? `${issue(r.command_owner.leaf)}, ${isNote(r.command_owner.service) ? code(r.command_owner.service) : cell(service(r.command_owner.service))}` : value(r.command_owner);
-      const target = r.target_authority && typeof r.target_authority === 'object' && !Array.isArray(r.target_authority) ? `${cell(r.target_authority.record)} (${r.target_authority.location})` : value(r.target_authority);
+      const target = (r.target_authority && typeof r.target_authority === 'object' && !Array.isArray(r.target_authority) ? `${cell(r.target_authority.record)} (${r.target_authority.location})` : value(r.target_authority)) + (r.yields_to ? `; yields to ${code(r.yields_to)}` : '');
       const spec = r.spec ? ` (spec ${r.spec.line}${r.split ? `; this part: ${cell(r.split)}` : ''})` : '';
       const ods = blocked.find((b) => b.row === r.id)?.ods;
       const n = pending(r);
@@ -128,11 +128,12 @@ export function renderAuthorityMd(A) {
   p('');
 
   p('## Packages', '');
-  p('One package per spec service (spec 1919-1935). #18 (ROUNDS-02-L01) sets each `target_path`.', '');
+  const added = A.packageList.filter((x) => x.decision);
+  p(`One package per spec service (spec 1919-1935)${added.length ? `, plus ${added.map((x) => `${x.service} (DR-0002 ${x.decision})`).join(', ')}` : ''}. #18 (ROUNDS-02-L01) sets each \`target_path\`.`, '');
   p('| Package | Service | Spec | Baseline locations |', '| --- | --- | --- | --- |');
   for (const pkg of A.packageList) {
     const locs = Array.isArray(pkg.baseline_locations) ? pkg.baseline_locations.map(code).join(', ') : code(pkg.baseline_locations);
-    p(`| ${code(pkg.id)} | ${cell(pkg.service)} | ${cell(pkg.spec)} | ${locs} |`);
+    p(`| ${code(pkg.id)} | ${cell(pkg.service)} | ${cell(pkg.spec)}${pkg.decision ? ` (DR-0002 ${pkg.decision})` : ''} | ${locs} |`);
   }
   p('');
 

@@ -659,7 +659,7 @@
       "api": "localStorage",
       "writes": ["frontend/src/features/resume/studio/tabs/ATSTab.tsx:135","frontend/src/hooks/usePersistedState.ts:17"],
       "reads": ["frontend/src/features/resume/studio/tabs/ATSTab.tsx:135","frontend/src/hooks/usePersistedState.ts:6"],
-      "rows": ["draft-caches"]
+      "rows": ["job-description-cache"]
     },
     {
       "id": "browser-key:rounds.resume.ats.*.ruleExpanded",
@@ -695,7 +695,7 @@
       "api": "localStorage",
       "writes": ["frontend/src/features/resume/studio/tabs/TailorTab.tsx:58","frontend/src/hooks/usePersistedState.ts:17"],
       "reads": ["frontend/src/features/resume/studio/tabs/TailorTab.tsx:58","frontend/src/hooks/usePersistedState.ts:6"],
-      "rows": ["draft-caches"]
+      "rows": ["job-description-cache"]
     },
     {
       "id": "browser-key:rounds.resume.tailor.*.roleFocus",

@@ -389,7 +389,7 @@
       "kind": "owner",
       "original": "- AI Trust Platform is the only command or contract owner for \"Provider Invocation Intent and authorization\"; callers cannot write durable state around it.",
       "rows": ["provider-invocation-receipt","ai-provider-credential"],
-      "corrected": "- #73 (ROUNDS-14-L02) is the command owner of `provider-invocation-receipt`, `ai-provider-credential` in DR-0002@1 (service blocked:OD-1); callers cannot write durable state around it."
+      "corrected": "- #73 (ROUNDS-14-L02) is the command owner of `provider-invocation-receipt`, `ai-provider-credential` in DR-0002@1 (Provider Gateway); callers cannot write durable state around it."
     },
     {
       "issue": 74,
@@ -398,7 +398,7 @@
       "kind": "owner",
       "original": "- AI Trust Platform is the only command or contract owner for \"provider outcomes and reconcile late or duplicate responses\"; callers cannot write durable state around it.",
       "rows": ["staged-provider-result"],
-      "corrected": "- #74 (ROUNDS-14-L03) is the command owner of `staged-provider-result` in DR-0002@1 (service blocked:OD-1); callers cannot write durable state around it."
+      "corrected": "- #74 (ROUNDS-14-L03) is the command owner of `staged-provider-result` in DR-0002@1 (Provider Gateway); callers cannot write durable state around it."
     },
     {
       "issue": 76,
@@ -785,7 +785,7 @@
       "kind": "owner",
       "original": "- Today is the only command or contract owner for \"accept, dismiss, snooze, and act workflows\"; callers cannot write durable state around it.",
       "rows": ["today-item-state"],
-      "corrected": "- #144 (ROUNDS-30-L03) is the command owner of `today-item-state` in DR-0002@1 (Read Model and Recommendation Service); callers cannot write durable state around it."
+      "corrected": "- #144 (ROUNDS-30-L03) is the command owner of `today-item-state` in DR-0002@1 (Read Model and Recommendation Service): Today hides and reminder acknowledgments; Recommendation accept, dismiss, and snooze stay #140's (ROUNDS-29-L03) commands on `recommendation`, which #144 calls; callers cannot write durable state around it."
     },
     {
       "issue": 146,

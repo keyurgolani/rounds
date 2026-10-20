@@ -82,6 +82,13 @@
         "anchor": { "description": "Text on the first cited line at the audited revision.", "type": "string", "minLength": 1 },
         "location": { "enum": ["frontend", "backend", "backend/pdf_renderer", "pocketbase", "browser-storage"] },
         "role": { "enum": ["derived-consumer"] },
+        "conflicts": {
+          "description": "The row's conflicts that cover this writer. Required when more than one module writes the store, or the writer is a derived consumer; a conflict exempts only the writers that name it.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^C\\d+$" }
+        },
         "note": { "type": "string", "minLength": 1 }
       }
     },
@@ -202,6 +209,10 @@
         "commands": { "type": ["array", "string"], "minLength": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]+$" } },
         "baseline_writers": { "type": "array", "items": { "$ref": "#/$defs/writer" } },
         "target_authority": { "$ref": "#/$defs/target" },
+        "yields_to": {
+          "description": "For a browser cache with no authority of its own (target_authority n/a): the row whose server authority it copies and yields to.",
+          "$ref": "#/$defs/rowId"
+        },
         "storage": { "$ref": "#/$defs/cellText" },
         "privacy_floor": { "enum": ["Private", "Sensitive", "Third-party personal", "Secret", "Share Projection"] },
         "visibility": { "enum": ["public-ui", "authed-readable", "server-only"] },

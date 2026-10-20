@@ -1,7 +1,7 @@
 {
   "$schema": "./packages.schema.json",
   "registry": "rounds-packages",
-  "description": "One package per spec service (spec 1917-1935): the code module that owns its rows' commands. baseline_locations are paths at the audited revision; #18 (ROUNDS-02-L01) sets target_path.",
+  "description": "One package per service: the 17 spec services (spec 1919-1935) and the Provider Gateway that DR-0002 D8 adds for spec 808. A package is the code module that owns its rows' commands; a package beyond the spec list names the DR-0002 decision that adds it. baseline_locations are paths at the audited revision; #18 (ROUNDS-02-L01) sets target_path.",
   "auditedRevision": "62d4eae",
   "packages": [
     {
@@ -150,6 +150,20 @@
       "service": "Ephemeral Execution Worker pool",
       "spec": "spec 1935",
       "baseline_locations": ["backend/drivers/","backend/ai_coding/","backend/take_home/","backend/pdf_renderer/"],
+      "target_path": "pending:ROUNDS-02-L01"
+    },
+    {
+      "id": "provider-gateway",
+      "service": "Provider Gateway",
+      "spec": "spec 808",
+      "decision": "D8",
+      "baseline_locations": [
+        "backend/routers/ai.py",
+        "backend/app/crypto.py",
+        "frontend/src/settings/AISection.tsx",
+        "frontend/src/settings/aiProviderEndpoints.ts",
+        "pocketbase/pb_migrations/1700000800_ai_providers.js"
+      ],
       "target_path": "pending:ROUNDS-02-L01"
     }
   ]

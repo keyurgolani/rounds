@@ -9,7 +9,7 @@ Matrix revision 1 (`DR-0002@1`), additive. The decision record [`DR-0002`](decis
 - Before you write a store, find its row here or in [`baseline-stores.json`](../contracts/authority/baseline-stores.json), and write only through that row's command owner. Cite the row in your leaf's `consumes` as `DR-0002@<revision>:<row-id>`, for example `DR-0002@1:appearance`.
 - A cell holds a value, `pending:<leaf-id>` (that leaf fills it; the row is citable and stays closed to implementation until then), `n/a:<reason>`, or `blocked:OD-<n>` (an open owner decision; the row is not citable, and the cell holds only its row).
 - A row has one writable authority at any revision: its legacy writer until the transfer leaf switches it, then the target. Compatibility adapters read, shadow, or compare, never write (spec 2641-2644). Browser storage holds only account-namespaced preferences, drafts, and caches that yield to the server (spec 2005-2007).
-- To change a row, edit `matrix.json`, give the row the new matrix revision and its `compatibility`, raise `revision` in the matrix and in DR-0002, regenerate, and get the record re-approved (its `approvalRef` pins the SHA-256 of `matrix.json`, `packages.json`, and `owner-labels.json`). Changing a row's command owner, target authority, privacy floor or visibility, scope, or package is breaking, and only that row's citers re-cite. Filling a pending cell or adding a row is additive. Rows are superseded, never deleted.
+- To change a row, edit `matrix.json`, give the row the new matrix revision and its `compatibility`, raise `revision` in the matrix and in DR-0002, regenerate, and get the record re-approved (its `approvalRef` pins the SHA-256 of `matrix.json`, `packages.json`, `owner-labels.json`, and `baseline-stores.json`). Changing a row's command owner, target authority, privacy floor or visibility, scope, or package is breaking, and only that row's citers re-cite. Filling a pending cell or adding a row is additive. A store's `rows` in `baseline-stores.json` count too: adding one is additive and dropping one is breaking. Rows are superseded, never deleted.
 - #155 (ROUNDS-32-L01) maps every store, field, and key to a row, and #18 (ROUNDS-02-L01) assigns each row its storage. #72 (ROUNDS-14-L01) owns privacy classes, sink policy, and the field map, which only tightens a floor; loosening one needs a breaking revision.
 - Check with `node scripts/conformance/run.mjs` and `node --test scripts/conformance` (Node 22, no install). `--review <rounds-review>` also checks the spec rows verbatim, the ledger pin, and the owner labels against the catalog. `--write` regenerates this file and `baseline-stores.json`, keeping each store's rows and note.
 
@@ -17,8 +17,8 @@ Matrix revision 1 (`DR-0002@1`), additive. The decision record [`DR-0002`](decis
 
 | Rule | Fails when | Codes |
 | --- | --- | --- |
-| 1 | A row names more than one target authority. | `AUTH_TWO_AUTHORITIES` |
-| 2 | A store has writers in more than one module, or a derived consumer writes it, and no conflict with a disposition and resolving leaf names the row. | `AUTH_UNFLAGGED_WRITERS` |
+| 1 | A row names more than one target authority, a target names several records, a cache row claims an authority, or two rows claim one authority. | `AUTH_TWO_AUTHORITIES`, `AUTH_AUTHORITY_SHARED` |
+| 2 | A writer of a store that more than one module writes, or a derived consumer, names no conflict of its row that covers it. A conflict exempts only the writers that name it. | `AUTH_UNFLAGGED_WRITERS` |
 | 3 | A relation has no owning row. | `AUTH_RELATION_UNOWNED` |
 | 4 | A Secret row has a consumer other than a verifier or gateway. | `AUTH_SECRET_CONSUMER` |
 | 5 | A row has no disposition, or one that is neither a ledger row nor new-platform-concept:INT-02 or INT-03. | `AUTH_NO_DISPOSITION` |
@@ -45,7 +45,7 @@ Matrix revision 1 (`DR-0002@1`), additive. The decision record [`DR-0002`](decis
 
 | Decision | State | Default or basis | Blocked rows |
 | --- | --- | --- | --- |
-| OD-1: Service for provider invocation | blocked |  | `ai-provider-credential`, `ai-role-settings`, `generation-proposal`, `staged-provider-result`, `provider-invocation-receipt` |
+| OD-1: Service for provider invocation | settled | DR-0002 D8, an orchestrator decision under the owner's delegation | none |
 | OD-2: Career Activity has one owner | settled | rounds-review PRODUCT.md:67-70 | none |
 | OD-3: Projector for the Preparation plan read model | default-taken | retarget #152 to the Preparation plan | none |
 | OD-4: Pack activation scope | default-taken | per-account enablement over a deployment installation | none |
@@ -64,8 +64,8 @@ Status: `citable`, `citable, N pending` (closed to implementation until those ce
 | `appearance` | Appearance and shell preferences | #178 (ROUNDS-03-L04), Account Service | Account preference (appearance) (server) | Private | account | `CUR-03` | C5, C16 | #178 (ROUNDS-03-L04) | citable, 9 pending |
 | `current-campaign` | Current campaign selection (spec 802) | #178 (ROUNDS-03-L04), Account Service | Account preference (current campaign lens) (server) | Private | account | `CUR-16` | C3 | #178 (ROUNDS-03-L04) | citable, 10 pending |
 | `demo-state` | Hosted demo account state and quotas | #177 (ROUNDS-00B-L07), Account Service | Account demo state (server) | Private | account | `CUR-24` | C10, C16 | #177 (ROUNDS-00B-L07) | citable, 8 pending |
-| `ai-provider-credential` | AI/provider credential (spec 808) | #73 (ROUNDS-14-L02), `blocked:OD-1` | Account secret store key (Key Version) (server) | Secret | `blocked:OD-1` | `CUR-04` |  | #73 (ROUNDS-14-L02) | blocked: OD-1 |
-| `ai-role-settings` | AI provider and model choice per role | #75 (ROUNDS-14-L04), `blocked:OD-1` | AI role settings (server) | Private | `blocked:OD-1` | `CUR-04` | C14 | #73 (ROUNDS-14-L02) | blocked: OD-1 |
+| `ai-provider-credential` | AI/provider credential (spec 808) | #73 (ROUNDS-14-L02), Provider Gateway | Account secret store key (Key Version) (server) | Secret | provider-gateway | `CUR-04` |  | #73 (ROUNDS-14-L02) | citable, 8 pending |
+| `ai-role-settings` | AI provider and model choice per role | #75 (ROUNDS-14-L04), Provider Gateway | AI role settings (server) | Private | provider-gateway | `CUR-04` | C14 | #73 (ROUNDS-14-L02) | citable, 9 pending |
 | `account-export` | Account export request, job, and archive | #91 (ROUNDS-18-L03), Account Service | Account export job and archive (server) | Sensitive | account | `CUR-05` |  |  | citable, 6 pending |
 | `account-restore` | Account restore into a fresh deployment | #92 (ROUNDS-18-L04), Account Service | Account restore journal (server) | Sensitive | account | `CUR-05` |  |  | citable, 6 pending |
 | `idempotency-record` | Command idempotency record | #20 (ROUNDS-02-L03), Transaction-owning Command Gateway | Idempotency record (server) | Private | command-gateway | `new-platform-concept:INT-03` |  |  | citable, 7 pending |
@@ -103,7 +103,8 @@ Status: `citable`, `citable, N pending` (closed to implementation until those ce
 | `practice-draft` | Practice draft/session (spec 798) | #130 (ROUNDS-28-L01), Practice Service | Practice Draft (server) | Private | practice | `CUR-22` | C4, C16 | #163 (ROUNDS-32-L09) | citable, 9 pending |
 | `practice-attempt` | Practice attempt/result (spec 799) | #130 (ROUNDS-28-L01), Practice Service | Practice Attempt (server) | Private | practice | `CUR-22` | C8 | #163 (ROUNDS-32-L09) | citable, 10 pending |
 | `practice-progress` | Practice progress status and timers | #130 (ROUNDS-28-L01), Practice Service | Practice progress and session timer (server) | Private | practice | `CUR-22` | C4, C16 | #163 (ROUNDS-32-L09) | citable, 11 pending |
-| `draft-caches` | Browser draft caches | `n/a:browser caches take no commands; each yields to its server row` | The server row each cache copies (Practice Draft, Opportunity) (server) | Private | `n/a:owns no commands` | `CUR-22` |  | #158 (ROUNDS-32-L04) | citable, 7 pending |
+| `draft-caches` | Browser draft journal for practice drafts | `n/a:a browser cache takes no commands; it yields to its server row` | `n/a:a cache has no authority of its own; yields_to names the row it copies`; yields to `practice-draft` | Private | `n/a:owns no commands` | `CUR-22` |  |  | citable, 6 pending |
+| `job-description-cache` | Pasted job descriptions cached by the ATS and Tailor tabs | `n/a:a browser cache takes no commands; it yields to its server row` | `n/a:a cache has no authority of its own; yields_to names the row it copies`; yields to `opportunity` | Private | `n/a:owns no commands` | `CUR-13` |  | #158 (ROUNDS-32-L04) | citable, 7 pending |
 | `view-state` | Browser view state: sort, filter, panel, width, and focus choices | `n/a:interface state takes no commands` | `n/a:interface state is not product data; browser storage may keep it account-namespaced (spec 2005-2007)` | Private | `n/a:owns no commands` | `CUR-26` |  | #158 (ROUNDS-32-L04) | citable, 5 pending |
 | `login-streak` | Login streak | `blocked:OD-5` | `blocked:OD-5` | Private | `blocked:OD-5` | `CUR-20` | C11 | #158 (ROUNDS-32-L04) | blocked: OD-5 |
 | `pack-activation` | Pack installation (spec 809) | #40 (ROUNDS-07-L02), Career Pack Registry | Pack Activation: deployment installation plus per-account enablement (server) | Private | career-pack-registry | `INT-06` |  |  | citable, 7 pending |
@@ -113,9 +114,9 @@ Status: `citable`, `citable, N pending` (closed to implementation until those ce
 | `source-document` | Imported raw material (spec 803) | #53 (ROUNDS-10-L01), Capture and Ingestion Service | Source Document (server) | Private | capture-ingestion | `CUR-12` |  |  | citable, 7 pending |
 | `processing-attempt` | Processing jobs and attempts | #54 (ROUNDS-10-L02), Capture and Ingestion Service | Processing Attempt (server) | Private | capture-ingestion | `CUR-12` |  |  | citable, 7 pending |
 | `extracted-claim` | Extracted fact proposal (spec 804) | #57 (ROUNDS-11-L01), Capture and Ingestion Service | Extracted Claim (server) | Private | capture-ingestion | `CUR-12` |  |  | citable, 7 pending |
-| `generation-proposal` | Generated wording (spec 805) | #180 (ROUNDS-14-L07), `blocked:OD-1` | Generation Proposal (server) | Private | `blocked:OD-1` | `CUR-19` |  |  | blocked: OD-1 |
-| `staged-provider-result` | Normalized provider result (spec 806) | #74 (ROUNDS-14-L03), `blocked:OD-1` | Staged Provider Result (server) | Private | `blocked:OD-1` | `INT-05` |  |  | blocked: OD-1 |
-| `provider-invocation-receipt` | Model invocation provenance (spec 807) | #73 (ROUNDS-14-L02), `blocked:OD-1` | Provider Invocation Intent and Outcome (server) | Private | `blocked:OD-1` | `INT-05` |  |  | blocked: OD-1 |
+| `generation-proposal` | Generated wording (spec 805) | #180 (ROUNDS-14-L07), Provider Gateway | Generation Proposal (server) | Private | provider-gateway | `CUR-19` |  |  | citable, 8 pending |
+| `staged-provider-result` | Normalized provider result (spec 806) | #74 (ROUNDS-14-L03), Provider Gateway | Staged Provider Result (server) | Private | provider-gateway | `INT-05` |  |  | citable, 6 pending |
+| `provider-invocation-receipt` | Model invocation provenance (spec 807) | #73 (ROUNDS-14-L02), Provider Gateway | Provider Invocation Receipt with its Intent and Outcome (server) | Private | provider-gateway | `INT-05` |  |  | citable, 7 pending |
 | `share-capability-metadata` | Public share (spec 810; this part: capability metadata (Private)) | #11 (ROUNDS-00B-L03), Public Share Capability Service | Share Capability (server) | Private | public-share | `CUR-23` | C15 | #161 (ROUNDS-32-L07) | citable, 9 pending |
 | `share-bearer-digest` | Public share (spec 810; this part: bearer digests (Secret)) | #12 (ROUNDS-00B-L04), Public Share Capability Service | Share bearer digest (server) | Secret | public-share | `CUR-23` |  | #161 (ROUNDS-32-L07) | citable, 8 pending |
 | `share-projection` | Public share (spec 810; this part: Share Projection content) | #93 (ROUNDS-18-L05), Public Share Capability Service | Share Projection of one Artifact Revision (server) | Share Projection | public-share | `CUR-23` |  |  | citable, 7 pending |
@@ -124,7 +125,7 @@ Status: `citable`, `citable, N pending` (closed to implementation until those ce
 | `execution-attempt` | Execution attempts and result envelopes | #3 (ROUNDS-00A-L03), Execution Control Plane | Execution Attempt (server) | Private | execution-control-plane | `CUR-28` |  |  | citable, 6 pending |
 | `recommendation` | Recommendation (spec 801) | #140 (ROUNDS-29-L03), Read Model and Recommendation Service | Recommendation (server) | Private | read-model | `CUR-20` |  |  | citable, 8 pending |
 | `evidence-gap-map` | Opportunity-to-evidence gap maps | #139 (ROUNDS-29-L02), Read Model and Recommendation Service | Evidence gap map (server) | Private | read-model | `INT-01` |  |  | citable, 9 pending |
-| `today-item-state` | Today item dispositions (accepted, dismissed, snoozed) | #144 (ROUNDS-30-L03), Read Model and Recommendation Service | Today item state (server) | Private | read-model | `CUR-20` |  |  | citable, 8 pending |
+| `today-item-state` | Today hides and reminder acknowledgments | #144 (ROUNDS-30-L03), Read Model and Recommendation Service | Today hide and reminder acknowledgment (server) | Private | read-model | `CUR-20` |  |  | citable, 8 pending |
 | `today-read-model` | Today | #143 (ROUNDS-30-L02), Read Model and Recommendation Service | Today projection (server) | Private | read-model | `CUR-20` |  |  | citable, 5 pending |
 | `career-profile-read-model` | Career Profile overview | #147 (ROUNDS-31-L02), Read Model and Recommendation Service | Career Profile projection (server) | Private | read-model | `CUR-11` |  |  | citable, 5 pending |
 | `pipeline-read-model` | Pipeline | #148 (ROUNDS-31-L03), Read Model and Recommendation Service | Pipeline projection (server) | Private | read-model | `CUR-13` |  |  | citable, 5 pending |
@@ -216,7 +217,7 @@ Each spec read model (spec 1970-1980) has one projector. Every projection carrie
 
 ## Packages
 
-One package per spec service (spec 1919-1935). #18 (ROUNDS-02-L01) sets each `target_path`.
+One package per spec service (spec 1919-1935), plus Provider Gateway (DR-0002 D8). #18 (ROUNDS-02-L01) sets each `target_path`.
 
 | Package | Service | Spec | Baseline locations |
 | --- | --- | --- | --- |
@@ -237,6 +238,7 @@ One package per spec service (spec 1919-1935). #18 (ROUNDS-02-L01) sets each `ta
 | `public-share` | Public Share Capability Service | spec 1933 | `backend/routers/share.py`, `frontend/src/features/resume/share/` |
 | `execution-control-plane` | Execution Control Plane | spec 1934 | `backend/main.py`, `backend/routers/runner.py`, `backend/app/` |
 | `execution-worker` | Ephemeral Execution Worker pool | spec 1935 | `backend/drivers/`, `backend/ai_coding/`, `backend/take_home/`, `backend/pdf_renderer/` |
+| `provider-gateway` | Provider Gateway | spec 808 (DR-0002 D8) | `backend/routers/ai.py`, `backend/app/crypto.py`, `frontend/src/settings/AISection.tsx`, `frontend/src/settings/aiProviderEndpoints.ts`, `pocketbase/pb_migrations/1700000800_ai_providers.js` |
 
 ## Owner Labels
 
@@ -259,7 +261,7 @@ Each capability's owner label maps to one service, `none` (the label owns no com
 | ROUNDS-11 | Claims and Provenance | `capture-ingestion` |
 | ROUNDS-12 | Claims and Career Profile | `career-profile` |
 | ROUNDS-13 | Profile Bootstrap | `capture-ingestion` |
-| ROUNDS-14 | AI Trust Platform | `blocked:OD-1` |
+| ROUNDS-14 | AI Trust Platform | `provider-gateway` |
 | ROUNDS-15 | Materials | `artifact` |
 | ROUNDS-16 | Resume Studio | `artifact` |
 | ROUNDS-17 | Opportunity Materials | `artifact` |
@@ -285,13 +287,13 @@ Each capability's owner label maps to one service, `none` (the label owns no com
 
 | Leaf | Cells | Rows |
 | --- | --- | --- |
-| #18 (ROUNDS-02-L01) | 84 | 84 |
-| #172 (ROUNDS-34-L03) | 84 | 84 |
-| #154 (ROUNDS-31-L09) | 82 | 82 |
-| #72 (ROUNDS-14-L01) | 73 | 73 |
-| #76 (ROUNDS-14-L05) | 73 | 73 |
+| #18 (ROUNDS-02-L01) | 85 | 85 |
+| #172 (ROUNDS-34-L03) | 85 | 85 |
+| #154 (ROUNDS-31-L09) | 83 | 83 |
+| #72 (ROUNDS-14-L01) | 74 | 74 |
+| #76 (ROUNDS-14-L05) | 74 | 74 |
 | #91 (ROUNDS-18-L03) | 51 | 51 |
-| #155 (ROUNDS-32-L01) | 50 | 50 |
+| #155 (ROUNDS-32-L01) | 51 | 51 |
 | #146 (ROUNDS-31-L01) | 39 | 39 |
 | #153 (ROUNDS-31-L08) | 17 | 17 |
 | #159 (ROUNDS-32-L05) | 13 | 13 |

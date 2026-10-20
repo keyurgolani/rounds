@@ -454,7 +454,8 @@
           "path": "frontend/src/theme/ThemeProvider.tsx",
           "lines": "274-276",
           "anchor": "await pb.collection('user_preferences').update(existing.id, payload);",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C5"]
         },
         {
           "store": "rounds.tweaks.v1",
@@ -469,7 +470,8 @@
           "lines": "138-151",
           "anchor": "function prefsPayload(input: Partial<UserPreferences>, uid: string) {",
           "location": "frontend",
-          "note": "blanks the six appearance fields on every campaign switch"
+          "note": "blanks the six appearance fields on every campaign switch",
+          "conflicts": ["C5"]
         },
         {
           "store": "user_preferences",
@@ -477,7 +479,8 @@
           "lines": "94",
           "anchor": "await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));",
           "location": "frontend",
-          "note": "demo reset deletes the demo account's rows client-side"
+          "note": "demo reset deletes the demo account's rows client-side",
+          "conflicts": ["C16"]
         }
       ],
       "target_authority": {"record":"Account preference (appearance)","location":"server"},
@@ -589,7 +592,8 @@
           "lines": "53",
           "anchor": "const updated = await pb.collection('users').update(record.id, { [field]: true });",
           "location": "frontend",
-          "note": "the client sets its own demo quota flags"
+          "note": "the client sets its own demo quota flags",
+          "conflicts": ["C10"]
         },
         {
           "store": "users",
@@ -597,7 +601,8 @@
           "lines": "97-103",
           "anchor": "const updated = await pb.collection('users').update(userId, {",
           "location": "frontend",
-          "note": "demo reset rewrites the demo profile and flags"
+          "note": "demo reset rewrites the demo profile and flags",
+          "conflicts": ["C16"]
         },
         {
           "store": "users",
@@ -605,7 +610,8 @@
           "lines": "15-17",
           "anchor": "addFieldIfMissing(users, { name: \"is_demo\", type: \"bool\" });",
           "location": "pocketbase",
-          "note": "quota fields"
+          "note": "quota fields",
+          "conflicts": ["C10"]
         },
         {
           "store": "rounds.auth.v1",
@@ -656,7 +662,7 @@
       },
       "scope": "account",
       "term": "ai-provider",
-      "command_owner": {"service":"blocked:OD-1","leaf":"ROUNDS-14-L02"},
+      "command_owner": {"service":"provider-gateway","leaf":"ROUNDS-14-L02"},
       "commands": "pending:ROUNDS-14-L02",
       "baseline_writers": [
         {
@@ -696,10 +702,10 @@
         "rollback": "Before #164's point of no return the switch record restores the legacy writer; after it, a compensating change set (spec 772-773)."
       },
       "consumers": [
-        {"type":"gateway","name":"Provider gateway (spec 808)","leaf":"ROUNDS-14-L02"},
+        {"type":"gateway","name":"Provider Gateway, its only consumer (spec 808)","leaf":"ROUNDS-14-L02"},
         {"type":"public-share","name":"n/a:Secret; never shared"}
       ],
-      "package": "blocked:OD-1",
+      "package": "provider-gateway",
       "purge": "pending:ROUNDS-14-L05",
       "export": "n/a:Secret is excluded from normal export; only an explicit rewrapped secret export (spec 2147)",
       "search": "n/a:not indexed",
@@ -723,7 +729,7 @@
       },
       "scope": "account",
       "term": "ai-provider",
-      "command_owner": {"service":"blocked:OD-1","leaf":"ROUNDS-14-L04"},
+      "command_owner": {"service":"provider-gateway","leaf":"ROUNDS-14-L04"},
       "commands": "pending:ROUNDS-14-L04",
       "baseline_writers": [
         {
@@ -731,14 +737,16 @@
           "path": "backend/routers/ai.py",
           "lines": "525-543",
           "anchor": "async def put_settings(request: Request, body: SettingsIn) -> SettingsOut:",
-          "location": "backend"
+          "location": "backend",
+          "conflicts": ["C14"]
         },
         {
           "store": "ai_settings",
           "path": "frontend/src/features/resume/api.ts",
           "lines": "403-409",
           "anchor": "const existing = await aiSettingsCol().getFirstListItem(`user = \"${me}\"`);",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C14"]
         }
       ],
       "target_authority": {"record":"AI role settings","location":"server"},
@@ -758,7 +766,7 @@
         {"type":"export","name":"account export","leaf":"ROUNDS-18-L03"},
         {"type":"public-share","name":"n/a:settings are not shareable"}
       ],
-      "package": "blocked:OD-1",
+      "package": "provider-gateway",
       "purge": "pending:ROUNDS-14-L05",
       "export": "pending:ROUNDS-18-L03",
       "search": "n/a:not indexed",
@@ -1184,7 +1192,8 @@
           "path": "frontend/src/experience/experienceApi.ts",
           "lines": "142-150",
           "anchor": "return adaptJob(await pb.collection<JobRow>('experience_jobs').create(payload));",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C6"]
         },
         {
           "store": "experience_jobs",
@@ -1193,7 +1202,8 @@
           "anchor": "const handlePush = async () => {",
           "location": "frontend",
           "role": "derived-consumer",
-          "note": "Resume Studio pushes header edits into the library"
+          "note": "Resume Studio pushes header edits into the library",
+          "conflicts": ["C6"]
         }
       ],
       "target_authority": {"record":"Career Profile Engagement","location":"server"},
@@ -1250,7 +1260,8 @@
           "path": "frontend/src/experience/experienceApi.ts",
           "lines": "208-216",
           "anchor": "return adaptProject(await pb.collection<ProjectRow>('experience_projects').create(payload));",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C6"]
         },
         {
           "store": "experience_projects",
@@ -1259,7 +1270,8 @@
           "anchor": "const handlePush = async () => {",
           "location": "frontend",
           "role": "derived-consumer",
-          "note": "Resume Studio pushes header edits into the library"
+          "note": "Resume Studio pushes header edits into the library",
+          "conflicts": ["C6"]
         }
       ],
       "target_authority": {"record":"Career Profile Project","location":"server"},
@@ -1426,7 +1438,8 @@
           "path": "frontend/src/experience/experienceApi.ts",
           "lines": "355-363",
           "anchor": "return adaptBullet(await pb.collection<BulletRow>('experience_bullets').create(payload));",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C6"]
         },
         {
           "store": "experience_bullets",
@@ -1435,7 +1448,8 @@
           "anchor": "const handlePush = async () => {",
           "location": "frontend",
           "role": "derived-consumer",
-          "note": "Resume Studio pushes bullet text into the library"
+          "note": "Resume Studio pushes bullet text into the library",
+          "conflicts": ["C6"]
         },
         {
           "store": "experience_bullets",
@@ -1444,7 +1458,8 @@
           "anchor": "const handlePush = async () => {",
           "location": "frontend",
           "role": "derived-consumer",
-          "note": "Resume Studio pushes bullet text into the library"
+          "note": "Resume Studio pushes bullet text into the library",
+          "conflicts": ["C6"]
         }
       ],
       "target_authority": {"record":"Career Profile Achievement","location":"server"},
@@ -1499,7 +1514,8 @@
           "path": "frontend/src/experience/experienceApi.ts",
           "lines": "301-309",
           "anchor": "return adaptAnecdoteRow(await pb.collection<AnecdoteRow>('experience_anecdotes').create(payload));",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C16"]
         },
         {
           "store": "experience_anecdotes",
@@ -1507,7 +1523,8 @@
           "lines": "94",
           "anchor": "await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));",
           "location": "frontend",
-          "note": "demo reset deletes the demo account's rows client-side"
+          "note": "demo reset deletes the demo account's rows client-side",
+          "conflicts": ["C16"]
         }
       ],
       "target_authority": {"record":"Career Profile Narrative","location":"server"},
@@ -1805,7 +1822,8 @@
           "lines": "362-401",
           "anchor": "return adaptApplication(await appsCol().create(applicationPayload(input, userId())));",
           "location": "frontend",
-          "note": "company, role, URL, and job description on the application row"
+          "note": "company, role, URL, and job description on the application row",
+          "conflicts": ["C16"]
         },
         {
           "store": "applications",
@@ -1813,7 +1831,8 @@
           "lines": "94",
           "anchor": "await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));",
           "location": "frontend",
-          "note": "demo reset deletes the demo account's rows client-side"
+          "note": "demo reset deletes the demo account's rows client-side",
+          "conflicts": ["C16"]
         }
       ],
       "target_authority": {"record":"Opportunity and Opportunity Revision","location":"server"},
@@ -1870,7 +1889,8 @@
           "lines": "362-401",
           "anchor": "return adaptApplication(await appsCol().create(applicationPayload(input, userId())));",
           "location": "frontend",
-          "note": "status, dates, notes, and the resume_variant text"
+          "note": "status, dates, notes, and the resume_variant text",
+          "conflicts": ["C1","C16"]
         },
         {
           "store": "applications",
@@ -1878,7 +1898,8 @@
           "lines": "94",
           "anchor": "await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));",
           "location": "frontend",
-          "note": "demo reset deletes the demo account's rows client-side"
+          "note": "demo reset deletes the demo account's rows client-side",
+          "conflicts": ["C16"]
         }
       ],
       "target_authority": {"record":"Pursuit","location":"server"},
@@ -1934,7 +1955,8 @@
           "lines": "27",
           "anchor": "const statuses = [",
           "location": "frontend",
-          "note": "stage list"
+          "note": "stage list",
+          "conflicts": ["C17"]
         },
         {
           "store": "bundled:pursuit-stages",
@@ -1942,7 +1964,8 @@
           "lines": "22",
           "anchor": "const STATUS_OPTIONS = [",
           "location": "frontend",
-          "note": "stage list"
+          "note": "stage list",
+          "conflicts": ["C17"]
         },
         {
           "store": "bundled:pursuit-stages",
@@ -1950,7 +1973,8 @@
           "lines": "11",
           "anchor": "const statuses = [",
           "location": "frontend",
-          "note": "stage list"
+          "note": "stage list",
+          "conflicts": ["C17"]
         },
         {
           "store": "bundled:pursuit-stages",
@@ -1958,7 +1982,8 @@
           "lines": "7",
           "anchor": "const statuses = [",
           "location": "frontend",
-          "note": "stage list"
+          "note": "stage list",
+          "conflicts": ["C17"]
         }
       ],
       "target_authority": {"record":"Pursuit stage registry","location":"server"},
@@ -2010,7 +2035,8 @@
           "path": "frontend/src/campaign/api.ts",
           "lines": "107-120",
           "anchor": "return adaptCampaign(await campaignsCol().create(campaignPayload(input, userId())));",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C16"]
         },
         {
           "store": "campaigns",
@@ -2018,7 +2044,8 @@
           "lines": "94",
           "anchor": "await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));",
           "location": "frontend",
-          "note": "demo reset deletes the demo account's rows client-side"
+          "note": "demo reset deletes the demo account's rows client-side",
+          "conflicts": ["C16"]
         }
       ],
       "target_authority": {"record":"Campaign/Goal","location":"server"},
@@ -2088,7 +2115,8 @@
           "lines": "107",
           "anchor": "return adapt(await col().create(payload(input, uid)));",
           "location": "frontend",
-          "note": "campaign field"
+          "note": "campaign field",
+          "conflicts": ["C3"]
         },
         {
           "store": "user_progress",
@@ -2120,7 +2148,8 @@
           "lines": "573",
           "anchor": "options: { collectionId: campaigns.id, cascadeDelete: true, maxSelect: 1 },",
           "location": "pocketbase",
-          "note": "code drafts and todos cascade-delete with their campaign (also line 608)"
+          "note": "code drafts and todos cascade-delete with their campaign (also line 608)",
+          "conflicts": ["C3"]
         }
       ],
       "target_authority": {"record":"Pursuit-to-Campaign relation","location":"server"},
@@ -2173,7 +2202,8 @@
           "path": "frontend/src/applications/api.ts",
           "lines": "504-542",
           "anchor": "await offersCol().update(prior.id, { status: 'superseded' });",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C16"]
         },
         {
           "store": "offers",
@@ -2181,7 +2211,8 @@
           "lines": "94",
           "anchor": "await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));",
           "location": "frontend",
-          "note": "demo reset deletes the demo account's rows client-side"
+          "note": "demo reset deletes the demo account's rows client-side",
+          "conflicts": ["C16"]
         }
       ],
       "target_authority": {"record":"Offer and Offer Revision","location":"server"},
@@ -2329,7 +2360,8 @@
           "lines": "420-452",
           "anchor": "await roundsCol().create(roundPayload(input, userId(), applicationId)),",
           "location": "frontend",
-          "note": "schedule and status"
+          "note": "schedule and status",
+          "conflicts": ["C16"]
         },
         {
           "store": "interview_rounds",
@@ -2337,7 +2369,8 @@
           "lines": "94",
           "anchor": "await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));",
           "location": "frontend",
-          "note": "demo reset deletes the demo account's rows client-side"
+          "note": "demo reset deletes the demo account's rows client-side",
+          "conflicts": ["C16"]
         }
       ],
       "target_authority": {"record":"Career Activity","location":"server"},
@@ -2567,7 +2600,8 @@
           "anchor": "loadLibrarySnapshot().catch(() => emptySnapshot),",
           "location": "frontend",
           "role": "derived-consumer",
-          "note": "a failed library load becomes an empty snapshot that unlinks entries and autosaves"
+          "note": "a failed library load becomes an empty snapshot that unlinks entries and autosaves",
+          "conflicts": ["C7"]
         }
       ],
       "target_authority": {"record":"Artifact Edition draft","location":"server"},
@@ -2831,7 +2865,8 @@
           "path": "frontend/src/lib/codeDraftsApi.ts",
           "lines": "103-111",
           "anchor": "return adapt(await col().update(existing.id, payload(input, uid)));",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C4","C16"]
         },
         {
           "store": "rounds.codeDraft.v1:*:*:*",
@@ -2839,7 +2874,8 @@
           "lines": "18",
           "anchor": "localStorage.setItem(keyFor(userId, questionId, language), code);",
           "location": "browser-storage",
-          "note": "a second store for code drafts"
+          "note": "a second store for code drafts",
+          "conflicts": ["C4"]
         },
         {
           "store": "ai_coding_drafts",
@@ -2861,7 +2897,8 @@
           "lines": "94",
           "anchor": "await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));",
           "location": "frontend",
-          "note": "demo reset deletes the demo account's rows client-side"
+          "note": "demo reset deletes the demo account's rows client-side",
+          "conflicts": ["C16"]
         }
       ],
       "target_authority": {"record":"Practice Draft","location":"server"},
@@ -2921,14 +2958,16 @@
           "path": "frontend/src/pages/take-home/takeHomeApi.ts",
           "lines": "187-213",
           "anchor": "await pb.collection('take_home_attempts').update(existing.id, payload);",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C8"]
         },
         {
           "store": "take_home_attempts",
           "path": "backend/routers/take_home.py",
           "lines": "164-167",
           "anchor": "await pb_post(",
-          "location": "backend"
+          "location": "backend",
+          "conflicts": ["C8"]
         }
       ],
       "target_authority": {"record":"Practice Attempt","location":"server"},
@@ -2980,7 +3019,8 @@
           "path": "frontend/src/hooks/progressApi.ts",
           "lines": "99-110",
           "anchor": "return adapt(await col().create(payload(input, userId())));",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C4","C16"]
         },
         {
           "store": "rounds.practiceStatus.v1",
@@ -2988,7 +3028,8 @@
           "lines": "48",
           "anchor": "localStorage.setItem(STATUS_KEY, JSON.stringify(m));",
           "location": "browser-storage",
-          "note": "treated as the user-visible source of truth"
+          "note": "treated as the user-visible source of truth",
+          "conflicts": ["C4"]
         },
         {
           "store": "question_timers",
@@ -3003,7 +3044,8 @@
           "lines": "94",
           "anchor": "await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));",
           "location": "frontend",
-          "note": "demo reset deletes the demo account's rows client-side"
+          "note": "demo reset deletes the demo account's rows client-side",
+          "conflicts": ["C16"]
         }
       ],
       "target_authority": {"record":"Practice progress and session timer","location":"server"},
@@ -3039,15 +3081,52 @@
       "revision": 1,
       "compatibility": "additive",
       "summary": {
-        "information": "Browser draft caches",
-        "authority": "The server record each cache copies",
+        "information": "Browser draft journal for practice drafts",
+        "authority": "None of its own; it yields to the Practice Draft",
         "mutability": "Cache entry; yields to the server revision",
         "delete_merge": "Purged on sign-out; reconciled on reconnect",
         "consumers": "Editor continuity"
       },
       "scope": "account",
       "term": "practice-draft",
-      "command_owner": "n/a:browser caches take no commands; each yields to its server row",
+      "command_owner": "n/a:a browser cache takes no commands; it yields to its server row",
+      "commands": "n/a:no commands",
+      "baseline_writers": [],
+      "target_authority": "n/a:a cache has no authority of its own; yields_to names the row it copies",
+      "yields_to": "practice-draft",
+      "storage": "pending:ROUNDS-02-L01",
+      "privacy_floor": "Private",
+      "disposition": "CUR-22",
+      "conflicts": [],
+      "consumers": [
+        {"type":"ui-direct-read","name":"editor continuity","leaf":"ROUNDS-28-L02"},
+        {"type":"public-share","name":"n/a:browser state"}
+      ],
+      "package": "n/a:owns no commands",
+      "purge": "pending:ROUNDS-14-L05",
+      "export": "n/a:browser state; the server rows export",
+      "search": "n/a:not indexed",
+      "health": "pending:ROUNDS-31-L09",
+      "impact": "n/a:no downstream-effect preview",
+      "authz": "pending:ROUNDS-34-L03",
+      "field_map": "pending:ROUNDS-14-L01",
+      "inventory": "pending:ROUNDS-32-L01",
+      "projector": "n/a:no read model consumes it"
+    },
+    {
+      "id": "job-description-cache",
+      "revision": 1,
+      "compatibility": "additive",
+      "summary": {
+        "information": "Pasted job descriptions cached by the ATS and Tailor tabs",
+        "authority": "None of its own; it yields to the Opportunity's job description",
+        "mutability": "Cache entry; yields to the Opportunity revision",
+        "delete_merge": "Purged on sign-out; moved onto its Opportunity on reconnect",
+        "consumers": "ATS analysis and tailoring"
+      },
+      "scope": "account",
+      "term": "opportunity",
+      "command_owner": "n/a:a browser cache takes no commands; it yields to its server row",
       "commands": "n/a:no commands",
       "baseline_writers": [
         {
@@ -3067,25 +3146,27 @@
           "note": "pasted job description"
         }
       ],
-      "target_authority": {"record":"The server row each cache copies (Practice Draft, Opportunity)","location":"server"},
+      "target_authority": "n/a:a cache has no authority of its own; yields_to names the row it copies",
+      "yields_to": "opportunity",
       "storage": "pending:ROUNDS-02-L01",
       "privacy_floor": "Private",
-      "disposition": "CUR-22",
+      "disposition": "CUR-13",
       "conflicts": [],
       "transfer": {
         "leaf": "ROUNDS-32-L04",
-        "mapping": "ROUNDS-28-L02",
+        "mapping": "ROUNDS-19-L01",
         "window": "pending:ROUNDS-32-L04",
-        "retirement": "The writer sites cited above are gone, and #164 (ROUNDS-32-L10) finds no legacy path for this row's stores.",
+        "retirement": "#158 (ROUNDS-32-L04) moves each cached description onto its Opportunity (#95, ROUNDS-19-L01), and the ATS and Tailor tabs (#86, #87) read it from there; no tab writes the .jd keys.",
         "rollback": "Before #164's point of no return the switch record restores the legacy writer; after it, a compensating change set (spec 772-773)."
       },
       "consumers": [
-        {"type":"ui-direct-read","name":"editor continuity","leaf":"ROUNDS-28-L02"},
+        {"type":"ui-direct-read","name":"ATS analysis job description","leaf":"ROUNDS-17-L02"},
+        {"type":"ui-direct-read","name":"tailoring job description","leaf":"ROUNDS-17-L03"},
         {"type":"public-share","name":"n/a:browser state"}
       ],
       "package": "n/a:owns no commands",
       "purge": "pending:ROUNDS-14-L05",
-      "export": "n/a:browser state; the server rows export",
+      "export": "n/a:browser state; the Opportunity exports",
       "search": "n/a:not indexed",
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
@@ -3463,7 +3544,8 @@
           "lines": "18-33",
           "anchor": "const rec = new Record(coll, {",
           "location": "pocketbase",
-          "note": "harness files and entrypoints"
+          "note": "harness files and entrypoints",
+          "conflicts": ["C12"]
         },
         {
           "store": "take_home_assignments",
@@ -3471,7 +3553,8 @@
           "lines": "19",
           "anchor": "dao.saveRecord(rec);",
           "location": "pocketbase",
-          "note": "reseeds the assignments"
+          "note": "reseeds the assignments",
+          "conflicts": ["C12"]
         }
       ],
       "target_authority": {"record":"Harness Revision","location":"server"},
@@ -3617,7 +3700,8 @@
           "path": "frontend/src/todos/api.ts",
           "lines": "89-97",
           "anchor": "return adapt(await todosCol().create(payload(input, userId())));",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C16"]
         },
         {
           "store": "todos",
@@ -3625,7 +3709,8 @@
           "lines": "94",
           "anchor": "await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));",
           "location": "frontend",
-          "note": "demo reset deletes the demo account's rows client-side"
+          "note": "demo reset deletes the demo account's rows client-side",
+          "conflicts": ["C16"]
         }
       ],
       "target_authority": {"record":"Action","location":"server"},
@@ -3876,7 +3961,7 @@
       },
       "scope": "account",
       "term": "generation-proposal",
-      "command_owner": {"service":"blocked:OD-1","leaf":"ROUNDS-14-L07"},
+      "command_owner": {"service":"provider-gateway","leaf":"ROUNDS-14-L07"},
       "commands": "pending:ROUNDS-14-L07",
       "baseline_writers": [],
       "target_authority": {"record":"Generation Proposal","location":"server"},
@@ -3889,7 +3974,7 @@
         {"type":"export","name":"account export","leaf":"ROUNDS-18-L03"},
         {"type":"public-share","name":"n/a:proposals are reviewed privately"}
       ],
-      "package": "blocked:OD-1",
+      "package": "provider-gateway",
       "purge": "pending:ROUNDS-14-L05",
       "export": "pending:ROUNDS-18-L03",
       "search": "n/a:not indexed",
@@ -3914,7 +3999,7 @@
       },
       "scope": "account",
       "term": "staged-provider-result",
-      "command_owner": {"service":"blocked:OD-1","leaf":"ROUNDS-14-L03"},
+      "command_owner": {"service":"provider-gateway","leaf":"ROUNDS-14-L03"},
       "commands": "pending:ROUNDS-14-L03",
       "baseline_writers": [],
       "target_authority": {"record":"Staged Provider Result","location":"server"},
@@ -3926,7 +4011,7 @@
         {"type":"verifier","name":"idempotent claim and proposal creation","leaf":"ROUNDS-14-L03"},
         {"type":"public-share","name":"n/a:never shared"}
       ],
-      "package": "blocked:OD-1",
+      "package": "provider-gateway",
       "purge": "pending:ROUNDS-14-L05",
       "export": "n/a:retention-bounded staging, purged after application (spec 2159)",
       "search": "n/a:not indexed",
@@ -3951,10 +4036,10 @@
       },
       "scope": "account",
       "term": "provider-invocation-receipt",
-      "command_owner": {"service":"blocked:OD-1","leaf":"ROUNDS-14-L02"},
+      "command_owner": {"service":"provider-gateway","leaf":"ROUNDS-14-L02"},
       "commands": "pending:ROUNDS-14-L02",
       "baseline_writers": [],
-      "target_authority": {"record":"Provider Invocation Intent and Outcome","location":"server"},
+      "target_authority": {"record":"Provider Invocation Receipt with its Intent and Outcome","location":"server"},
       "storage": "pending:ROUNDS-02-L01",
       "privacy_floor": "Private",
       "disposition": "INT-05",
@@ -3965,7 +4050,7 @@
         {"type":"log-trace","name":"digests and metadata only"},
         {"type":"public-share","name":"n/a:never shared"}
       ],
-      "package": "blocked:OD-1",
+      "package": "provider-gateway",
       "purge": "pending:ROUNDS-14-L05",
       "export": "pending:ROUNDS-18-L03",
       "search": "n/a:not indexed",
@@ -3999,21 +4084,24 @@
           "path": "frontend/src/features/resume/api.ts",
           "lines": "433-445",
           "anchor": "const r = await shareLinksCol().create({",
-          "location": "frontend"
+          "location": "frontend",
+          "conflicts": ["C15"]
         },
         {
           "store": "resume_share_links",
           "path": "backend/routers/share.py",
           "lines": "85-86",
           "anchor": "record = await pb_post(",
-          "location": "backend"
+          "location": "backend",
+          "conflicts": ["C15"]
         },
         {
           "store": "resume_share_links",
           "path": "backend/routers/share.py",
           "lines": "133-134",
           "anchor": "resp = await client.delete(",
-          "location": "backend"
+          "location": "backend",
+          "conflicts": ["C15"]
         }
       ],
       "target_authority": {"record":"Share Capability","location":"server"},
@@ -4344,10 +4432,10 @@
       "revision": 1,
       "compatibility": "additive",
       "summary": {
-        "information": "Today item dispositions (accepted, dismissed, snoozed)",
-        "authority": "One state per account and Today item",
-        "mutability": "Item version",
-        "delete_merge": "Expire with the item",
+        "information": "Today hides and reminder acknowledgments",
+        "authority": "One active hide per account and Today candidate; one acknowledgment per reminder occurrence",
+        "mutability": "Hide or acknowledgment version",
+        "delete_merge": "A hide ends when shown, reverted, expired, or its source closes; an acknowledgment ends when its reminder moves",
         "consumers": "Today"
       },
       "scope": "account",
@@ -4355,7 +4443,7 @@
       "command_owner": {"service":"read-model","leaf":"ROUNDS-30-L03"},
       "commands": "pending:ROUNDS-30-L03",
       "baseline_writers": [],
-      "target_authority": {"record":"Today item state","location":"server"},
+      "target_authority": {"record":"Today hide and reminder acknowledgment","location":"server"},
       "storage": "pending:ROUNDS-02-L01",
       "privacy_floor": "Private",
       "disposition": "CUR-20",

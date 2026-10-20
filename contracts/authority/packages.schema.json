@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "contracts/authority/packages.schema.json",
   "title": "Service packages",
-  "description": "Shape of contracts/authority/packages.json (ROUNDS-01-L02): one package per spec service (spec 1917-1935). Decision records name packages in affectedPackages by id or service.",
+  "description": "Shape of contracts/authority/packages.json (ROUNDS-01-L02): one package per spec service (spec 1919-1935), plus any package a DR-0002 decision adds (D8 adds the Provider Gateway). Decision records name packages in affectedPackages by id or service.",
   "type": "object",
   "required": ["registry", "auditedRevision", "packages"],
   "additionalProperties": false,
@@ -22,6 +22,11 @@
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
           "service": { "type": "string", "minLength": 1 },
           "spec": { "type": "string", "pattern": "^spec \\d+$" },
+          "decision": {
+            "description": "For a package beyond the spec's service list: the DR-0002 decision that adds it.",
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]*-?[0-9]+$"
+          },
           "baseline_locations": {
             "description": "Paths at the audited revision (a trailing / names a directory), or n/a:<reason>.",
             "type": ["array", "string"],
