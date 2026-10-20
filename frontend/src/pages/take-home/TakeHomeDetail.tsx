@@ -38,6 +38,15 @@ import { useEditorFocus } from '../../hooks/useEditorFocus';
 import { usePracticeStatus } from '../../hooks/usePracticeStatus';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import { useCampaign } from '../../campaign/CampaignContext';
+import {
+  RunnerDenialNotice,
+  type RunnerAction,
+} from '../../components/runner/RunnerDenialNotice';
+import {
+  activeTrigger,
+  classifyRunnerError,
+  type RunnerDenial,
+} from '../../lib/runnerDenial';
 
 type SideTab = 'rubric' | 'notes' | 'guidance';
 
@@ -98,6 +107,12 @@ export default function TakeHomeDetail() {
     false,
   );
   const [dockOpen, setDockOpen] = useState(false);
+  // A run or submission the runner refused or couldn't serve. Shown
+  // above the console in place of a result or report.
+  const [runDenial, setRunDenial] = useState<{
+    action: RunnerAction;
+    denial: RunnerDenial;
+  } | null>(null);
   const [virtualFolders, setVirtualFolders] = useState<string[]>([]);
   const [chatResetVersion, setChatResetVersion] = useState(0);
   const { focus, toggle: toggleFocus } = useEditorFocus(FOCUS_KEY);
@@ -115,6 +130,7 @@ export default function TakeHomeDetail() {
     setChatLog([]);
     setNotes('');
     setDockOpen(false);
+    setRunDenial(null);
     startedAtRef.current = Date.now();
     getAssignment(slug)
       .then(async (a) => {
@@ -192,9 +208,11 @@ export default function TakeHomeDetail() {
 
   async function handleRun() {
     if (!assignment) return;
+    const trigger = activeTrigger();
     const reqId = ++runReqIdRef.current;
     setRunning(true);
     setRunResult(null);
+    setRunDenial(null);
     setDockOpen(true);
     try {
       const r = await runProject(assignment.slug, files);
@@ -202,6 +220,13 @@ export default function TakeHomeDetail() {
       setRunResult(r);
     } catch (e) {
       if (reqId !== runReqIdRef.current) return;
+      const denial = classifyRunnerError(e, trigger);
+      if (denial) {
+        // Nothing ran, so there's no harness score or output to show.
+        setRunDenial({ action: 'run', denial });
+        setDockOpen(false);
+        return;
+      }
       setRunResult({
         score: 0,
         criteria: [],
@@ -218,8 +243,10 @@ export default function TakeHomeDetail() {
 
   async function handleSubmit() {
     if (!assignment) return;
+    const trigger = activeTrigger();
     setSubmitting(true);
     setReport(null);
+    setRunDenial(null);
     try {
       const result = await submitAttempt({
         assignment_slug: assignment.slug,
@@ -238,6 +265,12 @@ export default function TakeHomeDetail() {
         setPracticeStatus('mastered');
       }
     } catch (e) {
+      // A denied submission isn't graded, so no report opens.
+      const denial = classifyRunnerError(e, trigger);
+      if (denial) {
+        setRunDenial({ action: 'grade', denial });
+        return;
+      }
       setReport({
         harness: {
           score: 0,
@@ -447,6 +480,13 @@ export default function TakeHomeDetail() {
                 />
               )}
             </div>
+
+            <RunnerDenialNotice
+              denial={runDenial?.denial ?? null}
+              action={runDenial?.action ?? 'run'}
+              className="flex-shrink-0"
+              contentStyle={{ margin: '8px 12px' }}
+            />
 
             <RunDock
               open={dockOpen}

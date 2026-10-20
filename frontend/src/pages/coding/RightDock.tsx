@@ -34,6 +34,9 @@ interface RightDockProps {
   /** Optional header slot rendered above the tab strip — used for the
       mobile sheet drag handle / close button injected by CodingDetail. */
   headerSlot?: ReactNode;
+  /** Rendered under the tab strip on every tab: the denial notice for
+      a run or test request the runner refused or couldn't serve. */
+  notice?: ReactNode;
 }
 
 const TABS: { key: SideTab; label: string }[] = [
@@ -61,6 +64,7 @@ export function RightDock({
   language,
   onLoadSolutionIntoEditor,
   headerSlot,
+  notice,
 }: RightDockProps) {
   return (
     <div className="flex flex-col h-full" data-testid="right-dock">
@@ -134,6 +138,7 @@ export function RightDock({
           );
         })}
       </div>
+      {notice}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {activeTab === 'tests' && (
           <div style={{ flex: 1, overflow: 'auto', padding: 12, minHeight: 0 }}>

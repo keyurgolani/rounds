@@ -48,6 +48,15 @@ import { useEditorFocus } from '../../hooks/useEditorFocus';
 import { usePracticeStatus } from '../../hooks/usePracticeStatus';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import { useCampaign } from '../../campaign/CampaignContext';
+import {
+  RunnerDenialNotice,
+  type RunnerAction,
+} from '../../components/runner/RunnerDenialNotice';
+import {
+  activeTrigger,
+  classifyRunnerError,
+  type RunnerDenial,
+} from '../../lib/runnerDenial';
 
 type SideTab = 'checkpoints' | 'rubric' | 'guidance';
 
@@ -109,6 +118,12 @@ export default function AICodingDetail() {
     false,
   );
   const [dockOpen, setDockOpen] = useState(false);
+  // A run or submission the runner refused or couldn't serve. Shown
+  // above the console in place of a result or report.
+  const [runDenial, setRunDenial] = useState<{
+    action: RunnerAction;
+    denial: RunnerDenial;
+  } | null>(null);
   const [virtualFolders, setVirtualFolders] = useState<string[]>([]);
   // Bumped on Reset Files so the chat panel remounts and rereads the
   // (now-empty) initialMessages — without this the panel would keep
@@ -132,6 +147,7 @@ export default function AICodingDetail() {
     setReport(null);
     setReportOpen(false);
     setDockOpen(false);
+    setRunDenial(null);
     startedAtRef.current = Date.now();
     getRound(slug)
       .then(async (r) => {
@@ -228,9 +244,11 @@ export default function AICodingDetail() {
     if (!round) return;
     const cp = round.checkpoints[checkpointIdx];
     if (!cp) return;
+    const trigger = activeTrigger();
     const reqId = ++runReqIdRef.current;
     setRunning(true);
     setRunResult(null);
+    setRunDenial(null);
     setDockOpen(true);
     try {
       const r = await runProject({
@@ -250,6 +268,13 @@ export default function AICodingDetail() {
       }
     } catch (e) {
       if (reqId !== runReqIdRef.current) return;
+      const denial = classifyRunnerError(e, trigger);
+      if (denial) {
+        // Nothing ran, so there's no console output to show.
+        setRunDenial({ action: 'run', denial });
+        setDockOpen(false);
+        return;
+      }
       setRunResult({
         passed: false,
         passed_count: 0,
@@ -269,8 +294,10 @@ export default function AICodingDetail() {
 
   async function handleSubmit() {
     if (!round) return;
+    const trigger = activeTrigger();
     setSubmitting(true);
     setReport(null);
+    setRunDenial(null);
     try {
       const result = await gradeAttempt({
         round_slug: round.slug,
@@ -296,6 +323,12 @@ export default function AICodingDetail() {
         duration_ms: Date.now() - startedAtRef.current,
       });
     } catch (e) {
+      // A denied grade isn't a graded attempt, so no report opens.
+      const denial = classifyRunnerError(e, trigger);
+      if (denial) {
+        setRunDenial({ action: 'grade', denial });
+        return;
+      }
       setReport({
         test_results: [],
         rubric_review: {
@@ -315,6 +348,7 @@ export default function AICodingDetail() {
     runReqIdRef.current++;
     setCheckpointIdx(i);
     setRunResult(null);
+    setRunDenial(null);
     setRunning(false);
   }
 
@@ -588,6 +622,13 @@ export default function AICodingDetail() {
                   />
                 )}
               </div>
+
+              <RunnerDenialNotice
+                denial={runDenial?.denial ?? null}
+                action={runDenial?.action ?? 'run'}
+                className="flex-shrink-0"
+                contentStyle={{ margin: '8px 12px' }}
+              />
 
               <RunDock
                 open={dockOpen}

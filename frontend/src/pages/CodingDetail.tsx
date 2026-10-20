@@ -29,6 +29,15 @@ import { useAuth } from '../auth/AuthProvider';
 import { loadLocal, saveLocal } from '../lib/codeDraft';
 import { useCampaign } from '../campaign/CampaignContext';
 import Select from '../components/shell/Select';
+import {
+  RunnerDenialNotice,
+  type RunnerAction,
+} from '../components/runner/RunnerDenialNotice';
+import {
+  activeTrigger,
+  classifyRunnerError,
+  type RunnerDenial,
+} from '../lib/runnerDenial';
 
 interface CQ {
   id: number;
@@ -120,6 +129,12 @@ export default function CodingDetail() {
   const [sideTab, setSideTab] = useState<SideTab>('tests');
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
   const [rightWidth, setRightWidth] = useState(440);
+  // A run or test request the runner refused or couldn't serve. Shown
+  // in place of a result; the code stays in the editor.
+  const [runDenial, setRunDenial] = useState<{
+    action: RunnerAction;
+    denial: RunnerDenial;
+  } | null>(null);
   const { focus, toggle: toggleFocus } = useEditorFocus();
 
   // Refs for the 10-second backend sync — avoids re-creating the interval on every keystroke.
@@ -146,6 +161,7 @@ export default function CodingDetail() {
     setRunResult(undefined);
     setEvalResults(undefined);
     setConsoleOpen(false);
+    setRunDenial(null);
   }, [lang, q]);
 
   // Load draft in priority order: PocketBase (source of truth) → local
@@ -282,9 +298,11 @@ export default function CodingDetail() {
   const handleRun = useCallback(
     async (input: Record<string, unknown>) => {
       if (!q || !code.trim()) return;
+      const trigger = activeTrigger();
       setLastRunInput(input);
       setRunning(true);
       setRunResult(undefined);
+      setRunDenial(null);
       setConsoleOpen(false);
       // Pop the Results sheet so the user sees output animate in.
       // Skip in focus mode — the right aside is unmounted and the
@@ -301,14 +319,19 @@ export default function CodingDetail() {
         setRunResult(res);
         setSideTab('run');
       } catch (e) {
-        setRunResult({
-          stdout: '',
-          stderr: '',
-          return_value: null,
-          error: String(e),
-          duration_ms: 0,
-          truncated: false,
-        });
+        const denial = classifyRunnerError(e, trigger);
+        if (denial) {
+          setRunDenial({ action: 'run', denial });
+        } else {
+          setRunResult({
+            stdout: '',
+            stderr: '',
+            return_value: null,
+            error: String(e),
+            duration_ms: 0,
+            truncated: false,
+          });
+        }
         setSideTab('run');
       } finally {
         setRunning(false);
@@ -320,8 +343,10 @@ export default function CodingDetail() {
   const handleEvaluate = useCallback(
     async (filter?: EvaluateFilter) => {
       if (!q || !code.trim()) return;
+      const trigger = activeTrigger();
       setSideTab('tests');
       setRunning(true);
+      setRunDenial(null);
       // See handleRun above — skip the mobile-sheet pop in focus mode.
       if (!focus) setMobileSheet('results');
       try {
@@ -345,6 +370,11 @@ export default function CodingDetail() {
           const failed = merged.filter((r) => !r.passed).length;
           return { passed, failed, results: merged };
         });
+      } catch (e) {
+        // Denials show in the dock; other failures propagate as before.
+        const denial = classifyRunnerError(e, trigger);
+        if (!denial) throw e;
+        setRunDenial({ action: 'tests', denial });
       } finally {
         setRunning(false);
       }
@@ -517,6 +547,15 @@ export default function CodingDetail() {
             </div>
           )}
 
+          {focus && (
+            <RunnerDenialNotice
+              denial={runDenial?.denial ?? null}
+              action={runDenial?.action ?? 'tests'}
+              className="flex-shrink-0"
+              contentStyle={{ margin: '8px 12px' }}
+            />
+          )}
+
           <div className="flex-1 min-h-0 relative" style={{ background: 'var(--bg-sunken)' }}>
             <MultiFileEditor
               hideExplorer
@@ -657,6 +696,14 @@ export default function CodingDetail() {
             <RightDock
               activeTab={sideTab}
               onTabChange={setSideTab}
+              notice={
+                <RunnerDenialNotice
+                  denial={runDenial?.denial ?? null}
+                  action={runDenial?.action ?? 'run'}
+                  className="flex-shrink-0"
+                  contentStyle={{ margin: '12px 12px 0' }}
+                />
+              }
               entry={q.entry}
               testCases={q.test_cases}
               running={running}
