@@ -110,6 +110,14 @@ class PBClient:
             json_body=payload,
         )
 
+    def update(self, collection: str, record_id: str, payload: dict, token: str | None = None) -> Response:
+        return self._request(
+            "PATCH",
+            f"/api/collections/{collection}/records/{record_id}",
+            token=token,
+            json_body=payload,
+        )
+
     def view(self, collection: str, record_id: str, token: str | None = None) -> Response:
         return self._request(
             "GET",

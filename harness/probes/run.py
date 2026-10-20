@@ -28,13 +28,23 @@ from pbclient import PBClient
 from receipts import Receipt, ReceiptWriter, read_all
 
 READBACK_PROBE = "account-scope.rules.readback.match"
-RULE_KEYS = [
-    ("list", "listRule"),
-    ("view", "viewRule"),
-    ("create", "createRule"),
-    ("update", "updateRule"),
-    ("delete", "deleteRule"),
-]
+# Policy rule-key -> PocketBase collection field. Each collection is checked
+# only on the keys its policy row declares. The five base rules are top-level;
+# an auth collection's manageRule is nested under `options` (PocketBase 0.22
+# does not serialize it at the top level), so "manage" is read from there.
+RULE_FIELD = {
+    "list": "listRule",
+    "view": "viewRule",
+    "create": "createRule",
+    "update": "updateRule",
+    "delete": "deleteRule",
+}
+AUTH_OPTION_RULE = {"manage": "manageRule"}
+# A rule PocketBase exposes as null is distinct from one it exposes as the
+# empty string: null means superusers only, "" means anyone. _RULE_MISSING
+# marks a field the collection does not expose at all, which must not read as
+# either null or "".
+_RULE_MISSING = object()
 
 
 def _context(phase: str) -> dict:
@@ -79,12 +89,16 @@ def _readback(pb: PBClient, doc: dict, admin_token: str, writer: ReceiptWriter) 
         if live is None:
             mismatches.append("collection-missing")
         else:
-            for key, pb_key in RULE_KEYS:
-                if key not in expected:
+            for key, want in expected.items():
+                if key in RULE_FIELD:
+                    got = live.get(RULE_FIELD[key], _RULE_MISSING)
+                elif key in AUTH_OPTION_RULE:
+                    got = (live.get("options") or {}).get(AUTH_OPTION_RULE[key], _RULE_MISSING)
+                else:
+                    mismatches.append(f"{key}:unknown-rule-key")
                     continue
-                want = expected[key]
-                got = live.get(pb_key)
-                if (got or None) != (want or None) and not (want == "" and (got or "") == ""):
+                # Exact comparison: null, "", and a rule string are all distinct.
+                if got != want:
                     mismatches.append(key)
         writer.write(
             Receipt(
@@ -101,6 +115,12 @@ def _readback(pb: PBClient, doc: dict, admin_token: str, writer: ReceiptWriter) 
         )
 
 
+def _expected_status(doc: dict, pid: str) -> int:
+    """The expected status for a family, read from the policy's deny_contract."""
+    deny_key = doc["probe_families"][pid]["deny_key"]
+    return doc["deny_contract"][deny_key]["status"]
+
+
 def run_main(doc: dict, writer: ReceiptWriter) -> None:
     pb = _pb()
     pb.wait_healthy()
@@ -111,18 +131,20 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
     b = make_account("b")
     register(pb, a)
     register(pb, b)
-    seed_account(pb, a, content)
-    seed_account(pb, b, content)
+    seed_account(pb, a, content, admin_token)
+    seed_account(pb, b, content, admin_token)
 
     fam = doc["probe_families"]
     for name, row in doc["collections"].items():
         for pid in row.get("probes", []):
             if fam[pid].get("status") != "enforced":
                 continue
-            impl = families.MAIN_FAMILIES.get(pid)
-            if impl is None:
-                continue  # hook-phase family, handled elsewhere
-            writer.write(impl(pb, name, a, b))
+            expected = _expected_status(doc, pid)
+            if pid in families.MAIN_FAMILIES:
+                writer.write(families.MAIN_FAMILIES[pid](pb, name, a, b, expected))
+            elif pid == families.OVERSIZED_FAMILY:
+                writer.write(families.oversized_input_rejected(pb, name, a, row["oversized_probe"], expected))
+            # hook-phase families are handled in run_hook
 
     _readback(pb, doc, admin_token, writer)
 
@@ -138,7 +160,7 @@ def run_hook(doc: dict, writer: ReceiptWriter) -> None:
             impl = families.HOOK_FAMILIES.get(pid)
             if impl is None:
                 continue
-            writer.write(impl(pb, name, None, None))
+            writer.write(impl(pb, _expected_status(doc, pid)))
 
 
 def run_verdict(doc: dict, receipts_path: str) -> int:
@@ -212,7 +234,7 @@ def run_verdict(doc: dict, receipts_path: str) -> int:
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("usage: run.py {main|hook|verdict}", file=sys.stderr)
+        print("usage: run.py {main|hook|verdict}", file=sys.stderr)  # scan: added by stage 2
         return 2
     phase = sys.argv[1]
     policy_path = os.environ.get("POLICY_PATH", "/policy/account-scope.v1.json")
