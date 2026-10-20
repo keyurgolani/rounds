@@ -39,7 +39,7 @@ Terms that follow from them: Sign-in provider (`sign-in-provider`), AI provider 
 
 ## Containment Terms
 
-The five containment terms (Legacy Artifact Snapshot, Test Definition, Harness Revision, Artifact Renderer Contract, Share Capability) come from spec 623-645, 2491-2636, and 3212. If #2, #3, #4, or #11 merges first with a different shipped name, the registry adopts it and lists each difference as a spec-change item. At revision 1 none of them has merged (next carries #1's stage 0 inventory and server-write record and #9's stage 1 harness and account-scope policy) and no containment collection exists, so the spec names stand and there is no spec-change item.
+The five containment terms (Legacy Artifact Snapshot, Test Definition, Harness Revision, Artifact Renderer Contract, Share Capability) come from spec 623-645, 2491-2636, and 3212. If #2, #3, #4, or #11 merges first with a different shipped name, the registry adopts it and lists each difference as a spec-change item. At revision 1 none of them has merged and no containment collection exists (the only ROUNDS-00 work on next comes from #1 and #9), so the spec names stand and there is no spec-change item.
 
 | Term | ID | Owning leaf | Source |
 | --- | --- | --- | --- |
