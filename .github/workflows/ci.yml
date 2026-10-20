@@ -87,10 +87,12 @@ jobs:
     # Two-account account-scope security harness (ROUNDS-00B-L01). Builds the
     # pocketbase and probe images from this commit, creates two accounts with
     # generated credentials, and proves that one account cannot read, list,
-    # update, or delete another's records, that anonymous writes and oversized
-    # JSON are rejected, and that the signup-disabled hook holds, failing on any
-    # missing or failed probe result. Then runs the read-only cross-owner scan
-    # against the run's pb_data. Docker on ubuntu; locally use Finch.
+    # update, or delete another's records, create a row owned by another
+    # account, or move a row to another account; that an account's own updates
+    # still succeed; that anonymous writes and oversized JSON are rejected; and
+    # that the signup-disabled hook holds, failing on any missing or failed
+    # probe result. Then runs the read-only cross-owner scan against the run's
+    # pb_data. Docker on ubuntu; locally use Finch.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -127,3 +129,17 @@ jobs:
       # parent is the base and the diff is exactly what merging would change.
       - name: Lint migration changes
         run: python scripts/lint_migrations.py --base HEAD^1 --head HEAD
+
+  migration-check:
+    # Behavioural checks for the account-scope rule migration (ROUNDS-00B-L01).
+    # Builds the pocketbase image from this commit and runs one-off
+    # `pocketbase migrate up` containers to prove the migration applies the
+    # policy's rules, that a missing collection fails the whole migration and
+    # changes nothing, and that the emergency lever locks a collection and the
+    # forward fix restores it. Docker on ubuntu; locally use Finch.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run migration check
+        run: CONTAINER_BIN=docker harness/migration_check.sh
