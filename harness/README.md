@@ -25,8 +25,9 @@ enforce, once per collection it applies to:
 - a signed-in account cannot read, update, or delete another account's record
   by id, and the record comes out exactly as it was;
 - an anonymous caller cannot read, update, or delete an account's record by id;
-- reading, updating, or deleting another account's record answers exactly like
-  the same request on a record that does not exist;
+- reading, updating, or deleting another account's record answers with the
+  same status and the same JSON body as the same request on a record that does
+  not exist;
 - an anonymous create of a complete, valid row is rejected by the create rule
   (not by field validation), and no row is left;
 - a signed-in account's create of a row owned by another account is rejected

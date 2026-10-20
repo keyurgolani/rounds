@@ -125,16 +125,22 @@ def create_anonymous_denied(pb, collection, payload, admin_token, owner_id, expe
                    expected, resp.status, ok, resp.elapsed_ms, detail)
 
 
-def oversized_input_rejected(pb, collection, token, payload, field, expected) -> Receipt:
+def oversized_input_rejected(pb, collection, token, payload, field, admin_token, owner_id, expected) -> Receipt:
     # An owner create whose body is valid except that one JSON field exceeds
-    # its maxSize. PocketBase rejects it with a per-field size error.
+    # its maxSize. PocketBase rejects it with a per-field size error, and the
+    # owner's row count is the same before and after, so nothing was written.
+    before, before_status = _admin_owner_count(pb, collection, admin_token, owner_id)
     resp = pb.create(collection, token, payload)
+    after, after_status = _admin_owner_count(pb, collection, admin_token, owner_id)
     field_err = ""
     if isinstance(resp.body, dict):
         field_err = ((resp.body.get("data") or {}).get(field) or {}).get("code", "")
-    ok = resp.status == expected and field_err == "validation_json_size_limit"
+    unchanged = before is not None and after == before
+    ok = resp.status == expected and field_err == "validation_json_size_limit" and unchanged
+    detail = "" if ok else (f"status={resp.status} field_code={field_err!r} rows_before={before} "
+                            f"rows_after={after} listing_status={after_status}")
     return Receipt("account-scope.oversized-input.rejected", collection, "create", "authenticated-owner",
-                   expected, resp.status, ok, resp.elapsed_ms, "" if ok else f"status={resp.status} field_code={field_err!r}")
+                   expected, resp.status, ok, resp.elapsed_ms, detail)
 
 
 def oversized_filler(max_bytes: int) -> list:
@@ -283,9 +289,10 @@ def list_filter_isolated(pb, collection, a, b, expected) -> Receipt:
 
 def _foreign_or_missing(op, pb, collection, a, b, expected) -> Receipt:
     # B tries the same operation on A's record and on an id no record has. Both
-    # must answer the deny contract with byte-for-byte the same body, so the
-    # answer says nothing about whether the record exists. A's record must come
-    # out unchanged.
+    # must answer the deny contract with the same status and the same parsed
+    # JSON body (headers and timing are not compared; timing is an open
+    # exception), so the answer says nothing about whether the record exists.
+    # A's record must come out unchanged.
     missing = missing_record_id()
     call = {
         "view": lambda rid: pb.view(collection, rid, token=b.token),
@@ -365,12 +372,19 @@ def runner_fails_closed_without_pocketbase(frontend: PBClient, collection, expec
                    expected, resp.status, ok, resp.elapsed_ms, "" if ok else f"status={resp.status} code={code!r}")
 
 
-def signup_disabled_denied(pb, expected) -> Receipt:
+def signup_disabled_denied(pb, admin_token, expected) -> Receipt:
+    # With signups disabled, a signup is rejected and no account is left with
+    # that email: the superuser looks for it afterwards.
     email = f"blocked-{secrets.token_hex(6)}@harness.invalid"
     password = "Hx" + secrets.token_hex(16) + "!9"
     resp = pb.signup(email, password)
+    found = pb.listing("users", token=admin_token, params={"filter": f'email = "{email}"'})
+    body = found.body if isinstance(found.body, dict) else {}
+    count = body.get("totalItems") if found.status == 200 and isinstance(body.get("totalItems"), int) else None
+    ok = resp.status == expected and count == 0
+    detail = "" if ok else f"status={resp.status} accounts_with_email={count} listing_status={found.status}"
     return Receipt("account-scope.signup.disabled.denied", "users", "create", "anonymous",
-                   expected, resp.status, resp.status == expected, resp.elapsed_ms)
+                   expected, resp.status, ok, resp.elapsed_ms, detail)
 
 
 # Registry of IMPLEMENTED families. Pending families are deliberately absent.

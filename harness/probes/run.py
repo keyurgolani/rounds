@@ -178,7 +178,8 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
                 field = row["oversized_probe"]["field"]
                 payload = factory.fresh_payload(name, a.user_id, a, b, content, secrets.token_hex(6))
                 payload[field] = families.oversized_filler(row["oversized_probe"]["max_bytes"])
-                writer.write(families.oversized_input_rejected(pb, name, a.token, payload, field, expected))
+                writer.write(families.oversized_input_rejected(
+                    pb, name, a.token, payload, field, admin_token, a.user_id, expected))
             elif pid == families.FOREIGN_OWNER_FAMILY:
                 # Caller b claims a no-rows third account (c) as owner, so the
                 # only reason to reject is the createRule and the owner-count
@@ -207,6 +208,7 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
 def run_hook(doc: dict, writer: ReceiptWriter) -> None:
     pb = _pb()
     pb.wait_healthy()
+    admin_token = _admin_token(pb)
     fam = doc["probe_families"]
     for name, row in doc["collections"].items():
         for pid in row.get("probes", []):
@@ -215,11 +217,23 @@ def run_hook(doc: dict, writer: ReceiptWriter) -> None:
             impl = families.HOOK_FAMILIES.get(pid)
             if impl is None:
                 continue
-            writer.write(impl(pb, _expected_status(doc, pid)))
+            writer.write(impl(pb, admin_token, _expected_status(doc, pid)))
 
 
 def _frontend_url() -> str:
     return os.environ.get("FRONTEND_URL", "http://frontend")
+
+
+def _wait_for_runner(frontend: PBClient) -> None:
+    # The degraded probe stops PocketBase and then needs the runner answering,
+    # so before that: the runner listening on its own port (its /health is for
+    # container checks and nginx doesn't route it), then nginx routing to it.
+    # GET /api/ai/providers without a bearer is the runner's own 401 and needs
+    # no PocketBase.
+    runner = PBClient(os.environ.get("RUNNER_URL", "http://runner:8000"))
+    runner.wait_for("/health", lambda r: r.status == 200)
+    frontend.wait_for("/api/ai/providers",
+                      lambda r: r.status == 401 and isinstance(r.body, dict) and "detail" in r.body)
 
 
 def _verifier_receipt(r) -> Receipt:
@@ -235,7 +249,9 @@ def run_deploy(doc: dict, writer: ReceiptWriter) -> None:
     import verify_deployment as vd
 
     pb_url = os.environ.get("POCKETBASE_URL", "http://pocketbase:8090").rstrip("/")
-    PBClient(_frontend_url()).wait_healthy()  # nginx up, and PocketBase behind it
+    frontend = PBClient(_frontend_url())
+    frontend.wait_healthy()  # nginx up, and PocketBase behind it
+    _wait_for_runner(frontend)
     results = vd.check_proxy(_frontend_url())
     results.append(vd.check_default_logins(pb_url))
     token = vd.admin_token(pb_url, os.environ.get("PB_ADMIN_EMAIL", ""), os.environ.get("PB_ADMIN_PASSWORD", ""))

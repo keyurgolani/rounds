@@ -91,6 +91,7 @@ probe() {
   ${CONTAINER_BIN} run --rm --network "${NETWORK}" \
     -e POCKETBASE_URL="http://pocketbase:8090" \
     -e FRONTEND_URL="http://frontend" \
+    -e RUNNER_URL="http://runner:8000" \
     -e PB_ADMIN_EMAIL="${PB_ADMIN_EMAIL_V}" \
     -e PB_ADMIN_PASSWORD="${PB_ADMIN_PASSWORD_V}" \
     -e POLICY_PATH="/policy/account-scope.v1.json" \

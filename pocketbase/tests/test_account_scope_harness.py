@@ -345,13 +345,56 @@ def test_create_anonymous_fails_if_a_row_was_left_under_the_owner():
     assert not r.passed and "rows_under_owner=1" in r.detail
 
 
+def _oversized(pb):
+    return families.oversized_input_rejected(pb, "resumes", "tok", {"user": "x"}, "data", "admin", "uid-a", 400)
+
+
 def test_oversized_passes_only_on_a_json_size_error_for_the_field():
-    good = _CreatePB(400, {"data": {"data": {"code": "validation_json_size_limit"}}})
-    assert families.oversized_input_rejected(good, "resumes", "tok", {"user": "x"}, "data", 400).passed
-    wrong = _CreatePB(400, {"data": {"name": {"code": "validation_required"}}})
-    assert not families.oversized_input_rejected(wrong, "resumes", "tok", {"user": "x"}, "data", 400).passed
-    created = _CreatePB(200, {"id": "rec"})
-    assert not families.oversized_input_rejected(created, "resumes", "tok", {"user": "x"}, "data", 400).passed
+    good = _CreatePB(400, {"data": {"data": {"code": "validation_json_size_limit"}}}, owner_rows=1)
+    assert _oversized(good).passed
+    wrong = _CreatePB(400, {"data": {"name": {"code": "validation_required"}}}, owner_rows=1)
+    assert not _oversized(wrong).passed
+    created = _CreatePB(200, {"id": "rec"}, owner_rows=1)
+    assert not _oversized(created).passed
+
+
+class _CountingCreatePB(_CreatePB):
+    """The owner's row count rises after the create, as if it was written."""
+
+    def __init__(self, status, body, counts):
+        super().__init__(status, body)
+        self._counts = list(counts)
+
+    def listing(self, collection, token=None, params=None):
+        return Response(status=200, body={"items": [], "totalItems": self._counts.pop(0)}, elapsed_ms=1)
+
+
+def test_oversized_fails_if_the_owners_row_count_changed():
+    pb = _CountingCreatePB(400, {"data": {"data": {"code": "validation_json_size_limit"}}}, counts=[1, 2])
+    r = _oversized(pb)
+    assert not r.passed and "rows_before=1 rows_after=2" in r.detail
+
+
+class _SignupPB:
+    def __init__(self, signup_status, accounts, listing_status=200):
+        self.signup_status, self.accounts, self.listing_status = signup_status, accounts, listing_status
+        self.filters = []
+
+    def signup(self, email, password):
+        return Response(self.signup_status, {"code": self.signup_status, "message": "x", "data": {}}, 1)
+
+    def listing(self, collection, token=None, params=None):
+        self.filters.append((collection, token, (params or {}).get("filter", "")))
+        return Response(self.listing_status, {"items": [], "totalItems": self.accounts}, 1)
+
+
+def test_disabled_signup_passes_only_when_no_account_is_left():
+    ok = _SignupPB(400, accounts=0)
+    r = families.signup_disabled_denied(ok, "admin", 400)
+    assert r.passed and ok.filters[0][:2] == ("users", "admin") and "@harness.invalid" in ok.filters[0][2]
+    assert not families.signup_disabled_denied(_SignupPB(400, accounts=1), "admin", 400).passed
+    assert not families.signup_disabled_denied(_SignupPB(400, accounts=0, listing_status=500), "admin", 400).passed
+    assert not families.signup_disabled_denied(_SignupPB(200, accounts=0), "admin", 400).passed
 
 
 # --------------------------------------------------------------------------

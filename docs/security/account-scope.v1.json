@@ -275,21 +275,21 @@
       "actor": "authenticated-other",
       "status": "enforced",
       "deny_key": "view",
-      "guarantee": "reading another account's record answers exactly like reading one that does not exist"
+      "guarantee": "reading another account's record gets the same status and JSON body as reading one that does not exist"
     },
     "account-scope.update.foreign-or-missing.indistinguishable": {
       "operation": "update",
       "actor": "authenticated-other",
       "status": "enforced",
       "deny_key": "update",
-      "guarantee": "updating another account's record answers exactly like updating one that does not exist"
+      "guarantee": "updating another account's record gets the same status and JSON body as updating one that does not exist"
     },
     "account-scope.delete.foreign-or-missing.indistinguishable": {
       "operation": "delete",
       "actor": "authenticated-other",
       "status": "enforced",
       "deny_key": "delete",
-      "guarantee": "deleting another account's record answers exactly like deleting one that does not exist"
+      "guarantee": "deleting another account's record gets the same status and JSON body as deleting one that does not exist"
     },
     "account-scope.create.replayed-denied.denied": {
       "operation": "create",
