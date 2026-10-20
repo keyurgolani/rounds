@@ -126,6 +126,10 @@ describe('CodingDetail denial states', () => {
     [new RunnerError({ message: 'x', status: 503, code: 'route_disabled' }), 'Running tests is turned off on this server.'],
     [new RunnerError({ message: 'Failed to fetch', status: 0 }), 'No tests ran.'],
     [new RunnerError({ message: 'x', status: 413, code: 'payload_too_large' }), 'Your code is over the size limit'],
+    [new RunnerError({ message: 'x', status: 400, code: 'idempotency_key_required' }), 'Unavailable right now'],
+    [new RunnerError({ message: 'x', status: 409, code: 'already_in_flight', retryAfterSeconds: 4 }), 'Unavailable right now'],
+    [new RunnerError({ message: 'x', status: 409, code: 'idempotency_mismatch' }), 'Unavailable right now'],
+    [new RunnerError({ message: 'x', status: 409, code: 'already_completed' }), 'Unavailable right now'],
   ])('reads %o as a denial, not an error dump', async (error, text) => {
     vi.mocked(evaluateCode).mockRejectedValue(error);
     const user = userEvent.setup();

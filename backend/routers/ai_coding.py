@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, AsyncIterator, Dict, List
+
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
@@ -17,6 +19,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from ai_coding.edit_mode import EDIT_SYSTEM_PROMPT, parse_patches as _parse_patches
 from ai_coding.project_runner import run_project
 from ai_coding.rubric import (
+    REVIEW_TIMED_OUT,
+    REVIEW_TIMEOUT_S,
     SYSTEM_PROMPT as _RUBRIC_SYS,
     build_prompt as _build_rubric_prompt,
     parse_ai_output as _parse_rubric,
@@ -62,6 +66,9 @@ async def _auth_user(request: Request) -> dict:
 # Wall time per run-project call and per graded checkpoint.
 RUN_PROJECT_TIMEOUT_S = 10
 GRADE_CHECKPOINT_TIMEOUT_S = 45
+# The most checkpoints one grade runs. Grade is admitted for this many.
+GRADE_MAX_CHECKPOINTS = 8
+GRADE_MAX_WALL_S = GRADE_MAX_CHECKPOINTS * GRADE_CHECKPOINT_TIMEOUT_S
 
 
 class RunProjectRequest(StrictModel):
@@ -107,6 +114,7 @@ def _checkpoints_for(round_row: dict[str, Any], language: str | None) -> tuple[s
 
 @router.post("/run-project", response_model=RunProjectResponse)
 async def run_project_route(request: Request, req: RunProjectRequest) -> RunProjectResponse:
+    await admission.begin(request, req, wall_seconds=RUN_PROJECT_TIMEOUT_S)
     user = admission.account(request)
     round_row = await admission.first_item(pb_get, user["token"], "ai_coding_rounds", req.round_slug)
     language, checkpoints = _checkpoints_for(round_row, req.language)
@@ -368,7 +376,12 @@ def _grade_checkpoints(slug: str, checkpoints: Any, files: Dict[str, str], langu
 
 
 @router.post("/grade")
-async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[str, Any]:
+async def grade(request: Request, body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[str, Any]:
+    # Admitted on one checkpoint's time, up to GRADE_MAX_CHECKPOINTS; the
+    # charge settles once the round loads.
+    await admission.begin(
+        request, body, wall_seconds=GRADE_CHECKPOINT_TIMEOUT_S, max_wall_seconds=GRADE_MAX_WALL_S
+    )
     # Look up the round server-side. Don't trust the client to ship
     # checkpoints/rubric/hidden_files — those drive grading and must
     # come from the seeded source of truth.
@@ -376,6 +389,10 @@ async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[st
     checkpoints = round_row.get("checkpoints") or []
     rubric = round_row.get("rubric") or {"items": []}
     language = round_row.get("language") or "python"
+    graded = len(checkpoints) if isinstance(checkpoints, (list, dict)) else 0
+    if graded > GRADE_MAX_CHECKPOINTS:
+        raise TypedError("invalid_request", "This round can't be graded here.")
+    await admission.settle(request, graded * GRADE_CHECKPOINT_TIMEOUT_S)
 
     async with admission.allocate() as slot:
         test_results = await run_in_threadpool(
@@ -384,21 +401,26 @@ async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[st
 
     rubric_review: Dict[str, Any] = {"items": [], "total": 0.0, "skipped": False}
     try:
-        cfg = await _active_text_config(user)
-        prompt = _build_rubric_prompt(
-            rubric=rubric,
-            files=body.files,
-            test_results={str(i): tr for i, tr in enumerate(test_results)},
-            ai_chats=body.ai_chats,
-        )
-        raw = await _call_complete(
-            cfg["kind"], cfg["model"], cfg["api_key"], cfg["base_url"] or None,
-            system=_RUBRIC_SYS,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1500,
-            destination=cfg.get("destination"),
-        )
+        # Bounded, so the review ends inside the grade's lease.
+        with anyio.fail_after(REVIEW_TIMEOUT_S):
+            cfg = await _active_text_config(user)
+            prompt = _build_rubric_prompt(
+                rubric=rubric,
+                files=body.files,
+                test_results={str(i): tr for i, tr in enumerate(test_results)},
+                ai_chats=body.ai_chats,
+            )
+            raw = await _call_complete(
+                cfg["kind"], cfg["model"], cfg["api_key"], cfg["base_url"] or None,
+                system=_RUBRIC_SYS,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1500,
+                destination=cfg.get("destination"),
+            )
         rubric_review = _parse_rubric(raw)
+    except TimeoutError:
+        _log.warning("ai-coding grade rubric review timed out")
+        rubric_review = {"items": [], "total": 0.0, "skipped": True, "reason": REVIEW_TIMED_OUT}
     except Exception as e:  # noqa: BLE001
         _log.exception("ai-coding grade rubric review failed")
         rubric_review = {"items": [], "total": 0.0, "skipped": True, "reason": str(e)[:300]}

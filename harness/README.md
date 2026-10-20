@@ -96,14 +96,47 @@ COMPOSE_PROJECT=rounds-9s1-b harness/run.sh
 ```
 
 The launcher builds the pocketbase, probe, runner, and frontend images, brings
-PocketBase up, runs the main probe phase, recreates PocketBase with signups
-disabled (the named `pb_data` volume keeps the run's accounts and rows), runs
-the signup-hook probe, brings the runner and nginx frontend up and runs the
-deployment verifier through them, stops PocketBase for the degraded probe,
-runs the verifier's checks and the cross-owner scan on the run's `pb_data`,
-prints the verdict (pass / expected-fail / fail counts), and tears the stack
-down, removing the images it built. Its exit code is non-zero on any failed or
-missing result.
+PocketBase up, runs the main probe phase, runs the admission check against two
+runner replicas, recreates PocketBase with signups disabled (the named
+`pb_data` volume keeps the run's accounts and rows), runs the signup-hook
+probe, brings the runner and nginx frontend up and runs the deployment
+verifier through them, stops PocketBase for the degraded probe, runs the
+verifier's checks and the cross-owner scan on the run's `pb_data`, prints the
+verdict (pass / expected-fail / fail counts), runs the admission migration
+check, and tears the stack down, removing the images and the volume it made.
+Its exit code is non-zero on any failed or missing result.
+
+## Admission state across two replicas
+
+`ROUNDS-00A-L01` stage 3 keeps idempotency and quota state in PocketBase, so
+every runner replica sees one count. The admission phase starts `runner` and
+`runner-b`, two replicas of the runner image built from this commit, on the
+one PocketBase, with `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` and
+`ROUNDS_GATE_ENFORCE_QUOTA` at `enforce` and a test `ROUNDS_ADMISSION_SECRET`
+shared by PocketBase, both runners, and the probe, and
+[`probes/admission_check.py`](probes/admission_check.py) checks that:
+
+- a run completed on one replica replays on the other, and a reused or
+  missing `Idempotency-Key` is refused;
+- runs on both replicas land in one hourly count, and an account's in-flight
+  limit and the shared demo tier's hold across them;
+- a run denied at step 8 stays retryable, with no live lease, on either
+  replica;
+- no client sets or clears `is_demo`, the `admission_*` collections are
+  superuser-only, the admission routes need a bearer, and the write routes
+  need the runner key as well;
+- on the real store, a lease settles once, never above what it was admitted
+  for, with its window only ever brought closer; a lease the runner never
+  heard about ends with the token the runner made; a duplicate of a running
+  command hears when to try again; and quota `off` counts nothing.
+
+After the scan,
+[`probes/admission_migration_check.py`](probes/admission_migration_check.py)
+copies the pinned PocketBase binary out of its image and, with no network,
+applies `1700006100_admission.js` to a `pb_data` built from every migration
+before `1700006000` (the `62d4eae` set), checks that it adds only the three
+server-only collections, reverses it with `pocketbase migrate down 1` as an
+operator would, checks that the data is back as it was, and applies it again.
 
 No service publishes a host port; the probes reach services over the compose
 network. Image tags, network, volume, the compose env file, and the receipts

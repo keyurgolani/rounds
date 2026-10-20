@@ -55,9 +55,15 @@ def test_a_signed_in_render_returns_the_pdf(client, signed_in, sidecar):
     [
         urllib.error.HTTPError("http://pdf-renderer:4000/render", 500, "x", {}, io.BytesIO(SIDECAR_TEXT.encode())),
         urllib.error.HTTPError("http://pdf-renderer:4000/render", 400, "x", {}, io.BytesIO(SIDECAR_TEXT.encode())),
+        urllib.error.HTTPError("http://pdf-renderer:4000/render", 422, "x", {}, io.BytesIO(SIDECAR_TEXT.encode())),
         urllib.error.URLError(SIDECAR_TEXT),
-        TimeoutError(SIDECAR_TEXT),
+        urllib.error.URLError(TimeoutError(SIDECAR_TEXT)),
         ConnectionResetError(SIDECAR_TEXT),
+        # The sidecar couldn't open a page in time.
+        urllib.error.HTTPError("http://pdf-renderer:4000/render", 503, "x", {}, io.BytesIO(b'{"error":"unavailable"}')),
+        # Connected, but no answer within the runner's wait: the sidecar
+        # answers a document's own timeout before then.
+        TimeoutError(SIDECAR_TEXT),
     ],
 )
 def test_a_failed_render_is_a_typed_503_without_sidecar_text(client, signed_in, sidecar, failure):
@@ -67,6 +73,24 @@ def test_a_failed_render_is_a_typed_503_without_sidecar_text(client, signed_in, 
     body = res.json()
     assert set(body) == {"detail", "code", "correlation_id"}
     assert body["code"] == "worker_unavailable"
+    assert SIDECAR_TEXT not in res.text and "pdf-renderer" not in res.text
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        # The sidecar's own answer for a document that ran out of time.
+        urllib.error.HTTPError("http://pdf-renderer:4000/render", 422, "x", {},
+                               io.BytesIO(b'{"error":"render_timeout"}')),
+    ],
+)
+def test_a_render_that_runs_out_of_time_is_a_typed_422_without_sidecar_text(client, signed_in, sidecar, failure):
+    sidecar["answer"] = failure
+    res = client.post("/api/pdf/render", json={"html": "<p>hi</p>"}, headers=signed_in)
+    assert res.status_code == 422
+    body = res.json()
+    assert set(body) == {"detail", "code", "correlation_id"}
+    assert body["code"] == "render_timeout"
     assert SIDECAR_TEXT not in res.text and "pdf-renderer" not in res.text
 
 

@@ -331,12 +331,15 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 
 ## Adapters
 
-157 entries: 43 collection, 3 field, 19 stored-value, 8 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
+160 entries: 46 collection, 3 field, 19 stored-value, 8 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
 
 ### collection
 
 | Legacy name | Where | Term or decided by | Target label | Retiring leaf |
 | --- | --- | --- | --- | --- |
+| admission_commands | `pocketbase/pb_migrations/1700006100_admission.js:51` | decided by #1 (ROUNDS-00A-L01) |  | #18 (ROUNDS-02-L01) |
+| admission_counters | `pocketbase/pb_migrations/1700006100_admission.js:84` | decided by #1 (ROUNDS-00A-L01) |  | #18 (ROUNDS-02-L01) |
+| admission_leases | `pocketbase/pb_migrations/1700006100_admission.js:112` | decided by #1 (ROUNDS-00A-L01) |  | #18 (ROUNDS-02-L01) |
 | ai_coding_attempts | `pocketbase/pb_migrations/1700001100_ai_coding.js:101` | `practice-attempt` | Attempt | #164 (ROUNDS-32-L10) |
 | ai_coding_drafts | `pocketbase/pb_migrations/1700001100_ai_coding.js:64` | `practice-draft` | Practice Draft | #164 (ROUNDS-32-L10) |
 | ai_coding_rounds | `pocketbase/pb_migrations/1700001100_ai_coding.js:37` | `practice-item` | Practice Item | #43 (ROUNDS-07-L05) |

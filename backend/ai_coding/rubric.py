@@ -5,6 +5,13 @@ import json
 import re
 from typing import Any
 
+# The longest a rubric review may take after a grade or take-home submit
+# has run, the provider config lookup included; a slower one is skipped.
+# Those leases hold this much past the run (HOLD_S in
+# pocketbase/pb_hooks/admission.js, with the attempt write).
+REVIEW_TIMEOUT_S = 60
+REVIEW_TIMED_OUT = "The rubric review took too long."
+
 
 SYSTEM_PROMPT = (
     "You are grading a candidate's submission in an AI-assisted coding "

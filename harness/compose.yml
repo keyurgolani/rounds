@@ -29,6 +29,8 @@ services:
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
       - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
+      # The runner key, a test placeholder shared with both runners.
+      - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/api/health >/dev/null 2>&1 || exit 1"]
       interval: 3s
@@ -37,7 +39,10 @@ services:
       start_period: 3s
     restart: "no"
 
-  # The launcher starts it with the frontend for the deployment phases
+  # Shaped like prod: the runner, plus runner-b, a second replica of the same
+  # image on the same PocketBase, as k8s/runner.yaml runs two. The launcher
+  # starts both for the admission phase (ROUNDS-00A-L01 stage 3), and the
+  # runner again with the frontend for the deployment phases
   # (harness/verify_deployment.py and the degraded probe); the account-scope
   # rule probes talk to PocketBase directly.
   runner:
@@ -45,12 +50,25 @@ services:
       context: ../backend
     image: ${IMAGE_PREFIX:-rounds-9s1}-runner:test
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-    environment:
+    environment: &runner-environment
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-}
       - POCKETBASE_URL=http://pocketbase:8090
       - AI_KEY_SECRET=${AI_KEY_SECRET:-rounds-dev-key-DO-NOT-USE-IN-PROD}
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
+      - ROUNDS_GATE_ENFORCE_IDEMPOTENCY=${ROUNDS_GATE_ENFORCE_IDEMPOTENCY:-}
+      - ROUNDS_GATE_ENFORCE_QUOTA=${ROUNDS_GATE_ENFORCE_QUOTA:-}
+      - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+    restart: "no"
+
+  # The image runner builds; this replica never builds its own.
+  runner-b:
+    image: ${IMAGE_PREFIX:-rounds-9s1}-runner:test
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment: *runner-environment
     depends_on:
       pocketbase:
         condition: service_healthy

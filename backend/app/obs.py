@@ -2,8 +2,9 @@
 
 Every decision is one JSON line on stdout. A line carries only the
 allowlisted fields below: a 32-hex correlation id, a keyed account
-pseudonym, the route template, the result code, the quota result, and
-latency. Unknown fields are dropped, and every value has to match its
+pseudonym, the route template, the result code, the idempotency and
+quota results, the code an observe-mode gate would have answered with,
+and latency. Unknown fields are dropped, and every value has to match its
 field's pattern, so source code, program output, HTML, bearer tokens,
 provider payloads, and raw account ids never reach the log.
 
@@ -186,6 +187,11 @@ FIELDS: dict[str, Callable[[Any], bool]] = {
     "status": _int_between(100, 599),
     "code": _matches(r"[a-z][a-z0-9_]{0,63}", 64),
     "quota": _one_of("charged", "exceeded", "demo_limit", "refunded", "unavailable", "skipped"),
+    "idempotency": _one_of(
+        "new", "retry", "replay", "mismatch", "in_flight", "none", "missing", "unavailable", "skipped"
+    ),
+    # The code an observe-mode gate would have answered with.
+    "would_deny": _matches(r"[a-z][a-z0-9_]{0,63}", 64),
     "latency_ms": _int_between(0, 86_400_000),
     "service": _one_of("runner", "pocketbase", "frontend"),
     "gates": _gate_table,

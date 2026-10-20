@@ -36,7 +36,16 @@ The harness superuser in #13 and #172 seeds and reads fixtures inside the test s
 
 ## Admission State
 
-#1's stage 3 adds `admission_commands`, `admission_counters`, and `admission_leases` in `pocketbase/pb_migrations/1700006100_admission.js`. Only the functions in `pb_hooks/admission.js` write them. #1 calls them from Caller hook routes under `/api/rounds/admission/`, which nginx answers with 404 from stage 2, and other leaves call the same functions from their own routes and hooks (#3, #4, #12, #177). One transaction writes the command row, the charge, and the lease, or nothing. SQLite serializes PocketBase writes, so both runner replicas share one count.
+#1's stage 3 adds `admission_commands`, `admission_counters`, and `admission_leases` in `pocketbase/pb_migrations/1700006100_admission.js`, with every client rule `null`. Only the functions in `pocketbase/pb_hooks/admission.js` write them:
+
+1. `admit`, `settle`, and `finish`, which #1 calls from Caller hook routes under `/api/rounds/admission/` in `pb_hooks/admission.pb.js`. nginx answers that prefix with 404 from stage 2, so the runner reaches them with the caller's bearer and `ROUNDS_ADMISSION_SECRET`, and a browser never does. Other leaves call the same functions from their own routes and hooks (#3, #4, #12, #177).
+2. `sweep`, which the `rounds_admission_sweep` cron job runs every 5 minutes with no caller token.
+
+Each call is one transaction: `admit` writes the command row, the charge, and the lease, or nothing. PocketBase runs every write transaction on its one SQLite write connection, so both runner replicas share one count.
+
+A Caller route writes only the caller's rows. The account and its tier come from the bearer's auth record, never the body. The write routes also need `ROUNDS_ADMISSION_SECRET`, which PocketBase and the runner share and no candidate process gets (#1 S2's minimal environment and per-slot uid), so a bearer alone admits, settles, and finishes nothing. The runner makes each lease's token and sends only its SHA-256, so `settle` and `finish` act only on a lease that runner holds. A lease settles once, never above what it was admitted for, and nothing moves its window later. The `usage` route reads the caller's own counters for the dependency check with the bearer alone and writes nothing.
+
+`pb_hooks/admission.pb.js` also refuses any client create or update that sets or changes `users.is_demo`, `demo_run_used`, or `demo_evaluate_used`, including an OAuth2 sign-up's `createData`. Superusers, migrations, and server hooks can still set them.
 
 ## Registry of Planned Writers
 
@@ -44,7 +53,8 @@ Each row restates the leaf's current body. The leaf confirms or corrects its row
 
 | Leaf | Kind | Principal, route, or hook | Writes | Credential |
 | --- | --- | --- | --- | --- |
-| #1 S3 | Caller | `pb_hooks/admission.js`, under `/api/rounds/admission/` | `admission_commands`, `admission_counters`, `admission_leases` | caller's bearer |
+| #1 S3 | Caller | `admit`, `settle`, and `finish` in `pb_hooks/admission.js`, from the routes in `pb_hooks/admission.pb.js` under `/api/rounds/admission/` | `admission_commands`, `admission_counters`, `admission_leases` | caller's bearer and `ROUNDS_ADMISSION_SECRET` |
+| #1 S3 | System hook | the `rounds_admission_sweep` `cronAdd` job in `pb_hooks/admission.pb.js`, which runs `sweep` in `pb_hooks/admission.js` | deletes expired `admission_*` rows; marks `in_flight` commands without a live lease `failed_infrastructure` | none |
 | #3 | Caller | `enqueue` and owner `cancel` in `pb_hooks/execution.pb.js`, under `/api/rounds/execution/` | `execution_jobs`, and the `job_id` on #1's admission row | caller's bearer |
 | #3 | Service | `execution_service`, one record (`execution-worker`): `claim`, `heartbeat`, `complete`, `reap` | `execution_jobs`, `execution_attempts`, `execution_envelopes`, and the graded rows in `ai_coding_attempts` and `take_home_attempts`, which `complete` writes with the envelope | `ROUNDS_EXECUTION_SECRET` |
 | #3 | System hook | `onBeforeServe` in `pb_hooks/execution.pb.js`, which creates `execution-worker` or resets its password | `execution_service` | `ROUNDS_EXECUTION_SECRET` |

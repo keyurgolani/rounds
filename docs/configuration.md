@@ -51,6 +51,7 @@ ROUNDS_RUNNER_IMAGE=ghcr.io/keyurgolani/rounds-runner:latest
 | `POCKETBASE_URL` | `http://pocketbase:8090` | Internal URL the runner uses for the public-share endpoint and AI provider credential lookups. |
 | `AI_KEY_SECRET` | dev placeholder | Symmetric secret used to encrypt user-supplied AI provider API keys at rest. **Set a strong value in production**; rotating it invalidates every stored key. |
 | `PB_ADMIN_EMAIL`, `PB_ADMIN_PASSWORD` | see PocketBase admin bootstrap | Used by the runner's share endpoint to obtain a cached admin token so public-share reads can bypass per-user owner rules. |
+| `ROUNDS_ADMISSION_SECRET` | blank; dev compose sets a placeholder | The key the runner sends with every write to the admission store. Set the same value, at least 32 printable characters, on PocketBase and every runner replica. Without it the runner can't reach the store, so admission records `quota_unavailable` in observe mode and answers it in enforce mode. Candidate processes never get it. |
 
 Use `*` only for local development. In production, set `CORS_ALLOW_ORIGINS` to your deployed origin, such as `https://rounds.example.com`.
 
@@ -64,6 +65,8 @@ Use `*` only for local development. In production, set `CORS_ALLOW_ORIGINS` to y
 | `VITE_DEV_ALLOWED_HOSTS` | `localhost` | Comma-separated allowed hosts for Vite dev server. |
 
 In production, the frontend should usually use same-origin PocketBase access. Leave `VITE_POCKETBASE_URL` blank unless you intentionally host PocketBase on a separate browser-visible origin.
+
+The Vite dev proxy (`frontend/devProxy.ts`) answers 404 for the paths production nginx never proxies: PocketBase's admin UI and admin APIs, collection metadata, and the admission hook routes. In dev, open the admin UI on PocketBase's own port.
 
 ## OAuth Buttons
 
@@ -108,10 +111,12 @@ Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads the
 | `ROUNDS_GATE_ATS_RULE` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/ai/ats-rule` |
 | `ROUNDS_GATE_PAPER_FETCH` | `enabled`, `disabled` | `disabled` | runner | yes; the `paper_url` fetch in `/api/ai/improve` |
 | `ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK` | `enabled`, `disabled` | `disabled` | runner | yes; AI provider base URLs on private addresses (RFC 1918, RFC 6598, IPv6 ULA) |
-| `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` | `off`, `observe`, `enforce` | `off` | runner | not yet (#1 stage 3); `Idempotency-Key` checks |
-| `ROUNDS_GATE_ENFORCE_QUOTA` | `off`, `observe`, `enforce` | `off` | runner | not yet (#1 stage 3); account, deployment, and demo quotas |
+| `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` | `off`, `observe`, `enforce` | `observe` | runner | `enforce` only; `Idempotency-Key` checks and replays on the admitted routes |
+| `ROUNDS_GATE_ENFORCE_QUOTA` | `off`, `observe`, `enforce` | `observe` | runner | `enforce` only; account, deployment, and demo quotas on the admitted routes |
 
 Each route gate is that route's off switch. Set it to `disabled` and restart the runner, and the route answers 503 `route_disabled` before it reads the request; nothing else changes. [The execution runbook](security/execution-runbook.md) covers flipping and confirming each gate and what each error code means.
+
+The two enforcement gates decide admission steps 6 and 7. `off` skips its step: with `ENFORCE_QUOTA` at `off` nothing is counted, charged, or limited, and idempotency still records each command while its own gate is on. `observe`, the default for now, checks every request, records in its `decision` line what enforcing would have answered (`would_deny`), and denies nothing. `enforce` denies: a missing key is 400 `idempotency_key_required`, a completed command's retry gets its stored response, a reused key is 409, a still-running one is 409 with `Retry-After`, an over-limit request is 429 with `Retry-After`, and an unreachable admission store, or a runner without `ROUNDS_ADMISSION_SECRET`, is 503 `quota_unavailable`. Set `ROUNDS_ADMISSION_SECRET` before enforcing; the next `v*` release sets both gates to `enforce`, and [the runbook](security/execution-runbook.md#idempotency-and-quotas) has the limits and how to read the observe lines first.
 
 Two outbound switches start off. `PAPER_FETCH` lets `/api/ai/improve` fetch a publication's `paper_url`. `PROVIDER_PRIVATE_NETWORK` lets an AI provider base URL point at a private address, for a model server on your LAN. Enabled, every account's provider URL can reach this deployment's private network, its own services included, so enable it only when you trust every account. Loopback, link-local, and cloud metadata addresses and service names such as `pocketbase` or `*.svc` stay refused either way, with 403 `destination_denied`.
 
@@ -143,6 +148,7 @@ CORS_ALLOW_ORIGINS=https://rounds.example.com
 PB_ADMIN_EMAIL=admin@example.com
 PB_ADMIN_PASSWORD=<strong-password>
 AI_KEY_SECRET=<long-random-secret>
+ROUNDS_ADMISSION_SECRET=<another-long-random-secret>
 VITE_POCKETBASE_URL=
 ROUNDS_GATE_SIGNUPS=disabled
 VITE_OAUTH_GOOGLE_ENABLED=false

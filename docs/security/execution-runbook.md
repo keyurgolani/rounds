@@ -1,6 +1,6 @@
 # Execution and Render Runbook
 
-Owner: [#1](https://github.com/keyurgolani/rounds/issues/1) (`ROUNDS-00A-L01`). Stage 2 adds the gates, codes, limits, and checks below. Stage 3 adds idempotency, quotas, and the repair steps for their records.
+Owner: [#1](https://github.com/keyurgolani/rounds/issues/1) (`ROUNDS-00A-L01`). Stage 2 added the gates, codes, limits, and checks below. Stage 3 added idempotency, quotas, the demo tier, and the repair steps for their records.
 
 ## Admitted Routes and Their Gates
 
@@ -46,14 +46,53 @@ Typed errors answer `{"detail", "code", "correlation_id"}`. `detail` is a fixed 
 | `route_disabled` | 503 | 2 | The route's gate is off | Turn it back on when it's safe |
 | `unauthenticated` | 401 | 3 | No usable bearer, or PocketBase refused it | The app asks the person to sign in again |
 | `auth_unavailable` | 503 | 3, 8 | PocketBase is down or answered 5xx while checking the account or reading a record | Check PocketBase from the runner (Dependency Checks) |
-| `not_permitted` | 403 | 4 | The account's tier can't use this operation | Everything is permitted until stage 3 adds the demo tier's limits |
+| `not_permitted` | 403 | 4 | The account's tier can't use this operation | Every tier and operation is permitted; the demo tier's limits are its quota |
 | `limit_exceeded` | 413 | 5 | A field is over its limit (Limits) | The app shows too large |
 | `invalid_request` | 422 | 5, 8 | An unknown or malformed field, the request shape an older tab sends, or a stored definition this runner can't run, such as a `custom` entry | Reload the page; for a stored definition, fix the record |
+| `idempotency_key_required` | 400 | 6 | No `Idempotency-Key`, or one that isn't a UUIDv7, while `ENFORCE_IDEMPOTENCY` enforces | The app shows unavailable; reload the page, since the app sends one key per action |
+| `already_completed` | 409 | 6 | The command already completed and no response was kept: a PDF render, or a result over 256 KiB | The app shows unavailable; the next try gets a new key |
+| `idempotency_mismatch` | 409 | 6 | The key was used for a different request or route | The app shows unavailable; the next try gets a new key |
+| `already_in_flight` | 409 | 6 | The same command is still running, or its end isn't recorded yet | `Retry-After`, up to 10 seconds, says when to look again; the app shows unavailable, and the next try gets a new key |
+| `quota_exceeded` | 429 | 7 | An account or deployment limit is reached for this hour, or the account's in-flight limit, at admission or when evaluate or grade settle | The app shows limit reached and the wait from `Retry-After` |
+| `demo_limit_reached` | 429 | 7 | The shared demo limit is reached | The app shows limit reached and the wait from `Retry-After` |
+| `quota_unavailable` | 503 | 7 | The admission store didn't answer while a gate enforces, or the runner has no usable `ROUNDS_ADMISSION_SECRET` | Check PocketBase, the admission routes, and the runner key (Dependency Checks) |
 | `not_found` | 404 | 8 | The question, round, checkpoint, assignment, or campaign is missing or belongs to another account | None; the caller named something it can't use |
-| `worker_unavailable` | 503 | 9, or after admission | Every in-flight slot on this replica is busy, or the PDF renderer couldn't finish | The app keeps the draft; retry shortly, and check the renderer if it persists |
+| `worker_unavailable` | 503 | 9, or after admission | Every in-flight slot on this replica is busy, or the PDF renderer was unreachable, failed, opened no page within 2 s, or didn't answer within 25 s | The app retries with the same key, keeps the draft, and shows unavailable if it persists; check the renderer |
+| `render_timeout` | 422 | after admission | The renderer reported that the document didn't load or print within its budget (13 s to load, 8 s to print) | The app shows the error; simplify the document. The content decides this, so it keeps its charge and the app doesn't retry it |
 | `destination_denied` | 403 | provider calls | An AI provider base URL points at a refused address | Use a public provider URL, or the LAN address with `ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK` |
 
-Stage 3 raises `idempotency_key_required`, `already_completed`, `quota_exceeded`, `demo_limit_reached`, and `quota_unavailable`.
+The app retries `auth_unavailable`, `quota_unavailable`, and `worker_unavailable` twice with the same key, after 1 and 3 seconds or a `Retry-After` of up to 10 seconds, before it shows unavailable. A retry that finds its command still running gets `already_in_flight`, which the app shows as unavailable without trying again.
+
+## Idempotency and Quotas
+
+Steps 6 and 7 run in one call to the admission store, `pocketbase/pb_hooks/admission.js`, once a route has parsed its body and before any lookup. The runner calls `POST /api/rounds/admission/admit` with the caller's bearer, for the account, and the runner key, `ROUNDS_ADMISSION_SECRET` in `X-Rounds-Admission-Key`, which only PocketBase and the runner hold. PocketBase writes the command row, the charge, and the lease in one transaction, or nothing. PocketBase runs every write transaction on its one write connection, so all runner replicas share one count. The write routes (`admit`, `settle`, and `finish`) need the key as well as a bearer: without it they answer 403, and 503 while PocketBase has no key set. nginx answers `/api/rounds/admission/` with 404, so browsers never reach the store.
+
+1. **Commands.** The `Idempotency-Key` is the command id. A command is keyed on the account and its id, with a SHA-256 fingerprint of the route and the parsed body. A completed command's retry gets the stored response with `Idempotent-Replayed: true` and runs nothing: no execution, no provider call, and no attempt row. A command denied before it ran is left retryable, and one that failed after it ran is left `failed_infrastructure`; a retry of either runs admission again. A command and its stored response are kept for 24 hours from its last admission. Responses over 256 KiB and rendered PDFs aren't kept, so their retries get `already_completed`.
+2. **Charges.** Admission charges one request plus the most the execution can run: run 3 s, evaluate 3 s per case and 10 s per `large` case, run-project 10 s, grade 45 s per checkpoint, take-home run 60 s, take-home submit 120 s, and render 25 s. Evaluate and grade are admitted on one case or checkpoint, for at most 32 cases of 10 s or 8 checkpoints of 45 s, and settle the exact charge once their definitions load. A lease settles once, never above what it was admitted for, and a raise has to fit the hour or the request is denied with `quota_exceeded` or `demo_limit_reached` before it runs.
+3. **Leases.** The runner makes each lease's token and the store keeps only its hash, so the runner can end a lease whose admit answer it lost. A lease counts the request as in flight until the runner ends it, or until its window closes: the most the request was admitted for, plus 90 seconds for grade's and take-home submit's rubric review and attempt write, plus 30 seconds. Nothing moves the window later; a settle can only bring it closer. The rubric review stops after 60 seconds and the attempt write after 10, so both end inside it. The runner tries to record each request's end up to 3 times within 6 seconds, 1.5 seconds a try. If the store never hears, the lease stops counting when its window closes and the sweep marks the command `failed_infrastructure`. An admit that gets no answer, or one in the wrong shape, ends its lease the same way, since the store may have written it. A refusal (any 4xx, such as a runner key the store doesn't accept, or 503 while PocketBase has no key) wrote nothing: the runner ends no lease for it and doesn't try a refused finish again.
+4. **Refunds.** A denial before the request ran, and an infrastructure failure after it ran (`auth_unavailable`, `quota_unavailable`, or `worker_unavailable`), refund the request's wall seconds, never the request itself. A render that ran out of time on its content (`render_timeout`) and every other failure keep their charge.
+
+Proposed hourly limits, counted per UTC hour; the owner ratifies them:
+
+| Bucket | Requests | Wall seconds | In flight |
+| --- | --- | --- | --- |
+| Each account | 120 | 1,800 | 2 |
+| The deployment | 2,000 | no limit | 8 |
+| The demo tier, shared by every demo account | 30 | 300 | 1 |
+| Each runner replica | none | none | 4 (step 9) |
+
+A request has to fit every bucket it counts in, and a demo account counts in all three. The tier is `is_demo` on the account's PocketBase record; a PocketBase hook refuses any client write to it or to the old demo flags. There's no `verified` requirement, so the deployment bucket bounds what new signups can spend. While quota enforces, an over-limit request writes nothing, and its 429 carries `Retry-After`: the rest of the hour for requests and wall seconds, or up to 10 seconds for a full in-flight bucket.
+
+`ROUNDS_GATE_ENFORCE_IDEMPOTENCY` and `ROUNDS_GATE_ENFORCE_QUOTA` start at `observe`: admission checks every request and denies nothing. Each `decision` line then carries `idempotency` (`new`, `retry`, `replay`, `mismatch`, `in_flight`, `missing`, `unavailable`, or `skipped`), `quota` (`charged`, `exceeded`, `demo_limit`, `refunded`, `unavailable`, or `skipped`), and `would_deny`, the code enforcing would have answered. In observe mode an over-limit request runs uncounted and uncharged, and a replay runs again. With `ENFORCE_QUOTA` at `off` nothing is counted, charged, or limited. Idempotency doesn't depend on the quota gate: while `ENFORCE_IDEMPOTENCY` is on, every request that runs with a new key records its command.
+
+To enforce:
+
+1. Set `ROUNDS_ADMISSION_SECRET` to one value of at least 32 printable characters, such as the output of `openssl rand -hex 32`, on PocketBase and on every runner replica, and restart them. Without it the runner can't reach the store: in observe mode every `decision` line shows `"would_deny":"quota_unavailable"`, and enforcing answers `quota_unavailable`.
+2. Read a few days of `decision` lines. `would_deny` should be rare and explainable, and `idempotency` should be `new` for nearly every request from a current tab.
+3. Set both gates to `enforce` and restart every runner replica.
+4. Confirm the startup line shows both `"value":"enforce","source":"env"`, then run a coding run twice from the app: both answer 200, and the second `decision` line shows `"idempotency":"new"` again, since each click mints a new key.
+
+To back out, set a gate to `observe` (keep checking, deny nothing) or `off` (skip the check) and restart. Command rows, counters, and leases stay as receipts until the sweep expires them. To rotate the runner key, set the new value everywhere and restart PocketBase and the runners together; requests in between answer `quota_unavailable`, or run with `would_deny` in observe mode.
 
 ## Limits
 
@@ -64,14 +103,14 @@ Proposed values; the owner ratifies them. The 256 KiB snippet and the 200-file o
 | `/api/run` | 512 KiB | code 256 KiB, input 64 KiB | 3 s |
 | `/api/evaluate` | 512 KiB | code 256 KiB, at most 32 selected cases | 3 s per case, 10 s for a `large` case |
 | `/api/ai-coding/run-project` | 6 MiB | 200 files or 5 MiB | 10 s |
-| `/api/ai-coding/grade` | 6 MiB | 200 files or 5 MiB, `ai_chats` 512 KiB | 45 s per checkpoint |
+| `/api/ai-coding/grade` | 6 MiB | 200 files or 5 MiB, `ai_chats` 512 KiB | 45 s per checkpoint, at most 8 checkpoints |
 | `/api/take-home/run` | 6 MiB | 200 files or 5 MiB | 60 s |
 | `/api/take-home/submit` | 6 MiB | 200 files or 5 MiB, `notes` 64 KiB, `ai_chats` 512 KiB | 120 s |
 | `/api/pdf/render` | 2 MiB | none | 25 s |
 | `/api/ai/ats-rule` | 1 MiB | job description 64 KiB | none |
 | `/api/ai/enhance-projects` | 6 MiB | at most 25 projects | none |
 
-nginx caps every other path at 1 MiB and the Ingress at 6 MiB. Each runner replica runs at most 4 admitted executions or renders at once.
+nginx caps every other path at 1 MiB and the Ingress at 6 MiB. nginx waits up to 60 seconds for `/api/run`, 420 seconds for `/api/evaluate`, and an hour for the other runner routes, each longer than the longest request admitted there. Each runner replica runs at most 4 admitted executions or renders at once.
 
 ## Candidate Processes Until #5
 
@@ -81,15 +120,24 @@ Each run gets a minimal environment with none of the runner's settings or secret
 
 Proposed thresholds, from the `decision` lines:
 
-1. `auth_unavailable` or `worker_unavailable` on more than 5% of a route's requests for 5 minutes. Stage 3 adds `quota_unavailable`.
+1. `auth_unavailable`, `quota_unavailable`, or `worker_unavailable` on more than 5% of a route's requests for 5 minutes. In observe mode, count `"would_deny":"quota_unavailable"` and `"quota":"unavailable"` too.
 2. Any 5xx after admission: a `decision` line with status 500 or higher and no code.
 
 ## Dependency Checks
 
 1. PocketBase's auth-refresh answers from each runner replica at `POCKETBASE_URL`. A failure shows as `auth_unavailable` on every admitted route.
 2. The renderer's health: a signed-in `GET /api/pdf/health` answers `{"status": "ok"}`, or 503 `{"status": "unavailable"}` when the runner can't reach the sidecar.
-3. Stage 3 adds a read of the admission counters per replica.
+3. The admission store reads its counters for each replica: from inside each runner container, `GET http://pocketbase:8090/api/rounds/admission/usage` (or the replica's `POCKETBASE_URL`) with a signed-in test account's bearer answers that account's requests, wall seconds, and in-flight count for this hour. A failure shows as `quota_unavailable`, or as `"quota":"unavailable"` in observe mode.
+4. The runner key: when `usage` answers but every `decision` line shows `"quota":"unavailable"`, `ROUNDS_ADMISSION_SECRET` is missing, shorter than 32 characters, or different on PocketBase and the runners.
 
 ## Repair
 
-Nothing to repair in stage 2: admission keeps no records yet. Stage 3 adds the steps for expired leases and stuck command rows.
+A PocketBase cron job, `rounds_admission_sweep`, runs every 5 minutes. It marks each `in_flight` command without a live lease `failed_infrastructure`, so its key can run again, and deletes expired leases, commands past their 24 hours, and counters older than a day. It refunds nothing and logs one `admission_sweep` line with the number it repaired.
+
+If the sweep isn't running, repair by hand as a superuser in the PocketBase admin UI, where `now` is the current epoch second:
+
+1. In `admission_leases`, delete every row with `expires_at <= now`.
+2. In `admission_commands`, find rows with `state = 'in_flight'` that no remaining lease points at, and set each one's `state` to `failed_infrastructure`.
+3. Optionally, delete `admission_commands` rows with `expires_at <= now` and `admission_counters` rows with `hour` more than 24 below `now / 3600`.
+
+Then find out why the sweep stopped: PocketBase's log has one `admission_sweep` line every 5 minutes while it runs.

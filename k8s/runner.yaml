@@ -15,6 +15,15 @@
 #   2. (Optional) edit CORS_ALLOW_ORIGINS below if the app is reached
 #      from cross-origin domains.
 #
+#   3. Before enforcing idempotency or quotas, create the key the runner
+#      sends with each admission store write. PocketBase reads the same
+#      secret (pocketbase.yaml):
+#
+#      kubectl -n rounds create secret generic rounds-admission \
+#        --from-literal=ROUNDS_ADMISSION_SECRET="$(openssl rand -hex 32)"
+#
+#      Restart PocketBase and the runners after creating or rotating it.
+#
 # The runner refuses to start when AI_KEY_SECRET is unset or matches
 # the dev placeholder, so a misconfigured rollout fails closed (the
 # pod will CrashLoopBackOff with a clear stderr message instead of
@@ -67,6 +76,12 @@ spec:
             # to provision the secret on first deploy.
             - secretRef:
                 name: rounds-runner-secrets
+            # ROUNDS_ADMISSION_SECRET (step 3 above). Optional: without it
+            # admission logs quota_unavailable in observe mode and denies
+            # with it in enforce. Candidate processes never get it.
+            - secretRef:
+                name: rounds-admission
+                optional: true
             # Gates (gates.yaml). Optional, so a cluster without the
             # ConfigMap keeps every written default.
             - configMapRef:

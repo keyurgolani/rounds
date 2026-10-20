@@ -56,6 +56,26 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m pytest . ../pocketbase/tests
 
+  pdf-renderer:
+    # PDF sidecar containment (ROUNDS-00A-L01). Builds the renderer image
+    # from this commit and runs server.test.mjs inside it, against the
+    # image's own Chromium: a render answers a PDF and leaves no page open,
+    # and a document that opens a window or loads a URL reaches nothing on
+    # the network and leaves no page behind. Docker on ubuntu; locally use
+    # Finch (finch build; finch run ... node --test server.test.mjs).
+    # TODO(ROUNDS-00A-L06): #6's render workers replace this sidecar.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the renderer image
+        run: docker build -t rounds-pdf-renderer:test backend/pdf_renderer
+      - name: Containment tests in the image
+        run: |
+          docker run --rm \
+            -v "$PWD/backend/pdf_renderer/server.test.mjs:/app/server.test.mjs:ro" \
+            rounds-pdf-renderer:test node --test server.test.mjs
+
   conformance:
     # Repository conformance rules (ROUNDS-01-L01, ROUNDS-01-L02): the
     # product vocabulary registry and its coverage of baseline names, the
