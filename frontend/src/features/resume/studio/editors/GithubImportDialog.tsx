@@ -37,6 +37,8 @@ type Props = {
 };
 
 const MAX_REPOS = 100;
+// /api/ai/enhance-projects takes at most this many projects a call.
+export const AI_ENHANCE_MAX_PROJECTS = 25;
 
 export default function GithubImportDialog({ open, onClose, onImport }: Props) {
   const [username, setUsername] = useState('');
@@ -45,7 +47,7 @@ export default function GithubImportDialog({ open, onClose, onImport }: Props) {
   const [repos, setRepos] = useState<Repo[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [includeForks, setIncludeForks] = useState(false);
-  const [aiEnhance, setAiEnhance] = useState(true);
+  const [aiEnhance, setAiEnhance] = useState(false);
   const [importing, setImporting] = useState(false);
 
   // Reset state on close so the next open feels fresh.
@@ -117,12 +119,15 @@ export default function GithubImportDialog({ open, onClose, onImport }: Props) {
     });
   }
 
+  const overAiCap = aiEnhance && selected.size > AI_ENHANCE_MAX_PROJECTS;
+
   async function doImport() {
     const picked = visible.filter((r) => selected.has(r.id));
     if (picked.length === 0) {
       onClose();
       return;
     }
+    if (aiEnhance && picked.length > AI_ENHANCE_MAX_PROJECTS) return;
     const baseProjects: Project[] = picked.map((r) => ({
       id: uid(),
       name: r.name,
@@ -333,6 +338,12 @@ export default function GithubImportDialog({ open, onClose, onImport }: Props) {
                 </label>
               </div>
 
+              <div role="status" aria-live="polite" style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                {overAiCap
+                  ? `AI Enhancement takes up to ${AI_ENHANCE_MAX_PROJECTS} projects at a time. Select fewer, or turn it off.`
+                  : null}
+              </div>
+
               <div
                 style={{
                   display: 'flex',
@@ -456,7 +467,7 @@ export default function GithubImportDialog({ open, onClose, onImport }: Props) {
             <button
               type="button"
               onClick={() => void doImport()}
-              disabled={selected.size === 0 || importing}
+              disabled={selected.size === 0 || importing || overAiCap}
               style={{
                 padding: '8px 14px',
                 borderRadius: 'var(--radius)',
@@ -466,8 +477,8 @@ export default function GithubImportDialog({ open, onClose, onImport }: Props) {
                 fontSize: 12.5,
                 fontWeight: 500,
                 cursor:
-                  selected.size === 0 || importing ? 'not-allowed' : 'pointer',
-                opacity: selected.size === 0 || importing ? 0.5 : 1,
+                  selected.size === 0 || importing || overAiCap ? 'not-allowed' : 'pointer',
+                opacity: selected.size === 0 || importing || overAiCap ? 0.5 : 1,
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 6,

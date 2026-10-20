@@ -83,6 +83,31 @@ beforeEach(() => {
   vi.mocked(persistAttempt).mockReset();
 });
 
+describe('AICodingDetail runner calls', () => {
+  it('names the round and checkpoint and leaves the test command to the runner', async () => {
+    vi.mocked(runProject).mockResolvedValue({
+      passed: true,
+      passed_count: 1,
+      failed_count: 0,
+      stdout: '',
+      stderr: '',
+      error: null,
+      duration_ms: 1,
+      truncated: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(runProject).toHaveBeenCalledTimes(1));
+    expect(runProject).toHaveBeenCalledWith({
+      round_slug: 'cart-totals',
+      language: 'python',
+      checkpoint_index: 0,
+      files: { 'cart.py': ROUND.starter_files[0].contents },
+    });
+  });
+});
+
 describe('AICodingDetail denial states', () => {
   it('shows a turned-off run above the console and returns focus to Run', async () => {
     vi.mocked(runProject).mockImplementation(

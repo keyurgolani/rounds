@@ -35,6 +35,7 @@ import { RunnerError } from '../../../lib/runnerFetch';
 
 const QUESTION = {
   id: 7,
+  slug: 'two-sum',
   title: 'Two Sum',
   difficulty: 'easy',
   description: 'Find two numbers.',
@@ -78,6 +79,22 @@ beforeEach(() => {
   window.localStorage.clear();
   vi.mocked(getCodingQuestion).mockResolvedValue(QUESTION as never);
   vi.mocked(evaluateCode).mockReset();
+});
+
+describe('CodingDetail runner calls', () => {
+  it('names the question by slug and leaves the test cases to the runner', async () => {
+    vi.mocked(evaluateCode).mockResolvedValue({ passed: 0, failed: 0, results: [] });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Run all (2)' }));
+    await waitFor(() => expect(evaluateCode).toHaveBeenCalledTimes(1));
+    expect(evaluateCode).toHaveBeenCalledWith({
+      question_slug: 'two-sum',
+      language: 'python',
+      code: QUESTION.starter_code.python,
+      filter: undefined,
+    });
+  });
 });
 
 describe('CodingDetail denial states', () => {

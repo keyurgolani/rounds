@@ -4,8 +4,9 @@ import PocketBase from 'pocketbase';
 //   1. `VITE_POCKETBASE_URL` wins (explicit override — needed in local
 //      dev when the Vite dev server and PB are on different ports).
 //   2. Same-origin in production. The frontend's nginx config reverse-
-//      proxies /api/* and /_/* to the PocketBase container, so PB SDK
-//      calls travel along the same origin as the page.
+//      proxies /api/* to the PocketBase container (not its admin UI or
+//      admin API), so PB SDK calls travel along the same origin as the
+//      page.
 const explicitUrl = import.meta.env.VITE_POCKETBASE_URL as string | undefined;
 const baseUrl = explicitUrl && explicitUrl.trim()
   ? explicitUrl.trim()

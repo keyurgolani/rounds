@@ -252,10 +252,10 @@ export default function AICodingDetail() {
     setDockOpen(true);
     try {
       const r = await runProject({
-        files,
+        round_slug: round.slug,
         language: round.language,
-        test_command: cp.test_command,
-        timeout_s: 30,
+        checkpoint_index: checkpointIdx,
+        files,
       });
       if (reqId !== runReqIdRef.current) return;
       setRunResult(r);

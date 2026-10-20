@@ -137,9 +137,10 @@ export default function ATSTab({ data, resume }: Props) {
     `${persistKey}.appId`,
     null,
   );
+  // Starts off. The .v2 key drops a `true` stored under the old one.
   const [useAI, setUseAI] = usePersistedState<boolean>(
-    `${persistKey}.useAI`,
-    true,
+    `${persistKey}.useAI.v2`,
+    false,
   );
   const [anchorOpen, setAnchorOpen] = usePersistedState<boolean>(
     `${persistKey}.anchorOpen`,

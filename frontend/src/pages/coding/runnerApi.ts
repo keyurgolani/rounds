@@ -1,5 +1,7 @@
 // Thin client for the FastAPI runner's /api/run and /api/evaluate
-// endpoints. Used only by CodingDetail today.
+// endpoints. Used only by CodingDetail today. The runner loads the
+// question's entry and test cases itself, so a call names the
+// question by slug and sends only the code and, for a run, the input.
 //
 // Replaces the legacy `api.post('/api/run', ...)` /
 // `api.post('/api/evaluate', ...)` calls that flowed through
@@ -13,26 +15,19 @@
 
 import { pb } from '../../lib/pocketbase';
 import { runnerJSON } from '../../lib/runnerFetch';
-import type {
-  CodeEvaluateResult,
-  CodeRunResult,
-  EvaluateFilter,
-  Entry,
-  TestCase,
-} from './types';
+import type { CodeEvaluateResult, CodeRunResult, EvaluateFilter } from './types';
 
-interface RunPayload {
-  code: string;
+export interface RunPayload {
+  question_slug: string;
   language: string;
-  entry: Entry;
+  code: string;
   input: Record<string, unknown>;
 }
 
-interface EvaluatePayload {
-  code: string;
+export interface EvaluatePayload {
+  question_slug: string;
   language: string;
-  entry: Entry;
-  test_cases: TestCase[];
+  code: string;
   filter?: EvaluateFilter;
 }
 

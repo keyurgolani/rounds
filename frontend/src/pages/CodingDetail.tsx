@@ -41,6 +41,7 @@ import {
 
 interface CQ {
   id: number;
+  slug: string;
   title: string;
   difficulty: string;
   description: string;
@@ -311,9 +312,9 @@ export default function CodingDetail() {
       if (!focus) setMobileSheet('results');
       try {
         const res = await runCode({
-          code,
+          question_slug: q.slug,
           language: lang === 'javascript' ? 'javascript' : lang,
-          entry: q.entry,
+          code,
           input,
         });
         setRunResult(res);
@@ -351,10 +352,9 @@ export default function CodingDetail() {
       if (!focus) setMobileSheet('results');
       try {
         const res = await evaluateCode({
-          code,
+          question_slug: q.slug,
           language: lang === 'javascript' ? 'javascript' : lang,
-          entry: q.entry,
-          test_cases: q.test_cases,
+          code,
           filter,
         });
         setEvalResults((prev) => {

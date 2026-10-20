@@ -11,7 +11,6 @@ vi.mock('../pocketbase', () => ({ pb: { authStore } }));
 import { evaluateCode, runCode } from '../../pages/coding/runnerApi';
 import { runProject } from '../../pages/ai-coding/aiCodingApi';
 import { isRunnerError } from '../runnerFetch';
-import type { Entry } from '../../pages/coding/types';
 
 const fetchMock = vi.fn<typeof fetch>();
 
@@ -27,13 +26,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const ENTRY: Entry = { kind: 'function', name: 'f', params: [], returns: 'int' };
-
 const CALLS: Array<[string, () => Promise<unknown>]> = [
-  ['run', () => runCode({ code: 'print(1)', language: 'python', entry: ENTRY, input: {} })],
-  ['evaluate', () => evaluateCode({ code: 'print(1)', language: 'python', entry: ENTRY, test_cases: [] })],
-  ['run-project', () => runProject({ files: {}, language: 'python', test_command: 'pytest' })],
+  ['run', () => runCode({ question_slug: 'two-sum', language: 'python', code: 'print(1)', input: {} })],
+  ['evaluate', () => evaluateCode({ question_slug: 'two-sum', language: 'python', code: 'print(1)' })],
+  [
+    'run-project',
+    () => runProject({ round_slug: 'cart-totals', language: 'python', checkpoint_index: 0, files: {} }),
+  ],
 ];
+
+// admission/v1 (#1 stage 2): the runner loads entries, test cases, test
+// commands, and timeouts itself, so the SPA never sends them.
+const FIELDS: Record<string, string[]> = {
+  run: ['code', 'input', 'language', 'question_slug'],
+  evaluate: ['code', 'language', 'question_slug'],
+  'run-project': ['checkpoint_index', 'files', 'language', 'round_slug'],
+};
 
 describe('runner calls', () => {
   it.each(CALLS)('%s sends nothing without a signed-in caller', async (_name, call) => {
@@ -48,6 +56,13 @@ describe('runner calls', () => {
     await call();
     const headers = fetchMock.mock.calls[0][1]!.headers as Headers;
     expect(headers.get('Authorization')).toBe('Bearer test-token-placeholder');
+  });
+
+  it.each(CALLS)('%s sends only the admission/v1 fields', async (name, call) => {
+    authStore.token = 'test-token-placeholder';
+    await call();
+    const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(FIELDS[name]);
   });
 });
 
