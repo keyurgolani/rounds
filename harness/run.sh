@@ -9,13 +9,25 @@
 #                     PocketBase, enforcing idempotency and quotas; check that
 #                     they replay, count, and limit as one
 #                     (harness/probes/admission_check.py)
+#  3b. admission deploy - on each replica, the admitted routes' anonymous
+#                     refusals and typed envelope, the runner's byte caps
+#                     before the account, field and key checks before any
+#                     lookup, and stage 2's closures in the built image
+#                     (harness/probes/admission_deploy.py)
+#  3c. emergency disable - both runner replicas and nginx restarted with
+#                     ROUNDS_GATE_RUN=disabled: 503 route_disabled for every
+#                     caller on each, nothing charged, other routes still admit
+#  3d. re-enable    - the gate cleared and both replicas restarted: runs
+#                     admitted on each
 #   4. recreate PocketBase with signups disabled; the named pb_data volume
 #      keeps the accounts and rows from phase 2 across the restart
 #   5. hook phase   - signup-disabled probe
 #   6. bring the runner and the nginx frontend up (after the last PocketBase
 #      recreate, since nginx looks PocketBase's address up once at start)
 #   7. deploy       - the deployment verifier (harness/verify_deployment.py)
-#                     through the real nginx config and at PocketBase's port
+#                     through the real nginx config and at PocketBase's port,
+#                     with its admission and gate checks and the runner's
+#                     saved startup gates line
 #   8. stop PocketBase; degraded - a runner write through nginx fails closed
 #   9. deploy-db    - the verifier's checks on the run's pb_data (read-only)
 #  10. scan         - the cross-owner relation scan against the run's pb_data
@@ -98,10 +110,35 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# The runners enforce idempotency and quotas for the admission phase.
+# The runners enforce idempotency and quotas for the admission phase. The
+# optional second argument sets ROUNDS_GATE_RUN for the emergency phases.
 set_signups() {
-  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\n' \
-    "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" > "${ENV_FILE}"
+  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\n' \
+    "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" > "${ENV_FILE}"
+}
+
+# A runner replica's startup gates line (only gate names and values,
+# nothing secret), saved for the probe phase that checks it:
+# gates-PHASE.log for runner, gates-PHASE-SERVICE.log for another replica.
+capture_gates() {
+  local phase="$1" service="${2:-runner}" line="" out
+  out="${RECEIPTS_DIR}/gates-${phase}.log"
+  [ "${service}" = "runner" ] || out="${RECEIPTS_DIR}/gates-${phase}-${service}.log"
+  for _ in $(seq 1 60); do
+    line="$(compose logs --no-color "${service}" 2>/dev/null | grep '"event":"gates"' | tail -n 1 || true)"
+    [ -n "${line}" ] && break
+    sleep 1
+  done
+  printf '%s\n' "${line}" > "${out}"
+}
+
+# Restart both runner replicas and nginx with the env file as it is now:
+# removed and created again, so the new gate value applies and nginx looks
+# the new runner up, while PocketBase keeps running.
+restart_runners() {
+  compose stop runner runner-b frontend >/dev/null 2>&1 || true
+  compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
+  compose up -d runner runner-b frontend
 }
 
 probe() {
@@ -166,7 +203,29 @@ set +e
 probe admission
 admission_rc=$?
 set -e
+
+echo "--- phase 3b: admission deploy (policy, order, caps, and stage 2 closures on both replicas) ---"
+probe admission-deploy
 compose stop runner runner-b
+
+# The emergency phases run while signups are still on, so they can make
+# their accounts; nginx starts with the runner each time and is removed
+# again before PocketBase is recreated, since it looks addresses up once.
+echo "--- phase 3c: emergency disable (ROUNDS_GATE_RUN=disabled, both replicas restarted) ---"
+set_signups false disabled
+restart_runners
+capture_gates emergency-disable
+capture_gates emergency-disable runner-b
+probe emergency-disable
+
+echo "--- phase 3d: re-enable (gate cleared, both replicas restarted) ---"
+set_signups false
+restart_runners
+capture_gates emergency-enable
+capture_gates emergency-enable runner-b
+probe emergency-enable
+compose stop runner runner-b frontend
+compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
 
 echo "--- phase 4: recreate PocketBase (signups disabled) ---"
 set_signups true
@@ -177,6 +236,7 @@ probe hook
 
 echo "--- phase 6: runner and nginx frontend up ---"
 compose up -d runner frontend
+capture_gates deploy
 
 echo "--- phase 7: deploy (verifier through the real nginx config) ---"
 probe deploy

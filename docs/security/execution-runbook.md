@@ -24,7 +24,16 @@ Two more gates switch outbound reach, and both start off: `ROUNDS_GATE_PAPER_FET
 
 1. Set the gate to `disabled`: in the root `.env` for compose, or in the `rounds-gates` ConfigMap (`k8s/gates.yaml`) for k8s.
 2. Restart the runner. It reads its gates once, at startup. On k8s, restart every runner replica.
-3. Confirm. The runner's startup log has one JSON line with `"event":"gates"`; the gate shows `"value":"disabled","source":"env"`. A request to the route answers 503 with code `route_disabled`, for every caller, because the gate is checked before the account. Each of those requests writes a `decision` line with `"code":"route_disabled"`.
+3. Confirm. The runner's startup log has one JSON line with `"event":"gates"`; the gate shows `"value":"disabled","source":"env"`. A request to the route answers 503 with code `route_disabled`, for every caller, because the gate is checked before the account. Each of those requests writes a `decision` line with `"code":"route_disabled"`. The deployment verifier checks both without sending anything a route would run. For `/api/run`:
+
+   ```sh
+   docker compose -f docker-compose.prod.yml logs --no-color runner > runner.log
+   python3 harness/verify_deployment.py --url https://your-domain \
+     --expect-disabled /api/run \
+     --gates-log runner.log --expect-gate RUN=disabled
+   ```
+
+   On k8s, save one log per runner pod (`kubectl -n rounds get pods -l app=runner`, then `kubectl -n rounds logs <pod> > <pod>.log`) and run `--gates-log` on each.
 
 A value outside the gate's list resolves to `disabled`, logs an error that names the gate, and shows `"source":"invalid"`. Fix the value and restart.
 
@@ -33,8 +42,10 @@ In-flight runs finish or time out. Runner logs stay as receipts.
 ## Turning a Gate Back On
 
 1. Set the gate empty or to `enabled`, and restart the runner.
-2. Confirm the startup line shows the gate `enabled`.
+2. Confirm the startup line shows the gate `enabled`: save the log again and run the verifier with `--gates-log runner.log --expect-gate RUN=enabled` (for `/api/run`), and with `--url https://your-domain --admission`, which fails while any admitted route still answers 503 instead of refusing an anonymous caller with 401.
 3. Run the route once from the app as a signed-in account: a coding run, a test run, an AI-coding run and submit, a take-home run and submit, a PDF export, or an ATS score. Each should answer 200 and write a `decision` line with status 200 and no code.
+
+The harness (`harness/run.sh`) does this whole cycle on every CI run: it restarts both runner replicas with `ROUNDS_GATE_RUN=disabled`, checks the route is refused for every caller on each and charges nothing while the other routes still admit, then clears the gate, restarts both, and checks every route refuses an anonymous caller 401 again and runs are admitted on each.
 
 ## Compiled Definitions
 
