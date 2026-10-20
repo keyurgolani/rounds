@@ -71,11 +71,13 @@ MAX_BEARER_CHARS = 4096
 # Proposed: 4 in-flight runs per replica. The owner ratifies it.
 REPLICA_SLOTS = 4
 # How long the end of a request may wait on the store, over at most
-# FINISH_ATTEMPTS calls of FINISH_CALL_TIMEOUT_S each. It runs shielded,
-# so a cancelled request still ends its lease when the store answers.
+# FINISH_ATTEMPTS calls of FINISH_CALL_TIMEOUT_S each with the backoffs
+# between them, which together fit the budget (3 x 1.5 s + 0.75 s). It
+# runs shielded, so a cancelled request still ends its lease when the
+# store answers.
 FINISH_TIMEOUT_S = 6
 FINISH_ATTEMPTS = 3
-FINISH_CALL_TIMEOUT_S = 2
+FINISH_CALL_TIMEOUT_S = 1.5
 FINISH_BACKOFF_S = (0.25, 0.5)
 # Typed failures after allocation that are the infrastructure's, not the
 # request's: they give the wall seconds back, and the app retries them.
@@ -406,9 +408,11 @@ async def begin(
             max_wall_seconds=max_wall_seconds,
         )
     except store.Unavailable as unavailable:
-        # The store may have written the lease and lost only its answer:
-        # end it, so its command can be retried and it stops counting.
-        if not isinstance(unavailable, store.Unconfigured):
+        # With no answer, or one in the wrong shape, the store may have
+        # written the lease and lost only its answer: end it, so its
+        # command can be retried and it stops counting. A refusal (a
+        # 4xx, 503 unconfigured, or no runner key) wrote nothing.
+        if not isinstance(unavailable, store.Refused):
             await _end_lease(token, lease, "infrastructure", None)
         admitted.quota = "unavailable"
         if key is not None:
@@ -521,11 +525,14 @@ async def _end_lease(token: str, lease: str, outcome: str, result: dict[str, Any
     with anyio.move_on_after(FINISH_TIMEOUT_S, shield=True):
         for attempt in range(FINISH_ATTEMPTS):
             try:
-                recorded = await store.finish(token, lease, outcome, result, timeout=FINISH_CALL_TIMEOUT_S)
+                # Bounds the whole call, which the client's timeout
+                # bounds only per phase.
+                with anyio.fail_after(FINISH_CALL_TIMEOUT_S):
+                    recorded = await store.finish(token, lease, outcome, result, timeout=FINISH_CALL_TIMEOUT_S)
                 break
-            except store.Unconfigured:
+            except store.Refused:
                 break
-            except store.Unavailable:
+            except (store.Unavailable, TimeoutError):
                 if attempt < len(FINISH_BACKOFF_S):
                     await anyio.sleep(FINISH_BACKOFF_S[attempt])
     return recorded

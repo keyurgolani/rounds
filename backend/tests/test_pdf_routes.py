@@ -59,6 +59,11 @@ def test_a_signed_in_render_returns_the_pdf(client, signed_in, sidecar):
         urllib.error.URLError(SIDECAR_TEXT),
         urllib.error.URLError(TimeoutError(SIDECAR_TEXT)),
         ConnectionResetError(SIDECAR_TEXT),
+        # The sidecar couldn't open a page in time.
+        urllib.error.HTTPError("http://pdf-renderer:4000/render", 503, "x", {}, io.BytesIO(b'{"error":"unavailable"}')),
+        # Connected, but no answer within the runner's wait: the sidecar
+        # answers a document's own timeout before then.
+        TimeoutError(SIDECAR_TEXT),
     ],
 )
 def test_a_failed_render_is_a_typed_503_without_sidecar_text(client, signed_in, sidecar, failure):
@@ -74,8 +79,6 @@ def test_a_failed_render_is_a_typed_503_without_sidecar_text(client, signed_in, 
 @pytest.mark.parametrize(
     "failure",
     [
-        # Connected, but no PDF within the runner's wait.
-        TimeoutError(SIDECAR_TEXT),
         # The sidecar's own answer for a document that ran out of time.
         urllib.error.HTTPError("http://pdf-renderer:4000/render", 422, "x", {},
                                io.BytesIO(b'{"error":"render_timeout"}')),

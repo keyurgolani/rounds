@@ -572,10 +572,9 @@ def _sidecar_answer(status: int, body: dict) -> urllib.error.HTTPError:
 @pytest.mark.parametrize(
     "failure",
     [
-        TimeoutError("timed out"),
         _sidecar_answer(422, {"error": "render_timeout"}),
     ],
-    ids=["no-answer-in-time", "sidecar-timeout"],
+    ids=["sidecar-timeout"],
 )
 def test_a_render_that_runs_out_of_time_keeps_its_charge_and_is_not_retried(
     client, signed_in, admission_store, monkeypatch, enforcing, capsys, failure
@@ -603,31 +602,41 @@ def test_a_render_that_runs_out_of_time_keeps_its_charge_and_is_not_retried(
         _sidecar_answer(503, {"error": "unavailable"}),
         _sidecar_answer(422, {"error": "something_else"}),
         urllib.error.URLError(TimeoutError("connect timed out")),
+        # The sidecar answers a document's own timeout before the runner's
+        # wait ends, so no answer at all is the sidecar stalling.
+        TimeoutError("timed out"),
     ],
-    ids=["render-failed", "no-browser", "other-422", "connect-timeout"],
+    ids=["render-failed", "no-page-in-time", "other-422", "connect-timeout", "no-answer-in-time"],
 )
-def test_any_other_render_failure_is_the_infrastructures(client, signed_in, admission_store, monkeypatch, enforcing, failure):
+def test_any_other_render_failure_is_the_infrastructures(
+    client, signed_in, admission_store, monkeypatch, enforcing, capsys, failure
+):
     from routers import pdf
 
     def refuse(_request, timeout=None):
         raise failure
 
     monkeypatch.setattr(pdf.urllib.request, "urlopen", refuse)
+    capsys.readouterr()
     _assert_typed(_send(client, "pdf_render", keyed(signed_in)), 503, "worker_unavailable")
     assert [f["outcome"] for f in admission_store.called("finish")] == ["infrastructure"]
+    (line,) = _decisions(capsys)
+    assert line["quota"] == "refunded"
 
 
-def test_the_sidecar_gives_up_on_a_document_before_the_runner_does():
+def test_the_sidecar_answers_before_the_runner_stops_waiting():
     from routers import pdf
 
     server = (ROOT / "backend" / "pdf_renderer" / "server.js").read_text()
     budget = sum(int(re.search(rf"const {name} = (\d+);", server).group(1))
-                 for name in ("CONTENT_TIMEOUT_MS", "PDF_TIMEOUT_MS"))
+                 for name in ("PAGE_TIMEOUT_MS", "CONTENT_TIMEOUT_MS", "PDF_TIMEOUT_MS"))
     assert budget < pdf.RENDER_TIMEOUT_S * 1000
+    # Opening the page is bounded too, and is the sidecar's 503, not the document's.
+    assert "withDeadline(opening, PAGE_TIMEOUT_MS)" in server
     assert "timeout: CONTENT_TIMEOUT_MS" in server and "timeout: PDF_TIMEOUT_MS" in server
     # The whole render ends by the same budget, even when the page stops answering.
     assert "const RENDER_DEADLINE_MS = CONTENT_TIMEOUT_MS + PDF_TIMEOUT_MS;" in server
-    assert "withDeadline(renderPdf(page, html, marginMm), RENDER_DEADLINE_MS)" in server
+    assert "withDeadline(renderPdf(opened.page, html, marginMm), RENDER_DEADLINE_MS)" in server
     assert "'render_timeout'" in server and pdf.SIDECAR_TIMEOUT_ERROR == "render_timeout"
 
 
@@ -713,6 +722,42 @@ def test_the_end_of_a_request_waits_on_the_store_only_so_long(signed_in, admissi
     assert recorded is False
 
 
+def test_every_finish_attempt_fits_the_budget():
+    backoffs = admission.FINISH_BACKOFF_S[: admission.FINISH_ATTEMPTS - 1]
+    assert len(backoffs) == admission.FINISH_ATTEMPTS - 1
+    assert admission.FINISH_ATTEMPTS * admission.FINISH_CALL_TIMEOUT_S + sum(backoffs) < admission.FINISH_TIMEOUT_S
+
+
+def test_a_store_that_hangs_on_every_finish_gets_every_attempt(signed_in, admission_store, monkeypatch):
+    # Each call is cut at its own timeout, whatever the client does, so
+    # the last attempt isn't cut short by the overall budget.
+    tries = []
+
+    async def hang(*_args, **_kwargs):
+        tries.append(1)
+        await anyio.sleep(3600)
+
+    monkeypatch.setattr(admission_store, "finish", hang)
+    monkeypatch.setattr(admission, "FINISH_TIMEOUT_S", 2.0)
+    monkeypatch.setattr(admission, "FINISH_CALL_TIMEOUT_S", 0.2)
+    monkeypatch.setattr(admission, "FINISH_BACKOFF_S", (0.05, 0.1))
+    recorded = asyncio.run(admission._end_lease(TEST_TOKEN, "l" * 43, "completed", None))
+    assert recorded is False
+    assert len(tries) == admission.FINISH_ATTEMPTS
+
+
+def test_a_refused_finish_isnt_tried_again(signed_in, admission_store, monkeypatch):
+    tries = []
+
+    async def refuse(*_args, **_kwargs):
+        tries.append(1)
+        raise admission_state.Refused
+
+    monkeypatch.setattr(admission_store, "finish", refuse)
+    recorded = asyncio.run(admission._end_lease(TEST_TOKEN, "l" * 43, "completed", None))
+    assert (recorded, len(tries)) == (False, 1)
+
+
 @pytest.mark.parametrize("env", [ENFORCE, {}])
 def test_a_lost_admit_answer_still_ends_its_lease_so_the_key_runs_again(
     client, signed_in, seeded, succeeding, admission_store, gate_env, env
@@ -748,6 +793,23 @@ def test_a_runner_without_its_key_calls_nothing_and_denies_only_when_a_gate_enfo
     assert admission_store.called("finish") == []
     gate_env(ENFORCE)
     _assert_typed(_send(client, "run", keyed(signed_in, OTHER_KEY)), 503, "quota_unavailable")
+    assert succeeding["run_one"] == 1
+
+
+def test_a_refused_admit_ends_no_lease_and_denies_only_when_a_gate_enforces(
+    client, signed_in, seeded, succeeding, admission_store, gate_env, capsys
+):
+    # A refusal (a key the store doesn't accept, say) proves no lease was
+    # written, so there's nothing to end and no finish call to make.
+    admission_store.refused = True
+    capsys.readouterr()
+    assert _send(client, "run", keyed(signed_in)).status_code == 200
+    (line,) = _decisions(capsys)
+    assert line["would_deny"] == "quota_unavailable"
+    gate_env(ENFORCE)
+    _assert_typed(_send(client, "run", keyed(signed_in, OTHER_KEY)), 503, "quota_unavailable")
+    assert len(admission_store.called("admit")) == 2
+    assert admission_store.called("finish") == []
     assert succeeding["run_one"] == 1
 
 
@@ -880,6 +942,57 @@ def test_settle_answers_the_quota_verdict_of_a_raise_the_hour_cant_fit(monkeypat
     for _ in range(4):
         with pytest.raises(admission_state.Unavailable):
             asyncio.run(admission_state.settle("t", LEASE, 30))
+
+
+@pytest.mark.parametrize(
+    "respond",
+    [
+        lambda r: httpx.Response(400, json={"v": "admission/v1", "error": "invalid_request"}),
+        lambda r: httpx.Response(401, json={"code": 401, "message": "x", "data": {}}),
+        lambda r: httpx.Response(403, json={"v": "admission/v1", "error": "forbidden"}),
+        lambda r: httpx.Response(404, text="<html>not found</html>"),
+        lambda r: httpx.Response(503, json={"v": "admission/v1", "error": "unconfigured"}),
+    ],
+    ids=["invalid-request", "unauthenticated", "forbidden", "no-route", "store-unconfigured"],
+)
+def test_an_answer_that_proves_nothing_was_written_is_a_refusal(monkeypatch, runner_key, respond):
+    _with_store(monkeypatch, respond)
+    with pytest.raises(admission_state.Refused):
+        asyncio.run(admission_state.admit("t", "run", 3, None, None, "observe", lease=LEASE))
+
+
+@pytest.mark.parametrize(
+    "respond",
+    [
+        lambda r: httpx.Response(500, json={}),
+        lambda r: httpx.Response(502, text="bad gateway"),
+        lambda r: httpx.Response(503, json={"v": "admission/v1", "error": "busy"}),
+        lambda r: httpx.Response(200, text="not json"),
+        lambda r: httpx.Response(200, json={**DECISION, "v": "admission/v2"}),
+    ],
+    ids=["500", "502-text", "503-other", "200-not-json", "200-other-version"],
+)
+def test_an_answer_that_may_hide_a_written_lease_is_no_refusal(monkeypatch, runner_key, respond):
+    _with_store(monkeypatch, respond)
+    with pytest.raises(admission_state.Unavailable) as raised:
+        asyncio.run(admission_state.admit("t", "run", 3, None, None, "observe", lease=LEASE))
+    assert not isinstance(raised.value, admission_state.Refused)
+
+
+def test_a_store_that_never_answers_is_no_refusal(monkeypatch, runner_key):
+    def stall(request):
+        raise httpx.ReadTimeout("no answer", request=request)
+
+    _with_store(monkeypatch, stall)
+    with pytest.raises(admission_state.Unavailable) as raised:
+        asyncio.run(admission_state.admit("t", "run", 3, None, None, "observe", lease=LEASE))
+    assert not isinstance(raised.value, admission_state.Refused)
+
+
+def test_a_finish_the_store_refuses_is_a_refusal(monkeypatch, runner_key):
+    _with_store(monkeypatch, lambda r: httpx.Response(403, json={"v": "admission/v1", "error": "forbidden"}))
+    with pytest.raises(admission_state.Refused):
+        asyncio.run(admission_state.finish("t", LEASE, "completed"))
 
 
 def test_an_unreachable_store_is_unavailable(monkeypatch, runner_key):

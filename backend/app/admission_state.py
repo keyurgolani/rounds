@@ -78,7 +78,12 @@ class Unavailable(Exception):
     """The admission store didn't answer in the contract's shape."""
 
 
-class Unconfigured(Unavailable):
+class Refused(Unavailable):
+    """The store answered and wrote nothing: a 4xx, or 503 while
+    PocketBase has no runner key. Asking again gets the same answer."""
+
+
+class Unconfigured(Refused):
     """The runner has no usable ``ROUNDS_ADMISSION_SECRET``, so it sent
     nothing."""
 
@@ -145,13 +150,27 @@ def runner_key() -> str:
 
 
 async def _post(path: str, token: str, payload: dict[str, Any], timeout: float = TIMEOUT_S) -> tuple[int, Any]:
+    """The store's status and JSON answer, None for an answer that isn't
+    JSON. Unavailable when no answer came."""
     headers = {"Authorization": f"Bearer {token}", RUNNER_KEY_HEADER: runner_key()}
     try:
         async with httpx.AsyncClient(base_url=POCKETBASE_URL, timeout=timeout) as client:
             resp = await client.post(BASE_PATH + path, json=payload, headers=headers)
-        return resp.status_code, resp.json()
-    except (httpx.HTTPError, ValueError):
+    except httpx.HTTPError:
         raise Unavailable from None
+    try:
+        return resp.status_code, resp.json()
+    except ValueError:
+        return resp.status_code, None
+
+
+def _refused(status: int, body: Any) -> bool:
+    """An answer that proves the store wrote nothing: any 4xx, or 503
+    ``unconfigured``. A timeout, a 5xx without that code, or a 200 in the
+    wrong shape proves nothing."""
+    if 400 <= status < 500:
+        return True
+    return status == 503 and isinstance(body, dict) and body.get("v") == VERSION and body.get("error") == "unconfigured"
 
 
 def _int(value: Any) -> bool:
@@ -187,6 +206,8 @@ async def admit(
         payload["command_id"] = key
         payload["fingerprint"] = fingerprint_hex
     status, body = await _post("/admit", token, payload)
+    if _refused(status, body):
+        raise Refused
     if status != 200 or not isinstance(body, dict) or body.get("v") != VERSION:
         raise Unavailable
     idempotency, verdict, retry_after = body.get("idempotency"), body.get("quota"), body.get("retry_after")
@@ -231,6 +252,8 @@ async def finish(
     status, body = await _post("/finish", token, payload, timeout)
     if status == 404:
         return False
+    if _refused(status, body):
+        raise Refused
     if status != 200 or not isinstance(body, dict) or body.get("v") != VERSION:
         raise Unavailable
     return True

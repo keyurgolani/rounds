@@ -100,8 +100,9 @@ class FakeAdmissionStore:
     Commands key on (bearer, command id), as the hook keys on (account,
     command id). Every request is in quota unless a test sets ``quota``,
     or ``settle_quota`` for a settle that raises the charge. ``down``
-    makes every call fail the way an unreachable store does, and
-    ``unconfigured`` the way a runner without its key does.
+    makes every call fail the way an unreachable store does,
+    ``unconfigured`` the way a runner without its key does, and
+    ``refused`` the way a store that refuses the runner's key does.
     ``lost_answers`` loses that many admit answers after the store wrote
     them, and ``finish_failures`` fails that many finish calls. The hook's
     own decisions are tested under node and in the harness."""
@@ -110,6 +111,7 @@ class FakeAdmissionStore:
         from app import admission_state
 
         self.Unavailable = admission_state.Unavailable
+        self.Refused = admission_state.Refused
         self.Unconfigured = admission_state.Unconfigured
         self._decision = admission_state.Decision
         self._settled = admission_state.Settled
@@ -123,6 +125,7 @@ class FakeAdmissionStore:
         self.in_flight_retry_after = 4
         self.down = False
         self.unconfigured = False
+        self.refused = False
         self.lost_answers = 0
         self.finish_failures = 0
         self._leases = 0
@@ -131,6 +134,8 @@ class FakeAdmissionStore:
         self.calls.append((name, args))
         if self.unconfigured:
             raise self.Unconfigured
+        if self.refused:
+            raise self.Refused
         if self.down:
             raise self.Unavailable
 
