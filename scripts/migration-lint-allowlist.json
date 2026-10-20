@@ -5,7 +5,7 @@
     {
       "path": "pocketbase/pb_migrations/1700006200_definitions_expand.js",
       "rules": ["rewrites-rows"],
-      "sha256": "bfbc7dba0f614fec82ce08b3d44d78e2387729f6e61da1f94abaa0f8e9a5088e",
+      "sha256": "652e601576eda406ebf715c4f2838fbce195ef22d292a94b5cd62c0f4f4a680d",
       "issue": "#2",
       "reason": "Annotates each presentation row with its definition version and records a definition_migration_journal row; it adds columns and a journal and deletes no row. Touched rows and dispositions are in the manifest.",
       "reviewed_by": "pending owner review",

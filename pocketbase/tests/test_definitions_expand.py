@@ -122,7 +122,7 @@ function makeRow(collection, data) {
   const r = { collection, _data: Object.assign({}, data), id: data.id };
   r.set = (k, v) => { r._data[k] = v; };
   r.get = (k) => r._data[k];
-  r.getString = (k) => (r._data[k] == null ? "" : String(r._data[k]));
+  r.getString = (k) => { const v = r._data[k]; return v == null ? "" : (typeof v === "string" ? v : JSON.stringify(v)); };
   return r;
 }
 

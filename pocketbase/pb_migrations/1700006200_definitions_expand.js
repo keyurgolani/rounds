@@ -106,7 +106,15 @@ migrate(
     // 3) Map each presentation row. find*ByFilter with an always-true
     //    filter lists every row; nothing is deleted or recreated.
     for (const row of dao.findRecordsByFilter("coding_questions", "id != ''")) {
-      const cases = row.get("test_cases");
+      // A json field reads back as raw bytes, so take its text with
+      // getString and parse it. The case ids are c000.. over the stored
+      // object cases, matching build.py's compiled test definition.
+      let cases;
+      try {
+        cases = JSON.parse(row.getString("test_cases"));
+      } catch (_) {
+        cases = [];
+      }
       const ids = [];
       if (Array.isArray(cases)) {
         for (let i = 0; i < cases.length; i += 1) {
