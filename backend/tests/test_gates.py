@@ -240,6 +240,13 @@ def test_the_spa_registry_carries_the_frontend_gates():
     assert data["gates"] == _expected_for(gates.FRONTEND)
 
 
+def test_runtime_config_publishes_only_the_frontend_gates():
+    script = (ROOT / "frontend" / "docker-entrypoint.d" / "10-runtime-config.sh").read_text()
+    (line,) = [ln for ln in script.splitlines() if ln.startswith("SPA_GATES=")]
+    published = set(line.split("=", 1)[1].strip('"').split())
+    assert published == {g.name for g in gates.REGISTRY if gates.FRONTEND in g.readers}
+
+
 # ---- deployment plumbing passes every gate through -----------------------
 
 

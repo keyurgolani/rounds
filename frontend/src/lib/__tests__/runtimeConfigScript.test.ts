@@ -49,12 +49,30 @@ describe('10-runtime-config.sh', () => {
     expect(config.VITE_OAUTH_GOOGLE_ENABLED).toBe('false');
   });
 
-  it('passes each set gate through as a trimmed lowercase word and logs it', () => {
-    const { config, log } = render({ ROUNDS_GATE_SIGNUPS: ' Disabled ', ROUNDS_GATE_ENFORCE_QUOTA: 'observe' });
+  it('passes each set SPA gate through as a trimmed lowercase word and logs it', () => {
+    const { config, log } = render({ ROUNDS_GATE_SIGNUPS: ' Disabled ' });
     expect(config.ROUNDS_GATE_SIGNUPS).toBe('disabled');
-    expect(config.ROUNDS_GATE_ENFORCE_QUOTA).toBe('observe');
     expect(log).toContain('runtime-config: ROUNDS_GATE_SIGNUPS=disabled');
-    expect(log).toContain('runtime-config: ROUNDS_GATE_ENFORCE_QUOTA=observe');
+  });
+
+  it('never publishes or logs a gate the SPA does not read', () => {
+    const runnerOnly = ['ENFORCE_QUOTA', 'ENFORCE_IDEMPOTENCY', 'RUN', 'PAPER_FETCH'];
+    const { config, log, source } = render({
+      ROUNDS_GATE_SIGNUPS: 'enabled',
+      ...Object.fromEntries(runnerOnly.map((name) => [`ROUNDS_GATE_${name}`, 'off'])),
+    });
+    expect(Object.keys(config).filter((k) => k.startsWith('ROUNDS_GATE_'))).toEqual(['ROUNDS_GATE_SIGNUPS']);
+    for (const name of runnerOnly) {
+      expect(source).not.toContain(`ROUNDS_GATE_${name}`);
+      expect(log).not.toContain(`ROUNDS_GATE_${name}`);
+    }
+  });
+
+  it('reports no SPA gate when only runner gates are set', () => {
+    const { config, log } = render({ ROUNDS_GATE_ENFORCE_QUOTA: 'observe' });
+    expect(Object.keys(config).some((k) => k.startsWith('ROUNDS_GATE_'))).toBe(false);
+    expect(log).toContain('no ROUNDS_GATE_* set for the SPA');
+    expect(log).not.toContain('ENFORCE_QUOTA');
   });
 
   it('leaves out empty gates and names that are not gate names', () => {

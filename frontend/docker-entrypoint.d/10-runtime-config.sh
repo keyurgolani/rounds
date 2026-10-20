@@ -9,19 +9,26 @@ bool_env() {
   esac
 }
 
-# "NAME value" for every ROUNDS_GATE_* variable that is set, so the SPA
-# reads the same gates as the runner and PocketBase. Gate values are
-# lowercase words; anything else goes out as "invalid", which the SPA
-# resolves to the gate's most restrictive value. Unset or empty gates
-# are left out, and the SPA uses their written defaults.
+# The gates the SPA reads (frontend/src/lib/gateRegistry.json). Only
+# these reach the public runtime-config.js; runner and PocketBase gates
+# stay in the container even when the environment carries them, as it
+# does on k8s. A stage that adds an SPA gate adds it here too, and
+# backend/tests/test_gates.py keeps this list in step with the registry.
+SPA_GATES="SIGNUPS"
+
+# "NAME value" for every SPA gate that is set. Gate values are lowercase
+# words; anything else goes out as "invalid", which the SPA resolves to
+# the gate's most restrictive value. Unset or empty gates are left out,
+# and the SPA uses their written defaults.
 gate_pairs() {
   env | sort | while IFS='=' read -r name value; do
     case "$name" in
       ROUNDS_GATE_*) ;;
       *) continue ;;
     esac
-    case "$name" in
-      *[!A-Z0-9_]*) continue ;;
+    case " $SPA_GATES " in
+      *" ${name#ROUNDS_GATE_} "*) ;;
+      *) continue ;;
     esac
     value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
     [ -n "$value" ] || continue
@@ -54,5 +61,5 @@ if [ -n "$gates" ]; then
     printf 'runtime-config: %s=%s\n' "$name" "$value"
   done
 else
-  printf 'runtime-config: no ROUNDS_GATE_* set, so the SPA uses each default\n'
+  printf 'runtime-config: no ROUNDS_GATE_* set for the SPA, so it uses each default\n'
 fi

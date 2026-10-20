@@ -92,7 +92,7 @@ Setting both older flags to `true` still works. Frontend hiding is not a securit
 
 ## Gates
 
-Gates are `ROUNDS_GATE_<NAME>` switches with written defaults that keep today's behavior. Compose reads them from the root `.env`, and k8s reads them from the `rounds-gates` ConfigMap in `k8s/gates.yaml`. Three readers share the names: the runner (`backend/app/gates.py`), PocketBase (`pocketbase/pb_hooks/gates.js`), and the frontend through `runtime-config.js`.
+Gates are `ROUNDS_GATE_<NAME>` switches with written defaults that keep today's behavior. Compose reads them from the root `.env`, and k8s reads them from the `rounds-gates` ConfigMap in `k8s/gates.yaml`. Three readers share the names: the runner (`backend/app/gates.py`), PocketBase (`pocketbase/pb_hooks/gates.js`), and the frontend through `runtime-config.js`, which publishes only the gates the SPA reads.
 
 | Gate | Values | Default | Read by | Enforced |
 | --- | --- | --- | --- | --- |
@@ -117,7 +117,7 @@ Each reader resolves a gate the same way:
 3. A blank gate falls back to the reader's alias when the alias is `true`, `1`, or `yes`. Only `SIGNUPS` has aliases: PocketBase reads `ROUNDS_DISABLE_SIGNUPS` and the frontend reads `VITE_DISABLE_SIGNUPS`.
 4. Otherwise the default applies.
 
-A process reads its gates once at startup, so a change needs a restart. The runner and PocketBase each log one JSON line with every gate they read, its value, and where the value came from (`default`, `env`, `alias`, or `invalid`). The frontend container logs each `ROUNDS_GATE_*` value it passes to the SPA. Gate values aren't secret, so never put a secret in one.
+A process reads its gates once at startup, so a change needs a restart. The runner and PocketBase each log one JSON line with every gate they read, its value, and where the value came from (`default`, `env`, `alias`, or `invalid`). The frontend container passes the SPA only the gates it reads, today `ROUNDS_GATE_SIGNUPS`, and logs each value it passes. Runner and PocketBase gates never reach the browser. Gate values aren't secret, so never put a secret in one.
 
 ## PocketBase Admin Bootstrap
 
@@ -151,6 +151,6 @@ The published frontend image generates `/runtime-config.js` at container startup
 - `VITE_DISABLE_SIGNUPS`
 - `VITE_OAUTH_GOOGLE_ENABLED`
 - `VITE_OAUTH_GITHUB_ENABLED`
-- every `ROUNDS_GATE_*` variable
+- the gates the SPA reads, today `ROUNDS_GATE_SIGNUPS`
 
 If you build the frontend outside the provided Docker image, make sure your deployment preserves the same runtime config behavior or sets the matching Vite build-time variables.

@@ -99,7 +99,7 @@ services:
       - VITE_DISABLE_SIGNUPS=${VITE_DISABLE_SIGNUPS:-false}
       - VITE_OAUTH_GOOGLE_ENABLED=${VITE_OAUTH_GOOGLE_ENABLED:-false}
       - VITE_OAUTH_GITHUB_ENABLED=${VITE_OAUTH_GITHUB_ENABLED:-false}
-      # runtime-config.js passes ROUNDS_GATE_* through to the SPA.
+      # runtime-config.js publishes only the gates the SPA reads.
       - ROUNDS_GATE_SIGNUPS=${ROUNDS_GATE_SIGNUPS:-}
     ports:
       - "${HTTP_PORT:-80}:80"
