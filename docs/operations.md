@@ -47,10 +47,10 @@ print(urllib.request.urlopen('http://localhost:8000/health').read().decode())
 PY
 ```
 
-PocketBase health is usually checked through the proxied API or admin UI:
+PocketBase health is checked through the proxied API:
 
 ```sh
-curl -I http://localhost:${HTTP_PORT:-80}/_/
+curl -s http://localhost:${HTTP_PORT:-80}/api/health
 ```
 
 ## Logs
@@ -154,11 +154,31 @@ The published frontend image applies these flags at container startup through `/
 
 ## PocketBase Admin Access
 
-The admin UI is available at:
+The frontend's nginx answers 404 for the admin UI (`/_/`) and PocketBase's admin API, so neither is reachable on your domain. Reach the admin UI on the host instead.
 
-```text
-https://<your-domain>/_/
+With compose, publish PocketBase on the host's loopback for the session with an override file kept outside the repo, for example `admin.override.yml`:
+
+```yaml
+services:
+  pocketbase:
+    ports:
+      - "127.0.0.1:8090:8090"
 ```
+
+```sh
+docker compose -f docker-compose.prod.yml -f admin.override.yml up -d pocketbase
+ssh -L 8090:127.0.0.1:8090 you@your-server   # from your machine
+```
+
+Open `http://127.0.0.1:8090/_/`, and when you're done run `docker compose -f docker-compose.prod.yml up -d pocketbase` to drop the port again. Restart the frontend afterwards too, since its nginx looks PocketBase's address up once at startup.
+
+On k8s, forward the Service:
+
+```sh
+kubectl -n rounds port-forward svc/pocketbase 8090:8090
+```
+
+Then open `http://127.0.0.1:8090/_/`.
 
 If `PB_ADMIN_EMAIL` and `PB_ADMIN_PASSWORD` were not set on first boot, create an admin manually:
 

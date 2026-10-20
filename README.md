@@ -79,7 +79,7 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Only the frontend port is exposed. nginx routes runner endpoints to FastAPI and all other `/api/*` plus `/_/*` traffic to PocketBase.
+Only the frontend port is exposed. nginx routes runner endpoints to FastAPI and the rest of `/api/*` to PocketBase. It doesn't serve PocketBase's admin UI or admin API; [PocketBase Admin Access](docs/operations.md#pocketbase-admin-access) shows how to reach the admin UI.
 
 Production compose pulls published images from Docker Hub by default:
 
