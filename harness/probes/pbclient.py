@@ -12,7 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 
 @dataclass
@@ -151,4 +151,29 @@ class PBClient:
     def collections_meta(self, admin_token: str) -> Response:
         return self._request(
             "GET", "/api/collections", token=admin_token, params={"perPage": 200}
+        )
+
+    # -- other routes -----------------------------------------------------
+    def post(self, path: str, body: dict[str, Any], token: str | None = None) -> Response:
+        """POST JSON to any route on this base URL (the runner, through nginx)."""
+        return self._request("POST", path, token=token, json_body=body)
+
+    def get(self, path: str, token: str | None = None) -> Response:
+        """GET any route on this base URL."""
+        return self._request("GET", path, token=token)
+
+    def wait_for(self, path: str, ready: "Callable[[Response], bool]", attempts: int = 60, delay: float = 1.0) -> Response:
+        """Poll a route until `ready` accepts the answer (connection errors
+        count as not ready), or raise."""
+        last: Response | None = None
+        for _ in range(attempts):
+            try:
+                last = self._request("GET", path)
+                if ready(last):
+                    return last
+            except (urllib.error.URLError, OSError):
+                pass
+            time.sleep(delay)
+        raise RuntimeError(
+            f"{self.base_url}{path} never became ready (last status={last.status if last else 'no answer'})"
         )

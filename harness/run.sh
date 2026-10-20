@@ -3,25 +3,30 @@
 #
 # Sequences the phases against one compose stack and always tears it down:
 #   1. bring PocketBase up with signups enabled
-#   2. main phase   — create two accounts, seed fixtures, run enforced probes,
+#   2. main phase   - create two accounts, seed fixtures, run enforced probes,
 #                     read the live rules back against the policy table
-#   3. admission    — two runner replicas built from this commit on the one
+#   3. admission    - two runner replicas built from this commit on the one
 #                     PocketBase, enforcing idempotency and quotas; check that
 #                     they replay, count, and limit as one
 #                     (harness/probes/admission_check.py)
 #   4. recreate PocketBase with signups disabled; the named pb_data volume
 #      keeps the accounts and rows from phase 2 across the restart
-#   5. hook phase   — signup-disabled probe
-#   6. verdict      — require every enforced result + rule read-back to pass,
-#                     and no pending family to leak; print pass/fail counts
-#   7. scan         — stop PocketBase, then run the cross-owner relation scan
-#                     against the run's pb_data volume (mounted read-only) and
-#                     a fixture copy of it (harness/probes/scan_check.py)
-#   8. admission migration — apply and reverse the admission migration with
+#   5. hook phase   - signup-disabled probe
+#   6. bring the runner and the nginx frontend up (after the last PocketBase
+#      recreate, since nginx looks PocketBase's address up once at start)
+#   7. deploy       - the deployment verifier (harness/verify_deployment.py)
+#                     through the real nginx config and at PocketBase's port
+#   8. stop PocketBase; degraded - a runner write through nginx fails closed
+#   9. deploy-db    - the verifier's checks on the run's pb_data (read-only)
+#  10. scan         - the cross-owner relation scan against the run's pb_data
+#                     (read-only) and a fixture copy (harness/probes/scan_check.py)
+#  11. verdict      - require every enforced result, rule read-back, and
+#                     deployment check to pass, and no pending family to leak
+#  12. admission migration - apply and reverse the admission migration with
 #                     the pinned binary on a 62d4eae-shaped pb_data, with no
 #                     network (harness/probes/admission_migration_check.py)
 #
-# PocketBase is built and brought up with compose; the probe container runs
+# The stack is built and brought up with compose; the probe container runs
 # directly on the compose network so the flow is identical under Finch
 # (nerdctl) and Docker and needs no TTY. The stack publishes no host ports;
 # everything talks over the compose network. Image tags, network, volume, the
@@ -103,6 +108,8 @@ probe() {
   local phase="$1"
   ${CONTAINER_BIN} run --rm --network "${NETWORK}" \
     -e POCKETBASE_URL="http://pocketbase:8090" \
+    -e FRONTEND_URL="http://frontend" \
+    -e RUNNER_URL="http://runner:8000" \
     -e PB_ADMIN_EMAIL="${PB_ADMIN_EMAIL_V}" \
     -e PB_ADMIN_PASSWORD="${PB_ADMIN_PASSWORD_V}" \
     -e POLICY_PATH="/policy/account-scope.v1.json" \
@@ -124,9 +131,28 @@ probe() {
 rm -rf "${RECEIPTS_DIR}"
 mkdir -p "${RECEIPTS_DIR}"
 
-echo "--- building pocketbase, runner, and probes images ---"
+# With PocketBase stopped: the run's pb_data mounted read-only, no network.
+offline() {
+  local phase="$1"; shift
+  ${CONTAINER_BIN} run --rm --network none \
+    -e POLICY_PATH="/policy/account-scope.v1.json" \
+    -e RECEIPTS_PATH="/out/receipts.jsonl" \
+    -e PB_MIGRATIONS_DIR="/pb_migrations" \
+    -e RUN_ID="${RUN_ID}" \
+    -e GIT_COMMIT="${GIT_COMMIT}" \
+    -e PB_BINARY_SHA256="${PB_BINARY_SHA256}" \
+    -e PB_BINARY_ARCH="${PB_BINARY_ARCH}" \
+    "$@" \
+    -v "${PROJECT}_pb_data:/pb_data:ro" \
+    -v "${ROOT}/docs/security:/policy:ro" \
+    -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+    -v "${RECEIPTS_DIR}:/out" \
+    "${PROBE_IMAGE}" "${phase}"
+}
+
+echo "--- building pocketbase, probes, runner, and frontend images ---"
 set_signups false
-compose build pocketbase runner probes
+compose build pocketbase probes runner frontend
 
 echo "--- phase 1: PocketBase up (signups enabled) ---"
 compose up -d pocketbase
@@ -149,9 +175,32 @@ compose up -d --force-recreate pocketbase
 echo "--- phase 5: hook (signup-disabled probe) ---"
 probe hook
 
-echo "--- phase 6: verdict ---"
+echo "--- phase 6: runner and nginx frontend up ---"
+compose up -d runner frontend
+
+echo "--- phase 7: deploy (verifier through the real nginx config) ---"
+probe deploy
+
+echo "--- phase 8: degraded (PocketBase stopped; a runner write fails closed) ---"
+compose stop pocketbase
+probe degraded
+compose stop runner frontend
+
+echo "--- phase 9: deploy-db (verifier on the run's pb_data, read-only) ---"
+offline deploy-db
+
+echo "--- phase 10: cross-owner scan (PocketBase stopped, pb_data read-only) ---"
 set +e
-probe verdict
+offline scan \
+  -e SCAN_PB_DATA="/pb_data" \
+  -e SCAN_TOOL="/tools/scan_cross_owner.py" \
+  -v "${ROOT}/pocketbase/tools:/tools:ro"
+scan_rc=$?
+set -e
+
+echo "--- phase 11: verdict ---"
+set +e
+offline verdict
 rc=$?
 set -e
 
@@ -159,21 +208,7 @@ if [ -f "${RECEIPTS_DIR}/receipts.jsonl" ]; then
   echo "--- receipts at ${RECEIPTS_DIR#"${ROOT}/"}/receipts.jsonl ($(wc -l < "${RECEIPTS_DIR}/receipts.jsonl") lines) ---"
 fi
 
-echo "--- phase 7: cross-owner scan (PocketBase stopped, pb_data read-only) ---"
-compose stop pocketbase
-set +e
-${CONTAINER_BIN} run --rm --network none \
-  -e SCAN_PB_DATA="/pb_data" \
-  -e SCAN_TOOL="/tools/scan_cross_owner.py" \
-  -e POLICY_PATH="/policy/account-scope.v1.json" \
-  -v "${PROJECT}_pb_data:/pb_data:ro" \
-  -v "${ROOT}/pocketbase/tools:/tools:ro" \
-  -v "${ROOT}/docs/security:/policy:ro" \
-  "${PROBE_IMAGE}" scan
-scan_rc=$?
-set -e
-
-echo "--- phase 8: admission migration applied and reversed on a 62d4eae-shaped pb_data ---"
+echo "--- phase 12: admission migration applied and reversed on a 62d4eae-shaped pb_data ---"
 ${CONTAINER_BIN} volume create "${PBBIN_VOLUME}" >/dev/null
 ${CONTAINER_BIN} run --rm -v "${PBBIN_VOLUME}:/out" "${IMAGE_PREFIX}-pocketbase:test" cp /pb/pocketbase /out/pocketbase
 set +e

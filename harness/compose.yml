@@ -41,8 +41,10 @@ services:
 
   # Shaped like prod: the runner, plus runner-b, a second replica of the same
   # image on the same PocketBase, as k8s/runner.yaml runs two. The launcher
-  # starts both for the admission phase (ROUNDS-00A-L01 stage 3); the
-  # account-scope rule probes talk to PocketBase directly.
+  # starts both for the admission phase (ROUNDS-00A-L01 stage 3), and the
+  # runner again with the frontend for the deployment phases
+  # (harness/verify_deployment.py and the degraded probe); the account-scope
+  # rule probes talk to PocketBase directly.
   runner:
     build:
       context: ../backend
@@ -72,7 +74,8 @@ services:
         condition: service_healthy
     restart: "no"
 
-  # Nginx frontend built from this commit (also for later stages).
+  # Nginx frontend built from this commit, so the deployment verifier tests the
+  # real frontend/nginx.conf.
   frontend:
     build:
       context: ../frontend
