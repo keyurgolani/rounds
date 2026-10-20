@@ -96,14 +96,16 @@ COMPOSE_PROJECT=rounds-9s1-b harness/run.sh
 ```
 
 The launcher builds the pocketbase, probe, runner, and frontend images, brings
-PocketBase up, runs the main probe phase, runs the admission check against two
-runner replicas, recreates PocketBase with signups disabled (the named
-`pb_data` volume keeps the run's accounts and rows), runs the signup-hook
-probe, brings the runner and nginx frontend up and runs the deployment
-verifier through them, stops PocketBase for the degraded probe, runs the
-verifier's checks and the cross-owner scan on the run's `pb_data`, prints the
-verdict (pass / expected-fail / fail counts), runs the admission migration
-check, and tears the stack down, removing the images and the volume it made.
+PocketBase up, runs the main probe phase, runs the admission check and the
+admission-deploy phase against two runner replicas, restarts the runner with
+`/api/run` turned off and then on again, recreates PocketBase with signups
+disabled (the named `pb_data` volume keeps the run's accounts and rows), runs
+the signup-hook probe, brings the runner and nginx frontend up and runs the
+deployment verifier through them, stops PocketBase for the degraded probe,
+runs the verifier's checks and the cross-owner scan on the run's `pb_data`,
+prints the verdict (pass / expected-fail / fail counts), runs the admission
+migration check, and tears the stack down, removing the images and the volume
+it made.
 Its exit code is non-zero on any failed or missing result.
 
 ## Admission state across two replicas
@@ -129,6 +131,41 @@ shared by PocketBase, both runners, and the probe, and
   for, with its window only ever brought closer; a lease the runner never
   heard about ends with the token the runner made; a duplicate of a running
   command hears when to try again; and quota `off` counts nothing.
+
+## Admission and gates as deployed
+
+`ROUNDS-00A-L01` stage 4 builds on the admission phase rather than repeating
+it. With both replicas still up, the `admission-deploy` phase
+([`probes/admission_deploy.py`](probes/admission_deploy.py)) checks on each
+replica that:
+
+- every admitted route refuses an anonymous caller in the typed
+  `{"detail", "code", "correlation_id"}` envelope, and a body declared over
+  the runner's own cap gets the typed 413 before any account is asked for;
+- a field a route doesn't take is refused 422 before the idempotency key is
+  asked for, and a missing key is refused 400 before anything is looked up;
+- that 422 is the typed envelope and repeats none of what was sent;
+- the replica admits through the admission store in `admission/v1`, and of
+  the account's requests so far only the one it admitted counts;
+- stage 2's closures hold in the built image: a candidate process sees only
+  the minimal environment and runs as a candidate uid that can't write
+  `/app`, from its own 0700 scratch; a running execution doesn't hold up the
+  replica's `/health`; the renderer health check answers only its status; and
+  a render the renderer can't finish is the typed 503 without its text.
+
+Next the launcher restarts both replicas and nginx with
+`ROUNDS_GATE_RUN=disabled` (`emergency-disable`), while signups are still on
+so the phase can make its account: `/api/run` answers 503 `route_disabled`
+through nginx and at each replica, for no bearer, an unknown bearer, and a
+signed-in account, and charges nothing, while the other routes still refuse
+an anonymous caller 401, `/api/evaluate` still admits, and each replica's
+saved gates line shows `RUN` disabled. It clears the gate and restarts both
+again (`emergency-enable`): every route refuses an anonymous caller 401
+again, and runs are admitted through nginx and at each replica. Later the
+deploy phase adds the verifier's `--admission` checks through the real nginx
+and the runner's startup gates line. The verdict requires a passing receipt
+for every check id in `verify_deployment.ADMISSION_CHECKS` and
+`admission_deploy.CHECKS`.
 
 After the scan,
 [`probes/admission_migration_check.py`](probes/admission_migration_check.py)

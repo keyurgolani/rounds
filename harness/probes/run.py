@@ -9,7 +9,7 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
             hook probe.
   deploy    with the runner and the nginx frontend up, run the deployment
             verifier (../verify_deployment.py) through the real proxy config
-            and at PocketBase's own port.
+            and at PocketBase's own port, with its admission and gate checks.
   degraded  with PocketBase stopped and the runner and frontend still up, run
             the fails-closed runner probe through nginx.
   deploy-db with PocketBase stopped, run the verifier's checks on the run's
@@ -29,6 +29,15 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
   admission-migration
             apply and reverse the admission migration with the pinned binary on
             a 62d4eae-shaped pb_data; see admission_migration_check.py.
+  admission-deploy
+            with both replicas up: the admission policy, its order and byte
+            caps, and stage 2's closures on each replica (ROUNDS-00A-L01 stage
+            4); see admission_deploy.py.
+  emergency-disable, emergency-enable
+            with both replicas restarted with ROUNDS_GATE_RUN=disabled, then
+            cleared: the route is refused for every caller on each and
+            charges nothing, the other routes still admit, and it comes
+            back; see admission_deploy.py.
 
 Exit code is non-zero on any failure, any missing result, or any pending
 family that has started to behave like an implemented one.
@@ -259,6 +268,16 @@ def run_deploy(doc: dict, writer: ReceiptWriter) -> None:
     frontend.wait_healthy()  # nginx up, and PocketBase behind it
     _wait_for_runner(frontend)
     results = vd.check_proxy(_frontend_url())
+    # The admission chain through nginx (ROUNDS-00A-L01 stage 4): every
+    # admitted route refuses an anonymous caller in the typed envelope, each
+    # edge cap holds, and the runner's startup line lists its gates, with
+    # this run's enforcing values.
+    results += vd.check_admitted_routes(_frontend_url())
+    results += vd.check_admission_body_caps(_frontend_url())
+    import admission_deploy
+
+    results += vd.check_gates_log(admission_deploy.gates_log("deploy"), dict(admission_deploy.ENFORCING),
+                                  source="runner log at deploy")
     results.append(vd.check_default_logins(pb_url))
     token = vd.admin_token(pb_url, os.environ.get("PB_ADMIN_EMAIL", ""), os.environ.get("PB_ADMIN_PASSWORD", ""))
     results += vd.compare_rules(doc, vd.live_rules(pb_url, token))
@@ -289,7 +308,16 @@ def run_deploy_db(doc: dict, writer: ReceiptWriter) -> None:
         writer.write(_verifier_receipt(r))
 
 
-def run_verdict(doc: dict, receipts_path: str) -> int:
+def admission_check_ids() -> set[str]:
+    """Every admission and gate check id a full run reports (ROUNDS-00A-L01
+    stage 4): the verifier's and the harness phases'."""
+    import admission_deploy
+    import verify_deployment as vd
+
+    return set(vd.ADMISSION_CHECKS) | set(admission_deploy.CHECKS)
+
+
+def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozenset[str] = frozenset()) -> int:
     receipts = read_all(receipts_path)
     fam = doc["probe_families"]
     enforced = set(policy.enforced_pairs(doc))
@@ -343,8 +371,19 @@ def run_verdict(doc: dict, receipts_path: str) -> int:
             bad = next(x for x in results if not x["passed"])
             failures.append(f"deployment check {check_id} failed on {bad['collection']}: {bad.get('detail', '')}")
 
+    # 4b. Every admission and gate check the run requires (ROUNDS-00A-L01
+    # stage 4; main() passes them all) needs receipts, all passing.
+    admission_ids = set(admission_ids)
+    for check_id in sorted(admission_ids):
+        results = [r for r in receipts if r["probe_id"] == check_id]
+        if not results:
+            failures.append(f"missing result for admission check {check_id}")
+        elif not all(x["passed"] for x in results):
+            bad = next(x for x in results if not x["passed"])
+            failures.append(f"admission check {check_id} failed on {bad['collection']}: {bad.get('detail', '')}")
+
     # 5. No stray receipts for unknown or pending families.
-    known = families.IMPLEMENTED_FAMILIES | {READBACK_PROBE} | set(deployment)
+    known = families.IMPLEMENTED_FAMILIES | {READBACK_PROBE} | set(deployment) | admission_ids
     for (coll, pid), results in seen.items():
         if pid not in known:
             failures.append(f"receipt for unknown probe id {pid} ({coll})")
@@ -367,6 +406,7 @@ def run_verdict(doc: dict, receipts_path: str) -> int:
     print(f"  fail:           {failed}")
     print(f"  enforced pairs: {len(enforced)}")
     print(f"  deploy checks:  {len(deployment)}")
+    print(f"  admission checks: {len(admission_ids)}")
     print(f"  pending pairs:  {len(pending)} (no probe committed; closed by later leaves)")
     print("=" * 60)
     if failures:
@@ -380,8 +420,8 @@ def run_verdict(doc: dict, receipts_path: str) -> int:
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("usage: run.py {main|hook|deploy|degraded|deploy-db|verdict|scan|admission|admission-migration}",
-              file=sys.stderr)
+        print("usage: run.py {main|hook|deploy|degraded|deploy-db|verdict|scan|admission|admission-migration|"
+              "admission-deploy|emergency-disable|emergency-enable}", file=sys.stderr)
         return 2
     phase = sys.argv[1]
     if phase == "scan":
@@ -401,7 +441,7 @@ def main() -> int:
     doc = policy.load(policy_path)
 
     if phase == "verdict":
-        return run_verdict(doc, receipts_path)
+        return run_verdict(doc, receipts_path, admission_check_ids())
 
     writer = ReceiptWriter(receipts_path, _context(phase))
     if phase == "main":
@@ -414,6 +454,12 @@ def main() -> int:
         run_degraded(doc, writer)
     elif phase == "deploy-db":
         run_deploy_db(doc, writer)
+    elif phase in ("admission-deploy", "emergency-disable", "emergency-enable"):
+        import admission_deploy
+
+        {"admission-deploy": admission_deploy.run_admission_deploy,
+         "emergency-disable": admission_deploy.run_emergency_disable,
+         "emergency-enable": admission_deploy.run_emergency_enable}[phase](writer)
     else:
         print(f"unknown phase {phase!r}", file=sys.stderr)
         return 2

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Deployment verification for the account-scope invariant (ROUNDS-00B-L01 stage 4).
+"""Deployment verification for the account-scope invariant (ROUNDS-00B-L01 stage 4)
+and the admission chain and gates (ROUNDS-00A-L01 stage 4).
 
 Read-only checks an operator runs against a Rounds deployment they operate:
 
@@ -20,9 +21,29 @@ Read-only checks an operator runs against a Rounds deployment they operate:
                the old any-signed-in-account rule.
   admins       A pb_data copy holds at least one admin, so PocketBase's
                first-admin setup is closed.
+  admission    (--admission, with --url) Through the public URL: each of the
+               nine admitted routes refuses a caller without a bearer before
+               reading the body, 401 unauthenticated (or the 503 that
+               --expect-disabled names for a route that is off), in the typed
+               {detail, code, correlation_id} envelope whose id the
+               X-Correlation-Id header repeats, and a body declared over its
+               cap gets the typed 413. No account is admitted, so nothing is
+               charged or run.
+  disabled     (--expect-disabled PATH[=CODE], with --url) After an emergency
+               disable: that route answers 503 CODE, with no bearer and with
+               a made-up one. CODE is route_disabled (the default) when the
+               route's own gate is off, or definitions_disabled when
+               ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled stops the six
+               execution routes.
+  gates        (--gates-log FILE) A saved runner log from its start: the
+               gates line lists every admitted route's gate and both
+               enforcement gates with valid values, none fell back from an
+               invalid setting, and each --expect-gate NAME=VALUE holds.
 
-It never writes. Every request is a read, a login that is expected to fail, or a
-request nginx refuses on its headers before PocketBase sees it. It prints no
+It never writes. Every request is a read, a login that is expected to fail, a
+request nginx refuses on its headers before PocketBase sees it, or a request to
+an admitted route that the runner refuses before it reads the body or names an
+account. It prints no
 credentials, emails, tokens, or record contents. The admin password, when
 given, comes from an environment variable, never the command line. It never
 uses an environment proxy, and it refuses a plain-HTTP --pb-url that is not
@@ -34,8 +55,9 @@ Standard library only, Python 3.9 or newer.
 
 Exit status: 0 no check failed, 1 a check failed, 2 a usage or configuration
 error (results gathered before it are still printed). A check that can't
-decide from where it runs (the body-cap check behind a buffering proxy) prints
-INCONCLUSIVE and does not fail the run.
+decide from where it runs prints INCONCLUSIVE and does not fail the run: a
+body-cap check behind a proxy that waits for the whole body, or that refuses
+the declared size with its own 413 page before the frontend sees it.
 """
 from __future__ import annotations
 
@@ -388,6 +410,49 @@ def read_first_sse_event(url: str, timeout: float = 8.0) -> tuple[int, str, str]
         resp.close()
 
 
+@dataclass
+class Declared:
+    """The answer to a request that declared a body and sent none of it."""
+
+    status: int
+    raw: bytes
+    headers: dict[str, str]
+    elapsed_ms: int
+    # "timeout" when nothing answered in time, an exception name when the
+    # connection failed, "" otherwise.
+    error: str = ""
+
+
+def declare_oversize(base_url: str, path: str, declared: int, method: str = "POST",
+                     timeout: float = 10.0) -> Declared:
+    """Send only the headers of a request whose Content-Length is
+    ``declared``. nginx, and the runner's own byte cap, decide on that
+    header alone, so nothing large crosses the network."""
+    parts = urllib.parse.urlsplit(base_url)
+    conn_cls = http.client.HTTPSConnection if parts.scheme == "https" else http.client.HTTPConnection
+    kwargs: dict[str, Any] = {"timeout": timeout}
+    if parts.scheme == "https":
+        kwargs["context"] = ssl.create_default_context()
+    start = time.monotonic()
+    try:
+        conn = conn_cls(parts.netloc, **kwargs)
+        try:
+            conn.putrequest(method, (parts.path.rstrip("/") or "") + path)
+            conn.putheader("Content-Type", "application/json")
+            conn.putheader("Content-Length", str(declared))
+            conn.endheaders()
+            resp = conn.getresponse()
+            status, raw = resp.status, resp.read()
+            headers = {k.lower(): v for k, v in resp.getheaders()}
+        finally:
+            conn.close()
+    except (socket.timeout, TimeoutError):
+        return Declared(0, b"", {}, int((time.monotonic() - start) * 1000), "timeout")
+    except (OSError, http.client.HTTPException) as err:
+        return Declared(0, b"", {}, int((time.monotonic() - start) * 1000), type(err).__name__)
+    return Declared(status, raw, headers, int((time.monotonic() - start) * 1000))
+
+
 def check_oversized_body(base_url: str, declared: int = NGINX_BODY_CAP + 1, timeout: float = 10.0) -> Result:
     """Declare a body one byte over nginx's cap and send none of it: nginx
     decides on the Content-Length header alone, so nothing large is sent and
@@ -399,46 +464,340 @@ def check_oversized_body(base_url: str, declared: int = NGINX_BODY_CAP + 1, time
     request times out; that is reported as inconclusive, not as a failure.
     """
     path = "/api/collections/campaigns/records"
-    parts = urllib.parse.urlsplit(base_url)
-    conn_cls = http.client.HTTPSConnection if parts.scheme == "https" else http.client.HTTPConnection
-    kwargs: dict[str, Any] = {"timeout": timeout}
-    if parts.scheme == "https":
-        kwargs["context"] = ssl.create_default_context()
-    start = time.monotonic()
-    try:
-        conn = conn_cls(parts.netloc, **kwargs)
-        try:
-            conn.putrequest("POST", (parts.path.rstrip("/") or "") + path)
-            conn.putheader("Content-Type", "application/json")
-            conn.putheader("Content-Length", str(declared))
-            conn.endheaders()
-            resp = conn.getresponse()
-            status, raw = resp.status, resp.read()
-        finally:
-            conn.close()
-    except (socket.timeout, TimeoutError):
+    got = declare_oversize(base_url, path, declared, timeout=timeout)
+    if got.error == "timeout":
         return Result("deployment.proxy.oversized-body.rejected", path, "proxy", "anonymous", 413, 0, False,
-                      int((time.monotonic() - start) * 1000),
+                      got.elapsed_ms,
                       f"inconclusive (buffering proxy in front): no answer within {timeout:g}s, so a proxy is "
                       f"waiting for the body; check the frontend's own cap through a port-forward to it",
                       inconclusive=True)
-    except (OSError, http.client.HTTPException) as err:
+    if got.error:
         return Result("deployment.proxy.oversized-body.rejected", path, "proxy", "anonymous", 413, 0, False,
-                      int((time.monotonic() - start) * 1000), f"no response ({type(err).__name__})")
-    elapsed = int((time.monotonic() - start) * 1000)
+                      got.elapsed_ms, f"no response ({got.error})")
     try:
-        code = json.loads(raw.decode("utf-8")).get("code")
+        code = json.loads(got.raw.decode("utf-8")).get("code")
     except (ValueError, UnicodeDecodeError, AttributeError):
         code = None
-    ok = status == 413 and code == "payload_too_large"
-    return Result("deployment.proxy.oversized-body.rejected", path, "proxy", "anonymous", 413, status, ok, elapsed,
-                  "" if ok else f"status={status} code={code!r}")
+    ok = got.status == 413 and code == "payload_too_large"
+    return Result("deployment.proxy.oversized-body.rejected", path, "proxy", "anonymous", 413, got.status, ok,
+                  got.elapsed_ms, "" if ok else f"status={got.status} code={code!r}")
 
 
 def check_proxy(base_url: str) -> list[Result]:
     base = base_url.rstrip("/")
     return (check_denied_routes(base) + [check_execute_gone(base)] + check_open_routes(base)
             + [check_oversized_body(base)])
+
+
+# --------------------------------------------------------------------------
+# admission and gate checks (ROUNDS-00A-L01 stage 4)
+# --------------------------------------------------------------------------
+
+MIB = 1024 * 1024
+KIB = 1024
+# The admitted routes, as backend/app/admission.py ROUTES lists them: method,
+# path, the gate that turns the route off, the runner's own byte cap, and the
+# cap nginx puts in front of it (frontend/nginx.conf). Kept in step with
+# both by backend/tests/test_verify_deployment_admission.py.
+ADMITTED_ROUTES: tuple[tuple[str, str, str, int, int], ...] = (
+    ("POST", "/api/run", "RUN", 512 * KIB, 512 * KIB),
+    ("POST", "/api/evaluate", "EVALUATE", 512 * KIB, 512 * KIB),
+    ("POST", "/api/ai-coding/run-project", "AI_CODING_RUN_PROJECT", 6 * MIB, 6 * MIB),
+    ("POST", "/api/ai-coding/grade", "AI_CODING_GRADE", 6 * MIB, 6 * MIB),
+    ("POST", "/api/take-home/run", "TAKE_HOME_RUN", 6 * MIB, 6 * MIB),
+    ("POST", "/api/take-home/submit", "TAKE_HOME_SUBMIT", 6 * MIB, 6 * MIB),
+    ("POST", "/api/pdf/render", "PDF_RENDER", 2 * MIB, 6 * MIB),
+    ("GET", "/api/pdf/health", "PDF_HEALTH", 0, 6 * MIB),
+    ("POST", "/api/ai/ats-rule", "ATS_RULE", 1 * MIB, 6 * MIB),
+)
+ENVELOPE_KEYS = frozenset({"detail", "code", "correlation_id"})
+ROUTE_GATE_VALUES = ("enabled", "disabled")
+# The 503 an operator's stop answers, before the account
+# (backend/app/admission.py): a route's own gate, and
+# ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled, which stops the six routes
+# that run a definition. Kept in step with the runner by
+# backend/tests/test_verify_deployment_admission.py.
+STOP_CODES = ("route_disabled", "definitions_disabled")
+STOPPED_BY = {
+    "route_disabled": "its gate is off",
+    "definitions_disabled": "ROUNDS_GATE_EXECUTION_DEFINITIONS is disabled",
+}
+DEFINITION_ROUTES = frozenset({
+    "/api/run", "/api/evaluate", "/api/ai-coding/run-project", "/api/ai-coding/grade",
+    "/api/take-home/run", "/api/take-home/submit",
+})
+ENFORCEMENT_GATES: dict[str, tuple[str, ...]] = {
+    "ENFORCE_IDEMPOTENCY": ("off", "observe", "enforce"),
+    "ENFORCE_QUOTA": ("off", "observe", "enforce"),
+}
+# A made-up bearer no deployment ever issued: a disabled route must refuse
+# it before it asks PocketBase who it is.
+BOGUS_BEARER = "verify-deployment-not-a-token"
+
+# Every admission and gate check id this tool can report, with the
+# guarantee it states. The harness verdict requires a passing receipt for
+# each (harness/probes/run.py).
+ADMISSION_CHECKS: dict[str, str] = {
+    "deployment.admission.anonymous.denied":
+        "every admitted route refuses a caller without a bearer before it reads the body: 401, or the 503 "
+        "the operator expects for a route they turned off",
+    "deployment.admission.error-shape.safe":
+        "every admitted route's refusal is the typed envelope with the response's correlation id and nothing else",
+    "deployment.admission.body-cap.rejected":
+        "a body declared over an admitted route's cap gets the typed 413 before anything reads it",
+    "deployment.gates.logged":
+        "the runner's startup log lists every admitted route's gate and both enforcement gates",
+    "deployment.gates.valid":
+        "every logged gate holds one of its values, and none fell back from a value it doesn't know",
+    "deployment.gates.expected":
+        "each gate the operator named holds the value they expect",
+    "deployment.gates.disabled-route.denied":
+        "a route the operator turned off answers 503 with their stop's code for every caller",
+}
+
+
+def envelope_problem(status: int, raw: bytes, headers: dict[str, str]) -> str:
+    """Why an answer isn't the typed admission/v1 envelope, or "" when it
+    is: a JSON object of exactly detail, code, and correlation_id, a
+    non-empty string detail and code, and a 32-hex correlation id that the
+    X-Correlation-Id header repeats."""
+    try:
+        doc = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return "not JSON"
+    if not isinstance(doc, dict):
+        return "not a JSON object"
+    if set(doc) != ENVELOPE_KEYS:
+        extra = sorted(set(doc) - ENVELOPE_KEYS)
+        missing = sorted(ENVELOPE_KEYS - set(doc))
+        return f"keys differ (extra={extra}, missing={missing})"
+    if not (isinstance(doc["detail"], str) and doc["detail"].strip()):
+        return "detail isn't a sentence"
+    if not (isinstance(doc["code"], str) and doc["code"]):
+        return "code isn't a string"
+    cid = doc["correlation_id"]
+    if not (isinstance(cid, str) and len(cid) == 32 and all(c in "0123456789abcdef" for c in cid)):
+        return "correlation_id isn't 32 hex"
+    if headers.get("x-correlation-id") != cid:
+        return "X-Correlation-Id header doesn't match"
+    if status < 400:
+        return f"status {status} isn't a refusal"
+    return ""
+
+
+def _code_of(raw: bytes) -> Any:
+    try:
+        doc = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return doc.get("code") if isinstance(doc, dict) else None
+
+
+def parse_expected_disabled(items: Iterable[str]) -> dict[str, str]:
+    """``--expect-disabled PATH[=CODE]`` values as {path: code}. CODE is
+    the 503 the stop answers: route_disabled (the default) for the route's
+    own gate, or definitions_disabled for one of the six execution routes
+    while ROUNDS_GATE_EXECUTION_DEFINITIONS is disabled."""
+    out: dict[str, str] = {}
+    for item in items:
+        path, sep, code = item.partition("=")
+        path, code = path.strip(), (code.strip().lower() if sep else "route_disabled")
+        admitted_method(path)
+        if code not in STOP_CODES:
+            raise ConfigError(f"--expect-disabled takes PATH or PATH=CODE, with CODE one of "
+                              f"{', '.join(STOP_CODES)}, not {item!r}")
+        if code == "definitions_disabled" and path not in DEFINITION_ROUTES:
+            raise ConfigError(f"ROUNDS_GATE_EXECUTION_DEFINITIONS doesn't stop {path}; "
+                              f"it stops {', '.join(sorted(DEFINITION_ROUTES))}")
+        if out.get(path, code) != code:
+            raise ConfigError(f"--expect-disabled names {path} with two codes")
+        out[path] = code
+    return out
+
+
+def _expect_disabled_arg(path: str, code: str) -> str:
+    return path if code == "route_disabled" else f"{path}={code}"
+
+
+def check_admitted_routes(base_url: str, req: Callable[..., Response] = request,
+                          actor: str = "anonymous", disabled: Iterable[str] = ()) -> list[Result]:
+    """Every admitted route, without a bearer: refused before the body is
+    read, in the typed envelope. That is 401 unauthenticated, or for a route
+    in ``disabled`` (``PATH[=CODE]``, the ones the operator turned off) the
+    503 its stop answers; a route that is off without being named fails, so
+    a stop left on after a re-enable shows. One request per route; nothing
+    is charged or run, since no account is admitted."""
+    base = base_url.rstrip("/")
+    off = parse_expected_disabled(disabled)
+    out: list[Result] = []
+    for method, path, _gate, _runner_cap, _edge_cap in ADMITTED_ROUTES:
+        resp = req(method, base + path, body={} if method == "POST" else None)
+        code = _code_of(resp.body)
+        want = (503, off[path]) if path in off else (401, "unauthenticated")
+        refused = (resp.status, code) == want
+        if refused:
+            why = ""
+        elif resp.status == 503 and code in STOP_CODES:
+            why = (f"{STOPPED_BY[code]}; give --expect-disabled {_expect_disabled_arg(path, code)} "
+                   f"if you turned it off")
+        else:
+            why = f"status={resp.status} code={code!r} answered_by={answered_by(resp)}"
+        out.append(Result("deployment.admission.anonymous.denied", path, "admission", actor, want[0], resp.status,
+                          refused, resp.elapsed_ms, why))
+        problem = envelope_problem(resp.status, resp.body, resp.headers) if resp.status else "unreachable"
+        out.append(Result("deployment.admission.error-shape.safe", path, "admission", actor, resp.status or 401,
+                          resp.status, not problem, resp.elapsed_ms, problem))
+    return out
+
+
+def _proxy_page(got: Declared) -> bool:
+    """A 413 in neither the runner's shapes nor PocketBase's: a proxy ahead
+    of the frontend refused the declared size with its own page (the
+    Kubernetes ingress above its proxy-body-size, for one), so the
+    frontend's cap was never reached."""
+    return got.status == 413 and answered_by(Response(got.status, got.raw, got.headers, got.elapsed_ms)) == "proxy"
+
+
+def check_admission_body_caps(base_url: str, *, at_runner: bool = False, timeout: float = 10.0,
+                              actor: str = "anonymous") -> list[Result]:
+    """Each POST route, with a body declared one byte over its cap and none
+    of it sent: the typed 413. Through the public URL that is nginx's cap;
+    with ``at_runner`` (the harness, straight at a replica) it is the
+    runner's own, which it checks before the account. A proxy in front
+    that waits for the body, or that answers its own 413 page for a size
+    over its own cap, is inconclusive."""
+    base = base_url.rstrip("/")
+    out: list[Result] = []
+    for method, path, _gate, runner_cap, edge_cap in ADMITTED_ROUTES:
+        if method != "POST":
+            continue
+        cap = runner_cap if at_runner else edge_cap
+        got = declare_oversize(base, path, cap + 1, timeout=timeout)
+        target = f"{path} ({cap + 1} bytes declared)"
+        if got.error == "timeout":
+            out.append(Result("deployment.admission.body-cap.rejected", target, "admission", actor, 413, 0, False,
+                              got.elapsed_ms,
+                              f"inconclusive (buffering proxy in front): no answer within {timeout:g}s",
+                              inconclusive=True))
+            continue
+        if got.error:
+            out.append(Result("deployment.admission.body-cap.rejected", target, "admission", actor, 413, 0, False,
+                              got.elapsed_ms, f"no response ({got.error})"))
+            continue
+        if _proxy_page(got):
+            out.append(Result("deployment.admission.body-cap.rejected", target, "admission", actor, 413, got.status,
+                              False, got.elapsed_ms,
+                              "inconclusive (capped proxy in front): a 413 page that isn't the typed envelope, "
+                              "so a proxy refused the size before the frontend saw it",
+                              inconclusive=True))
+            continue
+        problem = envelope_problem(got.status, got.raw, got.headers)
+        code = _code_of(got.raw)
+        ok = got.status == 413 and code == "payload_too_large" and not problem
+        out.append(Result("deployment.admission.body-cap.rejected", target, "admission", actor, 413, got.status, ok,
+                          got.elapsed_ms, "" if ok else f"status={got.status} code={code!r} {problem}".strip()))
+    return out
+
+
+def admitted_method(path: str) -> str:
+    for method, route, *_rest in ADMITTED_ROUTES:
+        if route == path:
+            return method
+    raise ConfigError(f"{path} isn't an admitted route; give one of {', '.join(r[1] for r in ADMITTED_ROUTES)}")
+
+
+def check_disabled_routes(base_url: str, paths: Iterable[str], req: Callable[..., Response] = request) -> list[Result]:
+    """Each route the operator turned off (``PATH[=CODE]``) answers 503
+    with its stop's code in the typed envelope, with no bearer and with a
+    made-up one: both stops come before the account, so neither caller
+    reaches PocketBase."""
+    base = base_url.rstrip("/")
+    out: list[Result] = []
+    for path, want in parse_expected_disabled(paths).items():
+        method = admitted_method(path)
+        failures, last = [], None
+        for actor, token in (("anonymous", ""), ("unknown-bearer", BOGUS_BEARER)):
+            last = req(method, base + path, body={} if method == "POST" else None, token=token)
+            code = _code_of(last.body)
+            problem = envelope_problem(last.status, last.body, last.headers)
+            if last.status != 503 or code != want or problem:
+                failures.append(f"{actor}: status={last.status} code={code!r} {problem}".strip())
+        out.append(Result("deployment.gates.disabled-route.denied", path, "gates", "anonymous", 503,
+                          last.status if last else 0, not failures, last.elapsed_ms if last else 0,
+                          "; ".join(failures)))
+    return out
+
+
+def parse_gates_log(text: str) -> dict[str, dict[str, str]] | None:
+    """The gate table from the last runner ``gates`` line in a saved log.
+    Lines may carry a compose or kubectl prefix before the JSON."""
+    found = None
+    for line in text.splitlines():
+        start = line.find("{")
+        if start < 0:
+            continue
+        try:
+            doc = json.loads(line[start:])
+        except ValueError:
+            continue
+        if isinstance(doc, dict) and doc.get("event") == "gates" and doc.get("service") == "runner" \
+                and isinstance(doc.get("gates"), dict):
+            found = doc["gates"]
+    return found
+
+
+def check_gates_log(text: str, expected: dict[str, str] | None = None, source: str = "runner log") -> list[Result]:
+    """The runner's startup gates line: it lists every admitted route's gate
+    and both enforcement gates, each value is one of its gate's values, none
+    came from an invalid setting, and the gates the operator named hold the
+    values they expect. Gate values aren't secret; the log is only read."""
+    gates = parse_gates_log(text)
+    if gates is None:
+        missing = Result("deployment.gates.logged", source, "gates", "operator", 200, 0, False, 0,
+                         "no runner gates line in the log; save the log from the runner's start")
+        out = [missing, Result("deployment.gates.valid", source, "gates", "operator", 200, 0, False, 0,
+                               "no gates line to check")]
+        if expected:
+            out.append(Result("deployment.gates.expected", source, "gates", "operator", 200, 0, False, 0,
+                              "no gates line to check"))
+        return out
+    required = [r[2] for r in ADMITTED_ROUTES] + list(ENFORCEMENT_GATES)
+    absent = [name for name in required if name not in gates]
+    out = [Result("deployment.gates.logged", source, "gates", "operator", 200, 200, not absent, 0,
+                  "" if not absent else "missing: " + ", ".join(absent))]
+    problems = []
+    route_gates = {r[2] for r in ADMITTED_ROUTES}
+    for name, entry in sorted(gates.items()):
+        if not isinstance(entry, dict):
+            problems.append(f"{name}: not a value and source")
+            continue
+        value, how = entry.get("value"), entry.get("source")
+        if how == "invalid":
+            problems.append(f"{name} fell back to {value!r} from a value it doesn't know")
+        allowed = ROUTE_GATE_VALUES if name in route_gates else ENFORCEMENT_GATES.get(name)
+        if allowed is not None and value not in allowed:
+            problems.append(f"{name}={value!r} isn't one of {', '.join(allowed)}")
+    out.append(Result("deployment.gates.valid", source, "gates", "operator", 200, 200, not problems, 0,
+                      "; ".join(problems)))
+    if expected:
+        wrong = [f"{name}={(gates.get(name) or {}).get('value')!r}, expected {want!r}"
+                 for name, want in sorted(expected.items()) if (gates.get(name) or {}).get("value") != want]
+        out.append(Result("deployment.gates.expected", source, "gates", "operator", 200, 200, not wrong, 0,
+                          "; ".join(wrong)))
+    return out
+
+
+def parse_expected_gates(items: Iterable[str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for item in items:
+        name, sep, value = item.partition("=")
+        name = name.strip().upper()
+        if name.startswith("ROUNDS_GATE_"):
+            name = name[len("ROUNDS_GATE_"):]
+        if not sep or not name or not value.strip():
+            raise ConfigError(f"--expect-gate takes NAME=VALUE, not {item!r}")
+        out[name] = value.strip().lower()
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -646,8 +1005,14 @@ def check_pb_transport(pb_url: str, allow_insecure: bool) -> None:
 def validate(args: argparse.Namespace, env: dict[str, str]) -> dict | None:
     """Usage and configuration checks before any request. Returns the policy
     when rules will be compared."""
-    if not (args.url or args.pb_url or args.db):
-        raise ConfigError("give at least one of --url, --pb-url, --db")
+    if not (args.url or args.pb_url or args.db or args.gates_log):
+        raise ConfigError("give at least one of --url, --pb-url, --db, --gates-log")
+    if (args.admission or args.expect_disabled) and not args.url:
+        raise ConfigError("--admission and --expect-disabled need --url")
+    if args.expect_gate and not args.gates_log:
+        raise ConfigError("--expect-gate needs --gates-log")
+    parse_expected_disabled(args.expect_disabled or [])
+    parse_expected_gates(args.expect_gate or [])
     if args.admin_email and not args.pb_url:
         raise ConfigError("--admin-email needs --pb-url")
     if args.admin_email and not env.get(args.admin_password_env):
@@ -666,6 +1031,18 @@ def run(args: argparse.Namespace, env: dict[str, str], policy: dict | None, resu
     error keeps what was already gathered."""
     if args.url:
         results += check_proxy(args.url)
+        if args.admission:
+            results += check_admitted_routes(args.url, disabled=args.expect_disabled or [])
+            results += check_admission_body_caps(args.url)
+        if args.expect_disabled:
+            results += check_disabled_routes(args.url, args.expect_disabled)
+
+    if args.gates_log:
+        try:
+            text = Path(args.gates_log).read_text(encoding="utf-8", errors="replace")
+        except OSError as err:
+            raise ConfigError(f"cannot read the gates log at {args.gates_log}: {err.strerror or err}") from None
+        results += check_gates_log(text, parse_expected_gates(args.expect_gate or []), source=args.gates_log)
 
     admin_emails: list[str] | None = None
     if args.db:
@@ -696,6 +1073,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="environment variable holding that admin's password (default PB_ADMIN_PASSWORD)")
     p.add_argument("--allow-insecure", action="store_true",
                    help="allow a plain-HTTP --pb-url that is not loopback (a private network you trust)")
+    p.add_argument("--admission", action="store_true",
+                   help="with --url: every admitted route refuses an anonymous caller in the typed envelope (401, "
+                        "or the 503 --expect-disabled names for a route that is off), and a body declared over its "
+                        "cap gets the typed 413 (headers only; nothing is charged or run)")
+    p.add_argument("--expect-disabled", action="append", metavar="PATH[=CODE]",
+                   help="with --url: this admitted route is off, so it answers 503 CODE for every caller: "
+                        "route_disabled (the default) when its own gate is off, or definitions_disabled for the six "
+                        "execution routes when ROUNDS_GATE_EXECUTION_DEFINITIONS is disabled (repeatable; for "
+                        "confirming an emergency disable)")
+    p.add_argument("--gates-log", metavar="FILE",
+                   help="a saved runner log from its start: check the gates line it writes")
+    p.add_argument("--expect-gate", action="append", metavar="NAME=VALUE",
+                   help="with --gates-log: this gate should hold this value (repeatable), e.g. RUN=disabled")
     p.add_argument("--receipts", help="append one JSON line per check (harness receipt schema) to this file")
     return p.parse_args(argv)
 

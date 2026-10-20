@@ -173,6 +173,9 @@ There is no rollback. Account isolation is forward-only: `migrate down` keeps th
 - `--pb-url`: at PocketBase's own port, the development default admin login and the demo account's login fail as an admin. This URL carries your admin password and token, so it must be `https` or a loopback address such as `http://127.0.0.1:8090`; `--allow-insecure` lifts that for a private network you trust.
 - `--admin-email`, with the password in `PB_ADMIN_PASSWORD`: the live rules match the rule table, and no admin account accepts a shipped default password. These are reads with your admin login.
 - `--db`: on a `pb_data` copy taken with PocketBase stopped (the cross-owner scan's copy), the rules match the rule table and at least one admin exists, so PocketBase's first-admin setup is closed.
+- `--admission`, with `--url`: each of the nine admitted runner routes refuses a caller with no bearer before it reads the body, with 401 `unauthenticated`, in the typed `{"detail", "code", "correlation_id"}` envelope whose id the `X-Correlation-Id` header repeats, and a body declared over the route's cap gets the typed 413. A route you turned off answers 503 instead: `route_disabled` when its own gate is off, or `definitions_disabled` for the six execution routes while `ROUNDS_GATE_EXECUTION_DEFINITIONS` is `disabled`. Name it with `--expect-disabled`, or the check fails. It sends no bearer and, for the caps, only headers, so nothing is charged or run.
+- `--gates-log FILE`: a runner log saved from its start (`docker compose -f docker-compose.prod.yml logs --no-color runner > runner.log`) has the gates line, which lists every admitted route's gate and both enforcement gates with valid values, and no gate fell back from a value it doesn't know. Add `--expect-gate NAME=VALUE` (repeatable), such as `--expect-gate ENFORCE_QUOTA=enforce`, to check a value you set.
+- `--expect-disabled PATH[=CODE]`, with `--url`: after you turned that route off, it answers 503 `CODE` with no bearer and with a made-up one. `CODE` is `route_disabled` (the default) for the route's own gate, or `definitions_disabled` for each of the six execution routes after you set `ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled`, such as `--expect-disabled /api/run=definitions_disabled`. The [execution runbook](security/execution-runbook.md#turning-a-gate-off) has the whole disable and re-enable cycle.
 
 The rule table is `docs/security/account-scope.v1.json` in the checkout you run from; `--policy` names another copy, and is only accepted with `--admin-email` or `--db`, which supply the rules to compare.
 
@@ -186,14 +189,20 @@ python3 harness/verify_deployment.py \
   --pb-url http://127.0.0.1:8090 \
   --admin-email you@example.com
 python3 harness/verify_deployment.py --db ~/rounds-scan/pb_data/data.db
+docker compose -f docker-compose.prod.yml logs --no-color runner > runner.log
+python3 harness/verify_deployment.py --url https://your-domain --admission --gates-log runner.log
 ```
 
 It prints one line per check and exits `0` when nothing failed, `1` on any failure, and `2` on a usage or configuration error (after printing the results it already had).
 
 1. `FAIL` on a denied or open route: the public URL isn't served through this repository's `frontend/nginx.conf`.
-2. `INCONCLUSIVE` on the 413 check: a buffering proxy in front of the frontend waits for the whole body, so the frontend's own cap can't be seen from the public URL. The Kubernetes ingress in `k8s/ingress.yaml` does this, since ingress-nginx buffers request bodies by default and the ingress allows up to 6 MiB. Check the frontend directly through a port-forward instead: `kubectl -n rounds port-forward svc/frontend 8080:80`, then `--url http://127.0.0.1:8080`.
+2. `INCONCLUSIVE` on the 413 check: a proxy in front of the frontend waits for the whole body, or refuses a declared size over its own cap with its own 413 page, so the frontend's own cap can't be seen from the public URL. The Kubernetes ingress in `k8s/ingress.yaml` does both: ingress-nginx buffers request bodies by default, and it answers its own 413 for a size declared over its 6 MiB `proxy-body-size`, as the AI-coding, take-home, PDF, and ATS cap checks are. Check the frontend directly through a port-forward instead: `kubectl -n rounds port-forward svc/frontend 8080:80`, then `--url http://127.0.0.1:8080`. Nothing sits in front of the frontend there, so an `INCONCLUSIVE` through the port-forward means the frontend isn't serving this repository's `frontend/nginx.conf`.
 3. `FAIL` on a credential check: an admin still uses a default; change that admin's password in the admin UI.
 4. `FAIL` on the admin check: PocketBase's first-admin setup is open; create an admin as above.
+5. `FAIL` on an admission check: a route answered something other than the typed refusal, so it isn't behind this release's runner, or a proxy rewrote its answer. A route that is still off fails until you name it with `--expect-disabled` and the code it answers; the failure names both. `INCONCLUSIVE` on an admission cap has the same cause and fix as item 2.
+6. `FAIL` on a gates check: the log has no gates line (save it from the runner's start), a gate is missing (the runner predates this release), or a value fell back from a typo; fix the value in `.env` or the `rounds-gates` ConfigMap and restart.
+
+Quotas and idempotency across replicas, a candidate's environment and uid, and the full disable and re-enable cycle need accounts and restarts, so they run only in the harness, not against your deployment.
 
 The harness runs the same checks through its own nginx frontend on every CI run, where nginx is the first hop and an inconclusive check fails the run.
 

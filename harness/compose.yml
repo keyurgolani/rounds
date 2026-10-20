@@ -58,6 +58,9 @@ services:
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
       - ROUNDS_GATE_ENFORCE_IDEMPOTENCY=${ROUNDS_GATE_ENFORCE_IDEMPOTENCY:-}
       - ROUNDS_GATE_ENFORCE_QUOTA=${ROUNDS_GATE_ENFORCE_QUOTA:-}
+      # The emergency-disable phase turns /api/run off, then back on
+      # (ROUNDS-00A-L01 stage 4).
+      - ROUNDS_GATE_RUN=${ROUNDS_GATE_RUN:-}
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}
     depends_on:
       pocketbase:
