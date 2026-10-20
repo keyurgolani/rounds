@@ -11,11 +11,13 @@ process. No test reaches a real host.
 from __future__ import annotations
 
 import contextlib
+import functools
 import json
 import re
 import sys
 import threading
 import time
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -27,10 +29,35 @@ sys.path.insert(0, str(ROOT / "harness"))
 import verify_deployment as vd  # noqa: E402
 
 CID = "0123456789abcdef0123456789abcdef"
+# ingress-nginx's own answer to a declared length over its proxy-body-size:
+# a plain page, no envelope, no correlation id.
+PROXY_413 = (
+    413,
+    b"<html>\r\n<head><title>413 Request Entity Too Large</title></head>\r\n<body>\r\n"
+    b"<center><h1>413 Request Entity Too Large</h1></center>\r\n<hr><center>nginx</center>\r\n"
+    b"</body>\r\n</html>\r\n",
+    {"Content-Type": "text/html"},
+)
 
 
 def envelope(code: str, detail: str = "A fixed sentence.") -> dict:
     return {"detail": detail, "code": code, "correlation_id": CID}
+
+
+def runner_definition_routes() -> set[str]:
+    """The routes ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled stops, from the
+    runner's own table."""
+    from app import admission
+
+    return {path for (_m, path), route in admission.ROUTES.items()
+            if route.operation in admission.DEFINITION_OPERATIONS}
+
+
+def ingress_body_cap() -> int:
+    """proxy-body-size on the repository's Kubernetes ingress."""
+    text = (ROOT / "k8s" / "ingress.yaml").read_text()
+    size = re.search(r'proxy-body-size:\s*"(\d+)([km])"', text)
+    return int(size.group(1)) * {"k": 1024, "m": 1024 * 1024}[size.group(2)]
 
 
 class Admission:
@@ -39,16 +66,25 @@ class Admission:
 
     def __init__(self) -> None:
         self.disabled: set[str] = set()
+        # ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled.
+        self.definitions_off = False
         self.overrides: dict[str, tuple[int, object, dict]] = {}
         self.caps = {path: edge for _m, path, _g, _r, edge in vd.ADMITTED_ROUTES}
         self.buffering = False
         self.cap_answer = (413, envelope("payload_too_large"), {"X-Correlation-Id": CID})
+        # A proxy in front that refuses a declared length over this with
+        # its own page, before the frontend sees the request.
+        self.proxy_cap: int | None = None
 
     def answer(self, path: str, bearer: str) -> tuple[int, object, dict]:
         if path in self.overrides:
             return self.overrides[path]
+        # The runner's order: the route's gate, then the definitions stop,
+        # then the account.
         if path in self.disabled:
             return 503, envelope("route_disabled"), {"X-Correlation-Id": CID}
+        if self.definitions_off and path in runner_definition_routes():
+            return 503, envelope("definitions_disabled"), {"X-Correlation-Id": CID}
         return 401, envelope("unauthenticated"), {"X-Correlation-Id": CID}
 
 
@@ -61,7 +97,7 @@ def fake(dep: Admission):
         def _send(self, status, payload, headers):
             raw = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            headers = {"Content-Type": "application/json", **headers}
             for name, value in headers.items():
                 self.send_header(name, value)
             self.send_header("Content-Length", str(len(raw)))
@@ -70,6 +106,10 @@ def fake(dep: Admission):
 
         def _handle(self):
             length = int(self.headers.get("Content-Length") or 0)
+            if dep.proxy_cap is not None and length > dep.proxy_cap:
+                self._send(*PROXY_413)
+                self.close_connection = True
+                return
             cap = dep.caps.get(self.path)
             if cap is not None and length > cap:
                 if dep.buffering:
@@ -244,6 +284,58 @@ def test_a_buffering_proxy_makes_the_cap_check_inconclusive():
     assert results and all(r.inconclusive for r in results)
 
 
+def test_a_capped_proxy_in_front_makes_the_caps_over_its_own_inconclusive():
+    # A proxy that refuses a declared length over its own cap with its own
+    # page hides the frontend's cap for those routes; the rest still reach
+    # nginx, which refuses them typed.
+    dep = Admission()
+    dep.proxy_cap = ingress_body_cap()
+    with fake(dep) as url:
+        results = vd.check_admission_body_caps(url)
+    assert [r.target for r in results if not r.passed and not r.inconclusive] == []
+    over = {path for method, path, _g, _r, edge in vd.ADMITTED_ROUTES if method == "POST" and edge + 1 > dep.proxy_cap}
+    hidden = [r for r in results if r.inconclusive]
+    assert {r.target.split(" ")[0] for r in hidden} == over and len(over) == 6
+    assert all(r.detail.startswith("inconclusive (capped proxy in front)") for r in hidden)
+    assert {r.target.split(" ")[0] for r in results if r.passed} == {"/api/run", "/api/evaluate"}
+
+
+def test_admission_passes_behind_the_kubernetes_ingress(monkeypatch, capsys):
+    # The repository's ingress: request buffering on, and its own 413 page
+    # over proxy-body-size. Every cap is inconclusive, none fails, and the
+    # run exits 0. The proxy checks have their own tests.
+    dep = Admission()
+    dep.proxy_cap = ingress_body_cap()
+    dep.buffering = True
+    monkeypatch.setattr(vd, "check_proxy", lambda _url: [])
+    monkeypatch.setattr(vd, "check_admission_body_caps",
+                        functools.partial(vd.check_admission_body_caps, timeout=1.0))
+    with fake(dep) as url:
+        assert vd.main(["--url", url, "--admission"], env={}) == 0
+    out = capsys.readouterr().out
+    posts = sum(1 for r in vd.ADMITTED_ROUTES if r[0] == "POST")
+    assert out.count("INCONCLUSIVE deployment.admission.body-cap.rejected") == posts
+    assert f"0 failed, {posts} inconclusive" in out
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        (413, {"code": 413, "message": "Request entity too large.", "data": {}}, {}),
+        (413, {"detail": "Request body too large"}, {}),
+        (413, envelope("payload_too_large"), {}),
+        (413, envelope("invalid_request"), {"X-Correlation-Id": CID}),
+    ],
+    ids=["pocketbase", "untyped-runner", "no-header", "wrong-code"],
+)
+def test_a_413_in_this_stacks_shapes_but_wrong_still_fails(answer):
+    dep = Admission()
+    dep.cap_answer = answer
+    with fake(dep) as url:
+        results = vd.check_admission_body_caps(url)
+    assert results and all(not r.passed and not r.inconclusive for r in results)
+
+
 # ---- an emergency disable ------------------------------------------------------
 
 
@@ -264,6 +356,59 @@ def test_a_route_still_on_fails_the_disabled_check():
 def test_only_an_admitted_route_can_be_expected_off():
     with pytest.raises(vd.ConfigError):
         vd.check_disabled_routes("http://127.0.0.1:9", ["/api/share/by-token/x"])
+
+
+def test_the_definitions_stop_passes_when_each_route_is_named_with_it():
+    dep = Admission()
+    dep.definitions_off = True
+    named = [f"{path}=definitions_disabled" for path in sorted(runner_definition_routes())]
+    with fake(dep) as url:
+        results = vd.check_admitted_routes(url, disabled=named) + vd.check_disabled_routes(url, named)
+    assert failed(results) == []
+    denied = {r.target: r.expected_status for r in results if r.check_id == "deployment.admission.anonymous.denied"}
+    assert {path for path, status in denied.items() if status == 503} == runner_definition_routes()
+
+
+def test_the_definitions_stop_fails_until_it_is_named_with_its_code():
+    dep = Admission()
+    dep.definitions_off = True
+    with fake(dep) as url:
+        unnamed = vd.check_admitted_routes(url)
+        (as_route_gate,) = vd.check_disabled_routes(url, ["/api/run"])
+    bad = [r for r in unnamed if not r.passed]
+    assert {r.target for r in bad} == runner_definition_routes()
+    assert {r.check_id for r in bad} == {"deployment.admission.anonymous.denied"}
+    run = next(r for r in bad if r.target == "/api/run")
+    assert "--expect-disabled /api/run=definitions_disabled" in run.detail
+    assert not as_route_gate.passed and "code='definitions_disabled'" in as_route_gate.detail
+
+
+def test_a_route_gate_named_as_the_definitions_stop_fails():
+    dep = Admission()
+    dep.disabled.add("/api/run")
+    with fake(dep) as url:
+        results = vd.check_admitted_routes(url, disabled=["/api/run=definitions_disabled"])
+        (result,) = vd.check_disabled_routes(url, ["/api/run=definitions_disabled"])
+    bad = [r for r in results if not r.passed]
+    assert [r.target for r in bad] == ["/api/run"] and "give --expect-disabled /api/run if" in bad[0].detail
+    assert not result.passed and "code='route_disabled'" in result.detail
+
+
+def test_expected_stops_parse_to_a_code_per_route():
+    assert vd.parse_expected_disabled(["/api/run"]) == {"/api/run": "route_disabled"}
+    assert vd.parse_expected_disabled(["/api/run=Definitions_Disabled", "/api/pdf/render=route_disabled"]) == {
+        "/api/run": "definitions_disabled", "/api/pdf/render": "route_disabled"}
+
+
+@pytest.mark.parametrize(
+    "items",
+    [["/api/pdf/render=definitions_disabled"], ["/api/run=unauthenticated"], ["/api/run="],
+     ["/api/run", "/api/run=definitions_disabled"], ["/api/not-admitted=route_disabled"]],
+    ids=["not-a-definition-route", "not-a-stop", "empty-code", "two-codes", "not-admitted"],
+)
+def test_an_expected_stop_that_cant_happen_is_a_usage_error(items):
+    with pytest.raises(vd.ConfigError):
+        vd.parse_expected_disabled(items)
 
 
 # ---- the gates line -----------------------------------------------------------
@@ -334,6 +479,26 @@ def test_the_runners_own_startup_line_passes(capsys, monkeypatch):
     monkeypatch.setattr(gates, "_snapshot", None)
 
 
+def test_the_runbooks_definitions_stop_confirmation_passes(tmp_path, capsys, monkeypatch):
+    # docs/security/execution-runbook.md, Compiled Definitions: the six
+    # routes named with definitions_disabled, and the gate in the log.
+    from app import gates
+
+    monkeypatch.setattr(gates, "_snapshot", None)
+    gates.init({"ROUNDS_GATE_EXECUTION_DEFINITIONS": "disabled"})
+    log = tmp_path / "runner.log"
+    log.write_text(capsys.readouterr().out)
+    monkeypatch.setattr(gates, "_snapshot", None)
+    dep = Admission()
+    dep.definitions_off = True
+    monkeypatch.setattr(vd, "check_proxy", lambda _url: [])
+    named = [arg for path in sorted(vd.DEFINITION_ROUTES) for arg in ("--expect-disabled", f"{path}=definitions_disabled")]
+    with fake(dep) as url:
+        code = vd.main(["--url", url, "--admission", *named, "--gates-log", str(log),
+                        "--expect-gate", "EXECUTION_DEFINITIONS=disabled"], env={})
+    assert code == 0, capsys.readouterr().out
+
+
 def test_expected_gates_take_either_spelling():
     assert vd.parse_expected_gates(["RUN=disabled", "ROUNDS_GATE_ENFORCE_QUOTA=Enforce"]) == {
         "RUN": "disabled", "ENFORCE_QUOTA": "enforce"}
@@ -367,6 +532,38 @@ def test_the_runners_field_refusals_repeat_none_of_the_request(client, signed_in
         assert marker not in res.text, path
 
 
+def _in_process(client):
+    """The verifier's request function, answered by the runner in process."""
+
+    def req(method, url, *, body=None, token="", timeout=10.0):
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        res = client.request(method, urllib.parse.urlsplit(url).path, json=body, headers=headers)
+        return vd.Response(res.status_code, res.content, {k.lower(): v for k, v in res.headers.items()}, 0)
+
+    return req
+
+
+def test_the_stop_codes_and_definition_routes_match_the_runner():
+    from app import errors
+
+    assert vd.DEFINITION_ROUTES == runner_definition_routes()
+    assert set(vd.STOPPED_BY) == set(vd.STOP_CODES)
+    assert all(errors.CODES[code] == 503 for code in vd.STOP_CODES)
+
+
+def test_the_runners_definitions_stop_is_the_one_the_verifier_expects(client, monkeypatch):
+    from app import gates
+
+    monkeypatch.setattr(gates, "_snapshot", gates.load({"ROUNDS_GATE_EXECUTION_DEFINITIONS": "disabled"}, gates.RUNNER))
+    req = _in_process(client)
+    named = [f"{path}=definitions_disabled" for path in sorted(vd.DEFINITION_ROUTES)]
+    results = vd.check_admitted_routes("http://runner", req, disabled=named)
+    results += vd.check_disabled_routes("http://runner", named, req)
+    assert failed(results) == []
+    unnamed = vd.check_admitted_routes("http://runner", req)
+    assert {r.target for r in unnamed if not r.passed} == vd.DEFINITION_ROUTES
+
+
 def test_the_runners_byte_cap_comes_before_the_account(client):
     res = client.post("/api/run", content=b"x" * (512 * 1024 + 1), headers={"Content-Type": "application/json"})
     headers = {k.lower(): v for k, v in res.headers.items()}
@@ -380,8 +577,9 @@ def test_the_runners_byte_cap_comes_before_the_account(client):
 @pytest.mark.parametrize(
     "argv",
     [["--admission"], ["--expect-disabled", "/api/run"], ["--url", "http://127.0.0.1:9", "--expect-gate", "RUN=x"],
-     ["--url", "http://127.0.0.1:9", "--expect-disabled", "/api/not-admitted"]],
-    ids=["admission-needs-url", "disabled-needs-url", "expect-needs-log", "not-admitted"],
+     ["--url", "http://127.0.0.1:9", "--expect-disabled", "/api/not-admitted"],
+     ["--url", "http://127.0.0.1:9", "--expect-disabled", "/api/pdf/render=definitions_disabled"]],
+    ids=["admission-needs-url", "disabled-needs-url", "expect-needs-log", "not-admitted", "no-such-stop"],
 )
 def test_misuse_is_a_usage_error(argv):
     assert vd.main(argv, env={}) == 2

@@ -52,7 +52,20 @@ The harness (`harness/run.sh`) does this whole cycle on every CI run: it restart
 `ROUNDS_GATE_EXECUTION_DEFINITIONS` selects where the six execution routes (run, evaluate, grade, run-project, take-home run and submit) get what they run. It is `legacy` by default.
 
 - `legacy`: each route loads its question, round, or assignment from PocketBase with the caller's token, as before #2. The compiled definitions in the image are verified at startup but not served yet.
-- `disabled`: the six routes answer 503 `definitions_disabled` before any lookup, and every draft is kept. Use it to stop all execution in one place without touching the per-route gates.
+- `disabled`: the six routes answer 503 `definitions_disabled` before any lookup, and every draft is kept. Use it to stop all execution in one place without touching the per-route gates. To confirm it, name each of the six with that code:
+
+  ```sh
+  python3 harness/verify_deployment.py --url https://your-domain --admission \
+    --expect-disabled /api/run=definitions_disabled \
+    --expect-disabled /api/evaluate=definitions_disabled \
+    --expect-disabled /api/ai-coding/run-project=definitions_disabled \
+    --expect-disabled /api/ai-coding/grade=definitions_disabled \
+    --expect-disabled /api/take-home/run=definitions_disabled \
+    --expect-disabled /api/take-home/submit=definitions_disabled \
+    --gates-log runner.log --expect-gate EXECUTION_DEFINITIONS=disabled
+  ```
+
+  After you set it back, `--admission` without those names passes again.
 - An unknown value (including `enforce`, which #2 step 2 adds) closes to `disabled` and logs an error, so a typo never opens execution.
 
 At startup the runner reads `backend/definitions/manifest.json` (mode 0400 in the image) and checks every shipped version's bytes against its checksum. It logs one `definitions.loaded` line with `entries` and `mismatched`; `mismatched` should be 0. A version whose file is missing or altered is the only one that fails, with `definition_integrity_mismatch`, and the rest keep serving. A manifest that's missing, isn't JSON, or isn't the manifest's shape leaves no definitions at all: the runner logs one `definition.rejected` line with `definition_integrity_mismatch` and no `definitions.loaded` line, keeps starting, and the legacy routes keep serving.
