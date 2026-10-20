@@ -114,11 +114,19 @@ def main() -> int:
             f"exit={code} findings={None if clean is None else len(clean['findings'])}")
     if clean is not None:
         s = clean["summary"]
+        print(
+            f"scan summary: owned_collections={s['owned_collections']} "
+            f"relations_checked={s['relations_checked']} rows_scanned={s['rows_scanned']}"
+        )
         c.check("scan.clean-data.relations-scanned", s["relations_checked"] > 0 and s["rows_scanned"] > 0,
                 f"relations={s['relations_checked']} rows={s['rows_scanned']}")
         pc = clean["policy_check"] or {}
         c.check("scan.policy-table.matches-schema",
-                pc.get("unlisted_in_policy") == [] and pc.get("listed_but_absent") == [],
+                pc.get("ok") is True
+                and pc.get("unlisted_in_policy") == []
+                and pc.get("owner_field_missing") == []
+                and pc.get("listed_but_absent") == []
+                and pc.get("collections_absent") == [],
                 json.dumps(pc))
 
     # 2. A fixture copy with one planted cross-owner relation.
