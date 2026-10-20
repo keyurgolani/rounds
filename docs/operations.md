@@ -146,6 +146,22 @@ docker compose -f docker-compose.prod.yml up -d
 
 Before upgrading to the release that tightens the account-scope rules, scan a copy of `pb_data` for relations that point at another account's records and hand the report to the relation quarantine work. The scan is read-only and runs on a copy taken with PocketBase stopped, not on the live volume or a backup of the running one. How to take that copy, the exact commands, what the report holds, and how long to keep it are in [docs/security/cross-owner-scan.md](security/cross-owner-scan.md).
 
+### Account-scope rules
+
+`1700006000_account_scope_rules.js` sets server-derived ownership on every user-owned collection: a create must name the signed-in account (`@request.data.user = @request.auth.id`) and an update cannot reassign `user`. `resume_share_views` becomes superuser-only, so only the share viewer's admin-token insert writes it. List, view, and delete rules are unchanged, and so are the `users` rules. The policy table is [`docs/security/account-scope.v1.json`](security/account-scope.v1.json).
+
+Deploying the release that carries it:
+
+1. Take a fresh `pb_data` backup with PocketBase stopped.
+2. Run the cross-owner relation scan (above) on a copy and clear what it finds.
+3. Deploy, then watch the PocketBase request logs for create or update denials rising on any collection. The migration applies on start; a missing collection fails it whole and PocketBase will not start, so the deploy is all or nothing.
+
+If a rule turns out too tight and a legitimate flow starts getting denied, ship a forward fix: a migration that restores that one collection's rules from `pocketbase/levers/restore_collection.template.js`. If a rule is too loose and a probe or the scan finds a foreign write, lock that collection with `pocketbase/levers/lock_collection.template.js` until the fix ships; it sets create and update to `null` so only the superuser can write.
+
+After the release, review each account's `ai_providers.base_url` and any `encrypted_key`/`key_iv` pair shared across accounts. Users are not forced to re-confirm their providers.
+
+There is no rollback. Account isolation is forward-only: `migrate down` keeps the rules, and a bad rule is repaired with a forward fix or the lever above, never by reverting. `harness/migration_check.sh` exercises the migration, the fail-whole behavior, and both levers.
+
 ## Smoke Test Checklist
 
 After deploy or restore, verify:
