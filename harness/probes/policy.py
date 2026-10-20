@@ -33,6 +33,16 @@ def load(path: str) -> dict[str, Any]:
     families = doc.get("probe_families")
     if not isinstance(families, dict) or not families:
         raise PolicyError("policy has no probe_families")
+    # Every family must declare a status this harness understands; an unknown
+    # status must stop the run rather than be silently dropped from the
+    # enforced and pending sets.
+    for pid, fam in families.items():
+        status = fam.get("status")
+        if status not in ("enforced", "pending"):
+            raise PolicyError(
+                f"probe family {pid!r} has unknown status {status!r}; "
+                f"expected 'enforced' or 'pending'"
+            )
     # Every probe id a collection lists must be a declared family.
     for name, row in collections.items():
         for pid in row.get("probes", []):
