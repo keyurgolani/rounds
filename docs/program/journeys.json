@@ -1,0 +1,377 @@
+{
+  "$schema": "./journeys.schema.json",
+  "registry": "journeys",
+  "revision": 1,
+  "decisionRecord": "DR-0003",
+  "description": "Each step of the five primary journeys (DR-0003 decision P10) mapped to one leaf (the one that completes the step; with lists the others it needs), the milestone where the step first works (spec 3104-3147), and the readiness gate it waits on. A journey's milestone is its latest step's. #173 (ROUNDS-34-L04) keeps each journey pending until its completing leaf and every other step leaf are done, then activates it; #176 runs them as release gates.",
+  "source": "rounds-review docs/superpowers/specs/2026-10-18-rounds-review-board-design.md, Primary Product Journeys (lines 1019-1071)",
+  "journeys": [
+    {
+      "id": "J1",
+      "title": "Bootstrap a Career Profile",
+      "lines": "1021-1030",
+      "milestone": 1,
+      "completingLeaf": "ROUNDS-13-L01",
+      "steps": [
+        {
+          "id": "J1.1",
+          "lines": "1023",
+          "text": "The user opens Career Profile with no canonical facts.",
+          "leaf": "ROUNDS-03-L03",
+          "milestone": 1,
+          "gate": "U3",
+          "with": [],
+          "note": "The Career Profile empty state; first-run step FR.2."
+        },
+        {
+          "id": "J1.2",
+          "lines": "1024-1025",
+          "text": "The product offers manual setup, resume/file import, JSON Resume, LinkedIn export, GitHub, or paste.",
+          "leaf": "ROUNDS-13-L01",
+          "milestone": 1,
+          "gate": "U5",
+          "with": ["ROUNDS-09-L01","ROUNDS-13-L02","ROUNDS-13-L03","ROUNDS-13-L04","ROUNDS-13-L05","ROUNDS-13-L06"],
+          "note": "One chooser: #49's openCapture lists the sources #65 registers; #66 to #70 add them."
+        },
+        {
+          "id": "J1.3",
+          "lines": "1026",
+          "text": "The source is preserved before extraction.",
+          "leaf": "ROUNDS-10-L01",
+          "milestone": 1,
+          "gate": "U7",
+          "with": [],
+          "note": "Raw sources are stored only after ROUNDS-14's privacy decisions (spec 3094)."
+        },
+        {
+          "id": "J1.4",
+          "lines": "1027",
+          "text": "Extraction creates staged claims and duplicate candidates.",
+          "leaf": "ROUNDS-11-L02",
+          "milestone": 1,
+          "gate": "U6",
+          "with": ["ROUNDS-10-L04","ROUNDS-11-L01"]
+        },
+        {
+          "id": "J1.5",
+          "lines": "1028",
+          "text": "The user reviews grouped entity changes.",
+          "leaf": "ROUNDS-12-L01",
+          "milestone": 1,
+          "gate": "U1",
+          "with": ["ROUNDS-12-L02"]
+        },
+        {
+          "id": "J1.6",
+          "lines": "1029",
+          "text": "Accepted changes commit as one Profile Revision.",
+          "leaf": "ROUNDS-12-L04",
+          "milestone": 1,
+          "gate": "U2",
+          "with": []
+        },
+        {
+          "id": "J1.7",
+          "lines": "1030",
+          "text": "The profile opens with completeness explanations and unresolved captures.",
+          "leaf": "ROUNDS-03-L03",
+          "milestone": 1,
+          "gate": "U3",
+          "with": ["ROUNDS-31-L02","ROUNDS-09-L02"],
+          "note": "Completeness explanations are assigned here (DR-0003 decision P10); #65 leaves them to this leaf."
+        }
+      ]
+    },
+    {
+      "id": "J2",
+      "title": "Add an opportunity from a job posting",
+      "lines": "1032-1040",
+      "milestone": 2,
+      "completingLeaf": "ROUNDS-19-L05",
+      "steps": [
+        {
+          "id": "J2.1",
+          "lines": "1034",
+          "text": "The user invokes Capture from Today, Pipeline, or Command Center.",
+          "leaf": "ROUNDS-09-L01",
+          "milestone": 2,
+          "gate": "U1",
+          "with": ["ROUNDS-27-L02","ROUNDS-30-L04"],
+          "note": "From Pipeline in Milestone 2; Command Center through #127; Today through #145 in Milestone 6."
+        },
+        {
+          "id": "J2.2",
+          "lines": "1035",
+          "text": "They paste a URL, description, or natural-language note.",
+          "leaf": "ROUNDS-19-L05",
+          "milestone": 2,
+          "gate": "U5",
+          "with": ["ROUNDS-10-L03"]
+        },
+        {
+          "id": "J2.3",
+          "lines": "1036-1037",
+          "text": "Rounds proposes Organization, Opportunity, requirements, source metadata, and optional Pursuit creation.",
+          "leaf": "ROUNDS-19-L05",
+          "milestone": 2,
+          "gate": "U6",
+          "with": ["ROUNDS-19-L01","ROUNDS-19-L02"],
+          "note": "Every path works with AI off."
+        },
+        {
+          "id": "J2.4",
+          "lines": "1038",
+          "text": "Existing organization/opportunity candidates are shown.",
+          "leaf": "ROUNDS-12-L02",
+          "milestone": 2,
+          "gate": "U1",
+          "with": ["ROUNDS-11-L02","ROUNDS-04-L02"]
+        },
+        {
+          "id": "J2.5",
+          "lines": "1039",
+          "text": "The user reviews and commits.",
+          "leaf": "ROUNDS-12-L04",
+          "milestone": 2,
+          "gate": "U2",
+          "with": ["ROUNDS-12-L01"]
+        },
+        {
+          "id": "J2.6",
+          "lines": "1040",
+          "text": "The Opportunity Workspace opens with suggested next steps.",
+          "leaf": "ROUNDS-21-L03",
+          "milestone": 2,
+          "gate": "U3",
+          "with": ["ROUNDS-21-L01","ROUNDS-31-L04"],
+          "note": "Stages 1 to 3 of #104 land in Milestone 2."
+        }
+      ]
+    },
+    {
+      "id": "J3",
+      "title": "Prepare for an interview",
+      "lines": "1042-1050",
+      "milestone": 6,
+      "completingLeaf": "ROUNDS-30-L02",
+      "steps": [
+        {
+          "id": "J3.1",
+          "lines": "1044",
+          "text": "The user schedules or imports an interview event.",
+          "leaf": "ROUNDS-22-L02",
+          "milestone": 4,
+          "gate": "U1",
+          "with": [],
+          "note": "Stage B of #107, after #106."
+        },
+        {
+          "id": "J3.2",
+          "lines": "1045",
+          "text": "The event inherits its pursuit and opportunity context.",
+          "leaf": "ROUNDS-22-L01",
+          "milestone": 4,
+          "gate": "U1",
+          "with": ["ROUNDS-19-L03"],
+          "note": "A round activity takes a slot in its own Pursuit's process."
+        },
+        {
+          "id": "J3.3",
+          "lines": "1046-1047",
+          "text": "Rounds derives a preparation plan from JD requirements, interview type, remaining time, previous attempts, profile stories, and readiness gaps.",
+          "leaf": "ROUNDS-29-L03",
+          "milestone": 6,
+          "gate": "U3",
+          "with": ["ROUNDS-22-L03","ROUNDS-29-L01","ROUNDS-29-L02"]
+        },
+        {
+          "id": "J3.4",
+          "lines": "1048",
+          "text": "The user accepts, edits, or dismisses recommended Actions.",
+          "leaf": "ROUNDS-29-L03",
+          "milestone": 6,
+          "gate": "U1",
+          "with": ["ROUNDS-26-L03"],
+          "note": "#140 owns the dispositions."
+        },
+        {
+          "id": "J3.5",
+          "lines": "1049",
+          "text": "Practice attempts and completed Actions update readiness.",
+          "leaf": "ROUNDS-29-L01",
+          "milestone": 6,
+          "gate": "U3",
+          "with": ["ROUNDS-31-L06"]
+        },
+        {
+          "id": "J3.6",
+          "lines": "1050",
+          "text": "Today reprioritizes without duplicating task records.",
+          "leaf": "ROUNDS-30-L02",
+          "milestone": 6,
+          "gate": "U3",
+          "with": ["ROUNDS-30-L01","ROUNDS-30-L04"]
+        }
+      ]
+    },
+    {
+      "id": "J4",
+      "title": "Create a tailored resume",
+      "lines": "1052-1061",
+      "milestone": 6,
+      "completingLeaf": "ROUNDS-29-L02",
+      "steps": [
+        {
+          "id": "J4.1",
+          "lines": "1054",
+          "text": "The user creates an Artifact Edition from an Opportunity Workspace.",
+          "leaf": "ROUNDS-17-L01",
+          "milestone": 3,
+          "gate": "U1",
+          "with": []
+        },
+        {
+          "id": "J4.2",
+          "lines": "1055",
+          "text": "Rounds proposes relevant canonical facts.",
+          "leaf": "ROUNDS-29-L02",
+          "milestone": 6,
+          "gate": "U3",
+          "with": ["ROUNDS-17-L01"],
+          "note": "#85's relevance slot stays off, and selection manual, until #139's evidence lookup ships."
+        },
+        {
+          "id": "J4.3",
+          "lines": "1056",
+          "text": "The user selects, orders, hides, and rewrites facts for this edition.",
+          "leaf": "ROUNDS-16-L02",
+          "milestone": 3,
+          "gate": "U1",
+          "with": []
+        },
+        {
+          "id": "J4.4",
+          "lines": "1057",
+          "text": "Overrides remain visibly distinct from canonical facts.",
+          "leaf": "ROUNDS-16-L02",
+          "milestone": 3,
+          "gate": "U1",
+          "with": ["ROUNDS-16-L01"]
+        },
+        {
+          "id": "J4.5",
+          "lines": "1058",
+          "text": "The user may propose an override back to the profile as a reviewed change.",
+          "leaf": "ROUNDS-16-L02",
+          "milestone": 3,
+          "gate": "U1",
+          "with": ["ROUNDS-15-L01","ROUNDS-12-L01","ROUNDS-12-L04"],
+          "note": "Stage 4 of #82 sends #77's ProposeOverrideToProfile; #61 reviews and #64 commits."
+        },
+        {
+          "id": "J4.6",
+          "lines": "1059",
+          "text": "A submitted version freezes its source profile and opportunity revisions.",
+          "leaf": "ROUNDS-15-L03",
+          "milestone": 3,
+          "gate": "U2",
+          "with": ["ROUNDS-17-L04"]
+        },
+        {
+          "id": "J4.7",
+          "lines": "1060-1061",
+          "text": "Later canonical changes show as optional edition updates, never silent rewrites.",
+          "leaf": "ROUNDS-16-L02",
+          "milestone": 3,
+          "gate": "U1",
+          "with": [],
+          "note": "Update available: use the update or keep this version."
+        }
+      ]
+    },
+    {
+      "id": "J5",
+      "title": "Capture interview feedback",
+      "lines": "1063-1071",
+      "milestone": 6,
+      "completingLeaf": "ROUNDS-29-L04",
+      "steps": [
+        {
+          "id": "J5.1",
+          "lines": "1065",
+          "text": "The completed interview event opens a concise debrief.",
+          "leaf": "ROUNDS-22-L04",
+          "milestone": 4,
+          "gate": "U1",
+          "with": []
+        },
+        {
+          "id": "J5.2",
+          "lines": "1066-1067",
+          "text": "The user records questions, signals, confidence, feedback, contacts, and follow-ups manually or in natural language.",
+          "leaf": "ROUNDS-22-L04",
+          "milestone": 4,
+          "gate": "U1",
+          "with": ["ROUNDS-19-L05"],
+          "note": "Manual in stage 2; natural language in stage 3 through #181's note capture."
+        },
+        {
+          "id": "J5.3",
+          "lines": "1068-1069",
+          "text": "AI may propose structured events, Actions, practice gaps, stories, or profile evidence.",
+          "leaf": "ROUNDS-22-L04",
+          "milestone": 4,
+          "gate": "U6",
+          "with": ["ROUNDS-09-L01","ROUNDS-11-L01","ROUNDS-19-L05"],
+          "note": "Only after the round is completed, so nothing assists a live interview (spec 178)."
+        },
+        {
+          "id": "J5.4",
+          "lines": "1070",
+          "text": "The user reviews canonical mutations.",
+          "leaf": "ROUNDS-22-L04",
+          "milestone": 4,
+          "gate": "U1",
+          "with": ["ROUNDS-12-L01","ROUNDS-12-L02","ROUNDS-12-L04"]
+        },
+        {
+          "id": "J5.5",
+          "lines": "1071",
+          "text": "Readiness and Today update from accepted evidence.",
+          "leaf": "ROUNDS-29-L04",
+          "milestone": 6,
+          "gate": "U3",
+          "with": ["ROUNDS-29-L01","ROUNDS-30-L02"]
+        }
+      ]
+    }
+  ],
+  "firstRun": {
+    "chooser": "ROUNDS-09-L01",
+    "rule": "No second chooser: the Today and Career Profile empty states open #49's openCapture, which lists the sources #65 registers; neither lists sources itself.",
+    "steps": [
+      {
+        "id": "FR.1",
+        "surface": "Today empty state: one panel, \"Start with your career history\", into the Career Profile empty state, with Capture second",
+        "leaf": "ROUNDS-30-L04",
+        "milestone": 6,
+        "gate": "U3"
+      },
+      {
+        "id": "FR.2",
+        "surface": "Career Profile empty state: manual setup, or import through Capture",
+        "leaf": "ROUNDS-03-L03",
+        "milestone": 1,
+        "gate": "U3"
+      },
+      {"id":"FR.3","surface":"openCapture, the one chooser","leaf":"ROUNDS-09-L01","milestone":1,"gate":"U1"},
+      {
+        "id": "FR.4",
+        "surface": "The bootstrap sources: manual setup, resume file, JSON Resume, LinkedIn export, GitHub, and paste",
+        "leaf": "ROUNDS-13-L01",
+        "milestone": 1,
+        "gate": "U5"
+      }
+    ]
+  }
+}

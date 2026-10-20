@@ -1,0 +1,197 @@
+{
+  "$schema": "./non-goals.schema.json",
+  "registry": "non-goals",
+  "revision": 1,
+  "decisionRecord": "DR-0003",
+  "description": "The register half of gate U11 (DR-0003 decision P8): the product non-goals, every catalog tradeoff verbatim, and the one fully populated reference leaf issue. Leaf non-goals stay in each issue body. A product non-goal changes only through the owner; adding a tradeoff with a new catalog entry is additive. The ROUNDS-32 tradeoff quotes the catalog's unqualified cutover phrase, so one space in it is written as a JSON \\u0020 escape: the parsed text is the catalog's, and DR-0001 G11's raw-text check reads it as a quotation rather than a new use (DR-0003 departure X6).",
+  "sources": {
+    "spec": "rounds-review docs/superpowers/specs/2026-10-18-rounds-review-board-design.md, Product non-goals (lines 173-187)",
+    "product": "rounds-review PRODUCT.md, Product Non-Goals (lines 207-217)",
+    "catalog": "rounds-review src/data/capabilities.json, each capability's tradeoffs, in catalog order"
+  },
+  "product": [
+    {
+      "id": "NG-1",
+      "spec": {"lines":"177","text":"employer, recruiter, applicant-tracking-system, or hiring-team workflows"},
+      "product": {"lines":"211","text":"Employer, recruiter, applicant-tracking-system, or hiring-team workflows"}
+    },
+    {
+      "id": "NG-2",
+      "spec": {"lines":"178","text":"covert assistance during a real interview"},
+      "product": {"lines":"212","text":"Covert assistance during a real interview"}
+    },
+    {
+      "id": "NG-3",
+      "spec": {"lines":"179-180","text":"a general-purpose CRM unrelated to professional history or a career opportunity"},
+      "product": {"lines":"213-214","text":"A general-purpose CRM unrelated to a career opportunity or professional history"}
+    },
+    {
+      "id": "NG-4",
+      "spec": {"lines":"181","text":"automatic job submission or impersonation of the user"},
+      "product": {"lines":"215","text":"Automatic job submission or impersonation of the user"}
+    },
+    {"id":"NG-5","spec":{"lines":"182","text":"a peer-coaching marketplace"},"product":null},
+    {
+      "id": "NG-6",
+      "spec": {"lines":"183","text":"unreviewed AI mutation of canonical facts"},
+      "product": {"lines":"216","text":"Unreviewed AI mutation of canonical facts"}
+    },
+    {
+      "id": "NG-7",
+      "spec": {"lines":"184","text":"runtime execution of arbitrary untrusted career-pack code"},
+      "product": {"lines":"217","text":"Untrusted runtime installation of arbitrary career-pack code"}
+    }
+  ],
+  "tradeoffs": [
+    {"capability":"ROUNDS-00A","text":"Ephemeral workers cost more than pooled in-process execution but make isolation reviewable."},
+    {
+      "capability": "ROUNDS-00A",
+      "text": "Server-owned definitions reduce caller flexibility while removing executable input from the public contract."
+    },
+    {"capability":"ROUNDS-00B","text":"One-time bearer disclosure prevents secret recovery and requires an explicit rotation flow."},
+    {"capability":"ROUNDS-00B","text":"Uniform public failures reduce support diagnostics but prevent account and artifact enumeration."},
+    {
+      "capability": "ROUNDS-01",
+      "text": "Ratification slows immediate feature coding but prevents expensive parallel authorities and naming drift."
+    },
+    {
+      "capability": "ROUNDS-02",
+      "text": "Command and projection infrastructure adds explicit ceremony in exchange for one auditable mutation path and bounded consistency."
+    },
+    {
+      "capability": "ROUNDS-03",
+      "text": "Separate aggregates add explicit joins but prevent authentication identity from becoming accidental portfolio content."
+    },
+    {
+      "capability": "ROUNDS-04",
+      "text": "Identity resolution introduces review work for ambiguous matches but prevents silent destructive deduplication."
+    },
+    {
+      "capability": "ROUNDS-05",
+      "text": "Typed constructs require migration and careful extension rules but avoid one unbounded generic content entity."
+    },
+    {
+      "capability": "ROUNDS-06",
+      "text": "A relation registry needs governance, but it keeps arbitrary cross-entity links out of page code and free text."
+    },
+    {
+      "capability": "ROUNDS-07",
+      "text": "Trusted build-time packs are less dynamic than arbitrary plugins but preserve self-host reliability, accessibility, security, and migration control."
+    },
+    {
+      "capability": "ROUNDS-08",
+      "text": "Shared primitives reduce inconsistency, while keeping page composition explicit avoids generic form-builder experiences."
+    },
+    {
+      "capability": "ROUNDS-09",
+      "text": "A durable inbox adds an intermediate step for rich sources but prevents hidden imports and lost partial work."
+    },
+    {
+      "capability": "ROUNDS-10",
+      "text": "Preserving raw sources improves auditability but requires explicit retention, deletion, encryption, and backup-expiry policy."
+    },
+    {
+      "capability": "ROUNDS-11",
+      "text": "Visible claims require review UI and storage, but they make automation correctable and preserve user trust."
+    },
+    {
+      "capability": "ROUNDS-12",
+      "text": "Atomic review may defer some accepted fields until conflicts resolve, but avoids a half-imported career history."
+    },
+    {
+      "capability": "ROUNDS-13",
+      "text": "Source-specific adapters cost more than a generic text importer but preserve native fields and honest source limitations."
+    },
+    {
+      "capability": "ROUNDS-14",
+      "text": "Explicit invocation and retention controls add friction but make provider use auditable and self-hosting choices meaningful."
+    },
+    {
+      "capability": "ROUNDS-15",
+      "text": "Explicit editions and revisions add concepts, but remove confusing detach and synchronization behavior while making submissions reproducible."
+    },
+    {
+      "capability": "ROUNDS-16",
+      "text": "Removing push-back from material to profile requires an explicit separate profile-edit action, which makes authority clearer."
+    },
+    {
+      "capability": "ROUNDS-17",
+      "text": "Immutable submission records consume storage but eliminate uncertainty about which changing draft was sent."
+    },
+    {
+      "capability": "ROUNDS-18",
+      "text": "Complete portability requires versioned schemas and upgrade tooling beyond simple JSON Resume compatibility."
+    },
+    {
+      "capability": "ROUNDS-19",
+      "text": "Separating posting and pursuit adds a relation but prevents source refresh from rewriting personal history."
+    },
+    {
+      "capability": "ROUNDS-20",
+      "text": "A governed registry constrains ad hoc custom statuses but supports pack extensions through explicit versioned contracts."
+    },
+    {
+      "capability": "ROUNDS-21",
+      "text": "A continuous workspace requires careful progressive disclosure to avoid overwhelming users with every lifecycle tool at once."
+    },
+    {
+      "capability": "ROUNDS-22",
+      "text": "Structured stages require more modeling than a list, but enable consistent preparation, history, scheduling, and pack-specific process types."
+    },
+    {
+      "capability": "ROUNDS-23",
+      "text": "Structured relationship context should remain lightweight and never become an invasive CRM or automatic surveillance system."
+    },
+    {
+      "capability": "ROUNDS-24",
+      "text": "Structured compensation cannot capture every term, so the model needs typed common fields plus private extensible terms and source evidence."
+    },
+    {
+      "capability": "ROUNDS-25",
+      "text": "Query lenses may change membership over time, so historical reports need explicit snapshots rather than copied live records."
+    },
+    {
+      "capability": "ROUNDS-26",
+      "text": "Typed relations should supplement readable action text, not turn quick capture into a mandatory project-management form."
+    },
+    {
+      "capability": "ROUNDS-27",
+      "text": "A universal surface must remain predictable: explicit modes and previews are preferable to opaque natural-language action guessing."
+    },
+    {
+      "capability": "ROUNDS-28",
+      "text": "Shared contracts unify durable meaning, while track-specific payloads and components preserve the specialized practice experience."
+    },
+    {
+      "capability": "ROUNDS-29",
+      "text": "Recommendations should optimize user attention without pretending readiness is an objective hiring probability."
+    },
+    {
+      "capability": "ROUNDS-30",
+      "text": "A strong priority queue must remain user-correctable and avoid gamified urgency or opaque productivity scoring."
+    },
+    {
+      "capability": "ROUNDS-31",
+      "text": "Read models introduce eventual consistency, so freshness and command-to-read expectations must be explicit and visible."
+    },
+    {
+      "capability": "ROUNDS-32",
+      "text": "A clean\u0020cutover requires deliberate gates and temporary adapters but avoids permanently paying for dual writes and reconciliation."
+    },
+    {
+      "capability": "ROUNDS-33",
+      "text": "Consistency should govern behavior and primitives without flattening distinct workspaces into one generic card grid."
+    },
+    {
+      "capability": "ROUNDS-34",
+      "text": "End-to-end release proof costs compute and maintenance, but prevents architecture claims from outrunning exercised behavior."
+    }
+  ],
+  "referenceLeaf": {
+    "leaf": "ROUNDS-02-L01",
+    "issue": 18,
+    "designation": "default",
+    "rule": "Gate U11's one fully populated reference leaf issue. Default taken under the owner's delegation (DR-0003 decision P9): #18, the refinement's suggestion. The owner designates another by superseding DR-0003.",
+    "source": "#17 Refinement review, owner input 1"
+  }
+}

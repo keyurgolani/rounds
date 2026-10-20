@@ -10,7 +10,7 @@ import { createContext } from '../lib/context.mjs';
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
-const COPY_DIRS = ['contracts/vocabulary', 'contracts/authority', 'docs/decisions', 'pocketbase/pb_migrations', 'backend/routers'];
+const COPY_DIRS = ['contracts/vocabulary', 'contracts/authority', 'docs/decisions', 'docs/program', 'pocketbase/pb_migrations', 'backend/routers'];
 const COPY_FILES = [
   'backend/main.py', 'frontend/src/App.tsx', 'frontend/src/components/Layout.tsx', 'frontend/src/command-center/registry.tsx',
   'frontend/src/applications/interviewTypes.ts', 'frontend/src/auth/AuthProvider.tsx', 'frontend/index.html',

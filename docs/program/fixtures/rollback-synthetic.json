@@ -1,0 +1,58 @@
+{
+  "$schema": "../rollback-template.schema.json",
+  "template": "rollback-template/v1",
+  "transfer": "ROUNDS-32-L05",
+  "context": "account",
+  "rollbackDeadline": {
+    "daysAfterSwitch": 14,
+    "rule": "Synthetic: 14 days after the switch, or sooner if a later transfer depends on this context."
+  },
+  "allowedDowntime": {
+    "freezeMinutes": 15,
+    "readsDuringFreeze": "available",
+    "note": "Synthetic: writes to the frozen set get 409 context_frozen; reads stay open."
+  },
+  "recoveryPointObjective": {"acceptedWritesLost":0},
+  "recoveryTimeObjective": {"minutes":30,"scale":"Synthetic: the per-account scale floor (spec 2020-2028) with 10 benchmark accounts."},
+  "compatibility": {
+    "forward": "Synthetic: the new release reads legacy rows through the adapter until the switch.",
+    "reverse": "Synthetic: the previous release reads canonical rows replayed into legacy form by the compensation journal.",
+    "versionMarker": "Synthetic: startup refuses a schema or client version the marker does not list."
+  },
+  "finalWriteFreezeBoundary": {
+    "freezeSet": [{"collection":"example_preferences"},{"collection":"example_profiles","fields":["example_field"]}],
+    "fence": "Synthetic: the change-journal sequence noted before the snapshot; entries past it are applied as the final delta."
+  },
+  "journal": {
+    "kind": "replay-and-reverse-delta",
+    "location": "Synthetic: the run journal and compensation journal of the migration framework."
+  },
+  "externalEffects": {
+    "publicShares": "Synthetic: no share changes target; a rollback leaves capabilities on their revisions.",
+    "exports": "Synthetic: exports made after the switch stay valid and are listed in the receipt.",
+    "emails": "Synthetic: none sent by this transfer.",
+    "other": "Synthetic: none."
+  },
+  "partialDeployDetection": {"mechanism":"Synthetic: the version marker and a client version header; a mismatched replica refuses writes."},
+  "readModels": {
+    "onRollback": "rebuild",
+    "note": "Synthetic: projectors rebuild from the restored authority, and sections read stale until they catch up."
+  },
+  "decisionOwner": {"role":"Synthetic: the operator running the transfer","leaf":"ROUNDS-32-L05"},
+  "upgradeSource": {
+    "tag": "v0.0.0-example",
+    "commit": "0000000",
+    "images": [
+      {"name":"rounds-frontend","digest":"sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+      {"name":"rounds-pocketbase","digest":"sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+      {"name":"rounds-runner","digest":"sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+      {"name":"rounds-pdf-renderer","digest":"sha256:0000000000000000000000000000000000000000000000000000000000000000"}
+    ]
+  },
+  "backupConsistency": {
+    "method": "Synthetic: a snapshot taken while the context is frozen, checked against per-store counts and checksums.",
+    "restoreRehearsed": true,
+    "evidence": "Synthetic: a rehearsal receipt at the current fingerprint."
+  },
+  "deviations": []
+}
