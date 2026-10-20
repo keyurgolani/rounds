@@ -10,6 +10,14 @@
       "reason": "Annotates each presentation row with its definition version and records a definition_migration_journal row; it adds columns and a journal and deletes no row. Touched rows and dispositions are in the manifest.",
       "reviewed_by": "pending owner review",
       "manifest": "pocketbase/migration-manifests/1700006200_definitions_expand.json"
+    },
+    {
+      "path": "pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js",
+      "rules": ["rewrites-rows"],
+      "sha256": "c380aca1ce0fedb656e54863a0d002aa12d0f5dd39f3b30f408a072c34796736",
+      "issue": "#10",
+      "reason": "Quarantines pre-existing cross-owner relation rows: moves an offending required row into relation_quarantine and clears an offending optional reference, so every retained relation points at a same-owner target.",
+      "reviewed_by": "keyurgolani"
     }
   ]
 }
