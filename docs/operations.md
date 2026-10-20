@@ -20,9 +20,9 @@ Production compose starts three services:
 
 Only the frontend port is exposed on the host.
 
-Images are published to both Docker Hub and GHCR. Docker Hub is the default in `docker-compose.prod.yml`; set the `ROUNDS_*_IMAGE` variables to use GHCR or pinned per-service tags.
+Images are published to both Docker Hub and GHCR. Docker Hub is the default in `docker-compose.prod.yml`; set `ROUNDS_IMAGE_TAG` to pin a release, and the `ROUNDS_*_IMAGE` variables to use GHCR or per-service tags. Run a pinned release in production; see [Upgrades](#upgrades).
 
-The publishing workflow always pushes GHCR images. Docker Hub publishing requires repository secrets named `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+The publishing workflow always pushes GHCR images. Docker Hub publishing requires repository secrets named `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. A push to `main` publishes `edge` and `sha-<short>`. A `vX.Y.Z` tag publishes the release tags and `latest`, once CI has passed on that commit; [image tags](deployment.md#image-tags) has the details.
 
 ## Health Checks
 
@@ -65,29 +65,38 @@ Use PocketBase logs for auth, migrations, hooks, and data-layer issues. Use runn
 
 ## Backups
 
-PocketBase stores SQLite data and uploads in the `pb_data` Docker volume. Back it up regularly.
+PocketBase stores SQLite data and uploads in the `pb_data` Docker volume. Back it up regularly, with PocketBase stopped. SQLite keeps recent writes in a separate WAL file while it runs, so a copy of a running database can be missing writes or fail to open. The stop lasts as long as the archive takes; the app shows errors until PocketBase is back.
 
 ```sh
+docker compose -f docker-compose.prod.yml stop pocketbase
 docker run --rm \
-  -v rounds_pb_data:/data \
+  -v rounds_pb_data:/data:ro \
   -v "$(pwd)":/backup \
   alpine tar czf /backup/pocketbase-$(date +%F).tar.gz /data
+docker compose -f docker-compose.prod.yml start pocketbase
 ```
 
-Validate that backup files are non-empty and periodically test restore on a non-production host.
+The volume is named after the compose project, which defaults to the checkout's directory name, so `rounds_pb_data` assumes a checkout named `rounds`; `docker volume ls` shows yours. Check that each archive isn't empty, and test a restore on another host now and then.
 
 ## Restore
 
 1. Stop the stack.
-2. Extract the backup archive into the `pb_data` volume.
-3. Start the stack again.
-4. Verify login, dashboard data, applications, interviews, todos, and guide pages.
-
-Example outline:
+2. Empty the `pb_data` volume and extract the backup archive into it.
+3. Check that `ROUNDS_IMAGE_TAG` in `.env` is the release that wrote the archive. PocketBase migrates whatever data it starts on, so a newer image would upgrade the restored data again.
+4. Start the stack again.
+5. Verify login, dashboard data, applications, interviews, todos, and guide pages.
 
 ```sh
 docker compose -f docker-compose.prod.yml down
-# restore archive contents into the pb_data volume
+docker run --rm \
+  -v rounds_pb_data:/data \
+  -v "$(pwd)":/backup:ro \
+  alpine sh -c 'find /data -mindepth 1 -delete && tar xzf /backup/pocketbase-2026-01-31.tar.gz -C /data --strip-components=1'
+```
+
+Use the archive's own date in place of `2026-01-31`. Nothing has started yet; once the tag is right, start the stack:
+
+```sh
 docker compose -f docker-compose.prod.yml up -d
 ```
 
@@ -95,16 +104,42 @@ Do not restore over a running PocketBase container.
 
 ## Upgrades
 
-1. Read release notes or changed migrations before deploying.
-2. Take a fresh `pb_data` backup.
-3. Pull the desired image tag and restart production compose.
-4. Watch PocketBase logs for migration errors.
-5. Run smoke tests.
+PocketBase applies a release's new migrations when it starts, and an older image can't undo them. So pin the release you run, back up first, and upgrade on purpose. `latest` moves to each new stable release, and an install that pulls it can upgrade on any restart. [Image tags](deployment.md#image-tags) lists what each tag follows.
+
+1. Read the release notes and the migrations the release adds.
+2. Note the tag you run now; rolling back goes to it.
+3. Stop PocketBase and back up `pb_data` as in [Backups](#backups). Keep that archive until the upgrade has run a while.
+4. Set `ROUNDS_IMAGE_TAG` in `.env` to the new release, for example `ROUNDS_IMAGE_TAG=1.2.3`.
+5. Pull and start, then watch PocketBase's log for migration errors.
+6. Run the smoke tests.
 
 ```sh
+docker compose -f docker-compose.prod.yml stop pocketbase
+# back up pb_data as in Backups, then set ROUNDS_IMAGE_TAG in .env
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml logs -f pocketbase
+```
+
+On Kubernetes, scale PocketBase to 0 and back up its volume, then set `newTag` for each image in `k8s/kustomization.yaml` and apply.
+
+### Rolling back
+
+An older image doesn't undo a newer release's migrations, so rolling back means restoring the backup from step 3 and running the tag you noted in step 2. Anything written since the upgrade is lost. Set the tag before anything starts, so the newer image never runs on the restored data.
+
+1. Stop the stack.
+2. Set `ROUNDS_IMAGE_TAG` in `.env` back to the previous tag.
+3. Restore the pre-upgrade archive into `pb_data`.
+4. Start the stack and run the smoke tests.
+
+```sh
+docker compose -f docker-compose.prod.yml down
+# set ROUNDS_IMAGE_TAG in .env back to the previous tag
+docker run --rm \
+  -v rounds_pb_data:/data \
+  -v "$(pwd)":/backup:ro \
+  alpine sh -c 'find /data -mindepth 1 -delete && tar xzf /backup/pocketbase-2026-01-31.tar.gz -C /data --strip-components=1'
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ### Cross-owner relation scan

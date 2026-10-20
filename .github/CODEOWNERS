@@ -1,0 +1,10 @@
+# Release guard (ROUNDS-00A-L01 stage 5). A pull request that touches these
+# needs the owner's review once code-owner review is required on main and
+# next. The migration lint and its allowlist run from the pull request's
+# own checkout, so this review is what makes an allowlist entry reviewed.
+/pocketbase/pb_migrations/ @keyurgolani
+/scripts/migration-lint-allowlist.json @keyurgolani
+/scripts/lint_migrations.py @keyurgolani
+/scripts/release_gate.py @keyurgolani
+/.github/workflows/ @keyurgolani
+/.github/CODEOWNERS @keyurgolani
