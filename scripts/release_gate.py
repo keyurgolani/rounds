@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Decides what a push may publish (ROUNDS-00A-L01 stage 5).
 
-The image workflow runs this twice:
+The image workflow runs this three times:
 
 ``plan``, in the plan job, before anything builds
     A push to main is the edge channel. A ``vX.Y.Z`` or
@@ -12,28 +12,43 @@ The image workflow runs this twice:
     a deleted ref isn't an error. Writes ``channel`` (edge, release, or
     none).
 
-``tags``, in each publish job, right before it pushes
-    Writes ``tags``, the docker/metadata-action tag list, from the
-    repository as it is at that moment, so a re-run of an old run can't
-    move a moving tag backwards:
+``tags``, in each build job
+    Writes ``tags``, the docker/metadata-action tag list. A build pushes
+    only tags that never move: ``sha-<short>`` on the edge channel, and
+    ``X.Y.Z`` and ``vX.Y.Z`` on the release channel.
 
-    - edge: ``sha-<short>``, plus ``edge`` while this commit is still
-      main's tip;
-    - release: ``X.Y.Z`` and ``vX.Y.Z``, plus ``X.Y`` for the highest stable
-      patch of that line and ``latest`` for the highest stable version.
+``retag``, in the one job that runs after all four builds
+    Decides the moving tags from the repository as it is at that moment and
+    moves them for all four images together with ``docker buildx imagetools
+    create``, without a rebuild:
 
-Both read GITHUB_EVENT_NAME, GITHUB_EVENT_PATH, GITHUB_REF, GITHUB_SHA,
-GITHUB_REPOSITORY, GITHUB_API_URL, GH_TOKEN, and GITHUB_OUTPUT; ``tags``
-also reads CHANNEL, the plan job's channel.
+    - edge: ``edge`` points at main's current tip;
+    - release: each line's ``X.Y`` points at its highest stable patch and
+      ``latest`` at the highest stable version. A pre-release is never one
+      of them.
 
-usage: release_gate.py plan|tags
-exit status: 0 decided, 1 nothing may publish
+    A tag moves only when all four images already have the tag it points
+    at; otherwise it stays where it is. Every run of a channel decides the
+    same answer from the same repository, and the workflow runs each
+    channel's jobs one at a time, so whichever runs last leaves each tag
+    right, and an older publish can't move one backwards.
+
+All three read GITHUB_REF, GITHUB_SHA, and GITHUB_REPOSITORY. ``plan`` and
+``retag`` also read GITHUB_API_URL and GH_TOKEN, ``plan`` reads
+GITHUB_EVENT_NAME and GITHUB_EVENT_PATH, ``plan`` and ``tags`` write
+GITHUB_OUTPUT, ``tags`` and ``retag`` read CHANNEL, the plan job's channel,
+and ``retag`` reads GHCR_PREFIX and DOCKERHUB_PREFIX, each a registry's image
+name without its ``-<service>`` suffix (an empty one is skipped).
+
+usage: release_gate.py plan|tags|retag
+exit status: 0 decided, 1 nothing may publish or a move failed
 """
 from __future__ import annotations
 
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -50,13 +65,20 @@ WAIT_S = 40 * 60  # how long CI on the tagged commit may still be running
 APPEAR_S = 5 * 60  # how long a CI run may take to show up at all
 POLL_S = 30
 MAX_PAGES = 20
+# The four images every publish builds, as the workflow's matrix names them.
+IMAGES = ("frontend", "pocketbase", "runner", "pdf-renderer")
+# docker/metadata-action's type=sha tag uses the commit's first 7 characters.
+SHORT_SHA = 7
+IMAGE_PREFIX = re.compile(r"[a-z0-9.-]+(?::[0-9]+)?(?:/[a-z0-9._-]+)+")
 
 # api(path, params) returns the decoded JSON of each page.
 Api = Callable[[str, "dict[str, str]"], "list[Any]"]
+# run(args) runs a command and returns its exit status.
+Runner = Callable[["list[str]"], int]
 
 
 class GateError(Exception):
-    """Nothing may publish; exit status 1."""
+    """Nothing may publish, or a tag didn't move; exit status 1."""
 
 
 # ---- versions ----------------------------------------------------------------------
@@ -75,21 +97,11 @@ def _stable(tags: list[str]) -> list[tuple[int, int, int]]:
     return [v[0] for v in map(release_version, tags) if v is not None and v[1]]
 
 
-def moves_latest(tag: str, tags: list[str]) -> bool:
-    """Whether ``tag`` is a stable version that no other stable tag outranks."""
-    mine = release_version(tag)
-    if mine is None or not mine[1]:
-        return False
-    return all(mine[0] >= other for other in _stable(tags))
-
-
-def moves_minor(tag: str, tags: list[str]) -> bool:
-    """Whether ``tag`` is a stable version that no other stable tag of the
-    same major and minor outranks, so it may move ``X.Y``."""
-    mine = release_version(tag)
-    if mine is None or not mine[1]:
-        return False
-    return all(mine[0] >= other for other in _stable(tags) if other[:2] == mine[0][:2])
+def highest_stable(tags: list[str], line: tuple[int, int] | None = None) -> str | None:
+    """The highest stable version among ``tags`` as ``X.Y.Z``, the form the
+    images carry, within the ``(major, minor)`` line when one is given."""
+    versions = [v for v in _stable(tags) if line is None or v[:2] == line]
+    return ".".join(map(str, max(versions))) if versions else None
 
 
 # ---- GitHub lookups ----------------------------------------------------------------
@@ -147,7 +159,7 @@ def branch_tip(api: Api, repo: str) -> str:
     pages = api(f"repos/{repo}/git/ref/heads/{BRANCH}", {})
     target = pages[0].get("object") if pages and isinstance(pages[0], dict) else None
     sha = target.get("sha") if isinstance(target, dict) else None
-    if not isinstance(sha, str):
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise GateError(f"the {BRANCH} lookup answered in an unexpected shape, so nothing was published")
     return sha
 
@@ -188,7 +200,7 @@ def wait_for_ci(
         sleep(poll_s)
 
 
-# ---- the two commands --------------------------------------------------------------
+# ---- the three commands -------------------------------------------------------------
 
 
 def _check_identity(sha: str, repo: str) -> None:
@@ -220,29 +232,80 @@ def plan(event_name: str, event: dict, ref: str, sha: str, repo: str, api: Api, 
     return {"channel": "release"}
 
 
-def image_tags(channel: str, ref: str, sha: str, repo: str, api: Api) -> list[str]:
-    """The docker/metadata-action tag list for this publish, decided from
-    the repository as it is now."""
+def _edge_ref(ref: str) -> None:
+    if ref != f"refs/heads/{BRANCH}":
+        raise GateError(f"the edge channel publishes only from {BRANCH}, not {ref}")
+
+
+def image_tags(channel: str, ref: str, sha: str, repo: str) -> list[str]:
+    """The docker/metadata-action tag list a build pushes. None of these
+    tags ever moves; ``moving_tags`` decides the ones that do."""
     _check_identity(sha, repo)
     if channel == "edge":
-        if ref != f"refs/heads/{BRANCH}":
-            raise GateError(f"the edge channel publishes only from {BRANCH}, not {ref}")
-        tags = ["type=sha,prefix=sha-"]
-        if branch_tip(api, repo) == sha:
-            tags.insert(0, "type=raw,value=edge")
-        else:
-            print(f"{sha} is no longer the tip of {BRANCH}, so edge stays where it is")
-        return tags
+        _edge_ref(ref)
+        return ["type=sha,prefix=sha-"]
     if channel == "release":
-        tag = _release_tag(ref)
-        existing = release_tags(api, repo)
-        tags = ["type=semver,pattern={{version}}", "type=ref,event=tag"]
-        if moves_minor(tag, existing):
-            tags.append("type=semver,pattern={{major}}.{{minor}}")
-        if moves_latest(tag, existing):
-            tags.append("type=raw,value=latest")
-        return tags
+        _release_tag(ref)
+        return ["type=semver,pattern={{version}}", "type=ref,event=tag"]
     raise GateError(f"there's nothing to publish on the {channel or 'unknown'} channel")
+
+
+def moving_tags(channel: str, ref: str, sha: str, repo: str, api: Api) -> list[tuple[str, str]]:
+    """``(moving tag, the tag it points at)`` for this publish, decided from
+    the repository as it is now rather than from this run's own commit or
+    tag, so every run decides the same answer."""
+    _check_identity(sha, repo)
+    if channel == "edge":
+        _edge_ref(ref)
+        tip = branch_tip(api, repo)
+        if tip != sha:
+            print(f"{sha} is no longer the tip of {BRANCH}, so edge follows the tip, {tip}")
+        return [("edge", f"sha-{tip[:SHORT_SHA]}")]
+    if channel == "release":
+        # Every line's X.Y and latest, not just this tag's: a newer release
+        # job can replace this one while it waits, and then it has to leave
+        # the tags this one would have. A pre-release is never a target.
+        _release_tag(ref)
+        existing = release_tags(api, repo)
+        moves: list[tuple[str, str]] = []
+        for major, minor in sorted({version[:2] for version in _stable(existing)}):
+            moves.append((f"{major}.{minor}", str(highest_stable(existing, (major, minor)))))
+        top = highest_stable(existing)
+        if top is not None:
+            moves.append(("latest", top))
+        return moves
+    raise GateError(f"there's nothing to publish on the {channel or 'unknown'} channel")
+
+
+def _image_prefix(prefix: str) -> str:
+    # Registries take lowercase names, and docker/metadata-action lowercases
+    # the names the builds push.
+    prefix = prefix.lower()
+    if not IMAGE_PREFIX.fullmatch(prefix):
+        raise GateError("an image prefix doesn't look right, so no tag moved")
+    return prefix
+
+
+def retag(moves: list[tuple[str, str]], prefixes: list[str], run: Runner) -> list[str]:
+    """Points each moving tag at its target on every registry prefix, for
+    all four images together, and returns what moved. A tag whose target
+    some image doesn't have yet stays where it is, with a warning."""
+    moved: list[str] = []
+    for prefix in map(_image_prefix, prefixes):
+        for moving, target in moves:
+            sources = [f"{prefix}-{image}:{target}" for image in IMAGES]
+            missing = [s for s in sources if run(["docker", "buildx", "imagetools", "inspect", s]) != 0]
+            if missing:
+                print(
+                    f"::warning::{moving} stays where it is on {prefix}: "
+                    f"{', '.join(missing)} can't be read, so it isn't pushed for every image yet"
+                )
+                continue
+            for image, source in zip(IMAGES, sources):
+                if run(["docker", "buildx", "imagetools", "create", "--tag", f"{prefix}-{image}:{moving}", source]) != 0:
+                    raise GateError(f"moving {moving} on {prefix}-{image} failed; re-run this job")
+            moved.append(f"{prefix}-*:{moving} -> {target}")
+    return moved
 
 
 # ---- GitHub client and entry point -------------------------------------------------
@@ -302,12 +365,19 @@ def _write_outputs(path: str | None, outputs: dict[str, str | list[str]]) -> Non
                 out.write(f"{key}={value}\n")
 
 
-def main(argv: list[str] | None = None) -> int:
+def run_command(args: list[str]) -> int:
+    """Runs a docker command with its output in the job log, except an
+    inspect's manifest."""
+    quiet = args[:4] == ["docker", "buildx", "imagetools", "inspect"]
+    return subprocess.run(args, check=False, stdout=subprocess.DEVNULL if quiet else None).returncode
+
+
+def main(argv: list[str] | None = None, run: Runner = run_command) -> int:
     args = sys.argv[1:] if argv is None else argv
     env = os.environ
     try:
-        if args not in (["plan"], ["tags"]):
-            raise GateError("usage: release_gate.py plan|tags")
+        if args not in (["plan"], ["tags"], ["retag"]):
+            raise GateError("usage: release_gate.py plan|tags|retag")
         api = github_api(env.get("GITHUB_API_URL") or "https://api.github.com", env.get("GH_TOKEN", ""))
         ref, sha, repo = env.get("GITHUB_REF", ""), env.get("GITHUB_SHA", ""), env.get("GITHUB_REPOSITORY", "")
         outputs: dict[str, str | list[str]]
@@ -319,8 +389,16 @@ def main(argv: list[str] | None = None) -> int:
             if not isinstance(event, dict):
                 raise GateError("the event payload isn't an object, so nothing was published")
             outputs = dict(plan(env.get("GITHUB_EVENT_NAME", ""), event, ref, sha, repo, api))
+        elif args == ["tags"]:
+            outputs = {"tags": image_tags(env.get("CHANNEL", ""), ref, sha, repo)}
         else:
-            outputs = {"tags": image_tags(env.get("CHANNEL", ""), ref, sha, repo, api)}
+            moves = moving_tags(env.get("CHANNEL", ""), ref, sha, repo, api)
+            prefixes = [p for p in (env.get("GHCR_PREFIX", ""), env.get("DOCKERHUB_PREFIX", "")) if p]
+            if not prefixes:
+                raise GateError("GHCR_PREFIX isn't set, so no tag moved")
+            moved = retag(moves, prefixes, run)
+            print("moved: " + ("; ".join(moved) if moved else "nothing"))
+            return 0
         _write_outputs(env.get("GITHUB_OUTPUT"), outputs)
     except (GateError, OSError, ValueError) as err:
         print(f"::error::{err}")

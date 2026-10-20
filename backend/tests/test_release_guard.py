@@ -1,10 +1,12 @@
 """Release guard (ROUNDS-00A-L01 stage 5).
 
-Pushes to main publish edge and sha-<short>. Only a v* tag publishes the
-version tags and latest, and only after CI passed on a push of that exact
-commit to main; the gate fails closed. Each publish decides its moving tags
-when it pushes. Pull requests into main and next lint their migration
-changes, and CODEOWNERS routes the files that decide all this to the owner."""
+Pushes to main publish sha-<short> and move edge. Only a v* tag publishes the
+version tags and moves X.Y and latest, and only after CI passed on a push of
+that exact commit to main; the gate fails closed. Builds push only tags that
+never move; one job, one at a time across the repository, moves edge, X.Y,
+and latest for all four images after every build passed. Pull requests into
+main and next lint their migration changes, and CODEOWNERS routes the files
+that decide all this to the owner."""
 from __future__ import annotations
 
 import importlib.util
@@ -45,12 +47,32 @@ def test_every_workflow_parses():
         assert isinstance(yaml.safe_load(path.read_text()), dict), path.name
 
 
-def test_publishing_runs_only_on_pushes_to_main_and_v_tags_one_at_a_time_per_ref():
+def test_publishing_runs_only_on_pushes_to_main_and_v_tags():
     workflow = _workflow("publish-images.yml")
     assert workflow["on"] == {"push": {"branches": ["main"], "tags": ["v*"]}}
     assert "workflow_dispatch" not in (WORKFLOWS / "publish-images.yml").read_text()
     assert workflow["permissions"] == {"contents": "read"}
-    assert workflow["concurrency"] == {"group": "publish-images-${{ github.ref }}", "cancel-in-progress": False}
+
+
+def test_builds_never_cancel_each_other_and_moving_tags_move_one_at_a_time():
+    # A run-wide group per ref let a newer push cancel an older one's pending
+    # publish, so that commit's sha-<short> never published.
+    workflow = _workflow("publish-images.yml")
+    assert "concurrency" not in workflow
+    jobs = workflow["jobs"]
+    assert "concurrency" not in jobs["plan"]
+    build = jobs["publish"]["concurrency"]
+    assert build == {
+        "group": "publish-images-build-${{ github.ref }}-${{ github.sha }}-${{ matrix.service }}",
+        "cancel-in-progress": False,
+    }
+    # One group per channel for the whole repository, with no per-ref or
+    # per-commit part. edge and the release tags never share a tag, and a
+    # waiting release job can't be replaced by an edge one.
+    assert jobs["move-tags"]["concurrency"] == {
+        "group": "publish-images-moving-tags-${{ needs.plan.outputs.channel }}",
+        "cancel-in-progress": False,
+    }
 
 
 def test_the_plan_job_gates_publishing_and_holds_no_publishing_rights():
@@ -63,19 +85,24 @@ def test_the_plan_job_gates_publishing_and_holds_no_publishing_rights():
     assert publish["needs"] == "plan"
     assert publish["if"] == "needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release'"
     assert publish["permissions"] == {"contents": "read", "packages": "write"}
-    assert set(jobs) == {"plan", "publish"}
+    move = jobs["move-tags"]
+    # Needing the matrix job means every one of the four builds passed.
+    assert move["needs"] == ["plan", "publish"]
+    assert move["if"] == publish["if"]
+    assert move["permissions"] == {"contents": "read", "packages": "write"}
+    assert set(jobs) == {"plan", "publish", "move-tags"}
 
 
 def _publish_steps() -> list[dict]:
     return _workflow("publish-images.yml")["jobs"]["publish"]["steps"]
 
 
-def test_each_publish_decides_its_tags_just_before_it_pushes():
+def test_each_build_pushes_only_the_tags_the_gate_decided():
     steps = _publish_steps()
     names = [s.get("name") or s.get("uses") for s in steps]
     tags = next(s for s in steps if s.get("id") == "tags")
     assert tags["run"] == "python3 scripts/release_gate.py tags"
-    assert tags["env"] == {"CHANNEL": "${{ needs.plan.outputs.channel }}", "GH_TOKEN": "${{ github.token }}"}
+    assert tags["env"] == {"CHANNEL": "${{ needs.plan.outputs.channel }}"}
     metadata = [s for s in steps if str(s.get("uses", "")).startswith("docker/metadata-action")]
     assert len(metadata) == 2
     for step in metadata:
@@ -84,6 +111,39 @@ def test_each_publish_decides_its_tags_just_before_it_pushes():
         assert step["with"]["tags"] == "${{ steps.tags.outputs.tags }}"
     text = (WORKFLOWS / "publish-images.yml").read_text()
     assert "is_default_branch" not in text and "event=branch" not in text
+    # No moving tag is written into a build.
+    build = json.dumps(_workflow("publish-images.yml")["jobs"]["publish"])
+    assert "value=edge" not in build and "value=latest" not in build and "{{major}}.{{minor}}" not in build
+
+
+def _move_steps() -> list[dict]:
+    return _workflow("publish-images.yml")["jobs"]["move-tags"]["steps"]
+
+
+def test_the_moving_tags_move_without_a_rebuild_decided_right_before_they_move():
+    steps = _move_steps()
+    assert not any("build-push-action" in str(s.get("uses", "")) for s in steps)
+    assert not any("metadata-action" in str(s.get("uses", "")) for s in steps)
+    move = steps[-1]
+    assert move["name"] == "Move edge, X.Y, and latest"
+    assert move["run"] == "python3 scripts/release_gate.py retag"
+    assert move["env"] == {
+        "CHANNEL": "${{ needs.plan.outputs.channel }}",
+        "GH_TOKEN": "${{ github.token }}",
+        "GHCR_PREFIX": "${{ env.GHCR_REGISTRY }}/${{ github.repository }}",
+        "DOCKERHUB_PREFIX": (
+            "${{ steps.dockerhub.outputs.configured == 'true' && "
+            "format('docker.io/{0}/rounds', env.DOCKERHUB_NAMESPACE) || '' }}"
+        ),
+    }
+    # The prefixes name what the builds push: <prefix>-<service>.
+    publish = _workflow("publish-images.yml")["jobs"]["publish"]
+    images = [s["with"]["images"] for s in publish["steps"] if str(s.get("uses", "")).startswith("docker/metadata-action")]
+    assert images == [
+        "${{ env.GHCR_REGISTRY }}/${{ github.repository }}-${{ matrix.image }}",
+        "docker.io/${{ env.DOCKERHUB_NAMESPACE }}/rounds-${{ matrix.image }}",
+    ]
+    assert [entry["image"] for entry in publish["strategy"]["matrix"]["include"]] == list(gate.IMAGES)
 
 
 def test_docker_hub_stays_optional_and_its_secrets_reach_only_the_steps_that_use_them():
@@ -100,10 +160,19 @@ def test_docker_hub_stays_optional_and_its_secrets_reach_only_the_steps_that_use
     assert holders == {"Check for Docker Hub credentials", "Log in to Docker Hub"}
     assert "secrets." not in json.dumps(publish.get("env", {}))
 
+    move = _workflow("publish-images.yml")["jobs"]["move-tags"]
+    move_steps = {s.get("name"): s for s in move["steps"]}
+    assert move_steps["Log in to Docker Hub"]["if"] == configured
+    check = move_steps["Check for Docker Hub credentials"]
+    assert check["id"] == "dockerhub" and set(check["env"]) == {"DOCKERHUB_USERNAME", "DOCKERHUB_TOKEN"}
+    holders = {name for name, step in move_steps.items() if "secrets.DOCKERHUB" in json.dumps(step)}
+    assert holders == {"Check for Docker Hub credentials", "Log in to Docker Hub"}
+    assert "secrets." not in json.dumps(move.get("env", {}))
+
 
 def test_every_action_the_publish_workflow_runs_is_pinned_to_a_commit():
     uses = [line.strip() for line in (WORKFLOWS / "publish-images.yml").read_text().splitlines() if "uses:" in line]
-    assert len(uses) == 9
+    assert len(uses) == 13
     for line in uses:
         assert re.fullmatch(r"(- )?uses: [\w.-]+/[\w.-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+", line), line
 
@@ -187,6 +256,10 @@ def test_release_tags_are_strict_semver(tag, version):
     assert gate.release_version(tag) == version
 
 
+def _bare(tag: str) -> str:
+    return tag.removeprefix("v").split("-")[0]
+
+
 @pytest.mark.parametrize(
     "tag, tags, moves",
     [
@@ -198,7 +271,7 @@ def test_release_tags_are_strict_semver(tag, version):
     ],
 )
 def test_latest_moves_only_to_the_highest_stable_version(tag, tags, moves):
-    assert gate.moves_latest(tag, tags) is moves
+    assert (gate.highest_stable(tags) == _bare(tag)) is moves
 
 
 @pytest.mark.parametrize(
@@ -212,7 +285,14 @@ def test_latest_moves_only_to_the_highest_stable_version(tag, tags, moves):
     ],
 )
 def test_x_y_moves_only_to_the_highest_stable_patch_of_its_line(tag, tags, moves):
-    assert gate.moves_minor(tag, tags) is moves
+    (major, minor, _), _stable = gate.release_version(tag)
+    assert (gate.highest_stable(tags, (major, minor)) == _bare(tag)) is moves
+
+
+def test_no_stable_version_means_no_target():
+    assert gate.highest_stable([]) is None
+    assert gate.highest_stable(["v2.0.0-rc.1", "not-a-release"]) is None
+    assert gate.highest_stable(["v1.2.3"], (1, 3)) is None
 
 
 def _run(status="completed", conclusion="success", sha=SHA, event="push", branch="main", repo=REPO):
@@ -320,44 +400,74 @@ def test_a_release_tag_publishes_once_ci_passed_on_that_commit():
     assert params == {"head_sha": SHA, "event": "push", "branch": "main", "per_page": "100"}
 
 
-# ---- the tags each publish pushes, decided when it pushes -------------------------------------
+# ---- the tags each build pushes, and where the moving tags point ----------------------------
 
 VERSION_TAGS = ["type=semver,pattern={{version}}", "type=ref,event=tag"]
-MINOR = "type=semver,pattern={{major}}.{{minor}}"
-LATEST = "type=raw,value=latest"
 
 
-def test_main_publishes_edge_and_its_sha_while_it_is_the_tip():
+@pytest.mark.parametrize(
+    "channel, ref, tags",
+    [
+        ("edge", "refs/heads/main", ["type=sha,prefix=sha-"]),
+        ("release", "refs/tags/v1.2.0", VERSION_TAGS),
+        ("release", "refs/tags/v1.3.0-rc.1", VERSION_TAGS),
+    ],
+)
+def test_a_build_pushes_only_tags_that_never_move(channel, ref, tags):
+    assert gate.image_tags(channel, ref, SHA, REPO) == tags
+
+
+def test_edge_points_at_mains_tip():
     api = FakeApi([], [], tip=SHA)
-    assert gate.image_tags("edge", "refs/heads/main", SHA, REPO, api) == ["type=raw,value=edge", "type=sha,prefix=sha-"]
+    assert gate.moving_tags("edge", "refs/heads/main", SHA, REPO, api) == [("edge", "sha-aaaaaaa")]
 
 
-def test_an_old_main_run_publishes_only_its_sha():
+def test_an_old_main_run_points_edge_at_the_tip_not_its_own_commit():
     # Re-running an old run, or one that lost the race, can't move edge back.
     api = FakeApi([], [], tip=OTHER_SHA)
-    assert gate.image_tags("edge", "refs/heads/main", SHA, REPO, api) == ["type=sha,prefix=sha-"]
+    assert gate.image_tags("edge", "refs/heads/main", SHA, REPO) == ["type=sha,prefix=sha-"]
+    assert gate.moving_tags("edge", "refs/heads/main", SHA, REPO, api) == [("edge", "sha-bbbbbbb")]
 
 
 @pytest.mark.parametrize(
     "tag, tags, moving",
     [
-        ("v1.2.0", ["v1.0.0", "v1.1.5", "v1.2.0"], [MINOR, LATEST]),
-        ("v1.1.6", ["v1.1.5", "v1.1.6", "v1.2.0"], [MINOR]),
-        ("v1.1.4", ["v1.1.4", "v1.1.5", "v1.2.0"], []),
-        ("v1.3.0-rc.1", ["v1.2.0", "v1.3.0-rc.1"], []),
+        ("v1.2.0", ["v1.0.0", "v1.1.5", "v1.2.0"], [("1.0", "1.0.0"), ("1.1", "1.1.5"), ("1.2", "1.2.0"), ("latest", "1.2.0")]),
+        ("v1.1.6", ["v1.1.5", "v1.1.6", "v1.2.0"], [("1.1", "1.1.6"), ("1.2", "1.2.0"), ("latest", "1.2.0")]),
+        # An older patch leaves every tag at the highest versions.
+        ("v1.1.4", ["v1.1.4", "v1.1.5", "v1.2.0"], [("1.1", "1.1.5"), ("1.2", "1.2.0"), ("latest", "1.2.0")]),
+        ("v1.10.0", ["v1.9.3", "v1.10.0"], [("1.9", "1.9.3"), ("1.10", "1.10.0"), ("latest", "1.10.0")]),
     ],
 )
-def test_a_release_moves_x_y_and_latest_only_when_it_is_still_the_highest(tag, tags, moving):
+def test_a_release_points_every_x_y_and_latest_at_the_highest_versions(tag, tags, moving):
+    # Every line, so a newer release job that replaced a waiting one leaves
+    # that one's line where it would have.
     api = FakeApi([], tags)
-    assert gate.image_tags("release", f"refs/tags/{tag}", SHA, REPO, api) == VERSION_TAGS + moving
+    assert gate.moving_tags("release", f"refs/tags/{tag}", SHA, REPO, api) == moving
 
 
-def test_a_release_rechecks_the_tags_when_it_pushes():
+def test_a_release_rechecks_the_tags_when_they_move():
     # A higher release that appeared after the plan job ran keeps latest.
     api = FakeApi([_run()], ["v1.1.0"])
     assert _plan("refs/tags/v1.1.0", api) == {"channel": "release"}
     api.tags = ["v1.1.0", "v1.2.0"]
-    assert gate.image_tags("release", "refs/tags/v1.1.0", SHA, REPO, api) == VERSION_TAGS + [MINOR]
+    assert gate.moving_tags("release", "refs/tags/v1.1.0", SHA, REPO, api) == [
+        ("1.1", "1.1.0"),
+        ("1.2", "1.2.0"),
+        ("latest", "1.2.0"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "tags, moving",
+    [
+        (["v1.2.0", "v1.3.0-rc.1", "v1.3.0-rc.2"], [("1.2", "1.2.0"), ("latest", "1.2.0")]),
+        (["v1.3.0-rc.1"], []),
+    ],
+)
+def test_a_pre_release_is_never_x_y_or_latest(tags, moving):
+    api = FakeApi([], tags)
+    assert gate.moving_tags("release", "refs/tags/v1.3.0-rc.1", SHA, REPO, api) == moving
 
 
 @pytest.mark.parametrize(
@@ -366,7 +476,87 @@ def test_a_release_rechecks_the_tags_when_it_pushes():
 )
 def test_tags_for_anything_else_fail(channel, ref):
     with pytest.raises(gate.GateError):
-        gate.image_tags(channel, ref, SHA, REPO, FakeApi([], ["v1.0.0"]))
+        gate.image_tags(channel, ref, SHA, REPO)
+    with pytest.raises(gate.GateError):
+        gate.moving_tags(channel, ref, SHA, REPO, FakeApi([], ["v1.0.0"]))
+
+
+def test_a_malformed_tip_fails():
+    with pytest.raises(gate.GateError, match="unexpected shape"):
+        gate.moving_tags("edge", "refs/heads/main", SHA, REPO, FakeApi([], [], tip="not-a-sha"))
+
+
+# ---- moving the tags -------------------------------------------------------------------------
+
+GHCR = "ghcr.io/keyurgolani/rounds"
+HUB = "docker.io/keyurgolani/rounds"
+
+
+class FakeDocker:
+    """``docker buildx imagetools``: inspect answers for the refs in
+    ``pushed``, and create records the tag it writes."""
+
+    def __init__(self, pushed: set[str], fail_create: str | None = None) -> None:
+        self.pushed, self.fail_create = set(pushed), fail_create
+        self.calls: list[list[str]] = []
+
+    def __call__(self, args: list[str]) -> int:
+        self.calls.append(args)
+        assert args[:3] == ["docker", "buildx", "imagetools"], args
+        if args[3] == "inspect":
+            return 0 if args[4] in self.pushed else 1
+        assert args[3:5] == ["create", "--tag"], args
+        if args[5] == self.fail_create:
+            return 1
+        self.pushed.add(args[5])
+        return 0
+
+    def created(self) -> list[tuple[str, str]]:
+        return [(c[5], c[6]) for c in self.calls if c[3] == "create"]
+
+
+def _pushed(prefix: str, tag: str, images=gate.IMAGES) -> set[str]:
+    return {f"{prefix}-{image}:{tag}" for image in images}
+
+
+def test_each_tag_moves_for_all_four_images_on_every_registry():
+    docker = FakeDocker(_pushed(GHCR, "1.2.0") | _pushed(HUB, "1.2.0"))
+    moved = gate.retag([("1.2", "1.2.0"), ("latest", "1.2.0")], [GHCR, HUB], docker)
+    assert moved == [f"{GHCR}-*:1.2 -> 1.2.0", f"{GHCR}-*:latest -> 1.2.0", f"{HUB}-*:1.2 -> 1.2.0", f"{HUB}-*:latest -> 1.2.0"]
+    created = docker.created()
+    assert len(created) == 16
+    for prefix in (GHCR, HUB):
+        for image in gate.IMAGES:
+            for moving in ("1.2", "latest"):
+                assert (f"{prefix}-{image}:{moving}", f"{prefix}-{image}:1.2.0") in created
+
+
+def test_a_tag_stays_put_unless_every_image_has_its_target(capsys):
+    # The tip's runner image isn't pushed yet, so edge moves for no image.
+    docker = FakeDocker(_pushed(GHCR, "sha-bbbbbbb", images=("frontend", "pocketbase", "pdf-renderer")))
+    assert gate.retag([("edge", "sha-bbbbbbb")], [GHCR], docker) == []
+    assert docker.created() == []
+    out = capsys.readouterr().out
+    assert out.startswith("::warning::edge stays where it is") and f"{GHCR}-runner:sha-bbbbbbb" in out
+
+
+def test_a_failed_move_fails_the_job():
+    docker = FakeDocker(_pushed(GHCR, "sha-aaaaaaa"), fail_create=f"{GHCR}-runner:edge")
+    with pytest.raises(gate.GateError, match="re-run"):
+        gate.retag([("edge", "sha-aaaaaaa")], [GHCR], docker)
+
+
+@pytest.mark.parametrize("prefix", ["", "ghcr.io", "ghcr.io/x y/rounds", "ghcr.io/owner/rounds;rm"])
+def test_a_malformed_prefix_moves_nothing(prefix):
+    docker = FakeDocker(set())
+    with pytest.raises(gate.GateError, match="prefix"):
+        gate.retag([("edge", "sha-aaaaaaa")], [prefix], docker)
+    assert docker.calls == []
+
+
+def test_a_prefix_is_lowercased_the_way_the_builds_name_images():
+    docker = FakeDocker(_pushed(GHCR, "sha-aaaaaaa"))
+    assert gate.retag([("edge", "sha-aaaaaaa")], ["GHCR.io/KeyurGolani/Rounds"], docker) == [f"{GHCR}-*:edge -> sha-aaaaaaa"]
 
 
 @pytest.mark.parametrize(
@@ -404,7 +594,9 @@ def test_a_malformed_commit_fails(sha):
     with pytest.raises(gate.GateError):
         _plan("refs/tags/v1.0.0", FakeApi([_run(sha=sha)], []), sha=sha)
     with pytest.raises(gate.GateError):
-        gate.image_tags("edge", "refs/heads/main", sha, REPO, FakeApi([], [], tip=sha))
+        gate.image_tags("edge", "refs/heads/main", sha, REPO)
+    with pytest.raises(gate.GateError):
+        gate.moving_tags("edge", "refs/heads/main", sha, REPO, FakeApi([], [], tip=SHA))
 
 
 # ---- the GitHub client -----------------------------------------------------------------------
@@ -474,13 +666,42 @@ def test_plan_writes_the_channel_for_a_push_to_main(actions_env):
 
 
 def test_tags_writes_a_multi_line_output(actions_env, monkeypatch):
-    monkeypatch.setenv("CHANNEL", "edge")
-    monkeypatch.setattr(gate, "github_api", lambda base, token: FakeApi([], [], tip=SHA))
+    monkeypatch.setenv("CHANNEL", "release")
+    monkeypatch.setenv("GITHUB_REF", "refs/tags/v1.2.0")
     assert gate.main(["tags"]) == 0
     first, *body, last = actions_env.read_text().splitlines()
     delimiter = first.removeprefix("tags<<")
     assert first.startswith("tags<<ghadelimiter_") and last == delimiter
-    assert body == ["type=raw,value=edge", "type=sha,prefix=sha-"]
+    assert body == VERSION_TAGS
+
+
+@pytest.mark.parametrize(
+    "hub, prefixes",
+    [("", [GHCR]), (HUB, [GHCR, HUB])],
+)
+def test_retag_moves_edge_on_each_configured_registry(actions_env, monkeypatch, capsys, hub, prefixes):
+    monkeypatch.setenv("CHANNEL", "edge")
+    monkeypatch.setenv("GHCR_PREFIX", GHCR)
+    monkeypatch.setenv("DOCKERHUB_PREFIX", hub)
+    monkeypatch.setattr(gate, "github_api", lambda base, token: FakeApi([], [], tip=SHA))
+    docker = FakeDocker(_pushed(GHCR, "sha-aaaaaaa") | _pushed(HUB, "sha-aaaaaaa"))
+    assert gate.main(["retag"], run=docker) == 0
+    created = docker.created()
+    assert {p for p in (GHCR, HUB) for tag, _source in created if tag.startswith(p + "-")} == set(prefixes)
+    assert len(created) == 4 * len(prefixes)
+    assert all(tag.endswith(":edge") and source.endswith(":sha-aaaaaaa") for tag, source in created)
+    assert not actions_env.exists()
+    assert "moved: " in capsys.readouterr().out
+
+
+def test_retag_fails_without_a_ghcr_prefix(actions_env, monkeypatch):
+    monkeypatch.setenv("CHANNEL", "edge")
+    monkeypatch.delenv("GHCR_PREFIX", raising=False)
+    monkeypatch.delenv("DOCKERHUB_PREFIX", raising=False)
+    monkeypatch.setattr(gate, "github_api", lambda base, token: FakeApi([], [], tip=SHA))
+    docker = FakeDocker(set())
+    assert gate.main(["retag"], run=docker) == 1
+    assert docker.calls == []
 
 
 def test_main_fails_without_outputs_when_the_gate_refuses(actions_env, monkeypatch, capsys):

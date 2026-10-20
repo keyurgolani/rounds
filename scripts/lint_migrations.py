@@ -21,8 +21,9 @@ A finding passes only with an entry in
 may break, the issue that needs it, who reviewed it, and the SHA-256 of the
 reviewed content, so any later edit needs a fresh review. The entry and
 this lint come from the change under review, so they don't prove review on
-their own; CODEOWNERS and required code-owner review do. See
-docs/development.md#migrations.
+their own. CODEOWNERS routes these files to the owner, and that review and
+this check block a merge only once a ruleset on main and next requires
+them; until then both are advisory. See docs/development.md#migrations.
 
 TODO(ROUNDS-32-L02): #156's migration framework and #157's restore
 rehearsal replace this lint.

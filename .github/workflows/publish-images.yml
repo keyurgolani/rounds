@@ -1,20 +1,21 @@
 name: Publish Docker Images
 
-# Release guard (ROUNDS-00A-L01 stage 5). A push to main publishes edge and
-# sha-<short>. Only a vX.Y.Z tag publishes X.Y.Z, vX.Y.Z, X.Y, and latest,
-# and only once CI passed on a push of that exact commit to main. No other
-# branch publishes, and there's no manual trigger; to retry, re-run the
-# workflow run from the Actions tab. Each publish decides its moving tags
-# when it pushes, so re-running an old run can't move one backwards.
+# Release guard (ROUNDS-00A-L01 stage 5). A push to main publishes sha-<short>
+# and moves edge. Only a vX.Y.Z tag publishes X.Y.Z and vX.Y.Z and moves X.Y
+# and latest, and only once CI passed on a push of that exact commit to main.
+# No other branch publishes, and there's no manual trigger; to retry, re-run
+# the workflow run from the Actions tab.
+#
+# The build jobs push only tags that never move. Once all four images are
+# pushed, the move-tags job points edge, X.Y, and latest for all four images
+# together, deciding each from the repository as it is then, and only at an
+# image all four builds already pushed. Each channel's move-tags jobs run one
+# at a time across the repository, so an older publish can't move a tag back
+# after a newer one.
 on:
   push:
     branches: [main]
     tags: ['v*']
-
-# One publish at a time per branch or tag, in push order.
-concurrency:
-  group: publish-images-${{ github.ref }}
-  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -44,6 +45,11 @@ jobs:
     needs: plan
     if: needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release'
     runs-on: ubuntu-latest
+    # Keyed per commit and image, so publishes of different commits or tags
+    # never wait on or cancel each other; their tags never move.
+    concurrency:
+      group: publish-images-build-${{ github.ref }}-${{ github.sha }}-${{ matrix.service }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -76,15 +82,12 @@ jobs:
         with:
           persist-credentials: false
 
-      # edge and sha-<short> only from main; edge only while this commit is
-      # still main's tip. X.Y.Z and vX.Y.Z only from a release the plan job
-      # cleared; X.Y only for the highest stable patch of its line, and
-      # latest only for the highest stable version, checked now.
+      # Only tags that never move: sha-<short> from main, and X.Y.Z and
+      # vX.Y.Z from a release the plan job cleared.
       - name: Decide the image tags
         id: tags
         env:
           CHANNEL: ${{ needs.plan.outputs.channel }}
-          GH_TOKEN: ${{ github.token }}
         run: python3 scripts/release_gate.py tags
 
       - name: Check for Docker Hub credentials
@@ -160,3 +163,70 @@ jobs:
         if: steps.dockerhub.outputs.configured != 'true'
         run: |
           echo "Docker Hub publish skipped because DOCKERHUB_USERNAME and/or DOCKERHUB_TOKEN repository secrets are not configured."
+
+  move-tags:
+    # Runs only once every build above succeeded, so the four images move
+    # together or not at all.
+    needs: [plan, publish]
+    if: needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release'
+    runs-on: ubuntu-latest
+    # One moving-tag update at a time per channel across the repository; the
+    # edge channel moves only edge, and the release channel only X.Y and
+    # latest. GitHub keeps one job waiting per group and replaces it with a
+    # newer one; each job decides every one of its channel's tags from the
+    # repository as it is, so the newer one leaves the tags the replaced one
+    # would have.
+    concurrency:
+      group: publish-images-moving-tags-${{ needs.plan.outputs.channel }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    env:
+      GHCR_REGISTRY: ghcr.io
+      DOCKERHUB_NAMESPACE: keyurgolani
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Check for Docker Hub credentials
+        id: dockerhub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: steps.dockerhub.outputs.configured == 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Decided here, right before the tags move: edge at main's current
+      # tip, each X.Y at the highest stable patch of its line, and latest at
+      # the highest stable version. A tag stays where it is when some image
+      # doesn't have its target yet. No image is rebuilt.
+      - name: Move edge, X.Y, and latest
+        env:
+          CHANNEL: ${{ needs.plan.outputs.channel }}
+          GH_TOKEN: ${{ github.token }}
+          GHCR_PREFIX: ${{ env.GHCR_REGISTRY }}/${{ github.repository }}
+          DOCKERHUB_PREFIX: ${{ steps.dockerhub.outputs.configured == 'true' && format('docker.io/{0}/rounds', env.DOCKERHUB_NAMESPACE) || '' }}
+        run: python3 scripts/release_gate.py retag

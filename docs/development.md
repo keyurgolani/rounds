@@ -112,7 +112,7 @@ A destructive change that's intended needs review and an entry in `scripts/migra
 
 The entry covers only that file, those rules, and that exact content, so any later edit fails the lint until it's reviewed again. `manifest` is optional. CI annotates each finding the entry covers.
 
-The lint can't prove the review happened. It runs from the pull request's own checkout, so the same pull request can add a destructive migration and its own entry, and `reviewed_by` is free text. The review is enforced by `.github/CODEOWNERS`, which assigns the migrations, the allowlist, the lint, the release gate, and the workflows to the owner, and by required code-owner review on `main` and `next`.
+The lint can't prove the review happened. It runs from the pull request's own checkout, so the same pull request can add a destructive migration and its own entry, and `reviewed_by` is free text. `.github/CODEOWNERS` assigns the migrations, the allowlist, the lint, the release gate, and the workflows to the owner, but nothing enforces that review or the lint yet: `main` and `next` have no branch protection or ruleset today, so a failing `migrations` check and a missing code-owner approval don't block a merge. Both stay advisory until the owner enables a ruleset on `main` and `next` that requires code-owner review and the `migrations` check.
 
 [#156](https://github.com/keyurgolani/rounds/issues/156)'s migration framework and [#157](https://github.com/keyurgolani/rounds/issues/157)'s restore rehearsal replace this lint.
 
