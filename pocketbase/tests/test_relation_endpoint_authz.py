@@ -19,9 +19,12 @@ quarantined row is reinstated) and the dry-run guards, and check that every
 collection whose policy row lists a relation family declares a non-empty
 ``relation_endpoints`` so no probe passes vacuously.
 
-The behavioural side (triggers actually aborting a cross-owner write, the dry
-run leaving the database untouched, apply moving and clearing rows) lives in
-``harness/migration_check.sh`` and ``harness/probes/scan_check.py``.
+The behavioural side runs the pinned PocketBase in the harness: the dry run
+leaving the database untouched and predicting the apply, the apply moving,
+clearing, and journalling rows on a legacy fixture, and deletes that clear one
+relation of a row lives in ``harness/probes/relation_quarantine_check.py``
+(harness phase 13); a trigger aborting a direct cross-owner write lives in
+``harness/probes/scan_check.py``.
 """
 from __future__ import annotations
 
@@ -177,31 +180,76 @@ def test_dry_run_guards_are_present(src):
     assert "dry run complete" in src
 
 
-def test_optional_clear_falls_back_to_quarantine_on_a_unique_collision(src):
+def test_only_a_unique_collision_turns_a_clear_into_a_move(src):
     # Clearing an optional cross-owner reference to "" can violate a unique
-    # index (SQLite treats "" as present, unlike NULL). The apply must catch
-    # that and quarantine the whole row instead of letting the write throw and
-    # roll back the boot transaction. Keep the clear inside a try/catch whose
-    # recovery path moves the row.
+    # index (SQLite treats "" as present, unlike NULL); then the row moves.
+    # Any other failed clear (a trigger abort, say) is unexpected and must fail
+    # the migration whole rather than be mistaken for a collision.
+    assert 'indexOf("UNIQUE constraint failed")' in src
     m = re.search(
-        r'rec\.set\(g\.f, ""\);\s*try \{.*?catch.*?quarantineRow\(g, fresh\);',
+        r"dao\.saveRecord\(rec\);\s*return true;\s*\}\s*catch \(err\) \{\s*"
+        r"if \(isUniqueCollision\(err\)\) return false;\s*throw err;",
         src,
-        re.DOTALL,
     )
-    assert m, "optional clear must fall back to quarantineRow on a failed save"
+    assert m, "a failed clear must fall back to a move only on a unique collision, and rethrow otherwise"
+
+
+def test_all_offending_fields_of_a_row_clear_in_one_update(src):
+    # Clearing one foreign provider at a time saved a row that still held the
+    # other foreign provider; the whole row's offending fields go in one save.
+    assert re.search(r"const fields = gs\.map\(\(g\) => g\.f\);\s*if \(clearFields\(", src)
+    assert re.search(r"for \(let i = 0; i < fields\.length; i\+\+\) rec\.set\(fields\[i\], \"\"\);", src)
+
+
+def test_update_trigger_checks_only_a_changed_relation(src):
+    # PocketBase rewrites every column on a save, so UPDATE OF fires on every
+    # save; re-checking an unchanged relation blocked deletes whose cascade
+    # clears one relation of a row while another still names a deleted record.
+    assert re.search(r"IS NOT OLD\.\"' \+ r\.f \+ '\" OR NEW\.\"' \+ OWNER \+ '\" IS NOT OLD\.\"' \+ OWNER", src)
+    assert re.search(r"'_upd\" BEFORE UPDATE OF .*?FOR EACH ROW WHEN ' \+ changed \+ \" AND \" \+ mismatch", src, re.DOTALL)
+
+
+def test_dry_run_takes_the_apply_path(src):
+    # The dry run must run the same moves, clears, and journal writes as the
+    # apply and only then write its report and roll back, so it predicts the
+    # apply's outcome (a failure included) and its checksum.
+    plan = src.index("const plan = quarantine();")
+    deletes = src.index("if (rec) dao.deleteRecord(rec);")
+    dry_report = src.index("writeDryRunReport(report);")
+    assert plan < deletes < dry_report
+    assert re.search(r"catch \(err\) \{.*?if \(dryRun\) \{.*?writeDryRunReport\(failed\);", src, re.DOTALL)
+
+
+def test_cascading_fields_move_the_row(src):
+    # A cross-owner required OR cascading reference moves the row; only an
+    # optional, non-cascading one is cleared.
+    assert re.search(r"if \(gs\[j\]\.required \|\| gs\[j\]\.cascade\) \{\s*addMove\(fromFinding\(gs\[j\]\)\);", src)
+
+
+def test_journal_entries_carry_the_issue_schema(src):
+    # Migration version, row, field, original row JSON, per-report pseudonyms,
+    # and a status, for clears as well as moves.
+    m = re.search(r'ensureCollection\("relation_quarantine", \[(.*?)\]\);', src, re.DOTALL)
+    assert m
+    names = set(re.findall(r'name: "([a-z_]+)"', m.group(1)))
+    assert {"migration", "source_collection", "source_id", "field", "payload", "owner", "target_owner",
+            "status", "action", "kind"} <= names
+    assert 'status: "quarantined"' in src
+    assert "owner: pub.owner" in src and "target_owner: pub.target_owner" in src
 
 
 def test_touched_row_manifest_matches_the_fields_table(src):
     # The committed manifest (docs/development.md#migrations) gives the
-    # disposition per relation field: a required reference moves the row, an
-    # optional one is cleared and falls back to moving the row. It must name
-    # exactly the migration's FIELDS, with the same required flags.
+    # disposition per relation field: a required or cascading reference moves
+    # the row, an optional, non-cascading one is cleared and falls back to
+    # moving the row. It must name exactly the migration's FIELDS, with the
+    # same required and cascade flags.
     block = re.search(r"const FIELDS = \[(.*?)\];", src, re.DOTALL)
     assert block, "could not find the FIELDS array in the migration"
     flags = {
-        (m.group(1), m.group(2), m.group(3)): m.group(4) == "true"
+        (m.group(1), m.group(2), m.group(3)): (m.group(4) == "true", m.group(5) == "true")
         for m in re.finditer(
-            r'\{\s*c:\s*"([^"]+)",\s*f:\s*"([^"]+)",\s*t:\s*"([^"]+)",\s*required:\s*(true|false)',
+            r'\{\s*c:\s*"([^"]+)",\s*f:\s*"([^"]+)",\s*t:\s*"([^"]+)",\s*required:\s*(true|false),\s*cascade:\s*(true|false)',
             block.group(1),
         )
     }
@@ -212,10 +260,10 @@ def test_touched_row_manifest_matches_the_fields_table(src):
     got = {(e["collection"], e["field"], e["target"]): e for e in manifest["fields"]}
     assert len(got) == len(manifest["fields"]), "a field is listed twice"
     assert set(got) == set(flags)
-    for key, required in flags.items():
+    for key, (required, cascade) in flags.items():
         entry = got[key]
-        assert entry["required"] is required, key
-        if required:
+        assert entry["required"] is required and entry["cascade"] is cascade, key
+        if required or cascade:
             assert entry["disposition"] == "moved" and "fallback" not in entry, key
         else:
             assert entry["disposition"] == "cleared" and entry["fallback"] == "moved", key

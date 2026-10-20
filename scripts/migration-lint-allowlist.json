@@ -14,9 +14,9 @@
     {
       "path": "pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js",
       "rules": ["rewrites-rows"],
-      "sha256": "09650c428c84d869a712cf47b4deb6fd6f2f8de5e20609d30be60edbfbc55230",
+      "sha256": "8e035d67d262b02c5a0711704f902fe7c8f66fcccf2dc053fdc8799b9b1bbd52",
       "issue": "#10",
-      "reason": "Quarantines pre-existing cross-owner relation rows: moves an offending required row into relation_quarantine and clears an offending optional reference, falling back to moving the row when clearing it would break a unique index, so every retained relation points at a same-owner target. The disposition per relation field is in the manifest.",
+      "reason": "Quarantines pre-existing cross-owner relation rows: moves a row whose required or cascading relation crosses accounts, with its cascade dependents, into relation_quarantine (copied first, deleted leaf-first), and clears and journals an offending optional reference or a reference to a moved row, moving the row instead when clearing it would break a unique index, so every retained relation points at a same-owner target. The disposition per relation field is in the manifest.",
       "reviewed_by": "pending owner review",
       "manifest": "pocketbase/migration-manifests/1700007000_relation_endpoint_authz.json"
     }

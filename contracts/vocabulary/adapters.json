@@ -266,21 +266,21 @@
     },
     {
       "kind": "collection",
-      "source": {"path": "pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js", "lines": "116"},
+      "source": {"path": "pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js", "lines": "158"},
       "legacyName": "relation_quarantine",
       "decidedBy": "ROUNDS-00B-L02",
       "targetLabel": null,
       "retiringLeaf": "ROUNDS-00B-L02",
-      "note": "Server-only operator collection created non-literally by the shared ensureCollection helper at line 116; holds cross-owner rows quarantined at the account-scope upgrade. All rules null; never user-facing."
+      "note": "Server-only operator collection created non-literally by the shared ensureCollection helper at line 158; journals the cross-owner rows and references quarantined at the account-scope upgrade. All rules null; never user-facing."
     },
     {
       "kind": "collection",
-      "source": {"path": "pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js", "lines": "116"},
+      "source": {"path": "pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js", "lines": "158"},
       "legacyName": "relation_quarantine_reports",
       "decidedBy": "ROUNDS-00B-L02",
       "targetLabel": null,
       "retiringLeaf": "ROUNDS-00B-L02",
-      "note": "Server-only operator collection created non-literally by the shared ensureCollection helper at line 116; holds one pseudonymized quarantine report row. All rules null; never user-facing."
+      "note": "Server-only operator collection created non-literally by the shared ensureCollection helper at line 158; holds one pseudonymized quarantine report row. All rules null; never user-facing."
     },
     {
       "kind": "collection",

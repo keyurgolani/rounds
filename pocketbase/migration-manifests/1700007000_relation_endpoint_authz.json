@@ -1,9 +1,10 @@
 {
-  "$comment": "Touched-row manifest for pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js (ROUNDS-00B-L02). Which rows the apply touches depends on each deployment's data, so this file gives the disposition per relation field instead of per row; the dry run in docs/operations.md (Relation endpoint authorization and quarantine) lists the rows a given copy would touch. A row whose reference on a required field points at another account or at a missing record is moved: copied into relation_quarantine, then deleted, which cascades or null-repairs its dependents like a normal delete. Such a reference on an optional field is cleared, and the row is moved instead when clearing it would collide with a unique index. A row with no such reference is not touched.",
+  "$comment": "Touched-row manifest for pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js (ROUNDS-00B-L02). Which rows the apply touches depends on each deployment's data, so this file gives the disposition per relation field instead of per row; the dry run in docs/operations.md (Relation endpoint authorization and quarantine) lists the rows a given copy would touch, with the same checksum as the apply. A row whose reference on a required or cascading field points at another account or at a missing record is moved: copied into relation_quarantine, then deleted. Such a reference on an optional, non-cascading field is cleared, all of a row's offending fields in one update, and the row is moved instead when clearing it would collide with a unique index. A row with no such reference is not touched, except as a dependent of a moved row (see dependents).",
   "migration": "1700007000_relation_endpoint_authz",
   "issue": "#10",
+  "dependents": "A moved row's cascading dependents (a variant's versions and share links, a share link's views) are moved with it, copied first and deleted leaf-first. A non-cascading reference to a moved row (previous_offer) is cleared and journalled, or its row is moved when clearing it would collide with a unique index.",
   "writes": {
-    "relation_quarantine": "one row per moved row, holding the moved row's fields as payload",
+    "relation_quarantine": "one entry per moved row and per cleared reference: the migration, the row, the field, the original row JSON, per-report account pseudonyms, and status quarantined",
     "relation_quarantine_reports": "one pseudonymized report row, only when a cross-owner or missing-target reference was found"
   },
   "fields": [
@@ -12,6 +13,7 @@
       "field": "campaign",
       "target": "campaigns",
       "required": false,
+      "cascade": false,
       "disposition": "cleared",
       "fallback": "moved"
     },
@@ -20,6 +22,7 @@
       "field": "campaign",
       "target": "campaigns",
       "required": false,
+      "cascade": false,
       "disposition": "cleared",
       "fallback": "moved"
     },
@@ -28,6 +31,7 @@
       "field": "text_provider",
       "target": "ai_providers",
       "required": false,
+      "cascade": false,
       "disposition": "cleared",
       "fallback": "moved"
     },
@@ -36,6 +40,7 @@
       "field": "vision_provider",
       "target": "ai_providers",
       "required": false,
+      "cascade": false,
       "disposition": "cleared",
       "fallback": "moved"
     },
@@ -44,6 +49,7 @@
       "field": "campaign",
       "target": "campaigns",
       "required": false,
+      "cascade": false,
       "disposition": "cleared",
       "fallback": "moved"
     },
@@ -52,6 +58,7 @@
       "field": "campaign",
       "target": "campaigns",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -59,6 +66,7 @@
       "field": "child",
       "target": "experience_bullets",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -66,6 +74,7 @@
       "field": "parent",
       "target": "experience_anecdotes",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -73,6 +82,7 @@
       "field": "child",
       "target": "experience_anecdotes",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -80,6 +90,7 @@
       "field": "parent",
       "target": "experience_jobs",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -87,6 +98,7 @@
       "field": "child",
       "target": "experience_bullets",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -94,6 +106,7 @@
       "field": "parent",
       "target": "experience_jobs",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -101,6 +114,7 @@
       "field": "child",
       "target": "experience_projects",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -108,6 +122,7 @@
       "field": "parent",
       "target": "experience_jobs",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -115,6 +130,7 @@
       "field": "child",
       "target": "experience_anecdotes",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -122,6 +138,7 @@
       "field": "parent",
       "target": "experience_projects",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -129,6 +146,7 @@
       "field": "child",
       "target": "experience_bullets",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -136,6 +154,7 @@
       "field": "parent",
       "target": "experience_projects",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -143,6 +162,7 @@
       "field": "application",
       "target": "applications",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -150,6 +170,7 @@
       "field": "campaign",
       "target": "campaigns",
       "required": false,
+      "cascade": false,
       "disposition": "cleared",
       "fallback": "moved"
     },
@@ -158,6 +179,7 @@
       "field": "application",
       "target": "applications",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -165,6 +187,7 @@
       "field": "previous_offer",
       "target": "offers",
       "required": false,
+      "cascade": false,
       "disposition": "cleared",
       "fallback": "moved"
     },
@@ -173,22 +196,23 @@
       "field": "resume",
       "target": "resumes",
       "required": false,
-      "disposition": "cleared",
-      "fallback": "moved"
+      "cascade": true,
+      "disposition": "moved"
     },
     {
       "collection": "resume_share_links",
       "field": "variant",
       "target": "resume_variants",
       "required": false,
-      "disposition": "cleared",
-      "fallback": "moved"
+      "cascade": true,
+      "disposition": "moved"
     },
     {
       "collection": "resume_share_views",
       "field": "link",
       "target": "resume_share_links",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -196,6 +220,7 @@
       "field": "application",
       "target": "applications",
       "required": false,
+      "cascade": false,
       "disposition": "cleared",
       "fallback": "moved"
     },
@@ -204,6 +229,7 @@
       "field": "resume",
       "target": "resumes",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -211,22 +237,23 @@
       "field": "resume",
       "target": "resumes",
       "required": false,
-      "disposition": "cleared",
-      "fallback": "moved"
+      "cascade": true,
+      "disposition": "moved"
     },
     {
       "collection": "resume_versions",
       "field": "variant",
       "target": "resume_variants",
       "required": false,
-      "disposition": "cleared",
-      "fallback": "moved"
+      "cascade": true,
+      "disposition": "moved"
     },
     {
       "collection": "take_home_attempts",
       "field": "campaign",
       "target": "campaigns",
       "required": false,
+      "cascade": false,
       "disposition": "cleared",
       "fallback": "moved"
     },
@@ -235,6 +262,7 @@
       "field": "campaign",
       "target": "campaigns",
       "required": false,
+      "cascade": false,
       "disposition": "cleared",
       "fallback": "moved"
     },
@@ -243,6 +271,7 @@
       "field": "campaign",
       "target": "campaigns",
       "required": true,
+      "cascade": true,
       "disposition": "moved"
     },
     {
@@ -250,6 +279,7 @@
       "field": "current_campaign",
       "target": "campaigns",
       "required": false,
+      "cascade": false,
       "disposition": "cleared",
       "fallback": "moved"
     },
@@ -258,6 +288,7 @@
       "field": "campaign",
       "target": "campaigns",
       "required": false,
+      "cascade": false,
       "disposition": "cleared",
       "fallback": "moved"
     }
