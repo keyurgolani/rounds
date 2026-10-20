@@ -86,9 +86,11 @@ jobs:
   harness:
     # Two-account account-scope security harness (ROUNDS-00B-L01). Builds the
     # pocketbase and probe images from this commit, creates two accounts with
-    # generated credentials, and proves that one account cannot read, list, or
-    # delete another's records (plus the signup-disabled hook), failing on any
-    # missing or failed probe result. Docker on ubuntu; locally use Finch.
+    # generated credentials, and proves that one account cannot read, list,
+    # update, or delete another's records, that anonymous writes and oversized
+    # JSON are rejected, and that the signup-disabled hook holds, failing on any
+    # missing or failed probe result. Then runs the read-only cross-owner scan
+    # against the run's pb_data. Docker on ubuntu; locally use Finch.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

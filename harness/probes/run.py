@@ -12,6 +12,9 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
           read-back must have a passing receipt; a pending family must be
           neither implemented nor present in any receipt. Prints pass /
           expected-fail / fail counts.
+  scan    with PocketBase stopped, run the cross-owner relation scan against
+          the run's pb_data (read-only) and a fixture copy of it; see
+          scan_check.py.
 
 Exit code is non-zero on any failure, any missing result, or any pending
 family that has started to behave like an implemented one.
@@ -249,9 +252,13 @@ def run_verdict(doc: dict, receipts_path: str) -> int:
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("usage: run.py {main|hook|verdict}", file=sys.stderr)
+        print("usage: run.py {main|hook|verdict|scan}", file=sys.stderr)
         return 2
     phase = sys.argv[1]
+    if phase == "scan":
+        import scan_check
+
+        return scan_check.main()
     policy_path = os.environ.get("POLICY_PATH", "/policy/account-scope.v1.json")
     receipts_path = os.environ.get("RECEIPTS_PATH", "/out/receipts.jsonl")
     doc = policy.load(policy_path)
