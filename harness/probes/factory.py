@@ -98,8 +98,15 @@ def ensure_content_fixtures(pb: PBClient, admin_token: str) -> dict[str, str]:
     return out
 
 
-def seed_account(pb: PBClient, acct: Account, content: dict[str, str]) -> None:
-    """Create one owned row in every account-scoped collection for `acct`."""
+def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_token: str) -> None:
+    """Create one owned row in every account-scoped collection for `acct`.
+
+    Most rows are created with the account's own token, which also confirms
+    the owner create path works. ``resume_share_views`` is seeded with the
+    admin token instead, because its client create path is one stage 3 closes
+    (its target rules make create/update null, superuser-only); seeding it
+    through the client path would stop working once the fix lands.
+    """
     uid = acct.user_id
     tok = acct.token
     tag = acct.tag
@@ -107,6 +114,11 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str]) -> None:
 
     def mk(collection: str, payload: dict[str, Any]) -> str:
         rec = _must(pb.create(collection, tok, {"user": uid, **payload}), f"seed {collection}/{tag}")
+        ids[collection] = rec["id"]
+        return rec["id"]
+
+    def mk_admin(collection: str, payload: dict[str, Any]) -> str:
+        rec = _must(pb.create(collection, admin_token, {"user": uid, **payload}), f"seed {collection}/{tag}")
         ids[collection] = rec["id"]
         return rec["id"]
 
@@ -123,7 +135,7 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str]) -> None:
     variant = mk("resume_variants", {"resume": resume, "name": "variant"})
     mk("resume_versions", {"resume": resume, "data": {}})
     mk("resume_share_links", {"resume": resume, "token": secrets.token_urlsafe(16)})
-    mk("resume_share_views", {"link": ids["resume_share_links"]})
+    mk_admin("resume_share_views", {"link": ids["resume_share_links"]})
 
     mk("ai_providers", {"kind": "openai", "label": "provider"})
     mk("ai_settings", {})
