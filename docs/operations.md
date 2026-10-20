@@ -173,6 +173,12 @@ Deploying the real migration (no dry-run env vars) applies both changes in one t
 
 After a quarantine, an operator can replay a `relation_quarantine` row through the admin API so the relation hook re-checks it (for example after the owning account is corrected). That replay is the one superuser-run step for this collection; it is recorded in [server-writes.md](security/server-writes.md).
 
+**Alert.** Each denial logs one `relation_denied` line carrying `collection`, `field`, `operation`, and `actor` only (no ids or values). A low background rate is normal. Alert on a sustained rise in `relation_denied` per `collection`/`field` after a deploy, or on the first `relation_denied` for a `field` that never denied before: either points at a client that started sending a cross-owner or stale id, or at a predicate that is now too tight for a legitimate write.
+
+**Dependency check.** The uniform denial depends on the relation hook being loaded: confirm `relation_endpoints.pb.js` and its sibling `relation_endpoints.v1.json` table load from `/pb/pb_hooks` at boot (a hook load error prints to the PocketBase log), then send one foreign-id create per relation family and confirm it is denied with the documented status (create `400`, update `404`, a foreign id and a nonexistent id indistinguishable). If the hook is missing, the in-database triggers still abort every cross-owner write, but the denial stops being uniform: the raw `relation endpoint denied` abort surfaces instead of the typed response.
+
+**Repair.** A predicate that proves too tight is repaired with a new forward-fix migration, never by editing `1700007000` or rolling back. While that migration is being prepared, the immediate lever for any one collection that is wrongly accepting or rejecting a write is to set that collection's create/update rule to `null` (superuser-only) through the admin API, which stops all non-superuser writes to it until the fix ships; it never widens a rule. Record any such change in [server-writes.md](security/server-writes.md).
+
 ### Account-scope rules
 
 `1700006000_account_scope_rules.js` sets server-derived ownership on every user-owned collection: a create must name the signed-in account (`@request.data.user = @request.auth.id`) and an update cannot reassign `user`. `resume_share_views` becomes superuser-only, so only the share viewer's admin-token insert writes it. List, view, and delete rules are unchanged, and so are the `users` rules. The policy table is [`docs/security/account-scope.v1.json`](security/account-scope.v1.json).
