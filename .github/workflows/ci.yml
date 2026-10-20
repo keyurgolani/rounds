@@ -104,3 +104,26 @@ jobs:
           name: account-scope-receipts
           path: harness/.receipts/
           if-no-files-found: warn
+
+  migrations:
+    # Migration safety (ROUNDS-00A-L01 stage 5). PocketBase runs each
+    # migration file once, so a pull request into main or next may only add
+    # migrations, and a new one may not drop a collection or field or rewrite
+    # existing rows outside its down step, unless a reviewed entry in
+    # scripts/migration-lint-allowlist.json covers it.
+    # TODO(ROUNDS-32-L02): #156's migration framework replaces this lint.
+    if: github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'next')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # The checkout is the pull request merged into its base, so the first
+      # parent is the base and the diff is exactly what merging would change.
+      - name: Lint migration changes
+        run: python scripts/lint_migrations.py --base HEAD^1 --head HEAD

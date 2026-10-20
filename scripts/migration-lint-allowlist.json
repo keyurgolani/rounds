@@ -1,0 +1,5 @@
+{
+  "$comment": "Reviewed exceptions for scripts/lint_migrations.py. Each entry names one migration, the rules it may break, the issue that needs it, who reviewed it, and the SHA-256 of the reviewed file, so any later edit needs a new review. See docs/development.md#migrations.",
+  "version": 1,
+  "entries": []
+}

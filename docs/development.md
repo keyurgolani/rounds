@@ -80,6 +80,37 @@ Most app code should use `frontend/src/api/client.ts` instead of importing Pocke
 
 Use the PocketBase SDK directly only in infrastructure-level code such as auth, low-level client setup, or a new adapter inside `api/client.ts`.
 
+## Migrations
+
+PocketBase applies each file in `pocketbase/pb_migrations/` once, when it starts, and records it by name. A migration that has shipped never runs again, so every schema or data change gets a new migration. Don't edit, rename, or delete one that exists.
+
+Pull requests into `main` and `next` run `scripts/lint_migrations.py`. It fails when a change:
+
+1. edits, renames, or deletes an existing migration;
+2. adds a migration whose up step drops a collection or a field, or rewrites or deletes existing rows.
+
+A down step may do all of that. The lint reads the whole file except the down step, helpers included, and looks for known PocketBase, dbx, and SQL calls, so it catches mistakes rather than every possible rewrite. Run it before you push:
+
+```sh
+python3 scripts/lint_migrations.py --base origin/next --head HEAD
+```
+
+A destructive change that's intended needs review and an entry in `scripts/migration-lint-allowlist.json`. The lint prints one to start from, with the file's SHA-256 filled in:
+
+```json
+{
+  "path": "pocketbase/pb_migrations/1700009000_example.js",
+  "rules": ["drops-field", "rewrites-rows"],
+  "sha256": "<printed by the lint>",
+  "issue": "#14",
+  "manifest": "legacy-shares-v1",
+  "reason": "Drops the plaintext token fields after the cutover.",
+  "reviewed_by": "keyurgolani"
+}
+```
+
+The entry covers only that file, those rules, and that exact content, so any later edit fails the lint until it's reviewed again. `manifest` is optional. CI annotates each finding the entry covers. [#156](https://github.com/keyurgolani/rounds/issues/156)'s migration framework and [#157](https://github.com/keyurgolani/rounds/issues/157)'s restore rehearsal replace this lint.
+
 ## Adding Pages
 
 1. Add the route component under `frontend/src/pages/`.
