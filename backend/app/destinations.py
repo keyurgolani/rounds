@@ -18,16 +18,27 @@ can't name the runner's own neighborhood. These answer 403
 A name is checked as written and then by every address it resolves to.
 A name that doesn't resolve is denied too.
 
-TODO(ROUNDS-14-L02): #73's provider invocation owns outbound policy,
-including pinning the checked address for the connection itself.
+``vet`` does that with one lookup and returns the checked addresses.
+Every outbound call to a provider, or to a paper URL, goes through a
+``client``: an httpx client whose transport connects only to a vetted
+address, keeping the name for the Host header and TLS, so the
+connection can't land somewhere the lookup didn't check. A host the
+caller didn't vet first is vetted on its first request, once per
+client. Redirects are off unless the caller turns them on, and then
+every hop is vetted the same way.
+
+TODO(ROUNDS-14-L02): #73's provider invocation owns outbound policy.
 """
 from __future__ import annotations
 
 import asyncio
 import ipaddress
 import socket
-from typing import Awaitable, Callable, Iterable
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Iterable
 from urllib.parse import urlsplit
+
+import httpx
 
 from app import gates
 from app.errors import TypedError
@@ -138,15 +149,26 @@ async def _system_resolve(host: str, port: int) -> list[str]:
 resolve: Resolver = _system_resolve
 
 
-async def check(base_url: str | None) -> None:
-    """Deny ``base_url`` unless every check passes. An empty base URL
-    means the provider's public default and passes."""
-    if not base_url or not base_url.strip():
-        return
-    private_ok = private_network_allowed()
-    host, port, literal = check_static(base_url, private_ok)
+@dataclass(frozen=True)
+class Destination:
+    """A host and port whose every address passed the checks, from one
+    lookup."""
+
+    host: str
+    port: int
+    addresses: tuple[Address, ...]
+
+
+async def vet(url: str | None, private_ok: bool | None = None) -> Destination | None:
+    """The checked destination of ``url``, from one lookup, or None for an
+    empty URL, which means the provider's public default. Raises 403
+    ``destination_denied`` unless every check passes."""
+    if not url or not url.strip():
+        return None
+    allowed_private = private_network_allowed() if private_ok is None else private_ok
+    host, port, literal = check_static(url, allowed_private)
     if literal is not None:
-        return
+        return Destination(host, port, (literal,))
     try:
         found = await asyncio.wait_for(resolve(host, port), RESOLVE_TIMEOUT_S)
     except (OSError, asyncio.TimeoutError, UnicodeError):
@@ -159,5 +181,108 @@ async def check(base_url: str | None) -> None:
             raise _deny() from None
     if not addresses:
         raise _deny(UNRESOLVED)
-    if not all(address_allowed(a, private_ok) for a in addresses):
+    if not all(address_allowed(a, allowed_private) for a in addresses):
         raise _deny()
+    return Destination(host, port, tuple(dict.fromkeys(addresses)))
+
+
+async def check(base_url: str | None) -> None:
+    """Deny ``base_url`` unless every check passes. An empty base URL
+    means the provider's public default and passes."""
+    await vet(base_url)
+
+
+def _vetted_for(destination: Destination | None, url: str | None) -> bool:
+    if destination is None or not url or not url.strip():
+        return False
+    try:
+        return _host_and_port(url) == (destination.host, destination.port)
+    except TypedError:
+        return False
+
+
+async def vetted(url: str | None, destination: Destination | None = None) -> Destination | None:
+    """``destination`` when it was vetted for ``url``'s host and port,
+    otherwise a fresh ``vet``, so a caller that already vetted the URL
+    doesn't look it up again."""
+    if _vetted_for(destination, url):
+        return destination
+    return await vet(url)
+
+
+def inner_transport(host: str) -> httpx.AsyncBaseTransport:
+    """The transport that carries one host's connections. Each host gets
+    its own pool, so a connection set up for one name never serves
+    another."""
+    return httpx.AsyncHTTPTransport()
+
+
+class PinnedTransport(httpx.AsyncBaseTransport):
+    """Sends each request to a vetted address of its host: one the caller
+    vetted, or one this transport vets on the host's first request. The
+    request goes out with the name in its Host header, and TLS checks
+    the certificate against the name. An address that refuses the
+    connection falls through to the next vetted one. The client's own
+    request keeps its URL, so a relative redirect resolves against the
+    name, not the address."""
+
+    def __init__(self, known: Iterable[Destination] = (), private_ok: bool | None = None) -> None:
+        self._vetted = {(d.host, d.port): d for d in known}
+        self._private_ok = private_ok
+        self._inner: dict[str, httpx.AsyncBaseTransport] = {}
+
+    async def _destination(self, url: httpx.URL) -> Destination:
+        key = _host_and_port(str(url))
+        destination = self._vetted.get(key)
+        if destination is None:
+            destination = await vet(str(url), self._private_ok)
+            if destination is None:
+                raise _deny()
+            self._vetted[key] = destination
+        return destination
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        url = request.url
+        destination = await self._destination(url)
+        inner = self._inner.get(destination.host)
+        if inner is None:
+            inner = self._inner[destination.host] = inner_transport(destination.host)
+        extensions = dict(request.extensions)
+        if url.scheme == "https":
+            extensions["sni_hostname"] = destination.host
+        last = len(destination.addresses) - 1
+        for index, address in enumerate(destination.addresses):
+            pinned = httpx.Request(
+                request.method,
+                url.copy_with(host=str(address)),
+                headers=request.headers,
+                stream=request.stream,
+                extensions=extensions,
+            )
+            try:
+                return await inner.handle_async_request(pinned)
+            except httpx.ConnectError:
+                if index == last:
+                    raise
+        raise _deny()  # unreachable: a vetted destination has an address
+
+    async def aclose(self) -> None:
+        for inner in self._inner.values():
+            await inner.aclose()
+
+
+def client(
+    *known: Destination | None,
+    private_ok: bool | None = None,
+    follow_redirects: bool = False,
+    **kwargs: Any,
+) -> httpx.AsyncClient:
+    """An httpx client for outbound calls that connects only to vetted
+    addresses. ``known`` destinations were vetted already and need no
+    further lookup; any other host is vetted once, on its first request.
+    ``private_ok`` overrides the private-network gate (the paper fetch
+    passes False). Redirects stay off unless ``follow_redirects``; each
+    hop is vetted either way. With its own transport, the client ignores
+    proxy settings in the environment."""
+    transport = PinnedTransport([d for d in known if d is not None], private_ok)
+    return httpx.AsyncClient(transport=transport, follow_redirects=follow_redirects, **kwargs)

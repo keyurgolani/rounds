@@ -25,12 +25,13 @@ from __future__ import annotations
 
 import json
 import time
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Iterator
+from typing import Any, AsyncIterator, Awaitable, Callable
 
 import httpx
 from fastapi import HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 
 from app import errors, gates, obs, sandbox
 from app.errors import TypedError
@@ -315,13 +316,16 @@ def pool() -> sandbox.SlotPool:
     return _pool
 
 
-@contextmanager
-def allocate() -> Iterator[sandbox.Sandbox]:
-    """Step 9: one in-flight slot, or 503 ``worker_unavailable``."""
+@asynccontextmanager
+async def allocate() -> AsyncIterator[sandbox.Sandbox]:
+    """Step 9: one in-flight slot, or 503 ``worker_unavailable``. The
+    slot's cleanup (the uid's process scan, the reap wait, and the temp
+    sweeps) runs in the threadpool, off the event loop, and finishes
+    before the slot is free again, even when the request is cancelled."""
     slot = _pool.try_acquire()
     if slot is None:
         raise TypedError("worker_unavailable")
     try:
         yield slot
     finally:
-        _pool.release(slot)
+        await run_in_threadpool(_pool.release, slot)

@@ -116,7 +116,7 @@ async def run_project_route(request: Request, req: RunProjectRequest) -> RunProj
     test_command = checkpoint.get("test_command") if isinstance(checkpoint, dict) else None
     if not isinstance(test_command, str) or not test_command.strip():
         raise TypedError("invalid_request", "This checkpoint can't run here.")
-    with admission.allocate() as slot:
+    async with admission.allocate() as slot:
         result = await run_in_threadpool(
             run_project,
             req.files,
@@ -183,12 +183,13 @@ async def _resolve_text_cfg(user: dict, provider_id: str | None, model: str | No
         api_key = decrypt(provider.get("encrypted_key") or "", provider.get("key_iv") or "")
         if not api_key:
             raise HTTPException(status_code=400, detail="No API key on file for the chosen provider.")
-        await destinations.check(provider.get("base_url") or "")
+        destination = await destinations.vet(provider.get("base_url") or "")
         return {
             "kind": provider.get("kind") or "provider",
             "model": model,
             "api_key": api_key,
             "base_url": provider.get("base_url") or "",
+            "destination": destination,
         }
     return await _active_text_config(user)
 
@@ -242,6 +243,7 @@ async def chat(body: ChatRequest, user: dict = Depends(_auth_user)) -> Streaming
                 system=system,
                 messages=messages,
                 max_tokens=1200,
+                destination=cfg.get("destination"),
             ):
                 yield f"data: {json.dumps({'delta': chunk})}\n\n".encode("utf-8")
             yield b"data: {\"done\": true}\n\n"
@@ -289,6 +291,7 @@ async def edit(body: ChatRequest, user: dict = Depends(_auth_user)) -> Streaming
                 # mode regenerates the whole file so even a small change
                 # consumes ~file-size in tokens.
                 system=system, messages=messages, max_tokens=8000,
+                destination=cfg.get("destination"),
             ):
                 accumulated += chunk
                 yield f"data: {json.dumps({'delta': chunk})}\n\n".encode("utf-8")
@@ -374,7 +377,7 @@ async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[st
     rubric = round_row.get("rubric") or {"items": []}
     language = round_row.get("language") or "python"
 
-    with admission.allocate() as slot:
+    async with admission.allocate() as slot:
         test_results = await run_in_threadpool(
             _grade_checkpoints, body.round_slug, checkpoints, body.files, language, slot
         )
@@ -393,6 +396,7 @@ async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[st
             system=_RUBRIC_SYS,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1500,
+            destination=cfg.get("destination"),
         )
         rubric_review = _parse_rubric(raw)
     except Exception as e:  # noqa: BLE001

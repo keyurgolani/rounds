@@ -115,6 +115,8 @@ Each route gate is that route's off switch. Set it to `disabled` and restart the
 
 Two outbound switches start off. `PAPER_FETCH` lets `/api/ai/improve` fetch a publication's `paper_url`. `PROVIDER_PRIVATE_NETWORK` lets an AI provider base URL point at a private address, for a model server on your LAN. Enabled, every account's provider URL can reach this deployment's private network, its own services included, so enable it only when you trust every account. Loopback, link-local, and cloud metadata addresses and service names such as `pocketbase` or `*.svc` stay refused either way, with 403 `destination_denied`.
 
+The runner looks a provider host up once per call, checks every address it gets, and connects only to one of those addresses. Provider calls don't follow redirects. The paper fetch gets the same check for the URL and for each of up to 5 redirects, and it refuses private addresses whatever `PROVIDER_PRIVATE_NETWORK` says; a refused paper URL is skipped like any other failed fetch. Provider calls and the paper fetch ignore `HTTP_PROXY` and `HTTPS_PROXY`.
+
 Each reader resolves a gate the same way:
 
 1. A set gate with an allowed value wins. Values are trimmed and case-insensitive.

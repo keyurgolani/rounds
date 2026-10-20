@@ -56,14 +56,23 @@ class CodeRunResult(BaseModel):
 
 
 class EvaluateFilter(StrictModel):
-    tags: Optional[List[str]] = Field(default=None, max_length=limits.EVALUATE_MAX_CASES)
-    indices: Optional[List[int]] = Field(default=None, max_length=limits.EVALUATE_MAX_CASES)
+    # Counted in validators, not with max_length, so too many entries
+    # answer 413 limit_exceeded like every other over-limit field.
+    tags: Optional[List[str]] = None
+    indices: Optional[List[int]] = None
 
     @field_validator("tags")
     @classmethod
-    def _tag_lengths(cls, v: Optional[List[str]]) -> Optional[List[str]]:
-        if v is not None and any(len(tag) > 64 for tag in v):
+    def _tag_limits(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None and (len(v) > limits.EVALUATE_MAX_CASES or any(len(tag) > 64 for tag in v)):
             raise limits.over_limit("tags")
+        return v
+
+    @field_validator("indices")
+    @classmethod
+    def _index_count(cls, v: Optional[List[int]]) -> Optional[List[int]]:
+        if v is not None and len(v) > limits.EVALUATE_MAX_CASES:
+            raise limits.over_limit("indices")
         return v
 
 

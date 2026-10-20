@@ -86,5 +86,5 @@ def _render(html: str, margin_mm: int) -> Response:
 
 @router.post("/render")
 async def render(req: RenderRequest):
-    with admission.allocate():
+    async with admission.allocate():
         return await run_in_threadpool(_render, req.html, req.margin_mm)

@@ -56,7 +56,7 @@ async def _load_question(request: Request, slug: str) -> tuple[dict, list[dict]]
 @router.post("/run", response_model=CodeRunResult)
 async def run_code(request: Request, req: CodeRunRequest):
     entry, _cases = await _load_question(request, req.question_slug)
-    with admission.allocate() as slot:
+    async with admission.allocate() as slot:
         outcome = await run_in_threadpool(
             run_one,
             req.code,
@@ -137,5 +137,5 @@ async def evaluate_code(request: Request, req: CodeEvaluateRequest):
     selected = _select_cases(cases, req.filter)
     if len(selected) > EVALUATE_MAX_CASES:
         raise TypedError("limit_exceeded")
-    with admission.allocate() as slot:
+    async with admission.allocate() as slot:
         return await run_in_threadpool(_evaluate, req.code, req.language, entry_dict, selected, slot)

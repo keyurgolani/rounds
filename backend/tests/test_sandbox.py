@@ -80,7 +80,8 @@ def test_large_input_goes_through_a_file_not_argv():
     assert outcome.error is None, outcome.error
     count, argc, longest_arg = outcome.return_value
     assert count == 60_000
-    assert argc == 2 and longest_arg < 4096
+    # The script, the input file, and the result file; no argument holds the input.
+    assert argc == 3 and longest_arg < 4096
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not on PATH")
@@ -413,3 +414,17 @@ def test_as_root_a_detached_child_is_killed_when_the_run_ends():  # pragma: no c
     outcome = run_one(code, "python", {"kind": "function", "name": "f"}, {}, sandbox=box, timeout_s=10)
     assert outcome.return_value == 1
     assert _live_pids_of(box.uid) == []
+
+
+@pytest.mark.skipif(sys.platform != "linux" or os.geteuid() != 0, reason="needs root on Linux")
+def test_as_root_a_result_pointed_at_a_root_file_is_not_read():  # pragma: no cover - image only
+    code = (
+        "import os, sys\n"
+        "def f():\n"
+        "    os.symlink('/etc/shadow', sys.argv[2])\n"
+        "    os._exit(0)\n"
+    )
+    outcome = run_one(code, "python", {"kind": "function", "name": "f"}, {}, sandbox=sandbox.sandbox_for(2))
+    assert outcome.return_value is None
+    assert outcome.error == "The program ended without returning a result."
+    assert "root:" not in outcome.stdout + outcome.stderr

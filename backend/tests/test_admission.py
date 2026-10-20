@@ -10,6 +10,8 @@ import asyncio
 import json
 import re
 import tempfile
+import threading
+import time
 import urllib.request
 
 import httpx
@@ -467,6 +469,13 @@ def test_more_than_32_selected_cases_is_413(client, signed_in, pocketbase, tripw
     assert tripwires == ["run_one"]
 
 
+@pytest.mark.parametrize("field, entries", [("tags", [f"t{i}" for i in range(33)]), ("indices", list(range(33)))])
+def test_more_than_32_filter_entries_is_413_before_any_lookup(client, signed_in, tripwires, pocketbase, field, entries):
+    body = {**ROUTES["evaluate"][2], "filter": {field: entries}}
+    _assert_typed(_send(client, "evaluate", signed_in, body=body), 413, "limit_exceeded")
+    assert tripwires == [] and pocketbase.calls == []
+
+
 # ---- step 8: lookups with the caller's token ------------------------------------------
 
 
@@ -561,6 +570,57 @@ def test_a_slot_is_released_after_the_run(client, signed_in, seeded, tripwires):
 
 def test_the_in_flight_cap_is_the_replica_slot_count():
     assert admission.pool().size == admission.REPLICA_SLOTS == 4
+
+
+def test_slot_cleanup_runs_off_the_event_loop(monkeypatch):
+    pool = admission.pool()
+    real_release = pool.release
+    cleanup_threads: list[int] = []
+
+    def slow_release(slot):
+        cleanup_threads.append(threading.get_ident())
+        time.sleep(0.3)
+        real_release(slot)
+
+    monkeypatch.setattr(pool, "release", slow_release)
+
+    async def go():
+        ticks = 0
+
+        async def tick():
+            nonlocal ticks
+            while True:
+                await asyncio.sleep(0.01)
+                ticks += 1
+
+        ticker = asyncio.create_task(tick())
+        before = pool.in_use()
+        async with admission.allocate():
+            assert pool.in_use() == before + 1
+        ticker.cancel()
+        assert pool.in_use() == before
+        return threading.get_ident(), ticks
+
+    loop_thread, ticks = asyncio.run(go())
+    assert cleanup_threads and cleanup_threads[0] != loop_thread
+    # The loop kept serving while the cleanup ran.
+    assert ticks >= 10
+
+
+def test_a_slot_is_cleaned_up_and_freed_when_the_run_raises(monkeypatch):
+    pool = admission.pool()
+    released = []
+    real_release = pool.release
+    monkeypatch.setattr(pool, "release", lambda slot: (released.append(slot.index), real_release(slot)))
+    before = pool.in_use()
+
+    async def go():
+        async with admission.allocate():
+            raise Tripped()
+
+    with pytest.raises(Tripped):
+        asyncio.run(go())
+    assert len(released) == 1 and pool.in_use() == before
 
 
 # ---- decision lines --------------------------------------------------------------------

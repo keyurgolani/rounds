@@ -104,3 +104,61 @@ def test_run_one_add_two_numbers_real_listnode():
     outcome = run_one(code, "python", entry, {"l1": _list([2, 4, 3]), "l2": _list([5, 6, 4])})
     assert outcome.error is None, outcome.error
     assert outcome.return_value == [7, 0, 8]
+
+
+# ---- the result comes back on its own channel (ROUNDS-00A-L01) ---------------------------
+
+MORE_THAN_KEPT = 5 * 1024 * 1024  # each output stream keeps its first 4 MiB
+
+
+def test_a_correct_python_result_survives_more_output_than_is_kept():
+    code = f"def solve(x):\n    print('x' * {MORE_THAN_KEPT})\n    return x + 1"
+    outcome = run_one(code, "python", {"kind": "function", "name": "solve"}, {"x": 41}, timeout_s=10)
+    assert outcome.error is None, outcome.error
+    assert outcome.return_value == 42
+    assert outcome.truncated is True
+    assert len(outcome.stdout) <= 64 * 1024
+
+
+def test_a_correct_javascript_result_survives_more_output_than_is_kept():
+    code = f"function solve(x) {{ process.stdout.write('y'.repeat({MORE_THAN_KEPT})); return x * 2; }}"
+    outcome = run_one(code, "javascript", {"kind": "function", "name": "solve"}, {"x": 21}, timeout_s=10)
+    assert outcome.error is None, outcome.error
+    assert outcome.return_value == 42
+    assert outcome.truncated is True
+
+
+def test_marker_like_output_doesnt_change_the_result():
+    code = "def solve():\n    print('__RUNNER_RESULT__999')\n    return 1"
+    outcome = run_one(code, "python", {"kind": "function", "name": "solve"}, {})
+    assert outcome.return_value == 1
+    assert "__RUNNER_RESULT__999" in outcome.stdout
+
+
+def test_a_program_that_exits_before_returning_has_no_result():
+    code = "import os\ndef solve():\n    os._exit(0)"
+    outcome = run_one(code, "python", {"kind": "function", "name": "solve"}, {})
+    assert outcome.return_value is None
+    assert outcome.error == "The program ended without returning a result."
+
+
+def test_a_result_over_4_mib_is_refused():
+    code = f"def solve():\n    return 'r' * {4 * 1024 * 1024}"
+    outcome = run_one(code, "python", {"kind": "function", "name": "solve"}, {}, timeout_s=10)
+    assert outcome.return_value is None
+    assert outcome.error == "The result is over 4 MiB."
+
+
+def test_a_result_path_swapped_for_a_symlink_is_not_read(tmp_path):
+    secret = tmp_path / "secret.txt"
+    secret.write_text('"symlinked-sentinel"')
+    code = (
+        "import os, sys\n"
+        "def solve():\n"
+        f"    os.symlink({str(secret)!r}, sys.argv[2])\n"
+        "    os._exit(0)\n"
+    )
+    outcome = run_one(code, "python", {"kind": "function", "name": "solve"}, {})
+    assert outcome.return_value is None
+    assert outcome.error == "The program ended without returning a result."
+    assert "symlinked-sentinel" not in outcome.stdout + outcome.stderr

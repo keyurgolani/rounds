@@ -33,6 +33,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
+from app import destinations
 from app.crypto import decrypt
 from app.pb_auth import current_user
 from routers.ai import (
@@ -423,11 +424,13 @@ async def _resolve_text_cfg(
                 status_code=400,
                 detail="No API key on file for the chosen provider.",
             )
+        destination = await destinations.vet(provider.get("base_url") or "")
         return {
             "kind": provider.get("kind") or "provider",
             "model": model,
             "api_key": api_key,
             "base_url": provider.get("base_url") or "",
+            "destination": destination,
         }
     return await _active_text_config(user)
 
@@ -532,6 +535,7 @@ async def _openai_stream_with_tools(
     messages: List[Dict[str, Any]],
     tools: List[Dict[str, Any]],
     max_tokens: int = 1600,
+    destination: destinations.Destination | None = None,
 ) -> AsyncIterator[Dict[str, Any]]:
     """OpenAI-style streaming with function-calling support.
 
@@ -549,55 +553,59 @@ async def _openai_stream_with_tools(
     kwargs: Dict[str, Any] = {"api_key": api_key}
     if base_url:
         kwargs["base_url"] = base_url
-    client = AsyncOpenAI(**kwargs)
-    chat = [{"role": "system", "content": system}] + messages
+    destination = await destinations.vetted(base_url, destination)
+    # The SDK's own client follows redirects; this one doesn't, and it
+    # connects only to vetted addresses.
+    async with destinations.client(destination) as http_client:
+        client = AsyncOpenAI(**kwargs, http_client=http_client)
+        chat = [{"role": "system", "content": system}] + messages
 
-    index_to_id: Dict[int, str] = {}
-    started: set[int] = set()
+        index_to_id: Dict[int, str] = {}
+        started: set[int] = set()
 
-    stream = await client.chat.completions.create(
-        model=model,
-        messages=chat,
-        tools=tools,
-        max_tokens=max_tokens,
-        stream=True,
-    )
-    async for chunk in stream:
-        if not chunk.choices:
-            continue
-        choice = chunk.choices[0]
-        delta = choice.delta
-        if delta is None:
-            continue
-        text_part = getattr(delta, "content", None)
-        if text_part:
-            yield {"type": "text_delta", "text": text_part}
-        tcs = getattr(delta, "tool_calls", None) or []
-        for tc in tcs:
-            idx = getattr(tc, "index", 0) or 0
-            fn = getattr(tc, "function", None)
-            if idx not in started:
-                tc_id = getattr(tc, "id", None) or f"call_{idx}"
-                name = (getattr(fn, "name", None) if fn else None) or ""
-                index_to_id[idx] = tc_id
-                started.add(idx)
-                yield {
-                    "type": "tool_use_start",
-                    "id": tc_id,
-                    "name": name,
-                }
-            args = getattr(fn, "arguments", None) if fn else None
-            if args:
-                yield {
-                    "type": "tool_use_delta",
-                    "id": index_to_id[idx],
-                    "partial_json": args,
-                }
-        if choice.finish_reason:
-            for tc_id in index_to_id.values():
-                yield {"type": "tool_use_stop", "id": tc_id}
-            yield {"type": "done"}
-            return
+        stream = await client.chat.completions.create(
+            model=model,
+            messages=chat,
+            tools=tools,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            delta = choice.delta
+            if delta is None:
+                continue
+            text_part = getattr(delta, "content", None)
+            if text_part:
+                yield {"type": "text_delta", "text": text_part}
+            tcs = getattr(delta, "tool_calls", None) or []
+            for tc in tcs:
+                idx = getattr(tc, "index", 0) or 0
+                fn = getattr(tc, "function", None)
+                if idx not in started:
+                    tc_id = getattr(tc, "id", None) or f"call_{idx}"
+                    name = (getattr(fn, "name", None) if fn else None) or ""
+                    index_to_id[idx] = tc_id
+                    started.add(idx)
+                    yield {
+                        "type": "tool_use_start",
+                        "id": tc_id,
+                        "name": name,
+                    }
+                args = getattr(fn, "arguments", None) if fn else None
+                if args:
+                    yield {
+                        "type": "tool_use_delta",
+                        "id": index_to_id[idx],
+                        "partial_json": args,
+                    }
+            if choice.finish_reason:
+                for tc_id in index_to_id.values():
+                    yield {"type": "tool_use_stop", "id": tc_id}
+                yield {"type": "done"}
+                return
 
 
 async def _anthropic_stream_with_tools(
@@ -608,6 +616,7 @@ async def _anthropic_stream_with_tools(
     messages: List[Dict[str, Any]],
     tools: List[Dict[str, Any]],
     max_tokens: int = 1600,
+    destination: destinations.Destination | None = None,
 ) -> AsyncIterator[Dict[str, Any]]:
     """Streams Anthropic responses, surfacing both text deltas and
     tool_use blocks. Each yielded dict has a `type` field the SSE
@@ -625,7 +634,8 @@ async def _anthropic_stream_with_tools(
     # Track the currently-open content block so we can correlate
     # input_json_delta events back to the tool_use that started them.
     current_block: Dict[str, Any] = {}
-    async with httpx.AsyncClient(timeout=180) as client:
+    destination = await destinations.vetted(base_url, destination)
+    async with destinations.client(destination, timeout=180) as client:
         async with client.stream(
             "POST",
             f"{base}/messages",
@@ -727,6 +737,7 @@ async def chat(
                     system=system,
                     messages=out_messages,
                     tools=ANTHROPIC_CANVAS_TOOLS,
+                    destination=cfg.get("destination"),
                 )
             else:
                 # OpenAI / OpenAI-compatible. Convert the Anthropic-shaped
@@ -740,6 +751,7 @@ async def chat(
                     system=system,
                     messages=oa_messages,
                     tools=OPENAI_CANVAS_TOOLS,
+                    destination=cfg.get("destination"),
                 )
             async for evt in stream_iter:
                 yield f"data: {json.dumps(evt)}\n\n".encode("utf-8")

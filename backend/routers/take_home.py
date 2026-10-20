@@ -118,7 +118,7 @@ async def run_route(
 ) -> TakeHomeRunResponse:
     a, entrypoint = await _admitted_assignment(user, body.assignment_slug)
     merged = _merge_with_harness(body.files, a.get("harness_files") or [])
-    with admission.allocate() as slot:
+    async with admission.allocate() as slot:
         r = await run_in_threadpool(run_assignment, merged, entrypoint, timeout_s=RUN_TIMEOUT_S, sandbox=slot)
     return TakeHomeRunResponse(
         score=r.score,
@@ -164,7 +164,7 @@ async def submit_route(
     if body.campaign_id:
         await _own_campaign(user, body.campaign_id)
     merged = _merge_with_harness(body.files, a.get("harness_files") or [])
-    with admission.allocate() as slot:
+    async with admission.allocate() as slot:
         r = await run_in_threadpool(run_assignment, merged, entrypoint, timeout_s=SUBMIT_TIMEOUT_S, sandbox=slot)
     harness_out = {
         "score": r.score,
@@ -191,6 +191,7 @@ async def submit_route(
             system=_RUBRIC_SYS,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1500,
+            destination=cfg.get("destination"),
         )
         rubric_review = _parse_rubric(raw)
     except Exception as e:  # noqa: BLE001
@@ -284,6 +285,7 @@ async def chat_route(
                 system=system,
                 messages=messages,
                 max_tokens=1200,
+                destination=cfg.get("destination"),
             ):
                 yield f"data: {json.dumps({'delta': chunk})}\n\n".encode("utf-8")
             yield b"data: {\"done\": true}\n\n"
