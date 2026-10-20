@@ -5,6 +5,9 @@ comes from ``CODES``, ``detail`` is a fixed sentence that never repeats
 request content, and ``correlation_id`` matches the
 ``X-Correlation-Id`` header. A 429 can carry ``Retry-After``.
 
+A completed command's replay (``Replayed``) answers its stored response
+as it was, with ``Idempotent-Replayed: true``.
+
 ``TypedError`` is an ``HTTPException``, so FastAPI passes it through
 body parsing and dependencies untouched. On an admitted route the
 admission middleware writes the one decision line for the request; on
@@ -16,6 +19,8 @@ On admitted routes a request that fails validation answers 422
 limit, instead of FastAPI's error list.
 """
 from __future__ import annotations
+
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exception_handlers import request_validation_exception_handler
@@ -40,6 +45,8 @@ CODES: dict[str, int] = {
     "invalid_request": 422,
     "idempotency_key_required": 400,
     "already_completed": 409,
+    "idempotency_mismatch": 409,
+    "already_in_flight": 409,
     "quota_exceeded": 429,
     "demo_limit_reached": 429,
     "quota_unavailable": 503,
@@ -51,6 +58,7 @@ CODES: dict[str, int] = {
     "runtime_unsupported": 422,
     "definition_integrity_mismatch": 503,
     "worker_unavailable": 503,
+    "render_timeout": 422,
     "destination_denied": 403,
 }
 
@@ -66,6 +74,8 @@ DETAILS: dict[str, str] = {
     "invalid_request": "The request doesn't match what this route accepts.",
     "idempotency_key_required": "This request needs an Idempotency-Key.",
     "already_completed": "This request already ran.",
+    "idempotency_mismatch": "This Idempotency-Key was already used for a different request.",
+    "already_in_flight": "This request is still running. Try again shortly.",
     "quota_exceeded": "You've reached the limit for now.",
     "demo_limit_reached": "The demo limit is reached for now.",
     "quota_unavailable": "Limits can't be checked right now. Try again shortly.",
@@ -76,6 +86,7 @@ DETAILS: dict[str, str] = {
     "runtime_unsupported": "This language isn't supported here.",
     "definition_integrity_mismatch": "This practice item can't be checked right now. Try again shortly.",
     "worker_unavailable": "The runner is busy or unavailable. Try again shortly.",
+    "render_timeout": "This document took too long to render. Simplify it and try again.",
     "destination_denied": "This provider address isn't allowed.",
 }
 
@@ -116,6 +127,19 @@ class TypedError(HTTPException):
         return f"{self.status_code} {self.code}"
 
 
+class Replayed(Exception):
+    """Step 6: a completed command's stored response, answered again
+    without running anything."""
+
+    def __init__(self, status: int, body: Any) -> None:
+        super().__init__(f"replayed {status}")
+        self.status = status
+        self.body = body
+
+
+REPLAY_HEADER = "Idempotent-Replayed"
+
+
 def envelope(code: str, detail: str, correlation_id: str) -> dict[str, str]:
     return {"detail": detail, "code": code, "correlation_id": correlation_id}
 
@@ -154,6 +178,11 @@ async def typed_error_handler(request: Request, exc: TypedError) -> JSONResponse
     return typed_response(request, exc)
 
 
+async def replayed_handler(_request: Request, exc: Replayed) -> JSONResponse:
+    # Admission's decision line records the replay.
+    return JSONResponse(exc.body, status_code=exc.status, headers={REPLAY_HEADER: "true"})
+
+
 async def validation_error_handler(request: Request, exc: RequestValidationError):
     from app import admission
 
@@ -166,4 +195,5 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
 def install(app: FastAPI) -> None:
     app.add_exception_handler(TypedError, typed_error_handler)
+    app.add_exception_handler(Replayed, replayed_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)

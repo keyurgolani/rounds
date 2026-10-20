@@ -30,6 +30,10 @@
 #                          still work as aliases when it is unset.
 #   ROUNDS_GATE_*        - the other gates in docs/configuration.md.
 #                          Unset keeps each written default.
+#   ROUNDS_ADMISSION_SECRET - 32+ characters, the same on PocketBase and
+#                          the runner (`openssl rand -hex 32`). The runner
+#                          sends it with each admission store write; set
+#                          it before ROUNDS_GATE_ENFORCE_* is `enforce`.
 #
 # If admin creds are unset, no admin is bootstrapped and you must run:
 #
@@ -48,6 +52,8 @@ services:
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-}
       - ROUNDS_GATE_SIGNUPS=${ROUNDS_GATE_SIGNUPS:-}
       - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
+      # Blank, the admission store's write routes answer 503.
+      - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-}
     restart: unless-stopped
 
   pdf-renderer:
@@ -74,6 +80,9 @@ services:
       # against the dev placeholder credentials.
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-}
+      # Same value as PocketBase's. Blank, admission logs
+      # quota_unavailable in observe mode and denies with it in enforce.
+      - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-}
       # Gates (docs/configuration.md#gates). Empty keeps each written
       # default, and the runner logs every value at startup.
       - ROUNDS_GATE_RUN=${ROUNDS_GATE_RUN:-}

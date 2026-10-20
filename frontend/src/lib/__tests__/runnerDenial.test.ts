@@ -32,7 +32,16 @@ describe('classifyRunnerError', () => {
     expect(classifyRunnerError(error)?.kind).toBe(kind);
   });
 
-  it.each([err(400), err(403), err(404), err(409, 'already_completed'), err(422, 'invalid_request')])(
+  it.each([
+    [err(400, 'idempotency_key_required'), 'unavailable'],
+    [err(409, 'already_completed'), 'unavailable'],
+    [err(409, 'idempotency_mismatch'), 'unavailable'],
+    [err(409, 'already_in_flight', { retryAfterSeconds: 4 }), 'unavailable'],
+  ])('shows the idempotency refusal %o as %s', (error, kind) => {
+    expect(classifyRunnerError(error)?.kind).toBe(kind);
+  });
+
+  it.each([err(400), err(403), err(404), err(409), err(422, 'invalid_request'), err(422, 'render_timeout')])(
     'leaves %o to the existing error display',
     (error) => {
       expect(classifyRunnerError(error)).toBeNull();

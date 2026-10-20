@@ -66,15 +66,15 @@ def test_the_registry_covers_each_admitted_route_and_the_switches():
 
 
 def test_written_defaults_keep_routes_on_and_outbound_reach_off():
-    # Route gates keep each route serving and enforcement starts off.
-    # The paper fetch and private provider addresses start disabled
-    # (#1 stage 2).
+    # Route gates keep each route serving, and enforcement starts at
+    # observe, which denies nothing (#1 stage 3's rollout). The paper
+    # fetch and private provider addresses start disabled (#1 stage 2).
     resolved = gates.load({}, gates.RUNNER)
     assert [n for n in resolved] == [g.name for g in RUNNER_GATES]
     for name, r in resolved.items():
         assert r.source == "default"
         if name.startswith("ENFORCE_"):
-            expected = "off"
+            expected = "observe"
         elif name in ("PAPER_FETCH", "PROVIDER_PRIVATE_NETWORK"):
             expected = "disabled"
         elif name == "EXECUTION_DEFINITIONS":

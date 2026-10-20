@@ -14,7 +14,9 @@
 // Failures throw a `RunnerError` that keeps the old message format
 // (`"<prefix> <status>: <detail>"`) and adds the typed parts of the
 // runner's error envelope: HTTP status, `code`, `Retry-After`, and the
-// correlation id. Unsafe methods carry one `Idempotency-Key` per call.
+// correlation id. Unsafe methods carry one `Idempotency-Key` per call,
+// and a denial that a moment's wait can clear is retried with that same
+// key, so the runner treats the retry as the same command.
 
 import { mintIdempotencyKey } from './idempotency';
 import { pb } from './pocketbase';
@@ -33,13 +35,34 @@ export type RunnerInit = {
   /** Prefix on thrown error messages, e.g. `'AI'` → `"AI 503: …"`. */
   errorPrefix?: string;
   /** One key per user action. POST, PUT, PATCH, and DELETE mint one
-   *  when this is omitted; pass a failed action's key to retry it.
-   *  TODO(ROUNDS-00A-L01): stage 3 checks the key on admitted routes. */
+   *  when this is omitted; pass a failed action's key to retry it. The
+   *  runner keys its command record on it: a completed command's retry
+   *  gets the stored result back. */
   idempotencyKey?: string;
+  /** How many times a retryable denial is retried with the same key.
+   *  Defaults to `RETRY_DELAYS_MS.length` for a call that carries a key;
+   *  reads are never retried. */
+  retries?: number;
 };
 
 export const IDEMPOTENCY_HEADER = 'Idempotency-Key';
 export const CORRELATION_HEADER = 'X-Correlation-Id';
+
+/** Denials a short wait can clear: PocketBase, the admission store, or
+ *  every worker was briefly unavailable. The runner leaves such a
+ *  command retryable, so a same-key retry runs admission again. A retry
+ *  that finds its command still running (`already_in_flight`) isn't
+ *  retried again; the caller shows it as unavailable, and the next try
+ *  sends a new key. */
+export const RETRYABLE_CODES: ReadonlySet<string> = new Set([
+  'auth_unavailable',
+  'quota_unavailable',
+  'worker_unavailable',
+]);
+/** The wait before each retry, unless the response's Retry-After asks
+ *  for a wait no longer than `MAX_RETRY_AFTER_S`. */
+export const RETRY_DELAYS_MS: readonly number[] = [1000, 3000];
+const MAX_RETRY_AFTER_S = 10;
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const CODE_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
@@ -143,24 +166,53 @@ export async function runnerFetch(
       : typeof init.body === 'string'
         ? init.body
         : JSON.stringify(init.body);
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: init.method,
-      headers,
-      body,
-      signal: init.signal,
-    });
-  } catch (err) {
-    // Callers rely on AbortError to tell a cancel from a failure.
-    if ((err as Error | undefined)?.name === 'AbortError') throw err;
-    const message = (err as Error | undefined)?.message || 'Network request failed.';
-    throw new RunnerError({ message, status: 0, idempotencyKey, cause: err });
+  const retries =
+    idempotencyKey === null ? 0 : Math.max(0, Math.floor(init.retries ?? RETRY_DELAYS_MS.length));
+  for (let attempt = 0; ; attempt += 1) {
+    let res: Response;
+    try {
+      res = await fetch(path, {
+        method: init.method,
+        headers,
+        body,
+        signal: init.signal,
+      });
+    } catch (err) {
+      // Callers rely on AbortError to tell a cancel from a failure.
+      if ((err as Error | undefined)?.name === 'AbortError') throw err;
+      const message = (err as Error | undefined)?.message || 'Network request failed.';
+      throw new RunnerError({ message, status: 0, idempotencyKey, cause: err });
+    }
+    if (res.ok) return res;
+    const error = await runnerErrorFromResponse(res, init.errorPrefix, idempotencyKey);
+    if (attempt >= retries || error.code === null || !RETRYABLE_CODES.has(error.code)) throw error;
+    await wait(retryDelayMs(error, attempt), init.signal);
   }
-  if (!res.ok) {
-    throw await runnerErrorFromResponse(res, init.errorPrefix, idempotencyKey);
-  }
-  return res;
+}
+
+function retryDelayMs(error: RunnerError, attempt: number): number {
+  const asked = error.retryAfterSeconds;
+  if (asked !== null && asked <= MAX_RETRY_AFTER_S) return asked * 1000;
+  return RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)] ?? 0;
+}
+
+function wait(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const aborted = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+    };
+    if (signal?.aborted) {
+      aborted();
+      return;
+    }
+    timer = setTimeout(() => {
+      signal?.removeEventListener('abort', aborted);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', aborted, { once: true });
+  });
 }
 
 async function runnerErrorFromResponse(

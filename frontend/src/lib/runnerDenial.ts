@@ -6,6 +6,10 @@
 // fallback: 401 sign in, 413 too large, 429 limit, 5xx or no response
 // unavailable. Anything else isn't a denial, and callers keep showing
 // the error the way they did before.
+//
+// The idempotency refusals show as unavailable: the action's key was
+// refused, already used, or its command is still running, and the next
+// try sends a new key.
 
 import { isRunnerError } from './runnerFetch';
 
@@ -31,7 +35,15 @@ export interface RunnerDenial {
 
 const LIMIT_CODES = new Set(['quota_exceeded', 'demo_limit_reached']);
 const TOO_LARGE_CODES = new Set(['payload_too_large', 'limit_exceeded']);
-const UNAVAILABLE_CODES = new Set(['auth_unavailable', 'quota_unavailable', 'worker_unavailable']);
+const UNAVAILABLE_CODES = new Set([
+  'auth_unavailable',
+  'quota_unavailable',
+  'worker_unavailable',
+  'idempotency_key_required',
+  'already_completed',
+  'idempotency_mismatch',
+  'already_in_flight',
+]);
 
 export function classifyRunnerError(
   err: unknown,

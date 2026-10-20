@@ -19,8 +19,8 @@ metadata:
   name: rounds-gates
   namespace: rounds
 data:
-  # Runner routes: "enabled" or "disabled". Not enforced yet; once
-  # admission lands, a disabled route answers 503 `route_disabled`.
+  # Runner routes: "enabled" or "disabled". A disabled route answers
+  # 503 `route_disabled`.
   ROUNDS_GATE_RUN: ""
   ROUNDS_GATE_EVALUATE: ""
   ROUNDS_GATE_AI_CODING_RUN_PROJECT: ""
@@ -34,7 +34,9 @@ data:
   ROUNDS_GATE_PAPER_FETCH: ""
   # AI provider base URLs on private addresses: "enabled" or "disabled".
   ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK: ""
-  # Runner admission checks: "off", "observe", or "enforce".
+  # Runner admission steps 6 and 7: "off", "observe", or "enforce".
+  # Empty is "observe", which logs what enforcing would deny and denies
+  # nothing.
   ROUNDS_GATE_ENFORCE_IDEMPOTENCY: ""
   ROUNDS_GATE_ENFORCE_QUOTA: ""
   # Where the six execution routes get what they run: "legacy" or
