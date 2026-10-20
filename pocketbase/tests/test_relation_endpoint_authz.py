@@ -1,15 +1,18 @@
 """Static and contract checks on the relation-endpoint migration (ROUNDS-00B-L02).
 
-These assert, without a running PocketBase, that the three sources of truth for
-typed-relation authorization never drift:
+These assert, without a running PocketBase, that the four places that list the
+typed relations never drift:
 
   * the canonical table ``pocketbase/pb_hooks/relation_endpoints.v1.json``;
   * the ``FIELDS`` array in
     ``pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js`` that the
-    triggers and the quarantine scan iterate; and
+    triggers and the quarantine scan iterate;
   * the per-collection ``relation_endpoints`` in
     ``docs/security/account-scope.v1.json`` that the harness points its probes
-    at.
+    at; and
+  * the touched-row manifest
+    ``pocketbase/migration-manifests/1700007000_relation_endpoint_authz.json``
+    that gives each field's quarantine disposition.
 
 They also pin the migration's forward-only ``down`` (every trigger stays, no
 quarantined row is reinstated) and the dry-run guards, and check that every
@@ -32,6 +35,7 @@ ROOT = Path(__file__).resolve().parents[1].parent
 MIGRATION = ROOT / "pocketbase" / "pb_migrations" / "1700007000_relation_endpoint_authz.js"
 TABLE = ROOT / "pocketbase" / "pb_hooks" / "relation_endpoints.v1.json"
 POLICY = ROOT / "docs" / "security" / "account-scope.v1.json"
+TOUCHED = ROOT / "pocketbase" / "migration-manifests" / "1700007000_relation_endpoint_authz.json"
 
 RELATION_FAMILIES = {
     "account-scope.create.relation-foreign.denied",
@@ -185,3 +189,33 @@ def test_optional_clear_falls_back_to_quarantine_on_a_unique_collision(src):
         re.DOTALL,
     )
     assert m, "optional clear must fall back to quarantineRow on a failed save"
+
+
+def test_touched_row_manifest_matches_the_fields_table(src):
+    # The committed manifest (docs/development.md#migrations) gives the
+    # disposition per relation field: a required reference moves the row, an
+    # optional one is cleared and falls back to moving the row. It must name
+    # exactly the migration's FIELDS, with the same required flags.
+    block = re.search(r"const FIELDS = \[(.*?)\];", src, re.DOTALL)
+    assert block, "could not find the FIELDS array in the migration"
+    flags = {
+        (m.group(1), m.group(2), m.group(3)): m.group(4) == "true"
+        for m in re.finditer(
+            r'\{\s*c:\s*"([^"]+)",\s*f:\s*"([^"]+)",\s*t:\s*"([^"]+)",\s*required:\s*(true|false)',
+            block.group(1),
+        )
+    }
+    assert len(flags) == 34
+    manifest = json.loads(TOUCHED.read_text())
+    assert manifest["migration"] == "1700007000_relation_endpoint_authz"
+    assert sorted(manifest["writes"]) == ["relation_quarantine", "relation_quarantine_reports"]
+    got = {(e["collection"], e["field"], e["target"]): e for e in manifest["fields"]}
+    assert len(got) == len(manifest["fields"]), "a field is listed twice"
+    assert set(got) == set(flags)
+    for key, required in flags.items():
+        entry = got[key]
+        assert entry["required"] is required, key
+        if required:
+            assert entry["disposition"] == "moved" and "fallback" not in entry, key
+        else:
+            assert entry["disposition"] == "cleared" and entry["fallback"] == "moved", key

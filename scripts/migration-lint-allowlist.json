@@ -16,8 +16,9 @@
       "rules": ["rewrites-rows"],
       "sha256": "09650c428c84d869a712cf47b4deb6fd6f2f8de5e20609d30be60edbfbc55230",
       "issue": "#10",
-      "reason": "Quarantines pre-existing cross-owner relation rows: moves an offending required row into relation_quarantine and clears an offending optional reference, falling back to moving the row when clearing it would break a unique index, so every retained relation points at a same-owner target.",
-      "reviewed_by": "keyurgolani"
+      "reason": "Quarantines pre-existing cross-owner relation rows: moves an offending required row into relation_quarantine and clears an offending optional reference, falling back to moving the row when clearing it would break a unique index, so every retained relation points at a same-owner target. The disposition per relation field is in the manifest.",
+      "reviewed_by": "pending owner review",
+      "manifest": "pocketbase/migration-manifests/1700007000_relation_endpoint_authz.json"
     }
   ]
 }
