@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp
 
-from app import errors, gates, obs
+from app import admission, errors, gates, obs
 from routers import ai, ai_coding, pdf, runner, sd_practice, share, take_home
 
 
@@ -33,6 +33,9 @@ _cors_env = os.environ.get("CORS_ALLOW_ORIGINS", "*")
 _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
 _cors_allow_credentials = _cors_origins != ["*"]
 
+# Middleware runs outermost-last-added: CORS (so denials still carry
+# CORS headers), then admission for the execution and render routes.
+app.add_middleware(admission.AdmissionMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,

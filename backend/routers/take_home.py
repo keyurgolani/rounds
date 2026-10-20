@@ -1,6 +1,11 @@
 """Take-Home Coding Assignment endpoints. Mirrors backend/routers/ai_coding.py's
 posture: subprocess sandbox via take_home.runner, server-authoritative
-assignment lookup via the user's PB token, optional AI rubric review."""
+assignment lookup via the user's PB token, optional AI rubric review.
+
+``run`` and ``submit`` are admitted (``app.admission``): the entrypoint,
+harness files, and timeout come from the assignment, and a submit's
+``campaign_id`` must name one of the caller's campaigns before anything
+runs."""
 from __future__ import annotations
 
 import json
@@ -8,8 +13,9 @@ import logging
 from typing import Any, AsyncIterator, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from take_home.runner import run_assignment
 from ai_coding.rubric import (
@@ -17,6 +23,9 @@ from ai_coding.rubric import (
     build_prompt as _build_rubric_prompt,
     parse_ai_output as _parse_rubric,
 )
+from app import admission, limits
+from app.errors import TypedError
+from app.limits import StrictModel
 from app.pb_auth import current_user, pb_get, pb_post
 from routers.ai import _active_text_config, _call_complete, _call_stream, _friendly_error, _request_id
 from routers.ai_coding import _resolve_text_cfg
@@ -25,11 +34,36 @@ _log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/take-home", tags=["take-home"])
 
+RUN_TIMEOUT_S = 60
+SUBMIT_TIMEOUT_S = 120
+
 
 async def _auth_user(request: Request) -> dict:
     """Wrapper so existing test mocks against `current_user` keep working
-    via name lookup at call time. Same pattern as backend/routers/ai_coding.py."""
+    via name lookup at call time. Same pattern as backend/routers/ai_coding.py.
+    On an admitted route it reuses admission's account."""
+    admitted = admission.account(request)
+    if admitted is not None:
+        return admitted
     return await current_user(request)
+
+
+async def _admitted_assignment(user: dict, slug: str) -> tuple[dict[str, Any], str]:
+    """Step 8: the assignment and its entrypoint, or a typed denial."""
+    a = await admission.first_item(pb_get, user["token"], "take_home_assignments", slug)
+    entrypoint = a.get("entrypoint")
+    if not isinstance(entrypoint, str) or not entrypoint.strip():
+        raise TypedError("invalid_request", "This assignment can't run here.")
+    return a, entrypoint
+
+
+async def _own_campaign(user: dict, campaign_id: str) -> None:
+    """Step 8: a campaign the caller doesn't own is not found."""
+    record = await admission.lookup(
+        pb_get, user["token"], f"/api/collections/campaigns/records/{campaign_id}"
+    )
+    if not isinstance(record, dict) or record.get("user") != user["id"]:
+        raise TypedError("not_found")
 
 
 async def _fetch_assignment(token: str, slug: str) -> dict[str, Any]:
@@ -57,9 +91,14 @@ def _merge_with_harness(
     return merged
 
 
-class TakeHomeRunRequest(BaseModel):
-    assignment_slug: str = Field(pattern=r"^[a-z0-9-]+$")
+class TakeHomeRunRequest(StrictModel):
+    assignment_slug: str = Field(pattern=limits.SLUG_PATTERN)
     files: Dict[str, str]
+
+    @field_validator("files")
+    @classmethod
+    def _files(cls, v: Dict[str, str]) -> Dict[str, str]:
+        return dict(limits.check_files(v))
 
 
 class TakeHomeRunResponse(BaseModel):
@@ -77,12 +116,10 @@ async def run_route(
     body: TakeHomeRunRequest,
     user: dict = Depends(_auth_user),
 ) -> TakeHomeRunResponse:
-    a = await _fetch_assignment(user["token"], body.assignment_slug)
-    entrypoint = a.get("entrypoint") or ""
-    if not entrypoint:
-        raise HTTPException(status_code=422, detail="Assignment has no entrypoint configured.")
+    a, entrypoint = await _admitted_assignment(user, body.assignment_slug)
     merged = _merge_with_harness(body.files, a.get("harness_files") or [])
-    r = run_assignment(merged, entrypoint, timeout_s=60)
+    with admission.allocate() as slot:
+        r = await run_in_threadpool(run_assignment, merged, entrypoint, timeout_s=RUN_TIMEOUT_S, sandbox=slot)
     return TakeHomeRunResponse(
         score=r.score,
         criteria=r.criteria,
@@ -94,13 +131,28 @@ async def run_route(
     )
 
 
-class TakeHomeSubmitRequest(BaseModel):
-    assignment_slug: str = Field(pattern=r"^[a-z0-9-]+$")
+class TakeHomeSubmitRequest(StrictModel):
+    assignment_slug: str = Field(pattern=limits.SLUG_PATTERN)
     files: Dict[str, str]
     notes: str = ""
     ai_chats: List[Dict[str, Any]] = Field(default_factory=list)
-    campaign_id: str | None = None
-    duration_ms: int = 0
+    campaign_id: str | None = Field(default=None, pattern=limits.OPTIONAL_RECORD_ID_PATTERN)
+    duration_ms: int = Field(default=0, ge=0)
+
+    @field_validator("files")
+    @classmethod
+    def _files(cls, v: Dict[str, str]) -> Dict[str, str]:
+        return dict(limits.check_files(v))
+
+    @field_validator("notes")
+    @classmethod
+    def _notes(cls, v: str) -> str:
+        return limits.check_text(v, limits.NOTES_BYTES, "notes")
+
+    @field_validator("ai_chats")
+    @classmethod
+    def _ai_chats(cls, v: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return limits.check_json(v, limits.AI_CHATS_BYTES, "ai_chats")
 
 
 @router.post("/submit")
@@ -108,12 +160,12 @@ async def submit_route(
     body: TakeHomeSubmitRequest,
     user: dict = Depends(_auth_user),
 ) -> Dict[str, Any]:
-    a = await _fetch_assignment(user["token"], body.assignment_slug)
-    entrypoint = a.get("entrypoint") or ""
-    if not entrypoint:
-        raise HTTPException(status_code=422, detail="Assignment has no entrypoint configured.")
+    a, entrypoint = await _admitted_assignment(user, body.assignment_slug)
+    if body.campaign_id:
+        await _own_campaign(user, body.campaign_id)
     merged = _merge_with_harness(body.files, a.get("harness_files") or [])
-    r = run_assignment(merged, entrypoint, timeout_s=120)
+    with admission.allocate() as slot:
+        r = await run_in_threadpool(run_assignment, merged, entrypoint, timeout_s=SUBMIT_TIMEOUT_S, sandbox=slot)
     harness_out = {
         "score": r.score,
         "criteria": r.criteria,

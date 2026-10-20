@@ -1,13 +1,21 @@
 """Pydantic schemas for the code runner. Data-model schemas moved to
-PocketBase (pocketbase/pb_migrations/) when the data layer migrated."""
+PocketBase (pocketbase/pb_migrations/) when the data layer migrated.
+
+Request models follow admission/v1: they refuse unknown fields, and a
+caller never supplies the entry, test cases, or expected values. Those
+load on the server (routers/runner.py)."""
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app import limits
+from app.limits import StrictModel
 
 
 class Entry(BaseModel):
-    """Per-problem entry declaration. Per-kind fields validated by the
-    driver — pydantic only enforces the union of kinds here."""
+    """Per-problem entry declaration, as stored on the question. Per-kind
+    fields validated by the driver — pydantic only enforces the union of
+    kinds here."""
     model_config = ConfigDict(extra="allow")
 
     kind: Literal[
@@ -21,11 +29,21 @@ class Entry(BaseModel):
     ]
 
 
-class CodeRunRequest(BaseModel):
+class CodeRunRequest(StrictModel):
+    question_slug: str = Field(pattern=limits.SLUG_PATTERN)
+    language: str = Field(default="python", pattern=limits.LANGUAGE_PATTERN)
     code: str
-    language: str = "python"
-    entry: Entry
     input: Dict[str, Any]
+
+    @field_validator("code")
+    @classmethod
+    def _code_size(cls, v: str) -> str:
+        return limits.check_text(v, limits.SNIPPET_CODE_BYTES, "code")
+
+    @field_validator("input")
+    @classmethod
+    def _input_size(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        return limits.check_json(v, limits.RUN_INPUT_BYTES, "input")
 
 
 class CodeRunResult(BaseModel):
@@ -37,17 +55,28 @@ class CodeRunResult(BaseModel):
     truncated: bool = False
 
 
-class EvaluateFilter(BaseModel):
-    tags: Optional[List[str]] = None
-    indices: Optional[List[int]] = None
+class EvaluateFilter(StrictModel):
+    tags: Optional[List[str]] = Field(default=None, max_length=limits.EVALUATE_MAX_CASES)
+    indices: Optional[List[int]] = Field(default=None, max_length=limits.EVALUATE_MAX_CASES)
+
+    @field_validator("tags")
+    @classmethod
+    def _tag_lengths(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None and any(len(tag) > 64 for tag in v):
+            raise limits.over_limit("tags")
+        return v
 
 
-class CodeEvaluateRequest(BaseModel):
+class CodeEvaluateRequest(StrictModel):
+    question_slug: str = Field(pattern=limits.SLUG_PATTERN)
+    language: str = Field(default="python", pattern=limits.LANGUAGE_PATTERN)
     code: str
-    language: str = "python"
-    entry: Entry
-    test_cases: List[Dict[str, Any]]
     filter: Optional[EvaluateFilter] = None
+
+    @field_validator("code")
+    @classmethod
+    def _code_size(cls, v: str) -> str:
+        return limits.check_text(v, limits.SNIPPET_CODE_BYTES, "code")
 
 
 class EvaluateCaseResult(BaseModel):

@@ -35,11 +35,14 @@ from typing import Any, AsyncIterator, Literal
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app import ats as ats_mod
-from app import obs
+from app import destinations, gates, limits, obs
+from app.errors import TypedError
+from app.limits import StrictModel
 from app.crypto import decrypt, encrypt
 from app.pb_auth import POCKETBASE_URL, current_user, pb_get, pb_patch, pb_post
 
@@ -269,6 +272,23 @@ class ATSRequest(BaseModel):
     use_ai: bool = True
 
 
+class ATSRuleRequest(StrictModel):
+    """admission/v1 body for /api/ai/ats-rule. ``use_ai`` is accepted
+    so the SPA can send its ATS body unchanged; the rule half ignores
+    it."""
+
+    data: dict[str, Any]
+    job_description: str | None = None
+    use_ai: bool = False
+
+    @field_validator("job_description")
+    @classmethod
+    def _job_description(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return limits.check_text(v, limits.JOB_DESCRIPTION_BYTES, "job_description")
+
+
 class EnhanceProjectsRequest(BaseModel):
     # Each project: a partial repo summary the model uses to author a
     # better description + 2–3 highlight bullets.
@@ -355,6 +375,7 @@ async def list_providers(request: Request) -> list[ProviderOut]:
 @router.post("/providers", response_model=ProviderOut)
 async def create_provider(request: Request, body: ProviderIn) -> ProviderOut:
     user = await current_user(request)
+    await destinations.check(body.base_url)
     payload: dict[str, Any] = {
         "user": user["id"],
         "kind": body.kind,
@@ -377,6 +398,7 @@ async def update_provider(
 ) -> ProviderOut:
     user = await current_user(request)
     row = await _load_provider(user, provider_id)
+    await destinations.check(body.base_url)
     payload: dict[str, Any] = {
         "kind": body.kind,
         "label": body.label,
@@ -423,6 +445,7 @@ async def test_provider(
         raise HTTPException(status_code=400, detail="No API key on file for this provider.")
     kind = row.get("kind") or "provider"
     base_url = row.get("base_url") or ""
+    await destinations.check(base_url)
 
     # Pick the cheapest reasonable model. For the test we ask the model
     # to say PONG; if anything comes back we treat it as success.
@@ -482,6 +505,7 @@ async def refresh_models(
         raise HTTPException(status_code=400, detail="No API key on file for this provider.")
     kind = row.get("kind") or "provider"
     base_url = row.get("base_url") or ""
+    await destinations.check(base_url)
 
     try:
         models = await _fetch_models(kind, api_key, base_url)
@@ -570,6 +594,7 @@ async def _active_text_config(user: dict) -> dict[str, Any]:
             status_code=400,
             detail="No API key on file for the selected text provider.",
         )
+    await destinations.check(provider.get("base_url") or "")
     return {
         "kind": provider.get("kind") or "provider",
         "model": settings["text_model"],
@@ -587,6 +612,7 @@ async def _call_complete(
     messages: list[dict[str, Any]],
     max_tokens: int = 1024,
 ) -> str:
+    await destinations.check(base_url)
     if kind in ("anthropic", "anthropic-compatible"):
         return await _anthropic_complete(model, api_key, base_url, system, messages, max_tokens)
     return await _openai_complete(model, api_key, base_url, system, messages, max_tokens)
@@ -675,6 +701,7 @@ async def _call_stream(
     messages: list[dict[str, Any]],
     max_tokens: int = 512,
 ) -> AsyncIterator[str]:
+    await destinations.check(base_url)
     if kind in ("anthropic", "anthropic-compatible"):
         async for chunk in _anthropic_stream(model, api_key, base_url, system, messages, max_tokens):
             yield chunk
@@ -806,6 +833,7 @@ def _models_headers(kind: str, api_key: str) -> dict[str, str]:
 
 
 async def _fetch_models(kind: str, api_key: str, base_url: str) -> list[str]:
+    await destinations.check(base_url)
     url = _models_url(kind, base_url)
     headers = _models_headers(kind, api_key)
     async with httpx.AsyncClient(timeout=12) as client:
@@ -1071,10 +1099,14 @@ async def improve(request: Request, body: ImproveRequest) -> StreamingResponse:
 
     # Publications can hand in a `paper_url` to ground the improve
     # in the actual paper text (HTML or PDF). Best effort — failure
-    # is silent and we fall through to other context.
+    # is silent and we fall through to other context. Off unless
+    # ROUNDS_GATE_PAPER_FETCH is enabled.
+    # TODO(ROUNDS-10-L03): #55's contained URL retrieval replaces this
+    # direct fetch.
     paper_text: str | None = None
     if (
-        isinstance(body.context, dict)
+        gates.value("PAPER_FETCH") == "enabled"
+        and isinstance(body.context, dict)
         and isinstance(body.context.get("paper_url"), str)
         and body.context["paper_url"].strip()
     ):
@@ -1520,13 +1552,14 @@ def _normalize_keys(obj: Any) -> Any:
 
 
 @router.post("/ats-rule")
-async def ats_rule(body: ATSRequest) -> dict[str, Any]:
+async def ats_rule(body: ATSRuleRequest) -> dict[str, Any]:
     """Rule-based ATS scoring. Pure computation, no AI provider call.
 
     Split from /ats-ai so the frontend can render the rule result
     immediately while the (slow) AI call is still in flight.
     """
-    rule = ats_mod.score_resume(body.data, body.job_description)
+    # CPU-bound on a large resume, so it stays off the event loop.
+    rule = await run_in_threadpool(ats_mod.score_resume, body.data, body.job_description)
     return {
         "rule_score": rule.score,
         "breakdown": rule.breakdown,
@@ -1899,6 +1932,9 @@ async def enhance_projects(
     if not body.projects:
         return {"projects": []}
     user = await current_user(request)
+    # TODO(ROUNDS-14-L06): #179's call-site inventory revisits this cap.
+    if len(body.projects) > limits.ENHANCE_MAX_PROJECTS:
+        raise TypedError("limit_exceeded", "Choose at most 25 projects to enhance at once.")
     cfg = await _active_text_config(user)
 
     timeout = httpx.Timeout(20.0, read=20.0, connect=10.0)

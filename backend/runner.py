@@ -1,18 +1,23 @@
 """Code-execution orchestrator. Spawns user code in a subprocess with a
 language-specific wrapper. Per-kind dispatch logic lives in
 backend/drivers/<language>/<kind>.py — this module only stitches the
-wrapper, runs it, and parses the result marker."""
+wrapper, runs it, and parses the result marker.
+
+The child runs through ``app.sandbox``: a private scratch directory,
+a minimal environment, and the slot's own uid in the image. Input
+goes in a file, not argv, so its size doesn't depend on the argv limit.
+"""
 from __future__ import annotations
 
 import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from dataclasses import dataclass
 from typing import Any
 
+from app import sandbox as sandboxes
 from drivers import get_driver
 
 
@@ -38,7 +43,9 @@ def run_one(
     input: Any,
     timeout_s: int = DEFAULT_TIMEOUT_S,
     output_cap_bytes: int = DEFAULT_OUTPUT_CAP_BYTES,
+    sandbox: sandboxes.Sandbox | None = None,
 ) -> ExecutionOutcome:
+    box = sandbox if sandbox is not None else sandboxes.sandbox_for(0)
     try:
         driver = get_driver(language, entry.get("kind", ""))
     except KeyError as e:
@@ -56,9 +63,9 @@ def run_one(
 
     snippet = driver.wrapper_snippet(entry)
     if language == "python":
-        return _exec_python(code, snippet, input, timeout_s, output_cap_bytes)
+        return _exec_python(code, snippet, input, timeout_s, output_cap_bytes, box)
     if language == "javascript":
-        return _exec_javascript(code, snippet, input, timeout_s, output_cap_bytes)
+        return _exec_javascript(code, snippet, input, timeout_s, output_cap_bytes, box)
     return ExecutionOutcome(
         stdout="", stderr="", return_value=None,
         error=f"Unsupported language: {language}",
@@ -66,7 +73,7 @@ def run_one(
     )
 
 
-def _exec_python(code, snippet, inp, timeout_s, cap) -> ExecutionOutcome:
+def _exec_python(code, snippet, inp, timeout_s, cap, box) -> ExecutionOutcome:
     wrapper = f"""
 import json, sys, traceback
 
@@ -75,16 +82,18 @@ import json, sys, traceback
 {snippet}
 
 try:
-    _result = _drive(json.loads(sys.argv[1]))
+    with open(sys.argv[1], encoding="utf-8") as _input_file:
+        _input = json.load(_input_file)
+    _result = _drive(_input)
     sys.stdout.write("\\n" + {_RESULT_MARKER!r} + json.dumps(_result))
 except Exception:
     sys.stdout.write("\\n" + {_RESULT_MARKER!r} + "null")
     traceback.print_exc(file=sys.stderr)
 """
-    return _run_subprocess(wrapper, ".py", [sys.executable], json.dumps(inp), timeout_s, cap)
+    return _run_subprocess(wrapper, ".py", [sys.executable], json.dumps(inp), timeout_s, cap, box)
 
 
-def _exec_javascript(code, snippet, inp, timeout_s, cap) -> ExecutionOutcome:
+def _exec_javascript(code, snippet, inp, timeout_s, cap, box) -> ExecutionOutcome:
     wrapper = f"""
 {code}
 
@@ -92,7 +101,7 @@ def _exec_javascript(code, snippet, inp, timeout_s, cap) -> ExecutionOutcome:
 
 (() => {{
   try {{
-    const _data = JSON.parse(process.argv[2]);
+    const _data = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
     const _result = _drive(_data);
     process.stdout.write("\\n{_RESULT_MARKER}" + JSON.stringify(_result === undefined ? null : _result));
   }} catch (e) {{
@@ -101,18 +110,30 @@ def _exec_javascript(code, snippet, inp, timeout_s, cap) -> ExecutionOutcome:
   }}
 }})();
 """
-    return _run_subprocess(wrapper, ".js", ["node"], json.dumps(inp), timeout_s, cap)
+    return _run_subprocess(wrapper, ".js", ["node"], json.dumps(inp), timeout_s, cap, box)
 
 
-def _run_subprocess(wrapper_src, suffix, cmd_prefix, input_json, timeout_s, cap) -> ExecutionOutcome:
-    with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as f:
-        f.write(wrapper_src)
-        path = f.name
+def _run_subprocess(wrapper_src, suffix, cmd_prefix, input_json, timeout_s, cap, box) -> ExecutionOutcome:
+    with sandboxes.scratch(box) as workdir:
+        path = os.path.join(workdir, "main" + suffix)
+        input_path = os.path.join(workdir, "input.json")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(wrapper_src)
+        with open(input_path, "w", encoding="utf-8") as f:
+            f.write(input_json)
+        sandboxes.hand_over(workdir, box)
+        return _run_in(workdir, path, input_path, cmd_prefix, timeout_s, cap, box)
+
+
+def _run_in(workdir, path, input_path, cmd_prefix, timeout_s, cap, box) -> ExecutionOutcome:
     start = time.monotonic()
     try:
-        proc = subprocess.run(
-            cmd_prefix + [path, input_json],
-            capture_output=True, text=True, timeout=timeout_s,
+        proc = sandboxes.run(
+            cmd_prefix + [path, input_path],
+            cwd=workdir,
+            env=sandboxes.candidate_env(workdir),
+            timeout_s=timeout_s,
+            sandbox=box,
         )
         duration_ms = int((time.monotonic() - start) * 1000)
         raw_out = proc.stdout
@@ -152,11 +173,6 @@ def _run_subprocess(wrapper_src, suffix, cmd_prefix, input_json, timeout_s, cap)
             error=f"Time limit exceeded ({timeout_s}s)",
             duration_ms=duration_ms, truncated=False,
         )
-    finally:
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
 
 
 def _cap(s: str, n: int) -> str:

@@ -5,19 +5,20 @@ the harness's JSON output (last well-formed object on stdout
 containing `criteria` + `score` keys) into a structured result.
 
 Mirrors backend/ai_coding/project_runner.py's posture: subprocess,
-hard timeout, output cap, UTF-8 capture. For self-host deployments
-this is the same trust posture as the existing code runner.
+hard timeout, output cap, UTF-8 capture, and ``app.sandbox``
+containment (private scratch, minimal environment, the slot's own uid
+in the image).
 """
 from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
-import tempfile
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
+
+from app import sandbox as sandboxes
 
 
 DEFAULT_OUTPUT_CAP_BYTES = 256 * 1024
@@ -94,27 +95,27 @@ def run_assignment(
     entrypoint: str,
     timeout_s: int = 60,
     output_cap_bytes: int = DEFAULT_OUTPUT_CAP_BYTES,
+    sandbox: sandboxes.Sandbox | None = None,
 ) -> TakeHomeRunResult:
     """Execute `entrypoint` (a bash command string) inside a fresh
-    tempdir populated with `files`. Returns a TakeHomeRunResult with
-    parsed harness criteria + score, plus captured stdout/stderr."""
-    workdir = tempfile.mkdtemp(prefix="takehome_")
+    scratch directory populated with `files`. Returns a TakeHomeRunResult
+    with parsed harness criteria + score, plus captured stdout/stderr."""
+    box = sandbox if sandbox is not None else sandboxes.sandbox_for(0)
+    with sandboxes.scratch(box) as workdir:
+        return _run_in(workdir, files, entrypoint, timeout_s, output_cap_bytes, box)
+
+
+def _run_in(workdir, files, entrypoint, timeout_s, output_cap_bytes, box) -> TakeHomeRunResult:
     start = time.monotonic()
     try:
         _materialize(workdir, files)
-        existing_pp = os.environ.get("PYTHONPATH", "")
-        pythonpath = workdir if not existing_pp else f"{workdir}{os.pathsep}{existing_pp}"
-        proc = subprocess.run(
+        sandboxes.hand_over(workdir, box)
+        proc = sandboxes.run(
             ["bash", "-c", entrypoint],
             cwd=workdir,
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-            env={
-                **os.environ,
-                "PYTHONDONTWRITEBYTECODE": "1",
-                "PYTHONPATH": pythonpath,
-            },
+            env=sandboxes.candidate_env(workdir, {"PYTHONPATH": workdir}),
+            timeout_s=timeout_s,
+            sandbox=box,
         )
         duration_ms = int((time.monotonic() - start) * 1000)
         truncated = _over_cap(proc.stdout, output_cap_bytes) or _over_cap(proc.stderr, output_cap_bytes)
@@ -148,5 +149,3 @@ def run_assignment(
             error=str(e),
             duration_ms=int((time.monotonic() - start) * 1000),
         )
-    finally:
-        shutil.rmtree(workdir, ignore_errors=True)
