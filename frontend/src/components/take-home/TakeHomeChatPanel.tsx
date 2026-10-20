@@ -41,7 +41,6 @@ export default function TakeHomeChatPanel({
       let acc = '';
       await runnerSSE('/api/take-home/chat', {
         method: 'POST',
-        auth: 'optional',
         signal,
         body: {
           assignment_slug: assignmentSlug,

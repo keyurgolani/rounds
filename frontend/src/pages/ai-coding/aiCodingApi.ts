@@ -182,7 +182,6 @@ export async function runProject(input: {
   return runnerJSON<RunProjectResult>('/api/ai-coding/run-project', {
     method: 'POST',
     body: input,
-    auth: 'optional',
     errorPrefix: 'run-project',
   });
 }

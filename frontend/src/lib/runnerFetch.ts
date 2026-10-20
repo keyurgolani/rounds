@@ -10,7 +10,13 @@
 //
 // PocketBase SDK calls (collections, records, auth) still go through
 // the `pb` client directly — this helper is only for the runner.
+//
+// Failures throw a `RunnerError` that keeps the old message format
+// (`"<prefix> <status>: <detail>"`) and adds the typed parts of the
+// runner's error envelope: HTTP status, `code`, `Retry-After`, and the
+// correlation id. Unsafe methods carry one `Idempotency-Key` per call.
 
+import { mintIdempotencyKey } from './idempotency';
 import { pb } from './pocketbase';
 
 export type RunnerInit = {
@@ -26,7 +32,77 @@ export type RunnerInit = {
   auth?: 'required' | 'optional' | 'none';
   /** Prefix on thrown error messages, e.g. `'AI'` → `"AI 503: …"`. */
   errorPrefix?: string;
+  /** One key per user action. POST, PUT, PATCH, and DELETE mint one
+   *  when this is omitted; pass a failed action's key to retry it.
+   *  TODO(ROUNDS-00A-L01): stage 3 checks the key on admitted routes. */
+  idempotencyKey?: string;
 };
+
+export const IDEMPOTENCY_HEADER = 'Idempotency-Key';
+export const CORRELATION_HEADER = 'X-Correlation-Id';
+
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const CODE_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
+const CORRELATION_PATTERN = /^[0-9a-f]{32}$/;
+
+type RunnerErrorInit = {
+  message: string;
+  /** HTTP status; 0 when no response arrived (no token, network). */
+  status: number;
+  code?: string | null;
+  detail?: string;
+  correlationId?: string | null;
+  retryAfterSeconds?: number | null;
+  idempotencyKey?: string | null;
+  cause?: unknown;
+};
+
+export class RunnerError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+  readonly detail: string;
+  readonly correlationId: string | null;
+  readonly retryAfterSeconds: number | null;
+  readonly idempotencyKey: string | null;
+
+  constructor(init: RunnerErrorInit) {
+    super(init.message);
+    // `name` stays "Error" so `String(err)` reads as it did before;
+    // `isRunnerError` tells the types apart.
+    this.status = init.status;
+    this.code = init.code ?? null;
+    this.detail = init.detail ?? init.message;
+    this.correlationId = init.correlationId ?? null;
+    this.retryAfterSeconds = init.retryAfterSeconds ?? null;
+    this.idempotencyKey = init.idempotencyKey ?? null;
+    if (init.cause !== undefined) {
+      (this as { cause?: unknown }).cause = init.cause;
+    }
+  }
+}
+
+export function isRunnerError(err: unknown): err is RunnerError {
+  return err instanceof RunnerError;
+}
+
+// IMF-fixdate, the HTTP date form servers send. `Date.parse` alone would
+// read strings like "1.5" as dates.
+const HTTP_DATE_PATTERN = /^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+
+/** Seconds to wait from a `Retry-After` value (delta-seconds or an
+ *  HTTP date), or null when it's missing or unreadable. */
+export function parseRetryAfter(
+  value: string | null | undefined,
+  now: number = Date.now(),
+): number | null {
+  const v = value?.trim();
+  if (!v) return null;
+  if (/^\d+$/.test(v)) return Number(v);
+  if (!HTTP_DATE_PATTERN.test(v)) return null;
+  const at = Date.parse(v);
+  if (Number.isNaN(at)) return null;
+  return Math.max(0, Math.ceil((at - now) / 1000));
+}
 
 export async function runnerJSON<T>(path: string, init: RunnerInit = {}): Promise<T> {
   const res = await runnerFetch(path, init);
@@ -48,8 +124,18 @@ export async function runnerFetch(
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     } else if (auth === 'required') {
-      throw new Error('Not authenticated.');
+      throw new RunnerError({
+        message: 'Not authenticated.',
+        status: 0,
+        code: 'unauthenticated',
+      });
     }
+  }
+  let idempotencyKey: string | null = null;
+  if (UNSAFE_METHODS.has((init.method ?? 'GET').toUpperCase())) {
+    idempotencyKey =
+      init.idempotencyKey ?? headers.get(IDEMPOTENCY_HEADER) ?? mintIdempotencyKey();
+    headers.set(IDEMPOTENCY_HEADER, idempotencyKey);
   }
   const body =
     init.body === undefined
@@ -57,29 +143,80 @@ export async function runnerFetch(
       : typeof init.body === 'string'
         ? init.body
         : JSON.stringify(init.body);
-  const res = await fetch(path, {
-    method: init.method,
-    headers,
-    body,
-    signal: init.signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: init.method,
+      headers,
+      body,
+      signal: init.signal,
+    });
+  } catch (err) {
+    // Callers rely on AbortError to tell a cancel from a failure.
+    if ((err as Error | undefined)?.name === 'AbortError') throw err;
+    const message = (err as Error | undefined)?.message || 'Network request failed.';
+    throw new RunnerError({ message, status: 0, idempotencyKey, cause: err });
+  }
   if (!res.ok) {
-    const detail = await _extractErrorDetail(res);
-    throw new Error(`${init.errorPrefix ?? 'Request'} ${res.status}: ${detail}`);
+    throw await runnerErrorFromResponse(res, init.errorPrefix, idempotencyKey);
   }
   return res;
 }
 
-async function _extractErrorDetail(res: Response): Promise<string> {
+async function runnerErrorFromResponse(
+  res: Response,
+  errorPrefix: string | undefined,
+  idempotencyKey: string | null,
+): Promise<RunnerError> {
+  const parsed = await _extractErrorDetail(res);
+  const headerId = res.headers.get(CORRELATION_HEADER);
+  const correlationId =
+    parsed.correlationId ??
+    (headerId && CORRELATION_PATTERN.test(headerId) ? headerId : null);
+  return new RunnerError({
+    message: `${errorPrefix ?? 'Request'} ${res.status}: ${parsed.detail}`,
+    status: res.status,
+    code: parsed.code,
+    detail: parsed.detail,
+    correlationId,
+    retryAfterSeconds: parseRetryAfter(res.headers.get('Retry-After')),
+    idempotencyKey,
+  });
+}
+
+async function _extractErrorDetail(
+  res: Response,
+): Promise<{ detail: string; code: string | null; correlationId: string | null }> {
   const text = await res.text().catch(() => res.statusText);
-  if (!text) return res.statusText;
+  if (!text) return { detail: res.statusText, code: null, correlationId: null };
   try {
-    const j = JSON.parse(text) as { detail?: string };
-    if (j.detail) return j.detail;
+    const j = JSON.parse(text) as {
+      detail?: unknown;
+      code?: unknown;
+      correlation_id?: unknown;
+    } | null;
+    if (j && typeof j === 'object') {
+      const code = typeof j.code === 'string' && CODE_PATTERN.test(j.code) ? j.code : null;
+      const correlationId =
+        typeof j.correlation_id === 'string' && CORRELATION_PATTERN.test(j.correlation_id)
+          ? j.correlation_id
+          : null;
+      if (typeof j.detail === 'string' && j.detail) {
+        return { detail: j.detail, code, correlationId };
+      }
+      if (Array.isArray(j.detail)) {
+        // FastAPI validation errors: a list of {msg, loc, ...}.
+        const msgs = j.detail
+          .map((d) => (d && typeof d === 'object' ? (d as { msg?: unknown }).msg : undefined))
+          .filter((m): m is string => typeof m === 'string' && m.length > 0);
+        if (msgs.length > 0) return { detail: msgs.join('; '), code, correlationId };
+      }
+      return { detail: text, code, correlationId };
+    }
   } catch {
     /* not JSON, return raw */
   }
-  return text;
+  return { detail: text, code: null, correlationId: null };
 }
 
 // ---- SSE helpers --------------------------------------------------------
