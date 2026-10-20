@@ -6,8 +6,11 @@ network access during render, so we don't expose anything new from
 the inside of our network — but we still keep the sidecar
 inside-only and require this proxy as the public entrypoint.
 
-Both routes are admitted (``app.admission``). A failed render answers a
-typed 503 and never repeats the sidecar's text, and health answers only
+Both routes are admitted (``app.admission``). A render whose document ran
+out of time, in the sidecar or here, answers 422 ``render_timeout``: the
+caller's content caused it, so it keeps its charge and isn't retried.
+Any other failed render answers a typed 503, which the infrastructure
+caused. Neither repeats the sidecar's text, and health answers only
 ``{"status"}``.
 
 TODO(ROUNDS-00A-L06): #6's ephemeral no-script render workers replace
@@ -34,9 +37,14 @@ _log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/pdf", tags=["pdf"])
 
 PDF_RENDERER_URL = os.environ.get("PDF_RENDERER_URL", "http://pdf-renderer:4000")
+# The sidecar gives up on a document before this (server.js).
 RENDER_TIMEOUT_S = 25
 HEALTH_TIMEOUT_S = 2
 RENDER_FAILED = "The PDF renderer couldn't finish this document. Try again shortly."
+# What the sidecar answers for a document that ran out of time.
+SIDECAR_TIMEOUT_STATUS = 422
+SIDECAR_TIMEOUT_ERROR = "render_timeout"
+_SIDECAR_ERROR_BYTES = 1024
 
 
 class RenderRequest(StrictModel):
@@ -63,6 +71,16 @@ async def health():
     return JSONResponse({"status": "unavailable"}, status_code=503)
 
 
+def _sidecar_timed_out(err: urllib.error.HTTPError) -> bool:
+    if err.code != SIDECAR_TIMEOUT_STATUS:
+        return False
+    try:
+        answer = json.loads(err.read(_SIDECAR_ERROR_BYTES) or b"null")
+    except (OSError, ValueError, http.client.HTTPException):
+        return False
+    return isinstance(answer, dict) and answer.get("error") == SIDECAR_TIMEOUT_ERROR
+
+
 def _render(html: str, margin_mm: int) -> Response:
     body = json.dumps({"html": html, "marginMm": margin_mm}).encode("utf-8")
     request = urllib.request.Request(
@@ -77,7 +95,14 @@ def _render(html: str, margin_mm: int) -> Response:
             content_type = resp.headers.get("Content-Type", "application/pdf")
     except urllib.error.HTTPError as err:
         _log.warning("pdf render failed: sidecar answered %s", err.code)
+        if _sidecar_timed_out(err):
+            raise TypedError("render_timeout") from None
         raise TypedError("worker_unavailable", RENDER_FAILED) from None
+    except TimeoutError:
+        # Connected, but no PDF within the whole budget. A failed connect
+        # arrives as a URLError instead.
+        _log.warning("pdf render failed: no answer in %ss", RENDER_TIMEOUT_S)
+        raise TypedError("render_timeout") from None
     except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as err:
         _log.warning("pdf render failed: %s", type(err).__name__)
         raise TypedError("worker_unavailable", RENDER_FAILED) from None

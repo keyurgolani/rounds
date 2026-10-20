@@ -68,9 +68,9 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 The app is written against same-origin URLs. Vite development and production nginx use the same split:
 
-- `/api/run` and `/api/evaluate` go to the FastAPI runner.
+- `/api/run`, `/api/evaluate`, and the other runner groups go to the FastAPI runner.
 - Other `/api/*` paths go to PocketBase.
-- `/_/*` goes to PocketBase admin UI.
+- PocketBase's admin UI (`/_/*`), its admin APIs, collection metadata, and the admission hook routes answer 404. Open the admin UI on PocketBase's own port, `http://localhost:8090/_/`.
 
 This keeps browser code portable between local dev, Docker Compose, and production.
 

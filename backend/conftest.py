@@ -99,33 +99,52 @@ class FakeAdmissionStore:
 
     Commands key on (bearer, command id), as the hook keys on (account,
     command id). Every request is in quota unless a test sets ``quota``,
-    and ``down`` makes every call fail the way an unreachable store does.
-    The hook's own decisions are tested under node and in the harness."""
+    or ``settle_quota`` for a settle that raises the charge. ``down``
+    makes every call fail the way an unreachable store does, and
+    ``unconfigured`` the way a runner without its key does.
+    ``lost_answers`` loses that many admit answers after the store wrote
+    them, and ``finish_failures`` fails that many finish calls. The hook's
+    own decisions are tested under node and in the harness."""
 
     def __init__(self) -> None:
         from app import admission_state
 
         self.Unavailable = admission_state.Unavailable
+        self.Unconfigured = admission_state.Unconfigured
         self._decision = admission_state.Decision
+        self._settled = admission_state.Settled
         self.commands: dict[tuple[str, str], dict] = {}
         self.leases: dict[str, dict] = {}
         self.calls: list[tuple[str, dict]] = []
         self.quota = "ok"
         self.retry_after = 0
+        self.settle_quota = "ok"
+        # What the hook answers a duplicate of a running command.
+        self.in_flight_retry_after = 4
         self.down = False
+        self.unconfigured = False
+        self.lost_answers = 0
+        self.finish_failures = 0
         self._leases = 0
 
     def _call(self, name: str, **args) -> None:
         self.calls.append((name, args))
+        if self.unconfigured:
+            raise self.Unconfigured
         if self.down:
             raise self.Unavailable
 
     def called(self, name: str) -> list[dict]:
         return [args for call, args in self.calls if call == name]
 
-    async def admit(self, token, operation, wall_seconds, key, fingerprint, mode):
+    def new_lease(self) -> str:
+        self._leases += 1
+        return f"lease{self._leases:038d}"
+
+    async def admit(self, token, operation, wall_seconds, key, fingerprint, mode, *, lease, quota="enforce",
+                    max_wall_seconds=None):
         self._call("admit", token=token, operation=operation, wall_seconds=wall_seconds, key=key,
-                   fingerprint=fingerprint, mode=mode)
+                   fingerprint=fingerprint, mode=mode, lease=lease, quota=quota, max_wall_seconds=max_wall_seconds)
         verdict, existing = "none", None
         if key is not None:
             existing = self.commands.get((token, key))
@@ -141,23 +160,38 @@ class FakeAdmissionStore:
                 verdict = "retry"
         refused = verdict in ("replay", "mismatch", "in_flight")
         if refused and mode == "enforce":
-            return self._decision(verdict, "skipped", 0, None, existing["result"] if verdict == "replay" else None)
-        if self.quota != "ok":
-            return self._decision(verdict, self.quota, self.retry_after, None, None)
-        self._leases += 1
-        lease = f"lease{self._leases:038d}"
+            wait = self.in_flight_retry_after if verdict == "in_flight" else 0
+            return self._decision(verdict, "skipped", wait, False, existing["result"] if verdict == "replay" else None)
+        counted, answer, wait = True, "ok", 0
+        if quota == "off":
+            counted, answer = False, "skipped"
+        elif self.quota != "ok":
+            if quota == "enforce":
+                return self._decision(verdict, self.quota, self.retry_after, False, None)
+            counted, answer, wait = False, self.quota, self.retry_after
         if key is not None and not refused:
             self.commands[(token, key)] = {"fingerprint": fingerprint, "operation": operation,
                                            "state": "in_flight", "result": None, "wall_seconds": wall_seconds}
-        self.leases[lease] = {"token": token, "key": None if refused else key, "wall_seconds": wall_seconds}
-        return self._decision(verdict, "ok", 0, lease, None)
+        self.leases[lease] = {"token": token, "key": None if refused else key, "wall_seconds": wall_seconds,
+                              "max_wall_seconds": max_wall_seconds, "counted": counted, "settled": False}
+        if self.lost_answers > 0:
+            self.lost_answers -= 1
+            raise self.Unavailable
+        return self._decision(verdict, answer, wait, True, None)
 
     async def settle(self, token, lease, wall_seconds):
         self._call("settle", token=token, lease=lease, wall_seconds=wall_seconds)
+        if self.settle_quota != "ok":
+            return self._settled(self.settle_quota, self.retry_after)
         self.leases[lease]["wall_seconds"] = wall_seconds
+        self.leases[lease]["settled"] = True
+        return self._settled("ok", 0)
 
-    async def finish(self, token, lease, outcome, result=None):
+    async def finish(self, token, lease, outcome, result=None, timeout=None):
         self._call("finish", token=token, lease=lease, outcome=outcome, result=result)
+        if self.finish_failures > 0:
+            self.finish_failures -= 1
+            raise self.Unavailable
         entry = self.leases.pop(lease, None)
         if entry is None:
             return False
@@ -170,11 +204,13 @@ class FakeAdmissionStore:
 
 @pytest.fixture(autouse=True)
 def admission_store(monkeypatch):
-    """Every test talks to an in-memory admission store, never PocketBase."""
+    """Every test talks to an in-memory admission store, never PocketBase,
+    and retries a missed finish without waiting."""
     from app import admission
 
     fake = FakeAdmissionStore()
     monkeypatch.setattr(admission, "store", fake)
+    monkeypatch.setattr(admission, "FINISH_BACKOFF_S", (0, 0))
     return fake
 
 

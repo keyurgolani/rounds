@@ -262,6 +262,19 @@ describe('retrying a retryable denial', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('stops when a retry finds its command still running', async () => {
+    fetchMock.mockResolvedValueOnce(denial('quota_unavailable'));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(409, { detail: 'Still running.', code: 'already_in_flight', correlation_id: CID }, { 'Retry-After': '4' }),
+    );
+    const pending = failure(runnerFetch('/api/run', { method: 'POST', body: {} }));
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS.reduce((a, b) => a + b, 0) + 10_000);
+    const err = await pending;
+    expect(err).toMatchObject({ status: 409, code: 'already_in_flight', retryAfterSeconds: 4 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sentHeaders(1).get(IDEMPOTENCY_HEADER)).toBe(sentHeaders(0).get(IDEMPOTENCY_HEADER));
+  });
+
   it('never retries a read or a call that opts out', async () => {
     fetchMock.mockResolvedValue(denial('worker_unavailable'));
     await failure(runnerFetch('/api/pdf/health'));

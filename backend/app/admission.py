@@ -28,15 +28,20 @@ and 7 in one call to the store (``app.admission_state``): the command
 row, the charge, and the lease are written together or not at all.
 Evaluate and grade ``settle`` their exact charge after step 8. When the
 request ends, the middleware finishes the lease: a completed response is
-kept for replay, a step 8 or 9 denial leaves the command retryable, and a
-failure after admission leaves it ``failed_infrastructure``; a same-key
-retry of either runs admission again.
+kept for replay, a denial before anything ran leaves the command
+retryable, and a failure after allocation leaves it
+``failed_infrastructure``; a same-key retry of either runs admission
+again. Only the infrastructure's failures (``INFRASTRUCTURE_CODES``) give
+the wall seconds back. A lease whose end the store never hears about
+stops counting when its window ends, and the sweep repairs its command.
 
 ``ENFORCE_IDEMPOTENCY`` and ``ENFORCE_QUOTA`` decide what steps 6 and 7
-do: ``off`` skips them, ``observe`` records what they would have answered
-in the decision line (``would_deny``) and denies nothing, and
-``enforce`` denies. ``ats-rule`` and ``pdf/health`` skip steps 6, 7, and
-9. Routes outside ``ROUTES`` are untouched; the 23 routes already on
+do: ``off`` skips the step, ``observe`` records what it would have
+answered in the decision line (``would_deny``) and denies nothing, and
+``enforce`` denies. Idempotency doesn't depend on the quota gate: with
+quota ``off`` nothing is counted or charged, and the command is still
+recorded. ``ats-rule`` and ``pdf/health`` skip steps 6, 7, and 9. Routes
+outside ``ROUTES`` are untouched; the 23 routes already on
 ``current_user`` and the anonymous share read stay outside admission.
 """
 from __future__ import annotations
@@ -65,9 +70,18 @@ AUTH_TIMEOUT_S = 8
 MAX_BEARER_CHARS = 4096
 # Proposed: 4 in-flight runs per replica. The owner ratifies it.
 REPLICA_SLOTS = 4
-# How long the end of a request may wait on the store. It runs shielded,
+# How long the end of a request may wait on the store, over at most
+# FINISH_ATTEMPTS calls of FINISH_CALL_TIMEOUT_S each. It runs shielded,
 # so a cancelled request still ends its lease when the store answers.
-FINISH_TIMEOUT_S = 5
+FINISH_TIMEOUT_S = 6
+FINISH_ATTEMPTS = 3
+FINISH_CALL_TIMEOUT_S = 2
+FINISH_BACKOFF_S = (0.25, 0.5)
+# Typed failures after allocation that are the infrastructure's, not the
+# request's: they give the wall seconds back, and the app retries them.
+# Any other failure once a slot ran the request, a render that ran out of
+# time on its content included, keeps its charge and isn't retried.
+INFRASTRUCTURE_CODES = frozenset({"auth_unavailable", "quota_unavailable", "worker_unavailable"})
 
 
 @dataclass(frozen=True)
@@ -337,11 +351,19 @@ store = admission_state
 _REFUSALS = {"mismatch": "idempotency_mismatch", "in_flight": "already_in_flight"}
 
 
-async def begin(request: Request, body: BaseModel, wall_seconds: int) -> None:
+def _quota_code(verdict: str) -> str:
+    return "quota_exceeded" if verdict == "exceeded" else "demo_limit_reached"
+
+
+async def begin(
+    request: Request, body: BaseModel, wall_seconds: int, max_wall_seconds: int | None = None
+) -> None:
     """Steps 6 and 7 for an allocating route, once FastAPI has parsed its
     body, before any lookup. ``wall_seconds`` is the most this request's
-    execution can run; evaluate and grade pass their first case or
-    checkpoint here and ``settle`` the rest after step 8.
+    execution can run. Evaluate and grade pass their first case or
+    checkpoint here, and as ``max_wall_seconds`` the most their cases or
+    checkpoints can run, then ``settle`` after step 8; the lease ends by
+    itself once that most has passed.
 
     A completed command answers its stored response (``errors.Replayed``)
     and runs nothing. A refused or over-limit request raises its typed
@@ -369,16 +391,25 @@ async def begin(request: Request, body: BaseModel, wall_seconds: int) -> None:
                 f"{admitted.method} {admitted.path}", admitted.route.operation, body
             )
 
+    token = admitted.account["token"]
+    lease = store.new_lease()
     try:
         decision = await store.admit(
-            admitted.account["token"],
+            token,
             admitted.route.operation,
             wall_seconds,
             key,
             fingerprint,
             "enforce" if idempotency == "enforce" else "observe",
+            lease=lease,
+            quota=quota,
+            max_wall_seconds=max_wall_seconds,
         )
-    except store.Unavailable:
+    except store.Unavailable as unavailable:
+        # The store may have written the lease and lost only its answer:
+        # end it, so its command can be retried and it stops counting.
+        if not isinstance(unavailable, store.Unconfigured):
+            await _end_lease(token, lease, "infrastructure", None)
         admitted.quota = "unavailable"
         if key is not None:
             admitted.idempotency = "unavailable"
@@ -386,6 +417,9 @@ async def begin(request: Request, body: BaseModel, wall_seconds: int) -> None:
             raise TypedError("quota_unavailable") from None
         admitted.would_deny = admitted.would_deny or "quota_unavailable"
         return
+    if decision.leased:
+        # From here the end of the request is recorded, whatever it is.
+        admitted.lease = lease
 
     # Step 6.
     if key is not None:
@@ -397,33 +431,41 @@ async def begin(request: Request, body: BaseModel, wall_seconds: int) -> None:
     refusal = _REFUSALS.get(decision.idempotency)
     if refusal is not None:
         if idempotency == "enforce":
-            raise TypedError(refusal)
+            wait = decision.retry_after if refusal == "already_in_flight" and decision.retry_after > 0 else None
+            raise TypedError(refusal, retry_after=wait)
         admitted.would_deny = admitted.would_deny or refusal
 
     # Step 7.
     if decision.quota in ("exceeded", "demo_limit"):
         admitted.quota = decision.quota
-        code = "quota_exceeded" if decision.quota == "exceeded" else "demo_limit_reached"
         if quota == "enforce":
-            raise TypedError(code, retry_after=decision.retry_after)
-        admitted.would_deny = admitted.would_deny or code
-    if decision.lease is not None:
-        admitted.lease = decision.lease
+            raise TypedError(_quota_code(decision.quota), retry_after=decision.retry_after)
+        admitted.would_deny = admitted.would_deny or _quota_code(decision.quota)
+    elif decision.quota == "ok" and decision.leased:
         admitted.quota = "charged"
 
 
 async def settle(request: Request, wall_seconds: int) -> None:
     """Evaluate and grade: the exact charge, once step 8 has loaded the
-    definitions. The admission check used the first case or checkpoint,
-    so the last request of an hour can go over by its own charge."""
+    definitions, at most the ``max_wall_seconds`` ``begin`` was given. A
+    raise that doesn't fit the hour is a step 7 denial like admission's,
+    and only a charged lease settles."""
     admitted = state(request)
-    if admitted is None or admitted.lease is None:
+    if admitted is None or admitted.lease is None or admitted.quota != "charged":
         return
+    quota = gates.value("ENFORCE_QUOTA")
     try:
-        await store.settle(admitted.account["token"], admitted.lease, wall_seconds)
+        settled = await store.settle(admitted.account["token"], admitted.lease, wall_seconds)
     except store.Unavailable:
-        if gates.value("ENFORCE_QUOTA") == "enforce":
+        if quota == "enforce":
             raise TypedError("quota_unavailable") from None
+        admitted.would_deny = admitted.would_deny or "quota_unavailable"
+        return
+    if settled.quota != "ok":
+        admitted.quota = settled.quota
+        if quota == "enforce":
+            raise TypedError(_quota_code(settled.quota), retry_after=settled.retry_after)
+        admitted.would_deny = admitted.would_deny or _quota_code(settled.quota)
 
 
 class _Kept:
@@ -462,27 +504,38 @@ def _outcome(admitted: Admission, status: int | None, kept: _Kept) -> tuple[str,
     if status is not None and 200 <= status < 300:
         return "completed", kept.result(status)
     if admitted.code is not None:
-        # A typed failure once a slot ran the request is the
-        # infrastructure's; anything typed before it is a step 8 or 9
-        # denial.
-        if admitted.allocated and status is not None and status >= 500:
+        # Anything typed before a slot ran the request is a denial.
+        if not admitted.allocated:
+            return "denied", None
+        if admitted.code in INFRASTRUCTURE_CODES:
             return "infrastructure", None
-        return "denied", None
     return "error", None
+
+
+async def _end_lease(token: str, lease: str, outcome: str, result: dict[str, Any] | None) -> bool:
+    """Records a lease's end, trying again while the store doesn't answer.
+    Shielded and bounded: a cancelled request still ends its lease, and a
+    lease the store never hears about stops counting when its window
+    ends. True when the store recorded it."""
+    recorded = False
+    with anyio.move_on_after(FINISH_TIMEOUT_S, shield=True):
+        for attempt in range(FINISH_ATTEMPTS):
+            try:
+                recorded = await store.finish(token, lease, outcome, result, timeout=FINISH_CALL_TIMEOUT_S)
+                break
+            except store.Unconfigured:
+                break
+            except store.Unavailable:
+                if attempt < len(FINISH_BACKOFF_S):
+                    await anyio.sleep(FINISH_BACKOFF_S[attempt])
+    return recorded
 
 
 async def _finish(admitted: Admission, status: int | None, kept: _Kept) -> None:
     lease, admitted.lease = admitted.lease, None
     outcome, result = _outcome(admitted, status, kept)
-    recorded = False
-    # Shielded and bounded: a cancelled request still ends its lease, and
-    # a lease the store never hears about expires on its own.
-    with anyio.move_on_after(FINISH_TIMEOUT_S, shield=True):
-        try:
-            recorded = await store.finish(admitted.account["token"], lease, outcome, result)
-        except store.Unavailable:
-            recorded = False
-    if recorded and outcome in ("denied", "infrastructure"):
+    recorded = await _end_lease(admitted.account["token"], lease, outcome, result)
+    if recorded and outcome in ("denied", "infrastructure") and admitted.quota == "charged":
         admitted.quota = "refunded"
 
 

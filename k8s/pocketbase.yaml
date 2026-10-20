@@ -48,6 +48,12 @@ spec:
             - name: ROUNDS_DISABLE_SIGNUPS
               value: "false"
           envFrom:
+            # ROUNDS_ADMISSION_SECRET, shared with the runner (runner.yaml,
+            # step 3). Optional: without it the admission store's write
+            # routes answer 503.
+            - secretRef:
+                name: rounds-admission
+                optional: true
             # Gates (gates.yaml). Optional, so a cluster without the
             # ConfigMap keeps every written default.
             - configMapRef:

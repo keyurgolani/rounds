@@ -15,6 +15,9 @@ services:
       # its alias here.
       - ROUNDS_GATE_SIGNUPS=${ROUNDS_GATE_SIGNUPS:-}
       - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
+      # The key the runner sends with each admission store write; the
+      # runner gets the same value. The default is dev-only.
+      - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-rounds-dev-admission-key-DO-NOT-USE-IN-PROD}
     restart: unless-stopped
 
   runner:
@@ -36,6 +39,8 @@ services:
       # via a cached admin token. Defaults match the bootstrap admin.
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-admin@local.dev}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-changemenowplz}
+      # Same value as PocketBase's; candidate processes never get it.
+      - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-rounds-dev-admission-key-DO-NOT-USE-IN-PROD}
       # Gates (docs/configuration.md#gates). Empty keeps each written
       # default, and the runner logs every value at startup.
       - ROUNDS_GATE_RUN=${ROUNDS_GATE_RUN:-}
@@ -75,7 +80,7 @@ services:
       - /app/node_modules
     environment:
       # Same-origin /api/* is proxied to the backend service via
-      # frontend/vite.config.ts. Override VITE_API_PROXY_TARGET only when
+      # frontend/devProxy.ts. Override VITE_API_PROXY_TARGET only when
       # pointing the dev server at a backend on a different host.
       # Runner is reached through the /api/run etc. proxy; PB via /api/*.
       - VITE_API_PROXY_TARGET=${VITE_API_PROXY_TARGET:-http://runner:8000}

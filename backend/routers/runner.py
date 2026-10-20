@@ -34,6 +34,8 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 DEFAULT_TIMEOUT_S = 3
 LARGE_TAG_TIMEOUT_S = 10
+# The most one evaluate can run: every case it may select, each large.
+EVALUATE_MAX_WALL_S = EVALUATE_MAX_CASES * LARGE_TAG_TIMEOUT_S
 
 
 async def _load_question(request: Request, slug: str) -> tuple[dict, list[dict]]:
@@ -134,8 +136,9 @@ def _evaluate(code, language, entry_dict, selected, slot) -> CodeEvaluateResult:
 
 @router.post("/evaluate", response_model=CodeEvaluateResult)
 async def evaluate_code(request: Request, req: CodeEvaluateRequest):
-    # Admitted on one case's time; the charge settles once the cases load.
-    await admission.begin(request, req, wall_seconds=DEFAULT_TIMEOUT_S)
+    # Admitted on one case's time, up to every case it may select; the
+    # charge settles once the cases load.
+    await admission.begin(request, req, wall_seconds=DEFAULT_TIMEOUT_S, max_wall_seconds=EVALUATE_MAX_WALL_S)
     entry_dict, cases = await _load_question(request, req.question_slug)
     selected = _select_cases(cases, req.filter)
     if len(selected) > EVALUATE_MAX_CASES:

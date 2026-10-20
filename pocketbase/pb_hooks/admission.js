@@ -12,6 +12,14 @@
 // write transaction on its one write connection, so both runner replicas
 // see one count.
 //
+// Only the runner reaches admit, settle, and finish: each call carries
+// the caller's bearer, for the account, and ROUNDS_ADMISSION_SECRET, which
+// PocketBase and the runner share and candidate code never sees. The
+// runner makes each lease's token and sends only its hash, so it can
+// still finish a lease whose admit answer it lost. A lease's window is
+// set when it's admitted and a settle can only shorten it, and a lease
+// settles its charge once, within what was admitted.
+//
 // A handler requires this file itself, as with gates.js:
 //
 //   const admission = require(`${__hooks}/admission.js`);
@@ -30,8 +38,17 @@ const LIMITS = {
 };
 const HOUR_S = 3600;
 const COMMAND_TTL_S = 24 * HOUR_S;
-// A lease outlives its charged wall time by this much, then stops counting.
+// A lease outlives its admitted wall time by this much, then stops counting.
 const LEASE_GRACE_S = 30;
+// What a lease holds past its wall time for the work after the run: grade
+// and submit ask the provider for a rubric review, which the runner cuts
+// at 60 s, and save the attempt.
+const HOLD_S = { grade: 90, take_home_submit: 90 };
+// The secret only the runner and PocketBase hold, and requestInfo's name
+// for the header that carries it (X-Rounds-Admission-Key).
+const RUNNER_KEY_ENV = "ROUNDS_ADMISSION_SECRET";
+const RUNNER_KEY_HEADER = "x_rounds_admission_key";
+const RUNNER_KEY_MIN_CHARS = 32;
 // The longest Retry-After for a full in-flight bucket: a lease usually
 // ends when its request does, long before it expires.
 const IN_FLIGHT_RETRY_S = 10;
@@ -44,19 +61,23 @@ const SWEEP_BATCH = 500;
 // [least, most] wall seconds each operation charges: one request plus the
 // longest the execution can run. backend/tests/test_admission_state.py
 // keeps these in step with the runner's timeouts. Evaluate and grade are
-// admitted on one case or checkpoint and settle the exact charge once the
-// runner has loaded the definitions.
+// admitted on one case or checkpoint, up to their most (32 cases of 10 s,
+// 8 checkpoints of 45 s), and settle the exact charge once the runner has
+// loaded the definitions.
 const OPERATIONS = {
   run: [3, 3],
   evaluate: [0, 32 * 10],
   run_project: [10, 10],
-  grade: [0, 1000 * 45],
+  grade: [0, 8 * 45],
   take_home_run: [60, 60],
   take_home_submit: [120, 120],
   pdf_render: [25, 25],
 };
 const OUTCOMES = ["completed", "denied", "infrastructure", "error"];
 const MODES = ["enforce", "observe"];
+// ROUNDS_GATE_ENFORCE_QUOTA: enforce denies, observe runs uncounted past a
+// limit, and off counts nothing.
+const QUOTA_MODES = ["enforce", "observe", "off"];
 const COMMAND_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const FINGERPRINT = /^[0-9a-f]{64}$/;
 const LEASE_TOKEN = /^[A-Za-z0-9]{43}$/;
@@ -93,10 +114,13 @@ function wallIn(operation, wall) {
 
 // Each returns the checked input, or null when the request is malformed.
 function checkAdmit(data) {
-  if (!only(data, ["operation", "command_id", "fingerprint", "wall_seconds", "idempotency"])) return null;
+  const keys = ["operation", "command_id", "fingerprint", "wall_seconds", "max_wall_seconds", "idempotency", "quota", "lease_hash"];
+  if (!only(data, keys)) return null;
   const operation = data.operation;
   if (typeof operation !== "string" || !Object.prototype.hasOwnProperty.call(OPERATIONS, operation)) return null;
   if (!wallIn(operation, data.wall_seconds)) return null;
+  const most = data.max_wall_seconds === undefined ? data.wall_seconds : data.max_wall_seconds;
+  if (!wallIn(operation, most) || most < data.wall_seconds) return null;
   const commandId = data.command_id === undefined || data.command_id === null ? null : data.command_id;
   if (commandId !== null && (typeof commandId !== "string" || !COMMAND_ID.test(commandId))) return null;
   const fingerprint = data.fingerprint === undefined || data.fingerprint === null ? null : data.fingerprint;
@@ -104,7 +128,19 @@ function checkAdmit(data) {
   if (fingerprint !== null && (typeof fingerprint !== "string" || !FINGERPRINT.test(fingerprint))) return null;
   const mode = data.idempotency === undefined ? "enforce" : data.idempotency;
   if (MODES.indexOf(mode) < 0) return null;
-  return { operation, command_id: commandId, fingerprint, wall_seconds: data.wall_seconds, idempotency: mode };
+  const quota = data.quota === undefined ? "enforce" : data.quota;
+  if (QUOTA_MODES.indexOf(quota) < 0) return null;
+  if (typeof data.lease_hash !== "string" || !FINGERPRINT.test(data.lease_hash)) return null;
+  return {
+    operation,
+    command_id: commandId,
+    fingerprint,
+    wall_seconds: data.wall_seconds,
+    max_wall_seconds: most,
+    idempotency: mode,
+    quota,
+    lease_hash: data.lease_hash,
+  };
 }
 
 function checkSettle(data) {
@@ -192,12 +228,30 @@ function verdictFor(store, existing, input, now) {
   return "retry";
 }
 
+// How long a duplicate of a running command should wait before trying
+// again: until its lease ends, at most IN_FLIGHT_RETRY_S.
+function inFlightWait(store, command, now) {
+  const until = store.liveLeaseExpiry(command.id, now);
+  return until === null ? 1 : Math.max(1, Math.min(IN_FLIGHT_RETRY_S, until - now));
+}
+
+// When a lease that may still run `wall` seconds from `now` ends: the
+// wall time, what the operation holds after the run, and the grace.
+function windowEnd(operation, wall, now) {
+  return now + wall + (HOLD_S[operation] || 0) + LEASE_GRACE_S;
+}
+
 // Steps 6 and 7 together. Writes the command row, the charge, and the
-// lease, or nothing. A request that idempotency would refuse writes no
-// command row; in observe mode it still runs, so it's charged and leased.
-// A request over any limit writes nothing in either mode.
+// lease, or nothing.
+//
+// Idempotency doesn't depend on the quota mode: whenever a request runs
+// with a key it hasn't used, its command row is written. A request that
+// idempotency refuses writes no command row, though in observe mode it
+// still runs and is leased. Past a limit, enforce writes nothing; observe
+// runs the request with a lease that doesn't count and no charge, so the
+// hook never counts past a limit. Off counts nothing.
 function admit(store, account, input, now) {
-  const out = { v: VERSION, idempotency: "none", quota: "ok", retry_after: 0, lease: "", result: null };
+  const out = { v: VERSION, idempotency: "none", quota: "ok", retry_after: 0, leased: false, result: null };
   let existing = null;
   if (input.command_id !== null) {
     existing = store.findCommand(account.id, input.command_id);
@@ -211,13 +265,26 @@ function admit(store, account, input, now) {
   if (refused && input.idempotency === "enforce") {
     out.quota = "skipped";
     if (out.idempotency === "replay") out.result = existing.result;
+    if (out.idempotency === "in_flight") out.retry_after = inFlightWait(store, existing, now);
     return out;
   }
+  if (store.findLease(input.lease_hash) !== null) {
+    return { invalid: true };
+  }
 
-  const verdict = quotaFor(store, account, input.wall_seconds, now);
-  out.quota = verdict.quota;
-  out.retry_after = verdict.retry_after;
-  if (verdict.quota !== "ok") return out;
+  let counted = true;
+  if (input.quota === "off") {
+    out.quota = "skipped";
+    counted = false;
+  } else {
+    const verdict = quotaFor(store, account, input.wall_seconds, now);
+    out.quota = verdict.quota;
+    out.retry_after = verdict.retry_after;
+    if (verdict.quota !== "ok") {
+      if (input.quota === "enforce") return out;
+      counted = false;
+    }
+  }
 
   const hour = hourOf(now);
   let command = null;
@@ -233,8 +300,7 @@ function admit(store, account, input, now) {
     // A stale lease of an earlier attempt stops counting now.
     store.deleteLeasesForCommand(command.id);
   }
-  charge(store, bucketsFor(account), hour, 1, input.wall_seconds);
-  const token = store.newToken();
+  if (counted) charge(store, bucketsFor(account), hour, 1, input.wall_seconds);
   store.saveLease({
     id: "",
     account: account.id,
@@ -243,10 +309,13 @@ function admit(store, account, input, now) {
     demo: account.demo,
     hour,
     wall_seconds: input.wall_seconds,
-    token_hash: store.hash(token),
-    expires_at: now + input.wall_seconds + LEASE_GRACE_S,
+    max_wall_seconds: input.max_wall_seconds,
+    settled: false,
+    counted,
+    token_hash: input.lease_hash,
+    expires_at: windowEnd(input.operation, input.max_wall_seconds, now),
   });
-  out.lease = token;
+  out.leased = true;
   return out;
 }
 
@@ -255,15 +324,39 @@ function leaseOf(store, account, token) {
   return lease !== null && lease.account === account.id ? lease : null;
 }
 
+// Step 7 again for a settle that raises a lease's charge: whether the
+// added wall seconds fit the hour the lease was charged in.
+function wallFits(store, lease, extra, now) {
+  const over = [];
+  leaseBuckets(lease).forEach((b) => {
+    const limit = LIMITS[b.bucket];
+    const used = store.counter(b.bucket, b.account, lease.hour) || { requests: 0, wall_seconds: 0 };
+    if (limit.wall_seconds !== null && used.wall_seconds + extra > limit.wall_seconds) over.push(b.bucket);
+  });
+  if (over.length === 0) return { quota: "ok", retry_after: 0 };
+  return { quota: over.indexOf("demo") >= 0 ? "demo_limit" : "exceeded", retry_after: untilNextHour(now) };
+}
+
 // Evaluate and grade: the exact charge, once the definitions are loaded.
+// A lease settles once, to at most what it was admitted for, and a raise
+// has to fit the hour's limits. Its window ends no later than the settled
+// wall time allows from now, and never later than it was admitted for.
 function settle(store, account, input, now) {
   const lease = leaseOf(store, account, input.lease);
-  if (lease === null) return { status: 404, body: { v: VERSION, error: "not_found" } };
-  if (!wallIn(lease.operation, input.wall_seconds)) return { status: 400, body: { v: VERSION, error: "invalid_request" } };
+  if (lease === null || lease.expires_at <= now) return { status: 404, body: { v: VERSION, error: "not_found" } };
+  if (lease.settled) return { status: 409, body: { v: VERSION, error: "already_settled" } };
+  if (input.wall_seconds > lease.max_wall_seconds) return { status: 400, body: { v: VERSION, error: "invalid_request" } };
   const delta = input.wall_seconds - lease.wall_seconds;
-  if (delta !== 0) charge(store, leaseBuckets(lease), lease.hour, 0, delta);
+  if (lease.counted && delta > 0) {
+    const verdict = wallFits(store, lease, delta, now);
+    if (verdict.quota !== "ok") {
+      return { status: 429, body: { v: VERSION, quota: verdict.quota, retry_after: verdict.retry_after } };
+    }
+  }
+  if (lease.counted && delta !== 0) charge(store, leaseBuckets(lease), lease.hour, 0, delta);
   lease.wall_seconds = input.wall_seconds;
-  lease.expires_at = now + input.wall_seconds + LEASE_GRACE_S;
+  lease.settled = true;
+  lease.expires_at = Math.min(lease.expires_at, windowEnd(lease.operation, input.wall_seconds, now));
   store.saveLease(lease);
   if (lease.command) {
     const command = store.getCommand(lease.command);
@@ -288,11 +381,13 @@ function storable(result) {
 // and a typed infrastructure failure ("infrastructure") or any other
 // failure ("error") leaves it failed_infrastructure; either way a retry
 // with the same key runs admission again. Only "denied" and
-// "infrastructure" refund, and only wall seconds. The lease goes.
+// "infrastructure" refund, only wall seconds, and only on a lease that
+// counted. The lease goes.
 function finish(store, account, input, now) {
   const lease = leaseOf(store, account, input.lease);
   if (lease === null) return { status: 404, body: { v: VERSION, error: "not_found" } };
-  const refund = input.outcome === "denied" || input.outcome === "infrastructure" ? lease.wall_seconds : 0;
+  const refundable = input.outcome === "denied" || input.outcome === "infrastructure";
+  const refund = lease.counted && refundable ? lease.wall_seconds : 0;
   if (refund > 0) charge(store, leaseBuckets(lease), lease.hour, 0, -refund);
   if (lease.command) {
     const command = store.getCommand(lease.command);
@@ -384,6 +479,9 @@ function pbStore(dao) {
       demo: record.getBool("demo"),
       hour: record.getInt("hour"),
       wall_seconds: record.getInt("wall_seconds"),
+      max_wall_seconds: record.getInt("max_wall_seconds"),
+      settled: record.getBool("settled"),
+      counted: record.getBool("counted"),
       token_hash: record.getString("token_hash"),
       expires_at: record.getInt("expires_at"),
       _record: record,
@@ -398,7 +496,7 @@ function pbStore(dao) {
     return row;
   }
   function liveFilter(leases) {
-    const parts = ["expires_at > {:now}"];
+    const parts = ["expires_at > {:now}", "counted = true"];
     if (leases.account !== undefined) parts.push("account = {:account}");
     if (leases.demo !== undefined) parts.push("demo = true");
     return parts.join(" && ");
@@ -411,7 +509,6 @@ function pbStore(dao) {
   }
 
   return {
-    newToken: () => $security.randomString(43),
     hash: (token) => $security.sha256(token),
     findCommand: (account, commandId) =>
       command(first(COMMANDS, "account = {:account} && command_id = {:id}", { account, id: commandId })),
@@ -421,13 +518,20 @@ function pbStore(dao) {
     deleteCommand: (row) => dao.deleteRecord(row._record),
     findLease: (tokenHash) => lease(first(LEASES, "token_hash = {:hash}", { hash: tokenHash })),
     saveLease: (row) =>
-      save(LEASES, row, ["account", "command", "operation", "demo", "hour", "wall_seconds", "token_hash", "expires_at"]),
+      save(LEASES, row, [
+        "account", "command", "operation", "demo", "hour", "wall_seconds", "max_wall_seconds", "settled", "counted",
+        "token_hash", "expires_at",
+      ]),
     deleteLease: (row) => dao.deleteRecord(row._record),
     deleteLeasesForCommand: (commandId) => {
       dao.findRecordsByFilter(LEASES, "command = {:id}", "", 0, 0, { id: commandId }).forEach((r) => dao.deleteRecord(r));
     },
     liveLeaseForCommand: (commandId, now) =>
       first(LEASES, "command = {:id} && expires_at > {:now}", { id: commandId, now }) !== null,
+    liveLeaseExpiry: (commandId, now) => {
+      const rows = dao.findRecordsByFilter(LEASES, "command = {:id} && expires_at > {:now}", "-expires_at", 1, 0, { id: commandId, now });
+      return rows.length > 0 ? rows[0].getInt("expires_at") : null;
+    },
     liveLeases: (leases, now) => {
       const rows = dao.findRecordsByFilter(LEASES, liveFilter(leases), "expires_at", 0, 0, {
         now,
@@ -487,8 +591,29 @@ function nowSeconds() {
 
 const CHECKS = { admit: checkAdmit, settle: checkSettle, finish: checkFinish };
 
+function sameSecret(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+// Why a write route refuses the caller, or null when the runner's key
+// came with it: 503 while PocketBase has no key set, 403 for any other
+// caller, which is everything candidate code could send.
+function runnerKeyError(headers, secret) {
+  if (typeof secret !== "string" || secret.length < RUNNER_KEY_MIN_CHARS) {
+    return { status: 503, body: { v: VERSION, error: "unconfigured" } };
+  }
+  const given = headers ? headers[RUNNER_KEY_HEADER] : undefined;
+  if (typeof given !== "string" || !sameSecret(given, secret)) {
+    return { status: 403, body: { v: VERSION, error: "forbidden" } };
+  }
+  return null;
+}
+
 // One caller route. The account and its tier come from the bearer, never
-// from the body.
+// from the body, and the writes need the runner's key as well.
 function handle(c, action) {
   const info = $apis.requestInfo(c);
   const record = info.authRecord;
@@ -496,13 +621,17 @@ function handle(c, action) {
   const account = { id: record.id, demo: tierOf(record) === "demo" };
   const now = nowSeconds();
   if (action === "usage") return c.json(200, usage(pbStore($app.dao()), account, now));
+  const refused = runnerKeyError(info.headers, $os.getenv(RUNNER_KEY_ENV));
+  if (refused !== null) return c.json(refused.status, refused.body);
   const input = CHECKS[action](info.data);
   if (input === null) return c.json(400, { v: VERSION, error: "invalid_request" });
   let out = null;
   $app.dao().runInTransaction((txDao) => {
     const store = pbStore(txDao);
-    if (action === "admit") out = { status: 200, body: admit(store, account, input, now) };
-    else if (action === "settle") out = settle(store, account, input, now);
+    if (action === "admit") {
+      const body = admit(store, account, input, now);
+      out = body.invalid ? { status: 400, body: { v: VERSION, error: "invalid_request" } } : { status: 200, body };
+    } else if (action === "settle") out = settle(store, account, input, now);
     else out = finish(store, account, input, now);
   });
   return c.json(out.status, out.body);
@@ -553,11 +682,16 @@ module.exports = {
   HOUR_S,
   COMMAND_TTL_S,
   LEASE_GRACE_S,
+  HOLD_S,
   IN_FLIGHT_RETRY_S,
   RESULT_MAX_CHARS,
   OPERATIONS,
   DEMO_FIELDS,
+  RUNNER_KEY_ENV,
+  RUNNER_KEY_HEADER,
+  RUNNER_KEY_MIN_CHARS,
   tierOf,
+  runnerKeyError,
   checkAdmit,
   checkSettle,
   checkFinish,

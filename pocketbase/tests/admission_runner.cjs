@@ -32,7 +32,6 @@ function memoryStore() {
   const counters = new Map();
   const leases = new Map();
   let ids = 0;
-  let tokens = 0;
   const nextId = () => `id${String(++ids).padStart(13, "0")}`;
   const clone = (row) => (row === null || row === undefined ? null : JSON.parse(JSON.stringify(row)));
   const counterKey = (bucket, account, hour) => `${bucket}|${account}|${hour}`;
@@ -45,7 +44,6 @@ function memoryStore() {
       counters: [...counters.values()].map(clone),
       leases: [...leases.values()].map(clone),
     }),
-    newToken: () => `tok${String(++tokens).padStart(40, "0")}`,
     hash: (token) => crypto.createHash("sha256").update(token).digest("hex"),
     findCommand: (account, commandId) =>
       clone([...commands.values()].find((c) => c.account === account && c.command_id === commandId) || null),
@@ -82,9 +80,13 @@ function memoryStore() {
       for (const [id, lease] of leases) if (lease.command === commandId) deleteLease(id);
     },
     liveLeaseForCommand: (commandId, now) => [...leases.values()].some((l) => l.command === commandId && live(l, now)),
+    liveLeaseExpiry: (commandId, now) => {
+      const rows = [...leases.values()].filter((l) => l.command === commandId && live(l, now));
+      return rows.length > 0 ? Math.max(...rows.map((l) => l.expires_at)) : null;
+    },
     liveLeases: (filter, now) => {
       const rows = [...leases.values()]
-        .filter((l) => live(l, now))
+        .filter((l) => live(l, now) && l.counted === true)
         .filter((l) => filter.account === undefined || l.account === filter.account)
         .filter((l) => filter.demo === undefined || l.demo === true)
         .sort((a, b) => a.expires_at - b.expires_at);
@@ -178,9 +180,15 @@ const results = program.steps.map((step) => {
         HOUR_S: admission.HOUR_S,
         COMMAND_TTL_S: admission.COMMAND_TTL_S,
         LEASE_GRACE_S: admission.LEASE_GRACE_S,
+        HOLD_S: admission.HOLD_S,
         RESULT_MAX_CHARS: admission.RESULT_MAX_CHARS,
         DEMO_FIELDS: admission.DEMO_FIELDS,
+        RUNNER_KEY_ENV: admission.RUNNER_KEY_ENV,
+        RUNNER_KEY_HEADER: admission.RUNNER_KEY_HEADER,
+        RUNNER_KEY_MIN_CHARS: admission.RUNNER_KEY_MIN_CHARS,
       };
+    case "runnerKeyError":
+      return admission.runnerKeyError(step.headers, step.secret);
     case "guardDemoCreate":
     case "guardDemoUpdate":
     case "guardDemoOAuth2":

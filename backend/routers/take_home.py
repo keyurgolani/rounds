@@ -12,6 +12,7 @@ import json
 import logging
 from typing import Any, AsyncIterator, Dict, List
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
@@ -19,6 +20,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from take_home.runner import run_assignment
 from ai_coding.rubric import (
+    REVIEW_TIMED_OUT,
+    REVIEW_TIMEOUT_S,
     SYSTEM_PROMPT as _RUBRIC_SYS,
     build_prompt as _build_rubric_prompt,
     parse_ai_output as _parse_rubric,
@@ -36,6 +39,8 @@ router = APIRouter(prefix="/api/take-home", tags=["take-home"])
 
 RUN_TIMEOUT_S = 60
 SUBMIT_TIMEOUT_S = 120
+# The longest a submit waits to save its attempt row after the review.
+ATTEMPT_WRITE_TIMEOUT_S = 10
 
 
 async def _auth_user(request: Request) -> dict:
@@ -184,21 +189,27 @@ async def submit_route(
     rubric = a.get("rubric") or {"items": []}
     rubric_review: Dict[str, Any] = {"items": [], "total": 0.0, "skipped": False}
     try:
-        cfg = await _active_text_config(user)
-        prompt = _build_rubric_prompt(
-            rubric=rubric,
-            files=body.files,
-            test_results={"harness": harness_out},
-            ai_chats=body.ai_chats,
-        )
-        raw = await _call_complete(
-            cfg["kind"], cfg["model"], cfg["api_key"], cfg["base_url"] or None,
-            system=_RUBRIC_SYS,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1500,
-            destination=cfg.get("destination"),
-        )
+        # Bounded, so the review and the attempt write end inside the
+        # submit's lease.
+        with anyio.fail_after(REVIEW_TIMEOUT_S):
+            cfg = await _active_text_config(user)
+            prompt = _build_rubric_prompt(
+                rubric=rubric,
+                files=body.files,
+                test_results={"harness": harness_out},
+                ai_chats=body.ai_chats,
+            )
+            raw = await _call_complete(
+                cfg["kind"], cfg["model"], cfg["api_key"], cfg["base_url"] or None,
+                system=_RUBRIC_SYS,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1500,
+                destination=cfg.get("destination"),
+            )
         rubric_review = _parse_rubric(raw)
+    except TimeoutError:
+        _log.warning("take-home submit rubric review timed out")
+        rubric_review = {"items": [], "total": 0.0, "skipped": True, "reason": REVIEW_TIMED_OUT}
     except Exception as e:  # noqa: BLE001
         _log.exception("take-home submit rubric review failed")
         rubric_review = {"items": [], "total": 0.0, "skipped": True, "reason": str(e)[:300]}
@@ -219,11 +230,12 @@ async def submit_route(
         }
         if body.campaign_id:
             attempt_payload["campaign"] = body.campaign_id
-        await pb_post(
-            user["token"],
-            "/api/collections/take_home_attempts/records",
-            attempt_payload,
-        )
+        with anyio.fail_after(ATTEMPT_WRITE_TIMEOUT_S):
+            await pb_post(
+                user["token"],
+                "/api/collections/take_home_attempts/records",
+                attempt_payload,
+            )
     except Exception:  # noqa: BLE001
         # Persistence is best-effort; don't fail the user-visible grade
         # because the attempts row didn't save. Log + continue.

@@ -50,7 +50,10 @@ export const CORRELATION_HEADER = 'X-Correlation-Id';
 
 /** Denials a short wait can clear: PocketBase, the admission store, or
  *  every worker was briefly unavailable. The runner leaves such a
- *  command retryable, so a same-key retry runs admission again. */
+ *  command retryable, so a same-key retry runs admission again. A retry
+ *  that finds its command still running (`already_in_flight`) isn't
+ *  retried again; the caller shows it as unavailable, and the next try
+ *  sends a new key. */
 export const RETRYABLE_CODES: ReadonlySet<string> = new Set([
   'auth_unavailable',
   'quota_unavailable',

@@ -57,6 +57,9 @@ RUNNER_URLS="http://runner:8000,http://runner-b:8000"
 
 PB_ADMIN_EMAIL_V="${PB_ADMIN_EMAIL:-ops@harness.test}"
 PB_ADMIN_PASSWORD_V="${PB_ADMIN_PASSWORD:-harness-admin-pw-123}"
+# The runner key PocketBase, both runners, and the admission probe share; a
+# test placeholder, as in compose.yml.
+ADMISSION_SECRET_V="${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}"
 
 # The verified PocketBase binary digest comes from the Dockerfile's ARGs, the
 # one source of truth, rather than a copy kept in sync here. Prod/CI build
@@ -92,8 +95,8 @@ trap cleanup EXIT
 
 # The runners enforce idempotency and quotas for the admission phase.
 set_signups() {
-  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\n' \
-    "${IMAGE_PREFIX}" "$1" > "${ENV_FILE}"
+  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\n' \
+    "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" > "${ENV_FILE}"
 }
 
 probe() {
@@ -110,6 +113,7 @@ probe() {
     -e PB_BINARY_SHA256="${PB_BINARY_SHA256}" \
     -e PB_BINARY_ARCH="${PB_BINARY_ARCH}" \
     -e RUNNER_URLS="${RUNNER_URLS}" \
+    -e ROUNDS_ADMISSION_SECRET="${ADMISSION_SECRET_V}" \
     -v "${ROOT}/docs/security:/policy:ro" \
     -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
     -v "${RECEIPTS_DIR}:/out" \

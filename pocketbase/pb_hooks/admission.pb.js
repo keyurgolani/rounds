@@ -5,8 +5,9 @@
 //
 // The runner calls these with the caller's bearer: admit (steps 6 and 7),
 // settle (evaluate's and grade's exact charge), finish (the end of an
-// admitted request), and usage (the dependency check). nginx answers
-// /api/rounds/admission/ with 404, so a browser never reaches them.
+// admitted request), and usage (the dependency check). The first three
+// also need ROUNDS_ADMISSION_SECRET, which only the runner holds. nginx
+// answers /api/rounds/admission/ with 404, so a browser never reaches them.
 
 routerAdd(
   "POST",

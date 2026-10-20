@@ -50,6 +50,7 @@ CODES: dict[str, int] = {
     "quota_unavailable": 503,
     "not_found": 404,
     "worker_unavailable": 503,
+    "render_timeout": 422,
     "destination_denied": 403,
 }
 
@@ -71,6 +72,7 @@ DETAILS: dict[str, str] = {
     "quota_unavailable": "Limits can't be checked right now. Try again shortly.",
     "not_found": "Not found.",
     "worker_unavailable": "The runner is busy or unavailable. Try again shortly.",
+    "render_timeout": "This document took too long to render. Simplify it and try again.",
     "destination_denied": "This provider address isn't allowed.",
 }
 

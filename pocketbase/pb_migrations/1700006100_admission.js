@@ -128,8 +128,16 @@ migrate(
         { name: "demo", type: "bool" },
         seconds("hour", true),
         seconds("wall_seconds", false),
-        // SHA-256 of the lease token only the admitting runner holds.
+        // The most a settle may charge; the window below is fixed by it.
+        seconds("max_wall_seconds", false),
+        // Set once the lease has settled; it can't settle again.
+        { name: "settled", type: "bool" },
+        // False when the quota gate is off, or observe let a request past
+        // a limit: the lease then neither counts in flight nor charges.
+        { name: "counted", type: "bool" },
+        // SHA-256 of the lease token the admitting runner made and holds.
         { name: "token_hash", type: "text", required: true, options: { pattern: SHA256_HEX } },
+        // Set when admitted; a settle can only bring it closer.
         seconds("expires_at", true),
       ],
       indexes: [

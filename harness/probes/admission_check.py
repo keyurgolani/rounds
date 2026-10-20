@@ -12,15 +12,23 @@ Two runner replicas built from this commit share one PocketBase, with
 3. A step 8 denial leaves its command retryable, with no live lease, on
    either replica.
 4. No client sets or clears ``is_demo``, the admission collections are
-   superuser-only, and the admission routes need a bearer.
+   superuser-only, the admission routes need a bearer, and the write
+   routes need the runner key as well.
+5. On the real store, with the runner key the harness shares: a lease
+   settles once, never above what it was admitted for, and its window is
+   only ever brought closer; a lease ends with the token its runner made
+   even when the admit answer never arrived; a duplicate of a running
+   command hears when to try again; and quota ``off`` counts nothing.
 
 Prints one PASS/FAIL line per check and exits non-zero on any failure.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import secrets
+import string
 import sys
 import threading
 import time
@@ -37,6 +45,11 @@ RUNNERS = [u.strip().rstrip("/") for u in os.environ.get("RUNNER_URLS", "").spli
 COLLECTIONS = ("admission_commands", "admission_counters", "admission_leases")
 # A run's own work: the second one sleeps long enough for others to queue.
 SLOW_S = 2
+# The harness's test runner key, the one PocketBase and both runners get.
+RUNNER_KEY = os.environ.get("ROUNDS_ADMISSION_SECRET", "")
+RUNNER_KEY_HEADER = "X-Rounds-Admission-Key"
+STORE = "/api/rounds/admission"
+GRACE_S = 30
 
 
 class Checks:
@@ -170,6 +183,112 @@ def in_background(fn) -> tuple[threading.Thread, dict]:
     return thread, out
 
 
+def lease_token() -> str:
+    """A lease token as a runner makes one: 43 letters and digits."""
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(43))
+
+
+def store(path: str, token: str, body: dict, key: str | None = None) -> tuple[int, Any]:
+    """One write to the admission store, as a runner makes it: the
+    caller's bearer and the runner key."""
+    headers = {RUNNER_KEY_HEADER: RUNNER_KEY if key is None else key}
+    if key == "":
+        headers = {}
+    status, parsed, _ = call(POCKETBASE_URL, "POST", STORE + path, token, body, headers)
+    return status, parsed
+
+
+def admit_body(lease: str, operation: str = "evaluate", wall: int = 3, most: int | None = 320,
+               quota: str = "enforce", command_id: str | None = None) -> dict:
+    body: dict = {"operation": operation, "wall_seconds": wall, "idempotency": "enforce", "quota": quota,
+                  "lease_hash": hashlib.sha256(lease.encode()).hexdigest()}
+    if most is not None:
+        body["max_wall_seconds"] = most
+    if command_id is not None:
+        body["command_id"] = command_id
+        body["fingerprint"] = secrets.token_hex(32)
+    return body
+
+
+def lease_row(pb: PBClient, admin: str, lease: str) -> dict | None:
+    digest = hashlib.sha256(lease.encode()).hexdigest()
+    rows = pb.listing("admission_leases", admin, {"filter": f"token_hash = '{digest}'"})
+    items = (rows.body or {}).get("items", []) if rows.status == 200 else []
+    return items[0] if items else None
+
+
+def check_the_real_store(c: Checks, pb: PBClient, admin: str) -> None:
+    s = account(pb, "adm-s")
+    probe_body = admit_body(lease_token())
+
+    # The write routes need the runner key as well as a bearer.
+    for path, body in (("/admit", probe_body), ("/settle", {"lease": lease_token(), "wall_seconds": 3}),
+                       ("/finish", {"lease": lease_token(), "outcome": "denied"})):
+        for label, key in (("no-key", ""), ("wrong-key", "x" * 40)):
+            status, body_out = store(path, s.token, body, key)
+            c.check(f"admission.store.{path.strip('/')}-{label}-refused",
+                    status == 403 and (body_out or {}).get("error") == "forbidden", f"status={status}")
+    c.check("admission.store.refusals-wrote-nothing", usage(s.token)["requests"] == 0, "a refused call charged")
+
+    # A lease settles once, never above what was admitted, and its window
+    # only ever comes closer.
+    first = lease_token()
+    status, admitted = store("/admit", s.token, admit_body(first))
+    row = lease_row(pb, admin, first)
+    c.check("admission.store.admit-with-the-runner-key", status == 200 and (admitted or {}).get("leased") is True
+            and row is not None and row.get("max_wall_seconds") == 320 and row.get("settled") is False,
+            f"status={status}")
+    if row is not None:
+        window = row["expires_at"]
+        settled = store("/settle", s.token, {"lease": first, "wall_seconds": 30})
+        after = lease_row(pb, admin, first) or {}
+        again = store("/settle", s.token, {"lease": first, "wall_seconds": 9})
+        last = lease_row(pb, admin, first) or {}
+        c.check("admission.store.settle-once-and-closer",
+                settled[0] == 200 and after.get("settled") is True and after.get("expires_at", window + 1) < window
+                and after.get("expires_at", 0) <= int(time.time()) + 30 + GRACE_S + 5
+                and again[0] == 409 and (again[1] or {}).get("error") == "already_settled"
+                and last.get("expires_at") == after.get("expires_at") and last.get("wall_seconds") == 30,
+                f"settle={settled[0]} again={again[0]}")
+        over = lease_token()
+        store("/admit", s.token, admit_body(over))
+        above = store("/settle", s.token, {"lease": over, "wall_seconds": 321})
+        c.check("admission.store.settle-never-above-admitted",
+                above[0] == 400 and (lease_row(pb, admin, over) or {}).get("settled") is False, f"status={above[0]}")
+        for lease in (first, over):
+            store("/finish", s.token, {"lease": lease, "outcome": "denied"})
+
+    # A lease whose admit answer never arrived ends with the runner's token.
+    lost = lease_token()
+    store("/admit", s.token, admit_body(lost, operation="run", wall=3, most=None, command_id=uuid7()))
+    ended = store("/finish", s.token, {"lease": lost, "outcome": "infrastructure"})
+    c.check("admission.store.lost-answer-lease-ends", ended[0] == 200 and lease_row(pb, admin, lost) is None
+            and usage(s.token)["in_flight"] == 0, f"status={ended[0]}")
+
+    # A duplicate of a running command hears when to try again.
+    key = uuid7()
+    running = lease_token()
+    body = admit_body(running, operation="run", wall=3, most=None, command_id=key)
+    store("/admit", s.token, body)
+    duplicate = store("/admit", s.token, {**body, "lease_hash": hashlib.sha256(lease_token().encode()).hexdigest()})
+    wait = (duplicate[1] or {}).get("retry_after", 0)
+    c.check("admission.store.duplicate-hears-when", duplicate[0] == 200
+            and (duplicate[1] or {}).get("idempotency") == "in_flight" and 1 <= wait <= 10, f"retry_after={wait}")
+    store("/finish", s.token, {"lease": running, "outcome": "denied"})
+
+    # Quota off counts nothing and still leases the command.
+    q = account(pb, "adm-q")
+    uncounted = lease_token()
+    status, out = store("/admit", q.token, admit_body(uncounted, operation="run", wall=3, most=None, quota="off",
+                                                       command_id=uuid7()))
+    used = usage(q.token)
+    c.check("admission.store.quota-off-counts-nothing", status == 200 and (out or {}).get("quota") == "skipped"
+            and (out or {}).get("leased") is True and used["requests"] == 0 and used["in_flight"] == 0,
+            f"status={status} requests={used['requests']} in_flight={used['in_flight']}")
+    store("/finish", q.token, {"lease": uncounted, "outcome": "completed"})
+
+
 def main() -> int:
     c = Checks()
     if len(RUNNERS) != 2:
@@ -285,6 +404,10 @@ def main() -> int:
                 f"account={listed.status} anonymous={anonymous.status}")
     bare = call(POCKETBASE_URL, "POST", "/api/rounds/admission/admit", None, {"operation": "run", "wall_seconds": 3})
     c.check("admission.store.routes-need-a-bearer", bare[0] == 401, f"status={bare[0]}")
+
+    # 5. The real store.
+    if c.check("admission.store.runner-key-configured", len(RUNNER_KEY) >= 32, "ROUNDS_ADMISSION_SECRET is unset"):
+        check_the_real_store(c, pb, admin)
 
     print(f"admission check: {c.passed} passed, {c.failed} failed")
     return 1 if c.failed else 0
