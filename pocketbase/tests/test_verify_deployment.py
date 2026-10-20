@@ -15,6 +15,7 @@ import re
 import sqlite3
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -43,6 +44,7 @@ class Deployment:
         self.health = 200
         self.realtime_event = "PB_CONNECT"
         self.oversize_reaches_pocketbase = False
+        self.buffering_proxy = False
 
     def answer(self, method: str, path: str, body: bytes):
         if (method, path) in self.overrides:
@@ -68,7 +70,8 @@ class Deployment:
         if bare == "/api/collections/users/auth-methods":
             return 200, {"usernamePassword": False, "emailPassword": True, "authProviders": []}
         if bare == "/api/oauth2-redirect":
-            return 400, {"code": 400, "message": "Invalid OAuth2 redirect.", "data": {}}
+            # What PocketBase 0.22.22 sends without state and code.
+            return 307, b"", {"Location": vd.OAUTH_FAILURE_LOCATION}
         if bare.startswith("/api/files/"):
             return 404, PB_404
         return 404, NGINX_404
@@ -81,10 +84,13 @@ def _server(dep: Deployment):
         def log_message(self, *args):  # quiet
             pass
 
-        def _send(self, status, payload, content_type=None):
+        def _send(self, status, payload, headers=None):
             raw = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
             self.send_response(status)
-            self.send_header("Content-Type", content_type or ("text/html" if isinstance(payload, bytes) else "application/json"))
+            if raw:
+                self.send_header("Content-Type", "text/html" if isinstance(payload, bytes) else "application/json")
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
             self.send_header("Content-Length", str(len(raw)))
             self.end_headers()
             self.wfile.write(raw)
@@ -92,6 +98,12 @@ def _server(dep: Deployment):
         def _handle(self):
             length = int(self.headers.get("Content-Length") or 0)
             if self.command == "POST" and self.path == "/api/collections/campaigns/records" and length > vd.NGINX_BODY_CAP:
+                if dep.buffering_proxy:
+                    # A buffering proxy in front waits for the whole body,
+                    # which never comes, and answers nothing in time.
+                    time.sleep(3)
+                    self.close_connection = True
+                    return
                 # Decided on the header alone, like nginx: the body is never read.
                 if dep.oversize_reaches_pocketbase:
                     self._send(400, {"code": 400, "message": "Failed to create record.", "data": {}})
@@ -107,8 +119,8 @@ def _server(dep: Deployment):
                 self.wfile.write(f"id:abc\nevent:{dep.realtime_event}\ndata:{{}}\n\n".encode())
                 self.wfile.flush()
                 return
-            status, payload = dep.answer(self.command, self.path, body)
-            self._send(status, payload)
+            answer = dep.answer(self.command, self.path, body)
+            self._send(*answer)
 
         do_GET = do_POST = do_PATCH = do_PUT = do_DELETE = _handle
 
@@ -224,6 +236,41 @@ def test_the_oversized_check_sends_no_body():
     with deployment() as (_, url):
         r = vd.check_oversized_body(url, timeout=3)
     assert r.passed
+
+
+def test_a_buffering_proxy_in_front_makes_the_body_cap_check_inconclusive():
+    dep = Deployment()
+    dep.buffering_proxy = True
+    with deployment(dep) as (_, url):
+        r = vd.check_oversized_body(url, timeout=1)
+    assert not r.passed and r.inconclusive and "buffering proxy" in r.detail
+
+
+@pytest.mark.parametrize("answer", [
+    (302, b"", {"Location": "https://login.example.test/"}),  # some other hop's redirect
+    (307, b"", {"Location": "/somewhere-else"}),
+    (400, {"code": 400, "message": "Invalid OAuth2 redirect.", "data": {}}),
+    (307, b"redirecting", {"Location": vd.OAUTH_FAILURE_LOCATION}),
+])
+def test_the_oauth_redirect_check_wants_pocketbases_exact_answer(answer):
+    dep = Deployment()
+    dep.overrides[("GET", "/api/oauth2-redirect")] = answer
+    with deployment(dep) as (_, url):
+        results = by_id(vd.check_open_routes(url))
+    assert not results["deployment.proxy.oauth-redirect.open"][0].passed
+
+
+def test_environment_proxies_are_never_used(monkeypatch):
+    # A dead proxy in every proxy variable: if the verifier honoured any of
+    # them, every request would fail.
+    for name in ("http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"):
+        monkeypatch.setenv(name, "http://127.0.0.1:9")
+    monkeypatch.delenv("no_proxy", raising=False)
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    with deployment(pb_port=True) as (_, url):
+        open_routes = vd.check_open_routes(url)
+        login = vd.check_default_logins(url)
+    assert all(r.passed for r in open_routes) and login.passed
 
 
 # --------------------------------------------------------------------------
@@ -403,6 +450,73 @@ def test_main_needs_something_to_check():
 
 def test_main_refuses_an_admin_login_without_pocketbase_url():
     assert vd.main(["--url", "http://127.0.0.1:9", "--admin-email", "x@example.test"], env={}) == 2
+
+
+@pytest.mark.parametrize("pb_url", ["http://10.1.2.3:8090", "http://pocketbase:8090", "http://rounds.example.test"])
+def test_plain_http_to_a_non_loopback_pocketbase_is_refused(pb_url, capsys):
+    env = {"PB_ADMIN_PASSWORD": "operator-test-password"}
+    assert vd.main(["--pb-url", pb_url, "--admin-email", "ops@example.test"], env=env) == 2
+    assert "--allow-insecure" in capsys.readouterr().err
+    # Refused before any request: validation alone raises.
+    with pytest.raises(vd.ConfigError):
+        vd.check_pb_transport(pb_url, allow_insecure=False)
+    vd.check_pb_transport(pb_url, allow_insecure=True)
+
+
+@pytest.mark.parametrize("pb_url", ["http://127.0.0.1:8090", "http://localhost:8090", "http://[::1]:8090",
+                                    "https://pocketbase.internal.example.test"])
+def test_loopback_or_https_pocketbase_is_allowed(pb_url):
+    vd.check_pb_transport(pb_url, allow_insecure=False)
+
+
+def test_policy_without_a_rule_source_is_a_usage_error(capsys):
+    code = vd.main(["--url", "http://127.0.0.1:9", "--policy", str(ROOT / "docs" / "security" / "account-scope.v1.json")], env={})
+    assert code == 2 and "--policy needs --db or --admin-email" in capsys.readouterr().err
+
+
+def test_a_copy_without_policy_compares_with_the_checkouts_rule_table(tmp_path, capsys):
+    db = _copy(tmp_path, ["ops@example.test"])
+    code = vd.main(["--db", db], env={})
+    out = capsys.readouterr().out
+    # The synthetic copy holds three collections, so the full table finds the
+    # rest missing: the rules were compared, against the default policy.
+    assert code == 1 and "deployment.rules.match [campaigns]" in out and "collection-missing" in out
+
+
+def test_a_policy_without_collections_is_a_clean_usage_error(tmp_path, capsys):
+    bad = tmp_path / "policy.json"
+    bad.write_text(json.dumps({"version": "v1", "contract": "account-scope"}))
+    code = vd.main(["--db", _copy(tmp_path, ["ops@example.test"]), "--policy", str(bad)], env={})
+    err = capsys.readouterr().err
+    assert code == 2 and "no collections" in err and "Traceback" not in err
+
+
+def test_a_missing_admin_password_is_a_usage_error_before_any_request(capsys):
+    code = vd.main(["--pb-url", "http://127.0.0.1:9", "--admin-email", "ops@example.test"], env={})
+    assert code == 2 and "$PB_ADMIN_PASSWORD" in capsys.readouterr().err
+
+
+def test_an_error_mid_run_prints_what_was_gathered_and_exits_2(capsys):
+    # The operator's admin login is refused after the default-login check ran.
+    with deployment(pb_port=True) as (_, url):
+        code = vd.main(["--pb-url", url, "--admin-email", "ops@example.test"],
+                       env={"PB_ADMIN_PASSWORD": "wrong-test-password"})
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "PASS deployment.credentials.defaults.rejected" in captured.out
+    assert "admin login with the given credentials failed" in captured.err
+
+
+def test_an_inconclusive_check_is_reported_but_does_not_fail_the_run(monkeypatch, capsys):
+    original = vd.check_oversized_body
+    monkeypatch.setattr(vd, "check_oversized_body", lambda base: original(base, timeout=1))
+    dep = Deployment()
+    dep.buffering_proxy = True
+    with deployment(dep) as (_, url):
+        code = vd.main(["--url", url], env={})
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "INCONCLUSIVE deployment.proxy.oversized-body.rejected" in out and "1 inconclusive" in out
 
 
 def test_a_full_run_prints_no_credential_and_writes_receipts(tmp_path, capsys):
