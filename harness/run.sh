@@ -5,14 +5,21 @@
 #   1. bring PocketBase up with signups enabled
 #   2. main phase   — create two accounts, seed fixtures, run enforced probes,
 #                     read the live rules back against the policy table
-#   3. recreate PocketBase with signups disabled; the named pb_data volume
+#   3. admission    — two runner replicas built from this commit on the one
+#                     PocketBase, enforcing idempotency and quotas; check that
+#                     they replay, count, and limit as one
+#                     (harness/probes/admission_check.py)
+#   4. recreate PocketBase with signups disabled; the named pb_data volume
 #      keeps the accounts and rows from phase 2 across the restart
-#   4. hook phase   — signup-disabled probe
-#   5. verdict      — require every enforced result + rule read-back to pass,
+#   5. hook phase   — signup-disabled probe
+#   6. verdict      — require every enforced result + rule read-back to pass,
 #                     and no pending family to leak; print pass/fail counts
-#   6. scan         — stop PocketBase, then run the cross-owner relation scan
+#   7. scan         — stop PocketBase, then run the cross-owner relation scan
 #                     against the run's pb_data volume (mounted read-only) and
 #                     a fixture copy of it (harness/probes/scan_check.py)
+#   8. admission migration — apply and reverse the admission migration with
+#                     the pinned binary on a 62d4eae-shaped pb_data, with no
+#                     network (harness/probes/admission_migration_check.py)
 #
 # PocketBase is built and brought up with compose; the probe container runs
 # directly on the compose network so the flow is identical under Finch
@@ -44,6 +51,9 @@ RECEIPTS_DIR="${HARNESS_DIR}/.receipts/${PROJECT}"
 export IMAGE_PREFIX="${PROJECT}"
 PROBE_IMAGE="${IMAGE_PREFIX}-probes:test"
 BUILT_IMAGES="${IMAGE_PREFIX}-pocketbase:test ${IMAGE_PREFIX}-probes:test ${IMAGE_PREFIX}-runner:test ${IMAGE_PREFIX}-frontend:test"
+# The pinned PocketBase binary, copied out of its image for the migration check.
+PBBIN_VOLUME="${PROJECT}_pbbin"
+RUNNER_URLS="http://runner:8000,http://runner-b:8000"
 
 PB_ADMIN_EMAIL_V="${PB_ADMIN_EMAIL:-ops@harness.test}"
 PB_ADMIN_PASSWORD_V="${PB_ADMIN_PASSWORD:-harness-admin-pw-123}"
@@ -74,12 +84,17 @@ compose() { ${COMPOSE_BIN} -p "${PROJECT}" -f "${COMPOSE_FILE}" --env-file "${EN
 cleanup() {
   echo "--- tearing down harness stack ---"
   compose down -v --remove-orphans >/dev/null 2>&1 || true
+  ${CONTAINER_BIN} volume rm "${PBBIN_VOLUME}" >/dev/null 2>&1 || true
   ${CONTAINER_BIN} rmi ${BUILT_IMAGES} >/dev/null 2>&1 || true
   rm -f "${ENV_FILE}"
 }
 trap cleanup EXIT
 
-set_signups() { printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\n' "${IMAGE_PREFIX}" "$1" > "${ENV_FILE}"; }
+# The runners enforce idempotency and quotas for the admission phase.
+set_signups() {
+  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\n' \
+    "${IMAGE_PREFIX}" "$1" > "${ENV_FILE}"
+}
 
 probe() {
   local phase="$1"
@@ -94,6 +109,7 @@ probe() {
     -e GIT_COMMIT="${GIT_COMMIT}" \
     -e PB_BINARY_SHA256="${PB_BINARY_SHA256}" \
     -e PB_BINARY_ARCH="${PB_BINARY_ARCH}" \
+    -e RUNNER_URLS="${RUNNER_URLS}" \
     -v "${ROOT}/docs/security:/policy:ro" \
     -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
     -v "${RECEIPTS_DIR}:/out" \
@@ -104,9 +120,9 @@ probe() {
 rm -rf "${RECEIPTS_DIR}"
 mkdir -p "${RECEIPTS_DIR}"
 
-echo "--- building pocketbase + probes images ---"
+echo "--- building pocketbase, runner, and probes images ---"
 set_signups false
-compose build pocketbase probes
+compose build pocketbase runner probes
 
 echo "--- phase 1: PocketBase up (signups enabled) ---"
 compose up -d pocketbase
@@ -114,14 +130,22 @@ compose up -d pocketbase
 echo "--- phase 2: main (accounts, fixtures, enforced probes, rule read-back) ---"
 probe main
 
-echo "--- phase 3: recreate PocketBase (signups disabled) ---"
+echo "--- phase 3: admission (two runner replicas on one PocketBase) ---"
+compose up -d runner runner-b
+set +e
+probe admission
+admission_rc=$?
+set -e
+compose stop runner runner-b
+
+echo "--- phase 4: recreate PocketBase (signups disabled) ---"
 set_signups true
 compose up -d --force-recreate pocketbase
 
-echo "--- phase 4: hook (signup-disabled probe) ---"
+echo "--- phase 5: hook (signup-disabled probe) ---"
 probe hook
 
-echo "--- phase 5: verdict ---"
+echo "--- phase 6: verdict ---"
 set +e
 probe verdict
 rc=$?
@@ -131,7 +155,7 @@ if [ -f "${RECEIPTS_DIR}/receipts.jsonl" ]; then
   echo "--- receipts at ${RECEIPTS_DIR#"${ROOT}/"}/receipts.jsonl ($(wc -l < "${RECEIPTS_DIR}/receipts.jsonl") lines) ---"
 fi
 
-echo "--- phase 6: cross-owner scan (PocketBase stopped, pb_data read-only) ---"
+echo "--- phase 7: cross-owner scan (PocketBase stopped, pb_data read-only) ---"
 compose stop pocketbase
 set +e
 ${CONTAINER_BIN} run --rm --network none \
@@ -145,7 +169,21 @@ ${CONTAINER_BIN} run --rm --network none \
 scan_rc=$?
 set -e
 
-if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ]; then
+echo "--- phase 8: admission migration applied and reversed on a 62d4eae-shaped pb_data ---"
+${CONTAINER_BIN} volume create "${PBBIN_VOLUME}" >/dev/null
+${CONTAINER_BIN} run --rm -v "${PBBIN_VOLUME}:/out" "${IMAGE_PREFIX}-pocketbase:test" cp /pb/pocketbase /out/pocketbase
+set +e
+${CONTAINER_BIN} run --rm --network none \
+  -e PB_BIN="/pbbin/pocketbase" \
+  -e PB_MIGRATIONS_DIR="/pb_migrations" \
+  -v "${PBBIN_VOLUME}:/pbbin:ro" \
+  -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+  -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
+  "${PROBE_IMAGE}" admission-migration
+migration_rc=$?
+set -e
+
+if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ] || [ "${admission_rc}" -ne 0 ] || [ "${migration_rc}" -ne 0 ]; then
   exit 1
 fi
 exit 0

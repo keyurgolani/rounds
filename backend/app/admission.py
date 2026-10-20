@@ -10,19 +10,38 @@ subprocess, sidecar, or provider call, in this order:
 4. ``(tier, operation)`` table: 403 ``not_permitted``.
 5. Fields, from the parsed body only: 413 ``limit_exceeded``, 422
    ``invalid_request`` (request models, ``app.limits``, ``app.errors``).
-6. Idempotency and 7. quota: passed through until stage 3.
+6. Idempotency, keyed on the ``Idempotency-Key`` (the command id) and a
+   fingerprint of the route and the parsed body: 400
+   ``idempotency_key_required``, the stored result of a completed
+   command, 409 ``already_completed`` when none was kept, 409
+   ``idempotency_mismatch``, or 409 ``already_in_flight``.
+7. Quota: 429 ``quota_exceeded`` or ``demo_limit_reached`` with
+   ``Retry-After``; the store down: 503 ``quota_unavailable``.
 8. Lookups with the caller's token, in each route: 404 ``not_found``.
 9. The replica's in-flight cap: 503 ``worker_unavailable``, then
    allocation through ``allocate``.
 
 ``AdmissionMiddleware`` runs steps 1 to 4 before the app reads the body
-and writes one obs decision line per admitted request. ``ats-rule`` and
-``pdf/health`` skip steps 6, 7, and 9. Routes outside ``ROUTES`` are
-untouched; the 23 routes already on ``current_user`` and the anonymous
-share read stay outside admission.
+and writes one obs decision line per admitted request. Each allocating
+route calls ``begin`` once FastAPI has parsed its body, which runs steps 6
+and 7 in one call to the store (``app.admission_state``): the command
+row, the charge, and the lease are written together or not at all.
+Evaluate and grade ``settle`` their exact charge after step 8. When the
+request ends, the middleware finishes the lease: a completed response is
+kept for replay, a step 8 or 9 denial leaves the command retryable, and a
+failure after admission leaves it ``failed_infrastructure``; a same-key
+retry of either runs admission again.
+
+``ENFORCE_IDEMPOTENCY`` and ``ENFORCE_QUOTA`` decide what steps 6 and 7
+do: ``off`` skips them, ``observe`` records what they would have answered
+in the decision line (``would_deny``) and denies nothing, and
+``enforce`` denies. ``ats-rule`` and ``pdf/health`` skip steps 6, 7, and
+9. Routes outside ``ROUTES`` are untouched; the 23 routes already on
+``current_user`` and the anonymous share read stay outside admission.
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import time
 from contextlib import asynccontextmanager
@@ -33,8 +52,9 @@ import anyio
 import httpx
 from fastapi import HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel
 
-from app import errors, gates, obs, sandbox
+from app import admission_state, errors, gates, obs, sandbox
 from app.errors import TypedError
 from app.limits import KIB, MIB
 from app.pb_auth import POCKETBASE_URL
@@ -45,6 +65,9 @@ AUTH_TIMEOUT_S = 8
 MAX_BEARER_CHARS = 4096
 # Proposed: 4 in-flight runs per replica. The owner ratifies it.
 REPLICA_SLOTS = 4
+# How long the end of a request may wait on the store. It runs shielded,
+# so a cancelled request still ends its lease when the store answers.
+FINISH_TIMEOUT_S = 5
 
 
 @dataclass(frozen=True)
@@ -69,8 +92,8 @@ ROUTES: dict[tuple[str, str], Route] = {
 }
 
 TIERS = ("standard", "demo")
-# (tier, operation) -> permitted. Every pair is permitted until stage 3
-# adds the demo tier's limits.
+# (tier, operation) -> permitted. Every pair is permitted, as #1 starts;
+# the demo tier's limits are its quota bucket in pb_hooks/admission.js.
 PERMITS: dict[tuple[str, str], bool] = {
     (tier, route.operation): True for tier in TIERS for route in ROUTES.values()
 }
@@ -87,6 +110,17 @@ class Admission:
     tier: str = "anonymous"
     code: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+    # Steps 6 and 7.
+    begun: bool = False
+    idempotency: str = "skipped"
+    quota: str = "skipped"
+    would_deny: str | None = None
+    lease: str | None = None
+    # Step 9 handed this request an in-flight slot.
+    allocated: bool = False
+
+
+_current: contextvars.ContextVar[Admission | None] = contextvars.ContextVar("rounds_admission", default=None)
 
 
 def state(request: Request) -> Admission | None:
@@ -100,7 +134,8 @@ def account(request: Request) -> dict[str, Any] | None:
 
 def tier_of(record: dict[str, Any]) -> str:
     # TODO(ROUNDS-00B-L07): #177 repoints this accessor at
-    # account_system_state; stage 3 makes is_demo immutable to clients.
+    # account_system_state, with tierOf() in pb_hooks/admission.js. A
+    # users hook there keeps clients from setting is_demo.
     return "demo" if record.get("is_demo") is True else "standard"
 
 
@@ -166,11 +201,29 @@ class AdmissionMiddleware:
         admitted = Admission(route=route, path=scope["path"], method=scope["method"])
         scope.setdefault("state", {})[STATE_KEY] = admitted
         response: dict[str, Any] = {}
+        # A leased request's response waits until the store has recorded
+        # its end, so the caller never sees a result its key can't replay
+        # yet, and a finished request never still counts as in flight.
+        kept = _Kept()
+        held: list[dict] = []
 
         async def send_tracked(message: dict) -> None:
-            if message.get("type") == "http.response.start":
+            kind = message.get("type")
+            if kind == "http.response.start":
                 response["status"] = message.get("status")
-            await send(message)
+            if admitted.lease is None:
+                await send(message)
+                return
+            if kind == "http.response.start":
+                kept.start(message)
+            elif kind == "http.response.body":
+                kept.add(message.get("body") or b"")
+            held.append(message)
+            if kind == "http.response.body" and not message.get("more_body", False):
+                await _finish(admitted, response.get("status"), kept)
+                for waiting in held:
+                    await send(waiting)
+                held.clear()
 
         try:
             await self._before_body(scope, admitted)
@@ -191,6 +244,7 @@ class AdmissionMiddleware:
                     raise TypedError("payload_too_large")
             return message
 
+        current = _current.set(admitted)
         try:
             await self.app(scope, receive_capped, send_tracked)
         except TypedError as denial:
@@ -204,7 +258,15 @@ class AdmissionMiddleware:
             response.setdefault("status", 500)
             raise
         finally:
+            _current.reset(current)
+            # A request that ended without a whole response: an exception,
+            # or a cancellation.
+            if admitted.lease is not None:
+                await _finish(admitted, response.get("status"), kept)
             _log_decision(admitted, response.get("status"), started)
+            # Whatever part of that response there was goes out as it was.
+            for waiting in held:
+                await send(waiting)
 
     async def _before_body(self, scope: dict, admitted: Admission) -> None:
         route = admitted.route
@@ -227,10 +289,8 @@ class AdmissionMiddleware:
         # 4. Tier and operation.
         if not PERMITS.get((admitted.tier, route.operation), False):
             raise TypedError("not_permitted")
-        # 6. Idempotency and 7. quota.
-        # TODO(ROUNDS-00A-L01): stage 3 checks the Idempotency-Key and
-        # charges the quota here, behind ENFORCE_IDEMPOTENCY and
-        # ENFORCE_QUOTA.
+        # 5 to 9 run in the route: FastAPI parses the body, then the
+        # route calls begin().
 
 
 async def _send_typed(scope: dict, send: Callable, denial: TypedError) -> None:
@@ -258,10 +318,172 @@ def _log_decision(admitted: Admission, status: int | None, started: float) -> No
         method=admitted.method,
         status=status,
         code=admitted.code,
-        quota="skipped",
+        idempotency=admitted.idempotency,
+        quota=admitted.quota,
+        would_deny=admitted.would_deny,
         latency_ms=int((time.monotonic() - started) * 1000),
         service="runner",
     )
+
+
+# ---------------------------------------------------------------------------
+# Steps 6 and 7: idempotency and quota
+# ---------------------------------------------------------------------------
+
+# The store's client; tests swap in a fake with the same functions.
+store = admission_state
+
+# Step 6 verdicts that refuse the request, and the code each answers.
+_REFUSALS = {"mismatch": "idempotency_mismatch", "in_flight": "already_in_flight"}
+
+
+async def begin(request: Request, body: BaseModel, wall_seconds: int) -> None:
+    """Steps 6 and 7 for an allocating route, once FastAPI has parsed its
+    body, before any lookup. ``wall_seconds`` is the most this request's
+    execution can run; evaluate and grade pass their first case or
+    checkpoint here and ``settle`` the rest after step 8.
+
+    A completed command answers its stored response (``errors.Replayed``)
+    and runs nothing. A refused or over-limit request raises its typed
+    denial when its gate enforces, and otherwise only records what the
+    gate would have answered."""
+    admitted = state(request)
+    if admitted is None or not admitted.route.allocates:
+        return
+    admitted.begun = True
+    idempotency = gates.value("ENFORCE_IDEMPOTENCY")
+    quota = gates.value("ENFORCE_QUOTA")
+    if idempotency == "off" and quota == "off":
+        return
+
+    key = fingerprint = None
+    if idempotency != "off":
+        key = admission_state.command_id(request.scope.get("headers") or [])
+        if key is None:
+            if idempotency == "enforce":
+                raise TypedError("idempotency_key_required")
+            admitted.idempotency = "missing"
+            admitted.would_deny = "idempotency_key_required"
+        else:
+            fingerprint = admission_state.fingerprint(
+                f"{admitted.method} {admitted.path}", admitted.route.operation, body
+            )
+
+    try:
+        decision = await store.admit(
+            admitted.account["token"],
+            admitted.route.operation,
+            wall_seconds,
+            key,
+            fingerprint,
+            "enforce" if idempotency == "enforce" else "observe",
+        )
+    except store.Unavailable:
+        admitted.quota = "unavailable"
+        if key is not None:
+            admitted.idempotency = "unavailable"
+        if "enforce" in (idempotency, quota):
+            raise TypedError("quota_unavailable") from None
+        admitted.would_deny = admitted.would_deny or "quota_unavailable"
+        return
+
+    # Step 6.
+    if key is not None:
+        admitted.idempotency = decision.idempotency
+    if decision.idempotency == "replay" and idempotency == "enforce":
+        if decision.result is None:
+            raise TypedError("already_completed")
+        raise errors.Replayed(decision.result["status"], decision.result["body"])
+    refusal = _REFUSALS.get(decision.idempotency)
+    if refusal is not None:
+        if idempotency == "enforce":
+            raise TypedError(refusal)
+        admitted.would_deny = admitted.would_deny or refusal
+
+    # Step 7.
+    if decision.quota in ("exceeded", "demo_limit"):
+        admitted.quota = decision.quota
+        code = "quota_exceeded" if decision.quota == "exceeded" else "demo_limit_reached"
+        if quota == "enforce":
+            raise TypedError(code, retry_after=decision.retry_after)
+        admitted.would_deny = admitted.would_deny or code
+    if decision.lease is not None:
+        admitted.lease = decision.lease
+        admitted.quota = "charged"
+
+
+async def settle(request: Request, wall_seconds: int) -> None:
+    """Evaluate and grade: the exact charge, once step 8 has loaded the
+    definitions. The admission check used the first case or checkpoint,
+    so the last request of an hour can go over by its own charge."""
+    admitted = state(request)
+    if admitted is None or admitted.lease is None:
+        return
+    try:
+        await store.settle(admitted.account["token"], admitted.lease, wall_seconds)
+    except store.Unavailable:
+        if gates.value("ENFORCE_QUOTA") == "enforce":
+            raise TypedError("quota_unavailable") from None
+
+
+class _Kept:
+    """A leased request's JSON response, up to the store's limit."""
+
+    def __init__(self) -> None:
+        self.json = False
+        self.chunks: list[bytes] = []
+        self.size = 0
+        self.over = False
+
+    def start(self, message: dict) -> None:
+        for name, value in message.get("headers") or []:
+            if name.lower() == b"content-type":
+                self.json = value.decode("latin-1").split(";")[0].strip().lower() == "application/json"
+
+    def add(self, chunk: bytes) -> None:
+        if self.over:
+            return
+        self.size += len(chunk)
+        if self.size > admission_state.RESULT_MAX_BYTES:
+            self.over, self.chunks = True, []
+        else:
+            self.chunks.append(chunk)
+
+    def result(self, status: int) -> dict[str, Any] | None:
+        if not self.json or self.over:
+            return None
+        try:
+            return {"status": status, "body": json.loads(b"".join(self.chunks) or b"null")}
+        except ValueError:
+            return None
+
+
+def _outcome(admitted: Admission, status: int | None, kept: _Kept) -> tuple[str, dict[str, Any] | None]:
+    if status is not None and 200 <= status < 300:
+        return "completed", kept.result(status)
+    if admitted.code is not None:
+        # A typed failure once a slot ran the request is the
+        # infrastructure's; anything typed before it is a step 8 or 9
+        # denial.
+        if admitted.allocated and status is not None and status >= 500:
+            return "infrastructure", None
+        return "denied", None
+    return "error", None
+
+
+async def _finish(admitted: Admission, status: int | None, kept: _Kept) -> None:
+    lease, admitted.lease = admitted.lease, None
+    outcome, result = _outcome(admitted, status, kept)
+    recorded = False
+    # Shielded and bounded: a cancelled request still ends its lease, and
+    # a lease the store never hears about expires on its own.
+    with anyio.move_on_after(FINISH_TIMEOUT_S, shield=True):
+        try:
+            recorded = await store.finish(admitted.account["token"], lease, outcome, result)
+        except store.Unavailable:
+            recorded = False
+    if recorded and outcome in ("denied", "infrastructure"):
+        admitted.quota = "refunded"
 
 
 # ---------------------------------------------------------------------------
@@ -322,10 +544,18 @@ async def allocate() -> AsyncIterator[sandbox.Sandbox]:
     """Step 9: one in-flight slot, or 503 ``worker_unavailable``. The
     slot's cleanup (the uid's process scan, the reap wait, and the temp
     sweeps) runs in the threadpool, off the event loop, and finishes
-    before the slot is free again, even when the request is cancelled."""
+    before the slot is free again, even when the request is cancelled.
+
+    An admitted route allocates only after ``begin``, so nothing runs
+    without passing steps 6 and 7."""
+    admitted = _current.get()
+    if admitted is not None and admitted.route.allocates and not admitted.begun:
+        raise RuntimeError("an admitted route allocates only after admission.begin()")
     slot = _pool.try_acquire()
     if slot is None:
         raise TypedError("worker_unavailable")
+    if admitted is not None:
+        admitted.allocated = True
     try:
         yield slot
     finally:

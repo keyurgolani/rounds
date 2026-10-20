@@ -1,6 +1,7 @@
 // runnerFetch (ROUNDS-00A-L01): the bearer, one Idempotency-Key per
-// call, and failures mapped to RunnerError with status, code,
-// Retry-After, and the correlation id.
+// call, failures mapped to RunnerError with status, code, Retry-After,
+// and the correlation id, and a retryable denial retried with the same
+// key.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,6 +11,8 @@ vi.mock('../pocketbase', () => ({ pb: { authStore } }));
 import {
   CORRELATION_HEADER,
   IDEMPOTENCY_HEADER,
+  RETRYABLE_CODES,
+  RETRY_DELAYS_MS,
   RunnerError,
   isRunnerError,
   parseRetryAfter,
@@ -198,6 +201,85 @@ describe('error mapping', () => {
   it('returns undefined for 204 in runnerJSON', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
     await expect(runnerJSON('/api/share/x', { method: 'DELETE' })).resolves.toBeUndefined();
+  });
+});
+
+describe('retrying a retryable denial', () => {
+  const denial = (code: string, headers: Record<string, string> = {}) =>
+    jsonResponse(503, { detail: 'Try again shortly.', code, correlation_id: CID }, headers);
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([...RETRYABLE_CODES])('sends the same key again after %s', async (code) => {
+    fetchMock.mockResolvedValueOnce(denial(code)).mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+    const pending = runnerJSON<{ ok: boolean }>('/api/run', { method: 'POST', body: { code: 'x' } });
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+    await expect(pending).resolves.toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sentHeaders(1).get(IDEMPOTENCY_HEADER)).toBe(sentHeaders(0).get(IDEMPOTENCY_HEADER));
+    expect(fetchMock.mock.calls[1][1]!.body).toBe(fetchMock.mock.calls[0][1]!.body);
+  });
+
+  it('gives up after the last retry with the last denial', async () => {
+    fetchMock.mockImplementation(async () => denial('worker_unavailable'));
+    const pending = failure(runnerFetch('/api/run', { method: 'POST', body: {} }));
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS.reduce((a, b) => a + b, 0));
+    const err = await pending;
+    expect(err).toMatchObject({ status: 503, code: 'worker_unavailable' });
+    expect(fetchMock).toHaveBeenCalledTimes(1 + RETRY_DELAYS_MS.length);
+    const keys = fetchMock.mock.calls.map((_call, i) => sentHeaders(i).get(IDEMPOTENCY_HEADER));
+    expect(new Set(keys).size).toBe(1);
+    expect(err.idempotencyKey).toBe(keys[0]);
+  });
+
+  it('waits as long as a short Retry-After asks', async () => {
+    fetchMock.mockResolvedValueOnce(denial('quota_unavailable', { 'Retry-After': '5' }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+    const pending = runnerFetch('/api/run', { method: 'POST', body: {} });
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await pending;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['a limit', 429, 'quota_exceeded'],
+    ['a demo limit', 429, 'demo_limit_reached'],
+    ['a turned-off route', 503, 'route_disabled'],
+    ['a conflict', 409, 'already_in_flight'],
+    ['a missing record', 404, 'not_found'],
+  ])('leaves %s to the person', async (_what, status, code) => {
+    fetchMock.mockResolvedValue(jsonResponse(status, { detail: 'No.', code, correlation_id: CID }));
+    const err = await failure(runnerFetch('/api/run', { method: 'POST', body: {} }));
+    expect(err.code).toBe(code);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('never retries a read or a call that opts out', async () => {
+    fetchMock.mockResolvedValue(denial('worker_unavailable'));
+    await failure(runnerFetch('/api/pdf/health'));
+    await failure(runnerFetch('/api/run', { method: 'POST', body: {}, retries: 0 }));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops waiting when the action is cancelled', async () => {
+    fetchMock.mockResolvedValue(denial('worker_unavailable'));
+    const controller = new AbortController();
+    const pending = runnerFetch('/api/run', { method: 'POST', body: {}, signal: controller.signal }).catch(
+      (e: unknown) => e,
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    controller.abort();
+    const err = (await pending) as Error;
+    expect(err.name).toBe('AbortError');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

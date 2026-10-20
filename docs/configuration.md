@@ -108,10 +108,12 @@ Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads the
 | `ROUNDS_GATE_ATS_RULE` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/ai/ats-rule` |
 | `ROUNDS_GATE_PAPER_FETCH` | `enabled`, `disabled` | `disabled` | runner | yes; the `paper_url` fetch in `/api/ai/improve` |
 | `ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK` | `enabled`, `disabled` | `disabled` | runner | yes; AI provider base URLs on private addresses (RFC 1918, RFC 6598, IPv6 ULA) |
-| `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` | `off`, `observe`, `enforce` | `off` | runner | not yet (#1 stage 3); `Idempotency-Key` checks |
-| `ROUNDS_GATE_ENFORCE_QUOTA` | `off`, `observe`, `enforce` | `off` | runner | not yet (#1 stage 3); account, deployment, and demo quotas |
+| `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` | `off`, `observe`, `enforce` | `observe` | runner | `enforce` only; `Idempotency-Key` checks and replays on the admitted routes |
+| `ROUNDS_GATE_ENFORCE_QUOTA` | `off`, `observe`, `enforce` | `observe` | runner | `enforce` only; account, deployment, and demo quotas on the admitted routes |
 
 Each route gate is that route's off switch. Set it to `disabled` and restart the runner, and the route answers 503 `route_disabled` before it reads the request; nothing else changes. [The execution runbook](security/execution-runbook.md) covers flipping and confirming each gate and what each error code means.
+
+The two enforcement gates decide admission steps 6 and 7. `off` skips them. `observe`, the default for now, checks every request, records in its `decision` line what enforcing would have answered (`would_deny`), and denies nothing. `enforce` denies: a missing key is 400 `idempotency_key_required`, a completed command's retry gets its stored response, a reused or still-running key is 409, an over-limit request is 429 with `Retry-After`, and an unreachable admission store is 503 `quota_unavailable`. The next `v*` release sets both to `enforce`; [the runbook](security/execution-runbook.md#idempotency-and-quotas) has the limits and how to read the observe lines first.
 
 Two outbound switches start off. `PAPER_FETCH` lets `/api/ai/improve` fetch a publication's `paper_url`. `PROVIDER_PRIVATE_NETWORK` lets an AI provider base URL point at a private address, for a model server on your LAN. Enabled, every account's provider URL can reach this deployment's private network, its own services included, so enable it only when you trust every account. Loopback, link-local, and cloud metadata addresses and service names such as `pocketbase` or `*.svc` stay refused either way, with 403 `destination_denied`.
 

@@ -20,7 +20,7 @@ import os
 import urllib.error
 import urllib.request
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field
@@ -85,6 +85,10 @@ def _render(html: str, margin_mm: int) -> Response:
 
 
 @router.post("/render")
-async def render(req: RenderRequest):
+async def render(request: Request, req: RenderRequest):
+    # No PDF is kept, so a completed render's replay answers 409
+    # already_completed.
+    # TODO(ROUNDS-00A-L06): #6's stage 3 stores render output and replays it.
+    await admission.begin(request, req, wall_seconds=RENDER_TIMEOUT_S)
     async with admission.allocate():
         return await run_in_threadpool(_render, req.html, req.margin_mm)

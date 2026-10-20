@@ -5,6 +5,33 @@
   "adapters": [
     {
       "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700006100_admission.js", "lines": "51"},
+      "legacyName": "admission_commands",
+      "decidedBy": "ROUNDS-00A-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-02-L01",
+      "note": "Server-only admission state for admission/v1 (idempotency, quotas, leases); never shown to a user. #18 ratifies or migrates it."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700006100_admission.js", "lines": "84"},
+      "legacyName": "admission_counters",
+      "decidedBy": "ROUNDS-00A-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-02-L01",
+      "note": "Server-only admission state for admission/v1 (idempotency, quotas, leases); never shown to a user. #18 ratifies or migrates it."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700006100_admission.js", "lines": "112"},
+      "legacyName": "admission_leases",
+      "decidedBy": "ROUNDS-00A-L01",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-02-L01",
+      "note": "Server-only admission state for admission/v1 (idempotency, quotas, leases); never shown to a user. #18 ratifies or migrates it."
+    },
+    {
+      "kind": "collection",
       "source": {"path": "pocketbase/pb_migrations/1700001100_ai_coding.js", "lines": "101"},
       "legacyName": "ai_coding_attempts",
       "termId": "practice-attempt",

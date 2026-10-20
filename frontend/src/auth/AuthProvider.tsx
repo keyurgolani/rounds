@@ -94,12 +94,12 @@ async function resetDemoUser(record: AuthRecord): Promise<void> {
     await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));
   }
 
+  // Only profile fields: PocketBase refuses a client write to is_demo or
+  // the old demo flags, and the runner's demo tier holds the limits.
   const updated = await pb.collection('users').update(userId, {
     name: 'Rounds Demo',
     bio: 'Disposable hosted demo account. Changes reset on logout.',
     target: 'Explore Rounds',
-    demo_run_used: false,
-    demo_evaluate_used: false,
   });
   pb.authStore.save(pb.authStore.token, updated);
 

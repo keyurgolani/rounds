@@ -22,12 +22,14 @@ Resolution, the same in all three readers:
    SPA reads ``VITE_DISABLE_SIGNUPS``, as each does today.
 4. Otherwise the written default applies.
 
-Admission (``app/admission.py``) enforces the route gates, the AI
+Admission (``app/admission.py``) enforces the route gates and runs steps
+6 and 7 as ``ENFORCE_IDEMPOTENCY`` and ``ENFORCE_QUOTA`` say, the AI
 router reads ``PAPER_FETCH`` and ``PROVIDER_PRIVATE_NETWORK``, and
 PocketBase and the SPA read ``SIGNUPS``.
 
-TODO(ROUNDS-00A-L01): stage 3 enforces ``ENFORCE_IDEMPOTENCY`` and
-``ENFORCE_QUOTA``; until then admission passes steps 6 and 7 through.
+The two enforcement gates start at ``observe``: admission records what
+it would deny and denies nothing. The next ``v*`` release sets them to
+``enforce``.
 """
 from __future__ import annotations
 
@@ -126,7 +128,7 @@ REGISTRY: tuple[Gate, ...] = (
     Gate(
         name="ENFORCE_IDEMPOTENCY",
         values=ENFORCEMENT_VALUES,
-        default="off",
+        default="observe",
         closed="enforce",
         readers=frozenset({RUNNER}),
         description="Idempotency-Key checks on admitted routes.",
@@ -134,7 +136,7 @@ REGISTRY: tuple[Gate, ...] = (
     Gate(
         name="ENFORCE_QUOTA",
         values=ENFORCEMENT_VALUES,
-        default="off",
+        default="observe",
         closed="enforce",
         readers=frozenset({RUNNER}),
         description="Account, deployment, and demo quotas on admitted routes.",

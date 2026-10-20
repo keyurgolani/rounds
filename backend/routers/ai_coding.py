@@ -107,6 +107,7 @@ def _checkpoints_for(round_row: dict[str, Any], language: str | None) -> tuple[s
 
 @router.post("/run-project", response_model=RunProjectResponse)
 async def run_project_route(request: Request, req: RunProjectRequest) -> RunProjectResponse:
+    await admission.begin(request, req, wall_seconds=RUN_PROJECT_TIMEOUT_S)
     user = admission.account(request)
     round_row = await admission.first_item(pb_get, user["token"], "ai_coding_rounds", req.round_slug)
     language, checkpoints = _checkpoints_for(round_row, req.language)
@@ -368,7 +369,10 @@ def _grade_checkpoints(slug: str, checkpoints: Any, files: Dict[str, str], langu
 
 
 @router.post("/grade")
-async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[str, Any]:
+async def grade(request: Request, body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[str, Any]:
+    # Admitted on one checkpoint's time; the charge settles once the
+    # round loads.
+    await admission.begin(request, body, wall_seconds=GRADE_CHECKPOINT_TIMEOUT_S)
     # Look up the round server-side. Don't trust the client to ship
     # checkpoints/rubric/hidden_files — those drive grading and must
     # come from the seeded source of truth.
@@ -376,6 +380,10 @@ async def grade(body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[st
     checkpoints = round_row.get("checkpoints") or []
     rubric = round_row.get("rubric") or {"items": []}
     language = round_row.get("language") or "python"
+    graded = len(checkpoints) if isinstance(checkpoints, (list, dict)) else 0
+    await admission.settle(
+        request, min(graded, limits.MAX_CHECKPOINT_INDEX + 1) * GRADE_CHECKPOINT_TIMEOUT_S
+    )
 
     async with admission.allocate() as slot:
         test_results = await run_in_threadpool(

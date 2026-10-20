@@ -37,20 +37,33 @@ services:
       start_period: 3s
     restart: "no"
 
-  # Present so the harness is shaped like prod and later stages (ROUNDS-00A-L01
-  # stage 4 deployment verification) can exercise it. The stage-1 launcher does
-  # not start it; the account-scope rule probes talk to PocketBase directly.
+  # Shaped like prod: the runner, plus runner-b, a second replica of the same
+  # image on the same PocketBase, as k8s/runner.yaml runs two. The launcher
+  # starts both for the admission phase (ROUNDS-00A-L01 stage 3); the
+  # account-scope rule probes talk to PocketBase directly.
   runner:
     build:
       context: ../backend
     image: ${IMAGE_PREFIX:-rounds-9s1}-runner:test
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-    environment:
+    environment: &runner-environment
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-}
       - POCKETBASE_URL=http://pocketbase:8090
       - AI_KEY_SECRET=${AI_KEY_SECRET:-rounds-dev-key-DO-NOT-USE-IN-PROD}
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
+      - ROUNDS_GATE_ENFORCE_IDEMPOTENCY=${ROUNDS_GATE_ENFORCE_IDEMPOTENCY:-}
+      - ROUNDS_GATE_ENFORCE_QUOTA=${ROUNDS_GATE_ENFORCE_QUOTA:-}
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+    restart: "no"
+
+  # The image runner builds; this replica never builds its own.
+  runner-b:
+    image: ${IMAGE_PREFIX:-rounds-9s1}-runner:test
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment: *runner-environment
     depends_on:
       pocketbase:
         condition: service_healthy

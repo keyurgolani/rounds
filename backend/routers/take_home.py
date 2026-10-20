@@ -113,9 +113,11 @@ class TakeHomeRunResponse(BaseModel):
 
 @router.post("/run", response_model=TakeHomeRunResponse)
 async def run_route(
+    request: Request,
     body: TakeHomeRunRequest,
     user: dict = Depends(_auth_user),
 ) -> TakeHomeRunResponse:
+    await admission.begin(request, body, wall_seconds=RUN_TIMEOUT_S)
     a, entrypoint = await _admitted_assignment(user, body.assignment_slug)
     merged = _merge_with_harness(body.files, a.get("harness_files") or [])
     async with admission.allocate() as slot:
@@ -157,9 +159,12 @@ class TakeHomeSubmitRequest(StrictModel):
 
 @router.post("/submit")
 async def submit_route(
+    request: Request,
     body: TakeHomeSubmitRequest,
     user: dict = Depends(_auth_user),
 ) -> Dict[str, Any]:
+    # A replay answers here, so it saves no second attempt row.
+    await admission.begin(request, body, wall_seconds=SUBMIT_TIMEOUT_S)
     a, entrypoint = await _admitted_assignment(user, body.assignment_slug)
     if body.campaign_id:
         await _own_campaign(user, body.campaign_id)

@@ -15,6 +15,12 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
   scan    with PocketBase stopped, run the cross-owner relation scan against
           the run's pb_data (read-only) and a fixture copy of it; see
           scan_check.py.
+  admission
+          with two runner replicas up on the one PocketBase, check admission
+          state across them (ROUNDS-00A-L01 stage 3); see admission_check.py.
+  admission-migration
+          apply and reverse the admission migration with the pinned binary on
+          a 62d4eae-shaped pb_data; see admission_migration_check.py.
 
 Exit code is non-zero on any failure, any missing result, or any pending
 family that has started to behave like an implemented one.
@@ -272,13 +278,21 @@ def run_verdict(doc: dict, receipts_path: str) -> int:
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("usage: run.py {main|hook|verdict|scan}", file=sys.stderr)
+        print("usage: run.py {main|hook|verdict|scan|admission|admission-migration}", file=sys.stderr)
         return 2
     phase = sys.argv[1]
     if phase == "scan":
         import scan_check
 
         return scan_check.main()
+    if phase == "admission":
+        import admission_check
+
+        return admission_check.main()
+    if phase == "admission-migration":
+        import admission_migration_check
+
+        return admission_migration_check.main()
     policy_path = os.environ.get("POLICY_PATH", "/policy/account-scope.v1.json")
     receipts_path = os.environ.get("RECEIPTS_PATH", "/out/receipts.jsonl")
     doc = policy.load(policy_path)

@@ -140,7 +140,7 @@ describe('vocabulary: leaf references', () => {
   });
 
   it('rejects an adapter with both termId and decidedBy, or missing its kind-specific field', () => {
-    only(run(fixture((dir) => editJson(dir, ADAPTERS, (d) => { d.adapters[0].decidedBy = 'ROUNDS-28-L01'; }))), 'VOCAB_ADAPTER_INVALID');
+    only(run(fixture((dir) => editJson(dir, ADAPTERS, (d) => { d.adapters.find((a) => a.termId).decidedBy = 'ROUNDS-28-L01'; }))), 'VOCAB_ADAPTER_INVALID');
     only(run(fixture((dir) => editJson(dir, ADAPTERS, (d) => { delete d.adapters.find((a) => a.kind === 'collection').source.lines; }))), 'VOCAB_ADAPTER_INVALID');
   });
 });
@@ -193,12 +193,13 @@ describe('vocabulary: coverage set (schema)', () => {
   const analysis = analyzeCoverage(ctx, reg, byId);
   const cov = analysis.cov;
 
-  it('extracts exactly 40 live and 3 historical collections at baseline', () => {
+  it('extracts exactly 43 live and 3 historical collections: the baseline 40 and the three admission collections', () => {
     const live = cov.collections.filter((c) => !c.historical).map((c) => c.name);
     const historical = cov.collections.filter((c) => c.historical).map((c) => c.name).sort();
-    assert.equal(live.length, 40);
+    assert.equal(live.length, 43);
     assert.deepEqual(historical, ['anecdotes', 'experience_items', 'resume_bullets']);
     assert.ok(live.includes('users'));
+    for (const c of ['admission_commands', 'admission_counters', 'admission_leases']) assert.ok(live.includes(c), c);
     for (const j of ['exp_job_projects', 'exp_job_anecdotes', 'exp_job_bullets', 'exp_project_anecdotes', 'exp_project_bullets', 'exp_anecdote_bullets']) assert.ok(live.includes(j), j);
     assert.ok(live.includes('ai_settings'), 'ai_settings is dropped and recreated, so it is live');
   });
@@ -310,7 +311,7 @@ describe('vocabulary: stored legacy terms (migration)', () => {
       }
     }
     const collections = adapters.filter((a) => a.kind === 'collection');
-    assert.equal(collections.length, 43);
+    assert.equal(collections.length, 46);
     for (const a of collections) {
       assert.ok(a.termId || a.decidedBy, a.legacyName);
       assert.ok(resolve(a.retiringLeaf).ok, a.legacyName);
@@ -519,6 +520,6 @@ describe('vocabulary: extraction without adapters', () => {
     writeJson(dir, ADAPTERS, { registry: 'rounds-vocabulary-adapters', adapters: [] });
     const cov = extractCoverage(ctxFor(dir));
     assert.equal(cov.unresolvedCollections.length, 1);
-    assert.equal(cov.collections.filter((c) => !c.historical).length, 34);
+    assert.equal(cov.collections.filter((c) => !c.historical).length, 37);
   });
 });
