@@ -156,41 +156,82 @@ export function lineOf(text, needle, from = 0) {
   return line;
 }
 
-// Line of a JSON key path like ['terms', 3, 'owningLeaf'] in pretty-printed
-// JSON. Best effort: finds the nth element's opening and then the key.
+// Line of a JSON path like ['terms', 3, 'owningLeaf']: walks the document
+// structurally, so a key is found only in the object the path names. Stops
+// at the deepest part it can reach (1 when the text isn't JSON there).
 export function jsonLine(text, pathParts) {
-  let from = 0;
+  let i = skipJsonWs(text, 0);
+  let reached = i;
   for (const part of pathParts) {
-    if (typeof part === 'number') {
-      // Advance to the start of the part-th object in the current array.
-      let count = -1;
-      let depth = 0;
-      let i = from;
-      for (; i < text.length; i++) {
-        const ch = text[i];
-        if (ch === '"') { i = skipJsonString(text, i); continue; }
-        if (ch === '{' || ch === '[') {
-          if (depth === 1 && ch === '{') { count++; if (count === part) break; }
-          depth++;
-        } else if (ch === '}' || ch === ']') {
-          depth--;
-          if (depth === 0) break;
-        }
-      }
-      from = i;
-    } else {
-      const idx = text.indexOf(`"${part}"`, from);
-      if (idx === -1) break;
-      from = idx;
-    }
+    const next = typeof part === 'number' ? jsonElement(text, i, part) : jsonMember(text, i, part);
+    if (!next) break;
+    reached = next.at;
+    i = next.value;
   }
   let line = 1;
-  for (let i = 0; i < from && i < text.length; i++) if (text.charCodeAt(i) === 10) line++;
+  for (let k = 0; k < reached && k < text.length; k++) if (text.charCodeAt(k) === 10) line++;
   return line;
 }
 
+function skipJsonWs(text, i) {
+  while (i < text.length && /\s/.test(text[i])) i++;
+  return i;
+}
+
 function skipJsonString(text, i) {
+  // text[i] is the opening quote; returns the index just past the closing one.
   let j = i + 1;
   while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+  return j + 1;
+}
+
+function skipJsonValue(text, i) {
+  const ch = text[i];
+  if (ch === '"') return skipJsonString(text, i);
+  if (ch === '{' || ch === '[') {
+    let depth = 0;
+    let j = i;
+    while (j < text.length) {
+      const c = text[j];
+      if (c === '"') { j = skipJsonString(text, j); continue; }
+      if (c === '{' || c === '[') depth++;
+      else if (c === '}' || c === ']') { depth--; if (depth === 0) return j + 1; }
+      j++;
+    }
+    return text.length;
+  }
+  let j = i;
+  while (j < text.length && !/[\s,}\]]/.test(text[j])) j++;
   return j;
+}
+
+// Member `key` of the object at text[i]: { at: key offset, value: value offset }.
+function jsonMember(text, i, key) {
+  if (text[i] !== '{') return null;
+  let j = skipJsonWs(text, i + 1);
+  while (j < text.length && text[j] !== '}') {
+    if (text[j] !== '"') return null;
+    const keyEnd = skipJsonString(text, j);
+    let name;
+    try { name = JSON.parse(text.slice(j, keyEnd)); } catch { return null; }
+    let k = skipJsonWs(text, keyEnd);
+    if (text[k] !== ':') return null;
+    k = skipJsonWs(text, k + 1);
+    if (name === key) return { at: j, value: k };
+    j = skipJsonWs(text, skipJsonValue(text, k));
+    if (text[j] === ',') j = skipJsonWs(text, j + 1);
+  }
+  return null;
+}
+
+// Element n of the array at text[i]: { at, value } (both the element offset).
+function jsonElement(text, i, n) {
+  if (text[i] !== '[') return null;
+  let j = skipJsonWs(text, i + 1);
+  for (let count = 0; j < text.length && text[j] !== ']'; count++) {
+    if (count === n) return { at: j, value: j };
+    j = skipJsonWs(text, skipJsonValue(text, j));
+    if (text[j] === ',') j = skipJsonWs(text, j + 1);
+  }
+  return null;
 }

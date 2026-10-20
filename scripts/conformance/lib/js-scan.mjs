@@ -364,7 +364,7 @@ export function readJsxOpeningElement(src, i) {
       const quoted = /^(["'])((?:\\.|(?!\1)[^\\])*)\1$/s.exec(inner);
       if (quoted) literal = readQuoted(inner, 0).value;
       else if (/^`[^`]*`$/s.test(inner) && !inner.includes('${')) literal = inner.slice(1, -1);
-      attributes.push({ name: attr.name, start, kind: literal === null ? 'expression' : 'string', literal });
+      attributes.push({ name: attr.name, start, kind: literal === null ? 'expression' : 'string', literal, expression: inner });
       j = exprEnd;
       continue;
     }

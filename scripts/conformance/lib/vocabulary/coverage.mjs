@@ -32,13 +32,16 @@ export const BACKEND_MAIN = 'backend/main.py';
 export const APP_ROUTES = 'frontend/src/App.tsx';
 export const LAYOUT = 'frontend/src/components/Layout.tsx';
 export const COMMAND_REGISTRY = 'frontend/src/command-center/registry.tsx';
+// The six positioning lines. Each is found by content, never by line number:
+// the line that equals the rendered template, or else the legacy line its
+// adapter entry records.
 export const POSITIONING_SITES = [
-  { path: 'README.md', line: 1, template: '# Rounds: {title}' },
-  { path: 'README.md', line: 3, template: '{statement}' },
-  { path: 'docs/architecture.md', line: 3, template: '{statement}' },
-  { path: 'frontend/index.html', line: 17, template: '<title>Rounds: {title}</title>' },
-  { path: 'frontend/src/pages/Login.tsx', line: 239, template: '<div className="eyebrow mb-2">Rounds · {title}</div>' },
-  { path: 'SHOWCASE.md', line: 3, template: '{statement}' },
+  { path: 'README.md', template: '# Rounds: {title}' },
+  { path: 'README.md', template: '{statement}' },
+  { path: 'docs/architecture.md', template: '{statement}' },
+  { path: 'frontend/index.html', template: '<title>Rounds: {title}</title>' },
+  { path: 'frontend/src/pages/Login.tsx', template: '<div className="eyebrow mb-2">Rounds · {title}</div>' },
+  { path: 'SHOWCASE.md', template: '{statement}' },
 ];
 
 const item = (kind, name, file, line, extra = {}) => ({ kind, name, path: file, line, ...extra });
@@ -229,34 +232,50 @@ export function extractStoredValues(ctx) {
     }
   }
   if (ctx.exists(INTERVIEW_TYPES_PATH)) {
-    const src = ctx.read(INTERVIEW_TYPES_PATH);
-    const tokens = tokenize(src);
+    const tokens = tokenize(ctx.read(INTERVIEW_TYPES_PATH));
     const field = 'interview_rounds.round_type';
-    for (let i = 0; i < tokens.length; i++) {
-      const t = tokens[i];
-      if (t.type === 'ident' && t.value === 'INTERVIEW_TYPES' && tokens[i + 1]?.value === ':') {
-        // export const INTERVIEW_TYPES: InterviewTypeEntry[] = [ ... ]
-        let open = i + 2;
-        while (open < tokens.length && tokens[open].value !== '=') open++;
-        open++;
-        if (tokens[open]?.value !== '[') continue;
-        for (let j = open + 1; j < matchClose(tokens, open); j++) {
-          if (tokens[j].value !== '{') continue;
-          const key = objectProperties(tokens, j).get('key');
-          if (key && tokens[key.valueStart].type === 'string') items.push(item('stored-value', tokens[key.valueStart].value, INTERVIEW_TYPES_PATH, tokens[key.valueStart].line, { field }));
-          j = matchClose(tokens, j);
-        }
+    // export const INTERVIEW_TYPES: InterviewTypeEntry[] = [ ... ]
+    const types = declarationValue(tokens, 'INTERVIEW_TYPES', '[');
+    if (types !== -1) {
+      for (let j = types + 1; j < matchClose(tokens, types); j++) {
+        if (tokens[j].value !== '{') continue;
+        const key = objectProperties(tokens, j).get('key');
+        if (key && tokens[key.valueStart].type === 'string') items.push(item('stored-value', tokens[key.valueStart].value, INTERVIEW_TYPES_PATH, tokens[key.valueStart].line, { field }));
+        j = matchClose(tokens, j);
       }
-      if (t.type === 'ident' && t.value === 'INTERVIEW_TYPE_ALIASES') {
-        let open = i + 1;
-        while (open < tokens.length && tokens[open].value !== '=') open++;
-        open++;
-        if (tokens[open]?.value !== '{') continue;
-        for (const [name, prop] of objectProperties(tokens, open)) items.push(item('stored-value', name, INTERVIEW_TYPES_PATH, tokens[prop.keyIndex].line, { field, alias: true }));
-      }
+    }
+    // const INTERVIEW_TYPE_ALIASES: Record<string, string> = { ... }
+    const aliases = declarationValue(tokens, 'INTERVIEW_TYPE_ALIASES', '{');
+    if (aliases !== -1) {
+      for (const [name, prop] of objectProperties(tokens, aliases)) items.push(item('stored-value', name, INTERVIEW_TYPES_PATH, tokens[prop.keyIndex].line, { field, alias: true }));
     }
   }
   return items;
+}
+
+// Index of the opening bracket of `const <name>[: Type] = <opener>`, or -1.
+// Uses of the name elsewhere in the file never match.
+function declarationValue(tokens, name, opener) {
+  for (let i = 1; i < tokens.length - 1; i++) {
+    const t = tokens[i];
+    if (t.type !== 'ident' || t.value !== name) continue;
+    if (!['const', 'let', 'var'].includes(tokens[i - 1].value)) continue;
+    let j = i + 1;
+    if (tokens[j].value === ':') {
+      // Skip the type annotation: angle brackets and [] nest.
+      let depth = 0;
+      for (j = j + 1; j < tokens.length; j++) {
+        const v = tokens[j].value;
+        if (v === '<' || v === '[' || v === '(' || (v === '{' && depth > 0)) depth++;
+        else if (v === '>' || v === ']' || v === ')' || (v === '}' && depth > 0)) depth--;
+        else if (depth === 0 && v === '=') break;
+        else if (depth === 0 && v === ';') return -1;
+      }
+    }
+    if (tokens[j]?.value !== '=') return -1;
+    return tokens[j + 1]?.value === opener ? j + 1 : -1;
+  }
+  return -1;
 }
 
 // ------------------------------------------------------------- api routes
@@ -316,24 +335,62 @@ function pushString(map, name, file, line) {
   if (!entry.lines.includes(line)) entry.lines.push(line);
 }
 
+// String value of an object property when it is one string literal (either
+// quote style) or a template literal without substitutions.
+function literalValue(tokens, prop) {
+  if (!prop || prop.shorthand || prop.valueEnd - prop.valueStart !== 1) return null;
+  const t = tokens[prop.valueStart];
+  if (t.type === 'string') return t;
+  if (t.type === 'template' && !t.hasExpressions) return t;
+  return null;
+}
+
+// Object literals in src that carry every property in `keys` as a literal,
+// in any order: yields { tokens, props, values }.
+function* literalObjects(src, keys) {
+  const tokens = tokenize(src);
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].type !== 'punct' || tokens[i].value !== '{') continue;
+    const props = objectProperties(tokens, i);
+    const values = {};
+    let ok = true;
+    for (const k of keys) {
+      const v = literalValue(tokens, props.get(k));
+      if (!v) { ok = false; break; }
+      values[k] = v;
+    }
+    if (ok) yield { tokens, props, values };
+  }
+}
+
 export function extractUiStrings(ctx) {
   const found = new Map();
   if (ctx.exists(LAYOUT)) {
     const src = ctx.read(LAYOUT);
     const starts = lineStarts(src);
-    // Navigation definitions: objects with a path and a label.
-    for (const m of src.matchAll(/\{\s*path:\s*'([^']*)',\s*label:\s*'([^']*)'/g)) pushString(found, m[2], LAYOUT, lineAt(starts, m.index));
-    // User-menu destinations: <MenuItem label="..." onClick={() => onNavigate('/x')} />.
-    for (const m of src.matchAll(/<MenuItem\s+label="([^"]*)"\s+onClick=\{\(\)\s*=>\s*(?:onNavigate|go)\('([^']*)'\)\}/g)) pushString(found, m[1], LAYOUT, lineAt(starts, m.index));
+    // Navigation definitions: objects with a literal path and label, in any
+    // key order and quote style.
+    for (const { values } of literalObjects(src, ['path', 'label'])) pushString(found, values.label.value, LAYOUT, values.label.line);
+    // User-menu destinations: <MenuItem label="..." onClick={() => onNavigate('/x')} />,
+    // attributes in any order.
+    for (const m of src.matchAll(/<MenuItem\b/g)) {
+      const el = readJsxOpeningElement(src, m.index);
+      const label = el.attributes.find((a) => a.name === 'label' && a.kind === 'string');
+      const click = el.attributes.find((a) => a.name === 'onClick' && a.kind === 'expression');
+      if (!label || !click || !/^\(\)\s*=>\s*(?:onNavigate|go)\(\s*(["'`])[^"'`]*\1\s*\)$/.test(click.expression)) continue;
+      pushString(found, label.literal, LAYOUT, lineAt(starts, label.start));
+    }
     // Sidebar section headings: <div className="eyebrow ...">Text</div>.
-    for (const m of src.matchAll(/<div className="eyebrow[^"]*"[^>]*>\s*([^<{}]+?)\s*<\/div>/g)) pushString(found, m[1], LAYOUT, lineAt(starts, m.index + m[0].indexOf(m[1])));
+    for (const m of src.matchAll(/<div className=(?:"|'|\{["'`])eyebrow[^"'`]*(?:"|'|["'`]\})[^>]*>\s*([^<{}]+?)\s*<\/div>/g)) pushString(found, m[1], LAYOUT, lineAt(starts, m.index + m[0].indexOf(m[1])));
   }
   if (ctx.exists(COMMAND_REGISTRY)) {
     const src = ctx.read(COMMAND_REGISTRY);
-    const starts = lineStarts(src);
-    for (const m of src.matchAll(/\bid:\s*'([^']+)',\s*label:\s*'([^']+)',(?:\s*description:\s*'([^']+)',)?/g)) {
-      pushString(found, m[2], COMMAND_REGISTRY, lineAt(starts, m.index + m[0].indexOf(`'${m[2]}'`)));
-      if (m[3]) pushString(found, m[3], COMMAND_REGISTRY, lineAt(starts, m.index + m[0].indexOf(`'${m[3]}'`)));
+    // Command Center entries: objects with a literal id and label, and the
+    // description when it is a literal, in any key order and quote style.
+    for (const { tokens, props, values } of literalObjects(src, ['id', 'label'])) {
+      pushString(found, values.label.value, COMMAND_REGISTRY, values.label.line);
+      const description = literalValue(tokens, props.get('description'));
+      if (description) pushString(found, description.value, COMMAND_REGISTRY, description.line);
     }
   }
   return [...found.values()];
@@ -373,14 +430,37 @@ export function renderPositioning(template, positioning) {
   return template.replace('{statement}', positioning.statement).replace('{title}', positioning.title);
 }
 
-export function extractPositioning(ctx) {
+// Locates each positioning site by content. `candidates(site)` lists the
+// texts that may stand there ({ text, adapter? }), in order of preference;
+// the item's name is the matching text and its line where it was found, or
+// name null when no line in the file matches.
+export function extractPositioning(ctx, candidates = () => []) {
   return POSITIONING_SITES.map((site) => {
-    const text = ctx.exists(site.path) ? (ctx.read(site.path).split('\n')[site.line - 1] ?? '') : '';
-    return item('positioning', text.trim(), site.path, site.line, { template: site.template });
+    const lines = ctx.exists(site.path) ? ctx.read(site.path).split('\n').map((l) => l.trim()) : [];
+    const options = candidates(site);
+    for (const candidate of options) {
+      const idx = lines.indexOf(candidate.text.trim());
+      if (idx !== -1) return item('positioning', candidate.text.trim(), site.path, idx + 1, { template: site.template, found: candidate });
+    }
+    return item('positioning', null, site.path, nearestLine(lines, options.map((c) => c.text.trim())), { template: site.template, found: null });
   });
 }
 
-export function extractCoverage(ctx, resolveNonLiteral) {
+// For a finding's line only: the line sharing the longest prefix (at least
+// eight characters) with any candidate text, else 1.
+function nearestLine(lines, texts) {
+  let best = { line: 1, length: 7 };
+  lines.forEach((l, i) => {
+    for (const t of texts) {
+      let n = 0;
+      while (n < l.length && n < t.length && l[n] === t[n]) n++;
+      if (n > best.length) best = { line: i + 1, length: n };
+    }
+  });
+  return best.line;
+}
+
+export function extractCoverage(ctx, resolveNonLiteral, positioningCandidates) {
   const collections = extractCollections(ctx, resolveNonLiteral);
   const headers = extractAppHeaders(ctx);
   return {
@@ -392,6 +472,6 @@ export function extractCoverage(ctx, resolveNonLiteral) {
     uiStrings: extractUiStrings(ctx),
     appHeaders: headers.items,
     appHeaderCallSites: headers.callSites,
-    positioning: extractPositioning(ctx),
+    positioning: extractPositioning(ctx, positioningCandidates),
   };
 }

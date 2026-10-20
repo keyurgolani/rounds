@@ -55,12 +55,32 @@ describe('vocabulary: contract shape and collisions', () => {
   });
 
   it('rejects an alias that equals a canonical term', () => {
-    only(run(fixture((dir) => editTerm(dir, 'pursuit', (t) => { t.aliases.push('Offer'); }))), 'VOCAB_ALIAS_SHADOWS_TERM');
+    // "Career Activity" is a canonical term and no term's label.
+    only(run(fixture((dir) => editTerm(dir, 'pursuit', (t) => { t.aliases.push('Career Activity'); }))), 'VOCAB_ALIAS_SHADOWS_TERM');
+  });
+
+  it("rejects an alias that equals another term's label or label option", () => {
+    // "Interview" is a Career Activity label option, not a canonical term.
+    only(run(fixture((dir) => editTerm(dir, 'interview-process', (t) => { t.aliases.push('Interview'); }))), 'VOCAB_ALIAS_SHADOWS_LABEL');
+    only(run(fixture((dir) => editTerm(dir, 'opportunity', (t) => { t.aliases.push('Follow-ups'); }))), 'VOCAB_ALIAS_SHADOWS_LABEL');
   });
 
   it('rejects a pack term that equals a platform one', () => {
-    only(run(fixture((dir) => editTerm(dir, 'track-coding', (t) => { t.aliases.push('Proposed change'); }))), 'VOCAB_PACK_REDEFINES_PLATFORM');
+    only(run(fixture((dir) => editTerm(dir, 'track-coding', (t) => { t.term = 'Proposed change'; }))), 'VOCAB_PACK_REDEFINES_PLATFORM');
     only(run(fixture((dir) => editTerm(dir, 'track-behavioral', (t) => { t.term = 'Revision'; }))), 'VOCAB_PACK_REDEFINES_PLATFORM');
+  });
+
+  it("reports a term's own line, not the first \"terms\" key", () => {
+    const dir = fixture((d) => editTerm(d, 'practice', (t) => { t.aliases.push('Career Activity'); }));
+    const findings = run(dir);
+    only(findings, 'VOCAB_ALIAS_SHADOWS_TERM');
+    const lines = fs.readFileSync(path.join(dir, TERMS), 'utf8').split('\n');
+    // The term entry, not the "practice" scope category above it.
+    const ownStart = lines.findIndex((l, i) => l.includes('"id": "practice"') && (lines[i + 1] || '').includes('"term": "Practice"')) + 1;
+    const aliasLine = lines.findIndex((l, i) => i >= ownStart && l.includes('"Career Activity"')) + 1;
+    // The finding points into the practice entry (its aliases key), not at
+    // coreConcepts.terms near the top of the file.
+    assert.ok(findings[0].line >= ownStart && findings[0].line <= aliasLine, `line ${findings[0].line} is outside practice (${ownStart}-${aliasLine})`);
   });
 
   it('rejects a term without owningLeaf', () => {
@@ -223,6 +243,50 @@ describe('vocabulary: coverage set (schema)', () => {
     assert.equal(findings[0].path, 'pocketbase/pb_migrations/1700003000_experience_connections.js');
   });
 
+  it('takes an adapter entry per site for a collection created at one site and dropped in a loop at another', () => {
+    const JUNCTIONS = ['exp_job_projects', 'exp_job_anecdotes', 'exp_job_bullets', 'exp_project_anecdotes', 'exp_project_bullets', 'exp_anecdote_bullets'];
+    const DROP = 'pocketbase/pb_migrations/1700099000_drop_experience_junctions.js';
+    const dropLoop = [
+      'migrate((db) => {',
+      '  const dao = new Dao(db);',
+      `  for (const name of ${JSON.stringify(JUNCTIONS)}) {`,
+      '    dao.deleteCollection(dao.findCollectionByNameOrId(name));',
+      '  }',
+      '}, (db) => {});',
+      '',
+    ].join('\n');
+    const withDrop = (d) => fs.writeFileSync(path.join(d, DROP), dropLoop);
+    // The drop site has no entries yet: the check asks for them.
+    const missing = run(fixture(withDrop));
+    only(missing, 'VOCAB_NONLITERAL_COLLECTION');
+    assert.equal(missing[0].path, DROP);
+    // One entry per junction at the drop site; the create-site entries still count.
+    const dir = fixture((d) => {
+      withDrop(d);
+      editJson(d, ADAPTERS, (data) => {
+        for (const name of JUNCTIONS) {
+          const create = data.adapters.find((a) => a.kind === 'collection' && a.legacyName === name);
+          data.adapters.push({ ...create, source: { path: DROP, lines: '4' } });
+        }
+      });
+    });
+    assert.deepEqual(run(dir), []);
+  });
+
+  it('reads Layout and Command Center strings in either quote style and any key order', () => {
+    const layout = run(fixture((dir) => editText(dir, 'frontend/src/components/Layout.tsx', (s) => s.replace("{ path: '/dashboard', label: 'Today', glyph: DashGlyph },", "{ path: '/dashboard', label: 'Today', glyph: DashGlyph },\n  { glyph: DashGlyph, label: \"Today's plan\", path: \"/plan\" },"))));
+    only(layout, 'VOCAB_UNCOVERED_NAME');
+    assert.match(layout[0].message, /Today's plan/);
+    const registry = run(fixture((dir) => editText(dir, 'frontend/src/command-center/registry.tsx', (s) => s.replace("label: 'Add todo',", 'label: "Add a quick note",'))));
+    assert.deepEqual(codes(registry), ['VOCAB_ADAPTER_STALE', 'VOCAB_UNCOVERED_NAME']);
+    assert.ok(registry.some((f) => /Add a quick note/.test(f.message)));
+  });
+
+  it('reads interview-type aliases only from their declaration', () => {
+    const findings = run(fixture((dir) => editText(dir, 'frontend/src/applications/interviewTypes.ts', (s) => `${s}\nexport const LATER = INTERVIEW_TYPE_ALIASES;\nconst extra = { bogus_kind: 'x' };\n`)));
+    assert.deepEqual(findings, []);
+  });
+
   it('fails an adapter entry whose name is gone', () => {
     only(run(fixture((dir) => editJson(dir, ADAPTERS, (d) => {
       d.adapters.push({ kind: 'ui-string', source: { path: 'frontend/src/components/Layout.tsx', lines: '1' }, legacyName: 'Nonexistent', termId: 'action', targetLabel: 'Actions', retiringLeaf: 'ROUNDS-33-L02' });
@@ -265,6 +329,15 @@ describe('vocabulary: documentation', () => {
     only(run(fixture((dir) => editText(dir, 'README.md', (s) => s.replace(/^Rounds is a self-hostable career command center.*$/m, 'Rounds is an interview prep tool.')))), 'VOCAB_POSITIONING_STALE');
     const showcase = run(fixture((dir) => editText(dir, 'SHOWCASE.md', (s) => s.replace('A tour of Rounds', 'A short tour of Rounds'))));
     assert.deepEqual(codes(showcase), ['VOCAB_ADAPTER_STALE', 'VOCAB_POSITIONING_STALE']);
+  });
+
+  it('finds positioning lines by content, so lines added above them do not fail', () => {
+    const dir = fixture((d) => {
+      editText(d, 'frontend/src/pages/Login.tsx', (s) => `// unrelated comment\n// another one\n${s}`);
+      editText(d, 'frontend/index.html', (s) => s.replace('<head>', '<head>\n    <meta name="robots" content="noindex" />'));
+      editText(d, 'README.md', (s) => s.replace(/^(# Rounds: .*)$/m, '<!-- badge -->\n$1'));
+    });
+    assert.deepEqual(run(dir), []);
   });
 
   it('accepts a kept positioning line once it is rewritten, if its adapter goes too', () => {
@@ -315,6 +388,21 @@ describe('vocabulary: security', () => {
       assert.ok(t && t.definition && t.definition.length > 40, id);
     }
     assert.equal(terms.find((x) => x.id === 'privacy-secret').definedBy[0], 'ROUNDS-14-L01');
+  });
+
+  it('keeps every spec 2144-2148 sink rule in the privacy class definitions', () => {
+    // One phrase per sink cell that is easy to drop when restating the table.
+    const rules = {
+      'privacy-private': ['per-request consent', 'separately reviewed Share Projection', 'encrypted backup'],
+      'privacy-sensitive': ['separate field-level confirmation', 'explicit opt-in', 'separate confirmation and a scoped snapshot', 'protected export only'],
+      'privacy-third-party-personal': ['purpose-specific confirmation', 'account-local', 'exact field is intentionally published', 'with a warning'],
+      'privacy-secret': ['browser storage', 'rewrapped secret export', 'separate key custody'],
+      'privacy-share-projection': ['public indexing', 'scoped capability', 'no browser draft'],
+    };
+    for (const [id, phrases] of Object.entries(rules)) {
+      const definition = terms.find((x) => x.id === id).definition;
+      for (const phrase of phrases) assert.ok(definition.includes(phrase), `${id} lost "${phrase}"`);
+    }
   });
 
   it('rejects token-shaped examples and passes synthetic ones', () => {
@@ -387,6 +475,22 @@ describe('vocabulary: revisions', () => {
     only(run(dir, { base }), 'VOCAB_REMOVED_TERM_UNADAPTED');
     const withAdapter = fixture((d) => { editJson(d, TERMS, (x) => removeCalendar(x, 2, 'breaking')); setDr(d, 2, 'breaking'); editJson(d, ADAPTERS, termAdapter(2)); });
     assert.deepEqual(run(withAdapter, { base }), []);
+  });
+
+  it('treats a changed label option as breaking and a new one as additive', () => {
+    const bump = (d, compatibility) => { editJson(d, TERMS, (x) => { x.revision = 2; x.compatibility = compatibility; }); setDr(d, 2, compatibility); };
+    const option = (fn) => (d) => editJson(d, TERMS, (x) => fn(x.terms.find((t) => t.id === 'career-activity').label));
+    // A plural rename, a key rename, and a new default under additive all fail.
+    for (const change of [
+      (l) => { l.options.find((o) => o.key === 'interview').plural = 'Interview rounds'; },
+      (l) => { l.options.find((o) => o.key === 'follow-up').key = 'followup'; },
+      (l) => { l.default = 'interview'; },
+    ]) {
+      only(run(fixture((d) => { bump(d, 'additive'); option(change)(d); }), { base }), 'VOCAB_COMPATIBILITY_UNDECLARED');
+      assert.deepEqual(run(fixture((d) => { bump(d, 'breaking'); option(change)(d); }), { base }), []);
+    }
+    // A new option is additive.
+    assert.deepEqual(run(fixture((d) => { bump(d, 'additive'); option((l) => { l.options.splice(3, 0, { key: 'milestone', singular: 'Milestone', plural: 'Milestones' }); })(d); }), { base }), []);
   });
 
   it('requires terms.json and DR-0001 to share one revision', () => {

@@ -50,7 +50,7 @@ Visibility: `user-facing` terms have a label; `inspection-only` terms appear onl
 - **Calendar provider** (`calendar-provider`): An external calendar service reached through the calendar connector contract. Continuous synchronization is a separate integration workstream. "Provider" is always qualified.
 - **Privacy class** (`privacy-class`): One of the five normative classes (Private, Sensitive, Third-party personal, Secret, Share Projection) that set what may reach remote AI, search, logs and traces, public share, and export, local draft, and backup. A career pack may make a rule stricter but cannot relax it. Defined by #72 (ROUNDS-14-L01).
 - **Private** (`privacy-private`): Private, the default: profile facts, opportunities, actions, and ordinary practice. Remote AI needs per-request consent after a payload preview; search and index stay inside the owning account; logs and traces carry metadata and opaque IDs only; public share only through a separately reviewed Share Projection; account export, account-namespaced local drafts, and encrypted backup are allowed. Defined by #72 (ROUNDS-14-L01).
-- **Sensitive** (`privacy-sensitive`): Compensation, immigration, accommodation, private feedback, and protected demographics. Remote AI is off by default with a separate field-level confirmation for one invocation; search is off by default or masked with explicit opt-in; logs and traces carry no field values or reversible identifiers; excluded from public share by default; protected export only, with encrypted local draft and backup. Defined by #72 (ROUNDS-14-L01).
+- **Sensitive** (`privacy-sensitive`): Compensation, immigration, accommodation, private feedback, and protected demographics. Remote AI is off by default with a separate field-level confirmation for one invocation; search is off by default or masked with explicit opt-in; logs and traces carry no field values or reversible identifiers; excluded from public share by default, and sharing needs a separate confirmation and a scoped snapshot; protected export only, with encrypted local draft and backup. Defined by #72 (ROUNDS-14-L01).
 - **Third-party personal** (`privacy-third-party-personal`): Recruiter, interviewer, and contact identity, messages, and notes about another person. Remote AI is off by default with purpose-specific confirmation; search stays account-local; logs and traces carry minimized pseudonymous IDs; excluded from public share unless that exact field is intentionally published; included in full account export with a warning, with encrypted local draft and backup. Defined by #72 (ROUNDS-14-L01).
 - **Secret** (`privacy-secret`): Provider credentials, reset and session tokens, share bearer material, and encryption keys. Never sent to remote AI, indexed, logged, or shared. Excluded from normal export and browser storage; only an explicit rewrapped secret export; encrypted backup with separate key custody. Defined by #72 (ROUNDS-14-L01).
 - **Share Projection** (`privacy-share-projection`): Owner-reviewed fields from one immutable Artifact Revision. Never part of remote AI resolution; not added to public indexing; an aggregate view event only when enabled; shared only through its scoped capability; exportable immutable bytes with no browser draft and an encrypted backup of the owner record. Defined by #72 (ROUNDS-14-L01).
@@ -586,6 +586,7 @@ UI strings and AppHeader props that equal a term's label are covered by the term
 | `VOCAB_SHARED_LABEL_INVALID` | A sharedLabels entry names a term that lacks that label. |
 | `VOCAB_ALIAS_AMBIGUOUS` | One alias resolves to two terms. |
 | `VOCAB_ALIAS_SHADOWS_TERM` | An alias equals a canonical term. |
+| `VOCAB_ALIAS_SHADOWS_LABEL` | An alias equals another term's label or label option. |
 | `VOCAB_PACK_REDEFINES_PLATFORM` | A pack term, alias, or label equals a platform term, alias, label, or platform core name. |
 | `VOCAB_RESERVED_LABEL` | A label breaks a usage rule (Attempt, Profile, workspace, Preference, Provider, Capability). |
 | `VOCAB_SECRET_EXAMPLE` | A term example holds a bearer-shaped token, a /r/ share URL, or an email outside example.com. |
@@ -599,12 +600,12 @@ UI strings and AppHeader props that equal a term's label are covered by the term
 | `VOCAB_ADAPTER_STALE` | An adapter entry matches nothing: its name or file is gone, so its retiring leaf removes it. |
 | `VOCAB_UNCOVERED_NAME` | A coverage-set name maps to no term label or adapter entry. Add the adapter entry; never loosen the rule. |
 | `VOCAB_NONLITERAL_COLLECTION` | A migration creates or drops a collection by a non-literal name with no adapter entry for that site. |
-| `VOCAB_POSITIONING_STALE` | A positioning line matches neither terms.json positioning nor its adapter entry. |
+| `VOCAB_POSITIONING_STALE` | No line in a positioning file equals the terms.json positioning or the legacy line its adapter entry records. Lines are found by content, not number. |
 | `VOCAB_CUTOVER_UNQUALIFIED` | A new use of the cutover phrase without "data-preserving" outside the allowlist. |
 | `VOCAB_CUTOVER_ALLOWLIST_STALE` | An allowlisted line no longer holds the phrase. |
 | `VOCAB_REVISION_MISMATCH` | terms.json and its decision record disagree on revision or compatibility. |
 | `VOCAB_REVISION_NOT_BUMPED` | terms.json changed since main but keeps its revision. |
-| `VOCAB_COMPATIBILITY_UNDECLARED` | A revision removes or changes a name or visibility but is not marked breaking. |
+| `VOCAB_COMPATIBILITY_UNDECLARED` | A revision removes or changes a name, a label option (key, singular, or plural), a label axis or default, or a visibility, but is not marked breaking. |
 | `VOCAB_REMOVED_TERM_UNADAPTED` | A breaking revision removes a name without a term adapter entry for it. |
 | `VOCAB_BASE_UNAVAILABLE` | terms.json at the base ref (default origin/main) cannot be read. |
 | `DR_RECORD_INCOMPLETE` | A decision record lacks a required field, a ratified record lacks an approver or approval reference, or a decision lacks alternatives. |

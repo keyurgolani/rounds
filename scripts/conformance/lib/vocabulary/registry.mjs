@@ -300,13 +300,16 @@ export function checkTerms(ctx, reg, findings, resolveLeaf) {
     if (!covered) push('VOCAB_DUPLICATE_LABEL', at(owners[1].i, 'label'), `label "${form}" is used by ${ids.join(' and ')} and is not in sharedLabels`);
   }
 
-  // Aliases: one term per alias, and never a canonical term name.
+  // Aliases: one term per alias, never a canonical term name, and never
+  // another term's label or label option.
   const canonicalNames = new Map(terms.map((t) => [norm(t.term), t.id]));
   const aliasOwners = new Map();
   terms.forEach((t, i) => {
     for (const alias of t.aliases || []) {
       const key = norm(alias);
       if (canonicalNames.has(key)) push('VOCAB_ALIAS_SHADOWS_TERM', at(i, 'aliases'), `${t.id}: alias "${alias}" equals the canonical term of ${canonicalNames.get(key)}`);
+      const labelOwnersOfAlias = (labelOwners.get(key) || []).map((o) => o.id).filter((id) => id !== t.id);
+      if (labelOwnersOfAlias.length) push('VOCAB_ALIAS_SHADOWS_LABEL', at(i, 'aliases'), `${t.id}: alias "${alias}" equals a label of ${[...new Set(labelOwnersOfAlias)].join(' and ')}`);
       if (!aliasOwners.has(key)) aliasOwners.set(key, []);
       aliasOwners.get(key).push({ id: t.id, i, alias });
     }
@@ -405,21 +408,34 @@ function adapterMatches(a, item) {
 
 export function analyzeCoverage(ctx, reg, byId) {
   const adapters = reg.adapters?.adapters || [];
+  const matched = new Set();
+  // A collection adapter names one collection. Its source says where the
+  // name appears: a literal create, or a non-literal create or drop site
+  // whose lines it covers. Either use counts, so a collection created at one
+  // site and dropped in a loop at another keeps an entry for each site.
   const resolveNonLiteral = (ev) => {
-    const names = adapters.filter((a) => a.kind === 'collection' && a.source?.path === ev.path && inLines(a.source.lines, ev.line)).map((a) => a.legacyName);
-    return names.length ? names : null;
+    const hits = adapters.filter((a) => a.kind === 'collection' && a.source?.path === ev.path && inLines(a.source.lines, ev.line));
+    hits.forEach((a) => matched.add(a));
+    return hits.length ? [...new Set(hits.map((a) => a.legacyName))] : null;
   };
-  const cov = extractCoverage(ctx, resolveNonLiteral);
+  const positioningText = reg.terms?.positioning || { statement: '', title: '' };
+  const positioningCandidates = (site) => {
+    const expected = renderPositioning(site.template, positioningText);
+    return [
+      { text: expected, current: true },
+      ...adapters.filter((a) => a.kind === 'positioning' && a.source?.path === site.path && norm(a.targetLabel || '') === norm(expected)).map((a) => ({ text: a.legacyName, adapter: a })),
+    ];
+  };
+  const cov = extractCoverage(ctx, resolveNonLiteral, positioningCandidates);
   const labelTexts = new Set();
   for (const t of byId?.values() || []) if (t.visibility === 'user-facing') for (const f of labelForms(t)) labelTexts.add(f);
   const items = [...cov.collections, ...cov.storedValues, ...cov.apiRoutes, ...cov.routeSegments, ...cov.uiStrings, ...cov.appHeaders];
-  const matched = new Set();
   const results = [];
   for (const it of items) {
-    const a = adapters.find((x) => adapterMatches(x, it));
-    if (a) {
-      matched.add(a);
-      results.push({ item: it, via: 'adapter', adapter: a });
+    const hits = adapters.filter((x) => adapterMatches(x, it));
+    if (hits.length) {
+      hits.forEach((a) => matched.add(a));
+      results.push({ item: it, via: 'adapter', adapter: hits[0] });
     } else if (IMPLICIT_KINDS.has(it.kind) && labelTexts.has(it.name)) {
       results.push({ item: it, via: 'label' });
     } else {
@@ -427,10 +443,10 @@ export function analyzeCoverage(ctx, reg, byId) {
     }
   }
   const positioning = cov.positioning.map((it) => {
-    const expected = renderPositioning(it.template, reg.terms?.positioning || { statement: '', title: '' });
-    const a = adapters.find((x) => adapterMatches(x, it));
-    if (a) matched.add(a);
-    return { item: it, expected, adapter: a || null, current: it.name === expected.trim() };
+    const expected = renderPositioning(it.template, positioningText);
+    const adapter = it.found?.adapter || null;
+    if (adapter) matched.add(adapter);
+    return { item: it, expected, adapter, current: Boolean(it.found?.current) };
   });
   return { cov, results, positioning, matched };
 }
@@ -448,9 +464,8 @@ export function checkCoverage(ctx, reg, findings, byId) {
     findings.push(finding('VOCAB_UNCOVERED_NAME', it.path, it.line, `${what} maps to no term label or adapter entry. Add an adapter entry (termId or decidedBy, targetLabel, retiringLeaf) to ${ADAPTERS_PATH}; never loosen the rule.`));
   }
   for (const p of positioning) {
-    if (p.current) continue;
-    if (p.adapter) continue;
-    findings.push(finding('VOCAB_POSITIONING_STALE', p.item.path, p.item.line, `positioning line differs from terms.json positioning ("${p.expected.slice(0, 60)}...") and from its adapter entry`));
+    if (p.current || p.adapter) continue;
+    findings.push(finding('VOCAB_POSITIONING_STALE', p.item.path, p.item.line, `no line in ${p.item.path} equals the terms.json positioning ("${p.expected.slice(0, 60)}...") or the legacy line of an adapter entry for it; write the positioning line, or restore the legacy line its adapter records`));
   }
   const list = reg.adapters?.adapters || [];
   list.forEach((a, i) => {
@@ -513,9 +528,30 @@ function registryNames(data) {
   for (const t of data.terms || []) {
     names.set(`term:${norm(t.term)}`, { id: t.id, name: t.term });
     for (const a of t.aliases || []) names.set(`alias:${norm(a)}`, { id: t.id, name: a });
+    // Plurals and option renames reach labelChanges(), which marks them breaking.
     for (const o of t.label?.options || []) names.set(`label:${t.id}:${o.key}:${norm(o.singular)}`, { id: t.id, name: o.singular });
   }
   return names;
+}
+
+// Changes to a term's existing label: a removed or renamed option key, a
+// changed singular or plural, or a changed axis or default. Each is breaking
+// under DR-0001's versioning; a new option key is additive.
+function labelChanges(baseTerm, curTerm) {
+  const before = baseTerm.label;
+  const after = curTerm.label;
+  if (!before) return [];
+  if (!after) return [`${curTerm.id} label removed`];
+  const out = [];
+  if (before.axis !== after.axis) out.push(`${curTerm.id} label axis ${before.axis} -> ${after.axis}`);
+  if (before.default !== after.default) out.push(`${curTerm.id} label default ${before.default} -> ${after.default}`);
+  const now = new Map((after.options || []).map((o) => [o.key, o]));
+  for (const o of before.options || []) {
+    const n = now.get(o.key);
+    if (!n) out.push(`${curTerm.id} label option "${o.key}" removed or renamed`);
+    else if (n.singular !== o.singular || n.plural !== o.plural) out.push(`${curTerm.id} label option "${o.key}" ${o.singular}/${o.plural} -> ${n.singular}/${n.plural}`);
+  }
+  return out;
 }
 
 export function compareWithBase(current, base) {
@@ -532,7 +568,8 @@ export function compareWithBase(current, base) {
     if (!curById.has(t.id)) removed.push({ id: t.id, name: t.term, idRemoved: true });
   }
   const visibility = (base.terms || []).filter((t) => curById.has(t.id) && curById.get(t.id).visibility !== t.visibility).map((t) => t.id);
-  return { changed, removed, visibility };
+  const labels = (base.terms || []).filter((t) => curById.has(t.id)).flatMap((t) => labelChanges(t, curById.get(t.id)));
+  return { changed, removed, visibility, labels };
 }
 
 export function checkRevision(ctx, reg, findings) {
@@ -570,8 +607,9 @@ export function checkRevision(ctx, reg, findings) {
   if (!(data.revision > prev.revision)) {
     findings.push(finding('VOCAB_REVISION_NOT_BUMPED', TERMS_PATH, line, `terms.json changed since ${ctx.baseRef} but keeps revision ${data.revision} (${data.compatibility}); raise revision above ${prev.revision} in terms.json and ${data.decisionRecord}`));
   }
-  if ((diff.removed.length || diff.visibility.length) && data.compatibility !== 'breaking') {
-    findings.push(finding('VOCAB_COMPATIBILITY_UNDECLARED', TERMS_PATH, jsonLine(reg.termsText, ['compatibility']), `revision removes or changes ${[...diff.removed.map((r) => `"${r.name}"`), ...diff.visibility.map((v) => `${v} visibility`)].join(', ')} but is marked ${data.compatibility}; mark it breaking`));
+  if ((diff.removed.length || diff.visibility.length || diff.labels.length) && data.compatibility !== 'breaking') {
+    const what = [...diff.removed.map((r) => `"${r.name}"`), ...diff.visibility.map((v) => `${v} visibility`), ...diff.labels];
+    findings.push(finding('VOCAB_COMPATIBILITY_UNDECLARED', TERMS_PATH, jsonLine(reg.termsText, ['compatibility']), `revision removes or changes ${[...new Set(what)].join(', ')} but is marked ${data.compatibility}; mark it breaking`));
   }
   const termAdapters = new Set((reg.adapters?.adapters || []).filter((a) => a.kind === 'term').map((a) => norm(a.legacyName)));
   const currentNames = new Set([...registryNames(data).values()].map((v) => norm(v.name)));
