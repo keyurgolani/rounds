@@ -171,3 +171,17 @@ def test_dry_run_guards_are_present(src):
     assert "ROUNDS_RELATION_QUARANTINE_REPORT" in src
     assert 'indexOf("pb_data")' in src
     assert "dry run complete" in src
+
+
+def test_optional_clear_falls_back_to_quarantine_on_a_unique_collision(src):
+    # Clearing an optional cross-owner reference to "" can violate a unique
+    # index (SQLite treats "" as present, unlike NULL). The apply must catch
+    # that and quarantine the whole row instead of letting the write throw and
+    # roll back the boot transaction. Keep the clear inside a try/catch whose
+    # recovery path moves the row.
+    m = re.search(
+        r'rec\.set\(g\.f, ""\);\s*try \{.*?catch.*?quarantineRow\(g, fresh\);',
+        src,
+        re.DOTALL,
+    )
+    assert m, "optional clear must fall back to quarantineRow on a failed save"

@@ -368,6 +368,23 @@ migrate(
       moved[key] = true;
     }
 
+    const quarantineRow = (g, rec) => {
+      const qrec = new Record(quarantineCol, {
+        source_collection: g.c,
+        source_id: g.record_id,
+        owner: g.owner,
+        field: g.f,
+        target_collection: g.t,
+        target_id: g.target_id,
+        kind: g.kind,
+        payload: payloadOf(rec),
+        quarantined_at: iso(now),
+      });
+      dao.saveRecord(qrec);
+      dao.deleteRecord(rec); // cascades / null-repairs dependents like a normal delete
+      moved[g.c + "|" + g.record_id] = true;
+    };
+
     for (let i = 0; i < findings.length; i++) {
       const g = findings[i];
       if (g.required) continue;
@@ -375,7 +392,21 @@ migrate(
       const rec = captureRow(g.c, g.record_id);
       if (!rec) continue;
       rec.set(g.f, "");
-      dao.saveRecord(rec);
+      try {
+        dao.saveRecord(rec);
+      } catch (clearErr) {
+        // Clearing the optional reference would break a unique index: SQLite
+        // treats an empty string as a present value (unlike NULL), so two
+        // rows cleared to "" in the same unique scope collide. The uniqueness
+        // check runs before the write, so the row on disk is untouched; we
+        // re-read it clean and quarantine the whole row instead, exactly as
+        // the required path does, so a cross-owner pointer can never force the
+        // apply (and with it the boot transaction) to abort. Matches the
+        // "then the row moves" rule in docs/operations.md.
+        const fresh = captureRow(g.c, g.record_id);
+        if (!fresh) continue;
+        quarantineRow(g, fresh);
+      }
     }
 
     // --- 2f. One report row, only when something was quarantined. -----------
