@@ -32,7 +32,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 # Nothing under /app is writable by anyone but root.
-RUN chmod -R go-w /app
+RUN chmod -R go-w /app \
+    # The compiled server-owned definitions (ROUNDS-00A-L02) are
+    # root-only: files 0400, directories 0500. The runner reads and
+    # verifies them at startup as root; a candidate uid (10001-10004)
+    # can't read the manifest, a stored test definition, or a harness
+    # revision, so hidden tests and validators never reach candidate
+    # code. The raw authoring trees are excluded in .dockerignore.
+    && find /app/definitions -type d -exec chmod 0500 {} + \
+    && find /app/definitions -type f -exec chmod 0400 {} +
 
 # Persistent volume mount point. Hosts with ephemeral filesystems (Render
 # free tier, etc.) should attach a disk here; single-box hosts with a

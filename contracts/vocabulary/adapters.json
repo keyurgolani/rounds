@@ -1315,6 +1315,15 @@
       "targetLabel": "planning lens",
       "retiringLeaf": "ROUNDS-34-L06",
       "note": "A Campaign is a lens, not a workspace (spec 978; G6)."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700006200_definitions_expand.js", "lines": "58"},
+      "legacyName": "definition_migration_journal",
+      "decidedBy": "ROUNDS-00A-L02",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-00A-L02",
+      "note": "Server-only bookkeeping for the definitions expand migration, not user-facing; this leaf confirms it as a canonical internal name."
     }
   ]
 }

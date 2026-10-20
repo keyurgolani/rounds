@@ -331,7 +331,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 
 ## Adapters
 
-157 entries: 43 collection, 3 field, 19 stored-value, 8 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
+158 entries: 44 collection, 3 field, 19 stored-value, 8 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
 
 ### collection
 
@@ -380,6 +380,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 | user_preferences | `pocketbase/pb_migrations/1700000000_init_collections.js:440` | `account-preference` | Settings | #164 (ROUNDS-32-L10) |
 | user_progress | `pocketbase/pb_migrations/1700000000_init_collections.js:398` | decided by #130 (ROUNDS-28-L01) |  | #164 (ROUNDS-32-L10) |
 | users | `pocketbase/pb_migrations/1700000000_init_collections.js:25` | `account` | Account | #164 (ROUNDS-32-L10) |
+| definition_migration_journal | `pocketbase/pb_migrations/1700006200_definitions_expand.js:58` | decided by #2 (ROUNDS-00A-L02) |  | #2 (ROUNDS-00A-L02) |
 
 ### field
 

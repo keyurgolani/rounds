@@ -134,6 +134,29 @@ jobs:
       - name: Lint migration changes
         run: python scripts/lint_migrations.py --base HEAD^1 --head HEAD
 
+  definitions:
+    # Compiled server-owned definitions only grow (ROUNDS-00A-L02). On a
+    # pull request into main or next, a change to backend/definitions/ may
+    # only add versions and move a lifecycle forward; a shipped version
+    # keeps its path, checksum, and bytes. The build and bindings drift
+    # checks run in the backend suite (build.py --check and
+    # definitions_bindings.py --check through pytest).
+    if: github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'next')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # The checkout is the pull request merged into its base, so the first
+      # parent is the base and the diff is exactly what merging would change.
+      - name: Check the definitions manifest
+        run: python scripts/definitions_manifest_check.py --base HEAD^1 --head HEAD
+
   migration-check:
     # Behavioural checks for the account-scope rule migration (ROUNDS-00B-L01).
     # Builds the pocketbase image from this commit and runs one-off

@@ -2,3 +2,12 @@ __pycache__
 .pytest_cache
 .venv
 *.pyc
+
+# The raw authoring trees for AI-coding rounds and take-home assignments
+# (ROUNDS-00A-L02). build.py compiles them into definitions/ at author
+# time; the runner reads round and assignment content from PocketBase and
+# the compiled definitions, never these files, so the hidden tests and
+# harnesses in them never reach the image. build.py itself runs only on a
+# full checkout (the definitions CI job), never in the image.
+ai_coding/rounds
+take_home/assignments
