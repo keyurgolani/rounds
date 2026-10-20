@@ -441,9 +441,13 @@ def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozens
 def main() -> int:
     if len(sys.argv) < 2:
         print("usage: run.py {main|hook|deploy|degraded|deploy-db|verdict|scan|admission|admission-migration|"
-              "admission-deploy|emergency-disable|emergency-enable}", file=sys.stderr)
+              "admission-deploy|emergency-disable|emergency-enable|relation-quarantine}", file=sys.stderr)
         return 2
     phase = sys.argv[1]
+    if phase == "relation-quarantine":
+        import relation_quarantine_check
+
+        return relation_quarantine_check.main()
     if phase == "scan":
         import scan_check
 

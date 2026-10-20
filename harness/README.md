@@ -181,6 +181,28 @@ before `1700006000` (the `62d4eae` set), checks that it adds only the three
 server-only collections, reverses it with `pocketbase migrate down 1` as an
 operator would, checks that the data is back as it was, and applies it again.
 
+Last, [`probes/relation_quarantine_check.py`](probes/relation_quarantine_check.py)
+runs the same pinned binary, with no network, against the relation
+quarantine in `1700007000_relation_endpoint_authz.js`. It builds a `pb_data`
+from every earlier migration, plants a legacy fixture of cross-owner and
+missing-target rows with direct SQL, and checks that:
+
+- the dry run changes nothing, exits 0 as PocketBase 0.22 does even after a
+  failed migration, and reports the outcomes and checksum the apply then has;
+- the apply moves each row whose required or cascading relation crosses
+  accounts with its cascade dependents (two offers chained through
+  `previous_offer` included), clears a row's offending optional fields in one
+  update, clears a reference to a moved row, and moves a row whose clear
+  would collide with a unique index, journalling every move and clear with
+  the original row, pseudonyms, and status;
+- same-owner rows and total row counts stay as they were, the logs carry
+  counts and the checksum but no ids, and a second run adds nothing.
+
+It then serves a fresh copy on loopback with the hooks and checks, through
+the API, that deleting a provider set as both text and vision provider,
+deleting an application with two chained offers, and a superuser deleting an
+account holding both shapes all succeed without touching another account.
+
 No service publishes a host port; the probes reach services over the compose
 network. Image tags, network, volume, the compose env file, and the receipts
 directory all derive from the compose project name, so runs with different

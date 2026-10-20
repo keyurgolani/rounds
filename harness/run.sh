@@ -37,6 +37,10 @@
 #  12. admission migration - apply and reverse the admission migration with
 #                     the pinned binary on a 62d4eae-shaped pb_data, with no
 #                     network (harness/probes/admission_migration_check.py)
+#  13. relation quarantine - with the pinned binary and no network: dry-run
+#                     and apply the relation quarantine on a legacy pb_data
+#                     holding cross-owner rows, then delete through the API on
+#                     a served copy (harness/probes/relation_quarantine_check.py)
 #
 # The stack is built and brought up with compose; the probe container runs
 # directly on the compose network so the flow is identical under Finch
@@ -287,7 +291,22 @@ ${CONTAINER_BIN} run --rm --network none \
 migration_rc=$?
 set -e
 
-if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ] || [ "${admission_rc}" -ne 0 ] || [ "${migration_rc}" -ne 0 ]; then
+echo "--- phase 13: relation quarantine on a legacy pb_data, then deletes on a served copy ---"
+set +e
+${CONTAINER_BIN} run --rm --network none \
+  -e PB_BIN="/pbbin/pocketbase" \
+  -e PB_MIGRATIONS_DIR="/pb_migrations" \
+  -e PB_HOOKS_DIR="/pb_hooks" \
+  -v "${PBBIN_VOLUME}:/pbbin:ro" \
+  -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+  -v "${ROOT}/pocketbase/pb_hooks:/pb_hooks:ro" \
+  -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
+  "${PROBE_IMAGE}" relation-quarantine
+quarantine_rc=$?
+set -e
+
+if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ] || [ "${admission_rc}" -ne 0 ] || [ "${migration_rc}" -ne 0 ] \
+   || [ "${quarantine_rc}" -ne 0 ]; then
   exit 1
 fi
 exit 0
