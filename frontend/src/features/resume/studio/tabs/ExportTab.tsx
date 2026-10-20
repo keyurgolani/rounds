@@ -13,6 +13,12 @@ import { useState } from 'react';
 import { Download, Printer } from 'lucide-react';
 import type { Resume, ResumeData } from '../../types';
 import { exportPdfServer, exportPdfPrint } from '../../export/pdf';
+import { RunnerDenialNotice } from '../../../../components/runner/RunnerDenialNotice';
+import {
+  activeTrigger,
+  classifyRunnerError,
+  type RunnerDenial,
+} from '../../../../lib/runnerDenial';
 import { exportDocx } from '../../export/docx';
 import { exportStandaloneHtml } from '../../export/html';
 import { exportMarkdown } from '../../export/markdown';
@@ -89,6 +95,9 @@ const SLOTS: Slot[] = [
 export default function ExportTab({ resume, data, onBeforeExport }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // A refused or failed server render shows as a denial state with a
+  // browser-print fallback; other failures keep the inline error.
+  const [pdfDenial, setPdfDenial] = useState<RunnerDenial | null>(null);
 
   if (!resume) {
     return (
@@ -104,12 +113,14 @@ export default function ExportTab({ resume, data, onBeforeExport }: Props) {
   );
 
   const run = async (slot: Slot) => {
+    const trigger = activeTrigger();
     setBusy(slot.key);
     setErrors((e) => {
       const next = { ...e };
       delete next[slot.key];
       return next;
     });
+    if (slot.action === 'server-pdf') setPdfDenial(null);
     try {
       // Flush pending edits so the export reflects the latest text.
       await onBeforeExport();
@@ -139,11 +150,15 @@ export default function ExportTab({ resume, data, onBeforeExport }: Props) {
           break;
       }
     } catch (err) {
-      setErrors((e) => ({ ...e, [slot.key]: (err as Error).message }));
+      const denial =
+        slot.action === 'server-pdf' ? classifyRunnerError(err, trigger) : null;
+      if (denial) setPdfDenial(denial);
+      else setErrors((e) => ({ ...e, [slot.key]: (err as Error).message }));
     } finally {
       setBusy(null);
     }
   };
+  const printSlot = SLOTS.find((s) => s.action === 'print');
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -178,6 +193,14 @@ export default function ExportTab({ resume, data, onBeforeExport }: Props) {
               >
                 {errors[s.key]}
               </div>
+            )}
+            {s.action === 'server-pdf' && (
+              <RunnerDenialNotice
+                denial={pdfDenial}
+                action="pdf"
+                onPrint={printSlot ? () => run(printSlot) : undefined}
+                contentStyle={{ marginTop: 8 }}
+              />
             )}
           </div>
           <button

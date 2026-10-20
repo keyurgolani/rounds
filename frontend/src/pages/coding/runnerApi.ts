@@ -36,6 +36,8 @@ interface EvaluatePayload {
   filter?: EvaluateFilter;
 }
 
+// TODO(ROUNDS-00A-L01): stage 3 replaces this browser-side demo allowance
+// with the server's demo tier, which answers 429 `demo_limit_reached`.
 async function consumeDemoAllowance(kind: 'run' | 'evaluate'): Promise<void> {
   const record = pb.authStore.record as
     | (Record<string, unknown> & { id: string })
@@ -59,7 +61,6 @@ export async function runCode(payload: RunPayload): Promise<CodeRunResult> {
   return runnerJSON<CodeRunResult>('/api/run', {
     method: 'POST',
     body: payload,
-    auth: 'optional',
   });
 }
 
@@ -70,6 +71,5 @@ export async function evaluateCode(
   return runnerJSON<CodeEvaluateResult>('/api/evaluate', {
     method: 'POST',
     body: payload,
-    auth: 'optional',
   });
 }

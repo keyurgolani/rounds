@@ -3,7 +3,10 @@
 //   `exportPdfServer()` — serializes the live preview, posts to
 //     /api/pdf/render, downloads the returned blob. Higher fidelity
 //     because Puppeteer prints exactly what we send (with our `@page`
-//     rules) without browser-specific print-dialog quirks.
+//     rules) without browser-specific print-dialog quirks. It goes
+//     through `runnerFetch`, so it sends the caller's bearer and one
+//     `Idempotency-Key`, and a failure is a `RunnerError` with the
+//     status, `code`, and `Retry-After`.
 //
 //   `exportPdfPrint()` — `window.print()`. Works offline, gives the
 //     user the standard system print dialog. Acts as a fallback when
@@ -14,21 +17,18 @@
 
 import { buildStandaloneHtml } from './html';
 import { downloadBlob } from './index';
+import { runnerFetch } from '../../../lib/runnerFetch';
 
 export async function exportPdfServer(filenameBase: string, marginMm = 0): Promise<void> {
   const html = buildStandaloneHtml();
   if (!html) {
     throw new Error('No resume preview is currently rendered.');
   }
-  const res = await fetch('/api/pdf/render', {
+  const res = await runnerFetch('/api/pdf/render', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ html, margin_mm: marginMm }),
+    body: { html, margin_mm: marginMm },
+    errorPrefix: 'PDF render failed',
   });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => res.statusText);
-    throw new Error(`PDF render failed (${res.status}): ${detail}`);
-  }
   const blob = await res.blob();
   downloadBlob(blob, `${filenameBase}.pdf`);
 }

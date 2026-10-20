@@ -125,7 +125,6 @@ export default function AIChatPanel({
       try {
         await runnerSSE(path, {
           method: 'POST',
-          auth: 'optional',
           signal,
           body: {
             round_slug: roundSlug,

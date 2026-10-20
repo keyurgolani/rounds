@@ -26,6 +26,12 @@ spec:
           ports:
             - name: http
               containerPort: 80
+          envFrom:
+            # The whole ConfigMap loads here, but runtime-config.js
+            # publishes only the gates the SPA reads.
+            - configMapRef:
+                name: rounds-gates
+                optional: true
           readinessProbe:
             httpGet:
               path: /

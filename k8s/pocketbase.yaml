@@ -42,8 +42,15 @@ spec:
             - name: http
               containerPort: 8090
           env:
+            # Alias of ROUNDS_GATE_SIGNUPS, which wins when it's set.
             - name: ROUNDS_DISABLE_SIGNUPS
               value: "false"
+          envFrom:
+            # Gates (gates.yaml). Optional, so a cluster without the
+            # ConfigMap keeps every written default.
+            - configMapRef:
+                name: rounds-gates
+                optional: true
           volumeMounts:
             - name: data
               mountPath: /pb/pb_data

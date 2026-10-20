@@ -1,0 +1,39 @@
+# Gates (docs/configuration.md#gates). The runner, PocketBase, and the
+# frontend read this ConfigMap through `envFrom`, and each one reads
+# only its own gates. A process reads its gates once at startup and
+# logs every value, so restart each Deployment that reads a changed
+# gate, for example:
+#
+#   kubectl -n rounds rollout restart deployment/runner
+#
+# An empty value keeps the written default, which is today's behavior.
+# A value outside a gate's list takes its most restrictive value and
+# logs an error. Gate values aren't secret, so never put a secret here.
+#
+# Leave ROUNDS_GATE_SIGNUPS empty to keep `ROUNDS_DISABLE_SIGNUPS` in
+# pocketbase.yaml in charge. Set it to "disabled" to close signups in
+# PocketBase and hide the form in the frontend in one place.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rounds-gates
+  namespace: rounds
+data:
+  # Runner routes: "enabled" or "disabled". Not enforced yet; once
+  # admission lands, a disabled route answers 503 `route_disabled`.
+  ROUNDS_GATE_RUN: ""
+  ROUNDS_GATE_EVALUATE: ""
+  ROUNDS_GATE_AI_CODING_RUN_PROJECT: ""
+  ROUNDS_GATE_AI_CODING_GRADE: ""
+  ROUNDS_GATE_TAKE_HOME_RUN: ""
+  ROUNDS_GATE_TAKE_HOME_SUBMIT: ""
+  ROUNDS_GATE_PDF_RENDER: ""
+  ROUNDS_GATE_PDF_HEALTH: ""
+  ROUNDS_GATE_ATS_RULE: ""
+  # The paper_url fetch in /api/ai/improve: "enabled" or "disabled".
+  ROUNDS_GATE_PAPER_FETCH: ""
+  # Runner admission checks: "off", "observe", or "enforce".
+  ROUNDS_GATE_ENFORCE_IDEMPOTENCY: ""
+  ROUNDS_GATE_ENFORCE_QUOTA: ""
+  # Signups, read by PocketBase and the frontend: "enabled" or "disabled".
+  ROUNDS_GATE_SIGNUPS: ""
