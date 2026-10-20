@@ -30,7 +30,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import secrets
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Literal
 
@@ -40,6 +39,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app import ats as ats_mod
+from app import obs
 from app.crypto import decrypt, encrypt
 from app.pb_auth import POCKETBASE_URL, current_user, pb_get, pb_patch, pb_post
 
@@ -49,13 +49,14 @@ _log = logging.getLogger(__name__)
 
 
 def _request_id() -> str:
-    """Short opaque id for correlating a user-facing error with server logs.
+    """Opaque id for correlating a user-facing error with server logs.
 
     The id is logged alongside the full traceback and echoed in the
     user-visible error message (or SSE error event) so a support
     interaction can pivot from "I saw error abc123" to the matching
-    log line in seconds."""
-    return secrets.token_hex(4)
+    log line in seconds. It is the request's 32-hex correlation id from
+    the obs kit, the same value as the ``X-Correlation-Id`` header."""
+    return obs.correlation_id()
 
 ProviderKind = Literal[
     "anthropic", "openai", "openai-compatible", "anthropic-compatible"

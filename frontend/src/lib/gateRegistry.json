@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "prefix": "ROUNDS_GATE_",
+  "truthy": ["true", "1", "yes"],
+  "gates": {
+    "SIGNUPS": {
+      "values": ["enabled", "disabled"],
+      "default": "enabled",
+      "closed": "disabled",
+      "aliases": [{ "env": "VITE_DISABLE_SIGNUPS", "value": "disabled" }]
+    }
+  }
+}

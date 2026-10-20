@@ -5,6 +5,7 @@ namespace: rounds
 
 resources:
   - namespace.yaml
+  - gates.yaml
   - pocketbase.yaml
   - runner.yaml
   - frontend.yaml

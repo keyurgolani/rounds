@@ -37,6 +37,9 @@ const proxy = {
 
 export default defineConfig({
   plugins: [react()],
+  // Gates aren't secrets. The dev SPA reads ROUNDS_GATE_* from here the
+  // way the nginx image reads them from runtime-config.js.
+  envPrefix: ['VITE_', 'ROUNDS_GATE_'],
   server: {
     host: '0.0.0.0',
     port: 3000,

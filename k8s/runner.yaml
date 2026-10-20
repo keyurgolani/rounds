@@ -64,6 +64,11 @@ spec:
             # to provision the secret on first deploy.
             - secretRef:
                 name: rounds-runner-secrets
+            # Gates (gates.yaml). Optional, so a cluster without the
+            # ConfigMap keeps every written default.
+            - configMapRef:
+                name: rounds-gates
+                optional: true
           readinessProbe:
             httpGet:
               path: /health

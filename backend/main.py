@@ -1,11 +1,21 @@
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app import errors, gates, obs
 from routers import ai, ai_coding, pdf, runner, sd_practice, share, take_home
 
-app = FastAPI(title="Rounds — Code Runner", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Gates are read once per process; the startup log lists each value.
+    gates.init()
+    yield
+
+
+app = FastAPI(title="Rounds — Code Runner", version="1.0.0", lifespan=lifespan)
 
 # CORS_ALLOW_ORIGINS accepts a comma-separated list. Default is permissive
 # for local dev; production deployments should lock this down to the
@@ -20,7 +30,13 @@ app.add_middleware(
     allow_credentials=_cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Cross-origin SPAs read the wait on a 429 and the support id.
+    expose_headers=["Retry-After", obs.CORRELATION_HEADER],
 )
+# Added last so it runs first: every response, CORS preflights included,
+# carries the request's correlation id.
+app.add_middleware(obs.CorrelationIdMiddleware)
+errors.install(app)
 
 app.include_router(runner.router)
 app.include_router(pdf.router)

@@ -26,6 +26,11 @@ spec:
           ports:
             - name: http
               containerPort: 80
+          envFrom:
+            # runtime-config.js passes ROUNDS_GATE_* through to the SPA.
+            - configMapRef:
+                name: rounds-gates
+                optional: true
           readinessProbe:
             httpGet:
               path: /

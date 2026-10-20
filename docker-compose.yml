@@ -11,6 +11,9 @@ services:
       # credentials; defaults are dev-only and obviously placeholder.
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-admin@local.dev}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-changemenowplz}
+      # ROUNDS_GATE_SIGNUPS wins when set; ROUNDS_DISABLE_SIGNUPS is
+      # its alias here.
+      - ROUNDS_GATE_SIGNUPS=${ROUNDS_GATE_SIGNUPS:-}
       - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
     restart: unless-stopped
 
@@ -31,6 +34,20 @@ services:
       # via a cached admin token. Defaults match the bootstrap admin.
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-admin@local.dev}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-changemenowplz}
+      # Gates (docs/configuration.md#gates). Empty keeps each written
+      # default, and the runner logs every value at startup.
+      - ROUNDS_GATE_RUN=${ROUNDS_GATE_RUN:-}
+      - ROUNDS_GATE_EVALUATE=${ROUNDS_GATE_EVALUATE:-}
+      - ROUNDS_GATE_AI_CODING_RUN_PROJECT=${ROUNDS_GATE_AI_CODING_RUN_PROJECT:-}
+      - ROUNDS_GATE_AI_CODING_GRADE=${ROUNDS_GATE_AI_CODING_GRADE:-}
+      - ROUNDS_GATE_TAKE_HOME_RUN=${ROUNDS_GATE_TAKE_HOME_RUN:-}
+      - ROUNDS_GATE_TAKE_HOME_SUBMIT=${ROUNDS_GATE_TAKE_HOME_SUBMIT:-}
+      - ROUNDS_GATE_PDF_RENDER=${ROUNDS_GATE_PDF_RENDER:-}
+      - ROUNDS_GATE_PDF_HEALTH=${ROUNDS_GATE_PDF_HEALTH:-}
+      - ROUNDS_GATE_ATS_RULE=${ROUNDS_GATE_ATS_RULE:-}
+      - ROUNDS_GATE_PAPER_FETCH=${ROUNDS_GATE_PAPER_FETCH:-}
+      - ROUNDS_GATE_ENFORCE_IDEMPOTENCY=${ROUNDS_GATE_ENFORCE_IDEMPOTENCY:-}
+      - ROUNDS_GATE_ENFORCE_QUOTA=${ROUNDS_GATE_ENFORCE_QUOTA:-}
     depends_on:
       - pdf-renderer
       - pocketbase
@@ -66,6 +83,8 @@ services:
       - VITE_OAUTH_GOOGLE_ENABLED=${VITE_OAUTH_GOOGLE_ENABLED:-false}
       - VITE_OAUTH_GITHUB_ENABLED=${VITE_OAUTH_GITHUB_ENABLED:-false}
       - VITE_DISABLE_SIGNUPS=${VITE_DISABLE_SIGNUPS:-false}
+      # Vite exposes ROUNDS_GATE_* to the dev SPA (vite.config.ts).
+      - ROUNDS_GATE_SIGNUPS=${ROUNDS_GATE_SIGNUPS:-}
     depends_on:
       - runner
       - pocketbase
