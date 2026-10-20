@@ -10,6 +10,9 @@
 #   4. hook phase   — signup-disabled probe
 #   5. verdict      — require every enforced result + rule read-back to pass,
 #                     and no pending family to leak; print pass/fail counts
+#   6. scan         — stop PocketBase, then run the cross-owner relation scan
+#                     against the run's pb_data volume (mounted read-only) and
+#                     a fixture copy of it (harness/probes/scan_check.py)
 #
 # PocketBase is built and brought up with compose; the probe container runs
 # directly on the compose network so the flow is identical under Finch
@@ -128,4 +131,21 @@ if [ -f "${RECEIPTS_DIR}/receipts.jsonl" ]; then
   echo "--- receipts at ${RECEIPTS_DIR#"${ROOT}/"}/receipts.jsonl ($(wc -l < "${RECEIPTS_DIR}/receipts.jsonl") lines) ---"
 fi
 
-exit "${rc}"
+echo "--- phase 6: cross-owner scan (PocketBase stopped, pb_data read-only) ---"
+compose stop pocketbase
+set +e
+${CONTAINER_BIN} run --rm --network none \
+  -e SCAN_PB_DATA="/pb_data" \
+  -e SCAN_TOOL="/tools/scan_cross_owner.py" \
+  -e POLICY_PATH="/policy/account-scope.v1.json" \
+  -v "${PROJECT}_pb_data:/pb_data:ro" \
+  -v "${ROOT}/pocketbase/tools:/tools:ro" \
+  -v "${ROOT}/docs/security:/policy:ro" \
+  "${PROBE_IMAGE}" scan
+scan_rc=$?
+set -e
+
+if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ]; then
+  exit 1
+fi
+exit 0
