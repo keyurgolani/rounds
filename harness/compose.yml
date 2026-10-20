@@ -18,6 +18,11 @@ services:
     build:
       context: ../pocketbase
     image: rounds-9s1-pocketbase:test
+    # Named volume like prod, so recreating the container with signups
+    # disabled keeps the accounts and rows created in the main phase.
+    # `compose down -v` (the launcher's teardown) removes it.
+    volumes:
+      - pb_data:/pb/pb_data
     environment:
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
@@ -89,3 +94,6 @@ services:
       pocketbase:
         condition: service_healthy
     restart: "no"
+
+volumes:
+  pb_data:
