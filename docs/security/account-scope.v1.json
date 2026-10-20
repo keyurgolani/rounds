@@ -81,6 +81,11 @@
       "id": "owner-id-create-shape",
       "closed_by": "ROUNDS-00B-L05",
       "note": "a create naming a missing owner and one naming another account are both denied with the same status (account-scope.create.nonexistent-owner.denied); PocketBase checks that the named user exists before the create rule runs, so the error bodies are not compared here"
+    },
+    {
+      "id": "client-chosen-record-id",
+      "closed_by": "ROUNDS-00B-L05",
+      "note": "a create may supply its own record id, and PocketBase validates that id before the create rule runs, so the response to a taken id differs from the response to a free one and can tell whether a record with that id exists in any account; the uniform relation denial covers the ids a row points at, not the new row's own id"
     }
   ],
   "deployment_checks": {
