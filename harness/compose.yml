@@ -1,0 +1,91 @@
+# Account-scope security harness. Shaped like docker-compose.prod.yml: the
+# same pocketbase, runner, and nginx frontend built from this commit, on one
+# private network, plus a probe runner that drives the two-account proof.
+#
+# Run it with the launcher, which sequences the phases and tears the stack
+# down afterwards:
+#
+#   harness/run.sh                     # local, Finch
+#   COMPOSE_BIN="docker compose" harness/run.sh   # CI, Docker on ubuntu
+#
+# Credentials here are obvious non-secret test placeholders. The probe
+# runner generates its own per-run account credentials and never uses the
+# demo password. Host ports bind to 127.0.0.1 and are only for debugging;
+# the probes reach services by their compose network names.
+
+services:
+  pocketbase:
+    build:
+      context: ../pocketbase
+    image: rounds-9s1-pocketbase:test
+    environment:
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
+      - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
+    ports:
+      - "127.0.0.1:${PB_HOST_PORT:-8390}:8090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+    restart: "no"
+
+  # Present so the harness is shaped like prod and later stages (ROUNDS-00A-L01
+  # stage 4 deployment verification) can exercise it. The stage-1 launcher does
+  # not start it; the account-scope rule probes talk to PocketBase directly.
+  runner:
+    build:
+      context: ../backend
+    image: rounds-9s1-runner:test
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-}
+      - POCKETBASE_URL=http://pocketbase:8090
+      - AI_KEY_SECRET=${AI_KEY_SECRET:-rounds-dev-key-DO-NOT-USE-IN-PROD}
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
+    ports:
+      - "127.0.0.1:${RUNNER_HOST_PORT:-8300}:8000"
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+    restart: "no"
+
+  # Nginx frontend built from this commit (also for later stages).
+  frontend:
+    build:
+      context: ../frontend
+    image: rounds-9s1-frontend:test
+    ports:
+      - "127.0.0.1:${HTTP_HOST_PORT:-8380}:80"
+    depends_on:
+      - pocketbase
+      - runner
+    restart: "no"
+
+  probes:
+    build:
+      context: .
+      dockerfile: Dockerfile.probes
+    image: rounds-9s1-probes:test
+    environment:
+      - POCKETBASE_URL=http://pocketbase:8090
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
+      - POLICY_PATH=/policy/account-scope.v1.json
+      - RECEIPTS_PATH=/out/receipts.jsonl
+      - PB_MIGRATIONS_DIR=/pb_migrations
+      - RUN_ID=${RUN_ID:-local}
+      - GIT_COMMIT=${GIT_COMMIT:-unknown}
+      - PB_BINARY_SHA256=${PB_BINARY_SHA256:-}
+      - PB_BINARY_ARCH=${PB_BINARY_ARCH:-}
+    volumes:
+      - ../docs/security:/policy:ro
+      - ../pocketbase/pb_migrations:/pb_migrations:ro
+      - ./.receipts:/out
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+    restart: "no"

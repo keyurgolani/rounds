@@ -73,3 +73,7 @@ sublime-purescript-syntax/
 
 # Internal SDLC working docs (specs/plans) — kept local, not committed
 docs/superpowers/
+
+# account-scope harness receipts (generated per run)
+harness/.receipts/
+harness/.env
