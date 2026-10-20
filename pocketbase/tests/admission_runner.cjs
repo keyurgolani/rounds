@@ -6,16 +6,18 @@
 // (bucket, account, hour), unique lease token hashes, and leases deleted
 // with their command. The PocketBase store itself runs in the harness.
 //
-//   node admission_runner.cjs <hooks dir> '<program JSON>'
+//   node admission_runner.cjs <hooks dir> < program.json
 //
-// A program is {"steps": [...]}; each step names a call and its
+// A program is {"steps": [...]}, read from stdin since a large result
+// is over Linux's limit for one argument; each step names a call and its
 // arguments, and the output is {"results": [...], "store": {...}}.
 
 const crypto = require("crypto");
+const fs = require("fs");
 const path = require("path");
 
-const [hooksDir, programJson] = process.argv.slice(2);
-const program = JSON.parse(programJson);
+const [hooksDir] = process.argv.slice(2);
+const program = JSON.parse(fs.readFileSync(0, "utf8"));
 
 class BadRequestError extends Error {}
 class UnauthorizedError extends Error {}

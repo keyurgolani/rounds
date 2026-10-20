@@ -35,7 +35,8 @@ def run(*steps: dict) -> dict:
     node = shutil.which("node")
     assert node, "node is required for the PocketBase hook checks; CI installs it"
     res = subprocess.run(
-        [node, str(RUNNER), str(HOOKS), json.dumps({"steps": list(steps)})],
+        [node, str(RUNNER), str(HOOKS)],
+        input=json.dumps({"steps": list(steps)}),
         capture_output=True,
         text=True,
         timeout=60,
