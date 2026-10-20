@@ -78,17 +78,46 @@ These flags only control whether buttons render. The corresponding providers mus
 
 | Variable | Default | Layer | Purpose |
 | --- | --- | --- | --- |
-| `VITE_DISABLE_SIGNUPS` | `false` | frontend | Hides signup entry points and blocks the frontend signup flow. |
-| `ROUNDS_DISABLE_SIGNUPS` | `false` | PocketBase hook | Blocks direct user creation requests. |
+| `ROUNDS_GATE_SIGNUPS` | blank (`enabled`) | PocketBase hook and frontend | `disabled` blocks user creation in PocketBase and hides signup entry points in the frontend. |
+| `VITE_DISABLE_SIGNUPS` | `false` | frontend | Alias read while the gate is blank. Hides signup entry points and blocks the frontend signup flow. |
+| `ROUNDS_DISABLE_SIGNUPS` | `false` | PocketBase hook | Alias read while the gate is blank. Blocks direct user creation requests. |
 
-Set both to `true` for invite-only hosted instances:
+For an invite-only hosted instance, set the gate once:
 
 ```env
-VITE_DISABLE_SIGNUPS=true
-ROUNDS_DISABLE_SIGNUPS=true
+ROUNDS_GATE_SIGNUPS=disabled
 ```
 
-Use both flags because frontend hiding is not a security boundary. The PocketBase hook is the server-side enforcement point.
+Setting both older flags to `true` still works. Frontend hiding is not a security boundary; the PocketBase hook is the server-side enforcement point. A set gate wins over the aliases, so `ROUNDS_GATE_SIGNUPS=enabled` reopens signups even when an alias is `true`.
+
+## Gates
+
+Gates are `ROUNDS_GATE_<NAME>` switches with written defaults that keep today's behavior. Compose reads them from the root `.env`, and k8s reads them from the `rounds-gates` ConfigMap in `k8s/gates.yaml`. Three readers share the names: the runner (`backend/app/gates.py`), PocketBase (`pocketbase/pb_hooks/gates.js`), and the frontend through `runtime-config.js`.
+
+| Gate | Values | Default | Read by | Enforced |
+| --- | --- | --- | --- | --- |
+| `ROUNDS_GATE_SIGNUPS` | `enabled`, `disabled` | `enabled` | PocketBase, frontend | yes |
+| `ROUNDS_GATE_RUN` | `enabled`, `disabled` | `enabled` | runner | not yet; once admission lands, a disabled route answers 503 `route_disabled`. `/api/run` |
+| `ROUNDS_GATE_EVALUATE` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/evaluate` |
+| `ROUNDS_GATE_AI_CODING_RUN_PROJECT` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/ai-coding/run-project` |
+| `ROUNDS_GATE_AI_CODING_GRADE` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/ai-coding/grade` |
+| `ROUNDS_GATE_TAKE_HOME_RUN` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/take-home/run` |
+| `ROUNDS_GATE_TAKE_HOME_SUBMIT` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/take-home/submit` |
+| `ROUNDS_GATE_PDF_RENDER` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/pdf/render` |
+| `ROUNDS_GATE_PDF_HEALTH` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/pdf/health` |
+| `ROUNDS_GATE_ATS_RULE` | `enabled`, `disabled` | `enabled` | runner | not yet; `/api/ai/ats-rule` |
+| `ROUNDS_GATE_PAPER_FETCH` | `enabled`, `disabled` | `enabled` | runner | not yet; the `paper_url` fetch in `/api/ai/improve` |
+| `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` | `off`, `observe`, `enforce` | `off` | runner | not yet; `Idempotency-Key` checks |
+| `ROUNDS_GATE_ENFORCE_QUOTA` | `off`, `observe`, `enforce` | `off` | runner | not yet; account, deployment, and demo quotas |
+
+Each reader resolves a gate the same way:
+
+1. A set gate with an allowed value wins. Values are trimmed and case-insensitive.
+2. A set gate with any other value takes its most restrictive value (`disabled` or `enforce`), and the reader logs an error that names the gate but not the value.
+3. A blank gate falls back to the reader's alias when the alias is `true`, `1`, or `yes`. Only `SIGNUPS` has aliases: PocketBase reads `ROUNDS_DISABLE_SIGNUPS` and the frontend reads `VITE_DISABLE_SIGNUPS`.
+4. Otherwise the default applies.
+
+A process reads its gates once at startup, so a change needs a restart. The runner and PocketBase each log one JSON line with every gate they read, its value, and where the value came from (`default`, `env`, `alias`, or `invalid`). The frontend container logs each `ROUNDS_GATE_*` value it passes to the SPA. Gate values aren't secret, so never put a secret in one.
 
 ## PocketBase Admin Bootstrap
 
@@ -108,8 +137,7 @@ PB_ADMIN_EMAIL=admin@example.com
 PB_ADMIN_PASSWORD=<strong-password>
 AI_KEY_SECRET=<long-random-secret>
 VITE_POCKETBASE_URL=
-VITE_DISABLE_SIGNUPS=true
-ROUNDS_DISABLE_SIGNUPS=true
+ROUNDS_GATE_SIGNUPS=disabled
 VITE_OAUTH_GOOGLE_ENABLED=false
 VITE_OAUTH_GITHUB_ENABLED=false
 ```
@@ -123,5 +151,6 @@ The published frontend image generates `/runtime-config.js` at container startup
 - `VITE_DISABLE_SIGNUPS`
 - `VITE_OAUTH_GOOGLE_ENABLED`
 - `VITE_OAUTH_GITHUB_ENABLED`
+- every `ROUNDS_GATE_*` variable
 
 If you build the frontend outside the provided Docker image, make sure your deployment preserves the same runtime config behavior or sets the matching Vite build-time variables.

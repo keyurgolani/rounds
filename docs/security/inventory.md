@@ -408,4 +408,4 @@ This file is the `62d4eae` baseline. A PR that adds, removes, or changes an entr
 
 ### Changes
 
-None yet.
+1. #1 S1 adds plumbing and enforces nothing new. The SPA sends the caller's bearer on every runner call, including `/api/run`, `/api/evaluate`, `/api/ai-coding/run-project`, the two chat streams, and `/api/pdf/render`, which now goes through `runnerFetch`. POST, PUT, PATCH, and DELETE calls carry one `Idempotency-Key` per user action. Every runner response carries `X-Correlation-Id`, the 32-hex id that `_request_id` now returns. The typed envelope `{"detail", "code", "correlation_id"}` is installed, but no route raises it until S2. The gate registry adds `ROUNDS_GATE_<NAME>` keys with defaults that keep this baseline, and `ROUNDS_GATE_SIGNUPS` joins the signup pair, which become its aliases. Two things now run without a request, and neither takes caller input: the runner reads its gates in a FastAPI lifespan hook, and PocketBase logs its gates in an `onAfterBootstrap` hook.
