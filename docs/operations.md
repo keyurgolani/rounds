@@ -154,9 +154,11 @@ Deploying the release that carries it:
 
 1. Take a fresh `pb_data` backup with PocketBase stopped.
 2. Run the cross-owner relation scan (above) on a copy and clear what it finds.
-3. Deploy, then watch the PocketBase request logs for create or update denials rising on any collection. The migration applies on start; a missing collection fails it whole and PocketBase will not start, so the deploy is all or nothing.
+3. Note the accepted and denied create and update requests per collection and status in the PocketBase request logs over the retained window (5 days by default). Read them in the admin UI's Logs view, reached as in "PocketBase Admin Access" below.
+4. Deploy. The migration applies on start. If one of its collections is missing, it fails whole: PocketBase logs `Failed to apply migration 1700006000_account_scope_rules.js`, changes no rule, and exits without serving, and under `restart: unless-stopped` it keeps restarting. Go back to the previous image tag while you find out why the collection is missing.
+5. Compare the same counts daily for 7 days. Create or update denials rising on a collection is the alert.
 
-If a rule turns out too tight and a legitimate flow starts getting denied, ship a forward fix: a migration that restores that one collection's rules from `pocketbase/levers/restore_collection.template.js`. If a rule is too loose and a probe or the scan finds a foreign write, lock that collection with `pocketbase/levers/lock_collection.template.js` until the fix ships; it sets create and update to `null` so only the superuser can write.
+If a rule turns out too tight and a legitimate flow starts getting denied, fix it forward with a new migration that corrects that collection's rule. If a rule is too loose and a probe or the scan finds a foreign write, lock that collection with `pocketbase/levers/lock_collection.template.js` until the fix ships; it sets create and update to `null` so only the superuser can write. Lift the lock with the corrected rule, or with `pocketbase/levers/restore_collection.template.js` when the rules themselves were right.
 
 After the release, review each account's `ai_providers.base_url` and any `encrypted_key`/`key_iv` pair shared across accounts. Users are not forced to re-confirm their providers.
 

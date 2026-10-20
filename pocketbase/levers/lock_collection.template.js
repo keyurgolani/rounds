@@ -16,8 +16,9 @@
 // backup taken with PocketBase stopped.
 //
 // down() is a deliberate no-op: a lever is forward-only like every account-scope
-// migration, so `migrate down` does not lift the lock. Lift it with the
-// restore_collection template once the fix is ready.
+// migration, so `migrate down` does not lift the lock. Lift it with a forward
+// fix: the corrected rule, or the restore_collection template when the rules
+// themselves were right.
 migrate(
   (db) => {
     const dao = new Dao(db);
