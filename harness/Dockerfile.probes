@@ -6,6 +6,8 @@ FROM python:3.12-slim
 
 WORKDIR /app
 COPY probes/ /app/
+# The operator-runnable deployment verifier; the harness runs it from here.
+COPY verify_deployment.py /app/
 
 ENTRYPOINT ["python", "run.py"]
 CMD ["verdict"]
