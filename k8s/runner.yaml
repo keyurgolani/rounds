@@ -36,6 +36,9 @@ spec:
       labels:
         app: runner
     spec:
+      # Nothing here calls the Kubernetes API, and candidate code runs
+      # in this pod, so it gets no service-account token.
+      automountServiceAccountToken: false
       containers:
         - name: runner
           image: ghcr.io/your-org/rounds-runner:1.0.0

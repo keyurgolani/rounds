@@ -34,6 +34,8 @@ spec:
       labels:
         app: pocketbase
     spec:
+      # Nothing here calls the Kubernetes API.
+      automountServiceAccountToken: false
       containers:
         - name: pocketbase
           image: ghcr.io/your-org/rounds-pocketbase:1.0.0
