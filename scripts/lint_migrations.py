@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
 """Lints PocketBase migration changes (ROUNDS-00A-L01 stage 5).
 
-PocketBase applies each ``.js`` file in ``pocketbase/pb_migrations/`` once,
-records it by filename, and never runs it again. So a change may only add
-migrations:
+PocketBase applies each ``.js`` and ``.ts`` file at the top of
+``pocketbase/pb_migrations/`` once, records it by filename, and never runs
+it again. So a change may only add migrations:
 
 - an edit to an existing migration never reaches a database that already
   applied it, and deleting or renaming one breaks its own down step;
 - a new migration's up step may not drop a collection or a field, or
-  rewrite or delete existing rows.
+  rewrite or delete existing rows, or load code the lint can't read;
+- any other file in that directory fails too, so nothing slips in under a
+  name the lint doesn't read.
 
 The scan covers the whole file except the down step, so a helper defined
-outside ``migrate(...)`` counts. It matches known PocketBase, dbx, and SQL
-patterns, so it catches mistakes; review still catches intent. A finding
-passes only with an entry in ``scripts/migration-lint-allowlist.json`` that
-names the file, the rules it may break, the issue that needs it, who
-reviewed it, and the SHA-256 of the reviewed content, so any later edit
-needs a fresh review. See docs/development.md#migrations.
+outside ``migrate(...)`` counts. It matches destructive and row-writing
+calls by method name, whatever the receiver is called, plus SQL in a file
+that runs newQuery(), so it catches mistakes; review still catches intent.
+A finding passes only with an entry in
+``scripts/migration-lint-allowlist.json`` that names the file, the rules it
+may break, the issue that needs it, who reviewed it, and the SHA-256 of the
+reviewed content, so any later edit needs a fresh review. The entry and
+this lint come from the change under review, so they don't prove review on
+their own; CODEOWNERS and required code-owner review do. See
+docs/development.md#migrations.
 
 TODO(ROUNDS-32-L02): #156's migration framework and #157's restore
 rehearsal replace this lint.
@@ -37,6 +43,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 MIGRATIONS_DIR = "pocketbase/pb_migrations/"
+# PocketBase 0.22's jsvm loads both from the top of the directory.
+MIGRATION_SUFFIXES = (".js", ".ts")
 DEFAULT_ALLOWLIST = "scripts/migration-lint-allowlist.json"
 
 RULES: dict[str, str] = {
@@ -46,23 +54,24 @@ RULES: dict[str, str] = {
     "drops-collection": "drops a collection outside its down step",
     "drops-field": "drops a field outside its down step",
     "rewrites-rows": "rewrites or deletes existing rows outside its down step",
+    "loads-code": "loads code with require() that the lint can't read",
     "unparsed-migration": "has no migrate(up, down) call the lint can read",
+    "unknown-file": f"is in {MIGRATIONS_DIR} but isn't a top-level .js or .ts migration",
 }
 
-# Checked against the scanned code, outside strings and comments.
+# Checked against the scanned code, outside strings and comments, by method
+# name whatever the receiver is called: db, dao, txDao, app, or anything else.
 CODE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("drops-collection", re.compile(r"\bdeleteCollection\s*\(")),
-    ("drops-collection", re.compile(r"\bdropTable\s*\(")),
+    ("drops-collection", re.compile(r"\b(?:deleteCollection|deleteTable|deleteView|dropTable|dropView)\s*\(")),
     # An import deletes the collections and fields it leaves out.
     ("drops-collection", re.compile(r"\bimportCollections\s*\(")),
-    ("drops-field", re.compile(r"\bremoveField\s*\(")),
-    ("drops-field", re.compile(r"\bfields\s*\.\s*remove\w*\s*\(")),
-    ("drops-field", re.compile(r"\bdropColumn\s*\(")),
-    ("rewrites-rows", re.compile(r"\bdeleteRecord\s*\(")),
-    ("rewrites-rows", re.compile(r"\btruncate(?:Collection|Table)\s*\(")),
-    # PocketBase 0.23+ deletes records and collections with app.delete().
-    ("rewrites-rows", re.compile(r"\b(?:app|txApp|dao|txDao)\s*\.\s*delete\s*\(")),
-    ("rewrites-rows", re.compile(r"\bdb\s*\(\s*\)\s*\.\s*(?:delete|update|upsert)\s*\(")),
+    ("drops-field", re.compile(r"\b(?:removeField|removeById|removeByName|dropColumn)\s*\(")),
+    # deleteRecord, deleteAdmin, app.delete, db.delete, and the like.
+    ("rewrites-rows", re.compile(r"\bdelete(?!Collection\b|Table\b|View\b)\w*\s*\(")),
+    ("rewrites-rows", re.compile(r"\btruncate\w*\s*\(")),
+    # dbx's update and upsert, on the callback's db or anything else.
+    ("rewrites-rows", re.compile(r"\.\s*(?:update|upsert)\s*\(")),
+    ("loads-code", re.compile(r"\brequire\s*\(")),
 )
 # Raw SQL, checked in the strings of a file that calls newQuery().
 SQL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -72,9 +81,11 @@ SQL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("rewrites-rows", re.compile(r"\bUPDATE\b.*?\bSET\b", re.I | re.S)),
     ("rewrites-rows", re.compile(r"\b(?:INSERT\s+OR\s+REPLACE|REPLACE\s+INTO|TRUNCATE)\b", re.I)),
 )
-# Looking up existing records and saving in the same migration rewrites them.
-FIND_EXISTING = re.compile(r"\bfind(?:Record|Records|FirstRecord|AllRecords)\w*\s*\(")
-SAVE = re.compile(r"\b(?:saveRecord|save)\s*\(")
+# Looking up existing records or admins and saving in the same migration
+# rewrites them: findRecordById, findAdminByEmail, findAuthRecordByEmail,
+# and so on, with saveRecord, saveAdmin, or save. Collections don't count.
+FIND_EXISTING = re.compile(r"\bfind(?!Collection)\w*\s*\(")
+SAVE = re.compile(r"\bsave(?!Collection\b)\w*\s*\(")
 NEW_QUERY = re.compile(r"\bnewQuery\s*\(")
 MIGRATE_CALL = re.compile(r"\bmigrate\s*\(")
 
@@ -112,8 +123,15 @@ def sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def in_migrations_dir(path: str) -> bool:
+    return path.startswith(MIGRATIONS_DIR)
+
+
 def is_migration(path: str) -> bool:
-    return path.startswith(MIGRATIONS_DIR) and path.endswith(".js")
+    """A file PocketBase loads as a migration: .js or .ts, at the top of
+    the directory."""
+    name = path[len(MIGRATIONS_DIR):] if in_migrations_dir(path) else ""
+    return bool(name) and "/" not in name and name.endswith(MIGRATION_SUFFIXES)
 
 
 # ---- reading JavaScript ----------------------------------------------------------
@@ -346,8 +364,8 @@ def load_allowlist(path: Path) -> list[dict]:
         unknown = set(entry) - ENTRY_KEYS - OPTIONAL_ENTRY_KEYS
         if unknown:
             raise LintError(f"{where} has unknown keys {', '.join(sorted(unknown))}")
-        if not isinstance(entry["path"], str) or not is_migration(entry["path"]):
-            raise LintError(f"{where}: path must be a .js file under {MIGRATIONS_DIR}")
+        if not isinstance(entry["path"], str) or not in_migrations_dir(entry["path"]) or entry["path"] == MIGRATIONS_DIR:
+            raise LintError(f"{where}: path must be a file under {MIGRATIONS_DIR}")
         rules = entry["rules"]
         if not isinstance(rules, list) or not rules or any(r not in RULES for r in rules):
             raise LintError(f"{where}: rules must be a non-empty list from {', '.join(RULES)}")
@@ -373,28 +391,34 @@ def _entry_for(finding: Finding, entries: list[dict]) -> dict | None:
     return None
 
 
-def _normalize(change: Change) -> Change | None:
-    """The change as it affects migrations: a rename that moves a file into
-    the migrations adds one, a rename that moves it out deletes one, and a
-    change to anything that isn't a migration drops out."""
+def _normalize(change: Change) -> list[Change]:
+    """The change as it touches the migrations directory, one change per
+    path: a rename between two migrations stays a rename, and any other
+    rename that crosses the directory splits into a deletion of the old path
+    and an addition of the new one. Paths outside the directory drop out."""
     if change.status == "R":
-        old_is = is_migration(change.old_path or "")
-        new_is = is_migration(change.path)
-        if old_is and new_is:
-            return change
-        if old_is:
-            return Change("D", change.old_path or "", base_content=change.base_content)
-        if new_is:
-            return Change("A", change.path, content=change.content)
-        return None
-    return change if is_migration(change.path) else None
+        old, new = change.old_path or "", change.path
+        if is_migration(old) and is_migration(new):
+            return [change]
+        split = []
+        if in_migrations_dir(old):
+            split.append(Change("D", old, base_content=change.base_content))
+        if in_migrations_dir(new):
+            split.append(Change("A", new, content=change.content))
+        return split
+    return [change] if in_migrations_dir(change.path) else []
 
 
 def lint(changes: list[Change], allowlist: list[dict]) -> tuple[list[Finding], list[Finding]]:
     """(blocking, allowed): the findings for ``changes``, split by whether
     an allowlist entry covers them."""
     findings: list[Finding] = []
-    for change in filter(None, map(_normalize, changes)):
+    for change in (part for c in changes for part in _normalize(c)):
+        if not is_migration(change.path):
+            # Something PocketBase wouldn't load, or that the lint doesn't read.
+            content = change.base_content if change.status == "D" else change.content
+            findings.append(Finding(change.path, "unknown-file", None, sha256(content or "")))
+            continue
         if change.status == "D":
             findings.append(Finding(change.path, "deleted-migration", None, sha256(change.base_content or "")))
             continue

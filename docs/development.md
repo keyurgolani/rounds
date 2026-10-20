@@ -82,14 +82,15 @@ Use the PocketBase SDK directly only in infrastructure-level code such as auth, 
 
 ## Migrations
 
-PocketBase applies each file in `pocketbase/pb_migrations/` once, when it starts, and records it by name. A migration that has shipped never runs again, so every schema or data change gets a new migration. Don't edit, rename, or delete one that exists.
+PocketBase applies each `.js` and `.ts` file at the top of `pocketbase/pb_migrations/` once, when it starts, and records it by name. A migration that has shipped never runs again, so every schema or data change gets a new migration. Don't edit, rename, or delete one that exists.
 
 Pull requests into `main` and `next` run `scripts/lint_migrations.py`. It fails when a change:
 
 1. edits, renames, or deletes an existing migration;
-2. adds a migration whose up step drops a collection or a field, or rewrites or deletes existing rows.
+2. adds a migration whose up step drops a collection or a field, rewrites or deletes existing rows, or loads code with `require()`;
+3. adds, edits, or deletes any other file in that directory.
 
-A down step may do all of that. The lint reads the whole file except the down step, helpers included, and looks for known PocketBase, dbx, and SQL calls, so it catches mistakes rather than every possible rewrite. Run it before you push:
+A down step may do all of that. The lint reads the whole file except the down step, helpers included. It matches destructive and row-writing calls by method name, whatever the object is called, plus SQL in a file that runs `newQuery()`, so it catches mistakes rather than every possible rewrite. Run it before you push:
 
 ```sh
 python3 scripts/lint_migrations.py --base origin/next --head HEAD
@@ -109,7 +110,11 @@ A destructive change that's intended needs review and an entry in `scripts/migra
 }
 ```
 
-The entry covers only that file, those rules, and that exact content, so any later edit fails the lint until it's reviewed again. `manifest` is optional. CI annotates each finding the entry covers. [#156](https://github.com/keyurgolani/rounds/issues/156)'s migration framework and [#157](https://github.com/keyurgolani/rounds/issues/157)'s restore rehearsal replace this lint.
+The entry covers only that file, those rules, and that exact content, so any later edit fails the lint until it's reviewed again. `manifest` is optional. CI annotates each finding the entry covers.
+
+The lint can't prove the review happened. It runs from the pull request's own checkout, so the same pull request can add a destructive migration and its own entry, and `reviewed_by` is free text. The review is enforced by `.github/CODEOWNERS`, which assigns the migrations, the allowlist, the lint, the release gate, and the workflows to the owner, and by required code-owner review on `main` and `next`.
+
+[#156](https://github.com/keyurgolani/rounds/issues/156)'s migration framework and [#157](https://github.com/keyurgolani/rounds/issues/157)'s restore rehearsal replace this lint.
 
 ## Adding Pages
 

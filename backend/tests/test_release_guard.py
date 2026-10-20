@@ -2,13 +2,15 @@
 
 Pushes to main publish edge and sha-<short>. Only a v* tag publishes the
 version tags and latest, and only after CI passed on a push of that exact
-commit to main; the gate fails closed. Pull requests into main and next
-lint their migration changes."""
+commit to main; the gate fails closed. Each publish decides its moving tags
+when it pushes. Pull requests into main and next lint their migration
+changes, and CODEOWNERS routes the files that decide all this to the owner."""
 from __future__ import annotations
 
 import importlib.util
 import io
 import json
+import re
 import sys
 import urllib.error
 from pathlib import Path
@@ -43,11 +45,12 @@ def test_every_workflow_parses():
         assert isinstance(yaml.safe_load(path.read_text()), dict), path.name
 
 
-def test_publishing_runs_only_on_pushes_to_main_and_v_tags():
+def test_publishing_runs_only_on_pushes_to_main_and_v_tags_one_at_a_time_per_ref():
     workflow = _workflow("publish-images.yml")
     assert workflow["on"] == {"push": {"branches": ["main"], "tags": ["v*"]}}
     assert "workflow_dispatch" not in (WORKFLOWS / "publish-images.yml").read_text()
     assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["concurrency"] == {"group": "publish-images-${{ github.ref }}", "cancel-in-progress": False}
 
 
 def test_the_plan_job_gates_publishing_and_holds_no_publishing_rights():
@@ -55,38 +58,68 @@ def test_the_plan_job_gates_publishing_and_holds_no_publishing_rights():
     plan, publish = jobs["plan"], jobs["publish"]
     assert plan["permissions"] == {"actions": "read", "contents": "read"}
     assert "secrets." not in json.dumps(plan)
-    assert [s.get("run") for s in plan["steps"] if "run" in s] == ["python3 scripts/release_gate.py"]
+    assert [s.get("run") for s in plan["steps"] if "run" in s] == ["python3 scripts/release_gate.py plan"]
+    assert plan["outputs"] == {"channel": "${{ steps.plan.outputs.channel }}"}
     assert publish["needs"] == "plan"
     assert publish["if"] == "needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release'"
     assert publish["permissions"] == {"contents": "read", "packages": "write"}
     assert set(jobs) == {"plan", "publish"}
 
 
-def test_edge_and_sha_come_only_from_main_and_latest_only_from_a_cleared_release():
-    publish = _workflow("publish-images.yml")["jobs"]["publish"]
-    assert publish["env"]["IMAGE_TAGS"].splitlines() == [
-        "type=raw,value=edge,enable=${{ needs.plan.outputs.channel == 'edge' }}",
-        "type=sha,prefix=sha-,enable=${{ needs.plan.outputs.channel == 'edge' }}",
-        "type=semver,pattern={{version}},enable=${{ needs.plan.outputs.channel == 'release' }}",
-        "type=semver,pattern={{major}}.{{minor}},enable=${{ needs.plan.outputs.channel == 'release' }}",
-        "type=ref,event=tag,enable=${{ needs.plan.outputs.channel == 'release' }}",
-        "type=raw,value=latest,enable=${{ needs.plan.outputs.latest == 'true' }}",
-    ]
-    metadata = [s for s in publish["steps"] if str(s.get("uses", "")).startswith("docker/metadata-action")]
+def _publish_steps() -> list[dict]:
+    return _workflow("publish-images.yml")["jobs"]["publish"]["steps"]
+
+
+def test_each_publish_decides_its_tags_just_before_it_pushes():
+    steps = _publish_steps()
+    names = [s.get("name") or s.get("uses") for s in steps]
+    tags = next(s for s in steps if s.get("id") == "tags")
+    assert tags["run"] == "python3 scripts/release_gate.py tags"
+    assert tags["env"] == {"CHANNEL": "${{ needs.plan.outputs.channel }}", "GH_TOKEN": "${{ github.token }}"}
+    metadata = [s for s in steps if str(s.get("uses", "")).startswith("docker/metadata-action")]
     assert len(metadata) == 2
     for step in metadata:
+        assert names.index(step["name"]) > names.index(tags["name"])
         assert step["with"]["flavor"] == "latest=false"
-        assert step["with"]["tags"] == "${{ env.IMAGE_TAGS }}"
+        assert step["with"]["tags"] == "${{ steps.tags.outputs.tags }}"
     text = (WORKFLOWS / "publish-images.yml").read_text()
     assert "is_default_branch" not in text and "event=branch" not in text
 
 
-def test_docker_hub_stays_optional():
-    steps = {s.get("name"): s for s in _workflow("publish-images.yml")["jobs"]["publish"]["steps"]}
-    configured = "env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''"
+def test_docker_hub_stays_optional_and_its_secrets_reach_only_the_steps_that_use_them():
+    publish = _workflow("publish-images.yml")["jobs"]["publish"]
+    steps = {s.get("name"): s for s in publish["steps"]}
+    configured = "steps.dockerhub.outputs.configured == 'true'"
     assert steps["Log in to Docker Hub"]["if"] == configured
+    assert steps["Extract Docker Hub metadata"]["if"] == configured
     assert steps["Build and push ${{ matrix.service }} to Docker Hub"]["if"] == configured
-    assert steps["Docker Hub publish skipped"]["if"] == "env.DOCKERHUB_USERNAME == '' || env.DOCKERHUB_TOKEN == ''"
+    assert steps["Docker Hub publish skipped"]["if"] == "steps.dockerhub.outputs.configured != 'true'"
+    check = steps["Check for Docker Hub credentials"]
+    assert check["id"] == "dockerhub" and set(check["env"]) == {"DOCKERHUB_USERNAME", "DOCKERHUB_TOKEN"}
+    holders = {name for name, step in steps.items() if "secrets.DOCKERHUB" in json.dumps(step)}
+    assert holders == {"Check for Docker Hub credentials", "Log in to Docker Hub"}
+    assert "secrets." not in json.dumps(publish.get("env", {}))
+
+
+def test_every_action_the_publish_workflow_runs_is_pinned_to_a_commit():
+    uses = [line.strip() for line in (WORKFLOWS / "publish-images.yml").read_text().splitlines() if "uses:" in line]
+    assert len(uses) == 9
+    for line in uses:
+        assert re.fullmatch(r"(- )?uses: [\w.-]+/[\w.-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+", line), line
+
+
+def test_codeowners_routes_the_release_and_migration_files_to_the_owner():
+    lines = [line.split() for line in (ROOT / ".github" / "CODEOWNERS").read_text().splitlines() if line.strip() and not line.startswith("#")]
+    owners = {path: rest for path, *rest in lines}
+    for path in (
+        "/pocketbase/pb_migrations/",
+        "/scripts/migration-lint-allowlist.json",
+        "/scripts/lint_migrations.py",
+        "/scripts/release_gate.py",
+        "/.github/workflows/",
+        "/.github/CODEOWNERS",
+    ):
+        assert owners.get(path) == ["@keyurgolani"], path
 
 
 # ---- installs pin the tag they run -----------------------------------------------------------
@@ -168,6 +201,20 @@ def test_latest_moves_only_to_the_highest_stable_version(tag, tags, moves):
     assert gate.moves_latest(tag, tags) is moves
 
 
+@pytest.mark.parametrize(
+    "tag, tags, moves",
+    [
+        ("v1.2.3", ["v1.2.2", "v1.2.3", "v1.3.0"], True),
+        ("v1.2.2", ["v1.2.2", "v1.2.3"], False),
+        ("v1.2.10", ["v1.2.9", "v1.2.10"], True),
+        ("v1.2.4-rc.1", ["v1.2.3", "v1.2.4-rc.1"], False),
+        ("v1.2.3", ["v1.2.3", "v1.2.4-rc.1", "v2.2.9"], True),
+    ],
+)
+def test_x_y_moves_only_to_the_highest_stable_patch_of_its_line(tag, tags, moves):
+    assert gate.moves_minor(tag, tags) is moves
+
+
 def _run(status="completed", conclusion="success", sha=SHA, event="push", branch="main", repo=REPO):
     return {"head_sha": sha, "event": event, "head_branch": branch, "status": status, "conclusion": conclusion,
             "head_repository": {"full_name": repo}}
@@ -238,8 +285,8 @@ def test_a_run_that_shows_up_late_still_counts():
 
 
 class FakeApi:
-    def __init__(self, runs: list[dict], tags: list[str]) -> None:
-        self.runs, self.tags = runs, tags
+    def __init__(self, runs: list[dict], tags: list[str], tip: str = SHA) -> None:
+        self.runs, self.tags, self.tip = runs, tags, tip
         self.calls: list[tuple[str, dict]] = []
 
     def __call__(self, path: str, params: dict) -> list:
@@ -248,33 +295,78 @@ class FakeApi:
             return [{"total_count": len(self.runs), "workflow_runs": self.runs}]
         if "/git/matching-refs/tags/" in path:
             return [[{"ref": f"refs/tags/{t}"} for t in self.tags]]
+        if path.endswith("/git/ref/heads/main"):
+            return [{"ref": "refs/heads/main", "object": {"sha": self.tip, "type": "commit"}}]
         raise AssertionError(path)
 
 
-def _decide(ref, api, event=None, event_name="push", sha=SHA):
+def _plan(ref, api, event=None, event_name="push", sha=SHA):
     clock = Clock()
-    return gate.decide(event_name, event or {}, ref, sha, REPO, api, wait_s=60, appear_s=30, poll_s=30,
-                       clock=clock.time, sleep=clock.sleep)
+    return gate.plan(event_name, event or {}, ref, sha, REPO, api, wait_s=60, appear_s=30, poll_s=30,
+                     clock=clock.time, sleep=clock.sleep)
 
 
-def test_a_push_to_main_publishes_edge_without_asking_github():
+def test_a_push_to_main_is_the_edge_channel_without_asking_github():
     api = FakeApi([], [])
-    assert _decide("refs/heads/main", api) == {"channel": "edge", "latest": "false"}
+    assert _plan("refs/heads/main", api) == {"channel": "edge"}
     assert api.calls == []
 
 
 def test_a_release_tag_publishes_once_ci_passed_on_that_commit():
     api = FakeApi([_run()], ["v1.0.0", "v1.1.0"])
-    assert _decide("refs/tags/v1.1.0", api) == {"channel": "release", "latest": "true"}
+    assert _plan("refs/tags/v1.1.0", api) == {"channel": "release"}
     path, params = api.calls[0]
     assert path == f"repos/{REPO}/actions/workflows/ci.yml/runs"
     assert params == {"head_sha": SHA, "event": "push", "branch": "main", "per_page": "100"}
 
 
-@pytest.mark.parametrize("tag", ["v1.0.1", "v2.0.0-rc.1"])
-def test_an_older_or_pre_release_tag_leaves_latest_alone(tag):
-    api = FakeApi([_run()], ["v1.1.0", tag])
-    assert _decide(f"refs/tags/{tag}", api) == {"channel": "release", "latest": "false"}
+# ---- the tags each publish pushes, decided when it pushes -------------------------------------
+
+VERSION_TAGS = ["type=semver,pattern={{version}}", "type=ref,event=tag"]
+MINOR = "type=semver,pattern={{major}}.{{minor}}"
+LATEST = "type=raw,value=latest"
+
+
+def test_main_publishes_edge_and_its_sha_while_it_is_the_tip():
+    api = FakeApi([], [], tip=SHA)
+    assert gate.image_tags("edge", "refs/heads/main", SHA, REPO, api) == ["type=raw,value=edge", "type=sha,prefix=sha-"]
+
+
+def test_an_old_main_run_publishes_only_its_sha():
+    # Re-running an old run, or one that lost the race, can't move edge back.
+    api = FakeApi([], [], tip=OTHER_SHA)
+    assert gate.image_tags("edge", "refs/heads/main", SHA, REPO, api) == ["type=sha,prefix=sha-"]
+
+
+@pytest.mark.parametrize(
+    "tag, tags, moving",
+    [
+        ("v1.2.0", ["v1.0.0", "v1.1.5", "v1.2.0"], [MINOR, LATEST]),
+        ("v1.1.6", ["v1.1.5", "v1.1.6", "v1.2.0"], [MINOR]),
+        ("v1.1.4", ["v1.1.4", "v1.1.5", "v1.2.0"], []),
+        ("v1.3.0-rc.1", ["v1.2.0", "v1.3.0-rc.1"], []),
+    ],
+)
+def test_a_release_moves_x_y_and_latest_only_when_it_is_still_the_highest(tag, tags, moving):
+    api = FakeApi([], tags)
+    assert gate.image_tags("release", f"refs/tags/{tag}", SHA, REPO, api) == VERSION_TAGS + moving
+
+
+def test_a_release_rechecks_the_tags_when_it_pushes():
+    # A higher release that appeared after the plan job ran keeps latest.
+    api = FakeApi([_run()], ["v1.1.0"])
+    assert _plan("refs/tags/v1.1.0", api) == {"channel": "release"}
+    api.tags = ["v1.1.0", "v1.2.0"]
+    assert gate.image_tags("release", "refs/tags/v1.1.0", SHA, REPO, api) == VERSION_TAGS + [MINOR]
+
+
+@pytest.mark.parametrize(
+    "channel, ref",
+    [("none", "refs/heads/main"), ("", "refs/heads/main"), ("edge", "refs/tags/v1.0.0"), ("release", "refs/heads/main")],
+)
+def test_tags_for_anything_else_fail(channel, ref):
+    with pytest.raises(gate.GateError):
+        gate.image_tags(channel, ref, SHA, REPO, FakeApi([], ["v1.0.0"]))
 
 
 @pytest.mark.parametrize(
@@ -291,26 +383,28 @@ def test_an_older_or_pre_release_tag_leaves_latest_alone(tag):
 def test_anything_else_publishes_nothing_and_fails(ref, event_name):
     api = FakeApi([_run()], ["v1.0.0"])
     with pytest.raises(gate.GateError):
-        _decide(ref, api, event_name=event_name)
+        _plan(ref, api, event_name=event_name)
     assert api.calls == []
 
 
 def test_a_tag_whose_commit_ci_never_passed_fails():
     api = FakeApi([_run(sha=OTHER_SHA), _run(conclusion="failure")], ["v1.0.0"])
     with pytest.raises(gate.GateError, match="didn't pass"):
-        _decide("refs/tags/v1.0.0", api)
+        _plan("refs/tags/v1.0.0", api)
 
 
 def test_a_deleted_tag_publishes_nothing():
     api = FakeApi([_run()], [])
-    assert _decide("refs/tags/v1.0.0", api, event={"deleted": True}) == {"channel": "none", "latest": "false"}
+    assert _plan("refs/tags/v1.0.0", api, event={"deleted": True}) == {"channel": "none"}
     assert api.calls == []
 
 
 @pytest.mark.parametrize("sha", ["", "abc", "A" * 40])
 def test_a_malformed_commit_fails(sha):
     with pytest.raises(gate.GateError):
-        _decide("refs/tags/v1.0.0", FakeApi([_run(sha=sha)], []), sha=sha)
+        _plan("refs/tags/v1.0.0", FakeApi([_run(sha=sha)], []), sha=sha)
+    with pytest.raises(gate.GateError):
+        gate.image_tags("edge", "refs/heads/main", sha, REPO, FakeApi([], [], tip=sha))
 
 
 # ---- the GitHub client -----------------------------------------------------------------------
@@ -361,7 +455,9 @@ def test_a_failed_lookup_or_a_missing_token_fails_closed(monkeypatch):
         gate.github_api("https://api.github.com", "")("repos/x/y/z", {})
 
 
-def test_main_writes_the_outputs_for_a_push_to_main(tmp_path, monkeypatch, capsys):
+@pytest.fixture
+def actions_env(tmp_path, monkeypatch):
+    """The environment Actions gives a step; returns its GITHUB_OUTPUT file."""
     output, event = tmp_path / "output", tmp_path / "event.json"
     event.write_text("{}")
     for key, value in {
@@ -369,19 +465,33 @@ def test_main_writes_the_outputs_for_a_push_to_main(tmp_path, monkeypatch, capsy
         "GITHUB_SHA": SHA, "GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": str(output),
     }.items():
         monkeypatch.setenv(key, value)
-    assert gate.main() == 0
-    assert output.read_text() == "channel=edge\nlatest=false\n"
+    return output
 
 
-def test_main_fails_without_outputs_when_the_gate_refuses(tmp_path, monkeypatch, capsys):
-    output, event = tmp_path / "output", tmp_path / "event.json"
-    event.write_text("{}")
-    for key, value in {
-        "GITHUB_EVENT_NAME": "push", "GITHUB_EVENT_PATH": str(event), "GITHUB_REF": "refs/tags/v1.0.0",
-        "GITHUB_SHA": SHA, "GITHUB_REPOSITORY": REPO, "GITHUB_OUTPUT": str(output),
-    }.items():
-        monkeypatch.setenv(key, value)
+def test_plan_writes_the_channel_for_a_push_to_main(actions_env):
+    assert gate.main(["plan"]) == 0
+    assert actions_env.read_text() == "channel=edge\n"
+
+
+def test_tags_writes_a_multi_line_output(actions_env, monkeypatch):
+    monkeypatch.setenv("CHANNEL", "edge")
+    monkeypatch.setattr(gate, "github_api", lambda base, token: FakeApi([], [], tip=SHA))
+    assert gate.main(["tags"]) == 0
+    first, *body, last = actions_env.read_text().splitlines()
+    delimiter = first.removeprefix("tags<<")
+    assert first.startswith("tags<<ghadelimiter_") and last == delimiter
+    assert body == ["type=raw,value=edge", "type=sha,prefix=sha-"]
+
+
+def test_main_fails_without_outputs_when_the_gate_refuses(actions_env, monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_REF", "refs/tags/v1.0.0")
     monkeypatch.delenv("GH_TOKEN", raising=False)
-    assert gate.main() == 1
-    assert not output.exists()
+    assert gate.main(["plan"]) == 1
+    assert not actions_env.exists()
     assert capsys.readouterr().out.startswith("::error::")
+
+
+@pytest.mark.parametrize("argv", [[], ["publish"], ["plan", "extra"]])
+def test_main_needs_a_command(actions_env, argv):
+    assert gate.main(argv) == 1
+    assert not actions_env.exists()

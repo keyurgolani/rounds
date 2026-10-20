@@ -38,14 +38,14 @@ Docker Hub publishing requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` GitHub
 | Tag | What it is | Moves |
 | --- | --- | --- |
 | `1.2.3`, `v1.2.3` | One release | Never |
-| `1.2` | The newest patch release of 1.2 | With each 1.2.x release |
-| `latest` | The newest stable release | Only when a higher `vX.Y.Z` tag is pushed |
-| `edge` | The newest commit on `main` | With every push to `main` |
+| `1.2` | The newest patch release of 1.2 | Only to a higher 1.2.x release |
+| `latest` | The newest stable release | Only to a higher `vX.Y.Z` release |
+| `edge` | The newest commit on `main` | With each push to `main`, never back to an older commit |
 | `sha-<short>` | One commit on `main` | Never |
 
 Run a release tag in production, such as `ROUNDS_IMAGE_TAG=1.2.3`, and change it on purpose; [Upgrades](operations.md#upgrades) walks through it, backup and rollback included. `latest` is safe to follow only if you're fine with upgrades, and their migrations, arriving whenever the stack pulls. `edge` isn't for production.
 
-Releases come from `vX.Y.Z` tags on `main`. The workflow checks that CI passed on a push of that exact commit to `main` before it publishes anything, and publishes nothing otherwise. A pre-release tag such as `v1.3.0-rc.1` publishes only `1.3.0-rc.1` and `v1.3.0-rc.1`. Nothing publishes from `next` or any other branch.
+Releases come from `vX.Y.Z` tags on `main`. The workflow checks that CI passed on a push of that exact commit to `main` before it publishes anything, and publishes nothing otherwise. A pre-release tag such as `v1.3.0-rc.1` publishes only `1.3.0-rc.1` and `v1.3.0-rc.1`. Nothing publishes from `next` or any other branch. Each publish checks the moving tags (`edge`, `1.2`, `latest`) at the moment it pushes, so re-running an old run can't move one backwards, and publishes for the same branch or tag run one at a time.
 
 ## Required Production Settings
 

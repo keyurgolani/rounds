@@ -82,8 +82,9 @@ The volume is named after the compose project, which defaults to the checkout's 
 
 1. Stop the stack.
 2. Empty the `pb_data` volume and extract the backup archive into it.
-3. Start the stack again.
-4. Verify login, dashboard data, applications, interviews, todos, and guide pages.
+3. Check that `ROUNDS_IMAGE_TAG` in `.env` is the release that wrote the archive. PocketBase migrates whatever data it starts on, so a newer image would upgrade the restored data again.
+4. Start the stack again.
+5. Verify login, dashboard data, applications, interviews, todos, and guide pages.
 
 ```sh
 docker compose -f docker-compose.prod.yml down
@@ -91,10 +92,15 @@ docker run --rm \
   -v rounds_pb_data:/data \
   -v "$(pwd)":/backup:ro \
   alpine sh -c 'find /data -mindepth 1 -delete && tar xzf /backup/pocketbase-2026-01-31.tar.gz -C /data --strip-components=1'
+```
+
+Use the archive's own date in place of `2026-01-31`. Nothing has started yet; once the tag is right, start the stack:
+
+```sh
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Use the archive's own date in place of `2026-01-31`. Do not restore over a running PocketBase container.
+Do not restore over a running PocketBase container.
 
 ## Upgrades
 
@@ -119,12 +125,22 @@ On Kubernetes, scale PocketBase to 0 and back up its volume, then set `newTag` f
 
 ### Rolling back
 
-An older image doesn't undo a newer release's migrations, so rolling back means restoring the backup from step 3 and running the tag you noted in step 2. Anything written since the upgrade is lost.
+An older image doesn't undo a newer release's migrations, so rolling back means restoring the backup from step 3 and running the tag you noted in step 2. Anything written since the upgrade is lost. Set the tag before anything starts, so the newer image never runs on the restored data.
 
 1. Stop the stack.
-2. Restore the pre-upgrade archive as in [Restore](#restore).
-3. Set `ROUNDS_IMAGE_TAG` back to the previous tag.
+2. Set `ROUNDS_IMAGE_TAG` in `.env` back to the previous tag.
+3. Restore the pre-upgrade archive into `pb_data`.
 4. Start the stack and run the smoke tests.
+
+```sh
+docker compose -f docker-compose.prod.yml down
+# set ROUNDS_IMAGE_TAG in .env back to the previous tag
+docker run --rm \
+  -v rounds_pb_data:/data \
+  -v "$(pwd)":/backup:ro \
+  alpine sh -c 'find /data -mindepth 1 -delete && tar xzf /backup/pocketbase-2026-01-31.tar.gz -C /data --strip-components=1'
+docker compose -f docker-compose.prod.yml up -d
+```
 
 ### Cross-owner relation scan
 

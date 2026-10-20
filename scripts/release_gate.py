@@ -1,21 +1,32 @@
 #!/usr/bin/env python3
 """Decides what a push may publish (ROUNDS-00A-L01 stage 5).
 
-The image workflow runs this before it builds anything:
+The image workflow runs this twice:
 
-- A push to main publishes the edge channel: ``edge`` and ``sha-<short>``.
-- A ``vX.Y.Z`` or ``vX.Y.Z-PRERELEASE`` tag publishes a release, but only
-  once the ``CI`` workflow passed on a push of the exact tagged commit to
-  main. It waits while that run is still going and fails closed when no
-  run passed, none ran, or the lookup failed. ``latest`` moves only for a
-  stable version that no other stable tag outranks.
-- Anything else publishes nothing. A deleted ref isn't an error; it just
-  publishes nothing.
+``plan``, in the plan job, before anything builds
+    A push to main is the edge channel. A ``vX.Y.Z`` or
+    ``vX.Y.Z-PRERELEASE`` tag is the release channel, but only once the
+    ``CI`` workflow passed on a push of the exact tagged commit to main. It
+    waits while that run is still going and fails closed when no run
+    passed, none ran, or the lookup failed. Anything else publishes nothing;
+    a deleted ref isn't an error. Writes ``channel`` (edge, release, or
+    none).
 
-It writes ``channel`` (edge, release, or none) and ``latest`` (true or
-false) to ``$GITHUB_OUTPUT``. It reads GITHUB_EVENT_NAME, GITHUB_EVENT_PATH,
-GITHUB_REF, GITHUB_SHA, GITHUB_REPOSITORY, GITHUB_API_URL, and GH_TOKEN.
+``tags``, in each publish job, right before it pushes
+    Writes ``tags``, the docker/metadata-action tag list, from the
+    repository as it is at that moment, so a re-run of an old run can't
+    move a moving tag backwards:
 
+    - edge: ``sha-<short>``, plus ``edge`` while this commit is still
+      main's tip;
+    - release: ``X.Y.Z`` and ``vX.Y.Z``, plus ``X.Y`` for the highest stable
+      patch of that line and ``latest`` for the highest stable version.
+
+Both read GITHUB_EVENT_NAME, GITHUB_EVENT_PATH, GITHUB_REF, GITHUB_SHA,
+GITHUB_REPOSITORY, GITHUB_API_URL, GH_TOKEN, and GITHUB_OUTPUT; ``tags``
+also reads CHANNEL, the plan job's channel.
+
+usage: release_gate.py plan|tags
 exit status: 0 decided, 1 nothing may publish
 """
 from __future__ import annotations
@@ -28,6 +39,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from typing import Any, Callable
 
 CI_WORKFLOW = "ci.yml"
@@ -47,6 +59,9 @@ class GateError(Exception):
     """Nothing may publish; exit status 1."""
 
 
+# ---- versions ----------------------------------------------------------------------
+
+
 def release_version(tag: str) -> tuple[tuple[int, int, int], bool] | None:
     """The tag's (major, minor, patch) and whether it is stable, or None
     when it isn't a release tag."""
@@ -56,13 +71,28 @@ def release_version(tag: str) -> tuple[tuple[int, int, int], bool] | None:
     return (int(match[1]), int(match[2]), int(match[3])), match[4] is None
 
 
+def _stable(tags: list[str]) -> list[tuple[int, int, int]]:
+    return [v[0] for v in map(release_version, tags) if v is not None and v[1]]
+
+
 def moves_latest(tag: str, tags: list[str]) -> bool:
     """Whether ``tag`` is a stable version that no other stable tag outranks."""
     mine = release_version(tag)
     if mine is None or not mine[1]:
         return False
-    stable = [v[0] for v in map(release_version, tags) if v is not None and v[1]]
-    return all(mine[0] >= other for other in stable)
+    return all(mine[0] >= other for other in _stable(tags))
+
+
+def moves_minor(tag: str, tags: list[str]) -> bool:
+    """Whether ``tag`` is a stable version that no other stable tag of the
+    same major and minor outranks, so it may move ``X.Y``."""
+    mine = release_version(tag)
+    if mine is None or not mine[1]:
+        return False
+    return all(mine[0] >= other for other in _stable(tags) if other[:2] == mine[0][:2])
+
+
+# ---- GitHub lookups ----------------------------------------------------------------
 
 
 def _repo_of(run: dict) -> str | None:
@@ -113,6 +143,15 @@ def release_tags(api: Api, repo: str) -> list[str]:
     return tags
 
 
+def branch_tip(api: Api, repo: str) -> str:
+    pages = api(f"repos/{repo}/git/ref/heads/{BRANCH}", {})
+    target = pages[0].get("object") if pages and isinstance(pages[0], dict) else None
+    sha = target.get("sha") if isinstance(target, dict) else None
+    if not isinstance(sha, str):
+        raise GateError(f"the {BRANCH} lookup answered in an unexpected shape, so nothing was published")
+    return sha
+
+
 def wait_for_ci(
     runs: Callable[[], list[dict]],
     sha: str,
@@ -149,25 +188,64 @@ def wait_for_ci(
         sleep(poll_s)
 
 
-def decide(event_name: str, event: dict, ref: str, sha: str, repo: str, api: Api, **wait: Any) -> dict[str, str]:
-    """The channel and latest outputs for this push."""
-    if event_name != "push":
-        raise GateError(f"images publish only from a push, not {event_name or 'an unknown event'}")
-    if event.get("deleted"):
-        print(f"{ref} was deleted, so there's nothing to publish")
-        return {"channel": "none", "latest": "false"}
-    if ref == f"refs/heads/{BRANCH}":
-        return {"channel": "edge", "latest": "false"}
+# ---- the two commands --------------------------------------------------------------
+
+
+def _check_identity(sha: str, repo: str) -> None:
+    if not re.fullmatch(r"[0-9a-f]{40}", sha) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+        raise GateError("GITHUB_SHA or GITHUB_REPOSITORY doesn't look right, so nothing was published")
+
+
+def _release_tag(ref: str) -> str:
     if not ref.startswith(TAG_PREFIX):
         raise GateError(f"{ref or 'this ref'} isn't main or a release tag, so nothing was published")
     tag = ref[len(TAG_PREFIX):]
     if release_version(tag) is None:
         raise GateError(f"{tag} isn't a release tag (vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE), so nothing was published")
-    if not re.fullmatch(r"[0-9a-f]{40}", sha) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
-        raise GateError("GITHUB_SHA or GITHUB_REPOSITORY doesn't look right, so nothing was published")
+    return tag
+
+
+def plan(event_name: str, event: dict, ref: str, sha: str, repo: str, api: Api, **wait: Any) -> dict[str, str]:
+    """The channel this push publishes on."""
+    if event_name != "push":
+        raise GateError(f"images publish only from a push, not {event_name or 'an unknown event'}")
+    if event.get("deleted"):
+        print(f"{ref} was deleted, so there's nothing to publish")
+        return {"channel": "none"}
+    if ref == f"refs/heads/{BRANCH}":
+        return {"channel": "edge"}
+    _release_tag(ref)
+    _check_identity(sha, repo)
     wait_for_ci(lambda: ci_runs(api, repo, sha), sha, repo, **wait)
-    latest = moves_latest(tag, release_tags(api, repo))
-    return {"channel": "release", "latest": "true" if latest else "false"}
+    return {"channel": "release"}
+
+
+def image_tags(channel: str, ref: str, sha: str, repo: str, api: Api) -> list[str]:
+    """The docker/metadata-action tag list for this publish, decided from
+    the repository as it is now."""
+    _check_identity(sha, repo)
+    if channel == "edge":
+        if ref != f"refs/heads/{BRANCH}":
+            raise GateError(f"the edge channel publishes only from {BRANCH}, not {ref}")
+        tags = ["type=sha,prefix=sha-"]
+        if branch_tip(api, repo) == sha:
+            tags.insert(0, "type=raw,value=edge")
+        else:
+            print(f"{sha} is no longer the tip of {BRANCH}, so edge stays where it is")
+        return tags
+    if channel == "release":
+        tag = _release_tag(ref)
+        existing = release_tags(api, repo)
+        tags = ["type=semver,pattern={{version}}", "type=ref,event=tag"]
+        if moves_minor(tag, existing):
+            tags.append("type=semver,pattern={{major}}.{{minor}}")
+        if moves_latest(tag, existing):
+            tags.append("type=raw,value=latest")
+        return tags
+    raise GateError(f"there's nothing to publish on the {channel or 'unknown'} channel")
+
+
+# ---- GitHub client and entry point -------------------------------------------------
 
 
 def next_link(header: str) -> str | None:
@@ -186,7 +264,7 @@ def github_api(base_url: str, token: str) -> Api:
 
     def api(path: str, params: dict[str, str]) -> list[Any]:
         if not token:
-            raise GateError("GH_TOKEN isn't set, so CI can't be checked and nothing was published")
+            raise GateError("GH_TOKEN isn't set, so the lookup can't run and nothing was published")
         url: str | None = f"{base}/{path}" + (f"?{urllib.parse.urlencode(params)}" if params else "")
         pages: list[Any] = []
         while url:
@@ -212,32 +290,43 @@ def github_api(base_url: str, token: str) -> Api:
     return api
 
 
-def main() -> int:
+def _write_outputs(path: str | None, outputs: dict[str, str | list[str]]) -> None:
+    if not path:
+        raise GateError("GITHUB_OUTPUT isn't set, so nothing was published")
+    with open(path, "a", encoding="utf-8") as out:
+        for key, value in outputs.items():
+            if isinstance(value, list):
+                delimiter = f"ghadelimiter_{uuid.uuid4().hex}"
+                out.write(f"{key}<<{delimiter}\n" + "".join(f"{line}\n" for line in value) + f"{delimiter}\n")
+            else:
+                out.write(f"{key}={value}\n")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
     env = os.environ
     try:
-        event: Any = {}
-        if env.get("GITHUB_EVENT_PATH"):
-            with open(env["GITHUB_EVENT_PATH"], encoding="utf-8") as fh:
-                event = json.load(fh)
-        if not isinstance(event, dict):
-            raise GateError("the event payload isn't an object, so nothing was published")
-        outputs = decide(
-            env.get("GITHUB_EVENT_NAME", ""),
-            event,
-            env.get("GITHUB_REF", ""),
-            env.get("GITHUB_SHA", ""),
-            env.get("GITHUB_REPOSITORY", ""),
-            github_api(env.get("GITHUB_API_URL") or "https://api.github.com", env.get("GH_TOKEN", "")),
-        )
-        output_path = env.get("GITHUB_OUTPUT")
-        if not output_path:
-            raise GateError("GITHUB_OUTPUT isn't set, so nothing was published")
-        with open(output_path, "a", encoding="utf-8") as out:
-            out.writelines(f"{key}={value}\n" for key, value in outputs.items())
+        if args not in (["plan"], ["tags"]):
+            raise GateError("usage: release_gate.py plan|tags")
+        api = github_api(env.get("GITHUB_API_URL") or "https://api.github.com", env.get("GH_TOKEN", ""))
+        ref, sha, repo = env.get("GITHUB_REF", ""), env.get("GITHUB_SHA", ""), env.get("GITHUB_REPOSITORY", "")
+        outputs: dict[str, str | list[str]]
+        if args == ["plan"]:
+            event: Any = {}
+            if env.get("GITHUB_EVENT_PATH"):
+                with open(env["GITHUB_EVENT_PATH"], encoding="utf-8") as fh:
+                    event = json.load(fh)
+            if not isinstance(event, dict):
+                raise GateError("the event payload isn't an object, so nothing was published")
+            outputs = dict(plan(env.get("GITHUB_EVENT_NAME", ""), event, ref, sha, repo, api))
+        else:
+            outputs = {"tags": image_tags(env.get("CHANNEL", ""), ref, sha, repo, api)}
+        _write_outputs(env.get("GITHUB_OUTPUT"), outputs)
     except (GateError, OSError, ValueError) as err:
         print(f"::error::{err}")
         return 1
-    print(f"publishing channel={outputs['channel']} latest={outputs['latest']}")
+    for key, value in outputs.items():
+        print(f"{key}: {', '.join(value) if isinstance(value, list) else value}")
     return 0
 
 

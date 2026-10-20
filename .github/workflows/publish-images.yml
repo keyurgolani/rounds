@@ -1,14 +1,20 @@
 name: Publish Docker Images
 
 # Release guard (ROUNDS-00A-L01 stage 5). A push to main publishes edge and
-# sha-<short>. Only a vX.Y.Z tag publishes X.Y.Z, X.Y, vX.Y.Z, and latest,
+# sha-<short>. Only a vX.Y.Z tag publishes X.Y.Z, vX.Y.Z, X.Y, and latest,
 # and only once CI passed on a push of that exact commit to main. No other
 # branch publishes, and there's no manual trigger; to retry, re-run the
-# workflow run from the Actions tab.
+# workflow run from the Actions tab. Each publish decides its moving tags
+# when it pushes, so re-running an old run can't move one backwards.
 on:
   push:
     branches: [main]
     tags: ['v*']
+
+# One publish at a time per branch or tag, in push order.
+concurrency:
+  group: publish-images-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -24,16 +30,15 @@ jobs:
       contents: read
     outputs:
       channel: ${{ steps.plan.outputs.channel }}
-      latest: ${{ steps.plan.outputs.latest }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
       - name: Check what this push may publish
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/release_gate.py
+        run: python3 scripts/release_gate.py plan
 
   publish:
     needs: plan
@@ -45,18 +50,6 @@ jobs:
     env:
       GHCR_REGISTRY: ghcr.io
       DOCKERHUB_NAMESPACE: keyurgolani
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      # The one tag policy both registries use. edge and sha-<short> come
-      # only from main; the version tags and latest only from a release tag
-      # the plan job cleared, and latest only for the highest stable version.
-      IMAGE_TAGS: |
-        type=raw,value=edge,enable=${{ needs.plan.outputs.channel == 'edge' }}
-        type=sha,prefix=sha-,enable=${{ needs.plan.outputs.channel == 'edge' }}
-        type=semver,pattern={{version}},enable=${{ needs.plan.outputs.channel == 'release' }}
-        type=semver,pattern={{major}}.{{minor}},enable=${{ needs.plan.outputs.channel == 'release' }}
-        type=ref,event=tag,enable=${{ needs.plan.outputs.channel == 'release' }}
-        type=raw,value=latest,enable=${{ needs.plan.outputs.latest == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -79,35 +72,60 @@ jobs:
             dockerfile: ./backend/pdf_renderer/Dockerfile
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - uses: docker/setup-buildx-action@v3
+      # edge and sha-<short> only from main; edge only while this commit is
+      # still main's tip. X.Y.Z and vX.Y.Z only from a release the plan job
+      # cleared; X.Y only for the highest stable patch of its line, and
+      # latest only for the highest stable version, checked now.
+      - name: Decide the image tags
+        id: tags
+        env:
+          CHANNEL: ${{ needs.plan.outputs.channel }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release_gate.py tags
+
+      - name: Check for Docker Hub credentials
+        id: dockerhub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.GHCR_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
-        uses: docker/login-action@v3
+        if: steps.dockerhub.outputs.configured == 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: docker.io
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ env.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract GHCR metadata
         id: meta-ghcr
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.GHCR_REGISTRY }}/${{ github.repository }}-${{ matrix.image }}
           flavor: latest=false
-          tags: ${{ env.IMAGE_TAGS }}
+          tags: ${{ steps.tags.outputs.tags }}
 
       - name: Build and push ${{ matrix.service }} to GHCR
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -118,17 +136,17 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
       - name: Extract Docker Hub metadata
-        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
+        if: steps.dockerhub.outputs.configured == 'true'
         id: meta-dockerhub
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/rounds-${{ matrix.image }}
           flavor: latest=false
-          tags: ${{ env.IMAGE_TAGS }}
+          tags: ${{ steps.tags.outputs.tags }}
 
       - name: Build and push ${{ matrix.service }} to Docker Hub
-        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
-        uses: docker/build-push-action@v6
+        if: steps.dockerhub.outputs.configured == 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -139,6 +157,6 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
       - name: Docker Hub publish skipped
-        if: env.DOCKERHUB_USERNAME == '' || env.DOCKERHUB_TOKEN == ''
+        if: steps.dockerhub.outputs.configured != 'true'
         run: |
           echo "Docker Hub publish skipped because DOCKERHUB_USERNAME and/or DOCKERHUB_TOKEN repository secrets are not configured."

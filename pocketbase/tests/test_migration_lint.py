@@ -76,15 +76,36 @@ def test_an_additive_migration_is_clean_even_with_a_destructive_down_step():
         ('  app.truncateCollection(app.findCollectionByNameOrId("x"));', "rewrites-rows"),
         ('  app.delete(record);', "rewrites-rows"),
         ('  dao.db().update("users", { verified: false }, null).execute();', "rewrites-rows"),
+        # Whatever the receiver is called: the callback's own db, or a Dao by another name.
+        ('  db.update("users", { verified: false }, null).execute();', "rewrites-rows"),
+        ('  db.delete("users", null).execute();', "rewrites-rows"),
+        ('  db.upsert("settings", { key: "k" }).execute();', "rewrites-rows"),
+        ('  dao.deleteTable("old");', "drops-collection"),
+        ("  const store = new Dao(db);\n  store.delete(record);", "rewrites-rows"),
+        ('  const d = new Dao(db);\n  d.deleteRecord(d.findRecordById("x", "abc"));', "rewrites-rows"),
+        ('  const f = c.fields;\n  f.removeById("abc");', "drops-field"),
     ],
 )
 def test_a_destructive_up_step_is_flagged(body, rule):
     assert rule in _rules(_up(body))
 
 
-def test_reading_existing_records_and_saving_rewrites_rows():
-    body = '  const r = dao.findFirstRecordByData("users", "email", "a@example.test");\n  r.set("name", "x");\n  dao.saveRecord(r);'
+@pytest.mark.parametrize(
+    "body",
+    [
+        '  const r = dao.findFirstRecordByData("users", "email", "a@example.test");\n  r.set("name", "x");\n  dao.saveRecord(r);',
+        '  const a = dao.findAdminByEmail("ops@example.test");\n  a.setPassword("changed");\n  dao.saveAdmin(a);',
+        '  const u = dao.findAuthRecordByEmail("users", "a@example.test");\n  u.set("verified", true);\n  dao.saveRecord(u);',
+        '  const r = app.findRecordById("users", "abc");\n  r.set("name", "x");\n  app.save(r);',
+    ],
+)
+def test_reading_existing_records_and_saving_rewrites_rows(body):
     assert lm.scan(_up(body)) == [("rewrites-rows", 5)]
+
+
+def test_loading_code_with_require_needs_an_entry():
+    body = "  const helpers = require(`${__hooks}/seed_helpers.js`);\n  helpers.seed(dao);"
+    assert lm.scan(_up(body)) == [("loads-code", 3)]
 
 
 def test_seeding_new_records_is_clean():
@@ -137,8 +158,14 @@ def test_a_file_without_a_readable_migrate_call_is_flagged(source):
 
 
 def test_every_existing_migration_parses():
-    for path in sorted((ROOT / MIG).glob("*.js")):
+    paths = sorted(p for p in (ROOT / MIG).iterdir() if p.suffix in (".js", ".ts"))
+    assert paths
+    for path in paths:
         assert ("unparsed-migration", None) not in lm.scan(path.read_text()), path.name
+
+
+def test_the_migrations_directory_holds_only_migrations():
+    assert all(lm.is_migration(f"{MIG}{p.name}") for p in (ROOT / MIG).iterdir())
 
 
 # ---- what a change may do to existing migrations ---------------------------------------------
@@ -172,13 +199,42 @@ def test_moving_a_file_into_the_migrations_scans_it_as_new():
     assert [f.rule for f in blocking] == ["rewrites-rows"]
 
 
-def test_files_that_arent_migrations_are_ignored():
+def test_files_outside_the_migrations_are_ignored():
     changes = [
         lm.Change("M", "pocketbase/pb_hooks/main.pb.js", content="x", base_content="y"),
-        lm.Change("D", MIG + "README.md", base_content="notes"),
         lm.Change("A", "backend/app/x.js", content=_up("  app.delete(r);")),
+        lm.Change("A", "pocketbase/pb_migrations_old/1_a.js", content=_up("  app.delete(r);")),
     ]
     assert lm.lint(changes, []) == ([], [])
+
+
+def test_a_typescript_migration_is_a_migration():
+    destructive = _up("  app.delete(r);").replace("(db) =>", "(db: any) =>")
+    blocking, _allowed = lm.lint([lm.Change("A", MIG + "9_drop.ts", content=destructive)], [])
+    assert [f.rule for f in blocking] == ["rewrites-rows"]
+    blocking, _allowed = lm.lint([lm.Change("M", MIG + "1_a.ts", content="edited", base_content="original")], [])
+    assert [f.rule for f in blocking] == ["modified-migration"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lm.Change("A", MIG + "README.md", content="notes"),
+        lm.Change("A", MIG + "1700009000_data.json", content="{}"),
+        lm.Change("A", MIG + "sub/1700009000_a.js", content=ADDITIVE),
+        lm.Change("M", MIG + ".gitkeep", content="x", base_content=""),
+        lm.Change("D", MIG + "notes.txt", base_content="old notes"),
+    ],
+)
+def test_any_other_file_in_the_migrations_directory_fails(change):
+    blocking, _allowed = lm.lint([change], [])
+    assert [f.rule for f in blocking] == ["unknown-file"]
+
+
+def test_renaming_a_migration_to_another_extension_deletes_it():
+    change = lm.Change("R", MIG + "1_a.js.bak", content=ADDITIVE, base_content=ADDITIVE, old_path=MIG + "1_a.js")
+    blocking, _allowed = lm.lint([change], [])
+    assert [(f.path, f.rule) for f in blocking] == [(MIG + "1_a.js", "deleted-migration"), (MIG + "1_a.js.bak", "unknown-file")]
 
 
 def test_a_new_additive_migration_passes():
@@ -242,7 +298,7 @@ def test_an_entry_can_name_its_manifest(tmp_path):
         {"rules": []},
         {"rules": ["drops-everything"]},
         {"path": "pocketbase/pb_hooks/main.pb.js"},
-        {"path": MIG + "README.md"},
+        {"path": MIG},
         {"reason": " "},
         {"reviewed_by": ""},
         {"reason": "line one\nline two"},
