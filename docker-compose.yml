@@ -18,6 +18,32 @@ services:
       # The key the runner sends with each admission store write; the
       # runner gets the same value. The default is dev-only.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-rounds-dev-admission-key-DO-NOT-USE-IN-PROD}
+    # The app network, plus the internal one only it shares with the
+    # materializer.
+    networks:
+      - default
+      - materialize
+    restart: unless-stopped
+
+  # Legacy Artifact Snapshot materializer (ROUNDS-00A-L04). It builds from
+  # the repository root because it bundles the resume templates. Only
+  # PocketBase reaches it, over the internal materialize network; it has no
+  # host port, no secret, no other network, and a read-only filesystem.
+  # Nothing calls it yet, so it sits behind the `materializer` profile and
+  # does not start on a plain `up`; #4 PR 2 wires PocketBase to it and
+  # removes the profile. Enable it now with `--profile materializer`.
+  materializer:
+    profiles: ["materializer"]
+    build:
+      context: .
+      dockerfile: backend/materializer/Dockerfile
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges
+    networks:
+      - materialize
     restart: unless-stopped
 
   runner:
@@ -100,6 +126,11 @@ services:
       - runner
       - pocketbase
     restart: unless-stopped
+
+networks:
+  # No route out; only PocketBase and the materializer join it.
+  materialize:
+    internal: true
 
 volumes:
   pb_data:

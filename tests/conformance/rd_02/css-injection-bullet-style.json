@@ -1,0 +1,39 @@
+{
+  "id": "RD-02.css-injection-bullet-style",
+  "fixture": "RD-02",
+  "title": "Selector injection through the bullet style",
+  "closing_leaf": "ROUNDS-00A-L04",
+  "target": "legacy-snapshot-materializer",
+  "input": {
+    "template_id": "modern",
+    "design": {
+      "bulletStyle": "disc\"] * { background: url(https://rd02.invalid/b) } [x=\""
+    },
+    "data": {
+      "personalInfo": {
+        "fullName": "RD-02 Fixture",
+        "email": "rd02@example.test",
+        "title": "Engineer"
+      },
+      "experience": [
+        {
+          "id": "e1",
+          "company": "Example Co",
+          "position": "Engineer",
+          "highlights": [
+            "Shipped the thing"
+          ]
+        }
+      ],
+      "education": [],
+      "skills": [],
+      "projects": [],
+      "publications": [],
+      "profiles": []
+    }
+  },
+  "expected": {
+    "status": "ineligible",
+    "reason": "design_out_of_domain"
+  }
+}

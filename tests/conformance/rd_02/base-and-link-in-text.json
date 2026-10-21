@@ -1,0 +1,50 @@
+{
+  "id": "RD-02.base-and-link-in-text",
+  "fixture": "RD-02",
+  "title": "Base, link, iframe, and object tags in text stay text",
+  "closing_leaf": "ROUNDS-00A-L04",
+  "target": "legacy-snapshot-materializer",
+  "input": {
+    "template_id": "compact",
+    "design": {},
+    "data": {
+      "personalInfo": {
+        "fullName": "RD-02 Fixture",
+        "email": "rd02@example.test",
+        "title": "Engineer"
+      },
+      "experience": [
+        {
+          "id": "e1",
+          "company": "Example Co",
+          "position": "Engineer",
+          "highlights": [
+            "Shipped the thing"
+          ]
+        }
+      ],
+      "education": [],
+      "skills": [],
+      "projects": [],
+      "publications": [
+        {
+          "id": "u1",
+          "title": "<base href=\"https://rd02.invalid/\">",
+          "summary": "<link rel=\"stylesheet\" href=\"https://rd02.invalid/x.css\"><iframe src=\"https://rd02.invalid/\"></iframe><object data=\"https://rd02.invalid/x\"></object>"
+        }
+      ],
+      "profiles": []
+    }
+  },
+  "expected": {
+    "status": "ok",
+    "template_id": "compact",
+    "template_fallback": false,
+    "markup_excludes": [
+      "<base",
+      "<link",
+      "<iframe",
+      "<object"
+    ]
+  }
+}

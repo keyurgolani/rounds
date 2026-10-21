@@ -1,6 +1,7 @@
 # Account-scope security harness. Shaped like docker-compose.prod.yml: the
-# same pocketbase, runner, and nginx frontend built from this commit, on one
-# private network, plus a probe runner that drives the two-account proof.
+# same pocketbase, runner, nginx frontend, and snapshot materializer built
+# from this commit, on the private app network and the internal materialize
+# network, plus a probe runner that drives the two-account proof.
 #
 # Run it with the launcher, which sequences the phases and tears the stack
 # down afterwards:
@@ -37,6 +38,31 @@ services:
       timeout: 3s
       retries: 30
       start_period: 3s
+    # As in prod: the app network, plus the internal one only it shares with
+    # the materializer.
+    networks:
+      - default
+      - materialize
+    restart: "no"
+
+  # The Legacy Artifact Snapshot materializer, built from the repository root
+  # and run as docker-compose.prod.yml runs it (ROUNDS-00A-L04). Phase 7b
+  # checks that only PocketBase reaches it. It sits behind the `materializer`
+  # profile, as the deploy compose files do; run.sh enables the profile so
+  # phase 7b still builds and runs it.
+  materializer:
+    profiles: ["materializer"]
+    build:
+      context: ..
+      dockerfile: backend/materializer/Dockerfile
+    image: ${IMAGE_PREFIX:-rounds-9s1}-materializer:test
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges
+    networks:
+      - materialize
     restart: "no"
 
   # Shaped like prod: the runner, plus runner-b, a second replica of the same
@@ -112,6 +138,11 @@ services:
       pocketbase:
         condition: service_healthy
     restart: "no"
+
+networks:
+  # No route out; only PocketBase and the materializer join it.
+  materialize:
+    internal: true
 
 volumes:
   pb_data:

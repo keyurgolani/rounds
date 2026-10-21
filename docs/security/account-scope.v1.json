@@ -43,7 +43,7 @@
     },
     "server_only": {
       "status": 403,
-      "guarantee": "a client create or update on a server-only collection is forbidden"
+      "guarantee": "a client create, update, or delete on a server-only collection is forbidden"
     },
     "update_own": {
       "status": 200,
@@ -258,7 +258,10 @@
       "status": "enforced",
       "deny_key": "server_only",
       "guarantee": "a client create on a server-only collection is forbidden",
-      "resource": "resume_share_views"
+      "resource": [
+        "resume_share_views",
+        "legacy_artifact_snapshots"
+      ]
     },
     "account-scope.update.server-only.denied": {
       "operation": "update",
@@ -266,7 +269,18 @@
       "status": "enforced",
       "deny_key": "server_only",
       "guarantee": "a client update on a server-only collection is forbidden",
-      "resource": "resume_share_views"
+      "resource": [
+        "resume_share_views",
+        "legacy_artifact_snapshots"
+      ]
+    },
+    "account-scope.delete.server-only.denied": {
+      "operation": "delete",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "server_only",
+      "guarantee": "a client delete on a collection whose delete rule is null is forbidden, even the owner's",
+      "resource": "legacy_artifact_snapshots"
     },
     "account-scope.create.superuser.accepted": {
       "operation": "create",
@@ -1997,6 +2011,37 @@
         "account-scope.create.relation-superuser.denied",
         "account-scope.update.relation-foreign.denied",
         "account-scope.update.relation-foreign-or-missing.indistinguishable"
+      ]
+    },
+    "legacy_artifact_snapshots": {
+      "migration": "1700008000_legacy_artifact_snapshots.js",
+      "fixture": "legacy_artifact_snapshots",
+      "owner_field": "user",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "target_rules": {
+        "create": null,
+        "update": null
+      },
+      "target_rule_migration": "1700008000_legacy_artifact_snapshots.js",
+      "hook": null,
+      "relation_exceptions": [],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.create.server-only.denied",
+        "account-scope.update.server-only.denied",
+        "account-scope.delete.server-only.denied"
       ]
     },
     "users": {

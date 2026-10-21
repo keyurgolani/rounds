@@ -1,0 +1,43 @@
+{
+  "id": "RD-02.css-injection-body-font",
+  "fixture": "RD-02",
+  "title": "CSS injection through the body font family",
+  "closing_leaf": "ROUNDS-00A-L04",
+  "target": "legacy-snapshot-materializer",
+  "input": {
+    "template_id": "modern",
+    "design": {
+      "typography": {
+        "body": {
+          "family": "x;background:url('https://rd02.invalid/f')"
+        }
+      }
+    },
+    "data": {
+      "personalInfo": {
+        "fullName": "RD-02 Fixture",
+        "email": "rd02@example.test",
+        "title": "Engineer"
+      },
+      "experience": [
+        {
+          "id": "e1",
+          "company": "Example Co",
+          "position": "Engineer",
+          "highlights": [
+            "Shipped the thing"
+          ]
+        }
+      ],
+      "education": [],
+      "skills": [],
+      "projects": [],
+      "publications": [],
+      "profiles": []
+    }
+  },
+  "expected": {
+    "status": "ineligible",
+    "reason": "design_out_of_domain"
+  }
+}

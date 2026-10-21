@@ -6,10 +6,10 @@ name: Publish Docker Images
 # No other branch publishes, and there's no manual trigger; to retry, re-run
 # the workflow run from the Actions tab.
 #
-# The build jobs push only tags that never move. Once all four images are
-# pushed, the move-tags job points edge, X.Y, and latest for all four images
+# The build jobs push only tags that never move. Once all five images are
+# pushed, the move-tags job points edge, X.Y, and latest for all five images
 # together, deciding each from the repository as it is then, and only at an
-# image all four builds already pushed. Each channel's move-tags jobs run one
+# image all five builds already pushed. Each channel's move-tags jobs run one
 # at a time across the repository, so an older publish can't move a tag back
 # after a newer one.
 on:
@@ -76,6 +76,12 @@ jobs:
             image: pdf-renderer
             context: ./backend/pdf_renderer
             dockerfile: ./backend/pdf_renderer/Dockerfile
+          # The repository root, through Dockerfile.dockerignore, because it
+          # bundles the frontend's resume templates (ROUNDS-00A-L04).
+          - service: materializer
+            image: materializer
+            context: .
+            dockerfile: ./backend/materializer/Dockerfile
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -165,7 +171,7 @@ jobs:
           echo "Docker Hub publish skipped because DOCKERHUB_USERNAME and/or DOCKERHUB_TOKEN repository secrets are not configured."
 
   move-tags:
-    # Runs only once every build above succeeded, so the four images move
+    # Runs only once every build above succeeded, so the five images move
     # together or not at all.
     needs: [plan, publish]
     if: needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release'

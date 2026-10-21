@@ -1,0 +1,41 @@
+{
+  "id": "RD-02.css-injection-margin",
+  "fixture": "RD-02",
+  "title": "CSS injection through the page margin",
+  "closing_leaf": "ROUNDS-00A-L04",
+  "target": "legacy-snapshot-materializer",
+  "input": {
+    "template_id": "split",
+    "design": {
+      "spacing": {
+        "margin": "0;background-image:image-set(\"https://rd02.invalid/m.png\" 1x)"
+      }
+    },
+    "data": {
+      "personalInfo": {
+        "fullName": "RD-02 Fixture",
+        "email": "rd02@example.test",
+        "title": "Engineer"
+      },
+      "experience": [
+        {
+          "id": "e1",
+          "company": "Example Co",
+          "position": "Engineer",
+          "highlights": [
+            "Shipped the thing"
+          ]
+        }
+      ],
+      "education": [],
+      "skills": [],
+      "projects": [],
+      "publications": [],
+      "profiles": []
+    }
+  },
+  "expected": {
+    "status": "ineligible",
+    "reason": "design_out_of_domain"
+  }
+}

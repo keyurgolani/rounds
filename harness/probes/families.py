@@ -251,6 +251,21 @@ def update_server_only_denied(pb, collection, record_id, owner_token, expected) 
                    expected, resp.status, ok, resp.elapsed_ms, detail)
 
 
+def delete_server_only_denied(pb, collection, record_id, owner_token, expected) -> Receipt:
+    # A server-written collection whose delete rule is null too (the
+    # Legacy Artifact Snapshots, ROUNDS-00A-L04) rejects even the owner's
+    # delete of its own row, the hardest client to deny; the owner reads the
+    # row before and after, proving it is still there exactly as it was.
+    before = pb.view(collection, record_id, token=owner_token)
+    resp = pb.delete(collection, record_id, token=owner_token)
+    still = pb.view(collection, record_id, token=owner_token)
+    unchanged = before.status == 200 and still.status == 200 and before.body == still.body
+    ok = resp.status == expected and unchanged
+    detail = "" if ok else f"delete={resp.status} owner_view={still.status} unchanged={unchanged}"
+    return Receipt("account-scope.delete.server-only.denied", collection, "delete", "authenticated-owner",
+                   expected, resp.status, ok, resp.elapsed_ms, detail)
+
+
 def create_superuser_accepted(pb, collection, admin_token, payload, expected) -> Receipt:
     # The superuser view-tracking insert still works after create becomes null.
     # The row names the same owner as the share link it points at, so it is not
@@ -570,6 +585,7 @@ REASSIGN_FAMILY = "account-scope.update.reassign-owner.denied"
 UPDATE_OWN_FAMILY = "account-scope.update.own.accepted"
 SERVER_ONLY_CREATE_FAMILY = "account-scope.create.server-only.denied"
 SERVER_ONLY_UPDATE_FAMILY = "account-scope.update.server-only.denied"
+SERVER_ONLY_DELETE_FAMILY = "account-scope.delete.server-only.denied"
 SUPERUSER_CREATE_FAMILY = "account-scope.create.superuser.accepted"
 # Stage 4 creates, dispatched by run.py with a caller token, the superuser
 # token, and the claimed owner.
@@ -602,6 +618,7 @@ IMPLEMENTED_FAMILIES = (
         UPDATE_OWN_FAMILY,
         SERVER_ONLY_CREATE_FAMILY,
         SERVER_ONLY_UPDATE_FAMILY,
+        SERVER_ONLY_DELETE_FAMILY,
         SUPERUSER_CREATE_FAMILY,
         REPLAY_FAMILY,
         NONEXISTENT_OWNER_FAMILY,

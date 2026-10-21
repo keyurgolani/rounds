@@ -1,5 +1,6 @@
-# Single-box production deploy. Four containers on a private network;
-# only the nginx-fronted frontend's port 80 is exposed. By default this
+# Single-box production deploy. Five containers on a private network, and
+# an internal one only PocketBase and the snapshot materializer share; only
+# the nginx-fronted frontend's port 80 is exposed. By default this
 # file pulls published Docker Hub images. Set ROUNDS_IMAGE_TAG or the
 # per-service image variables below to pin a release or use GHCR.
 #
@@ -54,6 +55,31 @@ services:
       - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
       # Blank, the admission store's write routes answer 503.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-}
+    # The private app network, plus the internal one only it shares with
+    # the materializer.
+    networks:
+      - default
+      - materialize
+    restart: unless-stopped
+
+  # Legacy Artifact Snapshot materializer (ROUNDS-00A-L04). Only PocketBase
+  # reaches it, over the internal materialize network; it has no host port,
+  # no secret, no other network, and a read-only filesystem. Nothing calls
+  # it yet, so it sits behind the `materializer` profile and does not start
+  # on a plain `up`: that keeps the stack starting after promotion, before a
+  # v* tag publishes rounds-materializer:latest, and on a rollback to an
+  # older tag that has no materializer image. #4 PR 2 wires PocketBase to it
+  # and removes the profile. Enable it with `--profile materializer`.
+  materializer:
+    profiles: ["materializer"]
+    image: ${ROUNDS_MATERIALIZER_IMAGE:-keyurgolani/rounds-materializer:${ROUNDS_IMAGE_TAG:-latest}}
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges
+    networks:
+      - materialize
     restart: unless-stopped
 
   pdf-renderer:
@@ -120,6 +146,11 @@ services:
       - pocketbase
       - runner
     restart: unless-stopped
+
+networks:
+  # No route out; only PocketBase and the materializer join it.
+  materialize:
+    internal: true
 
 volumes:
   pb_data:

@@ -10,6 +10,12 @@ resources:
   - runner.yaml
   - frontend.yaml
   - ingress.yaml
+# The Legacy Artifact Snapshot materializer (ROUNDS-00A-L04) is opt-in and
+# not in the default resources: nothing calls it yet, so a default apply
+# does not run a pod that has no caller and whose image a release may not
+# carry. Enable it by applying k8s/materializer.yaml alongside this
+# kustomization (see docs/deployment.md). #4 PR 2 wires PocketBase to it
+# and folds it back in.
 
 # The image tag every Deployment runs, in one place: the k8s counterpart of
 # ROUNDS_IMAGE_TAG. Pin newTag to a release and set newName to your

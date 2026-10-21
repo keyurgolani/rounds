@@ -33,6 +33,9 @@ spec:
     metadata:
       labels:
         app: pocketbase
+        # The NetworkPolicy label: k8s/materializer.yaml admits only pods
+        # with it, and #7 (ROUNDS-00A-L07) keys PocketBase's own rules on it.
+        rounds.io/net: pocketbase
     spec:
       # Nothing here calls the Kubernetes API.
       automountServiceAccountToken: false

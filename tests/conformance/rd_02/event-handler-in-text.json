@@ -1,0 +1,52 @@
+{
+  "id": "RD-02.event-handler-in-text",
+  "fixture": "RD-02",
+  "title": "Event handlers in text fields stay text",
+  "closing_leaf": "ROUNDS-00A-L04",
+  "target": "legacy-snapshot-materializer",
+  "input": {
+    "template_id": "classic",
+    "design": {},
+    "data": {
+      "personalInfo": {
+        "fullName": "\"><img src=x onerror=alert(1)>",
+        "email": "rd02@example.test",
+        "title": "Engineer",
+        "location": "' onmouseover='alert(1)"
+      },
+      "experience": [
+        {
+          "id": "e1",
+          "company": "Example Co",
+          "position": "Engineer",
+          "highlights": [
+            "Shipped the thing"
+          ]
+        }
+      ],
+      "education": [],
+      "skills": [
+        {
+          "id": "s1",
+          "category": "<svg onload=alert(1)>",
+          "items": [
+            "<body onload=alert(1)>"
+          ]
+        }
+      ],
+      "projects": [],
+      "publications": [],
+      "profiles": []
+    }
+  },
+  "expected": {
+    "status": "ok",
+    "template_id": "classic",
+    "template_fallback": false,
+    "markup_excludes": [
+      "<img",
+      "<svg",
+      "<body onload"
+    ]
+  }
+}

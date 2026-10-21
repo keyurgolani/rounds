@@ -101,17 +101,18 @@ COMPOSE_BIN="docker compose" harness/run.sh
 COMPOSE_PROJECT=rounds-9s1-b harness/run.sh
 ```
 
-The launcher builds the pocketbase, probe, runner, and frontend images, brings
-PocketBase up, runs the main probe phase, runs the admission check and the
-admission-deploy phase against two runner replicas, restarts the runner with
-`/api/run` turned off and then on again, recreates PocketBase with signups
-disabled (the named `pb_data` volume keeps the run's accounts and rows), runs
-the signup-hook probe, brings the runner and nginx frontend up and runs the
-deployment verifier through them, stops PocketBase for the degraded probe,
-runs the verifier's checks and the cross-owner scan on the run's `pb_data`,
-prints the verdict (pass / expected-fail / fail counts), runs the admission
-migration check, and tears the stack down, removing the images and the volume
-it made.
+The launcher builds the pocketbase, probe, runner, frontend, and materializer
+images, brings PocketBase up, runs the main probe phase, runs the admission
+check and the admission-deploy phase against two runner replicas, restarts the
+runner with `/api/run` turned off and then on again, recreates PocketBase with
+signups disabled (the named `pb_data` volume keeps the run's accounts and
+rows), runs the signup-hook probe, brings the runner and nginx frontend up and
+runs the deployment verifier through them, checks that only PocketBase reaches
+the snapshot materializer and that it has no route out, stops PocketBase for
+the degraded probe, runs the verifier's checks and the cross-owner scan on the
+run's `pb_data`, prints the verdict (pass / expected-fail / fail counts), runs
+the admission migration, relation quarantine, and snapshot store checks, and
+tears the stack down, removing the images and the volume it made.
 Its exit code is non-zero on any failed or missing result.
 
 ## Admission state across two replicas

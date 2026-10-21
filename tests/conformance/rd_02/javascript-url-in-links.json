@@ -1,0 +1,60 @@
+{
+  "id": "RD-02.javascript-url-in-links",
+  "fixture": "RD-02",
+  "title": "javascript: URLs in link fields render as text, never as a link",
+  "closing_leaf": "ROUNDS-00A-L04",
+  "target": "legacy-snapshot-materializer",
+  "input": {
+    "template_id": "executive",
+    "design": {},
+    "data": {
+      "personalInfo": {
+        "fullName": "RD-02 Fixture",
+        "email": "rd02@example.test",
+        "title": "Engineer",
+        "website": "javascript:alert(1)",
+        "linkedin": "javascript:alert(2)",
+        "github": "JaVaScRiPt:alert(3)"
+      },
+      "experience": [
+        {
+          "id": "e1",
+          "company": "Example Co",
+          "position": "Engineer",
+          "highlights": [
+            "Shipped the thing"
+          ]
+        }
+      ],
+      "education": [],
+      "skills": [],
+      "projects": [
+        {
+          "id": "p1",
+          "name": "Project",
+          "technologies": [],
+          "highlights": [],
+          "url": "javascript:alert(4)",
+          "github": "javascript:alert(5)"
+        }
+      ],
+      "publications": [],
+      "profiles": [
+        {
+          "id": "f1",
+          "network": "Site",
+          "url": "javascript:alert(6)"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "status": "ok",
+    "template_id": "executive",
+    "template_fallback": false,
+    "markup_excludes": [
+      "href=",
+      "<a "
+    ]
+  }
+}

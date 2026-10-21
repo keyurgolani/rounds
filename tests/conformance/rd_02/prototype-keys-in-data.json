@@ -1,0 +1,54 @@
+{
+  "id": "RD-02.prototype-keys-in-data",
+  "fixture": "RD-02",
+  "title": "Prototype keys in the data are dropped",
+  "closing_leaf": "ROUNDS-00A-L04",
+  "target": "legacy-snapshot-materializer",
+  "input": {
+    "template_id": "notion",
+    "design": {},
+    "data": {
+      "personalInfo": {
+        "fullName": "RD-02 Fixture",
+        "email": "rd02@example.test",
+        "title": "Engineer"
+      },
+      "experience": [
+        {
+          "id": "e1",
+          "company": "Example Co",
+          "position": "Engineer",
+          "highlights": [
+            "Shipped the thing"
+          ]
+        }
+      ],
+      "education": [],
+      "skills": [],
+      "projects": [],
+      "publications": [],
+      "profiles": [],
+      "__proto__": {
+        "polluted": "rd02"
+      },
+      "constructor": {
+        "prototype": {
+          "polluted": "rd02"
+        }
+      }
+    }
+  },
+  "expected": {
+    "status": "ok",
+    "template_id": "notion",
+    "template_fallback": false,
+    "markup_excludes": [
+      "polluted"
+    ],
+    "data_excludes": [
+      "polluted",
+      "__proto__",
+      "constructor"
+    ]
+  }
+}
