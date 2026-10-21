@@ -110,6 +110,12 @@
     "deployment.proxy.admission-hooks.denied": {
       "guarantee": "the admission hook routes are not reachable at the public URL"
     },
+    "deployment.proxy.execution-hooks.denied": {
+      "guarantee": "the execution job store's hook routes are not reachable at the public URL"
+    },
+    "deployment.proxy.execution-service.denied": {
+      "guarantee": "the execution service record, its login included, is not reachable at the public URL"
+    },
     "deployment.proxy.execute.gone": {
       "guarantee": "/api/execute no longer reaches a code runner"
     },

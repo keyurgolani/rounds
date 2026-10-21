@@ -24,6 +24,16 @@
 #
 #      Restart PocketBase and the runners after creating or rotating it.
 #
+#   4. Before turning ROUNDS_GATE_EXECUTION_STORE on (gates.yaml), add the
+#      password the runner logs in to the execution job store with. It
+#      goes in the step 1 secret, which PocketBase reads one key of
+#      (pocketbase.yaml):
+#
+#      kubectl -n rounds patch secret rounds-runner-secrets --type merge \
+#        -p "{\"stringData\":{\"ROUNDS_EXECUTION_SECRET\":\"$(openssl rand -hex 32)\"}}"
+#
+#      Restart PocketBase, then the runners, after adding or rotating it.
+#
 # The runner refuses to start when AI_KEY_SECRET is unset or matches
 # the dev placeholder, so a misconfigured rollout fails closed (the
 # pod will CrashLoopBackOff with a clear stderr message instead of
@@ -71,9 +81,11 @@ spec:
             - name: CORS_ALLOW_ORIGINS
               value: ""
           envFrom:
-            # AI_KEY_SECRET, PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD live here.
-            # See the comment block at the top of this file for how
-            # to provision the secret on first deploy.
+            # AI_KEY_SECRET, PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD live here,
+            # and ROUNDS_EXECUTION_SECRET once step 4 adds it. See the
+            # comment block at the top of this file for how to provision
+            # the secret on first deploy. Candidate processes get none of
+            # these.
             - secretRef:
                 name: rounds-runner-secrets
             # ROUNDS_ADMISSION_SECRET (step 3 above). Optional: without it
@@ -87,9 +99,12 @@ spec:
             - configMapRef:
                 name: rounds-gates
                 optional: true
+          # /ready checks the execution job store only while
+          # ROUNDS_GATE_EXECUTION_STORE is on and the secret is set;
+          # /health stays liveness.
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 8000
             initialDelaySeconds: 3
             periodSeconds: 10

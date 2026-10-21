@@ -11,6 +11,7 @@ import signal
 import stat
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
@@ -241,6 +242,48 @@ def test_a_detached_child_holding_the_pipe_doesnt_hold_the_run(tmp_path):
             os.kill(detached, signal.SIGKILL)
         except ProcessLookupError:
             pass
+
+
+def test_a_stopped_run_kills_its_group_and_says_it_was_stopped(tmp_path):
+    control = sandbox.Control()
+    timer = threading.Timer(0.3, control.stop.set)
+    timer.start()
+    started = time.monotonic()
+    with pytest.raises(sandbox.Stopped) as err:
+        sandbox.run(
+            ["bash", "-c", "echo started; sleep 30 & wait"],
+            cwd=str(tmp_path),
+            env=sandbox.candidate_env(str(tmp_path)),
+            timeout_s=30,
+            sandbox=sandbox.sandbox_for(0),
+            control=control,
+        )
+    assert time.monotonic() - started < 10
+    assert err.value.output.startswith("started")
+    assert control.pid is not None and sandbox.group_gone(control.pid, wait_s=5)
+
+
+def test_a_stop_set_after_the_run_exits_changes_nothing(tmp_path):
+    control = sandbox.Control()
+    done = sandbox.run(["true"], cwd=str(tmp_path), env=sandbox.candidate_env(str(tmp_path)), timeout_s=10,
+                       sandbox=sandbox.sandbox_for(0), control=control)
+    control.stop.set()
+    assert done.returncode == 0
+
+
+def test_a_group_is_gone_when_only_zombies_are_left(tmp_path):
+    def proc(pid: int, stat_line: str) -> None:
+        (tmp_path / str(pid)).mkdir()
+        (tmp_path / str(pid) / "stat").write_text(stat_line)
+
+    proc(101, "101 (python3) S 1 4242 4242 0 -1")
+    proc(102, "102 (a (b) c) Z 1 4242 4242 0 -1")
+    proc(103, "103 (sleep) R 1 999 999 0 -1")
+    (tmp_path / "self").mkdir()
+    assert sandbox._group_members(4242, str(tmp_path)) == [101]
+    assert sandbox.group_gone(4242, wait_s=0, proc_root=str(tmp_path)) is False
+    shutil.rmtree(tmp_path / "101")
+    assert sandbox.group_gone(4242, wait_s=0, proc_root=str(tmp_path)) is True
 
 
 def test_each_stream_keeps_at_most_its_cap(monkeypatch, tmp_path):

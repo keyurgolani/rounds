@@ -32,6 +32,12 @@ services:
       - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
       # The runner key, a test placeholder shared with both runners.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}
+      # The execution job store's phases (ROUNDS-00A-L03) turn it on and
+      # rotate the worker secret, a test placeholder. PocketBase's and the
+      # runners' come from separate variables, so the launcher can rotate
+      # one before the other.
+      - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
+      - ROUNDS_EXECUTION_SECRET=${PB_EXECUTION_SECRET:-}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/api/health >/dev/null 2>&1 || exit 1"]
       interval: 3s
@@ -88,6 +94,8 @@ services:
       # (ROUNDS-00A-L01 stage 4).
       - ROUNDS_GATE_RUN=${ROUNDS_GATE_RUN:-}
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}
+      - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
+      - ROUNDS_EXECUTION_SECRET=${RUNNER_EXECUTION_SECRET:-}
     depends_on:
       pocketbase:
         condition: service_healthy

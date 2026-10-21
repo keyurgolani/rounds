@@ -37,7 +37,7 @@ import tempfile
 import threading
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterator, Mapping, Sequence
 
 _log = logging.getLogger(__name__)
@@ -168,6 +168,26 @@ class _Drain(threading.Thread):
         return list(self._chunks)
 
 
+@dataclass
+class Control:
+    """Lets another thread stop a run (ROUNDS-00A-L03's cancel), and
+    records the process group it ran in, so the caller can confirm the
+    group is gone afterwards."""
+
+    stop: threading.Event = field(default_factory=threading.Event)
+    pid: int | None = None
+
+
+class Stopped(subprocess.SubprocessError):
+    """The run's ``Control`` stopped it before it exited."""
+
+    def __init__(self, cmd: Sequence[str], output: str, stderr: str) -> None:
+        super().__init__(f"{cmd[0] if cmd else 'run'} was stopped")
+        self.cmd = list(cmd)
+        self.output = output
+        self.stderr = stderr
+
+
 def run(
     cmd: Sequence[str],
     *,
@@ -175,11 +195,13 @@ def run(
     env: Mapping[str, str],
     timeout_s: float,
     sandbox: Sandbox,
+    control: Control | None = None,
 ) -> subprocess.CompletedProcess:
     """Run ``cmd`` contained and wait for it, not for its output pipes.
-    When it exits or times out, its process group and, with a uid, every
-    process running as the slot's uid is killed. Raises
-    ``subprocess.TimeoutExpired`` with the output so far on a timeout."""
+    When it exits, times out, or ``control`` stops it, its process group
+    and, with a uid, every process running as the slot's uid is killed.
+    Raises ``subprocess.TimeoutExpired`` with the output so far on a
+    timeout, and ``Stopped`` with it when stopped."""
     kwargs: dict = {
         "cwd": cwd,
         "env": dict(env),
@@ -191,18 +213,23 @@ def run(
     if sandbox.uid is not None:
         kwargs.update(user=sandbox.uid, group=sandbox.gid, extra_groups=[], umask=0o077)
     proc = subprocess.Popen(list(cmd), **kwargs)
+    if control is not None:
+        control.pid = proc.pid
+    stop = control.stop if control is not None else None
     drains = [_Drain(proc.stdout, STREAM_KEEP_BYTES), _Drain(proc.stderr, STREAM_KEEP_BYTES)]
     for drain in drains:
         drain.start()
     exited = False
     try:
-        exited = _wait(proc, timeout_s)
+        exited = _wait(proc, timeout_s) if stop is None else _wait(proc, timeout_s, stop)
     finally:
         _end(proc, sandbox)
     for drain in drains:
         drain.join(DRAIN_GRACE_S)
     stdout, stderr = (drain.text() for drain in drains)
     if not exited:
+        if stop is not None and stop.is_set():
+            raise Stopped(list(cmd), output=stdout, stderr=stderr)
         raise subprocess.TimeoutExpired(list(cmd), timeout_s, output=stdout, stderr=stderr)
     return subprocess.CompletedProcess(list(cmd), proc.returncode, stdout, stderr)
 
@@ -263,16 +290,22 @@ def run_with_channel(
     return b"".join(drain.chunks()), not exited
 
 
-def _wait(proc: subprocess.Popen, timeout_s: float) -> bool:
-    """True when the process exits within ``timeout_s``. On Linux it's
-    left unreaped, so its group id can't be reused before ``_end``
-    kills the group."""
+def _wait(proc: subprocess.Popen, timeout_s: float, stop: threading.Event | None = None) -> bool:
+    """True when the process exits within ``timeout_s``, False when the
+    time runs out or ``stop`` is set first. On Linux it's left unreaped,
+    so its group id can't be reused before ``_end`` kills the group."""
     if not hasattr(os, "waitid"):
-        try:
-            proc.wait(timeout=timeout_s)
-            return True
-        except subprocess.TimeoutExpired:
-            return False
+        deadline = time.monotonic() + timeout_s
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            try:
+                proc.wait(timeout=remaining if stop is None else min(remaining, 0.05))
+                return True
+            except subprocess.TimeoutExpired:
+                if stop is not None and stop.is_set():
+                    return False
     deadline = time.monotonic() + timeout_s
     delay = 0.0005
     while True:
@@ -281,11 +314,63 @@ def _wait(proc: subprocess.Popen, timeout_s: float) -> bool:
                 return True
         except ChildProcessError:
             return True
+        if stop is not None and stop.is_set():
+            return False
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return False
         delay = min(delay * 2, remaining, 0.05)
         time.sleep(delay)
+
+
+def _group_members(pgid: int, proc_root: str) -> list[int]:
+    """The live processes in group ``pgid``, from ``/proc``. A zombie
+    has already exited and counts as gone."""
+    members: list[int] = []
+    try:
+        entries = os.listdir(proc_root)
+    except OSError:
+        return members
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        try:
+            with open(os.path.join(proc_root, entry, "stat"), encoding="utf-8") as fh:
+                stat_line = fh.read()
+            # pid (comm) state ppid pgrp ...; comm may hold spaces.
+            state, _ppid, pgrp = stat_line[stat_line.rindex(")") + 2:].split()[:3]
+        except (OSError, ValueError):
+            continue
+        if int(pgrp) == pgid and state not in ("Z", "X"):
+            members.append(int(entry))
+    return members
+
+
+def group_gone(pgid: int, wait_s: float = 0.5, proc_root: str = "/proc") -> bool:
+    """True once no live process is left in process group ``pgid``,
+    reaping any that are the runner's own children. A run's group is its
+    first process's pid (``Control.pid``). Without ``/proc`` (local dev
+    off Linux) it asks the kernel, where a zombie still counts."""
+    deadline = time.monotonic() + wait_s
+    while True:
+        try:
+            while os.waitpid(-pgid, os.WNOHANG)[0] > 0:
+                pass
+        except ChildProcessError:
+            pass
+        if os.path.isdir(proc_root):
+            if not _group_members(pgid, proc_root):
+                return True
+        else:
+            try:
+                os.killpg(pgid, 0)
+            except ProcessLookupError:
+                return True
+            except PermissionError:
+                pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.01)
 
 
 def _end(proc: subprocess.Popen, sandbox: Sandbox) -> None:

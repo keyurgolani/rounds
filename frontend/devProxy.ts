@@ -21,11 +21,14 @@ import type { ProxyOptions } from 'vite';
 const RUNNER_TARGET = process.env.VITE_API_PROXY_TARGET || 'http://runner:8000';
 const POCKETBASE_TARGET = process.env.VITE_POCKETBASE_PROXY_TARGET || 'http://pocketbase:8090';
 
-// PocketBase's admin UI, the admission hook routes, the admin APIs, and
-// collection metadata (nginx.conf, "Never proxied").
+// PocketBase's admin UI, the admission and execution hook routes, the
+// execution service record's routes, the admin APIs, and collection
+// metadata (nginx.conf, "Never proxied").
 const NEVER_PROXIED = [
   '^/_/',
   '^/api/rounds/admission/',
+  '^/api/rounds/execution/',
+  '^/api/collections/execution_service/',
   '^/api/(admins|settings|backups|logs)([/?]|$)',
   '^/api/collections(/[^/?]+)?/?([?]|$)',
 ];

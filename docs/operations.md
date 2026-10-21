@@ -47,6 +47,8 @@ print(urllib.request.urlopen('http://localhost:8000/health').read().decode())
 PY
 ```
 
+`/health` is liveness and never looks past the runner. `/ready` adds the [execution job store](#execution-job-store) while `ROUNDS_GATE_EXECUTION_STORE` is `on` and `ROUNDS_EXECUTION_SECRET` is set: then it answers 503 `{"status":"unready","store":"on"}` until the runner's worker is logged in and the store has answered within the last 30 seconds. Otherwise it answers 200 with `store` `off` or `unconfigured`. k8s uses `/ready` as the runner's readiness probe.
+
 PocketBase health is checked through the proxied API:
 
 ```sh
@@ -228,7 +230,7 @@ There is no rollback. Account isolation is forward-only: `migrate down` keeps th
 
 `harness/verify_deployment.py` checks a deployment you operate. It only reads: every request is a read, a login that should fail, or a request nginx refuses on its headers alone. It prints no email, password, or token, and it never uses `http_proxy` or any other environment proxy. It needs Python 3.9 or newer and nothing else; run it from a checkout of this repository.
 
-- `--url`: through the public URL, the routes nginx must answer itself (`/_/`, `/api/admins`, `/api/settings`, `/api/backups`, `/api/logs`, collection schema routes, `/api/rounds/admission/`) never reach PocketBase or the runner; `/api/execute` is gone; record, auth, OAuth redirect, realtime, file, and health routes still reach PocketBase; and a body over the 1 MiB cap gets the typed 413.
+- `--url`: through the public URL, the routes nginx must answer itself (`/_/`, `/api/admins`, `/api/settings`, `/api/backups`, `/api/logs`, collection schema routes, `/api/rounds/admission/`, `/api/rounds/execution/`, and the execution service record's login and records) never reach PocketBase or the runner; `/api/execute` is gone; record, auth, OAuth redirect, realtime, file, and health routes still reach PocketBase; and a body over the 1 MiB cap gets the typed 413.
 - `--pb-url`: at PocketBase's own port, the development default admin login and the demo account's login fail as an admin. This URL carries your admin password and token, so it must be `https` or a loopback address such as `http://127.0.0.1:8090`; `--allow-insecure` lifts that for a private network you trust.
 - `--admin-email`, with the password in `PB_ADMIN_PASSWORD`: the live rules match the rule table, and no admin account accepts a shipped default password. These are reads with your admin login.
 - `--db`: on a `pb_data` copy taken with PocketBase stopped (the cross-owner scan's copy), the rules match the rule table and at least one admin exists, so PocketBase's first-admin setup is closed.
@@ -270,6 +272,57 @@ The harness runs the same checks through its own nginx frontend on every CI run,
 `1700008000_legacy_artifact_snapshots.js` adds `legacy_artifact_snapshots`, the immutable resume snapshots server PDF and sharing will render. Owners can list and view their own; no client can create, update, or delete one. The `materializer` container builds a snapshot's markup for PocketBase. It holds no secret, writes nothing, joins only the internal `materialize` network in Compose, and in Kubernetes accepts only pods labeled `rounds.io/net: pocketbase`. In this release nothing writes the collection and nothing calls the materializer, so a stopped materializer changes nothing.
 
 The migration's down step drops the collection only while it's empty. Once a snapshot exists, `migrate down` fails, PocketBase logs why, and the collection, its rows, and their files stay. Deleting an account deletes its snapshots.
+## Execution Job Store
+
+`ROUNDS_GATE_EXECUTION_STORE` turns on the durable job store from [#3](https://github.com/keyurgolani/rounds/issues/3) (`ROUNDS-00A-L03`). It starts `off`. Nothing runs through it yet; #3's later PRs move the execution routes onto it. PocketBase keeps jobs, attempts, and result envelopes in `execution_jobs`, `execution_attempts`, and `execution_envelopes`, and only its hooks write them ([server-writes.md](security/server-writes.md#execution-job-store)).
+
+Each runner replica runs a worker that logs in as the `execution_service` record `execution-worker`, claims a queued job while it has a free slot (the same 4 as the admitted routes), and holds the job's lease for 30 seconds on PocketBase's clock, renewing it every 10. An account has at most 2 jobs leased or started at once. A lease that runs out before its run starts puts the job back in the queue. Otherwise a job runs again only on a retry with the same key after a `worker-lost` or `infrastructure-degraded` attempt, and only while fewer than 3 attempts have started.
+
+**Turning it on.**
+
+1. Set `ROUNDS_EXECUTION_SECRET` to one value of 32 to 72 printable characters with no spaces, such as the output of `openssl rand -hex 32`, on PocketBase and every runner replica. On k8s it's a key in `rounds-runner-secrets` (`k8s/runner.yaml`, step 4), and PocketBase reads only that key.
+2. Set `ROUNDS_GATE_EXECUTION_STORE=on` for PocketBase and the runners, then restart PocketBase and, after it, every runner replica.
+3. Confirm. PocketBase's log has one `execution_worker` line at start, with `worker` set to `created`, `updated`, or `unchanged`, and its gates line shows `EXECUTION_STORE` `on`. The first start after the upgrade logs `created` at the runner's first login instead, since PocketBase runs migrations after its start hooks. Each runner logs `execution.worker` with `code` `started`, its gates line shows `EXECUTION_STORE` `on`, and its `/ready` answers 200 `{"status":"ok","store":"on"}`.
+
+With the gate `on` and no usable secret, PocketBase creates no `execution-worker`, or gives the one it has a random password, and logs that nothing can log in as it. The runner logs `execution.worker` with `code` `unconfigured` and starts no worker, and `/ready` stays 200 with `store` `unconfigured`.
+
+**Rotating the secret.** Set the new value everywhere, restart PocketBase, then every runner replica. At its start PocketBase sets `execution-worker`'s password to the new value, which ends every session the old one had. Until a runner restarts with the new value, its logins fail: it logs `execution.worker` with `code` `login_rejected` and its `/ready` answers 503. On k8s an unready runner leaves the Service, so a secret that PocketBase doesn't take stops every runner route there, not only the store's work. Restart the runners right after PocketBase.
+
+**Turning it off.** Set the gate `off`, or empty, and restart PocketBase and the runners. The store's routes answer 503 `store_off`, no worker starts, and the rows stay. A job that was leased or started when the store went off is reaped the next time a worker claims.
+
+**Stuck jobs.** Nobody needs to end a job by hand. Every claim reaps first, and each worker reaps every 15 seconds too:
+
+1. A lease that ran out before its run started puts the job back in the queue, unless it was canceled or has had 3 attempts.
+2. A lease that ran out after the run started ends the job `failed`, `worker-lost`.
+3. A started attempt 30 seconds past its declared budget ends `failed`, `infrastructure-degraded`, even while it still heartbeats.
+
+Each reaped attempt gets a server-written envelope that is never authoritative. A runner writing for an attempt it no longer holds is refused and counted in that attempt's `rejected_writes`.
+
+**Forced reap.** Jobs stay as they are while no worker runs. To reap without one, run the reap from inside a runner container, which holds the secret, so it never reaches your shell:
+
+```sh
+docker compose -f docker-compose.prod.yml exec runner python -c "
+import asyncio
+from execution import store
+async def main():
+    client = store.ServiceClient(store.secret_from_env())
+    try:
+        print(await client.reap())
+    finally:
+        await client.aclose()
+asyncio.run(main())"
+```
+
+On k8s run the same through `kubectl -n rounds exec deploy/runner -- python -c "..."`. It prints the counts it reaped, `requeued`, `worker_lost`, and `over_budget`, and fails while the gate is `off`.
+
+**Alerts.** Each runner writes `execution.job` lines through the same log kit as `decision`, labeled `kind`, `purpose`, `state`, `outcome_class`, and `executor_kind`, never an account. Proposed thresholds; the owner ratifies them:
+
+1. `rounds_job_queue_wait_seconds` over 10 seconds at p95 for 5 minutes.
+2. Any `rounds_job_cleanup_unconfirmed_total`: a run's scratch directory or processes may have outlived it.
+3. `rounds_job_lease_expired_total` over 1% of `rounds_job_terminal_total`.
+4. `execution.worker` with `code` `login_rejected`, or a runner's `/ready` answering 503 while the gate is `on`.
+
+`rounds_job_late_result_rejected_total` counts writes refused because their attempt was superseded. A few after a restart are expected.
 
 ## Smoke Test Checklist
 
