@@ -21,13 +21,22 @@ import type { ProxyOptions } from 'vite';
 const RUNNER_TARGET = process.env.VITE_API_PROXY_TARGET || 'http://runner:8000';
 const POCKETBASE_TARGET = process.env.VITE_POCKETBASE_PROXY_TARGET || 'http://pocketbase:8090';
 
-// PocketBase's admin UI, the admission hook routes, the admin APIs, and
-// collection metadata (nginx.conf, "Never proxied").
+// A pattern's letters in either case. PocketBase reads a collection name
+// in any case, so a denial that names collections matches in any case, as
+// nginx's `location ~*` does; Vite's keys take no regex flags.
+export function anyCase(pattern: string): string {
+  return pattern.replace(/[a-z]/g, (c) => `[${c}${c.toUpperCase()}]`);
+}
+
+// PocketBase's admin UI, the admission hook routes, the legacy snapshot
+// hook only the runner calls, the admin APIs, and collection metadata
+// (nginx.conf, "Never proxied").
 const NEVER_PROXIED = [
   '^/_/',
   '^/api/rounds/admission/',
+  '^/api/rounds/legacy-snapshots',
   '^/api/(admins|settings|backups|logs)([/?]|$)',
-  '^/api/collections(/[^/?]+)?/?([?]|$)',
+  `^${anyCase('/api/collections')}(/[^/?]+)?/?([?]|$)`,
 ];
 
 // A 404 for requests and WebSocket upgrades alike.

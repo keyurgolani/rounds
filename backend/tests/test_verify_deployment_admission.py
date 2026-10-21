@@ -205,6 +205,39 @@ def test_a_route_the_operator_turned_off_passes_when_named():
     assert denied["/api/run"] == 503 and denied["/api/evaluate"] == 401
 
 
+def test_the_routes_that_ship_off_are_the_registrys():
+    from app import admission, gates
+
+    defaults = {g.name: g.default for g in gates.REGISTRY}
+    shipped_off = {path for (_m, path), route in admission.ROUTES.items() if defaults[route.gate] == "disabled"}
+    assert shipped_off == vd.SHIPS_OFF
+
+
+@pytest.mark.parametrize("answer, passes", [
+    ((503, envelope("route_disabled"), {"X-Correlation-Id": CID}), True),
+    ((401, envelope("unauthenticated"), {"X-Correlation-Id": CID}), True),
+    ((503, envelope("definitions_disabled"), {"X-Correlation-Id": CID}), False),
+    ((503, envelope("materializer_unavailable"), {"X-Correlation-Id": CID}), False),
+    ((201, {"status": "created"}, {}), False),
+], ids=["shipped-off", "turned-on", "other-stop", "other-503", "ran-it"])
+def test_a_route_that_ships_off_passes_off_or_on_until_it_is_named(answer, passes):
+    (path,) = vd.SHIPS_OFF
+    dep = Admission()
+    dep.overrides[path] = answer
+    with fake(dep) as url:
+        results = vd.check_admitted_routes(url)
+    bad = [r for r in results if not r.passed and r.check_id == "deployment.admission.anonymous.denied"]
+    assert [r.target for r in bad] == ([] if passes else [path])
+
+
+def test_a_route_that_ships_off_and_is_named_off_has_to_be_off():
+    (path,) = vd.SHIPS_OFF
+    with fake(Admission()) as url:
+        results = vd.check_admitted_routes(url, disabled=[path])
+    bad = [r for r in results if not r.passed]
+    assert [(r.check_id, r.target) for r in bad] == [("deployment.admission.anonymous.denied", path)]
+
+
 def test_a_route_left_off_fails_until_it_is_named():
     dep = Admission()
     dep.disabled.add("/api/run")
@@ -295,7 +328,7 @@ def test_a_capped_proxy_in_front_makes_the_caps_over_its_own_inconclusive():
     assert [r.target for r in results if not r.passed and not r.inconclusive] == []
     over = {path for method, path, _g, _r, edge in vd.ADMITTED_ROUTES if method == "POST" and edge + 1 > dep.proxy_cap}
     hidden = [r for r in results if r.inconclusive]
-    assert {r.target.split(" ")[0] for r in hidden} == over and len(over) == 6
+    assert {r.target.split(" ")[0] for r in hidden} == over and len(over) == 7
     assert all(r.detail.startswith("inconclusive (capped proxy in front)") for r in hidden)
     assert {r.target.split(" ")[0] for r in results if r.passed} == {"/api/run", "/api/evaluate"}
 
@@ -509,18 +542,35 @@ def test_expected_gates_take_either_spelling():
 # ---- the runner's own denials pass the shape check ----------------------------
 
 
-def test_the_runners_anonymous_denials_are_the_safe_shape(client):
+def _every_route_on(monkeypatch):
+    from app import gates
+
+    env = {f"{gates.PREFIX}{gate}": "enabled" for _m, _p, gate, _r, _e in vd.ADMITTED_ROUTES}
+    monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
+
+
+@pytest.mark.parametrize("shipped", [True, False], ids=["as-shipped", "every-route-on"])
+def test_the_runners_anonymous_denials_are_the_safe_shape(client, monkeypatch, shipped):
+    from app import gates
+
+    if shipped:
+        monkeypatch.setattr(gates, "_snapshot", gates.load({}, gates.RUNNER))
+    else:
+        _every_route_on(monkeypatch)
     for method, path, _g, _r, _e in vd.ADMITTED_ROUTES:
         res = client.request(method, path, json={} if method == "POST" else None)
         headers = {k.lower(): v for k, v in res.headers.items()}
         assert vd.envelope_problem(res.status_code, res.content, headers) == "", path
-        assert res.json()["code"] == "unauthenticated", path
+        # A route whose gate ships off answers its stop before the account.
+        want = "route_disabled" if shipped and path in vd.SHIPS_OFF else "unauthenticated"
+        assert res.json()["code"] == want, path
 
 
-def test_the_runners_field_refusals_repeat_none_of_the_request(client, signed_in):
+def test_the_runners_field_refusals_repeat_none_of_the_request(client, signed_in, monkeypatch):
     # What the harness's no-echo check expects of each replica, here for
-    # every POST route: a field the route doesn't take is the typed 422,
-    # and nothing sent comes back.
+    # every POST route with its gate on: a field the route doesn't take is
+    # the typed 422, and nothing sent comes back.
+    _every_route_on(monkeypatch)
     marker = "s4echo0123456789ab"
     for method, path, _g, _r, _e in vd.ADMITTED_ROUTES:
         if method != "POST":

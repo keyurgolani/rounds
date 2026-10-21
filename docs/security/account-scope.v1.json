@@ -110,6 +110,9 @@
     "deployment.proxy.admission-hooks.denied": {
       "guarantee": "the admission hook routes are not reachable at the public URL"
     },
+    "deployment.proxy.legacy-snapshot-hook.denied": {
+      "guarantee": "the legacy snapshot hook, which only the runner calls, is not reachable at the public URL"
+    },
     "deployment.proxy.execute.gone": {
       "guarantee": "/api/execute no longer reaches a code runner"
     },

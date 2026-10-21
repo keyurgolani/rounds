@@ -31,7 +31,8 @@ import receipts  # noqa: E402
 NGINX_404 = b"<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
 PB_404 = {"code": 404, "message": "The requested resource wasn't found.", "data": {}}
 PB_401 = {"code": 401, "message": "The request requires admin authorization token to be set.", "data": {}}
-DENIED_PREFIXES = ("/_/", "/api/admins", "/api/settings", "/api/backups", "/api/logs", "/api/rounds/admission/")
+DENIED_PREFIXES = ("/_/", "/api/admins", "/api/settings", "/api/backups", "/api/logs", "/api/rounds/admission/",
+                   "/api/rounds/legacy-snapshots")
 
 
 class Deployment:
@@ -187,6 +188,15 @@ def test_collection_metadata_reaching_pocketbase_fails_but_records_stay_open():
         opened = by_id(vd.check_open_routes(url))
     assert not denied["deployment.proxy.collection-metadata.denied"][0].passed
     assert opened["deployment.proxy.records.open"][0].passed
+
+
+def test_the_legacy_snapshot_hook_reaching_pocketbase_fails():
+    dep = Deployment()
+    dep.overrides[("POST", "/api/rounds/legacy-snapshots")] = (401, PB_401)
+    with deployment(dep) as (_, url):
+        results = by_id(vd.check_denied_routes(url))
+    r = results["deployment.proxy.legacy-snapshot-hook.denied"][0]
+    assert not r.passed and "answered_by=pocketbase" in r.detail
 
 
 def test_execute_answered_by_the_runner_fails():

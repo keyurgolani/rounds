@@ -9,7 +9,7 @@ import { resolve } from 'node:path';
 import type { ProxyOptions } from 'vite';
 import { describe, expect, it, vi } from 'vitest';
 
-import { devProxy } from '../../devProxy';
+import { anyCase, devProxy } from '../../devProxy';
 
 interface Location {
   modifier: string;
@@ -73,6 +73,9 @@ const NEVER_PROXIED = [
   '/_/images/logo.svg',
   '/api/rounds/admission/admit',
   '/api/rounds/admission/usage?x=1',
+  '/api/rounds/legacy-snapshots',
+  '/api/rounds/legacy-snapshots/',
+  '/api/rounds/legacy-snapshots?x=1',
   '/api/admins',
   '/api/admins/auth-with-password',
   '/api/settings',
@@ -85,6 +88,10 @@ const NEVER_PROXIED = [
   '/api/collections/users',
   '/api/collections/users/',
   '/api/collections/users?fields=schema',
+  // PocketBase reads a collection name in any case.
+  '/api/collections/USERS',
+  '/api/collections/Users/?fields=schema',
+  '/API/Collections/users',
 ];
 
 const PROXIED = [
@@ -95,6 +102,7 @@ const PROXIED = [
   '/api/run',
   '/api/evaluate',
   '/api/pdf/render',
+  '/api/pdf/snapshots',
   '/api/ai-coding/grade',
   '/api/take-home/submit',
   '/api/rounds/other',
@@ -102,11 +110,39 @@ const PROXIED = [
   '/api/collections/users/records',
   '/api/collections/users/records?filter=x',
   '/api/collections/users/auth-with-password',
+  '/api/collections/legacy_artifact_snapshots/records',
 ];
 
 describe('the dev proxy and production nginx', () => {
   it('found the denials in nginx.conf', () => {
-    expect(LOCATIONS.filter((l) => l.denies).length).toBeGreaterThanOrEqual(4);
+    expect(LOCATIONS.filter((l) => l.denies).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('matches every denial that names collections in any case', () => {
+    const named = LOCATIONS.filter((l) => l.denies && /collections/i.test(l.pattern));
+    expect(named.length).toBeGreaterThanOrEqual(1);
+    for (const l of named) expect(l.modifier).toBe('~*');
+    // Each denied collection URL, its name in other cases, is denied too.
+    for (const url of NEVER_PROXIED.filter((u) => /^\/api\/collections\/[^/?]+/.test(u))) {
+      const [path, query] = url.split('?');
+      const parts = path.split('/');
+      const name = parts[3];
+      for (const other of [name.toUpperCase(), name[0].toUpperCase() + name.slice(1)]) {
+        const changed = [...parts.slice(0, 3), other, ...parts.slice(4)].join('/') + (query ? `?${query}` : '');
+        expect(nginxDenies(changed), changed).toBe(true);
+        expect(viteDenies(changed), changed).toBe(true);
+      }
+    }
+  });
+
+  it('writes each letter of a pattern in both cases', () => {
+    expect(anyCase('/api/x_1')).toBe('/[aA][pP][iI]/[xX]_1');
+    expect(new RegExp(`^${anyCase('/api/collections')}$`).test('/API/Collections')).toBe(true);
+  });
+
+  it('sends the snapshot route to the runner and keeps its hook from PocketBase', () => {
+    expect(viteEntry('/api/pdf/snapshots')?.target).toBe(viteEntry('/api/run')?.target);
+    expect(viteDenies('/api/rounds/legacy-snapshots')).toBe(true);
   });
 
   it.each(NEVER_PROXIED)('both answer 404 for %s', (url) => {
