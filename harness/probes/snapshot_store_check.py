@@ -108,6 +108,32 @@ def _field_problems(schema: list[dict]) -> list[str]:
     return problems
 
 
+def _fresh_field_problems(schema: list[dict]) -> list[str]:
+    # On a fresh database, PocketBase's own 1702134272_set_default_json_max_size
+    # runs after this migration (decision D10) and resets every JSON field's
+    # maxSize to its 2,000,000 default, so the intended smaller design and
+    # font_families limits are not in force until #200's re-apply registry
+    # restores them. The structural guarantee that must hold on a fresh
+    # database: the collection exists, every field has its type and required
+    # flag, and no JSON field is left at maxSize 0 (which would reject every
+    # value). The exact small limits are checked on the upgraded database.
+    by_name = {f["name"]: f for f in schema}
+    problems = sorted(set(by_name) ^ set(FIELDS))
+    for name, (ftype, required, options) in FIELDS.items():
+        field = by_name.get(name)
+        if field is None:
+            continue
+        if field.get("type") != ftype or bool(field.get("required")) != required:
+            problems.append(f"{name}:type-or-required")
+        if ftype == "json" and not ((field.get("options") or {}).get("maxSize", 0) > 0):
+            problems.append(f"{name}.maxSize-zero")
+        if ftype != "json":
+            for key, want in options.items():
+                if (field.get("options") or {}).get(key) != want:
+                    problems.append(f"{name}.{key}")
+    return problems
+
+
 def _without_store(snapshot: dict) -> dict:
     return {
         "counts": {t: n for t, n in snapshot["counts"].items() if t != COLLECTION},
@@ -212,6 +238,26 @@ def main() -> int:
         c.check("snapshot-store.reapplies",
                 _applied(db, MIGRATION) and again is not None and _without_store(_snapshot(db)) == before,
                 (up.stdout + up.stderr)[-500:])
+
+        # A fresh database: the whole migration set applied in one `migrate
+        # up` on an empty pb_data, so PocketBase's own JSON-size-default
+        # migration runs after this one (decision D10). The collection must
+        # still be created, owner-read, uniquely indexed, and usable; the
+        # exact small JSON limits land with #200's re-apply registry.
+        fresh = work / "fresh_pb_data"
+        up = _migrate(fresh, full, "up")
+        fdb = fresh / "data.db"
+        c.check("snapshot-store.fresh.applies", _applied(fdb, MIGRATION), (up.stdout + up.stderr)[-500:])
+        ffound = _collection(fdb)
+        c.check("snapshot-store.fresh.adds-the-collection", ffound is not None,
+                "collection missing on a fresh database")
+        if ffound is not None:
+            c.check("snapshot-store.fresh.owner-reads-and-no-client-writes",
+                    ffound["rules"] == [OWNER_RULE, OWNER_RULE, None, None, None], repr(ffound["rules"]))
+            c.check("snapshot-store.fresh.unique-reuse-index", ffound["indexes"] == [INDEX],
+                    repr(ffound["indexes"]))
+            fresh_problems = _fresh_field_problems(ffound["schema"])
+            c.check("snapshot-store.fresh.fields-usable", not fresh_problems, ", ".join(fresh_problems))
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

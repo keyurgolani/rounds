@@ -34,9 +34,16 @@ def _down(src: str) -> str:
     return src[src.index("(db) => {", src.index("dao.saveCollection(snapshots)")) :]
 
 
-def test_it_sorts_after_every_other_migration():
+def test_it_sorts_after_the_migrations_it_depends_on():
+    # It must apply after the account-scope rules and the relation-endpoint
+    # authorization migration so the owner rules and the server-write
+    # invariants are already in place. It need not be the last migration,
+    # so a later leaf may add one after it without breaking this.
     names = sorted(p.name for p in MIGRATION.parent.glob("*.js"))
-    assert names[-1] == MIGRATION.name
+    assert MIGRATION.name in names
+    for prerequisite in ("1700006000_account_scope_rules.js", "1700007000_relation_endpoint_authz.js"):
+        assert prerequisite in names, prerequisite
+        assert names.index(prerequisite) < names.index(MIGRATION.name), prerequisite
 
 
 def test_owners_read_and_no_client_writes(src):
