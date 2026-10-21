@@ -297,9 +297,11 @@ ${CONTAINER_BIN} run --rm --network none \
   -e PB_BIN="/pbbin/pocketbase" \
   -e PB_MIGRATIONS_DIR="/pb_migrations" \
   -e PB_HOOKS_DIR="/pb_hooks" \
+  -e PB_LEVERS_DIR="/pb_levers" \
   -v "${PBBIN_VOLUME}:/pbbin:ro" \
   -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
   -v "${ROOT}/pocketbase/pb_hooks:/pb_hooks:ro" \
+  -v "${ROOT}/pocketbase/levers:/pb_levers:ro" \
   -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
   "${PROBE_IMAGE}" relation-quarantine
 quarantine_rc=$?

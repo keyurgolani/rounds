@@ -195,8 +195,19 @@ missing-target rows with direct SQL, and checks that:
   update, clears a reference to a moved row, and moves a row whose clear
   would collide with a unique index, journalling every move and clear with
   the original row, pseudonyms, and status;
-- same-owner rows and total row counts stay as they were, the logs carry
-  counts and the checksum but no ids, and a second run adds nothing.
+- same-owner rows and total row counts stay as they were, each journal
+  entry's payload is the row's every raw column value exactly, the logs carry
+  counts and the checksum but no ids, and a second run adds nothing;
+- on copies of the applied data, the admin API marks entries `dropped` and
+  `replayed` without touching their payload, and the replay lever
+  (`pocketbase/levers/replay_quarantine.template.js`) writes same-owner
+  entries back exactly, `created` and `updated` included, and refuses one
+  whose target still belongs to another account;
+- a view, an added relation, and a toggled cascade with nothing to quarantine
+  change nothing; a toggled cascade on a field with something to quarantine,
+  or an added relation pointing at a row about to move, stops the migration;
+  and a failure as early as creating the triggers still writes the dry run's
+  report and the apply's failure log line.
 
 It then serves a fresh copy on loopback with the hooks and checks, through
 the API, that deleting a provider set as both text and vision provider,
