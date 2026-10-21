@@ -146,6 +146,65 @@ docker compose -f docker-compose.prod.yml up -d
 
 Before upgrading to the release that tightens the account-scope rules, scan a copy of `pb_data` for relations that point at another account's records and hand the report to the relation quarantine work. The scan is read-only and runs on a copy taken with PocketBase stopped, not on the live volume or a backup of the running one. How to take that copy, the exact commands, what the report holds, and how long to keep it are in [docs/security/cross-owner-scan.md](security/cross-owner-scan.md).
 
+### Relation endpoint authorization and quarantine
+
+`1700007000_relation_endpoint_authz.js` authorizes every typed relation: a write may point a relation only at a target the same account owns, and it adds a transactional SQLite backstop for all 34 relation fields. The update trigger checks a relation only when that relation or the row's owner changes, so a delete that clears one relation of a row never trips over the row's other relations. The same migration quarantines any existing cross-owner (or missing-target) references before the backstop starts rejecting them, so a deployment that already holds such rows upgrades cleanly:
+
+- A row whose required or cascading relation points at another account (or at a missing record) moves into `relation_quarantine` with its cascade dependents: a variant brings its versions, share links, and their views. Every moved row is copied first and then deleted leaf-first, so no delete cascades into a row that wasn't copied. A moved share link's token then gets the usual not-found.
+- A reference on an optional, non-cascading field is cleared and journalled, all of a row's offending fields in one update. If clearing it would collide with a unique index (SQLite treats an empty string as a present value), the row moves instead.
+- A non-cascading reference to a moved row, like `previous_offer`, is cleared and journalled the same way.
+
+Each `relation_quarantine` entry holds the migration, the row (`source_collection`, `source_id`), the `field` and its target, the `action` (`moved` or `cleared`), per-report account pseudonyms, the original row (`payload`: every column's raw value as text, so a large number, a real, or a JSON column comes back exactly), and a `status` (`quarantined`, then `replayed` or `dropped`). One pseudonymized report row, in the cross-owner scan's shape, is written to `relation_quarantine_reports`.
+
+Anything unexpected fails the whole migration and writes nothing: a write that fails for any reason other than that unique collision, a relation in the migration's frozen table that is missing or no longer a single relation to its target, a changed required or cascade option on a field with something to quarantine, or a relation outside the frozen table that points at a row about to move. A view, an added relation, or a changed option with nothing to quarantine doesn't stop it. `migrate down` keeps every trigger: a predicate that proves too tight is repaired with a forward-fix migration, never by reverting.
+
+Dry-run it on a copy of each deployment first, so you see exactly what the apply will quarantine before you run it for real:
+
+```sh
+mkdir -p ~/rounds-scan/reports
+docker run --rm --network none \
+  -e ROUNDS_RELATION_QUARANTINE=dry-run \
+  -e ROUNDS_RELATION_QUARANTINE_REPORT=/reports/quarantine-$(date +%F).json \
+  -v ~/rounds-scan/pb_data:/pb/pb_data \
+  -v ~/rounds-scan/reports:/reports \
+  keyurgolani/rounds-pocketbase:${ROUNDS_IMAGE_TAG} \
+  /pb/pocketbase migrate up --dir=/pb/pb_data --migrationsDir=/pb/pb_migrations
+```
+
+`~/rounds-scan/pb_data` is the stopped-PocketBase copy the cross-owner scan already uses; set `ROUNDS_IMAGE_TAG` to the release you are about to deploy so the copy runs the same migrations. The container's report path is `/reports/...`, which resolves outside `/pb/pb_data`. This runs the migration without serving, and `--network none` keeps it offline.
+
+- The report path must be set and must resolve outside `pb_data`; the migration refuses a path containing `pb_data` and refuses an unset path. Create its directory first (the migration writes the file, not the directory), and the file is written mode `0600`.
+- The dry run takes the apply's own path: it moves, clears, and journals inside the migration's transaction, writes the report, logs `relation_quarantine_dry_run`, and then throws, so PocketBase rolls everything back. Nothing in the copy changes. Because it runs the same code, it also hits any failure the apply would hit, from creating the triggers onward; then the report's `status` is `failed`, its `stage` names the step it reached, and its `error` names the cause, so fix that before you deploy.
+- PocketBase 0.22 exits 0 even when a migration fails, so the exit code tells you nothing. Judge the run by the report's `status` (`ok` or `failed`) and the `relation_quarantine_dry_run` log line, which carries the same status, the counts, and the checksum (or, on a failure, the stage and reason).
+- The report's `summary` carries `owned_collections`, `relations_checked`, `rows_scanned`, `references_checked`, `cross_owner`, `missing_target`, `rows_moved`, `dependents_moved`, `references_cleared`, and `unique_fallbacks`. `findings` lists each cross-owner or missing-target reference, and `outcomes` lists each row the apply moves and each reference it clears, all with per-report account pseudonyms (`acct-01`, ...), never account ids. Keep the report and the scanned copy no longer than its `expires_at` (14 days), same as the cross-owner scan.
+
+Deploying the real migration (no dry-run env vars) applies both changes in one transaction. An apply that quarantines anything logs `relation_quarantine_applied` with its counts and the report `checksum`, and writes the one report row into `relation_quarantine_reports`; compare that checksum with the dry run's. The checksum covers the per-field row and reference counts as well as the findings and outcomes, so it matches only if the rows on those 34 fields didn't change between taking the copy and the apply. Any change there gives a different checksum, an ordinary row added or deleted included, without meaning anything crossed accounts, so read the applied report and its `outcomes` rather than assuming the dry run still describes it.
+
+If the apply fails at any step, it logs `relation_quarantine_failed` with that `stage` and a `reason` (`schema_mismatch` or `apply_failed`), and PocketBase logs `Failed to apply migration 1700007000_relation_endpoint_authz.js`, writes nothing, and still exits 0, so under `restart: unless-stopped` the container keeps restarting. Judge it by those log lines, not the exit code. Nothing was applied, so go back to the previous image tag, run the dry run on a fresh copy to see the cause in its report, and fix it before you deploy again. Once the apply has succeeded, don't pin a pre-L02 image to avoid the migration, and don't roll back to one to undo it: the backstop and the quarantine are forward-only. The relation triggers live in `data.db`, so they keep rejecting cross-owner writes even under an older image that predates this release; what an older image loses is the relation hook and its uniform denial, so the triggers' own abort error becomes the only guard. Repair a predicate that proves too tight with a forward-fix migration, never by reverting.
+
+**Replay.** A wrongly quarantined entry comes back through `pocketbase/levers/replay_quarantine.template.js`, which writes a `moved` entry's row back exactly as it was, `created` and `updated` included, and sets a `cleared` entry's `field` on the `source_id` row back to `target_id`. The admin API can't do that: it can't set `created` or `updated`, so a replayed resume version would show as the newest. Every write goes through the relation triggers, so only a same-owner entry replays; correct the owning account first if that's why it moved, and list a moved parent with its dependents (the lever writes parents first). With PocketBase stopped and a fresh backup taken as in [Backups](#backups):
+
+```sh
+mkdir -p ~/rounds-replay
+cp pocketbase/levers/replay_quarantine.template.js ~/rounds-replay/$(date +%s)_replay_quarantine.js
+# In the copy, replace "__ENTRY_ID__" with the entry ids, each quoted, comma-separated.
+docker compose -f docker-compose.prod.yml stop pocketbase
+docker run --rm --network none \
+  -v rounds_pb_data:/pb/pb_data \
+  -v ~/rounds-replay:/replay:ro \
+  keyurgolani/rounds-pocketbase:${ROUNDS_IMAGE_TAG} \
+  /pb/pocketbase migrate up --dir=/pb/pb_data --migrationsDir=/replay
+docker compose -f docker-compose.prod.yml start pocketbase
+```
+
+Pointing `--migrationsDir` at a folder holding only the lever runs just the lever. It sets each replayed entry's `status` to `replayed`. If any listed entry isn't `quarantined` or can't be replayed, the run changes nothing and PocketBase logs why but still exits 0, so check the entries afterwards. To set aside an entry the owner decides not to restore, set its `status` to `dropped` through the admin API with the admin token; that update keeps the `payload`. The replay and the migration's own writes are recorded in [server-writes.md](security/server-writes.md).
+
+**Alert.** Each denial logs one `relation_denied` line carrying `collection`, `field`, `operation`, and `actor` only (no ids or values). A low background rate is normal. Alert on a sustained rise in `relation_denied` per `collection`/`field` after a deploy, or on the first `relation_denied` for a `field` that never denied before: either points at a client that started sending a cross-owner or stale id, or at a predicate that is now too tight for a legitimate write.
+
+**Dependency check.** The uniform denial depends on the relation hook being loaded: confirm `relation_endpoints.pb.js` and its sibling `relation_endpoints.v1.json` table load from `/pb/pb_hooks` at boot (a hook load error prints to the PocketBase log), then send one foreign-id create per relation family and confirm it is denied with the documented status (create `400`, update `404`, a foreign id and a nonexistent id indistinguishable). If the hook is missing, the in-database triggers still abort every cross-owner write, but the denial stops being uniform: the trigger's abort surfaces as a generic write failure, so a foreign id and a nonexistent id no longer return the same status.
+
+**Repair.** A predicate that proves too tight is repaired with a new forward-fix migration, never by editing `1700007000` or rolling back. While that migration is being prepared, the immediate lever for a collection found accepting a write that points at another account's record is to set that collection's create/update rule to `null` (superuser-only) through the admin API, which stops all non-superuser writes to it until the fix ships; it never widens a rule. Record any such change in [server-writes.md](security/server-writes.md).
+
 ### Account-scope rules
 
 `1700006000_account_scope_rules.js` sets server-derived ownership on every user-owned collection: a create must name the signed-in account (`@request.data.user = @request.auth.id`) and an update cannot reassign `user`. `resume_share_views` becomes superuser-only, so only the share viewer's admin-token insert writes it. List, view, and delete rules are unchanged, and so are the `users` rules. The policy table is [`docs/security/account-scope.v1.json`](security/account-scope.v1.json).
@@ -153,7 +212,7 @@ Before upgrading to the release that tightens the account-scope rules, scan a co
 Deploying the release that carries it:
 
 1. Take a fresh `pb_data` backup with PocketBase stopped.
-2. Run the cross-owner relation scan (above) on a copy and clear what it finds.
+2. Run the cross-owner relation scan (above) on a copy to see what cross-owner references exist, then dry-run the [relation endpoint authorization and quarantine](#relation-endpoint-authorization-and-quarantine) migration on the same copy; its apply clears and quarantines those references as part of the upgrade.
 3. Note the accepted and denied create and update requests per collection and status in the PocketBase request logs over the retained window (5 days by default). Read them in the admin UI's Logs view, reached as in "PocketBase Admin Access" below.
 4. Deploy. The migration applies on start. If one of its collections is missing, it fails whole: PocketBase logs `Failed to apply migration 1700006000_account_scope_rules.js`, changes no rule, and exits without serving, and under `restart: unless-stopped` it keeps restarting. Go back to the previous image tag while you find out why the collection is missing.
 5. Compare the same counts daily for 7 days. Create or update denials rising on a collection is the alert.

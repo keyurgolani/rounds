@@ -63,7 +63,10 @@ with the leaf and stage that closes it, and carries no probe here: its probes
 land in the pull request that fixes it. The run fails if a pending family ever
 gains an implementation or produces a receipt, so the policy row and its probe
 flip together. Stage 3 of `ROUNDS-00B-L01` closed the last pending families, so
-none remain.
+none remain. `ROUNDS-00B-L02` adds the enforced typed-relation endpoint
+families: a write may point a relation only at a target the same account owns,
+and a foreign target reads the same as a nonexistent one, so both are denied
+alike.
 
 `harness/migration_check.sh` checks the rule migration itself in one-off
 `pocketbase migrate up` containers: the migration produces the rule table's
@@ -77,10 +80,13 @@ scan
 [docs](../docs/security/cross-owner-scan.md)) against the run's `pb_data`
 volume, mounted read-only in a container with no network. It checks that the
 clean data has no findings, that the policy's relation table matches the live
-schema, that a relation pointed at another account's record in a fixture copy
-(a direct SQLite write to the copy, never through the API) is reported, and
-that reports carry no account ids, are private, have a stable checksum, and are
-refused inside `pb_data`.
+schema, and that a relation pointed at another account's record in a fixture
+copy (a direct SQLite write to the copy, never through the API) is reported.
+The same direct cross-owner write is first confirmed to be aborted by the
+`ROUNDS-00B-L02` relation-endpoint triggers (the transactional backstop), which
+are then dropped on the throwaway copy only so the pre-migration row can be
+planted for the scan to detect. It also checks that reports carry no account
+ids, are private, have a stable checksum, and are refused inside `pb_data`.
 
 ## Running it
 
@@ -174,6 +180,39 @@ applies `1700006100_admission.js` to a `pb_data` built from every migration
 before `1700006000` (the `62d4eae` set), checks that it adds only the three
 server-only collections, reverses it with `pocketbase migrate down 1` as an
 operator would, checks that the data is back as it was, and applies it again.
+
+Last, [`probes/relation_quarantine_check.py`](probes/relation_quarantine_check.py)
+runs the same pinned binary, with no network, against the relation
+quarantine in `1700007000_relation_endpoint_authz.js`. It builds a `pb_data`
+from every earlier migration, plants a legacy fixture of cross-owner and
+missing-target rows with direct SQL, and checks that:
+
+- the dry run changes nothing, exits 0 as PocketBase 0.22 does even after a
+  failed migration, and reports the outcomes and checksum the apply then has;
+- the apply moves each row whose required or cascading relation crosses
+  accounts with its cascade dependents (two offers chained through
+  `previous_offer` included), clears a row's offending optional fields in one
+  update, clears a reference to a moved row, and moves a row whose clear
+  would collide with a unique index, journalling every move and clear with
+  the original row, pseudonyms, and status;
+- same-owner rows and total row counts stay as they were, each journal
+  entry's payload is the row's every raw column value exactly, the logs carry
+  counts and the checksum but no ids, and a second run adds nothing;
+- on copies of the applied data, the admin API marks entries `dropped` and
+  `replayed` without touching their payload, and the replay lever
+  (`pocketbase/levers/replay_quarantine.template.js`) writes same-owner
+  entries back exactly, `created` and `updated` included, and refuses one
+  whose target still belongs to another account;
+- a view, an added relation, and a toggled cascade with nothing to quarantine
+  change nothing; a toggled cascade on a field with something to quarantine,
+  or an added relation pointing at a row about to move, stops the migration;
+  and a failure as early as creating the triggers still writes the dry run's
+  report and the apply's failure log line.
+
+It then serves a fresh copy on loopback with the hooks and checks, through
+the API, that deleting a provider set as both text and vision provider,
+deleting an application with two chained offers, and a superuser deleting an
+account holding both shapes all succeed without touching another account.
 
 No service publishes a host port; the probes reach services over the compose
 network. Image tags, network, volume, the compose env file, and the receipts

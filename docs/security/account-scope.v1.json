@@ -56,6 +56,14 @@
     "auth_unavailable": {
       "status": 503,
       "guarantee": "the runner refuses with auth_unavailable when it cannot verify the caller"
+    },
+    "relation_create": {
+      "status": 400,
+      "guarantee": "a create pointing a typed relation at a target the account does not own is rejected"
+    },
+    "relation_update": {
+      "status": 404,
+      "guarantee": "an update pointing a typed relation at a target the account does not own is not found"
     }
   },
   "open_exceptions": [
@@ -73,6 +81,11 @@
       "id": "owner-id-create-shape",
       "closed_by": "ROUNDS-00B-L05",
       "note": "a create naming a missing owner and one naming another account are both denied with the same status (account-scope.create.nonexistent-owner.denied); PocketBase checks that the named user exists before the create rule runs, so the error bodies are not compared here"
+    },
+    {
+      "id": "client-chosen-record-id",
+      "closed_by": "ROUNDS-00B-L05",
+      "note": "a create may supply its own record id, and PocketBase validates that id before the create rule runs, so the response to a taken id differs from the response to a free one and can tell whether a record with that id exists in any account; the uniform relation denial covers the ids a row points at, not the new row's own id"
     }
   ],
   "deployment_checks": {
@@ -313,6 +326,41 @@
       "guarantee": "with PocketBase unreachable a runner write fails closed before it writes",
       "resource": "take_home_attempts",
       "route": "/api/take-home/submit"
+    },
+    "account-scope.create.relation-foreign.denied": {
+      "operation": "create",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "relation_create",
+      "guarantee": "an account's own row cannot point a typed relation at another account's record"
+    },
+    "account-scope.create.relation-foreign-or-missing.indistinguishable": {
+      "operation": "create",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "relation_create",
+      "guarantee": "a foreign and a missing relation target are denied alike on create, so neither reveals the target exists"
+    },
+    "account-scope.create.relation-superuser.denied": {
+      "operation": "create",
+      "actor": "superuser",
+      "status": "enforced",
+      "deny_key": "relation_create",
+      "guarantee": "even the superuser cannot create a row whose typed relation points across accounts"
+    },
+    "account-scope.update.relation-foreign.denied": {
+      "operation": "update",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "relation_update",
+      "guarantee": "an account cannot repoint its own row's typed relation at another account's record"
+    },
+    "account-scope.update.relation-foreign-or-missing.indistinguishable": {
+      "operation": "update",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "relation_update",
+      "guarantee": "a foreign and a missing relation target are denied alike on update, so neither reveals the target exists"
     }
   },
   "collections": {
@@ -381,6 +429,12 @@
       "relation_exceptions": [
         "campaign"
       ],
+      "relation_endpoints": [
+        {
+          "field": "campaign",
+          "target": "campaigns"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -400,7 +454,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "interview_rounds": {
@@ -424,6 +483,16 @@
         "application",
         "campaign"
       ],
+      "relation_endpoints": [
+        {
+          "field": "application",
+          "target": "applications"
+        },
+        {
+          "field": "campaign",
+          "target": "campaigns"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -444,7 +513,12 @@
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
         "account-scope.create.nonexistent-owner.denied",
-        "account-scope.oversized-input.rejected"
+        "account-scope.oversized-input.rejected",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ],
       "oversized_probe": {
         "field": "questions_asked",
@@ -471,6 +545,12 @@
       "relation_exceptions": [
         "campaign"
       ],
+      "relation_endpoints": [
+        {
+          "field": "campaign",
+          "target": "campaigns"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -490,7 +570,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "user_preferences": {
@@ -513,6 +598,12 @@
       "relation_exceptions": [
         "current_campaign"
       ],
+      "relation_endpoints": [
+        {
+          "field": "current_campaign",
+          "target": "campaigns"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -532,7 +623,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "offers": {
@@ -556,6 +652,16 @@
         "application",
         "previous_offer"
       ],
+      "relation_endpoints": [
+        {
+          "field": "application",
+          "target": "applications"
+        },
+        {
+          "field": "previous_offer",
+          "target": "offers"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -576,7 +682,12 @@
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
         "account-scope.create.nonexistent-owner.denied",
-        "account-scope.oversized-input.rejected"
+        "account-scope.oversized-input.rejected",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ],
       "oversized_probe": {
         "field": "trail",
@@ -603,6 +714,12 @@
       "relation_exceptions": [
         "campaign"
       ],
+      "relation_endpoints": [
+        {
+          "field": "campaign",
+          "target": "campaigns"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -622,7 +739,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "todos": {
@@ -645,6 +767,12 @@
       "relation_exceptions": [
         "campaign"
       ],
+      "relation_endpoints": [
+        {
+          "field": "campaign",
+          "target": "campaigns"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -665,7 +793,12 @@
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
         "account-scope.create.nonexistent-owner.denied",
-        "account-scope.oversized-input.rejected"
+        "account-scope.oversized-input.rejected",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ],
       "oversized_probe": {
         "field": "mentions",
@@ -738,6 +871,16 @@
         "resume",
         "application"
       ],
+      "relation_endpoints": [
+        {
+          "field": "resume",
+          "target": "resumes"
+        },
+        {
+          "field": "application",
+          "target": "applications"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -758,7 +901,12 @@
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
         "account-scope.create.nonexistent-owner.denied",
-        "account-scope.oversized-input.rejected"
+        "account-scope.oversized-input.rejected",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ],
       "oversized_probe": {
         "field": "data",
@@ -786,6 +934,16 @@
         "resume",
         "variant"
       ],
+      "relation_endpoints": [
+        {
+          "field": "resume",
+          "target": "resumes"
+        },
+        {
+          "field": "variant",
+          "target": "resume_variants"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -806,7 +964,12 @@
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
         "account-scope.create.nonexistent-owner.denied",
-        "account-scope.oversized-input.rejected"
+        "account-scope.oversized-input.rejected",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ],
       "oversized_probe": {
         "field": "data",
@@ -834,6 +997,16 @@
         "variant",
         "resume"
       ],
+      "relation_endpoints": [
+        {
+          "field": "variant",
+          "target": "resume_variants"
+        },
+        {
+          "field": "resume",
+          "target": "resumes"
+        }
+      ],
       "exceptions": [
         {
           "id": "share-token-read",
@@ -859,7 +1032,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "resume_share_views": {
@@ -882,6 +1060,12 @@
       "relation_exceptions": [
         "link"
       ],
+      "relation_endpoints": [
+        {
+          "field": "link",
+          "target": "resume_share_links"
+        }
+      ],
       "exceptions": [
         {
           "id": "superuser-view-insert",
@@ -901,7 +1085,8 @@
         "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.create.server-only.denied",
         "account-scope.update.server-only.denied",
-        "account-scope.create.superuser.accepted"
+        "account-scope.create.superuser.accepted",
+        "account-scope.create.relation-superuser.denied"
       ]
     },
     "ai_providers": {
@@ -970,6 +1155,16 @@
         "text_provider",
         "vision_provider"
       ],
+      "relation_endpoints": [
+        {
+          "field": "text_provider",
+          "target": "ai_providers"
+        },
+        {
+          "field": "vision_provider",
+          "target": "ai_providers"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -989,7 +1184,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "ai_coding_drafts": {
@@ -1013,6 +1213,12 @@
         "campaign",
         "round"
       ],
+      "relation_endpoints": [
+        {
+          "field": "campaign",
+          "target": "campaigns"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -1032,7 +1238,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "ai_coding_attempts": {
@@ -1056,102 +1267,11 @@
         "campaign",
         "round"
       ],
-      "exceptions": [
+      "relation_endpoints": [
         {
-          "id": "client-graded-status",
-          "closed_by": "ROUNDS-00A-L03",
-          "note": "client-written status:'graded' on attempts"
+          "field": "campaign",
+          "target": "campaigns"
         }
-      ],
-      "probes": [
-        "account-scope.list.cross-account.isolated",
-        "account-scope.list.anonymous.isolated",
-        "account-scope.view.cross-account.denied",
-        "account-scope.view.anonymous.denied",
-        "account-scope.delete.cross-account.denied",
-        "account-scope.delete.anonymous.denied",
-        "account-scope.list.filter.isolated",
-        "account-scope.view.foreign-or-missing.indistinguishable",
-        "account-scope.delete.foreign-or-missing.indistinguishable",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
-        "account-scope.create.anonymous.denied",
-        "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted",
-        "account-scope.update.foreign-or-missing.indistinguishable",
-        "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied",
-        "account-scope.oversized-input.rejected"
-      ],
-      "oversized_probe": {
-        "field": "ai_chats",
-        "max_bytes": 2000000
-      }
-    },
-    "take_home_drafts": {
-      "migration": "1700001300_take_home.js",
-      "fixture": "take_home_drafts",
-      "owner_field": "user",
-      "current_rules": {
-        "list": "user = @request.auth.id",
-        "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
-        "delete": "user = @request.auth.id"
-      },
-      "target_rules": {
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
-      },
-      "target_rule_migration": "1700006000_account_scope_rules.js",
-      "hook": null,
-      "relation_exceptions": [
-        "campaign",
-        "assignment"
-      ],
-      "exceptions": [],
-      "probes": [
-        "account-scope.list.cross-account.isolated",
-        "account-scope.list.anonymous.isolated",
-        "account-scope.view.cross-account.denied",
-        "account-scope.view.anonymous.denied",
-        "account-scope.delete.cross-account.denied",
-        "account-scope.delete.anonymous.denied",
-        "account-scope.list.filter.isolated",
-        "account-scope.view.foreign-or-missing.indistinguishable",
-        "account-scope.delete.foreign-or-missing.indistinguishable",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
-        "account-scope.create.anonymous.denied",
-        "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted",
-        "account-scope.update.foreign-or-missing.indistinguishable",
-        "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
-      ]
-    },
-    "take_home_attempts": {
-      "migration": "1700001300_take_home.js",
-      "fixture": "take_home_attempts",
-      "owner_field": "user",
-      "current_rules": {
-        "list": "user = @request.auth.id",
-        "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
-        "delete": "user = @request.auth.id"
-      },
-      "target_rules": {
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
-      },
-      "target_rule_migration": "1700006000_account_scope_rules.js",
-      "hook": null,
-      "relation_exceptions": [
-        "campaign",
-        "assignment"
       ],
       "exceptions": [
         {
@@ -1180,7 +1300,131 @@
         "account-scope.create.replayed-denied.denied",
         "account-scope.create.nonexistent-owner.denied",
         "account-scope.oversized-input.rejected",
-        "account-scope.runner.pocketbase-unreachable.fails-closed"
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
+      ],
+      "oversized_probe": {
+        "field": "ai_chats",
+        "max_bytes": 2000000
+      }
+    },
+    "take_home_drafts": {
+      "migration": "1700001300_take_home.js",
+      "fixture": "take_home_drafts",
+      "owner_field": "user",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "campaign",
+        "assignment"
+      ],
+      "relation_endpoints": [
+        {
+          "field": "campaign",
+          "target": "campaigns"
+        }
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
+      ]
+    },
+    "take_home_attempts": {
+      "migration": "1700001300_take_home.js",
+      "fixture": "take_home_attempts",
+      "owner_field": "user",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
+        "delete": "user = @request.auth.id"
+      },
+      "target_rules": {
+        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+      },
+      "target_rule_migration": "1700006000_account_scope_rules.js",
+      "hook": null,
+      "relation_exceptions": [
+        "campaign",
+        "assignment"
+      ],
+      "relation_endpoints": [
+        {
+          "field": "campaign",
+          "target": "campaigns"
+        }
+      ],
+      "exceptions": [
+        {
+          "id": "client-graded-status",
+          "closed_by": "ROUNDS-00A-L03",
+          "note": "client-written status:'graded' on attempts"
+        }
+      ],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.delete.cross-account.denied",
+        "account-scope.delete.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
+        "account-scope.update.cross-account.denied",
+        "account-scope.update.anonymous.denied",
+        "account-scope.create.anonymous.denied",
+        "account-scope.create.foreign-owner.denied",
+        "account-scope.update.reassign-owner.denied",
+        "account-scope.update.own.accepted",
+        "account-scope.update.foreign-or-missing.indistinguishable",
+        "account-scope.create.replayed-denied.denied",
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.oversized-input.rejected",
+        "account-scope.runner.pocketbase-unreachable.fails-closed",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ],
       "oversized_probe": {
         "field": "files",
@@ -1428,6 +1672,16 @@
         "parent",
         "child"
       ],
+      "relation_endpoints": [
+        {
+          "field": "parent",
+          "target": "experience_jobs"
+        },
+        {
+          "field": "child",
+          "target": "experience_projects"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -1447,7 +1701,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "exp_job_anecdotes": {
@@ -1471,6 +1730,16 @@
         "parent",
         "child"
       ],
+      "relation_endpoints": [
+        {
+          "field": "parent",
+          "target": "experience_jobs"
+        },
+        {
+          "field": "child",
+          "target": "experience_anecdotes"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -1490,7 +1759,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "exp_job_bullets": {
@@ -1514,6 +1788,16 @@
         "parent",
         "child"
       ],
+      "relation_endpoints": [
+        {
+          "field": "parent",
+          "target": "experience_jobs"
+        },
+        {
+          "field": "child",
+          "target": "experience_bullets"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -1533,7 +1817,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "exp_project_anecdotes": {
@@ -1557,6 +1846,16 @@
         "parent",
         "child"
       ],
+      "relation_endpoints": [
+        {
+          "field": "parent",
+          "target": "experience_projects"
+        },
+        {
+          "field": "child",
+          "target": "experience_anecdotes"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -1576,7 +1875,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "exp_project_bullets": {
@@ -1600,6 +1904,16 @@
         "parent",
         "child"
       ],
+      "relation_endpoints": [
+        {
+          "field": "parent",
+          "target": "experience_projects"
+        },
+        {
+          "field": "child",
+          "target": "experience_bullets"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -1619,7 +1933,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "exp_anecdote_bullets": {
@@ -1643,6 +1962,16 @@
         "parent",
         "child"
       ],
+      "relation_endpoints": [
+        {
+          "field": "parent",
+          "target": "experience_anecdotes"
+        },
+        {
+          "field": "child",
+          "target": "experience_bullets"
+        }
+      ],
       "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
@@ -1662,7 +1991,12 @@
         "account-scope.update.own.accepted",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied"
+        "account-scope.create.nonexistent-owner.denied",
+        "account-scope.create.relation-foreign.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.update.relation-foreign.denied",
+        "account-scope.update.relation-foreign-or-missing.indistinguishable"
       ]
     },
     "users": {

@@ -144,6 +144,14 @@ async def delete_link(request: Request, link_id: str) -> dict[str, bool]:
 # ---------------------------------------------------------------------------
 
 
+def _link_not_found() -> HTTPException:
+    """The one not-found a share token gets. A link with no target, or whose
+    variant or resume is gone, answers exactly like a token that never existed,
+    so the response never says whether a link is behind the token
+    (ROUNDS-00B-L02)."""
+    return HTTPException(status_code=404, detail="Share link not found.")
+
+
 @router.get("/by-token/{token}")
 async def public_read(token: str, request: Request) -> dict[str, Any]:
     """Returns the resume data + template + design for a share token.
@@ -159,7 +167,7 @@ async def public_read(token: str, request: Request) -> dict[str, Any]:
     )
     items = (body or {}).get("items") or []
     if not items:
-        raise HTTPException(status_code=404, detail="Share link not found.")
+        raise _link_not_found()
     link = items[0]
 
     # Fetch the underlying record. Variant first if both are set.
@@ -168,7 +176,7 @@ async def public_read(token: str, request: Request) -> dict[str, Any]:
             f"/api/collections/resume_variants/records/{link['variant']}"
         )
         if not record:
-            raise HTTPException(status_code=404, detail="Variant no longer exists.")
+            raise _link_not_found()
         master = await pb_admin_get(
             f"/api/collections/resumes/records/{record['resume']}"
         )
@@ -184,7 +192,7 @@ async def public_read(token: str, request: Request) -> dict[str, Any]:
             f"/api/collections/resumes/records/{link['resume']}"
         )
         if not record:
-            raise HTTPException(status_code=404, detail="Resume no longer exists.")
+            raise _link_not_found()
         out = {
             "data": record.get("data") or {},
             "template_id": record.get("template_id") or "modern",
@@ -193,7 +201,9 @@ async def public_read(token: str, request: Request) -> dict[str, Any]:
             "kind": "resume",
         }
     else:
-        raise HTTPException(status_code=500, detail="Share link points nowhere.")
+        # A legacy link with neither target (e.g. cleared before the
+        # quarantine moved such rows): the same not-found, not a 500.
+        raise _link_not_found()
 
     # Best-effort view tracking. Failures here shouldn't block the
     # viewer, but we want the full traceback in logs so a broken

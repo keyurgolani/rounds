@@ -288,9 +288,22 @@ async def submit_route(
                 "/api/collections/take_home_attempts/records",
                 attempt_payload,
             )
+    except HTTPException as e:
+        # A persist-time authorization denial (the account may not point this
+        # attempt's typed relations at a record it does not own, or may not
+        # write the row at all) must reach the caller with the same status and
+        # body PocketBase returned, not be masked by a success grade. Any
+        # other client-side (4xx) rejection surfaces the same way. Only a
+        # server-side failure (5xx), a PocketBase outage included, stays
+        # best-effort so it does not drop the user's grade. A write timeout
+        # raises TimeoutError, not HTTPException, so it falls to the handler
+        # below and stays best-effort too.
+        if e.status_code < 500:
+            raise
+        _log.exception("take-home submit: failed to persist attempt")
     except Exception:  # noqa: BLE001
-        # Persistence is best-effort; don't fail the user-visible grade
-        # because the attempts row didn't save. Log + continue.
+        # Persistence is best-effort for infrastructure failures; don't fail
+        # the user-visible grade because the attempts row didn't save.
         _log.exception("take-home submit: failed to persist attempt")
 
     return {"harness": harness_out, "rubric_review": rubric_review}

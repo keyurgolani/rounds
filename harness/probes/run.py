@@ -164,8 +164,8 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
     seed_account(pb, b, content, admin_token)
     # A third account that signs up but seeds nothing. The anonymous-create
     # probe owns its payload with this account so there is no per-user
-    # uniqueness collision (it owns no rows), leaving the createRule as the
-    # only thing that can deny the write.
+    # uniqueness collision (it owns no rows), so the write is rejected only
+    # because the account is not allowed to create it.
     c = make_account("c")
     register(pb, c)
 
@@ -197,8 +197,8 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
                     pb, name, a.token, payload, field, admin_token, a.user_id, expected))
             elif pid == families.FOREIGN_OWNER_FAMILY:
                 # Caller b claims a no-rows third account (c) as owner, so the
-                # only reason to reject is the createRule and the owner-count
-                # check stays at zero on a clean deny.
+                # write is rejected only because the caller does not own the
+                # row, and the owner-count check stays at zero on a clean deny.
                 payload = factory.fresh_payload(name, c.user_id, a, b, content, secrets.token_hex(6))
                 writer.write(families.create_foreign_owner_denied(pb, name, b.token, payload, admin_token, c.user_id, expected))
             elif pid == families.REASSIGN_FAMILY:
@@ -215,6 +215,26 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
                 # at, so the superuser insert is not a cross-owner relation.
                 payload = factory.fresh_payload(name, a.user_id, a, b, content, secrets.token_hex(6))
                 writer.write(families.create_superuser_accepted(pb, name, admin_token, payload, expected))
+            elif pid == families.RELATION_CREATE_FOREIGN_FAMILY:
+                # Owner b creates its own row but points one typed relation at
+                # account a's record; the write must be rejected because the
+                # target is not owned by the same account.
+                writer.write(families.create_relation_foreign_denied(
+                    pb, name, row.get("relation_endpoints", []), b, a, content, admin_token, expected))
+            elif pid == families.RELATION_CREATE_INDISTINGUISHABLE_FAMILY:
+                writer.write(families.create_relation_foreign_or_missing_indistinguishable(
+                    pb, name, row.get("relation_endpoints", []), b, a, content, expected))
+            elif pid == families.RELATION_SUPERUSER_CREATE_FAMILY:
+                # The superuser creates an a-owned row pointing one relation at
+                # account b's record: an admin token is no exemption.
+                writer.write(families.create_relation_superuser_denied(
+                    pb, name, row.get("relation_endpoints", []), a, b, content, admin_token, expected))
+            elif pid == families.RELATION_UPDATE_FOREIGN_FAMILY:
+                writer.write(families.update_relation_foreign_denied(
+                    pb, name, row.get("relation_endpoints", []), b, a, expected))
+            elif pid == families.RELATION_UPDATE_INDISTINGUISHABLE_FAMILY:
+                writer.write(families.update_relation_foreign_or_missing_indistinguishable(
+                    pb, name, row.get("relation_endpoints", []), b, a, expected))
             # hook-phase families run in run_hook, degraded ones in run_degraded
 
     _readback(pb, doc, admin_token, writer)
@@ -421,9 +441,13 @@ def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozens
 def main() -> int:
     if len(sys.argv) < 2:
         print("usage: run.py {main|hook|deploy|degraded|deploy-db|verdict|scan|admission|admission-migration|"
-              "admission-deploy|emergency-disable|emergency-enable}", file=sys.stderr)
+              "admission-deploy|emergency-disable|emergency-enable|relation-quarantine}", file=sys.stderr)
         return 2
     phase = sys.argv[1]
+    if phase == "relation-quarantine":
+        import relation_quarantine_check
+
+        return relation_quarantine_check.main()
     if phase == "scan":
         import scan_check
 

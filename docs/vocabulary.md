@@ -331,7 +331,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 
 ## Adapters
 
-161 entries: 47 collection, 3 field, 19 stored-value, 8 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
+163 entries: 49 collection, 3 field, 19 stored-value, 8 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
 
 ### collection
 
@@ -368,6 +368,8 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 | interview_rounds | `pocketbase/pb_migrations/1700000000_init_collections.js:340` | `career-activity` | Interview | #110 (ROUNDS-22-L05) |
 | offers | `pocketbase/pb_migrations/1700000000_init_collections.js:487` | `offer` | Offer | #164 (ROUNDS-32-L10) |
 | question_timers | `pocketbase/pb_migrations/1700001500_question_timers.js:21` | `practice-session` | Practice Session | #164 (ROUNDS-32-L10) |
+| relation_quarantine | `pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js:242` | decided by #10 (ROUNDS-00B-L02) |  | #10 (ROUNDS-00B-L02) |
+| relation_quarantine_reports | `pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js:242` | decided by #10 (ROUNDS-00B-L02) |  | #10 (ROUNDS-00B-L02) |
 | resume_bullets (historical) | `pocketbase/pb_migrations/1700000700_resume_studio.js:164` | `achievement` | Achievement | #164 (ROUNDS-32-L10) |
 | resume_share_links | `pocketbase/pb_migrations/1700000700_resume_studio.js:231` | `share-capability` | Share link | #164 (ROUNDS-32-L10) |
 | resume_share_views | `pocketbase/pb_migrations/1700000700_resume_studio.js:265` | decided by #93 (ROUNDS-18-L05) |  | #164 (ROUNDS-32-L10) |
