@@ -161,6 +161,22 @@ REGISTRY: tuple[Gate, ...] = (
         ),
     ),
     Gate(
+        # ROUNDS-00A-L04: Legacy Artifact Snapshot creation. Off by default;
+        # the runner route and the PocketBase hook both check it, and both
+        # answer 503 route_disabled while it is off. Turn it on only after
+        # the signed scan (docs/operations.md#legacy-artifact-snapshots).
+        name="LEGACY_SNAPSHOT_CREATE",
+        values=ROUTE_VALUES,
+        default="disabled",
+        closed="disabled",
+        readers=frozenset({RUNNER, POCKETBASE}),
+        description=(
+            "Lets an account create Legacy Artifact Snapshots of its own resumes "
+            "and variants (/api/pdf/snapshots); disabled answers 503 route_disabled."
+        ),
+        route="/api/pdf/snapshots",
+    ),
+    Gate(
         name="SIGNUPS",
         values=ROUTE_VALUES,
         default="enabled",

@@ -43,5 +43,11 @@ data:
   # "enforce", or "disabled". The runner and the frontend both read it,
   # so restart both Deployments when it changes.
   ROUNDS_GATE_EXECUTION_DEFINITIONS: ""
+  # Legacy Artifact Snapshot creation, read by the runner and PocketBase:
+  # "enabled" or "disabled". Empty is "disabled". Turn it on only with
+  # the materializer applied (k8s/overlays/materializer) and after the
+  # signed scan (docs/operations.md#legacy-artifact-snapshots), then
+  # restart both Deployments.
+  ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE: ""
   # Signups, read by PocketBase and the frontend: "enabled" or "disabled".
   ROUNDS_GATE_SIGNUPS: ""

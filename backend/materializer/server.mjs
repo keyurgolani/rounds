@@ -4,8 +4,9 @@
 // `materialize` network, and in k8s through k8s/materializer.yaml's
 // NetworkPolicy, which admits pods labeled rounds.io/net: pocketbase and
 // allows no egress. It holds no secret, writes nothing, and runs non-root
-// on a read-only filesystem. PR 1 ships it unused; #4's PocketBase hook
-// calls it in PR 2.
+// on a read-only filesystem. PocketBase's legacy snapshot hook
+// (pocketbase/pb_hooks/legacy_snapshots.js) and its scan call it, only
+// while ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE is on or an operator scans.
 //
 //   POST /v1/materialize  {template_id, design, data}, application/json
 //   GET  /health

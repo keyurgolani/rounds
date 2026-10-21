@@ -1,0 +1,24 @@
+# The base (k8s/) plus the Legacy Artifact Snapshot materializer
+# (ROUNDS-00A-L04). The base leaves it out: PocketBase calls it only while
+# ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE is enabled, so a cluster with the gate
+# off needs no materializer image. Apply this overlay instead of the base
+# when you turn snapshot creation on (docs/operations.md#legacy-artifact-snapshots):
+#
+#   kubectl apply -k k8s/overlays/materializer
+#
+# Then run the scan, and only after it set the gate in the rounds-gates
+# ConfigMap and restart the runner and PocketBase.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: rounds
+
+resources:
+  - ../..
+  - materializer.yaml
+
+# Pin the materializer like the base pins the others; keep newTag the same
+# as the base's tag.
+images:
+  - name: ghcr.io/your-org/rounds-materializer
+    newTag: "1.0.0"

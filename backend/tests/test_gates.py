@@ -55,6 +55,8 @@ def test_the_registry_covers_each_admitted_route_and_the_switches():
         "/api/pdf/render",
         "/api/pdf/health",
         "/api/ai/ats-rule",
+        # ROUNDS-00A-L04: snapshot creation, off by default.
+        "/api/pdf/snapshots",
     }
     assert {
         "PAPER_FETCH",
@@ -77,6 +79,10 @@ def test_written_defaults_keep_routes_on_and_outbound_reach_off():
             expected = "observe"
         elif name in ("PAPER_FETCH", "PROVIDER_PRIVATE_NETWORK"):
             expected = "disabled"
+        elif name == "LEGACY_SNAPSHOT_CREATE":
+            # #4 PR 2 ships snapshot creation off; the owner turns it on
+            # after the signed scan.
+            expected = "disabled"
         elif name == "EXECUTION_DEFINITIONS":
             # #2 step 1 keeps stage 2's server-loaded path.
             expected = "legacy"
@@ -84,6 +90,7 @@ def test_written_defaults_keep_routes_on_and_outbound_reach_off():
             expected = "enabled"
         assert r.value == expected, name
     assert gates.load({}, gates.POCKETBASE)["SIGNUPS"] == gates.Resolved("enabled", "default")
+    assert gates.load({}, gates.POCKETBASE)["LEGACY_SNAPSHOT_CREATE"] == gates.Resolved("disabled", "default")
     assert gates.load({}, gates.FRONTEND)["SIGNUPS"] == gates.Resolved("enabled", "default")
 
 
@@ -220,7 +227,7 @@ def test_the_pocketbase_module_carries_the_pocketbase_gates():
     assert data["prefix"] == gates.PREFIX
     assert data["truthy"] == list(gates.TRUTHY)
     assert data["gates"] == _expected_for(gates.POCKETBASE)
-    assert data["keys"] == ["ROUNDS_GATE_SIGNUPS", "ROUNDS_DISABLE_SIGNUPS"]
+    assert data["keys"] == ["ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE", "ROUNDS_GATE_SIGNUPS", "ROUNDS_DISABLE_SIGNUPS"]
 
 
 ENV_CASES = [

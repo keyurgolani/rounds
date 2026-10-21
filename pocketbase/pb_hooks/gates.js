@@ -17,6 +17,13 @@ const PREFIX = "ROUNDS_GATE_";
 const TRUTHY = ["true", "1", "yes"];
 
 const GATES = {
+  // ROUNDS-00A-L04: Legacy Artifact Snapshot creation (legacy_snapshots.js).
+  LEGACY_SNAPSHOT_CREATE: {
+    values: ["enabled", "disabled"],
+    default: "disabled",
+    closed: "disabled",
+    aliases: [],
+  },
   SIGNUPS: {
     values: ["enabled", "disabled"],
     default: "enabled",

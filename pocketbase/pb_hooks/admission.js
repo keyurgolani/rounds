@@ -72,6 +72,9 @@ const OPERATIONS = {
   take_home_run: [60, 60],
   take_home_submit: [120, 120],
   pdf_render: [25, 25],
+  // ROUNDS-00A-L04: one Legacy Artifact Snapshot, the materializer call
+  // bounded at 10 s (legacy_snapshots.js).
+  snapshot_create: [10, 10],
 };
 const OUTCOMES = ["completed", "denied", "infrastructure", "error"];
 const MODES = ["enforce", "observe"];
@@ -407,6 +410,33 @@ function finish(store, account, input, now) {
   return { status: 200, body: { v: VERSION, refunded_wall_seconds: refund } };
 }
 
+// For a leaf whose own hook finishes its command in the same transaction
+// as its write (ROUNDS-00A-L04's legacy snapshots): the stored result of
+// the account's completed command, or null when there is none to replay.
+function completedResult(store, account, commandId, now) {
+  if (typeof commandId !== "string" || !COMMAND_ID.test(commandId)) return null;
+  const existing = store.findCommand(account.id, commandId);
+  if (existing === null || existing.state !== "completed" || existing.expires_at <= now) return null;
+  return existing.result;
+}
+
+// Completes the account's in-flight command for `operation` with a result
+// to replay, inside the caller's transaction, so the write and the result
+// commit together. True when a row was completed. Without a row (the
+// runner sent no key, or idempotency is off) nothing is written; the
+// runner's own finish later leaves an already completed row as it is.
+function completeCommand(store, account, commandId, operation, result) {
+  if (typeof commandId !== "string" || !COMMAND_ID.test(commandId)) return false;
+  const existing = store.findCommand(account.id, commandId);
+  if (existing === null || existing.operation !== operation || existing.state !== "in_flight") return false;
+  const kept = storable(result);
+  if (kept === null) return false;
+  existing.state = "completed";
+  existing.result = kept;
+  store.saveCommand(existing);
+  return true;
+}
+
 // The account's use this hour, for the dependency check.
 function usage(store, account, now) {
   const hour = hourOf(now);
@@ -700,9 +730,13 @@ module.exports = {
   admit,
   settle,
   finish,
+  completedResult,
+  completeCommand,
   usage,
   sweep,
   pbStore,
+  nowSeconds,
+  COMMAND_ID,
   handle,
   sweepNow,
   changedDemoFields,

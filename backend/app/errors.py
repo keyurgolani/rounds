@@ -66,6 +66,10 @@ CODES: dict[str, int] = {
     "worker_unavailable": 503,
     "render_timeout": 422,
     "destination_denied": 403,
+    # Legacy Artifact Snapshot creation (ROUNDS-00A-L04).
+    "snapshot_conflict": 409,
+    "snapshot_quota_exceeded": 429,
+    "materializer_unavailable": 503,
 }
 
 # The fixed sentence each code answers with unless a caller passes its own.
@@ -97,6 +101,9 @@ DETAILS: dict[str, str] = {
     "worker_unavailable": "The runner is busy or unavailable. Try again shortly.",
     "render_timeout": "This document took too long to render. Simplify it and try again.",
     "destination_denied": "This provider address isn't allowed.",
+    "snapshot_conflict": "This resume changed in another tab. Reload, then export again.",
+    "snapshot_quota_exceeded": "This account has reached its limit for saved snapshots.",
+    "materializer_unavailable": "Server PDF can't be prepared right now. Try again shortly.",
 }
 
 # Pydantic error type a field validator raises for an over-limit value.

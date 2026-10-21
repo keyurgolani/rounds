@@ -1,8 +1,9 @@
 ---
 # Legacy Artifact Snapshot materializer (ROUNDS-00A-L04). Stateless and
 # secret-free: it renders a resume's server-read records to markup for
-# PocketBase and writes nothing. Nothing calls it until #4's PocketBase hook
-# lands.
+# PocketBase and writes nothing. PocketBase calls it only while
+# ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE is enabled, and the operator's scan
+# calls it; this overlay (kustomization.yaml beside it) adds it to the base.
 #
 # Only PocketBase reaches it: the NetworkPolicy below admits pods labeled
 # rounds.io/net: pocketbase on 4100 and allows no egress at all, DNS
