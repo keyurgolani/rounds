@@ -52,7 +52,8 @@ def test_the_materializer_runs_read_only_with_no_secret_port_or_privilege(compos
     svc = _yaml(compose_file)["services"]["materializer"]
     assert svc["read_only"] is True
     assert svc["cap_drop"] == ["ALL"]
-    assert svc["security_opt"] == ["no-new-privileges:true"]
+    # The bare form, which Docker and nerdctl both read.
+    assert svc["security_opt"] == ["no-new-privileges"]
     for key in ("environment", "env_file", "ports", "volumes", "privileged", "user"):
         assert key not in svc, (compose_file, key)
 

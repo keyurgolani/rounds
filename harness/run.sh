@@ -195,9 +195,15 @@ check_materializer_reach() {
   verdict materializer.reach.frontend-by-address-refused $?
 
   # No default route: /proc/net/route lists none with destination 00000000.
-  refused compose exec -T materializer node -e \
-    "const routes = require('fs').readFileSync('/proc/net/route', 'utf8').split('\n').slice(1); process.exit(routes.some((r) => r.split(/\s+/)[1] === '00000000') ? 0 : 1)"
-  verdict materializer.egress.no-default-route $?
+  # nerdctl compose, which Finch runs, ignores `internal: true` and says so,
+  # so only Docker, which CI runs, can show it.
+  if [ "${CONTAINER_BIN}" = "docker" ]; then
+    refused compose exec -T materializer node -e \
+      "const routes = require('fs').readFileSync('/proc/net/route', 'utf8').split('\n').slice(1); process.exit(routes.some((r) => r.split(/\s+/)[1] === '00000000') ? 0 : 1)"
+    verdict materializer.egress.no-default-route $?
+  else
+    echo "SKIP materializer.egress.no-default-route: ${COMPOSE_BIN} ignores internal networks; CI checks it under Docker"
+  fi
   refused compose exec -T materializer node -e \
     "const s = require('net').connect({ host: process.argv[1], port: 8000, timeout: 3000 }); s.on('connect', () => process.exit(0)); s.on('error', () => process.exit(1)); s.on('timeout', () => process.exit(1));" \
     "${runner_address:-0.0.0.0}"
