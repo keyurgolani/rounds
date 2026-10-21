@@ -242,7 +242,7 @@ export default function AICodingDetail() {
     resetToStarter,
     persistImmediately,
     saveNow,
-  } = useAICodingDrafts(round, campaignId ?? undefined);
+  } = useAICodingDrafts(round, campaignId ?? undefined, rawRound);
 
   // A reload the denial asks for saves the files first.
   async function reloadKeepingDrafts() {

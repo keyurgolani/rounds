@@ -25,6 +25,11 @@ export function useTakeHomeDrafts(
   const [savedFiles, setSavedFiles] = useState<Files>({});
   const [hydrated, setHydrated] = useState(false);
   const dirtyRef = useRef<Set<string>>(new Set());
+  // What the server last confirmed for each path, updated as each save
+  // lands, so saveNow knows what's unsaved even mid-autosave.
+  const confirmedRef = useRef<Files>({});
+  // The autosave pass in flight, if any.
+  const autosaveRef = useRef<Promise<boolean> | null>(null);
 
   // Hydrate: starter overlaid by draft rows.
   useEffect(() => {
@@ -43,6 +48,7 @@ export function useTakeHomeDrafts(
       const merged: Files = { ...starter };
       for (const d of drafts) merged[d.file_path] = d.contents;
       if (cancelled) return;
+      confirmedRef.current = merged;
       setFiles(merged);
       setSavedFiles(merged);
       setHydrated(true);
@@ -52,40 +58,52 @@ export function useTakeHomeDrafts(
     };
   }, [assignment?.id, campaignId]);
 
-  // Mirror latest files/savedFiles into refs so the autosave interval can
-  // read current values without restarting on every keystroke.
+  // Mirror latest files into a ref so the autosave interval can read
+  // current values without restarting on every keystroke.
   const filesRef = useRef<Files>({});
-  const savedRef = useRef<Files>({});
   useEffect(() => {
     filesRef.current = files;
   }, [files]);
-  useEffect(() => {
-    savedRef.current = savedFiles;
-  }, [savedFiles]);
 
-  // Autosave dirty files at most every AUTOSAVE_MS.
+  // Saves each path's current contents, one after another or all at
+  // once. A save that fails goes back on the dirty list for the next
+  // autosave. True when every save landed.
+  async function savePaths(assignmentId: string, paths: string[], oneAtATime: boolean): Promise<boolean> {
+    async function saveOne(path: string): Promise<boolean> {
+      const contents = filesRef.current[path] ?? '';
+      try {
+        await upsertDraft({ assignmentId, campaignId, filePath: path, contents });
+        confirmedRef.current = { ...confirmedRef.current, [path]: contents };
+        return true;
+      } catch {
+        dirtyRef.current.add(path);
+        return false;
+      }
+    }
+    let saved = true;
+    if (oneAtATime) {
+      for (const path of paths) saved = (await saveOne(path)) && saved;
+    } else {
+      saved = (await Promise.all(paths.map(saveOne))).every(Boolean);
+    }
+    setSavedFiles({ ...confirmedRef.current });
+    return saved;
+  }
+
+  // Autosave dirty files at most every AUTOSAVE_MS, one pass at a time.
   useEffect(() => {
     if (!assignment || !hydrated) return;
-    const t = setInterval(async () => {
+    const assignmentId = assignment.id;
+    const t = setInterval(() => {
+      if (autosaveRef.current) return;
       const dirty = Array.from(dirtyRef.current);
       if (!dirty.length) return;
       dirtyRef.current.clear();
-      const next: Files = { ...savedRef.current };
-      for (const path of dirty) {
-        try {
-          await upsertDraft({
-            assignmentId: assignment.id,
-            campaignId,
-            filePath: path,
-            contents: filesRef.current[path] ?? '',
-          });
-          next[path] = filesRef.current[path] ?? '';
-        } catch {
-          // Re-mark for retry next tick.
-          dirtyRef.current.add(path);
-        }
-      }
-      setSavedFiles(next);
+      const pass = savePaths(assignmentId, dirty, true);
+      autosaveRef.current = pass;
+      void pass.finally(() => {
+        if (autosaveRef.current === pass) autosaveRef.current = null;
+      });
     }, AUTOSAVE_MS);
     return () => clearInterval(t);
   }, [assignment?.id, hydrated, campaignId]);
@@ -98,23 +116,24 @@ export function useTakeHomeDrafts(
     });
   }
 
-  /** Saves every changed file now, so a reload keeps it. */
-  async function saveNow() {
-    if (!assignment) return;
-    const dirty = Array.from(dirtyRef.current);
-    dirtyRef.current.clear();
-    await Promise.all(
-      dirty.map((path) =>
-        upsertDraft({
-          assignmentId: assignment.id,
-          campaignId,
-          filePath: path,
-          contents: filesRef.current[path] ?? '',
-        }).catch(() => {
-          dirtyRef.current.add(path);
-        }),
-      ),
-    );
+  /**
+   * Saves every file that differs from what the server last confirmed,
+   * once any autosave in flight has finished, so a reload keeps it. The
+   * autosave takes its paths off the dirty list before it saves them one
+   * at a time, so a file it hadn't reached yet still counts. True when
+   * every save landed.
+   */
+  async function saveNow(): Promise<boolean> {
+    if (!assignment) return true;
+    if (autosaveRef.current) await autosaveRef.current;
+    const current = filesRef.current;
+    const unsaved = new Set(dirtyRef.current);
+    for (const [path, contents] of Object.entries(current)) {
+      if (confirmedRef.current[path] !== contents) unsaved.add(path);
+    }
+    for (const path of unsaved) dirtyRef.current.delete(path);
+    if (unsaved.size === 0) return true;
+    return savePaths(assignment.id, [...unsaved], false);
   }
 
   /** Discard every saved draft on the server and rehydrate local
@@ -129,6 +148,7 @@ export function useTakeHomeDrafts(
     }
     const starter: Files = {};
     for (const f of assignment.starter_files) starter[f.path] = f.contents;
+    confirmedRef.current = starter;
     setFiles(starter);
     setSavedFiles(starter);
   }

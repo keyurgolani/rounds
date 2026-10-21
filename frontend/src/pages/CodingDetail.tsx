@@ -26,7 +26,7 @@ import BackLink from '../components/shell/BackLink';
 import InlineMarkdown from '../components/shell/InlineMarkdown';
 import BlockMarkdown from '../components/shell/BlockMarkdown';
 import { useAuth } from '../auth/AuthProvider';
-import { loadLocal, saveLocal } from '../lib/codeDraft';
+import { loadLocal, localIsNewer, markLocalNewer, saveLocal } from '../lib/codeDraft';
 import { useCampaign } from '../campaign/CampaignContext';
 import Select from '../components/shell/Select';
 import {
@@ -183,9 +183,11 @@ export default function CodingDetail() {
   }, [lang, q]);
 
   // Load draft in priority order: PocketBase (source of truth) → local
-  // cache (continuity for offline tabs) → starter skeleton. The remote
-  // row is tracked via lastSyncedRef so the 10s interval below can
-  // decide whether to upsert, update, or delete.
+  // cache (continuity for offline tabs) → starter skeleton. A local copy
+  // marked newer, because the save before a reload failed, wins over
+  // PocketBase's row until a save lands. The remote row is tracked via
+  // lastSyncedRef so the 10s interval below can decide whether to
+  // upsert, update, or delete.
   useEffect(() => {
     if (!q) return;
     const starter = q.starter_code?.[lang] || '';
@@ -193,8 +195,7 @@ export default function CodingDetail() {
     let cancelled = false;
 
     (async () => {
-      let chosen: string | null = null;
-      let draftId: string | null = null;
+      let remote: { code: string; id: string } | null = null;
 
       if (campaignId) {
         try {
@@ -203,29 +204,36 @@ export default function CodingDetail() {
             question: String(q.id),
             language: lang,
           });
-          if (rows.length > 0) {
-            chosen = rows[0].code;
-            draftId = rows[0].id;
-          }
+          if (rows.length > 0) remote = { code: rows[0].code, id: rows[0].id };
         } catch {
           /* fall through to local */
         }
       }
 
-      if (chosen === null) {
-        const local = loadLocal(userId, q.id, lang);
-        if (local !== null) chosen = local;
+      const local = loadLocal(userId, q.id, lang);
+      let chosen: string;
+      // What PocketBase holds as far as this page knows, so the sync
+      // below pushes a newer local copy up.
+      let synced: string;
+      if (local !== null && localIsNewer(userId, q.id, lang)) {
+        chosen = local;
+        synced = remote ? remote.code : starter;
+        if (chosen === synced) markLocalNewer(userId, q.id, lang, false);
+      } else if (remote) {
+        chosen = remote.code;
+        synced = chosen;
+      } else {
+        chosen = local ?? starter;
+        synced = chosen;
       }
-
-      if (chosen === null) chosen = starter;
 
       if (cancelled) return;
       setCode(chosen);
       lastSyncedRef.current = {
-        code: chosen,
+        code: synced,
         lang,
         qid: q.id,
-        draftId,
+        draftId: remote ? remote.id : null,
       };
     })();
 
@@ -244,6 +252,7 @@ export default function CodingDetail() {
     // lose it through control-flow analysis.
     const cid = campaignId;
     const qid = q.id;
+    const uid = userId;
 
     async function flush() {
       const last = lastSyncedRef.current;
@@ -258,6 +267,7 @@ export default function CodingDetail() {
             await deleteCodeDraft(last.draftId);
             lastSyncedRef.current = { ...last, code, draftId: null };
           }
+          markLocalNewer(uid, qid, last.lang, false);
           return;
         }
         const saved = await upsertCodeDraft({
@@ -267,6 +277,7 @@ export default function CodingDetail() {
           code,
         });
         lastSyncedRef.current = { ...last, code, draftId: saved.id };
+        markLocalNewer(uid, qid, last.lang, false);
       } catch {
         /* retry next tick */
       }
@@ -282,10 +293,12 @@ export default function CodingDetail() {
       document.removeEventListener('visibilitychange', onVisibility);
       void flush();
     };
-  }, [q, campaignId]);
+  }, [q, campaignId, userId]);
 
   // Before a reload the denial asks for, the code goes to the draft the
-  // page loads first, so it survives the reload.
+  // page loads first, so it survives the reload. When that save fails,
+  // the local copy is marked newer, so the reload loads it rather than
+  // PocketBase's older row.
   const reloadKeepingDraft = useCallback(async () => {
     const last = lastSyncedRef.current;
     if (q) saveLocal(userId, q.id, lang, codeRef.current);
@@ -301,8 +314,9 @@ export default function CodingDetail() {
             code: codeRef.current,
           });
         }
+        markLocalNewer(userId, q.id, lang, false);
       } catch {
-        /* the local copy is kept */
+        markLocalNewer(userId, q.id, lang, true);
       }
     }
     reloadPage();

@@ -10,13 +10,18 @@ hidden file back out of a response or an attempt row.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
+from starlette.requests import Request
 
 from app import canonical, definitions, execution, gates
+from app.errors import TypedError
+from app.limits import StrictModel
 from routers import ai_coding, runner, take_home
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -212,6 +217,56 @@ def test_an_input_over_its_limit_is_refused_before_anything_runs(client, signed_
     assert tripwires == []
 
 
+def _nested(levels: int) -> object:
+    """``levels`` arrays, one inside the next, around a number."""
+    value: object = 1
+    for _ in range(levels):
+        value = [value]
+    return value
+
+
+@pytest.mark.parametrize("value", ["legacy", "enforce"])
+@pytest.mark.parametrize("path", sorted(ROUTE_BODIES))
+def test_a_body_nested_too_deep_for_the_json_parser_is_invalid_at_either_gate_value(client, signed_in, gate,
+                                                                                     tripwires, pocketbase, path,
+                                                                                     value):
+    gate(value)
+    body = "[" * 100_000 + "]" * 100_000
+    typed(client.post(path, content=body, headers={**signed_in, "Content-Type": "application/json"}),
+          422, "invalid_request")
+    assert tripwires == [] and pocketbase.calls == []
+
+
+class _Open(StrictModel):
+    input: Any = None
+
+
+def _parse(body: object):
+    raw = json.dumps(body).encode()
+
+    async def receive():
+        return {"type": "http.request", "body": raw, "more_body": False}
+
+    request = Request({"type": "http", "method": "POST", "path": "/api/run", "headers": [], "query_string": b""},
+                      receive)
+    return asyncio.run(execution.parse(request, _Open, _Open))
+
+
+@pytest.mark.parametrize("value", ["legacy", "enforce"])
+def test_a_body_parses_up_to_the_nesting_limit_and_no_further(gate, value):
+    gate(value)
+    # The body object is the first level, so its input adds one fewer.
+    assert _parse({"input": _nested(execution.MAX_JSON_DEPTH - 1)}).input is not None
+    with pytest.raises(TypedError) as refused:
+        _parse({"input": _nested(execution.MAX_JSON_DEPTH)})
+    assert refused.value.code == "invalid_request"
+
+
+def test_nesting_counts_arrays_and_objects():
+    assert execution._depth_within({"a": [{"b": [1]}], "c": {}}, 4)
+    assert not execution._depth_within({"a": [{"b": [1]}], "c": {}}, 3)
+
+
 def test_any_other_unknown_field_is_invalid(client, signed_in, enforce, tripwires):
     body = {**ROUTE_BODIES["/api/run"], "colour": "blue"}
     typed(client.post("/api/run", json=body, headers=signed_in), 422, "invalid_request")
@@ -375,6 +430,29 @@ def test_a_candidates_own_paths_are_allowed(path):
     assert execution.path_problem(path, frozenset({"harness/users_api.py"})) is None
 
 
+LONG_ACCENTED = "d/" + "\u00e9" * 128 + ".py"
+
+
+@pytest.mark.parametrize(
+    "files, harness, problems",
+    [
+        (["lib", "lib/a.py"], [], {"lib": "conflict"}),
+        (["a/b", "a/b/c/d.py", "a/x.py"], [], {"a/b": "conflict"}),
+        (["grade.py/x.py"], ["grade.py"], {"grade.py/x.py": "conflict"}),
+        (["probe"], ["probe/data.json"], {"probe": "conflict"}),
+        (["n" * 256 + ".py"], [], {"n" * 256 + ".py": "name"}),
+        ([LONG_ACCENTED], [], {LONG_ACCENTED: "name"}),
+        (["lib/a.py", "lib/b.py", "lib.py", "n" * 252 + ".py"], ["grade.py"], {}),
+    ],
+    ids=["file-and-folder", "nested", "under-a-harness-file", "over-a-harness-folder", "long-name",
+         "long-in-bytes", "clear"],
+)
+def test_files_that_cant_be_written_beside_each_other_are_found(files, harness, problems):
+    folders = execution._folders([*files, *harness])
+    found = {path: execution.layout_problem(path, frozenset(harness), folders) for path in files}
+    assert {path: problem for path, problem in found.items() if problem} == problems
+
+
 # ---- AI-coding ----------------------------------------------------------------------
 
 ROUND = BACKEND / "ai_coding" / "rounds" / "hallucinated-http-client"
@@ -509,6 +587,53 @@ def test_a_file_that_changes_how_the_grade_runs_is_refused(client, signed_in, en
     # One of the fixed sentences, never the path the request sent.
     assert out["detail"] in execution.PATH_DETAILS.values()
     assert tripwires == []
+
+
+@pytest.mark.parametrize("path", ["/api/ai-coding/run-project", "/api/ai-coding/grade"])
+@pytest.mark.parametrize("extra, detail", [({"lib": "x", "lib/a.py": "y"}, "conflict"),
+                                           ({LONG_ACCENTED: "x"}, "name")], ids=["conflict", "name"])
+def test_files_the_runner_cant_write_are_refused_before_a_slot_and_refunded(client, signed_in, enforce,
+                                                                            committed_store, tripwires,
+                                                                            admission_store, path, extra, detail):
+    files = {**_project(FIXED_CLIENT), **extra}
+    out = typed(client.post(path, json={**ROUTE_BODIES[path], "files": files}, headers=signed_in), 422,
+                "path_not_allowed")
+    assert out["detail"] == execution.PATH_DETAILS[detail]
+    assert tripwires == []
+    (finished,) = admission_store.called("finish")
+    assert finished["outcome"] == "denied"
+
+
+@pytest.mark.parametrize("path", ["/api/ai-coding/run-project", "/api/ai-coding/grade"])
+@pytest.mark.parametrize("where", ["path", "contents"])
+def test_text_utf8_cant_hold_is_refused_before_a_slot(client, signed_in, enforce, committed_store, tripwires,
+                                                      admission_store, path, where):
+    files = _project(FIXED_CLIENT)
+    if where == "path":
+        files["lib/\ud800.py"] = "x = 1\n"
+    else:
+        files["client.py"] = "x = '\ud800'\n"
+    # ensure_ascii keeps the lone surrogate as an escape the server decodes.
+    body = json.dumps({**ROUTE_BODIES[path], "files": files})
+    typed(client.post(path, content=body, headers={**signed_in, "Content-Type": "application/json"}), 422,
+          "invalid_request")
+    assert tripwires == []
+    (finished,) = admission_store.called("finish")
+    assert finished["outcome"] == "denied"
+
+
+@pytest.mark.parametrize("path", ["/api/ai-coding/run-project", "/api/ai-coding/grade"])
+def test_a_write_the_runner_cant_make_is_a_typed_infrastructure_failure(client, signed_in, enforce,
+                                                                        committed_store, admission_store,
+                                                                        monkeypatch, path):
+    def full_disk(*_args, **_kwargs):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(execution, "_write", full_disk)
+    res = client.post(path, json={**ROUTE_BODIES[path], "files": _project(FIXED_CLIENT)}, headers=signed_in)
+    typed(res, 503, "worker_unavailable")
+    (finished,) = admission_store.called("finish")
+    assert finished["outcome"] == "infrastructure"
 
 
 # ---- take-home, on a test-only definition ---------------------------------------------
@@ -696,6 +821,19 @@ def test_a_take_home_file_that_changes_the_grader_is_refused(client, signed_in, 
                       headers=signed_in)
     typed(res, 422, "path_not_allowed")
     assert tripwires == [] and attempts == []
+
+
+@pytest.mark.parametrize("path", ["/api/take-home/run", "/api/take-home/submit"])
+def test_a_take_home_file_and_folder_with_one_name_are_refused_before_a_slot(client, signed_in, enforce,
+                                                                             take_home_store, tripwires, attempts,
+                                                                             admission_store, path):
+    res = client.post(path, json={"definition": TAKE_HOME_REF,
+                                  "files": {"solution.py": HONEST, "lib": "x", "lib/util.py": "y = 1\n"}},
+                      headers=signed_in)
+    assert typed(res, 422, "path_not_allowed")["detail"] == execution.PATH_DETAILS["conflict"]
+    assert tripwires == [] and attempts == []
+    (finished,) = admission_store.called("finish")
+    assert finished["outcome"] == "denied"
 
 
 def test_a_take_home_that_prints_hidden_files_gets_none_back(client, signed_in, enforce, take_home_store, attempts,

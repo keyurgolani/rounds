@@ -17,10 +17,11 @@ run-project, grade, and take-home run and submit take:
 
 ``parse`` reads a route's body for the gate's value, ``resolve`` returns
 the named definition, ``check_paths`` keeps a submission's files off the
-harness's paths and away from files that change how a harness runs, and
-``run_step`` and ``grade`` run a harness revision's argv in a slot: the
-visible run with the candidate's files only, the grade with the harness
-files read-only and its fd 3 result channel.
+harness's paths, away from files that change how a harness runs, and
+clear of each other, and ``run_step`` and ``grade`` run a harness
+revision's argv in a slot: the visible run with the candidate's files
+only, the grade with the harness files read-only and its fd 3 result
+channel.
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping, TypeVar
+from typing import Any, Iterable, Literal, Mapping, TypeVar
 
 from fastapi import Request
 from pydantic import BaseModel, Field, ValidationError
@@ -82,7 +83,14 @@ PATH_DETAILS = {
     ),
     "startup": "Python startup files, such as sitecustomize.py or a .pth file, can't be sent. Remove it and try again.",
     "shadow": "A file is named like a Python library module, such as json.py. Rename it and try again.",
+    "conflict": "A file in this submission has the same name as a folder. Rename one of them and try again.",
+    "name": "A file or folder name in this submission is too long. Shorten it and try again.",
 }
+# The longest file or folder name the runner's filesystem takes.
+NAME_MAX_BYTES = 255
+# A body nested deeper than this many arrays and objects answers 422
+# invalid_request before any request model or fingerprint walks it.
+MAX_JSON_DEPTH = 64
 
 # The result channel's write end reaches the driver as this descriptor.
 CHANNEL_FD = 3
@@ -118,14 +126,29 @@ def _reject_legacy(request: Request, field: str) -> TypedError:
     )
 
 
+def _depth_within(value: Any, limit: int) -> bool:
+    """True when ``value`` nests at most ``limit`` arrays and objects deep."""
+    stack: list[tuple[Any, int]] = [(value, 1)]
+    while stack:
+        item, depth = stack.pop()
+        children = item.values() if isinstance(item, dict) else item
+        if depth > limit:
+            return False
+        stack.extend((child, depth + 1) for child in children if isinstance(child, (dict, list)))
+    return True
+
+
 async def parse(request: Request, legacy: type[M], definition: type[N]) -> M | N:
     """Step 5 for an execution route: the body as ``definition`` at
     enforce, otherwise as ``legacy``. Over a field limit is 413
-    ``limit_exceeded``, anything else wrong 422 ``invalid_request``."""
+    ``limit_exceeded``, anything else wrong, a body nested deeper than
+    ``MAX_JSON_DEPTH`` included, 422 ``invalid_request``."""
     try:
         raw = json.loads(await request.body() or b"null")
-    except ValueError:
+    except (ValueError, RecursionError):
         raise TypedError("invalid_request") from None
+    if isinstance(raw, (dict, list)) and not _depth_within(raw, MAX_JSON_DEPTH):
+        raise TypedError("invalid_request")
     model: type[BaseModel] = legacy
     if enforced():
         model = definition
@@ -182,11 +205,48 @@ def path_problem(path: str, harness_paths: frozenset[str]) -> str | None:
     return None
 
 
+def _folders(paths: Iterable[str]) -> set[str]:
+    """Every folder the paths are in."""
+    out: set[str] = set()
+    for path in paths:
+        parts = path.split("/")
+        out.update("/".join(parts[:i]) for i in range(1, len(parts)))
+    return out
+
+
+def _encodes(text: str) -> bool:
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def layout_problem(path: str, harness_paths: frozenset[str], folders: set[str]) -> str | None:
+    """Why ``path`` can't be written beside the other files, or None:
+    it's also a folder of another file, one of its folders is a harness
+    file, or a name in it is longer than the filesystem takes.
+    ``folders`` holds every folder of the submission's and the harness's
+    files."""
+    if path in folders or any(folder in harness_paths for folder in _folders([path])):
+        return "conflict"
+    if any(len(part.encode("utf-8")) > NAME_MAX_BYTES for part in path.split("/")):
+        return "name"
+    return None
+
+
 def check_paths(request: Request, files: Mapping[str, str], resolved: definitions.Resolved) -> None:
-    """422 ``path_not_allowed`` for the first file a submission can't carry."""
+    """422 ``path_not_allowed`` for the first file a submission can't
+    carry or the runner can't write beside the others, and 422
+    ``invalid_request`` for a path or contents that aren't text UTF-8 can
+    hold (a lone surrogate). Everything here runs before a slot does, so
+    a refusal refunds its charge."""
+    if not all(_encodes(path) and _encodes(contents) for path, contents in files.items()):
+        raise rejected(request, resolved, "invalid_request")
     harness = frozenset(item["path"] for item in resolved.document.get("files") or [])
+    folders = _folders([*files, *harness])
     for path in sorted(files):
-        problem = path_problem(path, harness)
+        problem = path_problem(path, harness) or layout_problem(path, harness, folders)
         if problem is not None:
             raise rejected(request, resolved, "path_not_allowed", PATH_DETAILS[problem])
 
@@ -214,18 +274,33 @@ def _write(workdir: str, path: str, contents: str, mode: int | None = None) -> N
         os.chmod(target, mode)
 
 
+def _lay_files(workdir: str, files: Mapping[str, str]) -> None:
+    """The candidate's files. ``check_paths`` already refused any the
+    runner can't write, so a write that fails here is the runner's own
+    trouble, such as a full disk: 503 ``worker_unavailable``, which
+    refunds the charge."""
+    try:
+        for path, contents in files.items():
+            _write(workdir, path, contents)
+    except (OSError, UnicodeError):
+        raise TypedError("worker_unavailable") from None
+
+
 def _lay_harness(workdir: str, files: list[dict[str, Any]]) -> None:
     """The harness files, written after the scratch is handed over: owned
     by the runner, files 0444 and directories 0755, so the candidate's
     uid can read them and change none."""
-    for item in files:
-        _write(workdir, item["path"], item["contents"])
-    for item in files:
-        directory = os.path.dirname(os.path.join(workdir, item["path"]))
-        while directory.startswith(workdir) and directory != workdir:
-            os.chmod(directory, 0o755)
-            directory = os.path.dirname(directory)
-        os.chmod(os.path.join(workdir, item["path"]), 0o444)
+    try:
+        for item in files:
+            _write(workdir, item["path"], item["contents"])
+        for item in files:
+            directory = os.path.dirname(os.path.join(workdir, item["path"]))
+            while directory.startswith(workdir) and directory != workdir:
+                os.chmod(directory, 0o755)
+                directory = os.path.dirname(directory)
+            os.chmod(os.path.join(workdir, item["path"]), 0o444)
+    except (OSError, UnicodeError):
+        raise TypedError("worker_unavailable") from None
 
 
 @dataclass(frozen=True)
@@ -243,8 +318,7 @@ def run_step(step: dict[str, Any], files: Mapping[str, str], slot: sandbox.Sandb
     its wall time."""
     start = time.monotonic()
     with sandbox.scratch(slot) as workdir:
-        for path, contents in files.items():
-            _write(workdir, path, contents)
+        _lay_files(workdir, files)
         sandbox.hand_over(workdir, slot)
         env = sandbox.candidate_env(workdir, {"PYTHONPATH": workdir, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
                                               **(extra_env or {})})
@@ -272,8 +346,7 @@ def grade(checkpoint: dict[str, Any], harness_files: list[dict[str, Any]], files
     timeout = min(step["wall_s"], wall_s) if wall_s is not None else step["wall_s"]
     start = time.monotonic()
     with sandbox.scratch(slot) as workdir:
-        for path, contents in files.items():
-            _write(workdir, path, contents)
+        _lay_files(workdir, files)
         sandbox.hand_over(workdir, slot)
         _lay_harness(workdir, harness_files)
         channel, timed_out = sandbox.run_with_channel(

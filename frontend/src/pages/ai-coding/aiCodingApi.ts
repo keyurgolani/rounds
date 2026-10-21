@@ -76,6 +76,51 @@ export function resolveRound(raw: AICodingRoundRaw, language: string): AICodingR
   return { ...raw, language, starter_files, checkpoints };
 }
 
+// Source extensions by round language. A file with another of the
+// round's languages' extensions belongs to that language's workspace.
+const SOURCE_EXTENSIONS: Record<string, readonly string[]> = {
+  python: ['py', 'pyi'],
+  typescript: ['ts', 'tsx', 'mts', 'cts'],
+  javascript: ['js', 'jsx', 'mjs', 'cjs'],
+  java: ['java'],
+};
+
+/** A path the runner takes in a submission's file map: relative, at
+ *  most 255 characters, and inside the project (backend/app/limits.py). */
+export function isProjectPath(path: string): boolean {
+  return (
+    path.length > 0 &&
+    path.length <= 255 &&
+    !path.startsWith('/') &&
+    !path.includes('\\') &&
+    !path.includes('\0') &&
+    path.split('/').every((part) => part !== '' && part !== '.' && part !== '..')
+  );
+}
+
+/**
+ * Which saved draft paths a workspace in `language` restores: its starter
+ * files, and any project path the candidate created, except one that
+ * belongs to another of the round's languages, as a starter file there or
+ * by its source extension.
+ */
+export function draftPathFilter(raw: AICodingRoundRaw, language: string): (path: string) => boolean {
+  const own = new Set(resolveRound(raw, language).starter_files.map((f) => f.path));
+  const others = effectiveLanguages(raw).filter((lang) => lang !== language);
+  const theirs = new Set(others.flatMap((lang) => resolveRound(raw, lang).starter_files.map((f) => f.path)));
+  const ownExtensions = new Set(SOURCE_EXTENSIONS[language] ?? []);
+  const theirExtensions = new Set(
+    others.flatMap((lang) => SOURCE_EXTENSIONS[lang] ?? []).filter((ext) => !ownExtensions.has(ext)),
+  );
+  return (path) => {
+    if (own.has(path)) return true;
+    if (!isProjectPath(path) || theirs.has(path)) return false;
+    const name = path.split('/').pop() ?? '';
+    const ext = name.includes('.') ? (name.split('.').pop() ?? '') : '';
+    return !theirExtensions.has(ext);
+  };
+}
+
 export async function listRounds(): Promise<AICodingRoundRaw[]> {
   const res = await pb.collection('ai_coding_rounds').getFullList<AICodingRoundRaw>({
     sort: 'title',

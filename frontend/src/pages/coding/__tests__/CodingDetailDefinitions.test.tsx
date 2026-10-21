@@ -44,7 +44,8 @@ vi.mock('../../../components/editor/MultiFileEditor', () => ({
 
 import CodingDetail from '../../CodingDetail';
 import { getCodingQuestion } from '../../../content/api';
-import { upsertCodeDraft } from '../../../lib/codeDraftsApi';
+import { listCodeDrafts, upsertCodeDraft } from '../../../lib/codeDraftsApi';
+import { localIsNewer, saveLocal } from '../../../lib/codeDraft';
 import { evaluateCode, runCode } from '../runnerApi';
 import { RunnerError } from '../../../lib/runnerFetch';
 
@@ -103,8 +104,20 @@ beforeEach(() => {
   vi.mocked(getCodingQuestion).mockResolvedValue(QUESTION as never);
   vi.mocked(evaluateCode).mockReset();
   vi.mocked(runCode).mockReset();
-  vi.mocked(upsertCodeDraft).mockClear();
+  vi.mocked(upsertCodeDraft).mockReset().mockResolvedValue({ id: 'd1' } as never);
+  vi.mocked(listCodeDrafts).mockReset().mockResolvedValue([]);
 });
+
+function savedDraft(code: string) {
+  return {
+    id: 'd1',
+    user_id: 'u1',
+    campaign_id: 'campaign00000001',
+    question: '7',
+    language: 'python',
+    code,
+  };
+}
 
 describe('CodingDetail definition requests', () => {
   it("names the row's definition version and case ids", async () => {
@@ -183,6 +196,48 @@ describe('CodingDetail definition requests', () => {
     expect(vi.mocked(upsertCodeDraft).mock.invocationCallOrder[0]).toBeLessThan(
       reloadPage.mock.invocationCallOrder[0],
     );
+  });
+
+  it('loads the local copy, not the older saved draft, after a reload whose save failed', async () => {
+    vi.mocked(evaluateCode).mockRejectedValue(
+      new RunnerError({ message: 'x', status: 422, code: 'legacy_request_rejected' }),
+    );
+    vi.mocked(upsertCodeDraft).mockRejectedValue(new Error('offline'));
+    const user = userEvent.setup();
+    const before = renderPage();
+    const editor = await screen.findByLabelText('Code');
+    await waitFor(() => expect(editor).toHaveValue(STARTER));
+    await user.type(editor, '# mine');
+    await user.click(screen.getByRole('button', { name: 'Run all (2)' }));
+    const region = within(screen.getByTestId('right-dock')).getByRole('status');
+    await waitFor(() => expect(region).toHaveTextContent('This page is out of date. No tests ran.'));
+    await user.click(within(region).getByRole('button', { name: 'Reload' }));
+    await waitFor(() => expect(reloadPage).toHaveBeenCalledTimes(1));
+    expect(localIsNewer('u1', 7, 'python')).toBe(true);
+    before.unmount();
+
+    // The reloaded page, with PocketBase still holding an older draft.
+    vi.mocked(upsertCodeDraft).mockReset().mockResolvedValue({ id: 'd1' } as never);
+    vi.mocked(listCodeDrafts).mockResolvedValue([savedDraft(`${STARTER}# older`)] as never);
+    const after = renderPage();
+    await waitFor(() => expect(screen.getByLabelText('Code')).toHaveValue(`${STARTER}# mine`));
+
+    // The next sync saves it, and PocketBase's draft is current again.
+    after.unmount();
+    await waitFor(() => expect(localIsNewer('u1', 7, 'python')).toBe(false));
+    expect(upsertCodeDraft).toHaveBeenLastCalledWith({
+      campaign_id: 'campaign00000001',
+      question: '7',
+      language: 'python',
+      code: `${STARTER}# mine`,
+    });
+  });
+
+  it('loads the saved draft over a local copy that is not marked newer', async () => {
+    saveLocal('u1', 7, 'python', `${STARTER}# local`);
+    vi.mocked(listCodeDrafts).mockResolvedValue([savedDraft(`${STARTER}# saved`)] as never);
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText('Code')).toHaveValue(`${STARTER}# saved`));
   });
 
   it('runs nothing for a retired question and keeps the code', async () => {
