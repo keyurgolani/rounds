@@ -15,12 +15,14 @@ Current release: **v1.0.0**
 
 Hosted demo: **https://rounds.keyurgolani.name**
 
-Demo login:
+Demo login on the hosted instance:
 
 - Email: `demo@rounds.keyurgolani.name`
 - Password: `RoundsDemo123!`
 
-The demo account is seeded on first PocketBase deployment, can run one custom coding snippet and one test-suite evaluation per session, and resets its profile, progress, drafts, applications, todos, preferences, and local caches when it logs out.
+The demo is off unless the operator sets `ROUNDS_ENABLE_DEMO=true` on PocketBase. Off is the default on every install, self-hosted ones included: PocketBase refuses the demo account's sign-in and gives it a new random password and token key at every start. With the demo on, the account runs under the demo tier's limits, can change only its name, bio, target, and avatar, can't hold share links, AI providers, or AI settings, and resets its profile, progress, drafts, applications, todos, preferences, and local caches when it logs out.
+
+**Upgrading a hosted demo:** set `ROUNDS_ENABLE_DEMO=true` on the PocketBase service before you deploy the release that adds `1700006700_demo_contain.js`, or the demo login stops working. That migration deletes the demo account's share links (and their view records), AI providers, and AI settings.
 
 ## Features
 
@@ -114,6 +116,8 @@ Fresh deployments run these migrations in order:
 5. `1700000700_resume_studio.js` adds resume, resume version, and bullet-library collections.
 6. `1700000800_ai_providers.js` adds the per-user AI provider credential collection (keys stored encrypted at rest).
 7. `1700000900_share_links_resume_rel.js` extends `share_links` with a relation to resumes for public read-only views.
+
+`1700006700_demo_contain.js` deletes what accounts with `is_demo` own in `resume_share_links` (with their `resume_share_views`), `ai_settings`, and `ai_providers`. It's forward-only and touches nothing a standard account owns. See the hosted-demo upgrade note above.
 
 The release that adds `1700006000_account_scope_rules.js` tightens the create and update rules on every user-owned collection so a write must name the signed-in account, and makes `resume_share_views` superuser-only. Before deploying it, back up `pb_data` and run the cross-owner relation scan on a copy taken with PocketBase stopped. The rules are forward-only: `migrate down` keeps them. See the "Account-scope rules" runbook in [docs/operations.md](docs/operations.md).
 

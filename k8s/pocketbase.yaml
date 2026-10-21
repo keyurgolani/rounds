@@ -50,6 +50,11 @@ spec:
             # Alias of ROUNDS_GATE_SIGNUPS, which wins when it's set.
             - name: ROUNDS_DISABLE_SIGNUPS
               value: "false"
+            # Alias of ROUNDS_GATE_DEMO, which wins when it's set. "true"
+            # only on a hosted demo; off, PocketBase refuses the demo
+            # account's sign-in.
+            - name: ROUNDS_ENABLE_DEMO
+              value: "false"
             # The execution-worker password the runner logs in with
             # (runner.yaml, step 4), and only that key of the runner's
             # secret. Optional: without it PocketBase makes no worker
