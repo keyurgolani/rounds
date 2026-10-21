@@ -6,8 +6,9 @@
 #
 # Only PocketBase reaches it: the NetworkPolicy below admits pods labeled
 # rounds.io/net: pocketbase on 4100 and allows no egress at all, DNS
-# included. #7 (ROUNDS-00A-L07) adds the default-deny set and PocketBase's
-# side of this edge.
+# included.
+# TODO(ROUNDS-00A-L07): #7's default-deny set adds PocketBase's egress rule
+# for this edge.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

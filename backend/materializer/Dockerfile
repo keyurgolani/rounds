@@ -8,9 +8,10 @@
 # Dockerfile.dockerignore, next to this file, admits only
 # backend/materializer/, the template, type, util, and export shell
 # sources, and frontend/package.json for its module type, so nothing else
-# in the repository reaches the build. The image
-# holds the bundle and the server, no package manager cache, no secret, and
-# runs as an unprivileged user.
+# in the repository reaches the build. The image holds the bundle and the
+# server, no package manager cache, no secret, and runs as an unprivileged
+# user.
+# TODO(ROUNDS-34-L08): #182's root build contexts absorb this one.
 
 FROM node:22-alpine AS build
 WORKDIR /build
