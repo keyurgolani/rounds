@@ -213,11 +213,73 @@ def test_dry_run_takes_the_apply_path(src):
     # The dry run must run the same moves, clears, and journal writes as the
     # apply and only then write its report and roll back, so it predicts the
     # apply's outcome (a failure included) and its checksum.
-    plan = src.index("const plan = quarantine();")
+    plan = src.index('stage = "plan";')
+    journal = src.index('stage = "journal";')
     deletes = src.index("if (rec) dao.deleteRecord(rec);")
     dry_report = src.index("writeDryRunReport(report);")
-    assert plan < deletes < dry_report
+    assert plan < journal < deletes < dry_report
     assert re.search(r"catch \(err\) \{.*?if \(dryRun\) \{.*?writeDryRunReport\(failed\);", src, re.DOTALL)
+
+
+def test_every_step_reports_its_failure(src):
+    # A failure creating the triggers or collections, or during the scan, must
+    # still write the dry run's report and the apply's failure log line, so
+    # every step runs inside the one reporting try.
+    head = src[: src.index("migrate(")]
+    body = src[src.index("migrate("):]
+    tried = body.index("    try {")
+    for step in ("CREATE TRIGGER", 'ensureCollection("relation_quarantine"', 'stage = "scan";', 'stage = "plan";'):
+        assert body.index(step) > tried, step
+    assert "CREATE TRIGGER" not in head
+    assert re.search(r'logLine\("relation_quarantine_failed", \{ stage: stage, reason: reason \}\);', src)
+
+
+def test_every_json_field_sets_its_own_max_size(src):
+    # PocketBase's size-default migration has already run on an upgraded
+    # deployment, so a JSON field created without maxSize keeps 0 and every
+    # later API write to the record fails validation (marking an entry
+    # replayed or dropped included).
+    json_fields = re.findall(r'\{ name: "([a-z_]+)", type: "json"([^}]*\})?[^}]*\}', src)
+    assert {name for name, _ in json_fields} == {"payload", "summary", "relations", "findings", "outcomes"}
+    for line in re.findall(r'\{ name: "[a-z_]+", type: "json".*', src):
+        assert "maxSize: JSON_MAX" in line, line
+    assert re.search(r"const JSON_MAX = \d+ \* 1024 \* 1024;", src)
+
+
+def test_the_guard_skips_views_and_only_refuses_what_matters(src):
+    # A view, an added relation, or a toggled option with nothing to
+    # quarantine must not stop the migration.
+    assert 'if (colRows[i].type === "view") continue;' in src
+    assert re.search(r"if \(withFindings\[key\] && \(live\.required !== want\.required \|\| live\.cascade !== want\.cascade\)\)", src)
+    # A relation outside the frozen table stops it only when a row about to
+    # move is referenced, inside the closure.
+    deps = src[src.index("const dependentsOf = "):src.index("const referenceCleared = {};")]
+    assert "unlistedByTarget[c]" in deps and "about to move" in deps
+
+
+def test_the_original_row_is_raw_text_read_by_sqlite(src):
+    # JSON.parse rounds integers above 2^53 and reorders keys, so the payload
+    # is every column's raw value as text, built by SQLite itself.
+    assert "json_object(" in src and "printf('%!.17g'" in src and 'AS TEXT) END' in src
+    assert "getFloat" not in src and "getBool" not in src
+    assert "payload: snapshots[keyOf(o.e.c, o.e.id)].payload" in src
+
+
+LEVER = ROOT / "pocketbase" / "levers" / "replay_quarantine.template.js"
+
+
+def test_the_replay_lever_restores_rows_exactly_through_the_triggers():
+    lever = LEVER.read_text()
+    assert 'const ENTRY_IDS = ["__ENTRY_ID__"];' in lever
+    # Only a quarantined entry replays, and it becomes replayed.
+    assert 'status !== "quarantined"' in lever and 'entry.set("status", "replayed");' in lever
+    # A moved row comes back column by column from the stored payload, so
+    # created, updated, numbers, and JSON text come back exactly.
+    assert re.search(r"INSERT INTO .*json_extract\(\\\"payload\\\"", lever) or "json_extract(\\\"payload\\\"" in lever
+    assert "pragma_table_info" in lever
+    # down() writes nothing.
+    m = re.search(r"\(_db\)\s*=>\s*\{(.*?)\},\s*\);", lever, re.DOTALL)
+    assert m and "db." not in m.group(1) and "dao" not in m.group(1)
 
 
 def test_cascading_fields_move_the_row(src):

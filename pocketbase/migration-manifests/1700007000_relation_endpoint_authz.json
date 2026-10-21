@@ -4,7 +4,7 @@
   "issue": "#10",
   "dependents": "A moved row's cascading dependents (a variant's versions and share links, a share link's views) are moved with it, copied first and deleted leaf-first. A non-cascading reference to a moved row (previous_offer) is cleared and journalled, or its row is moved when clearing it would collide with a unique index.",
   "writes": {
-    "relation_quarantine": "one entry per moved row and per cleared reference: the migration, the row, the field, the original row JSON, per-report account pseudonyms, and status quarantined",
+    "relation_quarantine": "one entry per moved row and per cleared reference: the migration, the row, the field, the original row (every column's raw value as text, which pocketbase/levers/replay_quarantine.template.js writes back exactly), per-report account pseudonyms, and status quarantined",
     "relation_quarantine_reports": "one pseudonymized report row, only when a cross-owner or missing-target reference was found"
   },
   "fields": [
