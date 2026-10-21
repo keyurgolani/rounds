@@ -285,8 +285,11 @@
       "actor": "authenticated-owner",
       "status": "enforced",
       "deny_key": "server_only",
-      "guarantee": "a client delete on a collection whose delete rule is null is forbidden, even the owner's",
-      "resource": "legacy_artifact_snapshots"
+      "guarantee": "a client delete on a collection only the server writes is forbidden, even the owner's",
+      "resource": [
+        "legacy_artifact_snapshots",
+        "execution_envelopes"
+      ]
     },
     "account-scope.create.superuser.accepted": {
       "operation": "create",
@@ -426,7 +429,7 @@
       ],
       "oversized_probe": {
         "field": "target_companies",
-        "max_bytes": 2000000
+        "max_bytes": 2097152
       }
     },
     "applications": {
@@ -542,7 +545,7 @@
       ],
       "oversized_probe": {
         "field": "questions_asked",
-        "max_bytes": 2000000
+        "max_bytes": 2097152
       }
     },
     "user_progress": {
@@ -711,7 +714,7 @@
       ],
       "oversized_probe": {
         "field": "trail",
-        "max_bytes": 2000000
+        "max_bytes": 2097152
       }
     },
     "code_drafts": {
@@ -822,7 +825,7 @@
       ],
       "oversized_probe": {
         "field": "mentions",
-        "max_bytes": 2000000
+        "max_bytes": 2097152
       }
     },
     "resumes": {
@@ -867,7 +870,7 @@
       ],
       "oversized_probe": {
         "field": "data",
-        "max_bytes": 2000000
+        "max_bytes": 2097152
       }
     },
     "resume_variants": {
@@ -930,7 +933,7 @@
       ],
       "oversized_probe": {
         "field": "data",
-        "max_bytes": 2000000
+        "max_bytes": 2097152
       }
     },
     "resume_versions": {
@@ -993,7 +996,7 @@
       ],
       "oversized_probe": {
         "field": "data",
-        "max_bytes": 2000000
+        "max_bytes": 2097152
       }
     },
     "resume_share_links": {
@@ -1151,7 +1154,7 @@
       ],
       "oversized_probe": {
         "field": "models_cache",
-        "max_bytes": 2000000
+        "max_bytes": 262144
       }
     },
     "ai_settings": {
@@ -1282,10 +1285,11 @@
         "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
       },
       "target_rule_migration": "1700006000_account_scope_rules.js",
-      "hook": null,
+      "hook": "pb_hooks/execution.pb.js",
       "relation_exceptions": [
         "campaign",
-        "round"
+        "round",
+        "envelope"
       ],
       "relation_endpoints": [
         {
@@ -1328,7 +1332,7 @@
       ],
       "oversized_probe": {
         "field": "ai_chats",
-        "max_bytes": 2000000
+        "max_bytes": 2097152
       }
     },
     "take_home_drafts": {
@@ -1401,10 +1405,11 @@
         "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
       },
       "target_rule_migration": "1700006000_account_scope_rules.js",
-      "hook": null,
+      "hook": "pb_hooks/execution.pb.js",
       "relation_exceptions": [
         "campaign",
-        "assignment"
+        "assignment",
+        "envelope"
       ],
       "relation_endpoints": [
         {
@@ -1448,8 +1453,39 @@
       ],
       "oversized_probe": {
         "field": "files",
-        "max_bytes": 2000000
+        "max_bytes": 8388608
       }
+    },
+    "execution_envelopes": {
+      "migration": "1700007100_execution_jobs.js",
+      "fixture": "execution_envelopes",
+      "owner_field": "user",
+      "current_rules": {
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "target_rules": {
+        "create": null,
+        "update": null
+      },
+      "target_rule_migration": "1700007100_execution_jobs.js",
+      "hook": null,
+      "relation_exceptions": [],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.cross-account.isolated",
+        "account-scope.list.anonymous.isolated",
+        "account-scope.view.cross-account.denied",
+        "account-scope.view.anonymous.denied",
+        "account-scope.list.filter.isolated",
+        "account-scope.view.foreign-or-missing.indistinguishable",
+        "account-scope.create.server-only.denied",
+        "account-scope.update.server-only.denied",
+        "account-scope.delete.server-only.denied"
+      ]
     },
     "question_timers": {
       "migration": "1700001500_question_timers.js",
@@ -1533,7 +1569,7 @@
       ],
       "oversized_probe": {
         "field": "tags",
-        "max_bytes": 2000000
+        "max_bytes": 2097152
       }
     },
     "experience_projects": {
@@ -1578,7 +1614,7 @@
       ],
       "oversized_probe": {
         "field": "tech_stack",
-        "max_bytes": 2000000
+        "max_bytes": 2097152
       }
     },
     "experience_anecdotes": {
@@ -1623,7 +1659,7 @@
       ],
       "oversized_probe": {
         "field": "tags",
-        "max_bytes": 2000000
+        "max_bytes": 2097152
       }
     },
     "experience_bullets": {
@@ -1668,7 +1704,7 @@
       ],
       "oversized_probe": {
         "field": "tags",
-        "max_bytes": 2000000
+        "max_bytes": 2097152
       }
     },
     "exp_job_projects": {

@@ -209,8 +209,11 @@ def test_a_claimed_job_runs_and_completes_with_one_authoritative_envelope(server
     (env,) = state["envelopes"]
     assert env["authoritative"] is True and env["user_view"]["score"] == 1.0
     assert env["user_view"]["parts"] == [{"id": "case-1", "outcome_class": "passed", "limit": None}]
-    assert env["operator_view"]["executor_kind"] == "legacy-in-process" and env["operator_view"]["worker"] == "runner-0"
-    assert env["operator_view"]["exit_status"] == 0 and env["operator_view"]["output_bytes"] == 3
+    # The account reads the envelope; the operator view stays on the attempt.
+    assert env["user"] == A and "operator_view" not in env
+    operator = attempt["operator_view"]
+    assert operator["executor_kind"] == "legacy-in-process" and operator["worker"] == "runner-0"
+    assert operator["exit_status"] == 0 and operator["output_bytes"] == 3
 
 
 def test_a_kind_without_a_handler_ends_definition_invalid_before_anything_runs(server):
@@ -317,7 +320,7 @@ def test_a_lost_lease_stops_the_run_and_its_late_result_is_rejected(server, caps
     assert attempt["rejected_writes"] >= 1
     # The only envelope is the reaper's, never authoritative.
     (env,) = state["envelopes"]
-    assert env["authoritative"] is False and env["operator_view"]["worker"] == "runner-0"
+    assert env["authoritative"] is False and attempt["operator_view"]["worker"] == "runner-0"
     lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
     assert any(line.get("metric") == "rounds_job_late_result_rejected_total" for line in lines)
 

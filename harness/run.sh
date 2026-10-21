@@ -52,6 +52,10 @@
 #  12b. execution migration - the same for the execution job store's
 #                     migration, on a pb_data with every earlier migration
 #                     (harness/probes/execution_migration_check.py)
+#  12c. JSON limits - every JSON field's declared maxSize on a fresh pb_data
+#                     and an upgraded one, the registry migration changing
+#                     nothing where they already hold, and its down step
+#                     (harness/probes/json_limits_check.py)
 #  13. relation quarantine - with the pinned binary and no network: dry-run
 #                     and apply the relation quarantine on a legacy pb_data
 #                     holding cross-owner rows, then delete through the API on
@@ -436,6 +440,16 @@ ${CONTAINER_BIN} run --rm --network none \
   -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
   -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
   "${PROBE_IMAGE}" execution-migration
+[ $? -eq 0 ] || migration_rc=1
+
+echo "--- phase 12c: JSON limits on fresh and upgraded pb_data ---"
+${CONTAINER_BIN} run --rm --network none \
+  -e PB_BIN="/pbbin/pocketbase" \
+  -e PB_MIGRATIONS_DIR="/pb_migrations" \
+  -v "${PBBIN_VOLUME}:/pbbin:ro" \
+  -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+  -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
+  "${PROBE_IMAGE}" json-limits
 [ $? -eq 0 ] || migration_rc=1
 set -e
 

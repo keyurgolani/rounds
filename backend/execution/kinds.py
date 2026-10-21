@@ -78,6 +78,12 @@ class Kind:
         the operation for."""
         return self.part_wall_s * self.max_parts
 
+    @property
+    def hidden_material(self) -> bool:
+        """Whether a run uses hidden tests, harness files, or a rubric, so
+        its envelope shows the account no output (D9)."""
+        return self.purpose == "grading"
+
 
 KINDS: dict[str, Kind] = {
     kind.name: kind

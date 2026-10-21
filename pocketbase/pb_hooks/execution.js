@@ -80,8 +80,16 @@ const TERMINAL = {
   canceled: { classes: ["canceled"], authoritative: [] },
   failed: { classes: ["worker-lost", "infrastructure-degraded"], authoritative: [] },
 };
+const OUTCOME_CLASSES = [
+  "passed", "candidate-failure", "resource-limit", "definition-invalid", "policy-violation", "canceled",
+  "worker-lost", "infrastructure-degraded",
+];
 // An attempt that ended with one of these may be retried with its key.
 const RETRYABLE = ["worker-lost", "infrastructure-degraded"];
+// Kinds whose runs use hidden material (hidden tests, harness files, a
+// rubric). Their envelope carries outcome classes and the server's totals
+// only, never output (D9).
+const HIDDEN_MATERIAL = ["grade", "take_home_submit"];
 const CLEANUP = ["pending", "confirmed", "unconfirmed"];
 const LIMITS = ["wall_time", "cpu_time", "memory", "processes", "files", "output"];
 const TRACKS = ["coding", "ai-coding", "take-home"];
@@ -92,6 +100,13 @@ const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const VARIANT = /^[a-z]{1,16}$/;
 const WORKER_ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const TOKEN = /^[A-Za-z0-9]{43}$/;
+// A case, checkpoint, or criterion id.
+const PART_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+const MAX_PARTS = 64;
+const RUBRIC_STATES = ["requested", "completed", "lost"];
+const CHECKSUM = /^sha256:[0-9a-f]{64}$/;
+// #2's cap on the visible output a run may show.
+const OUTPUT_MAX_CHARS = 256 * 1024;
 // The keys a user projection may carry (rounds.execution-envelope/v1).
 const USER_VIEW_KEYS = [
   "version", "job_id", "state", "outcome_class", "authoritative", "limit", "parts", "score", "definition",
@@ -189,6 +204,53 @@ function nullableInt(value) {
   return value === null || (isInt(value) && value >= 0);
 }
 
+// One part: its id, its outcome class, and the limit a resource-limit
+// names. Nothing else, so no part can carry what a test expected or printed.
+function checkPart(part) {
+  if (!only(part, ["id", "outcome_class", "limit"]) || !has(part, "id") || !has(part, "outcome_class") ||
+      !has(part, "limit")) return false;
+  if (typeof part.id !== "string" || !PART_ID.test(part.id)) return false;
+  if (OUTCOME_CLASSES.indexOf(part.outcome_class) < 0) return false;
+  if (part.limit === null) return part.outcome_class !== "resource-limit";
+  return part.outcome_class === "resource-limit" && LIMITS.indexOf(part.limit) >= 0;
+}
+
+// #2's receipt for what ran: {track, slug, variant, content_version,
+// checksum}.
+function checkReceipt(ref) {
+  if (ref === null) return true;
+  const keys = ["track", "slug", "variant", "content_version", "checksum"];
+  if (!only(ref, keys) || keys.some((key) => !has(ref, key))) return false;
+  if (TRACKS.indexOf(ref.track) < 0) return false;
+  if (typeof ref.slug !== "string" || ref.slug.length > 100 || !SLUG.test(ref.slug)) return false;
+  if (ref.variant !== null && (typeof ref.variant !== "string" || !VARIANT.test(ref.variant))) return false;
+  if (!isInt(ref.content_version) || ref.content_version < 1 || ref.content_version > 9999) return false;
+  return typeof ref.checksum === "string" && CHECKSUM.test(ref.checksum);
+}
+
+// The user view of rounds.execution-envelope/v1: enums, ids, times, the
+// server's score, the receipt, the rubric's state, and the visible output,
+// which is null for a run with hidden material (complete checks that).
+function checkUserView(user, result) {
+  if (!only(user, USER_VIEW_KEYS) || USER_VIEW_KEYS.some((key) => !has(user, key))) return false;
+  if (user.version !== ENVELOPE_VERSION) return false;
+  if (typeof user.job_id !== "string" || !RECORD_ID.test(user.job_id)) return false;
+  if (user.state !== result.state || user.outcome_class !== result.outcome_class) return false;
+  if (user.authoritative !== result.authoritative || user.cleanup !== result.cleanup) return false;
+  if (user.limit !== null && LIMITS.indexOf(user.limit) < 0) return false;
+  // A resource-limit names its limit, and only it does.
+  if ((result.outcome_class === "resource-limit") !== (user.limit !== null)) return false;
+  if (!Array.isArray(user.parts) || user.parts.length > MAX_PARTS || !user.parts.every(checkPart)) return false;
+  if (user.score !== null && !(typeof user.score === "number" && user.score >= 0 && user.score <= 1)) return false;
+  if (user.score !== null && result.outcome_class !== "passed" && result.outcome_class !== "candidate-failure") return false;
+  if (!checkReceipt(user.definition)) return false;
+  if (!(isInt(user.queued_at) && user.queued_at >= 0) || !nullableInt(user.started_at)) return false;
+  if (!(isInt(user.finished_at) && user.finished_at >= 0)) return false;
+  if (user.rubric !== null && !(only(user.rubric, ["state"]) && RUBRIC_STATES.indexOf(user.rubric.state) >= 0)) return false;
+  if (user.output !== null && !(isObject(user.output) && jsonWithin(user.output, OUTPUT_MAX_CHARS))) return false;
+  return jsonWithin(user, USER_VIEW_MAX_CHARS);
+}
+
 // A runner-built envelope: its terminal state and outcome class agree
 // with TERMINAL, authoritative says what TERMINAL says, and each view
 // carries the v1 keys only.
@@ -199,17 +261,7 @@ function checkResult(result) {
   if (result.authoritative !== (terminal.authoritative.indexOf(result.outcome_class) >= 0)) return null;
   if (CLEANUP.indexOf(result.cleanup) < 0) return null;
   const user = result.user_view;
-  if (!only(user, USER_VIEW_KEYS) || USER_VIEW_KEYS.some((key) => !has(user, key))) return null;
-  if (user.version !== ENVELOPE_VERSION) return null;
-  if (user.state !== result.state || user.outcome_class !== result.outcome_class) return null;
-  if (user.authoritative !== result.authoritative || user.cleanup !== result.cleanup) return null;
-  if (user.limit !== null && LIMITS.indexOf(user.limit) < 0) return null;
-  // A resource-limit names its limit, and only it scores null by rule.
-  if ((result.outcome_class === "resource-limit") !== (user.limit !== null)) return null;
-  if (!Array.isArray(user.parts)) return null;
-  if (user.score !== null && !(typeof user.score === "number" && user.score >= 0 && user.score <= 1)) return null;
-  if (user.score !== null && result.outcome_class !== "passed" && result.outcome_class !== "candidate-failure") return null;
-  if (!jsonWithin(user, USER_VIEW_MAX_CHARS)) return null;
+  if (!checkUserView(user, result)) return null;
   const operator = result.operator_view;
   if (!only(operator, OPERATOR_VIEW_KEYS) || OPERATOR_VIEW_KEYS.some((key) => !has(operator, key))) return null;
   if (operator.version !== ENVELOPE_VERSION) return null;
@@ -374,10 +426,12 @@ function serverEnvelope(job, attempt, state, outcomeClass, cleanup, now) {
   };
 }
 
+// The envelope the account reads, with the user view only. The operator
+// view goes on the attempt (endAttempt).
 function writeEnvelope(store, job, attempt, result) {
   return store.saveEnvelope({
     id: "",
-    account: job.account,
+    user: job.account,
     job: job.id,
     attempt: attempt.id,
     version: ENVELOPE_VERSION,
@@ -385,17 +439,17 @@ function writeEnvelope(store, job, attempt, result) {
     outcome_class: result.outcome_class,
     authoritative: result.authoritative,
     user_view: result.user_view,
-    operator_view: result.operator_view,
     graded_collection: "",
     graded_row: "",
   });
 }
 
-function endAttempt(store, attempt, state, outcomeClass, cleanup, now) {
+function endAttempt(store, attempt, state, outcomeClass, cleanup, now, operatorView) {
   attempt.state = state;
   attempt.outcome_class = outcomeClass;
   attempt.cleanup = cleanup;
   attempt.finished_at = now;
+  attempt.operator_view = operatorView;
   return store.saveAttempt(attempt);
 }
 
@@ -436,9 +490,13 @@ function reap(store, now) {
   store.expiredAttempts(now, REAP_BATCH).forEach((attempt) => {
     const job = store.getJob(attempt.job);
     const current = job !== null && job.attempts === attempt.attempt_number && ACTIVE.indexOf(job.state) >= 0;
-    endAttempt(store, attempt, "failed", "worker-lost", "unconfirmed", now);
-    if (job === null) return;
-    writeEnvelope(store, job, attempt, serverEnvelope(job, attempt, "failed", "worker-lost", "unconfirmed", now));
+    if (job === null) {
+      endAttempt(store, attempt, "failed", "worker-lost", "unconfirmed", now, null);
+      return;
+    }
+    const lost = serverEnvelope(job, attempt, "failed", "worker-lost", "unconfirmed", now);
+    endAttempt(store, attempt, "failed", "worker-lost", "unconfirmed", now, lost.operator_view);
+    writeEnvelope(store, job, attempt, lost);
     if (!current) return;
     if (attempt.started_at) {
       endJob(store, job, "failed", "worker-lost", "unconfirmed", now);
@@ -456,9 +514,13 @@ function reap(store, now) {
   });
   store.overBudgetAttempts(now - BUDGET_GRACE_S, REAP_BATCH).forEach((attempt) => {
     const job = store.getJob(attempt.job);
-    endAttempt(store, attempt, "failed", "infrastructure-degraded", "unconfirmed", now);
-    if (job === null) return;
-    writeEnvelope(store, job, attempt, serverEnvelope(job, attempt, "failed", "infrastructure-degraded", "unconfirmed", now));
+    if (job === null) {
+      endAttempt(store, attempt, "failed", "infrastructure-degraded", "unconfirmed", now, null);
+      return;
+    }
+    const degraded = serverEnvelope(job, attempt, "failed", "infrastructure-degraded", "unconfirmed", now);
+    endAttempt(store, attempt, "failed", "infrastructure-degraded", "unconfirmed", now, degraded.operator_view);
+    writeEnvelope(store, job, attempt, degraded);
     if (job.attempts === attempt.attempt_number && ACTIVE.indexOf(job.state) >= 0) {
       endJob(store, job, "failed", "infrastructure-degraded", "unconfirmed", now);
     }
@@ -501,6 +563,7 @@ function claim(store, input, now) {
       finished_at: 0,
       rejected_writes: 0,
       cleanup: "",
+      operator_view: null,
     });
     job.state = "leased";
     job.attempts = attempt.attempt_number;
@@ -587,13 +650,17 @@ function complete(store, input, now) {
   const job = held.job;
   const result = input.result;
   if (result.user_view.job_id !== job.id) return { status: 400, body: { v: VERSION, error: "invalid_request" } };
+  // A run with hidden material shows the account no output at all.
+  if (HIDDEN_MATERIAL.indexOf(job.kind) >= 0 && result.user_view.output !== null) {
+    return { status: 400, body: { v: VERSION, error: "invalid_request" } };
+  }
   // Only a run that started can end with what the candidate did. A run
   // that never got a slot ends timed-out, infrastructure-degraded.
   if (result.authoritative && attempt.state !== "started") {
     return { status: 409, body: { v: VERSION, error: "not_started" } };
   }
   const envelope = writeEnvelope(store, job, attempt, result);
-  endAttempt(store, attempt, result.state, result.outcome_class, result.cleanup, now);
+  endAttempt(store, attempt, result.state, result.outcome_class, result.cleanup, now, result.operator_view);
   endJob(store, job, result.state, result.outcome_class, result.cleanup, now);
   return { status: 200, body: { v: VERSION, envelope_id: envelope.id, job: jobView(store.getJob(job.id)) } };
 }
@@ -704,6 +771,7 @@ function pbStore(dao) {
       finished_at: record.getInt("finished_at"),
       rejected_writes: record.getInt("rejected_writes"),
       cleanup: record.getString("cleanup"),
+      operator_view: json(record, "operator_view"),
       _record: record,
     };
   }
@@ -729,10 +797,11 @@ function pbStore(dao) {
   const ATTEMPT_FIELDS = [
     "job", "account", "attempt_number", "token_hash", "worker", "state", "outcome_class", "budget_s", "deadline_at",
     "leased_at", "lease_expires_at", "started_at", "heartbeat_at", "finished_at", "rejected_writes", "cleanup",
+    "operator_view",
   ];
   const ENVELOPE_FIELDS = [
-    "account", "job", "attempt", "version", "state", "outcome_class", "authoritative", "user_view", "operator_view",
-    "graded_collection", "graded_row",
+    "user", "job", "attempt", "version", "state", "outcome_class", "authoritative", "user_view", "graded_collection",
+    "graded_row",
   ];
 
   return {
@@ -936,6 +1005,8 @@ module.exports = {
   ACCOUNT_ACTIVE_JOBS,
   KINDS,
   TERMINAL,
+  OUTCOME_CLASSES,
+  HIDDEN_MATERIAL,
   RETRYABLE,
   CLEANUP,
   LIMITS,

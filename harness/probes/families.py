@@ -252,10 +252,11 @@ def update_server_only_denied(pb, collection, record_id, owner_token, expected) 
 
 
 def delete_server_only_denied(pb, collection, record_id, owner_token, expected) -> Receipt:
-    # A server-written collection whose delete rule is null too (the
-    # Legacy Artifact Snapshots, ROUNDS-00A-L04) rejects even the owner's
-    # delete of its own row, the hardest client to deny; the owner reads the
-    # row before and after, proving it is still there exactly as it was.
+    # A collection whose delete rule is null too, because only the server
+    # writes it (the Legacy Artifact Snapshots, ROUNDS-00A-L04, and the
+    # execution envelopes, ROUNDS-00A-L03), rejects even the owner's delete
+    # of its own row, the hardest client to deny; the owner reads the row
+    # before and after, proving it is still there exactly as it was.
     before = pb.view(collection, record_id, token=owner_token)
     resp = pb.delete(collection, record_id, token=owner_token)
     still = pb.view(collection, record_id, token=owner_token)

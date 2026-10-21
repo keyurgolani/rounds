@@ -322,11 +322,65 @@ def test_complete_writes_the_envelope_and_both_terminal_states_together():
     out = run(*steps, complete(attempt["id"], token, result(job["id"])))
     (envelope,) = out["store"]["envelopes"]
     assert (envelope["state"], envelope["outcome_class"], envelope["authoritative"]) == ("completed", "passed", True)
-    assert envelope["job"] == job["id"] and envelope["attempt"] == attempt["id"] and envelope["account"] == A["id"]
+    assert envelope["job"] == job["id"] and envelope["attempt"] == attempt["id"] and envelope["user"] == A["id"]
     assert envelope["version"] == ENVELOPE and envelope["graded_row"] == ""
-    assert out["store"]["attempts"][0]["state"] == "completed"
+    # The account reads the envelope, so the operator view goes on the
+    # attempt, which only the service reads.
+    assert "operator_view" not in envelope
+    (stored,) = out["store"]["attempts"]
+    assert stored["state"] == "completed" and stored["operator_view"]["worker"] == "runner-a"
     stored_job = out["store"]["jobs"][0]
     assert (stored_job["state"], stored_job["outcome_class"], stored_job["cleanup"]) == ("completed", "passed", "confirmed")
+
+
+def _leaves(value):
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _leaves(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _leaves(item)
+    else:
+        yield value
+
+
+@pytest.mark.parametrize("kind", ["grade", "take_home_submit"])
+def test_a_run_with_hidden_material_shows_its_account_outcome_classes_and_totals_only(kind):
+    steps, job, attempt, token = started_job(kind=kind, budget=45)
+    body = result(job["id"], outcome="candidate-failure", score=0.5)
+    body["user_view"]["parts"] = [{"id": "checkpoint-1", "outcome_class": "passed", "limit": None},
+                                  {"id": "checkpoint-2", "outcome_class": "candidate-failure", "limit": None}]
+    shown = json.loads(json.dumps(body))
+    shown["user_view"]["output"] = {"stdout": "what the hidden tests printed"}
+    refused = run(*steps, complete(attempt["id"], token, shown))
+    assert refused["results"][-1] == {"status": 400, "body": {"v": "execution/v1", "error": "invalid_request"}}
+    assert refused["store"]["envelopes"] == []
+    out = run(*steps, complete(attempt["id"], token, body))
+    assert out["results"][-1]["status"] == 200
+    (envelope,) = out["store"]["envelopes"]
+    allowed = {ENVELOPE, job["id"], "completed", "candidate-failure", "passed", "confirmed", "checkpoint-1",
+               "checkpoint-2"}
+    for leaf in _leaves(envelope["user_view"]):
+        assert leaf is None or isinstance(leaf, (bool, int, float)) or leaf in allowed, leaf
+
+
+@pytest.mark.parametrize(
+    "part",
+    [
+        {"id": "case-1", "outcome_class": "passed", "limit": None, "expected": [1, 2]},
+        {"id": "case-1", "outcome_class": "passed", "limit": None, "output": "x"},
+        {"id": "case 1", "outcome_class": "passed", "limit": None},
+        {"id": "case-1", "outcome_class": "passed", "limit": "memory"},
+        {"id": "case-1", "outcome_class": "skipped", "limit": None},
+    ],
+    ids=["expected", "output", "id", "limit-without-class", "class"],
+)
+def test_a_part_carries_its_id_outcome_and_limit_and_nothing_else(part):
+    steps, job, attempt, token = started_job()
+    body = result(job["id"])
+    body["user_view"]["parts"] = [part]
+    out = run(*steps, complete(attempt["id"], token, body))
+    assert out["results"][-1]["status"] == 400 and out["store"]["envelopes"] == []
 
 
 def test_a_resource_limit_is_authoritative_names_its_limit_and_scores_null():

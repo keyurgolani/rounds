@@ -113,7 +113,8 @@ them, checks that only PocketBase reaches the snapshot materializer and that
 it has no route out, stops PocketBase for the degraded probe, runs the
 verifier's checks and the cross-owner scan on the run's `pb_data`, prints the
 verdict (pass / expected-fail / fail counts), runs the admission migration,
-execution migration, relation quarantine, and snapshot store checks, and tears
+execution migration, JSON limits, relation quarantine, and snapshot store
+checks, and tears
 the stack down, removing the images and the volume it made.
 Its exit code is non-zero on any failed or missing result.
 
@@ -219,6 +220,16 @@ operator would, checks that the data is back as it was, and applies it again.
 does the same for `1700007100_execution_jobs.js` on a `pb_data` built from
 every migration before it: the four collections with no client writes, the
 `envelope` and `job` links, and the 8 MiB `files` limit, and nothing else.
+[`probes/json_limits_check.py`](probes/json_limits_check.py) holds every JSON
+field's maxSize to the limit its migrations declare (D10). PocketBase's own
+`1702134272_set_default_json_max_size` resets them all to 2,000,000 bytes and
+sorts after the repository's migrations, and `1702134273_json_limits.js` sets
+them back. The check takes the declared limits from a `pb_data` where
+PocketBase's migrations ran first, then checks that a fresh `pb_data` and one
+upgraded from every migration before `1700007100_execution_jobs.js` hold them,
+that the registry changes nothing else and saves no collection where they
+already hold, and that `pocketbase migrate down 1` puts the 2,000,000-byte
+default back and a second `migrate up` restores them.
 
 Last, [`probes/relation_quarantine_check.py`](probes/relation_quarantine_check.py)
 runs the same pinned binary, with no network, against the relation

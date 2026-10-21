@@ -310,6 +310,8 @@ class Worker:
         job, claim = attempt.claim.job, attempt.claim
         scored = result is not None and outcome.outcome_class in ("passed", "candidate-failure")
         observation = result.observation if result else None
+        kind = kinds.KINDS.get(job.kind)
+        hidden = kind is not None and kind.hidden_material
         # TODO(ROUNDS-00A-L03): build_revision stays null until the runner
         # image carries its revision; image_digest until #5's launcher
         # reports it (ROUNDS-00A-L05).
@@ -334,6 +336,7 @@ class Worker:
                 output_sha256=observation.output_sha256 if observation else None,
                 output_bytes=observation.output_bytes if observation else None,
                 exit_status=observation.exit_status if observation else None,
+                hidden_material=hidden,
             )
         except envelope.InvalidEnvelope:
             _log.exception("execution envelope invalid")

@@ -195,16 +195,32 @@ def test_the_service_writer_is_an_auth_collection_no_client_reaches(run):
     assert options["minPasswordLength"] == run["hooks"]["secretMin"]
 
 
-@pytest.mark.parametrize("name", JOB_COLLECTIONS)
-def test_only_the_service_reads_a_job_collection_and_nothing_writes_one(run, name):
+@pytest.mark.parametrize("name, owner, reader", [
+    ("execution_jobs", "account", SERVICE_ONLY),
+    ("execution_attempts", "account", SERVICE_ONLY),
+    # D9: the account reads its own envelopes, and only the store writes them.
+    ("execution_envelopes", "user", "user = @request.auth.id"),
+])
+def test_only_the_store_writes_a_job_collection_and_each_has_its_one_reader(run, name, owner, reader):
     collection = run["up"][name]
     assert collection["type"] == "base"
-    assert collection["listRule"] == collection["viewRule"] == SERVICE_ONLY
+    assert collection["listRule"] == collection["viewRule"] == reader
     assert collection["createRule"] is None and collection["updateRule"] is None
     assert collection["deleteRule"] is None
-    account = _field(collection, "account")
-    assert account["type"] == "relation" and account["required"] is True
-    assert account["options"] == {"collectionId": "c_users", "cascadeDelete": True, "maxSelect": 1}
+    field = _field(collection, owner)
+    assert field["type"] == "relation" and field["required"] is True
+    assert field["options"] == {"collectionId": "c_users", "cascadeDelete": True, "maxSelect": 1}
+
+
+def test_the_envelope_an_account_reads_holds_no_operator_view(run):
+    envelopes, attempts = run["up"]["execution_envelopes"], run["up"]["execution_attempts"]
+    assert [f["name"] for f in envelopes["fields"]] == [
+        "user", "job", "attempt", "version", "state", "outcome_class", "authoritative", "user_view",
+        "graded_collection", "graded_row",
+    ]
+    operator = _field(attempts, "operator_view")
+    assert operator["type"] == "json" and not operator.get("required")
+    assert "CREATE INDEX idx_execution_envelopes_user ON execution_envelopes (user)" in envelopes["indexes"]
 
 
 def test_jobs_attempts_and_envelopes_point_at_each_other_and_cascade(run):
@@ -247,13 +263,13 @@ def test_the_values_match_the_hooks(run):
 
 
 def test_the_json_fields_hold_what_the_hooks_allow(run):
-    jobs, envelopes = run["up"]["execution_jobs"], run["up"]["execution_envelopes"]
+    jobs, attempts, envelopes = (run["up"][n] for n in JOB_COLLECTIONS)
     hooks = (HOOKS / "execution.js").read_text()
     limits = {name: eval(value, {}) for name, value in  # noqa: S307 - integer arithmetic from our own file
               re.findall(r"^const (\w+_MAX_CHARS) = ([0-9 *]+);$", hooks, re.M)}
     assert _field(jobs, "input")["options"]["maxSize"] == limits["INPUT_MAX_CHARS"] == 8 * MIB
     assert _field(envelopes, "user_view")["options"]["maxSize"] == limits["USER_VIEW_MAX_CHARS"]
-    assert _field(envelopes, "operator_view")["options"]["maxSize"] == limits["OPERATOR_VIEW_MAX_CHARS"]
+    assert _field(attempts, "operator_view")["options"]["maxSize"] == limits["OPERATOR_VIEW_MAX_CHARS"]
 
 
 @pytest.mark.parametrize("name", ["ai_coding_attempts", "take_home_attempts"])

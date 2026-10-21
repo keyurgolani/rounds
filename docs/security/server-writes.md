@@ -49,7 +49,7 @@ A Caller route writes only the caller's rows. The account and its tier come from
 
 ## Execution Job Store
 
-#3's PR 1 adds `execution_service`, `execution_jobs`, `execution_attempts`, and `execution_envelopes` in `pocketbase/pb_migrations/1700007100_execution_jobs.js`. Every client create, update, and delete rule is `null`, and list and view need the `execution_service` record. Only the functions in `pocketbase/pb_hooks/execution.js` write them, from the routes in `pb_hooks/execution.pb.js` under `/api/rounds/execution/`, and those routes answer 503 while `ROUNDS_GATE_EXECUTION_STORE` is `off`:
+#3's PR 1 adds `execution_service`, `execution_jobs`, `execution_attempts`, and `execution_envelopes` in `pocketbase/pb_migrations/1700007100_execution_jobs.js`. Every client create, update, and delete rule is `null`. Listing or viewing a job or an attempt needs the `execution_service` record, and an account lists and views only its own envelopes (below). Only the functions in `pocketbase/pb_hooks/execution.js` write them, from the routes in `pb_hooks/execution.pb.js` under `/api/rounds/execution/`, and those routes answer 503 while `ROUNDS_GATE_EXECUTION_STORE` is `off`:
 
 1. `enqueue` and the owner's `cancel`, Caller routes that need the caller's bearer and `ROUNDS_ADMISSION_SECRET`, as admission's writes do. `enqueue` needs the account's in-flight admission command for the same key and fingerprint, and sets that command's `job` link.
 2. `claim`, `heartbeat`, `complete`, and `reap`, which only the `execution-worker` record can call. Its password is `ROUNDS_EXECUTION_SECRET`, which PocketBase and the runner share and no candidate process gets. A claim's lease is held under the SHA-256 of a token the claiming replica made, so only that replica's writes for the attempt count. A late or superseded write is counted on the attempt and changes nothing else.
@@ -60,6 +60,8 @@ The migration also adds a nullable `envelope` link to `ai_coding_attempts` and `
 ## Legacy Artifact Snapshots
 
 #4's PR 1 adds `legacy_artifact_snapshots` in `pocketbase/pb_migrations/1700008000_legacy_artifact_snapshots.js`. Its owner can list and view a row; create, update, and delete are `null`. Nothing writes it yet. Its one writer is the Caller route in #4's row below, which PR 2 adds behind `legacy_snapshot_create` (default off). That route reads a resume or variant only after checking the caller owns it, and stores the markup the `materializer` service returns for it. The materializer itself writes nothing, holds no credential, and answers only PocketBase. The migration writes no row, and its down step drops the collection only while it's empty.
+
+An account reads its own envelopes (orchestrator decision D9). An envelope's `user` is the job's account and its list and view rule is `user = @request.auth.id`, so nobody else reads it, and a graded row's server-written `envelope` link points only at a row that row's account can read. The envelope holds the account's view alone: state, outcome classes, part ids and limits, the server's score and times, the cleanup state, the definition receipt, and the rubric state, each held to its v1 shape. The operator view (worker, sandbox, and cleanup detail) is on the attempt, which only `execution-worker` reads. For the kinds that run hidden material, `grade` and `take_home_submit`, `complete` refuses a result that carries output, so the account sees outcome classes and the server's totals and never hidden test content.
 
 ## Registry of Planned Writers
 

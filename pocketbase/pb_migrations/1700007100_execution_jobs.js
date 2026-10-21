@@ -12,16 +12,24 @@
 //                         definition reference, the input digests, the
 //                         candidate's input, and the job's state.
 //   execution_attempts    one row per (job, attempt_number), at most three:
-//                         the lease, the fencing token's hash, and the times.
+//                         the lease, the fencing token's hash, the times, and
+//                         the operator view of its result.
 //   execution_envelopes   one per attempt: the rounds.execution-envelope/v1
-//                         result, and the graded row it was written for.
+//                         result the account sees, and the graded row it was
+//                         written for.
 //
 // Client create, update, and delete rules are null, so only the functions
 // in pb_hooks/execution.js write these at runtime
-// (docs/security/server-writes.md); list and view need the execution_service
-// record. It also adds a nullable `envelope` relation to ai_coding_attempts
-// and take_home_attempts, raises take_home_attempts.files from 2 MiB to
-// 8 MiB for #1's 5 MiB file ceiling, and adds a nullable `job` relation to
+// (docs/security/server-writes.md). Jobs and attempts are read by the
+// execution_service record only. An envelope is read by its own account
+// (D9): it has a `user` field like every collection an account reads
+// (docs/security/account-scope.v1.json), and it carries the user view only,
+// outcome classes and the server's totals for a run with hidden material.
+// The operator view stays on the attempt.
+//
+// It also adds a nullable `envelope` relation to ai_coding_attempts and
+// take_home_attempts, raises take_home_attempts.files to 8 MiB for #1's
+// 5 MiB file ceiling, and adds a nullable `job` relation to
 // admission_commands, which enqueue sets. An envelope names its graded row
 // back (graded_collection, graded_row), so a row's `envelope` counts only
 // when the envelope points at that row for the same account, and
@@ -39,6 +47,7 @@ migrate(
     const takeHomeAttempts = dao.findCollectionByNameOrId("take_home_attempts");
 
     const SERVICE_ONLY = '@request.auth.collectionName = "execution_service"';
+    const OWNER_ONLY = "user = @request.auth.id";
     const KINDS = ["run", "evaluate", "run_project", "take_home_run", "grade", "take_home_submit"];
     const STATES = ["queued", "leased", "started", "completed", "timed-out", "denied", "canceled", "failed"];
     const ATTEMPT_STATES = ["leased", "started", "completed", "timed-out", "denied", "canceled", "failed"];
@@ -159,6 +168,9 @@ migrate(
         // Writes refused because this attempt's token was superseded.
         seconds("rejected_writes", false),
         select("cleanup", CLEANUP, false),
+        // What only operators see of the result: digests, measurements,
+        // the executor, the build. Set when the attempt ends.
+        { name: "operator_view", type: "json", options: { maxSize: 64 * 1024 } },
       ],
       indexes: [
         "CREATE UNIQUE INDEX idx_execution_attempts_number ON execution_attempts (job, attempt_number)",
@@ -172,13 +184,18 @@ migrate(
     const envelopes = new Collection({
       name: "execution_envelopes",
       type: "base",
-      listRule: SERVICE_ONLY,
-      viewRule: SERVICE_ONLY,
+      listRule: OWNER_ONLY,
+      viewRule: OWNER_ONLY,
       createRule: null,
       updateRule: null,
       deleteRule: null,
       schema: [
-        account,
+        {
+          name: "user",
+          type: "relation",
+          required: true,
+          options: { collectionId: users.id, cascadeDelete: true, maxSelect: 1 },
+        },
         {
           name: "job",
           type: "relation",
@@ -195,9 +212,8 @@ migrate(
         select("state", TERMINAL_STATES, true),
         select("outcome_class", OUTCOME_CLASSES, true),
         { name: "authoritative", type: "bool" },
-        // What the account sees, and what only operators see.
+        // What the account sees: no output for a run with hidden material.
         { name: "user_view", type: "json", required: true, options: { maxSize: MIB } },
-        { name: "operator_view", type: "json", required: true, options: { maxSize: 64 * 1024 } },
         // The graded row this envelope was written for: the back-pointer
         // a row's `envelope` has to match.
         select("graded_collection", ["ai_coding_attempts", "take_home_attempts"], false),
@@ -206,6 +222,7 @@ migrate(
       indexes: [
         "CREATE UNIQUE INDEX idx_execution_envelopes_attempt ON execution_envelopes (attempt)",
         "CREATE INDEX idx_execution_envelopes_job ON execution_envelopes (job)",
+        "CREATE INDEX idx_execution_envelopes_user ON execution_envelopes (user)",
       ],
     });
     dao.saveCollection(envelopes);
@@ -219,11 +236,9 @@ migrate(
     aiAttempts.schema.addField(envelopeLink());
     dao.saveCollection(aiAttempts);
     takeHomeAttempts.schema.addField(envelopeLink());
-    // TODO(ROUNDS-00A-L03): on a database built from scratch, PocketBase's
-    // own 1702134272_set_default_json_max_size migration sorts after this
-    // one and sets every JSON field back to 2,000,000 bytes, this one
-    // included. Only a database upgraded in place keeps 8 MiB until a
-    // later-sorting migration reapplies it.
+    // On a database built from scratch PocketBase's own JSON reset sorts
+    // after this migration, and 1702134273_json_limits.js sets this limit
+    // and the ones above back after it (D10).
     takeHomeAttempts.schema.getFieldByName("files").options.maxSize = 8 * MIB;
     dao.saveCollection(takeHomeAttempts);
 

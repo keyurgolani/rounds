@@ -21,6 +21,16 @@ _DEMO_PASSWORD = "RoundsDemo123!"
 _DEMO_EMAIL = "demo@rounds.keyurgolani.name"
 
 _DATE = "2020-01-01 00:00:00.000Z"
+# An epoch second for the execution store's times, which can't be 0.
+_EPOCH = 1_700_000_000
+_ENVELOPE = "rounds.execution-envelope/v1"
+
+
+def _user_view(job_id: str) -> dict[str, Any]:
+    return {"version": _ENVELOPE, "job_id": job_id, "state": "completed", "outcome_class": "passed",
+            "authoritative": True, "limit": None, "parts": [{"id": "case-1", "outcome_class": "passed", "limit": None}],
+            "score": 1.0, "definition": None, "queued_at": _EPOCH, "started_at": _EPOCH, "finished_at": _EPOCH + 1,
+            "cleanup": "confirmed", "rubric": None, "output": None}
 
 
 @dataclass
@@ -131,7 +141,9 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
     Most rows are created with the account's own token, which also confirms
     the owner create path works under the create rule: a rejected owner create
     stops the run. ``resume_share_views`` is seeded with the admin token
-    instead, because its create and update rules are superuser-only (null).
+    instead, because its create and update rules are superuser-only (null),
+    and so is the execution store (ROUNDS-00A-L03): one job, its attempt, and
+    the attempt's envelope, which is the row the account reads.
     """
     uid = acct.user_id
     tok = acct.token
@@ -186,6 +198,23 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
 
     mk("take_home_drafts", {"assignment": content["assignment"], "file_path": "a.py", "contents": "x=1"})
     mk("take_home_attempts", {"assignment": content["assignment"], "status": "in-progress"})
+
+    store = {"account": uid}
+    job_row = _must(pb.create("execution_jobs", admin_token, {
+        **store, "command_id": f"0190f000-0000-7000-8000-{secrets.token_hex(6)}", "kind": "grade",
+        "purpose": "grading", "definition": {"track": "ai-coding", "slug": "harness", "variant": "python", "version": 1},
+        "fingerprint": secrets.token_hex(32), "source_checksum": "c" * 64, "input_digest": "d" * 64,
+        "input": {"files": {}}, "state": "completed", "outcome_class": "passed", "queued_at": _EPOCH,
+    }), f"seed execution_jobs/{tag}")
+    ids["execution_jobs"] = job_row["id"]
+    attempt_row = _must(pb.create("execution_attempts", admin_token, {
+        **store, "job": job_row["id"], "attempt_number": 1, "token_hash": secrets.token_hex(32), "worker": "harness",
+        "state": "completed", "outcome_class": "passed", "leased_at": _EPOCH, "lease_expires_at": _EPOCH + 30,
+    }), f"seed execution_attempts/{tag}")
+    ids["execution_attempts"] = attempt_row["id"]
+    mk_admin("execution_envelopes", {"job": job_row["id"], "attempt": attempt_row["id"], "version": _ENVELOPE,
+                                     "state": "completed", "outcome_class": "passed", "authoritative": True,
+                                     "user_view": _user_view(job_row["id"])})
 
     mk("question_timers", {"question_type": "coding", "question_slug": "two-sum", "accumulated_ms": 0})
 
@@ -254,6 +283,11 @@ def fresh_payload(
         "ai_coding_attempts": {"round": content["round"], "status": "in-progress", "current_checkpoint": 0},
         "take_home_drafts": {"assignment": content["assignment"], "file_path": f"probe-{s}.py", "contents": "x=1"},
         "take_home_attempts": {"assignment": content["assignment"], "status": "in-progress"},
+        # Only the store writes envelopes, so a client create is refused
+        # before validation; the superuser never creates one here.
+        "execution_envelopes": {"job": a.ids.get("execution_jobs", ""), "attempt": a.ids.get("execution_attempts", ""),
+                                "version": _ENVELOPE, "state": "completed", "outcome_class": "passed",
+                                "authoritative": True, "user_view": _user_view(a.ids.get("execution_jobs", ""))},
         "question_timers": {"question_type": "coding", "question_slug": f"probe-{s}", "accumulated_ms": 0},
         "experience_jobs": {"company": "Acme", "role": "Engineer", "start_date": _DATE},
         "experience_projects": {"title": "project", "start_date": _DATE},

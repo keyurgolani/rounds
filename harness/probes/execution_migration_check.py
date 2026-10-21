@@ -7,7 +7,8 @@ and the demo account included:
 
 1. Applying it adds ``execution_service``, ``execution_jobs``,
    ``execution_attempts``, and ``execution_envelopes``, with every client
-   write rule null, adds the ``envelope`` and ``job`` links, raises
+   write rule null and an account reading only its own envelopes (D9),
+   adds the ``envelope`` and ``job`` links, raises
    ``take_home_attempts.files`` to 8 MiB, and changes no other table, row,
    collection, or field.
 2. Reversing it (``pocketbase migrate down 1``, confirmed on a pseudo
@@ -39,6 +40,7 @@ MIGRATION = "1700007100_execution_jobs.js"
 NEW = ("execution_service", "execution_jobs", "execution_attempts", "execution_envelopes")
 CHANGED = {"ai_coding_attempts": ["envelope"], "take_home_attempts": ["envelope"], "admission_commands": ["job"]}
 SERVICE_ONLY = '@request.auth.collectionName = "execution_service"'
+OWNER_ONLY = "user = @request.auth.id"
 MIB = 1024 * 1024
 
 
@@ -133,7 +135,9 @@ def main() -> int:
             f"present={sorted(n for n in applied['collections'] if n.startswith('execution_'))}")
     rules = _rules(db)
     want = {"execution_service": [None] * 5,
-            **{n: [SERVICE_ONLY, SERVICE_ONLY, None, None, None] for n in NEW[1:]}}
+            "execution_jobs": [SERVICE_ONLY, SERVICE_ONLY, None, None, None],
+            "execution_attempts": [SERVICE_ONLY, SERVICE_ONLY, None, None, None],
+            "execution_envelopes": [OWNER_ONLY, OWNER_ONLY, None, None, None]}
     c.check("execution-migration.no-client-writes", rules == want, repr(rules))
     links = {name: {f["name"]: f for f in _fields(db, name)} for name in CHANGED}
     c.check("execution-migration.adds-the-links",
