@@ -252,6 +252,18 @@ describe('materializer: output checks', () => {
     ['syntax', '<!-- <script>alert(1)</script> -->'],
     ['syntax', '<div style=unquoted>x</div>'],
     ['syntax', '<style>div{color:red}'],
+    // ROUNDS-00A-L08 review: tokenize tags like a browser. Only HTML
+    // whitespace [\t\n\f\r ] ends a tag name; a Unicode space (U+00A0,
+    // \v, U+FEFF) does not, so a tag using one is unparseable here rather
+    // than a shorter element that hides live markup as raw text.
+    ['syntax', '<style >a{color:red}</style>'],
+    ['syntax', '<div class="x">hidden<img src="https://rd02.invalid/x"></div>'],
+    ['syntax', '<div\u000bclass="x">x</div>'],
+    ['syntax', '<div﻿class="x">x</div>'],
+    // A raw-text element closes only at an appropriate end tag, so a
+    // lookalike (</stylex>) does not end it and the CSS after it, up to the
+    // real </style>, is still scanned.
+    ['css-url', '<style>a{color:red}</stylex>b{background:url(https://rd02.invalid/x)}</style>'],
   ];
   for (const [rule, inner] of rejected) {
     it(`rejects ${inner.slice(0, 48)} (${rule})`, () => {

@@ -325,9 +325,18 @@ const CSS_LOADS = ['url(', '@import', 'image-set(', 'image(', 'cross-fade(', 'el
 const HREF_SCHEMES = ['https:', 'mailto:'];
 
 const DOCTYPE = '<!DOCTYPE html>';
-const START_TAG = /<([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[^\s"'<>/=]+(?:\s*=\s*"[^"]*")?)*)\s*\/?>/y;
-const END_TAG = /<\/([a-zA-Z][a-zA-Z0-9-]*)\s*>/y;
-const ATTRIBUTE = /\s+([^\s"'<>/=]+)(?:\s*=\s*"([^"]*)")?/y;
+// HTML tag-syntax whitespace is exactly these five characters. A browser's
+// tokenizer does not treat U+00A0, U+FEFF, \v, or any other Unicode space
+// as whitespace inside a tag, so neither may this one, or `\s` (which does)
+// would let a construct hide: `<style >` would read as an element name
+// of `style` here but as an unknown element in a browser, so live markup up
+// to `</style` would be skipped as CSS text it never was.
+const WSC = '\\t\\n\\f\\r ';
+const WS = `[${WSC}]`;
+const NAME_CHAR = `[^${WSC}"'<>/=]`;
+const START_TAG = new RegExp(`<([a-zA-Z][a-zA-Z0-9-]*)((?:${WS}+${NAME_CHAR}+(?:${WS}*=${WS}*"[^"]*")?)*)${WS}*/?>`, 'y');
+const END_TAG = new RegExp(`<\\/([a-zA-Z][a-zA-Z0-9-]*)${WS}*>`, 'y');
+const ATTRIBUTE = new RegExp(`${WS}+(${NAME_CHAR}+)(?:${WS}*=${WS}*"([^"]*)")?`, 'y');
 
 function decode(value) {
   // Any other `&` would be a character reference React never writes.
@@ -405,7 +414,11 @@ export function checkMarkup(markup) {
     }
     i = START_TAG.lastIndex;
     if (RAW_TEXT.has(name)) {
-      const closing = new RegExp(`</${name}`, 'ig');
+      // A browser ends a raw-text element only at an appropriate end tag:
+      // `</name` followed by tag whitespace, `/`, or `>`. `</namex>` does
+      // not close it, so everything up to the real `</name>` is still raw
+      // text, and the CSS there is still scanned.
+      const closing = new RegExp(`</${name}(?=[${WSC}/>])`, 'ig');
       closing.lastIndex = i;
       const close = closing.exec(markup);
       if (!close) return fail('syntax');
