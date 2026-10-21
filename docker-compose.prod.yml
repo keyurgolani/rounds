@@ -112,6 +112,8 @@ services:
       - VITE_OAUTH_GITHUB_ENABLED=${VITE_OAUTH_GITHUB_ENABLED:-false}
       # runtime-config.js publishes only the gates the SPA reads.
       - ROUNDS_GATE_SIGNUPS=${ROUNDS_GATE_SIGNUPS:-}
+      # The SPA's request shapes follow the runner's (ROUNDS-00A-L02).
+      - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
     ports:
       - "${HTTP_PORT:-80}:80"
     depends_on:

@@ -3,7 +3,11 @@ chat proxy that reuses backend.routers.ai's call-stream helpers.
 
 ``run-project`` and ``grade`` are admitted (``app.admission``). The
 caller names a round and a checkpoint; the test command, the hidden
-files, and the timeout come from the round on the server."""
+files, and the timeout come from the server: from the round's row at
+``ROUNDS_GATE_EXECUTION_DEFINITIONS=legacy``, and from the compiled
+harness revision the request names at ``enforce`` (``app.execution``),
+where grade answers per-result outcomes and server totals, never the
+harness's output."""
 from __future__ import annotations
 
 import json
@@ -17,7 +21,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ai_coding.edit_mode import EDIT_SYSTEM_PROMPT, parse_patches as _parse_patches
-from ai_coding.project_runner import run_project
+from ai_coding.project_runner import DEFAULT_OUTPUT_CAP_BYTES, _cap, _over_cap, _parse_counts, run_project
 from ai_coding.rubric import (
     REVIEW_TIMED_OUT,
     REVIEW_TIMEOUT_S,
@@ -25,7 +29,7 @@ from ai_coding.rubric import (
     build_prompt as _build_rubric_prompt,
     parse_ai_output as _parse_rubric,
 )
-from app import admission, destinations, limits
+from app import admission, definitions, destinations, execution, limits
 from app.errors import TypedError
 from app.limits import StrictModel
 from app.pb_auth import current_user, pb_get
@@ -85,6 +89,19 @@ class RunProjectRequest(StrictModel):
         return dict(limits.check_files(v))
 
 
+class DefinitionRunProjectRequest(StrictModel):
+    """A visible run at enforce: the definition, a checkpoint, and the files."""
+
+    definition: execution.DefinitionRef
+    checkpoint: int = Field(ge=0, le=limits.MAX_CHECKPOINT_INDEX)
+    files: Dict[str, str]
+
+    @field_validator("files")
+    @classmethod
+    def _files(cls, v: Dict[str, str]) -> Dict[str, str]:
+        return dict(limits.check_files(v))
+
+
 class RunProjectResponse(BaseModel):
     passed: bool
     passed_count: int
@@ -94,6 +111,8 @@ class RunProjectResponse(BaseModel):
     error: str | None
     duration_ms: int
     truncated: bool = False
+    # The definition this ran, at enforce, for #3 to store.
+    definition: Dict[str, Any] | None = None
 
 
 def _checkpoints_for(round_row: dict[str, Any], language: str | None) -> tuple[str, list[Any]]:
@@ -134,7 +153,10 @@ def _submitted_language(round_row: dict[str, Any], files: Dict[str, str]) -> str
 
 
 @router.post("/run-project", response_model=RunProjectResponse)
-async def run_project_route(request: Request, req: RunProjectRequest) -> RunProjectResponse:
+async def run_project_route(request: Request) -> RunProjectResponse:
+    req = await execution.parse(request, RunProjectRequest, DefinitionRunProjectRequest)
+    if isinstance(req, DefinitionRunProjectRequest):
+        return await _run_project_definition(request, req)
     await admission.begin(request, req, wall_seconds=RUN_PROJECT_TIMEOUT_S)
     user = admission.account(request)
     round_row = await admission.first_item(pb_get, user["token"], "ai_coding_rounds", req.round_slug)
@@ -368,6 +390,24 @@ class GradeRequest(StrictModel):
         return limits.check_json(v, limits.AI_CHATS_BYTES, "ai_chats")
 
 
+class DefinitionGradeRequest(StrictModel):
+    """A grade at enforce: the definition, the files, and the AI chats."""
+
+    definition: execution.DefinitionRef
+    files: Dict[str, str]
+    ai_chats: List[Dict[str, Any]] = Field(default_factory=list)
+
+    @field_validator("files")
+    @classmethod
+    def _files(cls, v: Dict[str, str]) -> Dict[str, str]:
+        return dict(limits.check_files(v))
+
+    @field_validator("ai_chats")
+    @classmethod
+    def _ai_chats(cls, v: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return limits.check_json(v, limits.AI_CHATS_BYTES, "ai_chats")
+
+
 def _grade_checkpoints(slug: str, checkpoints: Any, files: Dict[str, str], language: str, slot) -> list[dict]:
     """Every checkpoint's tests, hidden files merged, in one slot."""
     test_results = []
@@ -409,7 +449,10 @@ def _grade_checkpoints(slug: str, checkpoints: Any, files: Dict[str, str], langu
 
 
 @router.post("/grade")
-async def grade(request: Request, body: GradeRequest, user: dict = Depends(_auth_user)) -> Dict[str, Any]:
+async def grade(request: Request, user: dict = Depends(_auth_user)) -> Dict[str, Any]:
+    body = await execution.parse(request, GradeRequest, DefinitionGradeRequest)
+    if isinstance(body, DefinitionGradeRequest):
+        return await _grade_definition(request, body, user)
     # Admitted on one checkpoint's time, up to GRADE_MAX_CHECKPOINTS; the
     # charge settles once the round loads.
     await admission.begin(
@@ -481,3 +524,128 @@ async def list_available_models(user: dict = Depends(_auth_user)) -> List[AICodi
                 model=m,
             ))
     return out
+
+
+# ---------------------------------------------------------------------------
+# ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce
+# ---------------------------------------------------------------------------
+
+CHECKPOINT_TIMED_OUT = "This checkpoint ran out of time."
+
+
+def _definition_checkpoint(request: Request, resolved: definitions.Resolved, index: int) -> dict[str, Any]:
+    checkpoints = resolved.document["checkpoints"]
+    if index >= len(checkpoints):
+        raise execution.rejected(request, resolved, "case_unknown")
+    return checkpoints[index]
+
+
+async def _run_project_definition(request: Request, req: DefinitionRunProjectRequest) -> RunProjectResponse:
+    await admission.begin(request, req, wall_seconds=RUN_PROJECT_TIMEOUT_S)
+    resolved = execution.resolve(request, req.definition, "ai-coding")
+    step = _definition_checkpoint(request, resolved, req.checkpoint)["run"]
+    if step is None:
+        raise TypedError("invalid_request", "This checkpoint can't run here.")
+    execution.check_paths(request, req.files, resolved)
+    bounded = {**step, "wall_s": min(step["wall_s"], RUN_PROJECT_TIMEOUT_S)}
+    async with admission.allocate() as slot:
+        ran = await run_in_threadpool(execution.run_step, bounded, req.files, slot)
+    if ran.timed_out:
+        return RunProjectResponse(
+            passed=False, passed_count=0, failed_count=0, stdout="", stderr="",
+            error=f"Time limit exceeded ({bounded['wall_s']}s)", duration_ms=ran.duration_ms,
+            definition=resolved.receipt(),
+        )
+    stdout = _cap(ran.stdout, DEFAULT_OUTPUT_CAP_BYTES)
+    stderr = _cap(ran.stderr, DEFAULT_OUTPUT_CAP_BYTES)
+    passed_count, failed_count = _parse_counts(resolved.document["variant"], stdout)
+    passed = ran.returncode == 0 and failed_count == 0
+    return RunProjectResponse(
+        passed=passed,
+        passed_count=passed_count,
+        failed_count=failed_count,
+        stdout=stdout,
+        stderr=stderr,
+        error=None if passed else (stderr.strip() or None),
+        duration_ms=ran.duration_ms,
+        truncated=_over_cap(ran.stdout, DEFAULT_OUTPUT_CAP_BYTES) or _over_cap(ran.stderr, DEFAULT_OUTPUT_CAP_BYTES),
+        definition=resolved.receipt(),
+    )
+
+
+def checkpoint_result(checkpoint: dict[str, Any], graded: execution.Graded) -> dict[str, Any]:
+    """One checkpoint's grade as a response carries it: per-result
+    outcomes and the server's totals, never what the harness printed."""
+    score = graded.score
+    passed_count = sum(1 for r in score.results if r.outcome == "passed")
+    return {
+        "index": checkpoint["index"],
+        "label": checkpoint["label"],
+        "passed": score.passed,
+        "score": score.score,
+        "executed": score.executed,
+        "passed_count": passed_count,
+        "failed_count": score.executed - passed_count,
+        "outcomes": score.outcomes(),
+        "error": CHECKPOINT_TIMED_OUT if graded.timed_out else None,
+    }
+
+
+def _grade_definition_checkpoints(checkpoints, harness_files, files, slot) -> list[execution.Graded]:
+    return [
+        execution.grade(checkpoint, harness_files, files, slot, wall_s=GRADE_CHECKPOINT_TIMEOUT_S)
+        for checkpoint in checkpoints
+    ]
+
+
+async def _grade_definition(request: Request, body: DefinitionGradeRequest, user: dict) -> Dict[str, Any]:
+    # Admitted on one checkpoint's time, up to GRADE_MAX_CHECKPOINTS; the
+    # charge settles once the revision names its checkpoints.
+    await admission.begin(
+        request, body, wall_seconds=GRADE_CHECKPOINT_TIMEOUT_S, max_wall_seconds=GRADE_MAX_WALL_S
+    )
+    resolved = execution.resolve(request, body.definition, "ai-coding")
+    document = resolved.document
+    checkpoints = document["checkpoints"]
+    if len(checkpoints) > GRADE_MAX_CHECKPOINTS:
+        raise TypedError("invalid_request", "This round can't be graded here.")
+    execution.check_paths(request, body.files, resolved)
+    await admission.settle(request, len(checkpoints) * GRADE_CHECKPOINT_TIMEOUT_S)
+    async with admission.allocate() as slot:
+        graded = await run_in_threadpool(_grade_definition_checkpoints, checkpoints, document["files"], body.files, slot)
+    test_results = [checkpoint_result(cp, g) for cp, g in zip(checkpoints, graded)]
+
+    rubric_review: Dict[str, Any] = {"items": [], "total": 0.0, "skipped": False}
+    try:
+        # Bounded, so the review ends inside the grade's lease. It reads
+        # the pinned revision's rubric and the server's outcomes only.
+        with anyio.fail_after(REVIEW_TIMEOUT_S):
+            cfg = await _active_text_config(user)
+            prompt = _build_rubric_prompt(
+                rubric=document["rubric"],
+                files=body.files,
+                test_results={str(r["index"]): r for r in test_results},
+                ai_chats=body.ai_chats,
+            )
+            raw = await _call_complete(
+                cfg["kind"], cfg["model"], cfg["api_key"], cfg["base_url"] or None,
+                system=_RUBRIC_SYS,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1500,
+                destination=cfg.get("destination"),
+            )
+        rubric_review = _parse_rubric(raw)
+    except TimeoutError:
+        _log.warning("ai-coding grade rubric review timed out")
+        rubric_review = {"items": [], "total": 0.0, "skipped": True, "reason": REVIEW_TIMED_OUT}
+    except Exception as e:  # noqa: BLE001
+        _log.exception("ai-coding grade rubric review failed")
+        rubric_review = {"items": [], "total": 0.0, "skipped": True, "reason": str(e)[:300]}
+
+    return {
+        "test_results": test_results,
+        "rubric_review": rubric_review,
+        "passed": bool(test_results) and all(r["passed"] for r in test_results),
+        "score": sum(r["score"] for r in test_results) / len(test_results) if test_results else 0.0,
+        "definition": resolved.receipt(),
+    }

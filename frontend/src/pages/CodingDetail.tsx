@@ -26,7 +26,7 @@ import BackLink from '../components/shell/BackLink';
 import InlineMarkdown from '../components/shell/InlineMarkdown';
 import BlockMarkdown from '../components/shell/BlockMarkdown';
 import { useAuth } from '../auth/AuthProvider';
-import { loadLocal, saveLocal } from '../lib/codeDraft';
+import { loadLocal, localIsNewer, markLocalNewer, saveLocal } from '../lib/codeDraft';
 import { useCampaign } from '../campaign/CampaignContext';
 import Select from '../components/shell/Select';
 import {
@@ -38,6 +38,7 @@ import {
   classifyRunnerError,
   type RunnerDenial,
 } from '../lib/runnerDenial';
+import { reloadPage, retrySuperseded } from '../lib/definitions';
 
 interface CQ {
   id: number;
@@ -64,6 +65,10 @@ interface CQ {
   time_complexity: string;
   space_complexity: string;
   entry: Entry;
+  /** The compiled test definition's version and case ids
+   *  (ROUNDS-00A-L02); runs name them at enforce. */
+  definition_version?: number | null;
+  definition_case_ids?: string[] | null;
 }
 
 const LANGUAGES = [
@@ -144,6 +149,10 @@ export default function CodingDetail() {
 
   const lastSyncedRef = useRef<{ code: string; lang: string; qid: string | number; draftId: string | null } | null>(null);
   const starterRef = useRef<string>('');
+  // The definition version runs name: the row's, until a superseded
+  // answer rereads it. Rereading leaves the question, results, and code
+  // alone.
+  const definitionVersionRef = useRef<number | null | undefined>(undefined);
 
   const { currentId: campaignId } = useCampaign();
 
@@ -151,9 +160,17 @@ export default function CodingDetail() {
     if (!slug) return;
     getCodingQuestion<CQ>(slug)
       .then((data) => {
+        definitionVersionRef.current = data.definition_version;
         setQ(data);
       })
       .finally(() => setLoading(false));
+  }, [slug]);
+
+  const rereadDefinitionVersion = useCallback(async () => {
+    if (!slug) return undefined;
+    const fresh = await getCodingQuestion<CQ>(slug);
+    definitionVersionRef.current = fresh.definition_version;
+    return fresh.definition_version;
   }, [slug]);
 
   // Reset run/eval results when language or question changes.
@@ -166,9 +183,11 @@ export default function CodingDetail() {
   }, [lang, q]);
 
   // Load draft in priority order: PocketBase (source of truth) → local
-  // cache (continuity for offline tabs) → starter skeleton. The remote
-  // row is tracked via lastSyncedRef so the 10s interval below can
-  // decide whether to upsert, update, or delete.
+  // cache (continuity for offline tabs) → starter skeleton. A local copy
+  // marked newer, because the save before a reload failed, wins over
+  // PocketBase's row until a save lands. The remote row is tracked via
+  // lastSyncedRef so the 10s interval below can decide whether to
+  // upsert, update, or delete.
   useEffect(() => {
     if (!q) return;
     const starter = q.starter_code?.[lang] || '';
@@ -176,8 +195,7 @@ export default function CodingDetail() {
     let cancelled = false;
 
     (async () => {
-      let chosen: string | null = null;
-      let draftId: string | null = null;
+      let remote: { code: string; id: string } | null = null;
 
       if (campaignId) {
         try {
@@ -186,29 +204,36 @@ export default function CodingDetail() {
             question: String(q.id),
             language: lang,
           });
-          if (rows.length > 0) {
-            chosen = rows[0].code;
-            draftId = rows[0].id;
-          }
+          if (rows.length > 0) remote = { code: rows[0].code, id: rows[0].id };
         } catch {
           /* fall through to local */
         }
       }
 
-      if (chosen === null) {
-        const local = loadLocal(userId, q.id, lang);
-        if (local !== null) chosen = local;
+      const local = loadLocal(userId, q.id, lang);
+      let chosen: string;
+      // What PocketBase holds as far as this page knows, so the sync
+      // below pushes a newer local copy up.
+      let synced: string;
+      if (local !== null && localIsNewer(userId, q.id, lang)) {
+        chosen = local;
+        synced = remote ? remote.code : starter;
+        if (chosen === synced) markLocalNewer(userId, q.id, lang, false);
+      } else if (remote) {
+        chosen = remote.code;
+        synced = chosen;
+      } else {
+        chosen = local ?? starter;
+        synced = chosen;
       }
-
-      if (chosen === null) chosen = starter;
 
       if (cancelled) return;
       setCode(chosen);
       lastSyncedRef.current = {
-        code: chosen,
+        code: synced,
         lang,
         qid: q.id,
-        draftId,
+        draftId: remote ? remote.id : null,
       };
     })();
 
@@ -227,6 +252,7 @@ export default function CodingDetail() {
     // lose it through control-flow analysis.
     const cid = campaignId;
     const qid = q.id;
+    const uid = userId;
 
     async function flush() {
       const last = lastSyncedRef.current;
@@ -241,6 +267,7 @@ export default function CodingDetail() {
             await deleteCodeDraft(last.draftId);
             lastSyncedRef.current = { ...last, code, draftId: null };
           }
+          markLocalNewer(uid, qid, last.lang, false);
           return;
         }
         const saved = await upsertCodeDraft({
@@ -250,6 +277,7 @@ export default function CodingDetail() {
           code,
         });
         lastSyncedRef.current = { ...last, code, draftId: saved.id };
+        markLocalNewer(uid, qid, last.lang, false);
       } catch {
         /* retry next tick */
       }
@@ -265,7 +293,34 @@ export default function CodingDetail() {
       document.removeEventListener('visibilitychange', onVisibility);
       void flush();
     };
-  }, [q, campaignId]);
+  }, [q, campaignId, userId]);
+
+  // Before a reload the denial asks for, the code goes to the draft the
+  // page loads first, so it survives the reload. When that save fails,
+  // the local copy is marked newer, so the reload loads it rather than
+  // PocketBase's older row.
+  const reloadKeepingDraft = useCallback(async () => {
+    const last = lastSyncedRef.current;
+    if (q) saveLocal(userId, q.id, lang, codeRef.current);
+    if (q && campaignId && last && codeRef.current !== last.code) {
+      try {
+        if (codeRef.current === starterRef.current) {
+          if (last.draftId) await deleteCodeDraft(last.draftId);
+        } else {
+          await upsertCodeDraft({
+            campaign_id: campaignId,
+            question: String(q.id),
+            language: last.lang,
+            code: codeRef.current,
+          });
+        }
+        markLocalNewer(userId, q.id, lang, false);
+      } catch {
+        markLocalNewer(userId, q.id, lang, true);
+      }
+    }
+    reloadPage();
+  }, [q, lang, userId, campaignId]);
 
   // Escape key closes the open mobile sheet (common bottom-sheet UX).
   // Desktop ignores the state entirely so this is a no-op there.
@@ -311,12 +366,18 @@ export default function CodingDetail() {
       // also confuse the Esc handler when exiting focus.
       if (!focus) setMobileSheet('results');
       try {
-        const res = await runCode({
-          question_slug: q.slug,
-          language: lang === 'javascript' ? 'javascript' : lang,
-          code,
-          input,
-        });
+        const res = await retrySuperseded(
+          definitionVersionRef.current,
+          (version) =>
+            runCode({
+              question_slug: q.slug,
+              language: lang === 'javascript' ? 'javascript' : lang,
+              code,
+              input,
+              definition_version: version,
+            }),
+          rereadDefinitionVersion,
+        );
         setRunResult(res);
         setSideTab('run');
       } catch (e) {
@@ -338,7 +399,7 @@ export default function CodingDetail() {
         setRunning(false);
       }
     },
-    [q, code, lang, focus]
+    [q, code, lang, focus, rereadDefinitionVersion]
   );
 
   const handleEvaluate = useCallback(
@@ -351,12 +412,19 @@ export default function CodingDetail() {
       // See handleRun above — skip the mobile-sheet pop in focus mode.
       if (!focus) setMobileSheet('results');
       try {
-        const res = await evaluateCode({
-          question_slug: q.slug,
-          language: lang === 'javascript' ? 'javascript' : lang,
-          code,
-          filter,
-        });
+        const res = await retrySuperseded(
+          definitionVersionRef.current,
+          (version) =>
+            evaluateCode({
+              question_slug: q.slug,
+              language: lang === 'javascript' ? 'javascript' : lang,
+              code,
+              filter,
+              definition_version: version,
+              definition_case_ids: q.definition_case_ids,
+            }),
+          rereadDefinitionVersion,
+        );
         setEvalResults((prev) => {
           if (!prev) return res;
           const merged = [...prev.results];
@@ -379,7 +447,7 @@ export default function CodingDetail() {
         setRunning(false);
       }
     },
-    [q, code, lang, focus]
+    [q, code, lang, focus, rereadDefinitionVersion]
   );
 
   if (loading) {
@@ -551,6 +619,7 @@ export default function CodingDetail() {
             <RunnerDenialNotice
               denial={runDenial?.denial ?? null}
               action={runDenial?.action ?? 'tests'}
+              onReload={reloadKeepingDraft}
               className="flex-shrink-0"
               contentStyle={{ margin: '8px 12px' }}
             />
@@ -700,6 +769,7 @@ export default function CodingDetail() {
                 <RunnerDenialNotice
                   denial={runDenial?.denial ?? null}
                   action={runDenial?.action ?? 'run'}
+                  onReload={reloadKeepingDraft}
                   className="flex-shrink-0"
                   contentStyle={{ margin: '12px 12px 0' }}
                 />

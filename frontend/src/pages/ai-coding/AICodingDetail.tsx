@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   ArrowRight,
@@ -44,6 +44,7 @@ import {
   type RunProjectResult,
 } from './aiCodingApi';
 import { useAICodingDrafts } from '../../hooks/useAICodingDrafts';
+import { reloadPage, retrySuperseded } from '../../lib/definitions';
 import { useEditorFocus } from '../../hooks/useEditorFocus';
 import { usePracticeStatus } from '../../hooks/usePracticeStatus';
 import { usePersistedState } from '../../hooks/usePersistedState';
@@ -135,6 +136,14 @@ export default function AICodingDetail() {
   const [, setPracticeStatus] = usePracticeStatus('ai-coding', slug);
   const startedAtRef = useRef(Date.now());
   const runReqIdRef = useRef(0);
+  // The definition version runs and grades name: the row's, until a
+  // superseded answer rereads it (ROUNDS-00A-L02).
+  const definitionVersionRef = useRef<number | null | undefined>(undefined);
+  const rereadDefinitionVersion = useCallback(async () => {
+    const fresh = await getRound(slug);
+    definitionVersionRef.current = fresh.definition_version;
+    return fresh.definition_version;
+  }, [slug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,6 +161,7 @@ export default function AICodingDetail() {
     getRound(slug)
       .then(async (r) => {
         if (cancelled) return;
+        definitionVersionRef.current = r.definition_version;
         setRawRound(r);
         // Pick the candidate's last-used language for this slug, or
         // fall back to the round's first supported language.
@@ -231,7 +241,27 @@ export default function AICodingDetail() {
     hydrated,
     resetToStarter,
     persistImmediately,
-  } = useAICodingDrafts(round, campaignId ?? undefined);
+    saveNow,
+  } = useAICodingDrafts(round, campaignId ?? undefined, rawRound);
+
+  // A reload the denial asks for saves the files first. When a save
+  // fails the page stays, so nothing is lost, and the notice says the
+  // draft wasn't saved and keeps Reload for another try.
+  async function reloadKeepingDrafts() {
+    let saved = false;
+    try {
+      saved = (await saveNow()) !== false;
+    } catch {
+      saved = false;
+    }
+    if (saved) {
+      reloadPage();
+      return;
+    }
+    setRunDenial((current) =>
+      current ? { ...current, denial: { ...current.denial, saveFailed: true } } : current,
+    );
+  }
 
   useEffect(() => {
     if (!hydrated) return;
@@ -251,12 +281,18 @@ export default function AICodingDetail() {
     setRunDenial(null);
     setDockOpen(true);
     try {
-      const r = await runProject({
-        round_slug: round.slug,
-        language: round.language,
-        checkpoint_index: checkpointIdx,
-        files,
-      });
+      const r = await retrySuperseded(
+        definitionVersionRef.current,
+        (version) =>
+          runProject({
+            round_slug: round.slug,
+            language: round.language,
+            checkpoint_index: checkpointIdx,
+            files,
+            definition_version: version,
+          }),
+        rereadDefinitionVersion,
+      );
       if (reqId !== runReqIdRef.current) return;
       setRunResult(r);
       if (r.passed) {
@@ -299,11 +335,18 @@ export default function AICodingDetail() {
     setReport(null);
     setRunDenial(null);
     try {
-      const result = await gradeAttempt({
-        round_slug: round.slug,
-        files,
-        ai_chats: chatLog,
-      });
+      const result = await retrySuperseded(
+        definitionVersionRef.current,
+        (version) =>
+          gradeAttempt({
+            round_slug: round.slug,
+            files,
+            ai_chats: chatLog,
+            language: round.language,
+            definition_version: version,
+          }),
+        rereadDefinitionVersion,
+      );
       setReport(result);
       setReportOpen(true);
       if (
@@ -626,6 +669,7 @@ export default function AICodingDetail() {
               <RunnerDenialNotice
                 denial={runDenial?.denial ?? null}
                 action={runDenial?.action ?? 'run'}
+                onReload={reloadKeepingDrafts}
                 className="flex-shrink-0"
                 contentStyle={{ margin: '8px 12px' }}
               />

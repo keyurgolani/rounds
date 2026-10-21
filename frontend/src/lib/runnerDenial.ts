@@ -10,6 +10,12 @@
 // The idempotency refusals show as unavailable: the action's key was
 // refused, already used, or its command is still running, and the next
 // try sends a new key.
+//
+// The definition refusals (ROUNDS-00A-L02) say what the page should do:
+// an out-of-date page reloads (an older request shape, a case or
+// version the server replaced), a retired or missing practice item runs
+// nothing, and an unsupported language or a file the grader won't take
+// shows the server's fixed sentence, which never repeats the request.
 
 import { isRunnerError } from './runnerFetch';
 
@@ -19,7 +25,12 @@ export type RunnerDenialKind =
   | 'turned_off'
   | 'unavailable'
   | 'too_large'
-  | 'not_permitted';
+  | 'not_permitted'
+  | 'reload'
+  | 'retired'
+  | 'not_found'
+  | 'unsupported'
+  | 'path_not_allowed';
 
 export interface RunnerDenial {
   kind: RunnerDenialKind;
@@ -27,6 +38,10 @@ export interface RunnerDenial {
   code: string | null;
   retryAfterSeconds: number | null;
   correlationId: string | null;
+  /** The server's fixed sentence, for the kinds that show it. */
+  detail?: string | null;
+  /** For reload: the draft couldn't be saved first, so the page stayed. */
+  saveFailed?: boolean;
   /** The control that started the action; focus returns to it when
    *  the action dropped focus (a disabled button) and nothing else
    *  took it. */
@@ -34,6 +49,14 @@ export interface RunnerDenial {
 }
 
 const LIMIT_CODES = new Set(['quota_exceeded', 'demo_limit_reached']);
+const RELOAD_CODES = new Set(['legacy_request_rejected', 'case_unknown', 'definition_superseded']);
+const DEFINITION_KINDS: Record<string, RunnerDenialKind> = {
+  definition_retired: 'retired',
+  definition_not_found: 'not_found',
+  runtime_unsupported: 'unsupported',
+  path_not_allowed: 'path_not_allowed',
+};
+const SHOWS_DETAIL = new Set<RunnerDenialKind>(['unsupported', 'path_not_allowed']);
 const TOO_LARGE_CODES = new Set(['payload_too_large', 'limit_exceeded']);
 const UNAVAILABLE_CODES = new Set([
   'auth_unavailable',
@@ -54,6 +77,8 @@ export function classifyRunnerError(
   let kind: RunnerDenialKind | null = null;
   // definitions_disabled is ROUNDS_GATE_EXECUTION_DEFINITIONS turned off.
   if (code === 'route_disabled' || code === 'definitions_disabled') kind = 'turned_off';
+  else if (code !== null && RELOAD_CODES.has(code)) kind = 'reload';
+  else if (code !== null && code in DEFINITION_KINDS) kind = DEFINITION_KINDS[code];
   else if (code === 'unauthenticated' || status === 401) kind = 'sign_in';
   else if ((code !== null && LIMIT_CODES.has(code)) || status === 429) kind = 'limit';
   else if ((code !== null && TOO_LARGE_CODES.has(code)) || status === 413) kind = 'too_large';
@@ -68,6 +93,7 @@ export function classifyRunnerError(
     code,
     retryAfterSeconds: err.retryAfterSeconds,
     correlationId: err.correlationId,
+    detail: SHOWS_DETAIL.has(kind) && err.detail ? err.detail : null,
     trigger,
   };
 }

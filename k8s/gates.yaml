@@ -39,8 +39,9 @@ data:
   # nothing.
   ROUNDS_GATE_ENFORCE_IDEMPOTENCY: ""
   ROUNDS_GATE_ENFORCE_QUOTA: ""
-  # Where the six execution routes get what they run: "legacy" or
-  # "disabled".
+  # Where the six execution routes get what they run: "legacy",
+  # "enforce", or "disabled". The runner and the frontend both read it,
+  # so restart both Deployments when it changes.
   ROUNDS_GATE_EXECUTION_DEFINITIONS: ""
   # Signups, read by PocketBase and the frontend: "enabled" or "disabled".
   ROUNDS_GATE_SIGNUPS: ""

@@ -14,7 +14,7 @@ bool_env() {
 # stay in the container even when the environment carries them, as it
 # does on k8s. A stage that adds an SPA gate adds it here too, and
 # backend/tests/test_gates.py keeps this list in step with the registry.
-SPA_GATES="SIGNUPS"
+SPA_GATES="EXECUTION_DEFINITIONS SIGNUPS"
 
 # "NAME value" for every SPA gate that is set. Gate values are lowercase
 # words; anything else goes out as "invalid", which the SPA resolves to

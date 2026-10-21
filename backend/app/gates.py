@@ -50,9 +50,10 @@ FRONTEND = "frontend"
 
 ROUTE_VALUES = ("enabled", "disabled")
 ENFORCEMENT_VALUES = ("off", "observe", "enforce")
-# ROUNDS-00A-L02: step 2 adds enforce. Until then enforce is an unknown
-# value, so the gate closes to disabled.
-DEFINITION_VALUES = ("legacy", "disabled")
+# ROUNDS-00A-L02: legacy loads what runs from PocketBase as #1 stage 2
+# does, enforce takes only definition requests, and disabled turns the
+# six execution routes off.
+DEFINITION_VALUES = ("legacy", "enforce", "disabled")
 
 _log = logging.getLogger(__name__)
 
@@ -150,10 +151,13 @@ REGISTRY: tuple[Gate, ...] = (
         values=DEFINITION_VALUES,
         default="legacy",
         closed="disabled",
-        readers=frozenset({RUNNER}),
+        # The SPA reads it too, so its request shapes match the runner's.
+        readers=frozenset({RUNNER, FRONTEND}),
         description=(
             "Where the six execution routes get what they run: legacy loads it from "
-            "PocketBase as stage 2 does; disabled answers 503 definitions_disabled."
+            "PocketBase as stage 2 does; enforce runs only the compiled server-owned "
+            "definitions and refuses older request shapes; disabled answers 503 "
+            "definitions_disabled."
         ),
     ),
     Gate(

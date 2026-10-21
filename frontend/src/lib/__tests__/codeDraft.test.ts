@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { loadLocal, saveLocal } from '../codeDraft';
+import { loadLocal, localIsNewer, markLocalNewer, saveLocal } from '../codeDraft';
 
 describe('codeDraft local storage', () => {
   beforeEach(() => {
@@ -19,6 +19,16 @@ describe('codeDraft local storage', () => {
 
   it('returns null when no draft exists', () => {
     expect(loadLocal('u1', 10, 'python')).toBeNull();
+  });
+
+  it('marks a local copy newer than the saved draft per (user, question, language)', () => {
+    expect(localIsNewer('u1', 10, 'python')).toBe(false);
+    markLocalNewer('u1', 10, 'python', true);
+    expect(localIsNewer('u1', 10, 'python')).toBe(true);
+    expect(localIsNewer('u1', 10, 'javascript')).toBe(false);
+    expect(localIsNewer('u2', 10, 'python')).toBe(false);
+    markLocalNewer('u1', 10, 'python', false);
+    expect(localIsNewer('u1', 10, 'python')).toBe(false);
   });
 
   it('treats null userId as guest bucket', () => {

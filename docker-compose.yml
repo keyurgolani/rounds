@@ -94,6 +94,8 @@ services:
       - VITE_DISABLE_SIGNUPS=${VITE_DISABLE_SIGNUPS:-false}
       # Vite exposes ROUNDS_GATE_* to the dev SPA (vite.config.ts).
       - ROUNDS_GATE_SIGNUPS=${ROUNDS_GATE_SIGNUPS:-}
+      # The SPA's request shapes follow the runner's (ROUNDS-00A-L02).
+      - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
     depends_on:
       - runner
       - pocketbase

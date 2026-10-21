@@ -1,5 +1,7 @@
+import { definitionRef, definitionsEnforced } from '../../lib/definitions';
 import { pb } from '../../lib/pocketbase';
 import { runnerJSON } from '../../lib/runnerFetch';
+import type { DefinitionReceipt } from '../coding/types';
 
 // ---- Types -----------------------------------------------------------
 
@@ -18,6 +20,9 @@ export type TakeHomeAssignment = {
   rubric: { items: Array<{ id: string; label: string; weight: number; prompt: string }> };
   topics?: string[];
   companies?: string[];
+  /** The compiled harness revision's version (ROUNDS-00A-L02); runs and
+   *  submits name it at enforce. */
+  definition_version?: number | null;
 };
 
 export type RubricCriterion = {
@@ -35,6 +40,10 @@ export type RunResult = {
   error: string | null;
   duration_ms: number;
   truncated?: boolean;
+  /** At enforce: the server's verdict and each result id's outcome. */
+  passed?: boolean | null;
+  outcomes?: Array<{ id: string; outcome: string; reason: string }> | null;
+  definition?: DefinitionReceipt | null;
 };
 
 export type SubmitResponse = {
@@ -52,6 +61,7 @@ export type SubmitResponse = {
     reason?: string;
     parse_error?: string;
   };
+  definition?: DefinitionReceipt | null;
 };
 
 export type SubmitRequest = {
@@ -61,7 +71,43 @@ export type SubmitRequest = {
   ai_chats?: Array<{ checkpoint: number; role: string; content: string; ts: number }>;
   campaign_id?: string;
   duration_ms?: number;
+  /** The assignment's language and its row's definition_version; sent
+   *  only at enforce, where the definition names the variant. */
+  language?: string;
+  definition_version?: number | null;
 };
+
+/** Which compiled revision a take-home run names at enforce. */
+export type TakeHomeDefinition = { language: string; definition_version?: number | null };
+
+/** The body /api/take-home/run takes under
+ *  ROUNDS_GATE_EXECUTION_DEFINITIONS (lib/definitions). */
+export function takeHomeRunBody(
+  assignment_slug: string,
+  files: Record<string, string>,
+  definition?: TakeHomeDefinition,
+): Record<string, unknown> {
+  if (!definitionsEnforced()) return { assignment_slug, files };
+  return {
+    definition: definitionRef(
+      'take-home',
+      assignment_slug,
+      definition?.language ?? '',
+      definition?.definition_version,
+    ),
+    files,
+  };
+}
+
+/** The body /api/take-home/submit takes under the current gate value. */
+export function takeHomeSubmitBody(req: SubmitRequest): Record<string, unknown> {
+  const { assignment_slug, language, definition_version, ...rest } = req;
+  if (!definitionsEnforced()) return { assignment_slug, ...rest };
+  return {
+    definition: definitionRef('take-home', assignment_slug, language ?? '', definition_version),
+    ...rest,
+  };
+}
 
 // ---- API helpers -----------------------------------------------------
 
@@ -87,11 +133,12 @@ export async function getAssignment(slug: string): Promise<TakeHomeAssignment> {
 export async function runProject(
   assignment_slug: string,
   files: Record<string, string>,
+  definition?: TakeHomeDefinition,
 ): Promise<RunResult> {
   return runnerJSON<RunResult>('/api/take-home/run', {
     method: 'POST',
     auth: 'required',
-    body: { assignment_slug, files },
+    body: takeHomeRunBody(assignment_slug, files, definition),
     errorPrefix: 'take-home run',
   });
 }
@@ -100,7 +147,7 @@ export async function submitAttempt(req: SubmitRequest): Promise<SubmitResponse>
   return runnerJSON<SubmitResponse>('/api/take-home/submit', {
     method: 'POST',
     auth: 'required',
-    body: req,
+    body: takeHomeSubmitBody(req),
     errorPrefix: 'take-home submit',
   });
 }

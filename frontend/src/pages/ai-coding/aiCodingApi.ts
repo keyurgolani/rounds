@@ -1,5 +1,7 @@
+import { definitionRef, definitionsEnforced } from '../../lib/definitions';
 import { pb } from '../../lib/pocketbase';
 import { runnerJSON } from '../../lib/runnerFetch';
+import type { DefinitionReceipt } from '../coding/types';
 
 export type StarterFile = { path: string; contents: string; readonly?: boolean };
 export type Checkpoint = {
@@ -32,6 +34,9 @@ export type AICodingRoundRaw = {
   rubric: { items: Array<{ id: string; label: string; weight: number; prompt: string }> };
   topics: string[];
   companies: string[];
+  /** The compiled harness revision's version (ROUNDS-00A-L02); runs and
+   *  grades name it at enforce. */
+  definition_version?: number | null;
 };
 
 /**
@@ -69,6 +74,51 @@ export function resolveRound(raw: AICodingRoundRaw, language: string): AICodingR
   const starter_files = Array.isArray(sf) ? sf : sf[language] ?? [];
   const checkpoints = Array.isArray(cps) ? cps : cps[language] ?? [];
   return { ...raw, language, starter_files, checkpoints };
+}
+
+// Source extensions by round language. A file with another of the
+// round's languages' extensions belongs to that language's workspace.
+const SOURCE_EXTENSIONS: Record<string, readonly string[]> = {
+  python: ['py', 'pyi'],
+  typescript: ['ts', 'tsx', 'mts', 'cts'],
+  javascript: ['js', 'jsx', 'mjs', 'cjs'],
+  java: ['java'],
+};
+
+/** A path the runner takes in a submission's file map: relative, at
+ *  most 255 characters, and inside the project (backend/app/limits.py). */
+export function isProjectPath(path: string): boolean {
+  return (
+    path.length > 0 &&
+    path.length <= 255 &&
+    !path.startsWith('/') &&
+    !path.includes('\\') &&
+    !path.includes('\0') &&
+    path.split('/').every((part) => part !== '' && part !== '.' && part !== '..')
+  );
+}
+
+/**
+ * Which saved draft paths a workspace in `language` restores: its starter
+ * files, and any project path the candidate created, except one that
+ * belongs to another of the round's languages, as a starter file there or
+ * by its source extension.
+ */
+export function draftPathFilter(raw: AICodingRoundRaw, language: string): (path: string) => boolean {
+  const own = new Set(resolveRound(raw, language).starter_files.map((f) => f.path));
+  const others = effectiveLanguages(raw).filter((lang) => lang !== language);
+  const theirs = new Set(others.flatMap((lang) => resolveRound(raw, lang).starter_files.map((f) => f.path)));
+  const ownExtensions = new Set(SOURCE_EXTENSIONS[language] ?? []);
+  const theirExtensions = new Set(
+    others.flatMap((lang) => SOURCE_EXTENSIONS[lang] ?? []).filter((ext) => !ownExtensions.has(ext)),
+  );
+  return (path) => {
+    if (own.has(path)) return true;
+    if (!isProjectPath(path) || theirs.has(path)) return false;
+    const name = path.split('/').pop() ?? '';
+    const ext = name.includes('.') ? (name.split('.').pop() ?? '') : '';
+    return !theirExtensions.has(ext);
+  };
 }
 
 export async function listRounds(): Promise<AICodingRoundRaw[]> {
@@ -171,30 +221,57 @@ export type RunProjectResult = {
   error: string | null;
   duration_ms: number;
   truncated: boolean;
+  definition?: DefinitionReceipt | null;
 };
 
-/** The runner takes the checkpoint's test command and timeout from the
- * round itself; a call names the round, language, and checkpoint. */
-export async function runProject(input: {
+export type RunProjectInput = {
   round_slug: string;
   language: string;
   checkpoint_index: number;
   files: Record<string, string>;
-}): Promise<RunProjectResult> {
+  /** The round row's definition_version; sent only at enforce. */
+  definition_version?: number | null;
+};
+
+/** The body /api/ai-coding/run-project takes under
+ *  ROUNDS_GATE_EXECUTION_DEFINITIONS (lib/definitions). */
+export function runProjectBody(input: RunProjectInput): Record<string, unknown> {
+  const { round_slug, language, checkpoint_index, files, definition_version } = input;
+  if (!definitionsEnforced()) return { round_slug, language, checkpoint_index, files };
+  return {
+    definition: definitionRef('ai-coding', round_slug, language, definition_version),
+    checkpoint: checkpoint_index,
+    files,
+  };
+}
+
+/** The runner takes the checkpoint's test command and timeout from the
+ * round itself; a call names the round, language, and checkpoint. */
+export async function runProject(input: RunProjectInput): Promise<RunProjectResult> {
   return runnerJSON<RunProjectResult>('/api/ai-coding/run-project', {
     method: 'POST',
-    body: input,
+    body: runProjectBody(input),
     errorPrefix: 'run-project',
   });
 }
+
+/** One result id's outcome from a grade (ROUNDS-00A-L02). */
+export type ResultOutcome = { id: string; outcome: string; reason: string };
 
 export type GradeResponse = {
   test_results: Array<{
     passed: boolean;
     passed_count: number;
     failed_count: number;
-    stdout: string;
+    /** #1's grade only; at enforce a grade answers outcomes, never
+     *  what the harness printed. */
+    stdout?: string;
     error: string | null;
+    index?: number;
+    label?: string;
+    score?: number;
+    executed?: number;
+    outcomes?: ResultOutcome[];
   }>;
   rubric_review: {
     items: Array<{ id: string; score: number; evidence: string; suggestions: string[] }>;
@@ -202,6 +279,9 @@ export type GradeResponse = {
     skipped?: boolean;
     reason?: string;
   };
+  passed?: boolean;
+  score?: number;
+  definition?: DefinitionReceipt | null;
 };
 
 export type AIChatLogEntry = {
@@ -215,12 +295,27 @@ export type GradeRequest = {
   round_slug: string;
   files: Record<string, string>;
   ai_chats: AIChatLogEntry[];
+  /** The round's language and its row's definition_version; sent only
+   *  at enforce, where the definition names the variant. */
+  language?: string;
+  definition_version?: number | null;
 };
+
+/** The body /api/ai-coding/grade takes under the current gate value. */
+export function gradeBody(req: GradeRequest): Record<string, unknown> {
+  const { round_slug, files, ai_chats, language, definition_version } = req;
+  if (!definitionsEnforced()) return { round_slug, files, ai_chats };
+  return {
+    definition: definitionRef('ai-coding', round_slug, language ?? '', definition_version),
+    files,
+    ai_chats,
+  };
+}
 
 export async function gradeAttempt(req: GradeRequest): Promise<GradeResponse> {
   return runnerJSON<GradeResponse>('/api/ai-coding/grade', {
     method: 'POST',
-    body: req,
+    body: gradeBody(req),
     auth: 'required',
     errorPrefix: 'grade',
   });

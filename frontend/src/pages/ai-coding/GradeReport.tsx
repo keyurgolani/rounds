@@ -1,17 +1,13 @@
-import type { AICodingRound, AIChatLogEntry } from './aiCodingApi';
+import type { AICodingRound, AIChatLogEntry, GradeResponse } from './aiCodingApi';
 import BlockMarkdown from '../../components/shell/BlockMarkdown';
 import AIPatchView from '../../components/ai/AIPatchView';
 import { normaliseProposedWhitespace } from '../../components/ai/AIChatPanel';
 import { splitPatches } from '../../components/ai/aiPatches';
 
 type Props = {
-  testResults: Array<{
-    passed: boolean;
-    passed_count: number;
-    failed_count: number;
-    stdout: string;
-    error: string | null;
-  }>;
+  /** At enforce each checkpoint carries its result ids' outcomes, and
+   *  never what the harness printed (ROUNDS-00A-L02). */
+  testResults: GradeResponse['test_results'];
   rubric: AICodingRound['rubric'];
   rubricReview: {
     items: Array<{
@@ -61,6 +57,15 @@ export default function GradeReport({
                 <pre className="text-xs mt-2" style={{ whiteSpace: 'pre-wrap' }}>
                   {tr.error}
                 </pre>
+              )}
+              {tr.outcomes && tr.outcomes.length > 0 && (
+                <ul className="text-xs mt-2 grid gap-1">
+                  {tr.outcomes.map((o) => (
+                    <li key={o.id} className="mono">
+                      {o.id}: {o.outcome === 'passed' ? 'pass' : `${o.outcome} (${o.reason})`}
+                    </li>
+                  ))}
+                </ul>
               )}
             </li>
           ))}

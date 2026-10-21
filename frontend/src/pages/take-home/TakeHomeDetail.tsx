@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Bot,
@@ -34,6 +34,7 @@ import {
   type TakeHomeChatEntry,
 } from './takeHomeApi';
 import { useTakeHomeDrafts } from '../../hooks/useTakeHomeDrafts';
+import { reloadPage, retrySuperseded } from '../../lib/definitions';
 import { useEditorFocus } from '../../hooks/useEditorFocus';
 import { usePracticeStatus } from '../../hooks/usePracticeStatus';
 import { usePersistedState } from '../../hooks/usePersistedState';
@@ -191,8 +192,39 @@ export default function TakeHomeDetail() {
     return () => window.clearTimeout(timer);
   }, [chatLog, assignment, campaignId]);
 
-  const { files, savedFiles, setFile, hydrated, resetToStarter } =
+  const { files, savedFiles, setFile, hydrated, resetToStarter, saveNow } =
     useTakeHomeDrafts(assignment, campaignId ?? undefined);
+
+  // The definition version runs and submits name: the row's, until a
+  // superseded answer rereads it (ROUNDS-00A-L02).
+  const definitionVersionRef = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    definitionVersionRef.current = assignment?.definition_version;
+  }, [assignment]);
+  const rereadDefinitionVersion = useCallback(async () => {
+    const fresh = await getAssignment(slug);
+    definitionVersionRef.current = fresh.definition_version;
+    return fresh.definition_version;
+  }, [slug]);
+
+  // A reload the denial asks for saves the files first. When a save
+  // fails the page stays, so nothing is lost, and the notice says the
+  // draft wasn't saved and keeps Reload for another try.
+  async function reloadKeepingDrafts() {
+    let saved = false;
+    try {
+      saved = (await saveNow()) !== false;
+    } catch {
+      saved = false;
+    }
+    if (saved) {
+      reloadPage();
+      return;
+    }
+    setRunDenial((current) =>
+      current ? { ...current, denial: { ...current.denial, saveFailed: true } } : current,
+    );
+  }
 
   const showChat =
     assignment != null &&
@@ -215,7 +247,15 @@ export default function TakeHomeDetail() {
     setRunDenial(null);
     setDockOpen(true);
     try {
-      const r = await runProject(assignment.slug, files);
+      const r = await retrySuperseded(
+        definitionVersionRef.current,
+        (version) =>
+          runProject(assignment.slug, files, {
+            language: assignment.language,
+            definition_version: version,
+          }),
+        rereadDefinitionVersion,
+      );
       if (reqId !== runReqIdRef.current) return;
       setRunResult(r);
     } catch (e) {
@@ -248,14 +288,21 @@ export default function TakeHomeDetail() {
     setReport(null);
     setRunDenial(null);
     try {
-      const result = await submitAttempt({
-        assignment_slug: assignment.slug,
-        files,
-        notes,
-        ai_chats: chatLog,
-        campaign_id: campaignId ?? undefined,
-        duration_ms: Date.now() - startedAtRef.current,
-      });
+      const result = await retrySuperseded(
+        definitionVersionRef.current,
+        (version) =>
+          submitAttempt({
+            assignment_slug: assignment.slug,
+            files,
+            notes,
+            ai_chats: chatLog,
+            campaign_id: campaignId ?? undefined,
+            duration_ms: Date.now() - startedAtRef.current,
+            language: assignment.language,
+            definition_version: version,
+          }),
+        rereadDefinitionVersion,
+      );
       setReport(result);
       setReportOpen(true);
       if (
@@ -484,6 +531,7 @@ export default function TakeHomeDetail() {
             <RunnerDenialNotice
               denial={runDenial?.denial ?? null}
               action={runDenial?.action ?? 'run'}
+              onReload={reloadKeepingDrafts}
               className="flex-shrink-0"
               contentStyle={{ margin: '8px 12px' }}
             />

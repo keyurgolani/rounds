@@ -76,6 +76,35 @@ describe('classifyRunnerError', () => {
   });
 });
 
+describe('definition refusals (ROUNDS-00A-L02)', () => {
+  function typed(status: number, code: string, detail = 'A fixed sentence from the server.') {
+    return new RunnerError({ message: `Request ${status}: ${detail}`, status, code, detail });
+  }
+
+  it.each([
+    [typed(422, 'legacy_request_rejected'), 'reload'],
+    [typed(422, 'case_unknown'), 'reload'],
+    [typed(409, 'definition_superseded'), 'reload'],
+    [typed(410, 'definition_retired'), 'retired'],
+    [typed(404, 'definition_not_found'), 'not_found'],
+    [typed(422, 'runtime_unsupported'), 'unsupported'],
+    [typed(422, 'path_not_allowed'), 'path_not_allowed'],
+    [typed(503, 'definition_integrity_mismatch'), 'unavailable'],
+  ])('maps %o to %s', (error, kind) => {
+    expect(classifyRunnerError(error)?.kind).toBe(kind);
+  });
+
+  it("keeps the server's fixed sentence only where the notice shows it", () => {
+    const unsupported = "This language isn't supported here. Try javascript.";
+    expect(classifyRunnerError(typed(422, 'runtime_unsupported', unsupported))?.detail).toBe(unsupported);
+    const path = "A file uses a path the grader owns. Rename or remove it and try again.";
+    expect(classifyRunnerError(typed(422, 'path_not_allowed', path))?.detail).toBe(path);
+    for (const code of ['legacy_request_rejected', 'definition_retired', 'definition_not_found']) {
+      expect(classifyRunnerError(typed(422, code))?.detail).toBeNull();
+    }
+  });
+});
+
 describe('activeTrigger', () => {
   it('returns the focused control, or null when focus is on the body', () => {
     const button = document.createElement('button');
