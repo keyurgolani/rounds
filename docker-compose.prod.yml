@@ -64,8 +64,14 @@ services:
 
   # Legacy Artifact Snapshot materializer (ROUNDS-00A-L04). Only PocketBase
   # reaches it, over the internal materialize network; it has no host port,
-  # no secret, no other network, and a read-only filesystem.
+  # no secret, no other network, and a read-only filesystem. Nothing calls
+  # it yet, so it sits behind the `materializer` profile and does not start
+  # on a plain `up`: that keeps the stack starting after promotion, before a
+  # v* tag publishes rounds-materializer:latest, and on a rollback to an
+  # older tag that has no materializer image. #4 PR 2 wires PocketBase to it
+  # and removes the profile. Enable it with `--profile materializer`.
   materializer:
+    profiles: ["materializer"]
     image: ${ROUNDS_MATERIALIZER_IMAGE:-keyurgolani/rounds-materializer:${ROUNDS_IMAGE_TAG:-latest}}
     read_only: true
     cap_drop:

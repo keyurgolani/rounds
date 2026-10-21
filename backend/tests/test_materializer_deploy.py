@@ -136,7 +136,32 @@ def test_pocketbase_pods_carry_the_label_the_policy_admits():
     assert deployment["spec"]["template"]["metadata"]["labels"]["rounds.io/net"] == "pocketbase"
     # The label is added to the pods only; the selector is unchanged.
     assert deployment["spec"]["selector"] == {"matchLabels": {"app": "pocketbase"}}
-    assert "materializer.yaml" in _yaml("k8s/kustomization.yaml")["resources"]
+
+
+def test_the_materializer_is_opt_in_in_k8s():
+    # Nothing calls the materializer yet, so it is not a default resource: a
+    # plain apply does not run a caller-less pod whose image a release may
+    # not carry. The manifest is still in the repo for the opt-in apply.
+    kustomization = _yaml("k8s/kustomization.yaml")
+    assert "materializer.yaml" not in kustomization["resources"]
+    assert (ROOT / "k8s" / "materializer.yaml").exists()
+
+
+@pytest.mark.parametrize("compose_file", COMPOSE_FILES)
+def test_the_materializer_sits_behind_its_profile(compose_file):
+    # The materializer is behind the `materializer` profile everywhere, so a
+    # plain `up` of the deploy compose files keeps starting without its
+    # image (after promotion, before a v* tag publishes it, and on rollback
+    # to an older tag). The harness enables the profile explicitly.
+    svc = _yaml(compose_file)["services"]["materializer"]
+    assert svc["profiles"] == ["materializer"], compose_file
+
+
+def test_the_harness_enables_the_materializer_profile():
+    # nerdctl (finch) honours the --profile flag but not COMPOSE_PROFILES, so
+    # the compose wrapper passes the flag to enable the profiled materializer.
+    run_sh = (ROOT / "harness" / "run.sh").read_text()
+    assert "--profile materializer" in run_sh
 
 
 def test_the_runner_image_leaves_the_materializer_out():

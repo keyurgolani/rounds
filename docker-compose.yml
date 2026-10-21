@@ -29,8 +29,11 @@ services:
   # the repository root because it bundles the resume templates. Only
   # PocketBase reaches it, over the internal materialize network; it has no
   # host port, no secret, no other network, and a read-only filesystem.
-  # Nothing calls it yet.
+  # Nothing calls it yet, so it sits behind the `materializer` profile and
+  # does not start on a plain `up`; #4 PR 2 wires PocketBase to it and
+  # removes the profile. Enable it now with `--profile materializer`.
   materializer:
+    profiles: ["materializer"]
     build:
       context: .
       dockerfile: backend/materializer/Dockerfile

@@ -110,8 +110,12 @@ RUN_ID="${RUN_ID:-$(date +%s)-$$}"
 GIT_COMMIT="${GIT_COMMIT:-$(git -C "${ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 
 # --env-file must be an absolute path and must come after -p/-f (nerdctl rejects
-# it before them); both finch and docker compose accept it here.
-compose() { ${COMPOSE_BIN} -p "${PROJECT}" -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" "$@"; }
+# it before them); both finch and docker compose accept it here. --profile
+# materializer enables the materializer, which every compose file keeps behind
+# that profile so a plain deploy `up` starts without it; the flag is used
+# rather than COMPOSE_PROFILES because nerdctl honours the flag but not the
+# environment variable, and both finch and docker compose accept the flag.
+compose() { ${COMPOSE_BIN} -p "${PROJECT}" -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile materializer "$@"; }
 
 cleanup() {
   echo "--- tearing down harness stack ---"

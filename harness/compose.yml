@@ -47,8 +47,11 @@ services:
 
   # The Legacy Artifact Snapshot materializer, built from the repository root
   # and run as docker-compose.prod.yml runs it (ROUNDS-00A-L04). Phase 7b
-  # checks that only PocketBase reaches it.
+  # checks that only PocketBase reaches it. It sits behind the `materializer`
+  # profile, as the deploy compose files do; run.sh enables the profile so
+  # phase 7b still builds and runs it.
   materializer:
+    profiles: ["materializer"]
     build:
       context: ..
       dockerfile: backend/materializer/Dockerfile

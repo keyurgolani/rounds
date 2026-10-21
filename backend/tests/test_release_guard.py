@@ -211,7 +211,10 @@ def test_k8s_pins_every_deployment_image_in_one_place():
         for doc in yaml.safe_load_all((ROOT / "k8s" / manifest).read_text()):
             if doc and doc.get("kind") == "Deployment":
                 images += [c["image"] for c in doc["spec"]["template"]["spec"]["containers"]]
-    assert len(images) == 4
+    # Three default Deployments: pocketbase, runner, frontend. The
+    # materializer is opt-in (ROUNDS-00A-L04 review), so it is neither a
+    # default resource nor a pin here; #4 PR 2 folds it back in.
+    assert len(images) == 3
     for image in images:
         name, _, tag = image.rpartition(":")
         # The pin repeats the manifests' tag, so applying the base runs what it ran before.
