@@ -104,15 +104,18 @@ COMPOSE_PROJECT=rounds-9s1-b harness/run.sh
 The launcher builds the pocketbase, probe, runner, frontend, and materializer
 images, brings PocketBase up, runs the main probe phase, runs the admission
 check and the admission-deploy phase against two runner replicas, restarts the
-runner with `/api/run` turned off and then on again, recreates PocketBase with
-signups disabled (the named `pb_data` volume keeps the run's accounts and
-rows), runs the signup-hook probe, brings the runner and nginx frontend up and
-runs the deployment verifier through them, checks that only PocketBase reaches
-the snapshot materializer and that it has no route out, stops PocketBase for
-the degraded probe, runs the verifier's checks and the cross-owner scan on the
-run's `pb_data`, prints the verdict (pass / expected-fail / fail counts), runs
-the admission migration, relation quarantine, and snapshot store checks, and
-tears the stack down, removing the images and the volume it made.
+runner with `/api/run` turned off and then on again, turns the execution job
+store on and checks it on PocketBase and both replicas through a secret
+rotation, recreates PocketBase with signups disabled (the named `pb_data`
+volume keeps the run's accounts and rows), runs the signup-hook probe, brings
+the runner and nginx frontend up and runs the deployment verifier through
+them, checks that only PocketBase reaches the snapshot materializer and that
+it has no route out, stops PocketBase for the degraded probe, runs the
+verifier's checks and the cross-owner scan on the run's `pb_data`, prints the
+verdict (pass / expected-fail / fail counts), runs the admission migration,
+execution migration, JSON limits, relation quarantine, and snapshot store
+checks, and tears
+the stack down, removing the images and the volume it made.
 Its exit code is non-zero on any failed or missing result.
 
 ## Admission state across two replicas
@@ -174,6 +177,41 @@ and the runner's startup gates line. The verdict requires a passing receipt
 for every check id in `verify_deployment.ADMISSION_CHECKS` and
 `admission_deploy.CHECKS`.
 
+## Execution job store
+
+`ROUNDS-00A-L03` PR 1 keeps execution jobs in PocketBase. After the gate
+cycle, the launcher restarts PocketBase with `ROUNDS_GATE_EXECUTION_STORE=on`
+and a test `ROUNDS_EXECUTION_SECRET`, and
+[`probes/execution_check.py`](probes/execution_check.py) checks on the real
+store that:
+
+- only the secret logs in as `execution-worker`; a `users` token and an
+  anonymous caller are refused on the service routes; and no client reads or
+  writes the job collections or links an attempt row to an envelope;
+- enqueue needs the account's admitted command and the runner key, answers a
+  duplicate with its job and a different request as a mismatch, and records
+  the job on the command, and another account's cancel gets the unknown-id
+  404;
+- two sessions racing for one job make one attempt, a superseded token's
+  write is counted and never applied, and an envelope outside v1 is refused
+  whole;
+- after a real 31 s wait, reap puts a lease lost before its run started back
+  in the queue and ends one lost after it started `worker-lost`, and a
+  same-key retry runs attempt two;
+- an account's filters on its envelopes name no field of a job or an
+  attempt, and one account's backlog of queued jobs holds no other account's
+  job back.
+
+Then both replicas start with the store on (`execution-runners`): each is
+ready, and with no handler for any kind yet, each claims jobs and ends every
+one `denied`, `definition-invalid`, once. PocketBase restarts with another
+secret and neither replica stays ready (`execution-unready`); the replicas
+restart with it, both are ready again, and only the new secret logs in
+(`execution-ready-again`). The signup restart runs PocketBase with no worker
+secret, and the last one no longer logs in (`execution-disabled`). The deploy
+phase's verifier checks that nginx answers `/api/rounds/execution/` and the
+worker's login and records with 404, those in other cases too.
+
 After the scan,
 [`probes/admission_migration_check.py`](probes/admission_migration_check.py)
 copies the pinned PocketBase binary out of its image and, with no network,
@@ -181,6 +219,24 @@ applies `1700006100_admission.js` to a `pb_data` built from every migration
 before `1700006000` (the `62d4eae` set), checks that it adds only the three
 server-only collections, reverses it with `pocketbase migrate down 1` as an
 operator would, checks that the data is back as it was, and applies it again.
+[`probes/execution_migration_check.py`](probes/execution_migration_check.py)
+does the same for `1700007100_execution_jobs.js` on a `pb_data` built from
+every migration before it: the four collections with no client writes, the
+`envelope` and `job` links, and the 8 MiB `files` limit, and nothing else,
+with envelopes that link into no service-only collection and a down step
+that puts back the `files` limit it found, also on a `pb_data` where
+PocketBase's reset ran first and `files` held 2 MiB.
+[`probes/json_limits_check.py`](probes/json_limits_check.py) holds every JSON
+field's maxSize to the limit its migrations declare (D10). PocketBase's own
+`1702134272_set_default_json_max_size` resets them all to 2,000,000 bytes and
+sorts after the repository's migrations, and `1702134273_json_limits.js` sets
+them back. The check takes the declared limits from a `pb_data` where
+PocketBase's migrations ran first, then checks that a fresh `pb_data` and one
+upgraded from every migration before `1700007100_execution_jobs.js` hold them,
+that the registry changes nothing else but its record and saves and
+records nothing where they already hold, and that `pocketbase migrate down 1`
+puts back the size each field held before it, removes the record, and a
+second `migrate up` restores them.
 
 Last, [`probes/relation_quarantine_check.py`](probes/relation_quarantine_check.py)
 runs the same pinned binary, with no network, against the relation

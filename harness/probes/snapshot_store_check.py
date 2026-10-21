@@ -14,6 +14,8 @@ before it, seeds and the demo account included.
 3. Once the store is empty, reversing it drops only that collection, and the
    data is back to the base snapshot.
 4. Applying it again after the reversal works.
+5. On a fresh ``pb_data`` given every migration in one ``migrate up``, the
+   collection holds the same fields, rules, index, and limits (D10).
 
 Prints one PASS/FAIL line per check and exits non-zero on any failure.
 """
@@ -111,12 +113,12 @@ def _field_problems(schema: list[dict]) -> list[str]:
 def _fresh_field_problems(schema: list[dict]) -> list[str]:
     # On a fresh database, PocketBase's own 1702134272_set_default_json_max_size
     # runs after this migration (decision D10) and resets every JSON field's
-    # maxSize to its 2,000,000 default, so the intended smaller design and
-    # font_families limits are not in force until #200's re-apply registry
-    # restores them. The structural guarantee that must hold on a fresh
-    # database: the collection exists, every field has its type and required
-    # flag, and no JSON field is left at maxSize 0 (which would reject every
-    # value). The exact small limits are checked on the upgraded database.
+    # maxSize to its 2,000,000 default, and 1702134273_json_limits.js puts the
+    # smaller design and font_families limits back right after it. The
+    # structural guarantee, which holds with or without that registry: the
+    # collection exists, every field has its type and required flag, and no
+    # JSON field is left at maxSize 0 (which would reject every value). The
+    # fresh check holds the exact limits too, with the registry applied.
     by_name = {f["name"]: f for f in schema}
     problems = sorted(set(by_name) ^ set(FIELDS))
     for name, (ftype, required, options) in FIELDS.items():
@@ -240,12 +242,16 @@ def main() -> int:
                 (up.stdout + up.stderr)[-500:])
 
         # A fresh database: the whole migration set applied in one `migrate
-        # up` on an empty pb_data, so PocketBase's own JSON-size-default
-        # migration runs after this one (decision D10). The collection must
-        # still be created, owner-read, uniquely indexed, and usable; the
-        # exact small JSON limits land with #200's re-apply registry.
+        # up` on an empty pb_data. PocketBase's own JSON-size-default
+        # migration runs after this one (decision D10), and
+        # 1702134273_json_limits.js right after it sets this store's limits
+        # back, so the collection holds them exactly here too.
+        every = work / "every_migration"
+        every.mkdir()
+        for path in sorted(MIGRATIONS.glob("*.js")):
+            shutil.copy(path, every / path.name)
         fresh = work / "fresh_pb_data"
-        up = _migrate(fresh, full, "up")
+        up = _migrate(fresh, every, "up")
         fdb = fresh / "data.db"
         c.check("snapshot-store.fresh.applies", _applied(fdb, MIGRATION), (up.stdout + up.stderr)[-500:])
         ffound = _collection(fdb)
@@ -258,6 +264,8 @@ def main() -> int:
                     repr(ffound["indexes"]))
             fresh_problems = _fresh_field_problems(ffound["schema"])
             c.check("snapshot-store.fresh.fields-usable", not fresh_problems, ", ".join(fresh_problems))
+            exact = _field_problems(ffound["schema"])
+            c.check("snapshot-store.fresh.fields-and-limits", not exact, ", ".join(exact))
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

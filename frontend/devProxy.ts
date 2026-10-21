@@ -9,10 +9,11 @@
 //   /api/ai, /api/ai-coding, /api/take-home → runner
 //   /api/* (everything else)               → pocketbase
 // The admin UI is on PocketBase's own port in dev, as it is in prod.
-// Vite tries the entries in order and uses the first that matches, so
-// the denials come first; a key starting with ^ is a regular expression
-// over the path and query.
+// Vite tries the entries in order and uses the first that matches. Every
+// entry refuses the paths nginx never proxies, so neither the order of
+// the entries nor a new one can forward them.
 
+import type { IncomingMessage } from 'node:http';
 import type { ProxyOptions } from 'vite';
 
 // Inside docker compose the sibling services are reachable by name.
@@ -21,14 +22,37 @@ import type { ProxyOptions } from 'vite';
 const RUNNER_TARGET = process.env.VITE_API_PROXY_TARGET || 'http://runner:8000';
 const POCKETBASE_TARGET = process.env.VITE_POCKETBASE_PROXY_TARGET || 'http://pocketbase:8090';
 
-// PocketBase's admin UI, the admission hook routes, the admin APIs, and
-// collection metadata (nginx.conf, "Never proxied").
-const NEVER_PROXIED = [
-  '^/_/',
-  '^/api/rounds/admission/',
-  '^/api/(admins|settings|backups|logs)([/?]|$)',
-  '^/api/collections(/[^/?]+)?/?([?]|$)',
+// PocketBase's admin UI, the admission and execution hook routes, the
+// execution service record's routes, the admin APIs, and collection
+// metadata (nginx.conf, "Never proxied"). The collection paths match in
+// any case, as their nginx locations do (~*).
+const NEVER_PROXIED: RegExp[] = [
+  /^\/_\//,
+  /^\/api\/rounds\/admission\//,
+  /^\/api\/rounds\/execution\//,
+  /^\/api\/collections\/execution_service\//i,
+  /^\/api\/(admins|settings|backups|logs)(\/|$)/,
+  /^\/api\/collections(\/[^/]+)?\/?$/i,
 ];
+
+// Whether nginx refuses this request URL. nginx matches a location
+// against the path without its query and with %XX decoded, so this does
+// too; a path that doesn't decode is refused.
+export function neverProxied(url: string | undefined): boolean {
+  let path: string;
+  try {
+    path = decodeURIComponent((url ?? '').split('?')[0]);
+  } catch {
+    return true;
+  }
+  return NEVER_PROXIED.some((pattern) => pattern.test(path));
+}
+
+type Socket = { end: (text: string) => void };
+
+function refuseUpgrade(socket: Socket): void {
+  socket.end('HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n');
+}
 
 // A 404 for requests and WebSocket upgrades alike.
 function denied(): ProxyOptions {
@@ -36,24 +60,36 @@ function denied(): ProxyOptions {
     ws: true,
     bypass: () => false,
     configure: (server) => {
-      server.ws = (_req, socket) => {
-        (socket as { end: (text: string) => void }).end(
-          'HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n',
-        );
-      };
+      server.ws = (_req, socket) => refuseUpgrade(socket as Socket);
     },
   };
 }
 
+// `options`, refusing the paths nginx never proxies: a request gets
+// Vite's 404, and an upgrade, when the entry carries them, a 404 too.
+function guarded(options: ProxyOptions): ProxyOptions {
+  return {
+    ...options,
+    bypass: (req: IncomingMessage) => (neverProxied(req.url) ? false : undefined),
+    configure: options.ws
+      ? (server) => {
+          const forward = server.ws.bind(server);
+          server.ws = (req, socket, head, ...rest) =>
+            neverProxied(req.url) ? refuseUpgrade(socket as Socket) : forward(req, socket, head, ...rest);
+        }
+      : undefined,
+  };
+}
+
 export const devProxy: Record<string, ProxyOptions> = {
-  ...Object.fromEntries(NEVER_PROXIED.map((path) => [path, denied()])),
-  '/api/run': { target: RUNNER_TARGET, changeOrigin: true },
-  '/api/evaluate': { target: RUNNER_TARGET, changeOrigin: true },
-  '/api/pdf': { target: RUNNER_TARGET, changeOrigin: true },
-  '/api/ai-coding': { target: RUNNER_TARGET, changeOrigin: true },
-  '/api/sd-practice': { target: RUNNER_TARGET, changeOrigin: true },
-  '/api/ai': { target: RUNNER_TARGET, changeOrigin: true },
-  '/api/share': { target: RUNNER_TARGET, changeOrigin: true },
-  '/api/take-home': { target: RUNNER_TARGET, changeOrigin: true },
-  '/api': { target: POCKETBASE_TARGET, changeOrigin: true, ws: true },
+  '^/_/': denied(),
+  '/api/run': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
+  '/api/evaluate': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
+  '/api/pdf': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
+  '/api/ai-coding': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
+  '/api/sd-practice': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
+  '/api/ai': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
+  '/api/share': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
+  '/api/take-home': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
+  '/api': guarded({ target: POCKETBASE_TARGET, changeOrigin: true, ws: true }),
 };

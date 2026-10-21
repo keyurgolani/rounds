@@ -6,6 +6,10 @@ pseudonym, the route template, the result code, the idempotency and
 quota results, the code an observe-mode gate would have answered with,
 and latency. ``definition.*`` lines carry a definition's identity
 (``track/slug/variant@version``), never its content (ROUNDS-00A-L02).
+``execution.job`` lines are the job metrics (ROUNDS-00A-L03): a metric
+name and a count or seconds, labeled by kind, purpose, state, outcome
+class, and executor kind, never by account; ``execution.worker`` says
+what the replica's worker did at start.
 Unknown fields are dropped, and every value has to match its field's
 pattern, so source code, program output, HTML, bearer tokens, provider
 payloads, and raw account ids never reach the log.
@@ -179,7 +183,24 @@ def _gate_table(value: Any) -> bool:
 
 
 # definition.* lines name a definition by its identity, never its content.
-EVENTS = frozenset({"decision", "gates", "definitions.loaded", "definition.resolved", "definition.rejected"})
+EVENTS = frozenset({
+    "decision", "gates", "definitions.loaded", "definition.resolved", "definition.rejected", "execution.job",
+    "execution.worker",
+})
+# The job metrics' names (ROUNDS-00A-L03). #54, #22, #154, and #174 reuse
+# the shape.
+JOB_METRICS = (
+    "rounds_job_queue_depth",
+    "rounds_job_queue_wait_seconds",
+    "rounds_job_attempt_seconds",
+    "rounds_job_terminal_total",
+    "rounds_job_lease_expired_total",
+    "rounds_job_reconciled_total",
+    "rounds_job_duplicate_total",
+    "rounds_job_fingerprint_conflict_total",
+    "rounds_job_late_result_rejected_total",
+    "rounds_job_cleanup_unconfirmed_total",
+)
 
 FIELDS: dict[str, Callable[[Any], bool]] = {
     "correlation_id": is_correlation_id,
@@ -207,6 +228,24 @@ FIELDS: dict[str, Callable[[Any], bool]] = {
     # The request field a definition.rejected line counts, such as
     # test_command for legacy_request_rejected: a field name, never a value.
     "field": _matches(r"[a-z][a-z0-9_]{0,31}", 32),
+    # execution.job (ROUNDS-00A-L03).
+    "metric": _one_of(*JOB_METRICS),
+    "value": _int_between(0, 1_000_000_000),
+    "kind": _one_of("run", "evaluate", "run_project", "take_home_run", "grade", "take_home_submit"),
+    "purpose": _one_of("scratch", "grading"),
+    "state": _one_of("queued", "leased", "started", "completed", "timed-out", "denied", "canceled", "failed"),
+    "outcome_class": _one_of(
+        "passed", "candidate-failure", "resource-limit", "definition-invalid", "policy-violation", "canceled",
+        "worker-lost", "infrastructure-degraded",
+    ),
+    "executor_kind": _one_of("legacy-in-process", "isolated-worker"),
+}
+# The fields an event may carry, where that's fewer than FIELDS: a job
+# metric never carries an account or a correlation id.
+EVENT_FIELDS: dict[str, frozenset[str]] = {
+    "execution.job": frozenset({"metric", "value", "kind", "purpose", "state", "outcome_class", "executor_kind",
+                                "service"}),
+    "execution.worker": frozenset({"code", "service"}),
 }
 
 
@@ -220,11 +259,12 @@ def build(event: str, **fields: Any) -> dict[str, Any]:
         raise ValueError(f"unknown obs event {event!r}")
     record: dict[str, Any] = {"v": KIT_VERSION, "event": event}
     dropped: list[str] = []
+    allowed = EVENT_FIELDS.get(event)
     for name, value in fields.items():
         if value is None:
             continue
         check = FIELDS.get(name)
-        if check is None or not check(value):
+        if check is None or (allowed is not None and name not in allowed) or not check(value):
             dropped.append(name if _FIELD_NAME_RE.fullmatch(name) else "unnamed")
             continue
         record[name] = value

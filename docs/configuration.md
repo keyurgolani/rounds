@@ -52,6 +52,7 @@ ROUNDS_RUNNER_IMAGE=ghcr.io/keyurgolani/rounds-runner:latest
 | `AI_KEY_SECRET` | dev placeholder | Symmetric secret used to encrypt user-supplied AI provider API keys at rest. **Set a strong value in production**; rotating it invalidates every stored key. |
 | `PB_ADMIN_EMAIL`, `PB_ADMIN_PASSWORD` | see PocketBase admin bootstrap | Used by the runner's share endpoint to obtain a cached admin token so public-share reads can bypass per-user owner rules. |
 | `ROUNDS_ADMISSION_SECRET` | blank; dev compose sets a placeholder | The key the runner sends with every write to the admission store. Set the same value, at least 32 printable characters, on PocketBase and every runner replica. Without it the runner can't reach the store, so admission records `quota_unavailable` in observe mode and answers it in enforce mode. Candidate processes never get it. |
+| `ROUNDS_EXECUTION_SECRET` | blank, with no default in either compose file | The password the runner logs in to the execution job store with, as `execution-worker`. Set the same value, 32 to 72 printable characters with no spaces, on PocketBase and every runner replica before `ROUNDS_GATE_EXECUTION_STORE` is `on`. Without it nothing can log in as `execution-worker`, the runner starts no worker, and `/ready` stays ready. Candidate processes never get it. |
 
 Use `*` only for local development. In production, set `CORS_ALLOW_ORIGINS` to your deployed origin, such as `https://rounds.example.com`.
 
@@ -66,7 +67,7 @@ Use `*` only for local development. In production, set `CORS_ALLOW_ORIGINS` to y
 
 In production, the frontend should usually use same-origin PocketBase access. Leave `VITE_POCKETBASE_URL` blank unless you intentionally host PocketBase on a separate browser-visible origin.
 
-The Vite dev proxy (`frontend/devProxy.ts`) answers 404 for the paths production nginx never proxies: PocketBase's admin UI and admin APIs, collection metadata, and the admission hook routes. In dev, open the admin UI on PocketBase's own port.
+The Vite dev proxy (`frontend/devProxy.ts`) answers 404 for the paths production nginx never proxies: PocketBase's admin UI and admin APIs, collection metadata, the admission and execution hook routes, and the execution service record's routes. Like nginx, it matches them on the decoded path, and the collection paths in any case. In dev, open the admin UI on PocketBase's own port.
 
 ## OAuth Buttons
 
@@ -114,6 +115,7 @@ Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads the
 | `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` | `off`, `observe`, `enforce` | `observe` | runner | `enforce` only; `Idempotency-Key` checks and replays on the admitted routes |
 | `ROUNDS_GATE_ENFORCE_QUOTA` | `off`, `observe`, `enforce` | `observe` | runner | `enforce` only; account, deployment, and demo quotas on the admitted routes |
 | `ROUNDS_GATE_EXECUTION_DEFINITIONS` | `legacy`, `enforce`, `disabled` | `legacy` | runner, frontend | `legacy` loads run, evaluate, grade, run-project, and take-home from PocketBase as before; `enforce` takes only requests that name a compiled definition, which the app then sends, and runs only that definition; `disabled` answers 503 `definitions_disabled` on those six routes and keeps every draft. An unknown value closes to `disabled`. Restart the runner and the frontend together when it changes. |
+| `ROUNDS_GATE_EXECUTION_STORE` | `off`, `on` | `off` | runner, PocketBase | yes; `on` serves the execution job store's routes in PocketBase and runs each runner replica's worker and reaper, and `off` answers those routes 503 `store_off` and starts no worker. An unknown value closes to `off`. Set `ROUNDS_EXECUTION_SECRET` first, and restart PocketBase and every runner replica when it changes. Nothing runs through the store yet: #3's later PRs move the execution routes onto it. |
 
 Each route gate is that route's off switch. Set it to `disabled` and restart the runner, and the route answers 503 `route_disabled` before it reads the request; nothing else changes. [The execution runbook](security/execution-runbook.md) covers flipping and confirming each gate and what each error code means.
 
@@ -150,6 +152,7 @@ PB_ADMIN_EMAIL=admin@example.com
 PB_ADMIN_PASSWORD=<strong-password>
 AI_KEY_SECRET=<long-random-secret>
 ROUNDS_ADMISSION_SECRET=<another-long-random-secret>
+ROUNDS_EXECUTION_SECRET=<a-third-long-random-secret>
 VITE_POCKETBASE_URL=
 ROUNDS_GATE_SIGNUPS=disabled
 VITE_OAUTH_GOOGLE_ENABLED=false

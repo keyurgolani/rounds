@@ -146,6 +146,42 @@
     },
     {
       "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700007100_execution_jobs.js", "lines": "146"},
+      "legacyName": "execution_attempts",
+      "termId": "execution-attempt",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-02-L01",
+      "note": "Server-only execution job store: one row per attempt at a job, with its lease and the hash of its fencing token; never shown to a user. #18 ratifies or migrates it."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700007100_execution_jobs.js", "lines": "193"},
+      "legacyName": "execution_envelopes",
+      "termId": "execution-attempt",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-02-L01",
+      "note": "Execution job store: each attempt's durable result envelope, which only the store writes and only its own account reads (D9). #18 ratifies or migrates it."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700007100_execution_jobs.js", "lines": "107"},
+      "legacyName": "execution_jobs",
+      "termId": "execution-attempt",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-02-L01",
+      "note": "Server-only execution job store: one row per admitted command's job and its state; never shown to a user. #18 ratifies or migrates it."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700007100_execution_jobs.js", "lines": "84"},
+      "legacyName": "execution_service",
+      "decidedBy": "ROUNDS-00A-L03",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-02-L01",
+      "note": "Service-writer auth collection whose one record, execution-worker, claims, heartbeats, completes, and reaps jobs; never user-facing. #18 ratifies or migrates it."
+    },
+    {
+      "kind": "collection",
       "source": {"path": "pocketbase/pb_migrations/1700003000_experience_connections.js", "lines": "20-29"},
       "legacyName": "exp_anecdote_bullets",
       "decidedBy": "ROUNDS-06-L01",
@@ -675,6 +711,15 @@
       "decidedBy": "ROUNDS-34-L05",
       "targetLabel": null,
       "retiringLeaf": "ROUNDS-34-L05"
+    },
+    {
+      "kind": "api-route",
+      "source": {"path": "backend/main.py", "lines": "83"},
+      "legacyName": "/ready",
+      "decidedBy": "ROUNDS-34-L05",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-34-L05",
+      "note": "The runner's readiness probe beside /health, which ROUNDS-00A-L03 adds for the execution job store; not user-facing."
     },
     {
       "kind": "route-segment",

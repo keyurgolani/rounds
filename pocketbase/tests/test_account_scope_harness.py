@@ -263,6 +263,7 @@ STANDARD_COLLECTIONS = [
     "resume_variants", "resume_versions", "resume_share_links",
     "resume_share_views", "ai_providers", "ai_settings", "ai_coding_drafts",
     "ai_coding_attempts", "take_home_drafts", "take_home_attempts",
+    "execution_envelopes",
     "question_timers", "experience_jobs", "experience_projects",
     "experience_anecdotes", "experience_bullets", "exp_job_projects",
     "exp_job_anecdotes", "exp_job_bullets", "exp_project_anecdotes",
@@ -278,6 +279,9 @@ def _acct(tag: str) -> "factory.Account":
     a = factory.Account(tag=tag, email=f"{tag}@x", password="pw")
     a.user_id = f"uid-{tag}"
     for c in STANDARD_COLLECTIONS:
+        a.ids[c] = f"{tag}-{c}-id"
+    # The execution store's job and attempt an envelope points at.
+    for c in ("execution_jobs", "execution_attempts"):
         a.ids[c] = f"{tag}-{c}-id"
     a.ids["users"] = a.user_id
     return a

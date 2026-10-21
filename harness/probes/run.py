@@ -38,6 +38,19 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
             cleared: the route is refused for every caller on each and
             charges nothing, the other routes still admit, and it comes
             back; see admission_deploy.py.
+  execution-store, execution-runners, execution-unready,
+  execution-ready-again, execution-disabled
+            the execution job store on the real PocketBase with
+            ROUNDS_GATE_EXECUTION_STORE on, then both replicas' workers and
+            readiness through a secret rotation (ROUNDS-00A-L03); see
+            execution_check.py.
+  execution-migration
+            apply and reverse the execution job store's migration with the
+            pinned binary; see execution_migration_check.py.
+  json-limits
+            every JSON field's declared limit on fresh and upgraded databases
+            with the pinned binary, and the registry migration's down step
+            (ROUNDS-00A-L03, D10); see json_limits_check.py.
 
 Exit code is non-zero on any failure, any missing result, or any pending
 family that has started to behave like an implemented one.
@@ -443,7 +456,9 @@ def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozens
 def main() -> int:
     if len(sys.argv) < 2:
         print("usage: run.py {main|hook|deploy|degraded|deploy-db|verdict|scan|admission|admission-migration|"
-              "admission-deploy|emergency-disable|emergency-enable|relation-quarantine|snapshot-store}", file=sys.stderr)
+              "admission-deploy|emergency-disable|emergency-enable|relation-quarantine|snapshot-store|"
+              "execution-store|execution-runners|execution-unready|execution-ready-again|execution-disabled|"
+              "execution-migration|json-limits}", file=sys.stderr)
         return 2
     phase = sys.argv[1]
     if phase == "relation-quarantine":
@@ -466,6 +481,21 @@ def main() -> int:
         import admission_migration_check
 
         return admission_migration_check.main()
+    if phase == "execution-migration":
+        import execution_migration_check
+
+        return execution_migration_check.main()
+    if phase == "json-limits":
+        import json_limits_check
+
+        return json_limits_check.main()
+    if phase.startswith("execution-"):
+        import execution_check
+
+        if phase not in execution_check.PHASES:
+            print(f"unknown phase {phase!r}", file=sys.stderr)
+            return 2
+        return execution_check.main(phase)
     policy_path = os.environ.get("POLICY_PATH", "/policy/account-scope.v1.json")
     receipts_path = os.environ.get("RECEIPTS_PATH", "/out/receipts.jsonl")
     doc = policy.load(policy_path)

@@ -17,6 +17,14 @@ const PREFIX = "ROUNDS_GATE_";
 const TRUTHY = ["true", "1", "yes"];
 
 const GATES = {
+  // The execution job store (ROUNDS-00A-L03): on serves the hook routes
+  // under /api/rounds/execution/ (execution.pb.js).
+  EXECUTION_STORE: {
+    values: ["off", "on"],
+    default: "off",
+    closed: "off",
+    aliases: [],
+  },
   SIGNUPS: {
     values: ["enabled", "disabled"],
     default: "enabled",

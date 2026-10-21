@@ -43,5 +43,10 @@ data:
   # "enforce", or "disabled". The runner and the frontend both read it,
   # so restart both Deployments when it changes.
   ROUNDS_GATE_EXECUTION_DEFINITIONS: ""
+  # The execution job store, read by PocketBase and the runner: "off" or
+  # "on". On, PocketBase serves the store's hook routes and each runner
+  # runs its worker. Turn it on in both, and set ROUNDS_EXECUTION_SECRET
+  # first (runner.yaml, step 4).
+  ROUNDS_GATE_EXECUTION_STORE: ""
   # Signups, read by PocketBase and the frontend: "enabled" or "disabled".
   ROUNDS_GATE_SIGNUPS: ""

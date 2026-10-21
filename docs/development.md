@@ -88,7 +88,8 @@ Pull requests into `main` and `next` run `scripts/lint_migrations.py`. It fails 
 
 1. edits, renames, or deletes an existing migration;
 2. adds a migration whose up step drops a collection or a field, rewrites or deletes existing rows, or loads code with `require()`;
-3. adds, edits, or deletes any other file in that directory.
+3. adds, edits, or deletes any other file in that directory;
+4. adds a migration that sets a JSON field's `maxSize` without registering it ([JSON field limits](#json-field-limits)).
 
 A down step may do all of that. The lint reads the whole file except the down step, helpers included. It matches destructive and row-writing calls by method name, whatever the object is called, plus SQL in a file that runs `newQuery()`, so it catches mistakes rather than every possible rewrite. Run it before you push:
 
@@ -117,6 +118,21 @@ The lint can't prove the review happened. It runs from the pull request's own ch
 [#156](https://github.com/keyurgolani/rounds/issues/156)'s migration framework and [#157](https://github.com/keyurgolani/rounds/issues/157)'s restore rehearsal replace this lint.
 
 A migration that rewrites rows records what it touches in a committed manifest under `pocketbase/migration-manifests/`, and its allowlist entry's `manifest` key names that file. `1700006200_definitions_expand.js` and its manifest are the first pair.
+
+### JSON Field Limits
+
+PocketBase 0.22's own `1702134272_set_default_json_max_size` migration sets every JSON field's `maxSize` to 2,000,000 bytes. It sorts after every `1700xxxxxx` migration here, so on a database built from scratch it overwrites the limit each of them declares, while a database upgraded in place keeps the limits of the fields added after it first ran. Orchestrator decision D10 (#3, `ROUNDS-00A-L03`) closes that difference: `pocketbase/pb_migrations/1702134273_json_limits.js` sorts right after PocketBase's migration and sets every JSON field the repository's migrations define back to the size they end on.
+
+Its `LIMITS` registry is a literal, sorted list of `[collection, field, bytes]`. It skips a collection or field the database doesn't have and saves a collection only when one of its limits changes, so it changes nothing on a database that already holds every limit. It records the size each field it changes held before in a `_params` row named for its file (`PRIOR_KEY`), and its down step puts exactly those sizes back and removes the row, so undoing it leaves a field that already held its declared size, as many do on a database upgraded in place, where it was.
+
+A migration that adds a JSON field or changes a `maxSize`:
+
+1. sets the size where it creates or changes the field, as the existing migrations do: `options: { maxSize: ... }` in the field, or `X.schema.getFieldByName("f").options.maxSize = ...`;
+2. registers the size in a new `NNNNNNNNNN_json_limits_<name>.js`, copied from `1702134273_json_limits.js` with its own `LIMITS`, a `PRIOR_KEY` that names its own file, and a timestamp after the last json_limits file, so its entries win over earlier ones. A json_limits file that has shipped is never edited.
+
+The migration lint fails a new migration whose JSON limit no json_limits file registers at the size the migrations end on (`unregistered-json-limit`), one that sets a limit in a way the lint can't read or declares a JSON field without one (`unreadable-json-limit`), and a json_limits file that sorts before PocketBase's migration or whose `LIMITS` isn't a literal list (`json-limits-registry`). `pocketbase/tests/test_json_limits.py` holds the registry to every migration and to the account-scope policy's oversized probes, and runs its up and down steps against a stub. Harness phase 12c (`harness/probes/json_limits_check.py`) checks a fresh and an upgraded database with the pinned PocketBase binary.
+
+Lowering a limit makes PocketBase refuse an API write to a row whose stored value is already bigger, until that value shrinks; hook writes through `saveRecord` skip the check. D10 sets four fields below the 2,000,000 bytes a fresh database held: `admission_commands.result` (1 MiB) and `coding_questions.entry` and `definition_case_ids` (64 KiB), which no client writes, and `ai_providers.models_cache` (256 KiB), a provider's list of model ids. It also sets `legacy_artifact_snapshots.design` (64 KiB) and `font_families` (4 KiB) below it, while that collection holds no rows yet.
 
 ## Server-Owned Definitions
 

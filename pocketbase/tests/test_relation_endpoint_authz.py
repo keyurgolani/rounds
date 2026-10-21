@@ -59,6 +59,16 @@ SHARED_CONTENT_FIELDS = {
 }
 
 
+# Relations no client sets at all: pb_hooks/execution.pb.js refuses any client
+# create or update that sets or changes one, and only the server writes them,
+# for the row's own account (ROUNDS-00A-L03). They need no owner-equality
+# endpoint, and the cross-owner scan still checks them.
+SERVER_SET_FIELDS = {
+    ("ai_coding_attempts", "envelope"),
+    ("take_home_attempts", "envelope"),
+}
+
+
 @pytest.fixture(scope="module")
 def src() -> str:
     return MIGRATION.read_text()
@@ -120,7 +130,17 @@ def test_endpoints_are_relation_exceptions_minus_shared_content(policy):
         rep = {e["field"] for e in row.get("relation_endpoints", [])}
         assert rep <= rex, (name, sorted(rep - rex))
         shared = {f for (c, f) in SHARED_CONTENT_FIELDS if c == name}
-        assert rex - rep == shared, (name, sorted(rex - rep), sorted(shared))
+        server_set = {f for (c, f) in SERVER_SET_FIELDS if c == name}
+        assert rex - rep == shared | server_set, (name, sorted(rex - rep), sorted(shared | server_set))
+
+
+def test_server_set_relations_are_refused_from_every_client():
+    hooks = (ROOT / "pocketbase" / "pb_hooks" / "execution.pb.js").read_text()
+    collections = sorted({c for c, _f in SERVER_SET_FIELDS})
+    listed = '"' + '", "'.join(collections) + '"'
+    for guard in ("guardEnvelopeCreate", "guardEnvelopeUpdate"):
+        assert re.search(r"\.%s\(e\);\s*\},\s*%s\);" % (guard, re.escape(listed)), hooks), guard
+    assert {f for _c, f in SERVER_SET_FIELDS} == {"envelope"}
 
 
 def test_every_relation_family_collection_has_endpoints(policy):

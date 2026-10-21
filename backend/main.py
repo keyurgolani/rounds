@@ -3,9 +3,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp
 
 from app import admission, definitions, errors, gates, obs
+from execution import runtime as execution_runtime
 from routers import ai, ai_coding, pdf, runner, sd_practice, share, take_home
 
 
@@ -16,7 +18,13 @@ async def lifespan(_app: FastAPI):
     # Every stored definition's checksum is checked once per process; a
     # mismatch logs definition.rejected and that version fails closed.
     definitions.init()
-    yield
+    # The execution worker runs only while ROUNDS_GATE_EXECUTION_STORE is
+    # on and ROUNDS_EXECUTION_SECRET logs in (ROUNDS-00A-L03).
+    await execution_runtime.start()
+    try:
+        yield
+    finally:
+        await execution_runtime.stop()
 
 
 class RunnerApp(FastAPI):
@@ -67,3 +75,13 @@ app.include_router(take_home.router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# Readiness (ROUNDS-00A-L03). With the execution store on and the worker
+# secret set, ready only while the worker is logged in and the store
+# answers; otherwise the same as /health. /health stays liveness.
+@app.get("/ready")
+def ready():
+    state = execution_runtime.readiness()
+    body = {"status": "ok" if state["ready"] else "unready", "store": state["store"]}
+    return JSONResponse(body, status_code=200 if state["ready"] else 503)

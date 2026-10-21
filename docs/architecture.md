@@ -41,7 +41,7 @@ PocketBase  <------------+ admin token (share endpoint)
   |-- seeded shared content
 ```
 
-In development, Vite mirrors the production proxy behavior (`frontend/devProxy.ts`). Exact runner paths (`/api/run`, `/api/evaluate`, `/api/pdf`, `/api/ai`, `/api/share`) go to FastAPI, while the rest of `/api/*` goes to PocketBase. In production, nginx in the frontend container owns that same routing. Both answer 404 for PocketBase's admin UI (`/_/`), its admin API, collection metadata, and the admission hook routes; in dev the admin UI is on PocketBase's own port. The PDF renderer is internal-only — it has no host port mapping and is reached through the runner.
+In development, Vite mirrors the production proxy behavior (`frontend/devProxy.ts`). Exact runner paths (`/api/run`, `/api/evaluate`, `/api/pdf`, `/api/ai`, `/api/share`) go to FastAPI, while the rest of `/api/*` goes to PocketBase. In production, nginx in the frontend container owns that same routing. Both answer 404 for PocketBase's admin UI (`/_/`), its admin API, collection metadata, the admission and execution hook routes, and the execution service record's routes, the collection paths in any case; in dev the admin UI is on PocketBase's own port. The PDF renderer is internal-only. It has no host port mapping and is reached through the runner.
 
 ## Frontend
 
