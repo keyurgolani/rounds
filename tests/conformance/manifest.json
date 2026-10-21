@@ -1,0 +1,785 @@
+{
+  "schema": "containment-corpus-manifest/v1",
+  "corpus_version": "1",
+  "audited_revision": "62d4eae",
+  "targets": [
+    "ci",
+    "compose",
+    "k8s"
+  ],
+  "defaults": {
+    "languages": [
+      "python",
+      "javascript"
+    ],
+    "control": "a negative control that lands with the closing leaf, in the same pull request (decision D4)",
+    "destructive": false,
+    "environment_sensitive": false,
+    "schemas": {
+      "manifest": "containment-corpus-manifest/v1",
+      "skip_ledger": "containment-corpus-skip-ledger/v1",
+      "receipt": "rounds-containment-receipt/v1"
+    },
+    "contract_revisions": {
+      "definition": "test-definition/v1",
+      "harness": "harness-revision/v1",
+      "renderer_contract": "absent",
+      "resource_profile": "execution-default.v1",
+      "envelope": "absent"
+    },
+    "environment": "a stack built from the commit under test (harness/compose.yml + tests/conformance/compose.yml); no 62d4eae images are pulled",
+    "retained_evidence": "redacted request and response summaries and their checksums; fixture artifacts kept 14 days, receipts 90"
+  },
+  "fixtures": [
+    {
+      "id": "EX-01",
+      "attack": "An anonymous caller reaches an execution or render route",
+      "spec_ref": "design-spec 1749; issue #8 EX-01",
+      "status": "contained",
+      "closing_leaf": "ROUNDS-00A-L01",
+      "module": "ex_01_anonymous",
+      "routes": [
+        "POST /api/run",
+        "POST /api/evaluate",
+        "POST /api/ai-coding/run-project",
+        "POST /api/ai-coding/grade",
+        "POST /api/take-home/run",
+        "POST /api/take-home/submit",
+        "POST /api/pdf/render"
+      ],
+      "languages": [],
+      "environment_sensitive": true,
+      "control": "selftest/test_negative_controls.py: the account step off, and the body checked before the account",
+      "setup": "none; the fixture sends no account",
+      "teardown": "none",
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "every admitted route refuses a request that carries no account before it starts work; a route its gate turned off answers the gate's typed 503 first and is recorded as contained by its gate",
+      "subcases": [
+        {
+          "id": "EX-01.anonymous-denied",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        }
+      ]
+    },
+    {
+      "id": "EX-02",
+      "attack": "One account reads another account's result; the quota and in-flight sub-cases",
+      "spec_ref": "security gate 3481; issue #8 EX-02",
+      "status": "contained",
+      "closing_leaf": "ROUNDS-00B-L01",
+      "module": "ex_02_cross_account_result",
+      "routes": [
+        "POST /api/collections/take_home_attempts/records",
+        "GET /api/collections/take_home_attempts/records/:id",
+        "GET /api/collections/take_home_attempts/records"
+      ],
+      "languages": [],
+      "environment_sensitive": true,
+      "control": "selftest/test_negative_controls.py: another account's rows readable, and a foreign id answering unlike a missing one",
+      "setup": "two synthetic accounts; account A creates one result row",
+      "teardown": "both accounts removed with the admin token",
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "a signed-in account cannot read another account's result by id, and a foreign id reads the same as a missing one; the quota-drain and in-flight sub-cases are a pending row for ROUNDS-00A-L03",
+      "subcases": [
+        {
+          "id": "EX-02.result-read-denied",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00B-L01"
+        },
+        {
+          "id": "EX-02.foreign-reads-as-missing",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00B-L01"
+        },
+        {
+          "id": "EX-02.quota-drain",
+          "status": "pending",
+          "closing_leaf": "ROUNDS-00A-L03"
+        },
+        {
+          "id": "EX-02.in-flight-cap",
+          "status": "pending",
+          "closing_leaf": "ROUNDS-00A-L03"
+        }
+      ]
+    },
+    {
+      "id": "EX-03",
+      "attack": "A demo actor resets its own limit flags",
+      "spec_ref": "security gate 3482; issue #8 EX-03",
+      "status": "contained",
+      "closing_leaf": "ROUNDS-00A-L01",
+      "module": "ex_03_demo_flag_immutable",
+      "routes": [
+        "PATCH /api/collections/users/records/:id",
+        "GET /api/collections/users/records/:id"
+      ],
+      "languages": [],
+      "environment_sensitive": true,
+      "control": "selftest/test_negative_controls.py: client writes to the demo flags accepted",
+      "setup": "one synthetic account",
+      "teardown": "the account removed with the admin token",
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "a client write to is_demo or the demo usage flags on its own record does not change them",
+      "subcases": [
+        {
+          "id": "EX-03.demo-flags-server-owned",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        }
+      ]
+    },
+    {
+      "id": "EX-04",
+      "attack": "An oversized request body, and caller-chosen limits",
+      "spec_ref": "design-spec 1750; issue #8 EX-04",
+      "status": "contained",
+      "closing_leaf": "ROUNDS-00A-L01",
+      "module": "ex_04_oversized_input",
+      "routes": [
+        "POST /api/run",
+        "POST /api/evaluate"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "environment_sensitive": true,
+      "control": "selftest/test_negative_controls.py: the byte cap waiting for the body, and caller fields accepted",
+      "setup": "one synthetic account (#9's factory) for the caller-limit requests; the body-cap requests declare their size in the headers and send no body",
+      "teardown": "the plugin removes the account; a failed removal fails the fixture",
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "a body over the route cap is refused 413 payload_too_large from its declared length, before it is read, and a request naming its own time limit is refused legacy_request_rejected before anything runs (closed by ROUNDS-00A-L02); a failed connection is inconclusive, never a finding",
+      "subcases": [
+        {
+          "id": "EX-04.body-cap",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        },
+        {
+          "id": "EX-04.caller-limits-refused",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L02"
+        }
+      ]
+    },
+    {
+      "id": "EX-05",
+      "attack": "Shell injection through a caller test_command",
+      "spec_ref": "design-spec 1751; issue #8 EX-05",
+      "status": "contained",
+      "closing_leaf": "ROUNDS-00A-L02",
+      "module": "ex_05_caller_command",
+      "routes": [
+        "POST /api/run",
+        "POST /api/ai-coding/run-project"
+      ],
+      "languages": [
+        "python",
+        "javascript",
+        "typescript"
+      ],
+      "environment_sensitive": false,
+      "control": "selftest/test_negative_controls.py: caller fields accepted",
+      "setup": "one synthetic account; the enforced execution-definitions gate",
+      "teardown": "the account removed with the admin token",
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "with server-owned definitions enforced, a caller-supplied test_command is refused legacy_request_rejected before anything runs",
+      "subcases": [
+        {
+          "id": "EX-05.caller-command-refused",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L02"
+        }
+      ]
+    },
+    {
+      "id": "EX-06",
+      "attack": "A caller validator or custom driver",
+      "spec_ref": "design-spec 1751; issue #8 EX-06",
+      "status": "contained",
+      "closing_leaf": "ROUNDS-00A-L02",
+      "module": "ex_06_caller_validator",
+      "routes": [
+        "POST /api/evaluate",
+        "POST /api/run"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "environment_sensitive": false,
+      "control": "selftest/test_negative_controls.py: caller fields accepted",
+      "setup": "one synthetic account; the enforced execution-definitions gate",
+      "teardown": "the account removed with the admin token",
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "caller validators and a caller-supplied driver are refused legacy_request_rejected; running a caller validator in the worker is a pending row for ROUNDS-00A-L05",
+      "subcases": [
+        {
+          "id": "EX-06.caller-validators-refused",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        },
+        {
+          "id": "EX-06.caller-driver-refused",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        },
+        {
+          "id": "EX-06.validators-in-worker",
+          "status": "pending",
+          "closing_leaf": "ROUNDS-00A-L05"
+        }
+      ]
+    },
+    {
+      "id": "EX-07",
+      "attack": "Read canaries from the environment, /proc, or the parent cmdline",
+      "spec_ref": "design-spec 1752; issue #8 EX-07",
+      "status": "contained",
+      "closing_leaf": "ROUNDS-00A-L01",
+      "module": "ex_07_candidate_env_absence",
+      "routes": [
+        "POST /api/run"
+      ],
+      "languages": [
+        "python"
+      ],
+      "environment_sensitive": true,
+      "control": "selftest/test_negative_controls.py: the candidate given the runner's environment",
+      "setup": "one synthetic account; the runner given the run's canaries as its environment",
+      "teardown": "the account removed with the admin token",
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "the candidate's environment is the minimal one and holds no runner secret, and the receipt keeps the output's checksum and any unexpected variable's name, never a value; the /proc and other-uid reads are pending rows for ROUNDS-00A-L05 and ROUNDS-00A-L07",
+      "subcases": [
+        {
+          "id": "EX-07.candidate-env-minimal",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        },
+        {
+          "id": "EX-07.other-process-env",
+          "status": "pending",
+          "closing_leaf": "ROUNDS-00A-L05"
+        }
+      ]
+    },
+    {
+      "id": "EX-08",
+      "attack": "Reach metadata, pocketbase, the renderer, loopback, or RFC1918 from a worker",
+      "spec_ref": "security gate 3491; issue #8 EX-08",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L05",
+      "routes": [
+        "POST /api/run",
+        "POST /api/ai-coding/run-project",
+        "POST /api/take-home/run"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "environment_sensitive": true,
+      "control": "ci-fault-worker-network (a worker with network), landing with the closing leaf",
+      "setup": "the bait network (fake metadata, fake RFC1918 service, logging DNS resolver)",
+      "teardown": "the account and any created rows removed",
+      "guarantee": "no-network workers cannot reach metadata, internal services, loopback, or RFC1918; lands with the no-secret worker"
+    },
+    {
+      "id": "EX-09",
+      "attack": "A DNS lookup of a canary under the bait domain",
+      "spec_ref": "security gate 3491; issue #8 EX-09",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L05",
+      "routes": [
+        "POST /api/run",
+        "POST /api/ai-coding/run-project"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "environment_sensitive": true,
+      "control": "ci-fault-worker-network (a worker with a resolver), landing with the closing leaf",
+      "setup": "the logging DNS resolver on the bait network",
+      "teardown": "the account and any created rows removed",
+      "guarantee": "a worker cannot resolve a canary under the bait domain; lands with the no-secret worker"
+    },
+    {
+      "id": "EX-10",
+      "attack": "Write outside scratch, symlink out, or read another job's scratch",
+      "spec_ref": "security gate 3484; issue #8 EX-10",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L05",
+      "routes": [
+        "POST /api/run",
+        "POST /api/ai-coding/run-project"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "destructive": true,
+      "control": "ci-fault-shared-scratch (jobs sharing a scratch root), landing with the closing leaf",
+      "setup": "two sequential runs",
+      "teardown": "the account and any created rows removed",
+      "guarantee": "a job's writes stay in its own scratch and cannot read another job's; lands with the ephemeral worker"
+    },
+    {
+      "id": "EX-11",
+      "attack": "Exhaust the process limit",
+      "spec_ref": "security gate 3485; issue #8 EX-11",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L05",
+      "routes": [
+        "POST /api/run"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "destructive": true,
+      "control": "ci-fault-no-pid-limit (the process cap raised), landing with the closing leaf",
+      "setup": "a resource-profile limit plus one",
+      "teardown": "the account removed",
+      "guarantee": "the worker's process cap holds; lands with the ephemeral worker"
+    },
+    {
+      "id": "EX-12",
+      "attack": "Exhaust memory, scratch, and the file limit",
+      "spec_ref": "security gate 3485; issue #8 EX-12",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L05",
+      "routes": [
+        "POST /api/run"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "destructive": true,
+      "control": "ci-fault-no-memory-limit (the limits raised), landing with the closing leaf",
+      "setup": "a resource-profile limit plus one",
+      "teardown": "the account removed",
+      "guarantee": "the worker's memory, scratch, and file caps hold; lands with the ephemeral worker"
+    },
+    {
+      "id": "EX-13",
+      "attack": "A CPU loop and a SIGTERM-ignoring child past the wall limit",
+      "spec_ref": "design-spec 1753; issue #8 EX-13",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L05",
+      "routes": [
+        "POST /api/run",
+        "POST /api/take-home/submit"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "destructive": true,
+      "control": "ci-fault-soft-kill (the worker not hard-killing the group), landing with the closing leaf",
+      "setup": "a program that ignores SIGTERM",
+      "teardown": "the account removed",
+      "guarantee": "the worker kills the whole process group at the wall limit; lands with the timeout work and the ephemeral worker"
+    },
+    {
+      "id": "EX-14",
+      "attack": "Flood stdout to amplify output",
+      "spec_ref": "security gate 3486; issue #8 EX-14",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L05",
+      "routes": [
+        "POST /api/run"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "destructive": true,
+      "control": "ci-fault-no-stream-cap (the output stream uncapped), landing with the closing leaf",
+      "setup": "a program that writes far past the output cap",
+      "teardown": "the account removed",
+      "guarantee": "the output stream is capped as it is read; lands with the ephemeral worker"
+    },
+    {
+      "id": "EX-15",
+      "attack": "A daemon outlives the job and the next job finds residue",
+      "spec_ref": "security gate 3484; issue #8 EX-15",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L05",
+      "routes": [
+        "POST /api/run",
+        "POST /api/ai-coding/run-project"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "destructive": true,
+      "control": "ci-fault-no-reap (the worker left running), landing with the closing leaf",
+      "setup": "two sequential runs",
+      "teardown": "the account removed",
+      "guarantee": "no process or state outlives a job into the next; lands with the result envelope and the ephemeral worker"
+    },
+    {
+      "id": "EX-16",
+      "attack": "Container socket, service-account token, capabilities, setuid, root writes",
+      "spec_ref": "security gate 3487; issue #8 EX-16",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L05",
+      "routes": [
+        "POST /api/run",
+        "POST /api/ai-coding/run-project"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "environment_sensitive": true,
+      "control": "ci-fault-privileged-worker (capabilities and a mounted socket), landing with the closing leaf",
+      "setup": "the worker's security context",
+      "teardown": "the account removed",
+      "guarantee": "a worker has no socket, token, extra capability, setuid, or root write; lands with the no-secret worker and its proof"
+    },
+    {
+      "id": "EX-17",
+      "attack": "The API stays responsive during one and during four in-flight take-homes",
+      "spec_ref": "security gate 3488; issue #8 EX-17",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L03",
+      "routes": [
+        "POST /api/take-home/submit",
+        "GET /health"
+      ],
+      "languages": [
+        "python"
+      ],
+      "control": "ci-fault-blocking-loop (the event loop held), landing with the closing leaf",
+      "setup": "one, then four, concurrent submissions",
+      "teardown": "the accounts removed",
+      "guarantee": "the event loop stays free under load; the four-in-flight sub-case lands with the result envelope"
+    },
+    {
+      "id": "EX-18",
+      "attack": "A canary in the runner or PocketBase logs or in stored harness output",
+      "spec_ref": "security gate 3494; issue #8 EX-18",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L07",
+      "routes": [
+        "POST /api/run",
+        "POST /api/take-home/submit"
+      ],
+      "languages": [
+        "python"
+      ],
+      "environment_sensitive": true,
+      "control": "ci-fault-log-canary (a sink that keeps the value), landing with the closing leaf",
+      "setup": "a canary planted in the candidate's input",
+      "teardown": "the accounts removed",
+      "guarantee": "no canary reaches a log, harness_output, or stored grade; rubric_review.reason is not-applicable (no provider-key canary)"
+    },
+    {
+      "id": "FG-01",
+      "attack": "A late result from atexit forges the outcome",
+      "spec_ref": "design-spec 1753; issue #8 FG-01",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L02",
+      "routes": [
+        "POST /api/evaluate",
+        "POST /api/ai-coding/grade"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "control": "ci-fault-trust-stdout (the runner trusting a printed result), landing with the closing leaf",
+      "setup": "a program that prints a forged result marker",
+      "teardown": "the account removed",
+      "guarantee": "only the server's result counts, never a printed marker; lands with the server-owned definitions"
+    },
+    {
+      "id": "FG-02",
+      "attack": "A fake pytest summary and exit 0",
+      "spec_ref": "design-spec 1753; issue #8 FG-02",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L02",
+      "routes": [
+        "POST /api/ai-coding/run-project",
+        "POST /api/take-home/submit"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "control": "ci-fault-trust-exit (the runner trusting the exit code), landing with the closing leaf",
+      "setup": "a program that prints a fake summary and exits 0",
+      "teardown": "the account removed",
+      "guarantee": "the server scores on its own channel, never the printed summary; lands with the server-owned definitions"
+    },
+    {
+      "id": "FG-03",
+      "attack": "A forged score of 1e9",
+      "spec_ref": "design-spec 1753; issue #8 FG-03",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L02",
+      "routes": [
+        "POST /api/take-home/submit"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
+      "control": "ci-fault-trust-score (the runner trusting a printed score), landing with the closing leaf",
+      "setup": "a program that prints {criteria, score: 1e9}",
+      "teardown": "the account removed",
+      "guarantee": "the server bounds and owns the score; lands with the server-owned definitions"
+    },
+    {
+      "id": "FG-04",
+      "attack": "A candidate conftest.py, sitecustomize.py, or harness-path file",
+      "spec_ref": "security gate 3489; issue #8 FG-04",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L02",
+      "routes": [
+        "POST /api/ai-coding/run-project",
+        "POST /api/take-home/run"
+      ],
+      "languages": [
+        "python"
+      ],
+      "control": "ci-fault-no-path-check (the submission path check removed), landing with the closing leaf",
+      "setup": "a submission carrying a reserved file name",
+      "teardown": "the account removed",
+      "guarantee": "a submission cannot place a configuration, startup, or harness-path file; lands with the server-owned definitions"
+    },
+    {
+      "id": "FG-05",
+      "attack": "A client writes an attempt row with status graded",
+      "spec_ref": "security gate 3490; issue #8 FG-05",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L03",
+      "routes": [
+        "POST /api/collections/take_home_attempts/records"
+      ],
+      "languages": [],
+      "environment_sensitive": true,
+      "control": "ci-fault-client-graded (the attempt create rule loosened), landing with the closing leaf",
+      "setup": "one synthetic account",
+      "teardown": "the account removed",
+      "guarantee": "only the server writes a graded attempt from its envelope; lands with the result envelope"
+    },
+    {
+      "id": "FG-06",
+      "attack": "Any account reads test_command, hidden_files, or harness_files",
+      "spec_ref": "security gate 3489; issue #8 FG-06",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L02",
+      "routes": [
+        "GET /api/collections/ai_coding_rounds/records",
+        "GET /api/collections/take_home_assignments/records"
+      ],
+      "languages": [],
+      "environment_sensitive": true,
+      "control": "ci-fault-harness-readable (the hidden fields exposed), landing with the closing leaf",
+      "setup": "one synthetic account",
+      "teardown": "the account removed",
+      "guarantee": "the hidden test command, hidden files, and harness files are not client-readable; lands with the server-owned definitions"
+    },
+    {
+      "id": "RD-01",
+      "attack": "An anonymous render, or one account renders another's snapshot",
+      "spec_ref": "renderer gate 2579; issue #8 RD-01",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L04",
+      "routes": [
+        "POST /api/pdf/render"
+      ],
+      "languages": [],
+      "environment_sensitive": true,
+      "control": "ci-fault-snapshot-cross-account (the snapshot owner rule removed), landing with the closing leaf",
+      "setup": "two accounts and a server-built snapshot",
+      "teardown": "both accounts removed",
+      "guarantee": "a render needs an account and a snapshot the account owns; the anonymous denial is covered by EX-01, the snapshot sub-cases land with the snapshot bridge and the render worker"
+    },
+    {
+      "id": "RD-02",
+      "attack": "Scripts, event handlers, javascript: URLs, meta refresh; CSS, image, font, and file injection",
+      "spec_ref": "renderer gate 2580; issue #8 RD-02",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L04",
+      "routes": [
+        "POST /api/pdf/render"
+      ],
+      "languages": [],
+      "control": "ci-fault-snapshot-unsanitised (the snapshot sanitiser weakened), landing with the closing leaf",
+      "setup": "a snapshot built from hostile resume data",
+      "teardown": "the account removed",
+      "guarantee": "the server-built snapshot excludes active and resource-loading markup; lands with the snapshot bridge and the no-script render worker"
+    },
+    {
+      "id": "RD-03",
+      "attack": "Fetches to services, metadata, or file://; an oversized data: URL",
+      "spec_ref": "security gate 3491; issue #8 RD-03",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L06",
+      "routes": [
+        "POST /api/pdf/render"
+      ],
+      "languages": [],
+      "environment_sensitive": true,
+      "control": "ci-fault-render-network (the render worker given network), landing with the closing leaf",
+      "setup": "the bait network and a document that fetches",
+      "teardown": "the account removed",
+      "guarantee": "the render worker reaches nothing and bounds data: URLs; lands with the no-script render worker and its proof"
+    },
+    {
+      "id": "RD-04",
+      "attack": "CSS, page-count, image, and font exhaustion; decompression and image bombs; output amplification",
+      "spec_ref": "security gate 3486; issue #8 RD-04",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L06",
+      "routes": [
+        "POST /api/pdf/render"
+      ],
+      "languages": [],
+      "destructive": true,
+      "control": "ci-fault-no-render-limits (the render limits raised), landing with the closing leaf",
+      "setup": "documents that exhaust a render limit",
+      "teardown": "the account removed",
+      "guarantee": "the render worker bounds pages, resources, and output; lands with the no-script render worker"
+    },
+    {
+      "id": "RD-05",
+      "attack": "Crash Chromium, then render again",
+      "spec_ref": "renderer gate 2581; issue #8 RD-05",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L06",
+      "routes": [
+        "POST /api/pdf/render"
+      ],
+      "languages": [],
+      "destructive": true,
+      "control": "ci-fault-pooled-browser (a reused browser), landing with the closing leaf",
+      "setup": "a document that crashes the renderer, then a normal one",
+      "teardown": "the account removed",
+      "guarantee": "a crash is contained to its own render and the next render is clean; lands with the no-script render worker"
+    },
+    {
+      "id": "RD-06",
+      "attack": "A render leaves cookies, storage, or cache for the next",
+      "spec_ref": "renderer gate 2582; issue #8 RD-06",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L06",
+      "routes": [
+        "POST /api/pdf/render"
+      ],
+      "languages": [],
+      "environment_sensitive": true,
+      "control": "ci-fault-shared-profile (a shared browser profile), landing with the closing leaf",
+      "setup": "two sequential renders",
+      "teardown": "the account removed",
+      "guarantee": "no cookie, storage, or cache carries between renders; lands with the ephemeral render worker"
+    },
+    {
+      "id": "RD-07",
+      "attack": "The render proxy or health echoes the sidecar or a URLError string",
+      "spec_ref": "renderer gate 2581; issue #8 RD-07",
+      "status": "contained",
+      "closing_leaf": "ROUNDS-00A-L01",
+      "module": "rd_07_render_no_echo",
+      "routes": [
+        "GET /api/pdf/health",
+        "POST /api/pdf/render"
+      ],
+      "languages": [],
+      "environment_sensitive": true,
+      "control": "selftest/test_negative_controls.py: health answering more than its status or a status of its own, and the renderer's text in a failed render",
+      "setup": "one synthetic account; the stack runs no renderer at stage 1",
+      "teardown": "the account removed with the admin token",
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "the proxy answers a failed render with a typed status and fixed text and health answers only its status, ok or unavailable; the sidecar's own echo is a white-box pending row for ROUNDS-00A-L06",
+      "subcases": [
+        {
+          "id": "RD-07.health-status-only",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        },
+        {
+          "id": "RD-07.render-failure-typed",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        },
+        {
+          "id": "RD-07.renderer-own-echo",
+          "status": "pending",
+          "closing_leaf": "ROUNDS-00A-L06"
+        }
+      ]
+    },
+    {
+      "id": "RD-08",
+      "attack": "A browser, page, profile, or scratch is left after any exit",
+      "spec_ref": "renderer gate 2582; issue #8 RD-08",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L06",
+      "routes": [
+        "POST /api/pdf/render"
+      ],
+      "languages": [],
+      "destructive": true,
+      "control": "ci-fault-no-render-reap (render processes left running), landing with the closing leaf",
+      "setup": "a render that exits abnormally",
+      "teardown": "the account removed",
+      "guarantee": "no browser, page, profile, or scratch outlives a render; lands with the ephemeral render worker"
+    },
+    {
+      "id": "RD-09",
+      "attack": "Two fresh renders match in text, page count, and font hashes",
+      "spec_ref": "renderer gate 2582; issue #8 RD-09",
+      "status": "pending",
+      "closing_leaf": "ROUNDS-00A-L06",
+      "routes": [
+        "POST /api/pdf/render"
+      ],
+      "languages": [],
+      "control": "ci-fault-nondeterministic-render (a nondeterministic renderer), landing with the closing leaf",
+      "setup": "the same document rendered twice",
+      "teardown": "the account removed",
+      "guarantee": "two fresh renders of one document match; lands with the no-script render worker"
+    }
+  ]
+}
