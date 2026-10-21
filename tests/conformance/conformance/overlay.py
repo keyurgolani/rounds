@@ -41,12 +41,22 @@ PATH = f"store/take-home/{SLUG}/{VARIANT}.v{VERSION}.json"
 # What the corpus changes in the source document.
 REKEYED = {"track": "take-home", "kind": "take-home", "slug": SLUG}
 
-ROOT = Path(__file__).resolve().parents[3]
 DEFINITIONS = Path("backend") / "definitions"
 
 
-def take_home_document(root: Path = ROOT) -> bytes:
+def repo_root() -> Path:
+    """The checkout this file is in. The corpus driver's image carries only
+    tests/conformance, so it has none; only the launcher and the self-tests
+    build the overlay."""
+    here = Path(__file__).resolve()
+    if len(here.parents) < 4:
+        raise RuntimeError("the corpus definitions are built from a checkout")
+    return here.parents[3]
+
+
+def take_home_document(root: Path | None = None) -> bytes:
     """The corpus take-home definition: the source revision, re-keyed."""
+    root = root or repo_root()
     doc = json.loads((root / DEFINITIONS / SOURCE).read_bytes())
     doc.update(REKEYED)
     return (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode("utf-8")
@@ -65,9 +75,10 @@ def entry(document: bytes) -> dict[str, Any]:
     }
 
 
-def overlay(root: Path = ROOT) -> tuple[dict[str, Any], bytes]:
+def overlay(root: Path | None = None) -> tuple[dict[str, Any], bytes]:
     """The corpus manifest (the real one plus the corpus entry) and the
     definition it names."""
+    root = root or repo_root()
     manifest = json.loads((root / DEFINITIONS / "manifest.json").read_bytes())
     entries = manifest.get("entries")
     if manifest.get("schema") != "definitions-manifest/v1" or not isinstance(entries, list):
@@ -78,7 +89,7 @@ def overlay(root: Path = ROOT) -> tuple[dict[str, Any], bytes]:
     return {**manifest, "entries": [*entries, entry(document)]}, document
 
 
-def write(out: Path, root: Path = ROOT) -> None:
+def write(out: Path, root: Path | None = None) -> None:
     manifest, document = overlay(root)
     target = out / PATH
     target.parent.mkdir(parents=True, exist_ok=True)

@@ -12,7 +12,7 @@ import pytest
 from conformance import overlay
 from corpus._requests import AI_CODING, CODING, TAKE_HOME, bodies
 
-DEFINITIONS = overlay.ROOT / "backend" / "definitions"
+DEFINITIONS = overlay.repo_root() / "backend" / "definitions"
 REAL = json.loads((DEFINITIONS / "manifest.json").read_bytes())
 COMPOSE = Path(__file__).resolve().parents[1] / "compose.yml"
 
@@ -57,6 +57,20 @@ def test_every_definition_the_bodies_name_is_active_on_the_corpus_stack():
         assert (ref["track"], ref["slug"], ref["variant"], ref["version"]) in active, ref
     named = {json.dumps(b["definition"], sort_keys=True) for b in bodies().values() if "definition" in b}
     assert named == {json.dumps(r, sort_keys=True) for r in (CODING, AI_CODING, TAKE_HOME)}
+
+
+def test_the_fixtures_bodies_need_no_checkout(monkeypatch):
+    # The corpus driver's image carries only tests/conformance.
+    import importlib
+
+    import corpus._requests as requests_module
+
+    def no_checkout():
+        raise RuntimeError("no checkout here")
+
+    monkeypatch.setattr(overlay, "repo_root", no_checkout)
+    importlib.reload(requests_module)
+    assert requests_module.bodies()[("POST", "/api/take-home/run")]["definition"] == TAKE_HOME
 
 
 def test_the_branch_has_no_active_take_home_definition_of_its_own():
