@@ -1,0 +1,993 @@
+{
+  "$schema": "./decision-record.schema.json",
+  "id": "DR-0003",
+  "title": "Transformation dependency and data-preserving clean-cutover program",
+  "leaf": "ROUNDS-01-L03",
+  "status": "ratified",
+  "owner": "Product Architecture",
+  "approver": "keyurgolani",
+  "approvalRef": {
+    "pr": 199,
+    "governedFiles": [
+      {"path":"docs/program/cutover-policy.md","sha256":"324d1b55c81c94bc887c2e20e03d1c5551762b8b6389d39f31aefedf7695fe89"},
+      {"path":"docs/program/reauthorization.md","sha256":"c42802dd9233951699ff00d40c8c320ca4fdedfa118642408ae1596fb815fc8a"},
+      {"path":"docs/program/rollback-template.schema.json","sha256":"f9f97c144e2d11750aa873cd979b6a041c78b034516098e21354248fa3300118"},
+      {"path":"docs/program/non-goals.json","sha256":"d4e0218a5a37a4e0de8be9985c1b8f99311d86e34397b516ada0f8b198b3aa03"},
+      {"path":"docs/program/non-goals.schema.json","sha256":"9e7a26dbe4252e659e5c22688dac7acb509b419a402d877bbf2b0c9e9035c1b3"},
+      {"path":"docs/program/definition-of-done.json","sha256":"724536a802989c993a6ac468dfda9943e5d6c910f1d05a1532c33f3e137a16d8"},
+      {"path":"docs/program/definition-of-done.schema.json","sha256":"fe06032731eb6880495bf678bc2467caa9785f9143c35178672fcf7452f8466b"},
+      {"path":"docs/program/journeys.json","sha256":"4b8ffc7210ca1b6e87e3828efb7c56a1c65a87d897262fdaf52ffb39bb4ace3a"},
+      {"path":"docs/program/journeys.schema.json","sha256":"e688a2b7aad59871c89fe1fa5d46e8b2c35fc28f4ff37dde4296a7c13d86bea9"},
+      {"path":"docs/program/program-record.schema.json","sha256":"530dbe0bd33507b008e087375c4c225392a17b789ac7c32517e3233a33a34e42"}
+    ]
+  },
+  "ratifiedOn": "2026-10-20",
+  "compatibility": "additive",
+  "revision": 1,
+  "supersedes": null,
+  "consumers": [
+    "ROUNDS-00A-L01",
+    "ROUNDS-00A-L08",
+    "ROUNDS-00B-L01",
+    "ROUNDS-00B-L06",
+    "ROUNDS-02-L01",
+    "ROUNDS-02-L02",
+    "ROUNDS-02-L03",
+    "ROUNDS-02-L04",
+    "ROUNDS-02-L05",
+    "ROUNDS-02-L06",
+    "ROUNDS-03-L01",
+    "ROUNDS-03-L02",
+    "ROUNDS-03-L03",
+    "ROUNDS-06-L01",
+    "ROUNDS-07-L01",
+    "ROUNDS-07-L02",
+    "ROUNDS-07-L03",
+    "ROUNDS-07-L04",
+    "ROUNDS-07-L05",
+    "ROUNDS-08-L02",
+    "ROUNDS-08-L03",
+    "ROUNDS-08-L04",
+    "ROUNDS-09-L01",
+    "ROUNDS-09-L02",
+    "ROUNDS-09-L03",
+    "ROUNDS-09-L04",
+    "ROUNDS-10-L04",
+    "ROUNDS-12-L01",
+    "ROUNDS-12-L02",
+    "ROUNDS-12-L03",
+    "ROUNDS-13-L01",
+    "ROUNDS-14-L01",
+    "ROUNDS-14-L04",
+    "ROUNDS-14-L05",
+    "ROUNDS-16-L01",
+    "ROUNDS-18-L03",
+    "ROUNDS-18-L05",
+    "ROUNDS-18-L06",
+    "ROUNDS-20-L01",
+    "ROUNDS-21-L01",
+    "ROUNDS-21-L02",
+    "ROUNDS-21-L03",
+    "ROUNDS-22-L01",
+    "ROUNDS-24-L03",
+    "ROUNDS-26-L04",
+    "ROUNDS-27-L01",
+    "ROUNDS-27-L02",
+    "ROUNDS-28-L01",
+    "ROUNDS-28-L02",
+    "ROUNDS-28-L03",
+    "ROUNDS-28-L04",
+    "ROUNDS-28-L05",
+    "ROUNDS-28-L06",
+    "ROUNDS-28-L07",
+    "ROUNDS-28-L08",
+    "ROUNDS-30-L04",
+    "ROUNDS-31-L06",
+    "ROUNDS-31-L09",
+    "ROUNDS-32-L01",
+    "ROUNDS-32-L02",
+    "ROUNDS-32-L03",
+    "ROUNDS-32-L05",
+    "ROUNDS-32-L06",
+    "ROUNDS-32-L07",
+    "ROUNDS-32-L08",
+    "ROUNDS-32-L09",
+    "ROUNDS-32-L10",
+    "ROUNDS-33-L01",
+    "ROUNDS-33-L02",
+    "ROUNDS-33-L04",
+    "ROUNDS-33-L05",
+    "ROUNDS-34-L01",
+    "ROUNDS-34-L02",
+    "ROUNDS-34-L03",
+    "ROUNDS-34-L04",
+    "ROUNDS-34-L05",
+    "ROUNDS-34-L06",
+    "ROUNDS-34-L07",
+    "ROUNDS-34-L08"
+  ],
+  "prerequisites": ["ROUNDS-01-L01","ROUNDS-01-L02"],
+  "authorityBoundary": "docs/program/cutover-policy.md",
+  "affectedPackages": [
+    "Transaction-owning Command Gateway",
+    "Account Service",
+    "Career Profile Service",
+    "Identity Directory for Organization and Person",
+    "Opportunity and Pursuit Service",
+    "Interview Process Service",
+    "Artifact Service",
+    "Practice Service",
+    "Action Service",
+    "Capture and Ingestion Service",
+    "Revision and Audit Service",
+    "Search Service",
+    "Read Model and Recommendation Service",
+    "Career Pack Registry",
+    "Public Share Capability Service",
+    "Execution Control Plane",
+    "Ephemeral Execution Worker pool",
+    "Provider Gateway"
+  ],
+  "versioning": "DR-0003 and the files it governs share one revision counter, cited as DR-0003@<revision>, or DR-0003@<revision>:<artifact-id> for one gateArtifacts row (each node's consumes in S2). definition-of-done.json, non-goals.json, and journeys.json carry their own revision, raised with this record's. Adding an artifact, edge, context, or journey mapping is additive; removing a producer or moving it later, dropping or loosening a DOD item, and reordering contexts are breaking. A ratified revision pins the SHA-256 of each governed file under docs/program/, so an unapproved edit fails DR_APPROVAL_STALE.",
+  "supersession": "A ratified revision is never edited. A changed decision gets a new revision that names the prior one in supersedes and gives a supersessionReason. From S2, leaf-gate fails a PR citing a breaking-superseded revision until it cites the successor (LEAF_GATE_SUPERSEDED); an additive successor passes. S3 supersedes this revision to ratify P3 and P5 against #18's ADR.",
+  "context": "Issue #17 (ROUNDS-01-L03), stage S1 of four. Spec lines refer to rounds-review docs/superpowers/specs/2026-10-18-rounds-review-board-design.md, and the catalog is rounds-review src/data/capabilities.json and src/data/capabilities.ts. The gates, gateArtifacts, and closure fields follow docs/program/program-record.schema.json. S2 adds docs/program/leaf-dag.json, its schema, scripts/conformance/rules/program.mjs, scripts/program/reconcile.mjs, and leaf-gate in report mode; S3 ratifies the context order and rollback defaults; S4 sets leaf-gate to enforce. Orchestrator decisions are taken under the owner's delegation to execute the approved plan.",
+  "securityConsequences": {
+    "account": "No runtime or privilege change. The program puts account isolation first (#9 to #14 in phase 1), and DOD-1 makes server-derived account scope part of every leaf's definition of done.",
+    "privacy": "Fixtures and examples are synthetic: the rollback fixture holds placeholder tags, commits, and digests and no account data. Transfer templates record procedures, never user data. DOD-6 keeps career content out of logs, traces, and metrics.",
+    "secret": "Nothing here reads or stores a secret. upgradeSource holds a release tag, commit, and image digests, which are public release metadata. S2's leaf-gate workflows get only actions: write (dispatcher) or read-only contents, issues, and pull-requests plus statuses: write, check out no PR code, and stay disabled until the owner sets LEAF_GATE_ENABLED.",
+    "publicBoundary": "Nothing new is published. scripts/program/report.mjs reads PR titles and issue states through the GitHub API, or from a saved state file, and writes nothing. From S2 leaf-gate posts one commit status on PRs, and only after the owner enables it."
+  },
+  "decisions": [
+    {
+      "id": "P1",
+      "title": "Delivery follows the spec's program order",
+      "status": "ratified",
+      "sources": ["spec 3070-3097","spec 3099-3147","orchestrator decision D1"],
+      "decision": "Leaves are ordered by the nine phases of spec 3072-3092, not by epic letter or catalog order: (1) containment, ROUNDS-00A and ROUNDS-00B; (2) decisions and early gates: ROUNDS-01, #18's database and transaction ADR, and the early ROUNDS-34 harnesses (#170, #171, #182); (3) authority substrate: account authorization, commands and idempotency, relation integrity, the pack contract, privacy policy, and the migration journal; (4) canonical aggregates, ROUNDS-03 to ROUNDS-07; (5) ingestion substrate: ROUNDS-14 privacy, then ROUNDS-10, ROUNDS-11, and ROUNDS-12 before the full ROUNDS-09 Capture UI, with adapters in ROUNDS-13; (6) vertical slices, each shipping its commands, read model, migration, UI, tests, and retirement gate together; (7) all five practice tracks behind the Software Engineering pack; (8) ROUNDS-29 and ROUNDS-30; (9) final cutover and release proof. Milestones 0 to 7 (spec 3104-3147) group the user outcomes inside that order. A leaf moves to the phase where an earlier leaf's gate needs it: the early ROUNDS-34 harnesses sit in phase 2, and #172 to #174 in phase 3. Containment preempts: a containment fix never waits on a later phase.",
+      "alternatives": [
+        {"option":"Epic letter order","reason":"ROUNDS-34 leaves in epic F gate leaves in epics A and B, so letter order deadlocks."},
+        {
+          "option": "Catalog capability order",
+          "reason": "It puts every ROUNDS-32 transfer after all the surfaces, while spec 3083-3085 ships each slice with its own migration and retirement gate."
+        },
+        {
+          "option": "One whole-product cutover at the end",
+          "reason": "Spec 2646-2647 rejects it; the approved direction moves one context at a time with a rollback checkpoint."
+        }
+      ],
+      "consequences": "S2's leaf-dag.json gives every node a phase (1 to 9) and a milestone (0 to 7) from its refined body, and leaf-gate fails a PR whose prerequisite is still open (report mode from S2, enforce from S4).",
+      "migrationImpact": "No transfer runs before containment and the substrate it uses. Transfers follow the context order in docs/program/cutover-policy.md.",
+      "rollbackImpact": "Reordering is a superseding revision. One that moves a prerequisite later fails the affected PRs until they cite the successor."
+    },
+    {
+      "id": "P2",
+      "title": "One bounded context at a time, every migration stage owned",
+      "status": "ratified",
+      "sources": ["spec 2637-2716","spec 772-773"],
+      "decision": "The program moves one bounded context at a time (spec 2641-2647). A converted concept has one writable authority at every revision (DR-0002 M2), a retirement criterion, and a time-bounded compatibility window; adapters, shadow reads, and comparisons read and never write. An authorityTransfer node is the PR that ships a run plan, after its mapping leaves, with one transfer per context it lists; #163's run stages 0 to 6 are transfers inside one node. Each of the 16 migration stages (spec 2677-2695) has one owner leaf in docs/program/cutover-policy.md. #164 runs stage 16 and removes legacy paths; it switches no authority of its own.",
+      "alternatives": [
+        {"option":"Switch every authority in #164","reason":"That is the whole-product cutover spec 2646-2647 rejects."},
+        {
+          "option": "Keep legacy and canonical writers in sync",
+          "reason": "Dual writing is what the approved direction rejected (spec 2639-2647)."
+        }
+      ],
+      "consequences": "No two freezes overlap. A context sits in exactly one transfer node's list, and S2 fails a second. Each stage owner supplies that stage's mechanism or receipt.",
+      "migrationImpact": "Data moves only through #156's framework under a transfer node's run plan, after #155's disposition manifest is complete (spec 2649-2673).",
+      "rollbackImpact": "Each transfer's filled rollback template bounds its rollback. Before #164's point of no return the switch record restores the legacy writer; after it, a compensating change set (spec 772-773). A rollback replays or compensates and never discards post-switch writes (spec 2715-2716)."
+    },
+    {
+      "id": "P3",
+      "title": "Draft context order",
+      "status": "draft",
+      "sources": ["spec 3104-3147","#14","#159 to #163"],
+      "decision": "Until S3 ratifies it against #18's ADR, the order is: M0 #14/S1 share; M1 #159 account, directory, career-profile; M2 #160/S1 to S3 pipeline, campaign, people-pursuit-notes, and #162/S1 actions; M3 #161 materials; M4 #160/S4 to S6 interview, people-round-notes, offer; M5 #163/P1 practice-0 to practice-6; then #164. docs/program/cutover-policy.md lists what S3 settles, including where the share rows' transfer sits (DR-0002@1 names #161) and #43's round types landing after the Milestone 4 interview transfer.",
+      "alternatives": [
+        {
+          "option": "Materials before pipeline",
+          "reason": "Opportunity-linked editions (#85) attach to the Opportunity and Pursuit that Milestone 2 migrates."
+        },
+        {"option":"Run contexts in parallel","reason":"Freezes would overlap, and spec 2689 freezes one context's writes at a time."}
+      ],
+      "consequences": "Draft: no transfer node merges in enforce mode until S3 ratifies the order, and none can run before then anyway.",
+      "migrationImpact": "None until ratified.",
+      "rollbackImpact": "S3 supersedes this revision with the ratified order."
+    },
+    {
+      "id": "P4",
+      "title": "One rollback template per transferred context",
+      "status": "ratified",
+      "sources": ["spec 2697-2716"],
+      "decision": "Every authority transfer fills docs/program/rollback-template.schema.json once per context it lists, as docs/program/transfers/<leaf>-<context>.json in its own PR (from S2). The template holds the 11 fields of spec 2703-2713 (rollback deadline, allowed downtime, recovery point and time objectives, forward and reverse compatibility, the final write-freeze boundary, the replay or reverse-delta journal, treatment of shares, exports, emails, and other external effects, partial-deploy detection, read-model downgrade or rebuild, and the decision owner), plus upgradeSource (the tag, commit, and image digests a rollback returns to) and backupConsistency. docs/program/fixtures/rollback-synthetic.json fills it with synthetic values.",
+      "alternatives": [
+        {"option":"A database snapshot as the rollback","reason":"Spec 2699: a snapshot alone is not a valid rollback after new writes."},
+        {
+          "option": "Rollback prose in each transfer body",
+          "reason": "Nothing checks prose, so a transfer could ship without a deadline or a journal."
+        }
+      ],
+      "consequences": "From S2 a transfer PR without a valid template for a listed context fails LEAF_GATE_NO_ROLLBACK. The operator passes the file to #156's switch as the transfer record.",
+      "migrationImpact": "Each transfer's rollback is bounded before its freeze starts.",
+      "rollbackImpact": "A template revision that only adds optional fields is additive; a new required field is breaking for open transfer PRs."
+    },
+    {
+      "id": "P5",
+      "title": "Rollback defaults",
+      "status": "draft",
+      "sources": ["spec 2056-2067","spec 2020-2031"],
+      "decision": "Until S3 ratifies them against #18's benchmark: the final write freeze stays under 15 minutes, zero accepted writes are lost, rollback or restore takes at most 30 minutes at the scale floor, and restore is rehearsed rather than inferred from a successful backup. A transfer may tighten a default; loosening one needs a deviations entry with the owner's approval.",
+      "alternatives": [
+        {
+          "option": "Targets per transfer only",
+          "reason": "Spec 2062-2067 sets program-wide targets, and #156, #159, and #161 already size their freezes to them."
+        }
+      ],
+      "consequences": "The template's deviations list makes every loosened default visible in review.",
+      "migrationImpact": "Freezes and batch sizes are planned inside the defaults.",
+      "rollbackImpact": "S3 supersedes this revision; a tighter ratified default is breaking for templates that relied on the draft value."
+    },
+    {
+      "id": "P6",
+      "title": "Gate artifacts, one producer each",
+      "status": "ratified",
+      "sources": ["rounds-review src/data/capabilities.ts:185-209","rounds-review src/data/capabilities.ts:1803-1846","spec 3178-3236"],
+      "decision": "Each of the 20 gate strings splits into artifacts, one gateArtifacts row each, and each row has exactly one producer: a leaf or stage, or, for an artifact every authority-matrix row needs, the DR-0002 field naming that row's producer (command_owner.leaf for U0's ERD rows and U1's aggregate and state-machine contracts, transfer.mapping for U10's mappings), so nothing here copies an owner DR-0002 records. A producer isn't blocked by the artifact it creates (spec 3232-3236); its body states the exemption, and its acceptance criteria deliver the artifact and its evidence. Consumers bind by domain. requiredFor forces U4 on #43 and #130 to #137, U8 on #133 to #135, and U9 on #93, #94, and #161, whatever their archetype. Rows whose producer has landed on next say where the artifact lives.",
+      "alternatives": [
+        {
+          "option": "Gates by archetype only (capabilities.ts:1803-1846)",
+          "reason": "No body names U8 and #43 lacks U4, so code-running practice and the pack migration would ship without their gates."
+        },
+        {
+          "option": "One producer per gate string",
+          "reason": "C7 alone has four producers, so a gate couldn't be met in part, and a missing producer would hide behind the others."
+        },
+        {
+          "option": "Copy each matrix row's owner into this table",
+          "reason": "Two records of one owner drift, and DR-0002's rule already fails a row without exactly one command owner."
+        }
+      ],
+      "consequences": "S2's program.mjs fails an artifact without exactly one producer and a requiredFor nobody consumes. scripts/program/report.mjs computes ROUNDS-01 closure from these rows, and scripts/program/lib.mjs checks that every row resolves, in the conformance tests until program.mjs takes it over.",
+      "migrationImpact": "None; contract only.",
+      "rollbackImpact": "A changed producer is a superseding revision. Removing a producer or moving it later is breaking and returns its consumers to blocked."
+    },
+    {
+      "id": "P7",
+      "title": "ROUNDS-01 closes last and gates no leaf",
+      "status": "ratified",
+      "sources": ["spec 3195-3197","DR-0001 correction 1"],
+      "decision": "ROUNDS-01 closes once #15, #16, this leaf's S4, and every producer of a U0 to U11 artifact have merged. DR-0001 correction 1 moved U0, U1, U2, and U11 out of the filed gate of #15 to #17 and into this closure. Closure gates no leaf: a leaf waits only on the artifacts it consumes. scripts/program/report.mjs prints it.",
+      "alternatives": [
+        {
+          "option": "Keep U0, U1, U2, and U11 as this leaf's filed gate",
+          "reason": "#18 to #26 and #39 to #43 depend on this leaf and produce those artifacts, a cycle."
+        },
+        {"option":"Close on the first three gate items","reason":"Spec 3195 puts the whole universal gate before completing ROUNDS-01."}
+      ],
+      "consequences": "ROUNDS-01 stays open until late in the program, which blocks nothing.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "A superseding revision can change the condition; closure never reopens a leaf."
+    },
+    {
+      "id": "P8",
+      "title": "Definition of done and the non-goals register",
+      "status": "ratified",
+      "sources": [
+        "spec 173-187",
+        "rounds-review PRODUCT.md, Product Non-Goals",
+        "rounds-review src/data/capabilities.json, tradeoffs",
+        "rounds-review DESIGN.md"
+      ],
+      "decision": "docs/program/definition-of-done.json (revision 1) holds DOD-1 to DOD-7: account-authorized, expected version, idempotent, revisioned and audited, one writable authority, correlation and redaction, and DESIGN.md plus a design review for surface leaves. From S2 each node's dod names the items it meets. docs/program/non-goals.json holds the product non-goals (spec 177-184 with their PRODUCT.md counterparts), every catalog tradeoffs entry verbatim, and the reference leaf issue.",
+      "alternatives": [
+        {
+          "option": "Each body writes its own definition of done",
+          "reason": "176 bodies would drift, and no check could tell which leaf skipped idempotency."
+        }
+      ],
+      "consequences": "Dropping or loosening a DOD item needs the owner's approval in a superseding revision; adding or tightening one is additive.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "Supersede; a dropped item is breaking for the nodes that cite it."
+    },
+    {
+      "id": "P9",
+      "title": "Reference leaf issue",
+      "status": "ratified-here",
+      "sources": ["spec 3218-3219","#17 owner input 1"],
+      "decision": "Default taken under the owner's delegation: #18 (ROUNDS-02-L01), the refinement's suggestion, is gate U11's one fully populated reference leaf issue. The owner designates another by superseding this revision.",
+      "alternatives": [
+        {"option":"No reference issue until the owner picks","reason":"45 bodies name gate U11, and nothing produced its reference issue."}
+      ],
+      "consequences": "The U11.reference-leaf row names #18 with designation default.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "A superseding revision names another leaf; additive for every consumer.",
+      "od": {"state":"default-taken","default":"#18 (ROUNDS-02-L01)"}
+    },
+    {
+      "id": "P10",
+      "title": "Primary journeys mapped to leaves",
+      "status": "ratified",
+      "sources": ["spec 1019-1071","#145","#65"],
+      "decision": "docs/program/journeys.json maps each step of the five primary journeys to one leaf, the milestone where the step first works, and the readiness gate it waits on, and names each journey's completing leaf for #173. First run is the Today empty state of #145, then the Career Profile empty state of #26, then openCapture from #49 listing the sources of #65, with no second chooser. Profile completeness explanations (spec 1030), which #65 leaves to this leaf, go to #26.",
+      "alternatives": [
+        {"option":"Leave journey owners to #173","reason":"#173 registers the journeys and needs an owner for each; spec 1030 had none."},
+        {
+          "option": "A source chooser on the Career Profile empty state",
+          "reason": "A second chooser for the same sources, which the one Capture Center replaces."
+        }
+      ],
+      "consequences": "Giving spec 1030 to #26 is a body change the owner re-authorizes with item 4 of docs/program/reauthorization.md.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "A superseding revision remaps a step; additive unless it moves a step to a later milestone."
+    },
+    {
+      "id": "P11",
+      "title": "One owner re-authorization before the DAG",
+      "status": "ratified",
+      "sources": [
+        "#17 Stage gates and re-authorization",
+        "rounds-review scripts/file-issues.mjs:79",
+        "rounds-review scripts/file-issues.mjs:755"
+      ],
+      "decision": "docs/program/reauthorization.md orders the rounds-review changes for one owner authorization, items 1 to 8, starting with per-leaf state in the filer so issues:file never reopens a completed leaf. Its edge table records the edges S2's DAG adds or drops, among them #13, #19, #29, #37, and #47 on #10 (ROUNDS-00B-L02). Until the re-authorization receipt, leaf-gate enforces the filed prerequisites (edgeSet filed), and then the proposed ones. Only the owner regenerates leaf-dag.json, from the catalog.",
+      "alternatives": [
+        {"option":"Edit issue bodies directly","reason":"issues:file reverts any body the catalog doesn't carry."},
+        {
+          "option": "Apply the changes one body at a time",
+          "reason": "Each run re-renders every body, and until item 1 every run reopens closed leaves."
+        }
+      ],
+      "consequences": "S2 is built after item 6. Until the receipt, scripts/program/report.mjs lists the table's edges as pending.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "An unapplied item can be dropped in a superseding revision; an applied one is undone by a later catalog change and export."
+    },
+    {
+      "id": "P12",
+      "title": "leaf-gate ships disabled, then reports, then enforces",
+      "status": "ratified",
+      "sources": ["#17 Data and API contracts","#17 Rollout gate and rollback boundary","orchestrator decision for #17 S2"],
+      "decision": "S2's leaf-gate-dispatch.yml and leaf-gate.yml ship disabled: every job runs only when vars.LEAF_GATE_ENABLED == 'true', so no dispatch fires and no status posts until the owner sets that variable, together with the main ruleset that requires the leaf-gate status. From then leaf-gate runs in report mode (success, with the code it would fail in the description) until S4 sets docs/program/leaf-gate.json to enforce. No agent runs workflow_dispatch; only the owner-enabled dispatcher does.",
+      "alternatives": [
+        {
+          "option": "Enable the workflows on merge",
+          "reason": "The dispatcher would call workflow_dispatch on main for agent PRs, which the execution rules forbid, and nothing requires the status before the owner's ruleset."
+        },
+        {
+          "option": "Check out PR code in pull_request_target",
+          "reason": "That runs untrusted code with a write token; leaf-gate.yml reads only base-tip files and the PR's transfer templates as data."
+        }
+      ],
+      "consequences": "Until the owner enables it, the conformance job and scripts/program/report.mjs are the program's signal.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "The owner unsets LEAF_GATE_ENABLED, or an owner PR with program:override sets leaf-gate.json back to report."
+    },
+    {
+      "id": "P13",
+      "title": "Edge kinds, stage nodes, and work in progress",
+      "status": "ratified",
+      "sources": ["#17 Domain ownership and invariants","#17 Data and API contracts"],
+      "decision": "A leaf is merged once its [LEAF-ID] PR or every stage PR merges, and done once a merged PR closed its issue as completed. Stage IDs are the body's per-PR labels (S<n>, S<letter>, P<n>, and #2's step numbers); a multi-PR stage gets one .k node per PR (ROUNDS-32-L10/SB.3). An edge's kind is done (the prerequisite is done), merged (merged, open or not), or closure (it gates only the dependent's closing PR). Open, non-draft PRs cover at most one authorityTransfer node, two implementation leaves, and one architecture-decision leaf; the next fails LEAF_GATE_WIP. Containment preempts and doesn't count.",
+      "alternatives": [
+        {"option":"Only done edges","reason":"#30 and #168/S2 deadlock: each waits for the other's closing PR."},
+        {"option":"No limit on open PRs","reason":"Parallel transfer PRs would race for the one-context-at-a-time rollout."}
+      ],
+      "consequences": "scripts/program/report.mjs parses titles this way today; S2's leaf-gate applies the kinds and the limit.",
+      "migrationImpact": "Transfers run after merge, under #156's one-context-at-a-time rollout; the limit covers only open PRs.",
+      "rollbackImpact": "A superseding revision changes a kind or the limit."
+    }
+  ],
+  "gates": [
+    {
+      "id": "C0",
+      "kind": "containment",
+      "text": "Commit-pinned endpoint, data-flow, deployment, and threat inventory",
+      "source": "rounds-review src/data/capabilities.ts:186"
+    },
+    {
+      "id": "C1",
+      "kind": "containment",
+      "text": "Server-derived authentication, account authorization, and quota contract",
+      "source": "rounds-review src/data/capabilities.ts:187"
+    },
+    {
+      "id": "C2",
+      "kind": "containment",
+      "text": "Server-owned Test Definition, Harness Revision, and Artifact Renderer request contracts",
+      "source": "rounds-review src/data/capabilities.ts:188"
+    },
+    {
+      "id": "C3",
+      "kind": "containment",
+      "text": "Legacy Artifact Snapshot bridge with deterministic later migration and safe feature-disable behavior",
+      "source": "rounds-review src/data/capabilities.ts:189"
+    },
+    {
+      "id": "C4",
+      "kind": "containment",
+      "text": "Code-worker and renderer-worker isolation profiles",
+      "source": "rounds-review src/data/capabilities.ts:190"
+    },
+    {
+      "id": "C5",
+      "kind": "containment",
+      "text": "Public-share ownership, bearer, password, response, telemetry, and revocation contract",
+      "source": "rounds-review src/data/capabilities.ts:191"
+    },
+    {"id":"C6","kind":"containment","text":"Emergency disable and rollback procedure","source":"rounds-review src/data/capabilities.ts:192"},
+    {
+      "id": "C7",
+      "kind": "containment",
+      "text": "Adversarial acceptance tests and affected-deployment verification",
+      "source": "rounds-review src/data/capabilities.ts:193"
+    },
+    {
+      "id": "U0",
+      "kind": "universal",
+      "text": "Ratified database and transaction ADR plus indexed account-scoped ERD",
+      "source": "rounds-review src/data/capabilities.ts:197"
+    },
+    {
+      "id": "U1",
+      "kind": "universal",
+      "text": "Command request, result, error, aggregate, and state-machine contracts",
+      "source": "rounds-review src/data/capabilities.ts:198"
+    },
+    {
+      "id": "U2",
+      "kind": "universal",
+      "text": "Authorization matrix, Audit Entry schema, and Domain Event catalogue",
+      "source": "rounds-review src/data/capabilities.ts:199"
+    },
+    {
+      "id": "U3",
+      "kind": "universal",
+      "text": "Projection envelope, consistency contract, and operational freshness targets",
+      "source": "rounds-review src/data/capabilities.ts:200"
+    },
+    {
+      "id": "U4",
+      "kind": "universal",
+      "text": "Career Pack contract and non-shipping conformance fixture",
+      "source": "rounds-review src/data/capabilities.ts:201"
+    },
+    {"id":"U5","kind":"universal","text":"Source Anchor and Processing Job schemas","source":"rounds-review src/data/capabilities.ts:202"},
+    {
+      "id": "U6",
+      "kind": "universal",
+      "text": "Provider Invocation Intent, Outcome, Staged Result, reconciliation, and receipt schemas",
+      "source": "rounds-review src/data/capabilities.ts:203"
+    },
+    {
+      "id": "U7",
+      "kind": "universal",
+      "text": "Normative privacy class, sink policy, retention, purge, backup-expiry, and restore-suppression matrix",
+      "source": "rounds-review src/data/capabilities.ts:204"
+    },
+    {
+      "id": "U8",
+      "kind": "universal",
+      "text": "Execution and renderer definitions plus worker isolation profiles",
+      "source": "rounds-review src/data/capabilities.ts:205"
+    },
+    {
+      "id": "U9",
+      "kind": "universal",
+      "text": "Share bearer, password, throttling, header, telemetry, and revocation contract",
+      "source": "rounds-review src/data/capabilities.ts:206"
+    },
+    {
+      "id": "U10",
+      "kind": "universal",
+      "text": "Deterministic migration algorithms, precedence rules, rollback journals, and operational limits",
+      "source": "rounds-review src/data/capabilities.ts:207"
+    },
+    {
+      "id": "U11",
+      "kind": "universal",
+      "text": "Product and leaf non-goals plus one fully populated reference issue",
+      "source": "rounds-review src/data/capabilities.ts:208"
+    }
+  ],
+  "gateArtifacts": [
+    {
+      "id": "C0.inventory",
+      "gate": "C0",
+      "artifact": "Execution and render entry-point inventory at 62d4eae: auth, inputs, what each starts, where its data goes, threat category, and the leaf and stage closing each gap",
+      "producer": "ROUNDS-00A-L01/S0",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": ["docs/security/inventory.md"]
+    },
+    {
+      "id": "C1.admission",
+      "gate": "C1",
+      "artifact": "admission/v1: server-derived authentication, authorization, idempotency, and quotas for every execution and render route",
+      "producer": "ROUNDS-00A-L01/S3",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": ["backend/app/admission.py","backend/app/admission_state.py"]
+    },
+    {
+      "id": "C1.account-scope",
+      "gate": "C1",
+      "artifact": "Account-scope policy and the enforced create and update rules for every user-owned collection",
+      "producer": "ROUNDS-00B-L01/S3",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": ["docs/security/account-scope.v1.json","pocketbase/pb_migrations/1700006000_account_scope_rules.js"]
+    },
+    {
+      "id": "C2.request-contracts",
+      "gate": "C2",
+      "artifact": "Server-owned Test Definition, Harness Revision, Artifact Renderer Contract, and render request schemas",
+      "producer": "ROUNDS-00A-L02/1",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": [
+        "contracts/definitions/test-definition.v1.schema.json",
+        "contracts/definitions/harness-revision.v1.schema.json",
+        "contracts/definitions/artifact-renderer.v1.schema.json",
+        "contracts/definitions/render-request.v1.schema.json",
+        "contracts/definitions/resource-profile.v1.schema.json",
+        "contracts/definitions/manifest.v1.schema.json"
+      ]
+    },
+    {
+      "id": "C3.snapshot-bridge",
+      "gate": "C3",
+      "artifact": "Legacy Artifact Snapshot bridge, its deterministic later migration, and safe render and share disable when a snapshot can't be created",
+      "producer": "ROUNDS-00A-L04",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "C4.code-worker",
+      "gate": "C4",
+      "artifact": "Code-worker isolation profile",
+      "producer": "ROUNDS-00A-L05",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "C4.renderer-worker",
+      "gate": "C4",
+      "artifact": "Renderer-worker isolation profile",
+      "producer": "ROUNDS-00A-L06",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "C5.share-capability",
+      "gate": "C5",
+      "artifact": "Share capability ownership, response headers, telemetry, and revocation",
+      "producer": "ROUNDS-00B-L03",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "C5.share-secret",
+      "gate": "C5",
+      "artifact": "One-time bearer delivery, password protection, and rotation",
+      "producer": "ROUNDS-00B-L04",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "C6.gate-registry",
+      "gate": "C6",
+      "artifact": "Gate registry: the per-route disable keys and their defaults",
+      "producer": "ROUNDS-00A-L01/S1",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": ["backend/app/gates.py","k8s/gates.yaml"]
+    },
+    {
+      "id": "C6.runbook",
+      "gate": "C6",
+      "artifact": "Execution runbook: flipping and confirming each gate, error codes, limits, quotas, and repair",
+      "producer": "ROUNDS-00A-L01/S3",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": ["docs/security/execution-runbook.md"]
+    },
+    {
+      "id": "C6.release-rollback",
+      "gate": "C6",
+      "artifact": "Release guard and the backup, upgrade, and rollback procedure",
+      "producer": "ROUNDS-00A-L01/S5",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": ["scripts/release_gate.py","docs/operations.md"]
+    },
+    {
+      "id": "C7.admission-deployment",
+      "gate": "C7",
+      "artifact": "Deployment verification of admission, gates, and quotas, in the harness and against a deployment",
+      "producer": "ROUNDS-00A-L01/S4",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": ["harness/verify_deployment.py","harness/probes/admission_deploy.py"]
+    },
+    {
+      "id": "C7.account-scope-deployment",
+      "gate": "C7",
+      "artifact": "Account-scope deployment verifier and the harness probes through nginx",
+      "producer": "ROUNDS-00B-L01/S4",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": ["harness/verify_deployment.py"]
+    },
+    {
+      "id": "C7.execution-corpus",
+      "gate": "C7",
+      "artifact": "Adversarial execution and rendering conformance suites and their release gate",
+      "producer": "ROUNDS-00A-L08",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "C7.two-account-suite",
+      "gate": "C7",
+      "artifact": "Two-account IDOR and disclosure suite",
+      "producer": "ROUNDS-00B-L05",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U0.adr",
+      "gate": "U0",
+      "artifact": "Ratified database and transaction-owner ADR",
+      "producer": "ROUNDS-02-L01",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U0.erd",
+      "gate": "U0",
+      "artifact": "Indexed account-scoped ERD of every baseline store, containment store, and platform table: cardinality, account partition, delete and merge behavior, and indexes",
+      "producer": "ROUNDS-02-L01",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U0.erd-rows",
+      "gate": "U0",
+      "artifact": "ERD rows for each authority-matrix row's target records, from the leaf that owns the row's commands",
+      "producer": null,
+      "producerFrom": "contracts/authority/matrix.json#command_owner.leaf",
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U1.envelopes",
+      "gate": "U1",
+      "artifact": "Command request, result, and error envelopes",
+      "producer": "ROUNDS-02-L02",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U1.conflict-results",
+      "gate": "U1",
+      "artifact": "Expected-version, idempotency, and conflict result contracts",
+      "producer": "ROUNDS-02-L03",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U1.aggregates",
+      "gate": "U1",
+      "artifact": "Aggregate and state-machine contract for each authority-matrix row (a read-model row's projection contract), from the leaf that owns the row's commands",
+      "producer": null,
+      "producerFrom": "contracts/authority/matrix.json#command_owner.leaf",
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U2.authorization-matrix",
+      "gate": "U2",
+      "artifact": "Authorization matrix schema",
+      "producer": "ROUNDS-34-L03",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U2.authorization-rows-account-scope",
+      "gate": "U2",
+      "artifact": "Account-scope rows of the authorization matrix",
+      "producer": "ROUNDS-00B-L01/S3",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": ["docs/security/account-scope.v1.json"]
+    },
+    {
+      "id": "U2.authorization-rows-commands",
+      "gate": "U2",
+      "artifact": "Command rows of the authorization matrix",
+      "producer": "ROUNDS-02-L02",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U2.audit-entry",
+      "gate": "U2",
+      "artifact": "Audit Entry and Change Set schema",
+      "producer": "ROUNDS-02-L04",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U2.domain-events",
+      "gate": "U2",
+      "artifact": "Domain Event catalogue and outbox envelope",
+      "producer": "ROUNDS-02-L05",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U3.projection-envelope",
+      "gate": "U3",
+      "artifact": "Projection envelope and consistency contract",
+      "producer": "ROUNDS-02-L06",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U3.projection-runtime",
+      "gate": "U3",
+      "artifact": "Account-scoped projection runtime: register, rebuild, repair, measure, and purge read models",
+      "producer": "ROUNDS-31-L01",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U3.freshness-targets",
+      "gate": "U3",
+      "artifact": "Operational freshness targets (spec 2056-2067)",
+      "producer": "ROUNDS-34-L05",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U4.pack-contract",
+      "gate": "U4",
+      "artifact": "Career Pack specification",
+      "producer": "ROUNDS-07-L01",
+      "producerFrom": null,
+      "requiredFor": [
+        "ROUNDS-07-L05",
+        "ROUNDS-28-L01",
+        "ROUNDS-28-L02",
+        "ROUNDS-28-L03",
+        "ROUNDS-28-L04",
+        "ROUNDS-28-L05",
+        "ROUNDS-28-L06",
+        "ROUNDS-28-L07",
+        "ROUNDS-28-L08"
+      ],
+      "paths": []
+    },
+    {
+      "id": "U4.conformance-fixture",
+      "gate": "U4",
+      "artifact": "Non-shipping conformance fixture pack",
+      "producer": "ROUNDS-07-L04",
+      "producerFrom": null,
+      "requiredFor": [
+        "ROUNDS-07-L05",
+        "ROUNDS-28-L01",
+        "ROUNDS-28-L02",
+        "ROUNDS-28-L03",
+        "ROUNDS-28-L04",
+        "ROUNDS-28-L05",
+        "ROUNDS-28-L06",
+        "ROUNDS-28-L07",
+        "ROUNDS-28-L08"
+      ],
+      "paths": []
+    },
+    {
+      "id": "U5.source-anchor",
+      "gate": "U5",
+      "artifact": "Source Document and Source Anchor schemas",
+      "producer": "ROUNDS-10-L01",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U5.processing-job",
+      "gate": "U5",
+      "artifact": "Processing Job schema and adapter versioning",
+      "producer": "ROUNDS-10-L02",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U6.schemas",
+      "gate": "U6",
+      "artifact": "Provider Invocation Intent, Outcome, Staged Result, reconciliation, and receipt schemas",
+      "producer": "ROUNDS-14-L02",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U6.runtime",
+      "gate": "U6",
+      "artifact": "Outcome, Staged Result, and reconciliation runtime",
+      "producer": "ROUNDS-14-L03",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U7.privacy-matrix",
+      "gate": "U7",
+      "artifact": "Privacy class, sink policy, retention, purge, backup-expiry, and restore-suppression matrix",
+      "producer": "ROUNDS-14-L01",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U8.definitions",
+      "gate": "U8",
+      "artifact": "Test Definition, Harness Revision, and Artifact Renderer Contract definitions",
+      "producer": "ROUNDS-00A-L02/1",
+      "producerFrom": null,
+      "requiredFor": ["ROUNDS-28-L04","ROUNDS-28-L05","ROUNDS-28-L06"],
+      "paths": [
+        "contracts/definitions/test-definition.v1.schema.json",
+        "contracts/definitions/harness-revision.v1.schema.json",
+        "contracts/definitions/artifact-renderer.v1.schema.json",
+        "contracts/definitions/render-request.v1.schema.json",
+        "contracts/definitions/resource-profile.v1.schema.json",
+        "contracts/definitions/manifest.v1.schema.json"
+      ]
+    },
+    {
+      "id": "U8.code-worker-profile",
+      "gate": "U8",
+      "artifact": "Code-worker isolation profile",
+      "producer": "ROUNDS-00A-L05",
+      "producerFrom": null,
+      "requiredFor": ["ROUNDS-28-L04","ROUNDS-28-L05","ROUNDS-28-L06"],
+      "paths": []
+    },
+    {
+      "id": "U8.renderer-worker-profile",
+      "gate": "U8",
+      "artifact": "Renderer-worker isolation profile",
+      "producer": "ROUNDS-00A-L06",
+      "producerFrom": null,
+      "requiredFor": ["ROUNDS-28-L04","ROUNDS-28-L05","ROUNDS-28-L06"],
+      "paths": []
+    },
+    {
+      "id": "U9.share-record",
+      "gate": "U9",
+      "artifact": "Share capability record, response headers, telemetry, and revocation",
+      "producer": "ROUNDS-00B-L03",
+      "producerFrom": null,
+      "requiredFor": ["ROUNDS-18-L05","ROUNDS-18-L06","ROUNDS-32-L07"],
+      "paths": []
+    },
+    {
+      "id": "U9.share-secret",
+      "gate": "U9",
+      "artifact": "Bearer and password storage, and throttling",
+      "producer": "ROUNDS-00B-L04",
+      "producerFrom": null,
+      "requiredFor": ["ROUNDS-18-L05","ROUNDS-18-L06","ROUNDS-32-L07"],
+      "paths": []
+    },
+    {
+      "id": "U10.framework",
+      "gate": "U10",
+      "artifact": "Deterministic migration algorithms, precedence rules, manifests, and rollback journals",
+      "producer": "ROUNDS-32-L02",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U10.mappings",
+      "gate": "U10",
+      "artifact": "Mapping and precedence for each authority-matrix row that moves, from the row's mapping leaf",
+      "producer": null,
+      "producerFrom": "contracts/authority/matrix.json#transfer.mapping",
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U10.limits",
+      "gate": "U10",
+      "artifact": "Operational limits (spec 2015-2067)",
+      "producer": "ROUNDS-34-L05",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": []
+    },
+    {
+      "id": "U11.non-goals",
+      "gate": "U11",
+      "artifact": "Product non-goals and catalog tradeoffs register",
+      "producer": "ROUNDS-01-L03/S1",
+      "producerFrom": null,
+      "requiredFor": [],
+      "paths": ["docs/program/non-goals.json"]
+    },
+    {
+      "id": "U11.reference-leaf",
+      "gate": "U11",
+      "artifact": "One fully populated reference leaf issue",
+      "producer": "ROUNDS-02-L01",
+      "producerFrom": null,
+      "designation": "default",
+      "requiredFor": [],
+      "paths": [],
+      "note": "Default taken (decision P9); the owner designates another by superseding this record."
+    }
+  ],
+  "closure": {
+    "capability": "ROUNDS-01",
+    "leaves": ["ROUNDS-01-L01","ROUNDS-01-L02","ROUNDS-01-L03/S4"],
+    "gates": ["U0","U1","U2","U3","U4","U5","U6","U7","U8","U9","U10","U11"],
+    "rule": "ROUNDS-01 closes once these have merged and every producer of an artifact for these gates has merged; closure gates no leaf (decision P7).",
+    "sources": ["spec 3195-3197","DR-0001 correction 1"]
+  },
+  "departures": [
+    {
+      "id": "X1",
+      "title": "Stage owners work with other leaves",
+      "detail": "Each migration stage names one owner leaf, as the issue asks, plus the leaves it works with. Stages 6 to 14 are #156's mechanisms, run by each transfer node for each context it lists."
+    },
+    {
+      "id": "X2",
+      "title": "Per-row producers",
+      "detail": "U0's ERD rows, U1's aggregate contracts, and U10's mappings name their producer through DR-0002's command_owner.leaf and transfer.mapping fields instead of one gateArtifacts row per matrix row."
+    },
+    {
+      "id": "X3",
+      "title": "Edges beyond item 2",
+      "detail": "The edge table in docs/program/reauthorization.md also carries the edges #1, #16, #151, and #155 ask this leaf to record, and the orchestrator's five edges on #10.",
+      "citedBy": ["ROUNDS-00A-L01","ROUNDS-01-L02","ROUNDS-31-L06","ROUNDS-32-L01"]
+    },
+    {
+      "id": "X4",
+      "title": "Numbered stage labels",
+      "detail": "#2's PRs are labeled by step number ([ROUNDS-00A-L02/1]), so the stage grammar accepts a number as well as S<n>, S<letter>, and P<n>.",
+      "citedBy": ["ROUNDS-00A-L02"]
+    },
+    {
+      "id": "X5",
+      "title": "Checks before program.mjs",
+      "detail": "S1 ships scripts/program/lib.mjs, whose checks the conformance tests run against these files; S2's program.mjs runs them in the conformance job."
+    },
+    {
+      "id": "X6",
+      "title": "Verbatim quote of the ROUNDS-32 tradeoff",
+      "detail": "The issue wants every catalog tradeoff verbatim, and the ROUNDS-32 tradeoff names the cutover without \"data-preserving\", which DR-0001 G11 fails in new text. non-goals.json quotes it verbatim, DR-0001@2 allowlists that one line, and spec-change request SCR-1 in docs/program/reauthorization.md asks the owner to qualify the catalog wording, after which the allowlist entry goes.",
+      "citedBy": ["ROUNDS-01-L01"]
+    }
+  ]
+}

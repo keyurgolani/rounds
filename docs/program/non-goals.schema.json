@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/program/non-goals.schema.json",
+  "title": "Non-goals register",
+  "description": "Format of docs/program/non-goals.json (ROUNDS-01-L03, DR-0003 decision P8), the register half of gate U11: the product non-goals (spec 177-184 with their PRODUCT.md counterparts), every catalog tradeoffs entry verbatim, and the reference leaf issue.",
+  "type": "object",
+  "required": ["registry", "revision", "decisionRecord", "description", "sources", "product", "tradeoffs", "referenceLeaf"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "registry": { "const": "non-goals" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "decisionRecord": { "const": "DR-0003" },
+    "description": { "type": "string", "minLength": 1 },
+    "sources": {
+      "type": "object",
+      "required": ["spec", "product", "catalog"],
+      "additionalProperties": false,
+      "properties": {
+        "spec": { "type": "string", "minLength": 1 },
+        "product": { "type": "string", "minLength": 1 },
+        "catalog": { "type": "string", "minLength": 1 }
+      }
+    },
+    "product": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "spec", "product"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^NG-\\d+$" },
+          "spec": { "$ref": "#/$defs/quote" },
+          "product": {
+            "description": "The PRODUCT.md Product Non-Goals line saying the same thing, or null when PRODUCT.md has none.",
+            "type": ["null", "object"],
+            "required": ["lines", "text"],
+            "additionalProperties": false,
+            "properties": {
+              "lines": { "type": "string", "pattern": "^\\d+(-\\d+)?$" },
+              "text": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "tradeoffs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["capability", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "capability": { "type": "string", "pattern": "^ROUNDS-\\d{2}[A-Z]?$" },
+          "text": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "referenceLeaf": {
+      "type": "object",
+      "required": ["leaf", "issue", "designation", "rule", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "leaf": { "type": "string", "pattern": "^ROUNDS-\\d{2}[A-Z]?-L\\d{2}$" },
+        "issue": { "type": "integer", "minimum": 1 },
+        "designation": { "enum": ["default", "owner-designated"] },
+        "rule": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "quote": {
+      "type": "object",
+      "required": ["lines", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "lines": { "type": "string", "pattern": "^\\d+(-\\d+)?$" },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

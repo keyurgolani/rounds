@@ -7,18 +7,19 @@
   "owner": "Product Architecture",
   "approver": "keyurgolani",
   "approvalRef": {
-    "pr": 188,
+    "pr": 199,
     "governedFiles": [
       {
         "path": "contracts/vocabulary/terms.json",
-        "sha256": "0f71669d0f0c120d1ff05c868ca57a2f254cd36c594d3bcbda9febce44d33d7e"
+        "sha256": "ea4b62d2cac8933db61cfa08b7d801a396cc2189d911882695534fffe05d62b7"
       }
     ]
   },
   "ratifiedOn": "2026-10-20",
   "compatibility": "additive",
-  "revision": 1,
-  "supersedes": null,
+  "revision": 2,
+  "supersedes": "DR-0001@1",
+  "supersessionReason": "Additive. G11 allowlists one more line: the verbatim quote of the catalog's ROUNDS-32 tradeoff in docs/program/non-goals.json (#17, ROUNDS-01-L03). Nothing else changes.",
   "consumers": [
     "ROUNDS-01-L02",
     "ROUNDS-01-L03",
@@ -323,7 +324,7 @@
       "title": "Data-preserving clean cutover",
       "status": "ratified",
       "sources": ["spec 2637-2647"],
-      "decision": "\"Data-preserving clean cutover\" follows spec 2637-2647: one bounded context at a time, one writable authority per converted concept, an explicit retirement criterion, and a time-bounded compatibility window. The two shipped migration comments that use the unqualified phrase for a drop with no data migration are allowlisted, not edited, because #1's lint (ROUNDS-00A-L01) bars editing shipped migrations. A new unqualified use fails.",
+      "decision": "\"Data-preserving clean cutover\" follows spec 2637-2647: one bounded context at a time, one writable authority per converted concept, an explicit retirement criterion, and a time-bounded compatibility window. The two shipped migration comments that use the unqualified phrase for a drop with no data migration are allowlisted, not edited, because #1's lint (ROUNDS-00A-L01) bars editing shipped migrations. A new unqualified use fails. Revision 2 allowlists a third line, the verbatim quote of the catalog's ROUNDS-32 tradeoff in docs/program/non-goals.json, which #17's U11 register keeps word for word until spec-change request SCR-1 qualifies the catalog wording.",
       "alternatives": [
         {"option": "Edit the shipped comments", "reason": "Shipped migrations are immutable."},
         {

@@ -1,7 +1,7 @@
 {
   "$schema": "./terms.schema.json",
   "registry": "rounds-product-vocabulary",
-  "revision": 1,
+  "revision": 2,
   "compatibility": "additive",
   "decisionRecord": "DR-0001",
   "description": "The product vocabulary: every name a user sees and every domain term an implementer uses. vocabulary@<n> is DR-0001@<n>. Generated views: docs/vocabulary.md and frontend/src/vocabulary/labels.ts (node scripts/conformance/run.mjs --write).",
@@ -205,6 +205,11 @@
         "path": "pocketbase/pb_migrations/1700005100_drop_resume_bullets.js",
         "line": 3,
         "reason": "Shipped migration comment for a drop with no data migration. Shipped migrations are never edited."
+      },
+      {
+        "path": "docs/program/non-goals.json",
+        "line": 179,
+        "reason": "Verbatim quote of the catalog's ROUNDS-32 tradeoff, which the U11 register keeps word for word (DR-0003 P8). Spec-change request SCR-1 in docs/program/reauthorization.md qualifies the catalog wording; then this entry goes."
       }
     ]
   },

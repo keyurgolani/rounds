@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/program/rollback-template.schema.json",
+  "title": "Authority transfer rollback template",
+  "description": "ROUNDS-01-L03, DR-0003 decision P4. An authorityTransfer node's PR adds one filled copy per bounded context it lists, at docs/program/transfers/<leaf>-<context>.json (from S2; leaf-gate reads it from the PR head as data, and the operator passes it to #156's switch as the transfer record). It holds the 11 fields of spec 2703-2713, plus upgradeSource (the release a rollback returns to) and backupConsistency. Defaults (spec 2062-2067, decision P5): the final write freeze stays under 15 minutes, zero accepted writes are lost, recovery takes at most 30 minutes at the scale floor, and restore is rehearsed. A transfer may tighten a default; loosening one needs a deviations entry with the owner's approval. Fixtures hold synthetic values and placeholder digests only.",
+  "type": "object",
+  "required": [
+    "template", "transfer", "context", "rollbackDeadline", "allowedDowntime", "recoveryPointObjective", "recoveryTimeObjective",
+    "compatibility", "finalWriteFreezeBoundary", "journal", "externalEffects", "partialDeployDetection", "readModels", "decisionOwner",
+    "upgradeSource", "backupConsistency", "deviations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "template": { "const": "rollback-template/v1" },
+    "transfer": {
+      "description": "The authorityTransfer node: a leaf or stage ID from the context order in docs/program/cutover-policy.md.",
+      "type": "string",
+      "pattern": "^ROUNDS-\\d{2}[A-Z]?-L\\d{2}(/[A-Za-z0-9.]+)?$"
+    },
+    "context": {
+      "description": "One bounded context from that node's list.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "rollbackDeadline": {
+      "description": "Spec 2703: until when the transfer can roll back to the legacy writer.",
+      "type": "object",
+      "required": ["daysAfterSwitch", "rule"],
+      "additionalProperties": false,
+      "properties": {
+        "daysAfterSwitch": { "type": "integer", "minimum": 0 },
+        "rule": { "type": "string", "minLength": 1 }
+      }
+    },
+    "allowedDowntime": {
+      "description": "Spec 2704: the final write freeze and what readers see during it.",
+      "type": "object",
+      "required": ["freezeMinutes", "readsDuringFreeze"],
+      "additionalProperties": false,
+      "properties": {
+        "freezeMinutes": { "description": "Longest final write freeze, in minutes: under 15 (spec 2062).", "type": "integer", "minimum": 0 },
+        "readsDuringFreeze": { "enum": ["available", "degraded", "unavailable"] },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    },
+    "recoveryPointObjective": {
+      "description": "Spec 2705: accepted writes a rollback may lose; default 0 (spec 2063).",
+      "type": "object",
+      "required": ["acceptedWritesLost"],
+      "additionalProperties": false,
+      "properties": {
+        "acceptedWritesLost": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "recoveryTimeObjective": {
+      "description": "Spec 2706: time to restore service at the stated scale; default 30 minutes at the scale floor (spec 2064-2065).",
+      "type": "object",
+      "required": ["minutes", "scale"],
+      "additionalProperties": false,
+      "properties": {
+        "minutes": { "type": "integer", "minimum": 1, "default": 30 },
+        "scale": { "type": "string", "minLength": 1 }
+      }
+    },
+    "compatibility": {
+      "description": "Spec 2707: forward and reverse compatibility of application and schema versions, and the marker that refuses a mismatch (spec 2715).",
+      "type": "object",
+      "required": ["forward", "reverse", "versionMarker"],
+      "additionalProperties": false,
+      "properties": {
+        "forward": { "type": "string", "minLength": 1 },
+        "reverse": { "type": "string", "minLength": 1 },
+        "versionMarker": { "type": "string", "minLength": 1 }
+      }
+    },
+    "finalWriteFreezeBoundary": {
+      "description": "Spec 2708: what the final freeze covers and the journal position it fences.",
+      "type": "object",
+      "required": ["freezeSet", "fence"],
+      "additionalProperties": false,
+      "properties": {
+        "freezeSet": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["collection"],
+            "additionalProperties": false,
+            "properties": {
+              "collection": { "type": "string", "minLength": 1 },
+              "fields": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+            }
+          }
+        },
+        "fence": { "type": "string", "minLength": 1 }
+      }
+    },
+    "journal": {
+      "description": "Spec 2709: the replay or reverse-delta journal a rollback applies; it never silently discards post-switch changes (spec 2715-2716).",
+      "type": "object",
+      "required": ["kind", "location"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["replay", "reverse-delta", "replay-and-reverse-delta"] },
+        "location": { "type": "string", "minLength": 1 }
+      }
+    },
+    "externalEffects": {
+      "description": "Spec 2710: treatment of public shares, exports, emails, and other external effects on rollback.",
+      "type": "object",
+      "required": ["publicShares", "exports", "emails", "other"],
+      "additionalProperties": false,
+      "properties": {
+        "publicShares": { "type": "string", "minLength": 1 },
+        "exports": { "type": "string", "minLength": 1 },
+        "emails": { "type": "string", "minLength": 1 },
+        "other": { "type": "string", "minLength": 1 }
+      }
+    },
+    "partialDeployDetection": {
+      "description": "Spec 2711: how a partial deployment (mixed versions) is detected and refused.",
+      "type": "object",
+      "required": ["mechanism"],
+      "additionalProperties": false,
+      "properties": {
+        "mechanism": { "type": "string", "minLength": 1 }
+      }
+    },
+    "readModels": {
+      "description": "Spec 2712: read-model downgrade or rebuild on rollback.",
+      "type": "object",
+      "required": ["onRollback", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "onRollback": { "enum": ["rebuild", "downgrade", "unchanged"] },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    },
+    "decisionOwner": {
+      "description": "Spec 2713: who decides to roll back, and the leaf that owns the run.",
+      "type": "object",
+      "required": ["role", "leaf"],
+      "additionalProperties": false,
+      "properties": {
+        "role": { "type": "string", "minLength": 1 },
+        "leaf": { "type": "string", "pattern": "^ROUNDS-\\d{2}[A-Z]?-L\\d{2}(/[A-Za-z0-9.]+)?$" }
+      }
+    },
+    "upgradeSource": {
+      "description": "The release a rollback returns to: its tag, commit, and image digests. Digests are public release metadata; fixtures use placeholders.",
+      "type": "object",
+      "required": ["tag", "commit", "images"],
+      "additionalProperties": false,
+      "properties": {
+        "tag": { "type": "string", "pattern": "^v\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+        "images": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "digest"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+            }
+          }
+        }
+      }
+    },
+    "backupConsistency": {
+      "description": "How the pre-transfer backup is made consistent, and the rehearsal that proves it restores (spec 2066-2067).",
+      "type": "object",
+      "required": ["method", "restoreRehearsed", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "method": { "type": "string", "minLength": 1 },
+        "restoreRehearsed": { "type": "boolean", "default": true },
+        "evidence": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deviations": {
+      "description": "Each default this transfer loosens, with the owner's approval: value is the exact value the template uses, and default the bound it loosens (15, 0, 30, or true). Empty when every default holds.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["field", "value", "default", "approvedBy", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "field": { "enum": ["allowedDowntime.freezeMinutes", "recoveryPointObjective.acceptedWritesLost", "recoveryTimeObjective.minutes", "backupConsistency.restoreRehearsed"] },
+          "value": { "type": ["integer", "boolean"] },
+          "default": { "type": ["integer", "boolean"] },
+          "approvedBy": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

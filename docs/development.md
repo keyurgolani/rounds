@@ -148,6 +148,8 @@ Product and domain names live in `contracts/vocabulary/terms.json`, and [vocabul
 
 Who may write each durable concept lives in `contracts/authority/matrix.json` (DR-0002), and [authority.md](authority.md) explains how to read, cite, and change it. Before writing a collection or browser storage key, find its row there and write only through that row's command owner.
 
+The order the transformation lands in, the gate artifacts each leaf waits on, the migration stage owners, and the definition of done live in `docs/program/` (DR-0003); its [README](program/README.md) explains each file. `node scripts/program/report.mjs` prints ROUNDS-01 closure, the pending re-authorization edges, and drift in those files (it reads PR and issue state through `gh`, or offline with `--state <file>`).
+
 The conformance rules in `scripts/conformance/rules/` check all of this with Node 22 and no install step:
 
 ```sh

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/program/journeys.schema.json",
+  "title": "Primary journey map",
+  "description": "Format of docs/program/journeys.json (ROUNDS-01-L03, DR-0003 decision P10): each step of the five primary journeys (spec 1019-1071) mapped to one leaf, the milestone where the step first works, and the readiness gate it waits on, plus the first-run trace.",
+  "type": "object",
+  "required": ["registry", "revision", "decisionRecord", "description", "source", "journeys", "firstRun"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "registry": { "const": "journeys" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "decisionRecord": { "const": "DR-0003" },
+    "description": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "journeys": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "lines", "milestone", "completingLeaf", "steps"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^J\\d+$" },
+          "title": { "type": "string", "minLength": 1 },
+          "lines": { "$ref": "#/$defs/lines" },
+          "milestone": { "$ref": "#/$defs/milestone" },
+          "completingLeaf": {
+            "description": "The step leaf whose merge completes the journey; #173 (ROUNDS-34-L04) activates the journey's browser test once it and every other step leaf are done.",
+            "$ref": "#/$defs/leaf"
+          },
+          "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } }
+        }
+      }
+    },
+    "firstRun": {
+      "type": "object",
+      "required": ["chooser", "rule", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "chooser": { "$ref": "#/$defs/leaf" },
+        "rule": { "type": "string", "minLength": 1 },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "surface", "leaf", "milestone", "gate"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^FR\\.\\d+$" },
+              "surface": { "type": "string", "minLength": 1 },
+              "leaf": { "$ref": "#/$defs/leaf" },
+              "milestone": { "$ref": "#/$defs/milestone" },
+              "gate": { "$ref": "#/$defs/gate" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "lines": { "type": "string", "pattern": "^\\d+(-\\d+)?$" },
+    "milestone": { "type": "integer", "minimum": 0, "maximum": 7 },
+    "leaf": { "type": "string", "pattern": "^ROUNDS-\\d{2}[A-Z]?-L\\d{2}(/[A-Za-z0-9.]+)?$" },
+    "gate": { "enum": ["C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "U0", "U1", "U2", "U3", "U4", "U5", "U6", "U7", "U8", "U9", "U10", "U11"] },
+    "step": {
+      "type": "object",
+      "required": ["id", "lines", "text", "leaf", "milestone", "gate", "with"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^J\\d+\\.\\d+$" },
+        "lines": { "$ref": "#/$defs/lines" },
+        "text": { "type": "string", "minLength": 1 },
+        "leaf": { "$ref": "#/$defs/leaf" },
+        "milestone": { "$ref": "#/$defs/milestone" },
+        "gate": { "$ref": "#/$defs/gate" },
+        "with": {
+          "description": "Other leaves the step needs; the step's leaf is the one that completes it.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/leaf" }
+        },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

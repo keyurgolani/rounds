@@ -30,7 +30,8 @@ describe('decision records: repository', () => {
     assert.ok(dr.supersession.length > 0);
     assert.deepEqual(Object.keys(dr.securityConsequences).sort(), ['account', 'privacy', 'publicBoundary', 'secret']);
     assert.equal(dr.status, 'ratified');
-    assert.equal(dr.revision, 1);
+    assert.equal(dr.revision, 2);
+    assert.equal(dr.supersedes, 'DR-0001@1');
     assert.ok(Number.isInteger(dr.approvalRef.pr));
     assert.deepEqual(dr.prerequisites, []);
   });
@@ -86,8 +87,8 @@ describe('decision records: architecture', () => {
   });
 
   it('checks supersession', () => {
-    only(run(editDr((r) => { r.revision = 2; })), 'DR_SUPERSEDES_INVALID');
-    only(run(editDr((r) => { r.revision = 2; r.supersedes = 'DR-0001@1'; })), 'DR_SUPERSEDES_INVALID');
+    only(run(editDr((r) => { r.revision = 2; r.supersedes = null; delete r.supersessionReason; })), 'DR_SUPERSEDES_INVALID');
+    only(run(editDr((r) => { r.revision = 2; r.supersedes = 'DR-0001@1'; delete r.supersessionReason; })), 'DR_SUPERSEDES_INVALID');
     assert.deepEqual(run(editDr((r) => { r.revision = 2; r.supersedes = 'DR-0001@1'; r.supersessionReason = 'Owner changed G6.'; })), []);
     only(run(editDr((r) => { r.revision = 2; r.supersedes = 'DR-0001@3'; r.supersessionReason = 'x'; })), 'DR_SUPERSEDES_INVALID');
   });
@@ -101,7 +102,7 @@ describe('decision records: architecture', () => {
   });
 
   it('rejects a file name that disagrees with the id, and duplicate ids', () => {
-    only(run(editDr((r) => { r.id = 'DR-0007'; })), 'DR_RECORD_INVALID');
+    only(run(editDr((r) => { r.id = 'DR-0007'; r.supersedes = 'DR-0007@1'; })), 'DR_RECORD_INVALID');
     const dir = fixture((d) => fs.copyFileSync(path.join(d, DR), path.join(d, 'docs/decisions/DR-0001-copy.json')));
     only(run(dir), 'DR_DUPLICATE_ID');
   });

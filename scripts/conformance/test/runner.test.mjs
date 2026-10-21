@@ -21,7 +21,7 @@ describe('runner', () => {
   it('prints the registry revision, counts, and open ratified-here items', async () => {
     const results = await runConformance({ ...parseArgs([]), root: REPO_ROOT, base: 'none' });
     const summary = results.find((r) => r.id === 'vocabulary').summary.join('\n');
-    assert.match(summary, /registry revision 1 \(vocabulary@1 = DR-0001@1\)/);
+    assert.match(summary, /registry revision 2 \(vocabulary@2 = DR-0001@2\)/);
     assert.match(summary, /terms: \d+ /);
     assert.match(summary, /adapters: \d+ /);
     assert.match(summary, /open ratified-here items: decisions G6, G7, G8, G9/);

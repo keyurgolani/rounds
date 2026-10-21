@@ -1,0 +1,81 @@
+{
+  "$schema": "./definition-of-done.schema.json",
+  "registry": "definition-of-done",
+  "revision": 1,
+  "decisionRecord": "DR-0003",
+  "description": "What done means for every implementation leaf (DR-0003 decision P8). From S2, each leaf-dag.json node's dod lists the items it meets, and each program.mjs rule names the items it enforces.",
+  "changePolicy": "Adding an item or tightening one is additive and raises revision. Dropping or loosening one needs the owner's approval in a superseding DR-0003 revision.",
+  "items": [
+    {
+      "id": "DOD-1",
+      "title": "Account-authorized",
+      "rule": "Every command, read, relation, source, revision, search result, projection, job, export, and share the leaf adds derives its account on the server and authorizes it. A client never chooses or overrides ownership, and another account's record reads as not found.",
+      "appliesTo": "Every leaf that adds or changes a command, read, store, job, or share.",
+      "sources": ["spec 382-392","spec 3587-3588","spec 1956-1958"],
+      "checkedBy": [
+        {"leaf":"ROUNDS-34-L03","check":"authorization matrix coverage for each command and read"},
+        {"leaf":"ROUNDS-00B-L05","check":"two-account IDOR and disclosure suite"}
+      ]
+    },
+    {
+      "id": "DOD-2",
+      "title": "Expected version",
+      "rule": "Every mutating command carries the aggregate versions it read and returns a typed conflict result when one moved, never a silent overwrite.",
+      "appliesTo": "Every leaf that adds or changes a mutating command.",
+      "sources": ["spec 1954-1967"],
+      "checkedBy": [{"leaf":"ROUNDS-02-L03","check":"expected-version and conflict result contract tests"}]
+    },
+    {
+      "id": "DOD-3",
+      "title": "Idempotent",
+      "rule": "Every mutating command carries a command id; a replay returns the stored result and writes nothing new.",
+      "appliesTo": "Every leaf that adds or changes a mutating command.",
+      "sources": ["spec 1962-1965"],
+      "checkedBy": [{"leaf":"ROUNDS-02-L03","check":"idempotency replay tests"}]
+    },
+    {
+      "id": "DOD-4",
+      "title": "Revisioned and audited",
+      "rule": "An accepted change commits its records, change set, revision, Audit Entry, and outbox entry in one transaction; its Domain Event goes out after that commit.",
+      "appliesTo": "Every leaf that adds or changes a mutating command.",
+      "sources": ["spec 560-570","spec 1962-1964"],
+      "checkedBy": [
+        {"leaf":"ROUNDS-02-L04","check":"change set, revision, and Audit Entry atomicity"},
+        {"leaf":"ROUNDS-02-L05","check":"outbox publication after commit"}
+      ]
+    },
+    {
+      "id": "DOD-5",
+      "title": "One writable authority",
+      "rule": "Each concept the leaf touches has one writable authority at every revision, named in DR-0002; compatibility adapters read, shadow, or compare and never write.",
+      "appliesTo": "Every leaf that writes a store or moves an authority.",
+      "sources": ["spec 2639-2647","DR-0002 M2"],
+      "checkedBy": [
+        {"leaf":"ROUNDS-01-L02","check":"authority conformance rule (rules 1 and 2)"},
+        {"leaf":"ROUNDS-01-L03","check":"program.mjs: a context in two boundedContext lists (S2)"}
+      ]
+    },
+    {
+      "id": "DOD-6",
+      "title": "Correlation and redaction",
+      "rule": "Commands, events, and logs carry causation and correlation ids. Logs, traces, and metrics hold metadata and opaque ids only, as each field's privacy class allows.",
+      "appliesTo": "Every leaf that adds a command, event, job, log, trace, or metric.",
+      "sources": ["spec 556","spec 567","spec 2139-2148"],
+      "checkedBy": [
+        {"leaf":"ROUNDS-34-L05","check":"log, trace, and metric redaction checks"},
+        {"leaf":"ROUNDS-14-L01","check":"privacy class and sink policy"}
+      ]
+    },
+    {
+      "id": "DOD-7",
+      "title": "Design contract and review",
+      "rule": "A surface leaf follows rounds-review DESIGN.md and gets a design review on its PR before merge.",
+      "appliesTo": "Every leaf that adds or changes a screen, dialog, or route.",
+      "sources": ["rounds-review DESIGN.md","rounds-review PRODUCT.md, Accessibility & Inclusion"],
+      "checkedBy": [
+        {"leaf":"ROUNDS-34-L04","check":"browser, accessibility, responsive, and visual tests"},
+        {"leaf":"ROUNDS-33-L05","check":"accessibility and interaction adoption"}
+      ]
+    }
+  ]
+}

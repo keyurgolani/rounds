@@ -11,8 +11,8 @@ import {
 
 describe('vocabulary labels', () => {
   it('names the registry revision consumers cite', () => {
-    expect(VOCABULARY_REVISION).toBe(1);
-    expect(VOCABULARY_RECORD).toBe('DR-0001@1');
+    expect(VOCABULARY_REVISION).toBe(2);
+    expect(VOCABULARY_RECORD).toBe('DR-0001@2');
   });
 
   it('returns the spec 1000-1014 labels', () => {
