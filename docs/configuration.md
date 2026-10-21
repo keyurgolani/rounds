@@ -67,7 +67,7 @@ Use `*` only for local development. In production, set `CORS_ALLOW_ORIGINS` to y
 
 In production, the frontend should usually use same-origin PocketBase access. Leave `VITE_POCKETBASE_URL` blank unless you intentionally host PocketBase on a separate browser-visible origin.
 
-The Vite dev proxy (`frontend/devProxy.ts`) answers 404 for the paths production nginx never proxies: PocketBase's admin UI and admin APIs, collection metadata, and the admission hook routes. In dev, open the admin UI on PocketBase's own port.
+The Vite dev proxy (`frontend/devProxy.ts`) answers 404 for the paths production nginx never proxies: PocketBase's admin UI and admin APIs, collection metadata, the admission and execution hook routes, and the execution service record's routes. Like nginx, it matches them on the decoded path, and the collection paths in any case. In dev, open the admin UI on PocketBase's own port.
 
 ## OAuth Buttons
 

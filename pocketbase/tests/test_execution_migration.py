@@ -4,7 +4,8 @@ Static checks on the source, plus a run of its up() and down() against a
 stubbed Dao through node, like test_definitions_expand.py: the four
 collections and their rules, fields, and indexes, the links it adds to
 the attempt collections and admission_commands, take_home_attempts.files
-at 8 MiB, and a down() that drops only what up() added. The values that
+at 8 MiB, and a down() that drops only what up() added and puts back the
+files limit up() found, whichever it was. The values that
 pb_hooks/execution.js also holds are checked against it, so the two stay
 in step. The migration also runs on real databases in #9's harness and
 in harness/migration_check.sh.
@@ -25,8 +26,12 @@ MIGRATION = ROOT / "pocketbase" / "pb_migrations" / "1700007100_execution_jobs.j
 HOOKS = ROOT / "pocketbase" / "pb_hooks"
 MIB = 1024 * 1024
 # What take_home_attempts.files holds before the migration: PocketBase's
-# JSON default, which its own migration sets after 1700001300_take_home.js.
+# JSON default on a database whose JSON reset ran after
+# 1700001300_take_home.js, or, on one built from scratch, where the reset
+# sorts after this migration, the 2 MiB that 1700001300 declares.
 BASE_FILES_MAX = 2000000
+DECLARED_FILES_MAX = 2 * MIB
+PRIOR_KEY = "1700007100_execution_jobs.js"
 SERVICE_ONLY = '@request.auth.collectionName = "execution_service"'
 JOB_COLLECTIONS = ("execution_jobs", "execution_attempts", "execution_envelopes")
 
@@ -66,7 +71,7 @@ def test_the_migration_lint_finds_nothing(src):
 # ---- behavioural: up() and down() through node against a stub Dao ---------
 
 _HARNESS = r"""
-const [migrationPath, hooksDir] = process.argv.slice(2);
+const [migrationPath, hooksDir, filesMax] = process.argv.slice(2);
 let up, down;
 globalThis.migrate = (u, d) => { up = u; down = d; };
 let ids = 0;
@@ -102,6 +107,12 @@ function Dao(db) {
     delete db.collections[c.name];
     db.deleted.push(c.name);
   };
+  this.saveParam = (key, value) => { db.params[key] = JSON.stringify(value); };
+  this.findParamByKey = (key) => {
+    if (!(key in db.params)) throw new Error("sql: no rows in result set");
+    return { key, value: { string: () => db.params[key] } };
+  };
+  this.deleteParam = (param) => { delete db.params[param.key]; };
 }
 globalThis.Dao = Dao;
 
@@ -115,8 +126,8 @@ function baseDb() {
   add("users", "auth", []);
   add("admission_commands", "base", [{ name: "command_id", type: "text" }]);
   add("ai_coding_attempts", "base", [{ name: "status", type: "select" }]);
-  add("take_home_attempts", "base", [{ name: "files", type: "json", options: { maxSize: 2000000 } }]);
-  return { collections, saves: [], deleted: [] };
+  add("take_home_attempts", "base", [{ name: "files", type: "json", options: { maxSize: Number(filesMax) } }]);
+  return { collections, saves: [], deleted: [], params: {} };
 }
 
 function dump(db) {
@@ -137,6 +148,7 @@ const db = baseDb();
 up(db);
 const afterUp = dump(db);
 const saves = db.saves.slice();
+const paramsAfterUp = JSON.parse(JSON.stringify(db.params));
 down(db);
 const execution = require(require("path").join(hooksDir, "execution.js"));
 process.stdout.write(JSON.stringify({
@@ -144,6 +156,7 @@ process.stdout.write(JSON.stringify({
   saves,
   down: dump(db),
   deleted: db.deleted,
+  params: { afterUp: paramsAfterUp, afterDown: db.params },
   hooks: {
     kinds: Object.keys(execution.KINDS),
     terminal: execution.TERMINAL,
@@ -155,19 +168,29 @@ process.stdout.write(JSON.stringify({
 """
 
 
-@pytest.fixture(scope="module")
-def run(tmp_path_factory) -> dict:
+def _run(tmp_path_factory, files_max: int) -> dict:
     node = shutil.which("node")
     assert node, "node is required for the PocketBase migration checks; CI installs it"
     harness = tmp_path_factory.mktemp("execution-jobs") / "harness.cjs"
-    harness.write_text(_HARNESS)
     # The hooks need these globals to load.
     prelude = "globalThis.__hooks = process.argv[3];"
     harness.write_text(prelude + _HARNESS)
-    res = subprocess.run([node, str(harness), str(MIGRATION), str(HOOKS)], capture_output=True, text=True,
-                         timeout=60)
+    res = subprocess.run([node, str(harness), str(MIGRATION), str(HOOKS), str(files_max)], capture_output=True,
+                         text=True, timeout=60)
     assert res.returncode == 0, res.stderr
     return json.loads(res.stdout)
+
+
+@pytest.fixture(scope="module")
+def run(tmp_path_factory) -> dict:
+    return _run(tmp_path_factory, BASE_FILES_MAX)
+
+
+@pytest.fixture(scope="module")
+def fresh_run(tmp_path_factory) -> dict:
+    """The same, on a database whose files field still holds what
+    1700001300 declares, as one built from scratch does at this point."""
+    return _run(tmp_path_factory, DECLARED_FILES_MAX)
 
 
 def _field(collection: dict, name: str) -> dict:
@@ -223,13 +246,27 @@ def test_the_envelope_an_account_reads_holds_no_operator_view(run):
     assert "CREATE INDEX idx_execution_envelopes_user ON execution_envelopes (user)" in envelopes["indexes"]
 
 
-def test_jobs_attempts_and_envelopes_point_at_each_other_and_cascade(run):
-    attempts, envelopes = run["up"]["execution_attempts"], run["up"]["execution_envelopes"]
-    jobs_id, attempts_id = run["up"]["execution_jobs"]["id"], attempts["id"]
+def test_an_attempt_points_at_its_job_and_cascades(run):
+    attempts, jobs_id = run["up"]["execution_attempts"], run["up"]["execution_jobs"]["id"]
     assert _field(attempts, "job")["options"] == {"collectionId": jobs_id, "cascadeDelete": True, "maxSelect": 1}
-    assert _field(envelopes, "job")["options"]["collectionId"] == jobs_id
-    assert _field(envelopes, "attempt")["options"] == {"collectionId": attempts_id, "cascadeDelete": True,
-                                                       "maxSelect": 1}
+
+
+def test_an_envelope_names_its_job_and_attempt_by_id_without_a_relation(run):
+    envelopes = run["up"]["execution_envelopes"]
+    for name in ("job", "attempt"):
+        field = _field(envelopes, name)
+        assert field["type"] == "text" and field["required"] is True, name
+        assert field["options"] == {"pattern": "^[a-z0-9]{15}$"}, name
+
+
+def test_no_collection_an_account_reads_links_into_a_service_only_one(run):
+    service_only = {run["up"][n]["id"] for n in ("execution_service", "execution_jobs", "execution_attempts")}
+    readable = [c for c in run["up"].values() if c["id"] not in service_only
+                and (c.get("listRule") is not None or c.get("viewRule") is not None)]
+    assert any(c["id"] == run["up"]["execution_envelopes"]["id"] for c in readable)
+    links = [(c["id"], f["name"]) for c in readable for f in c["fields"]
+             if f["type"] == "relation" and f["options"].get("collectionId") in service_only]
+    assert links == []
 
 
 @pytest.mark.parametrize(
@@ -296,3 +333,21 @@ def test_down_drops_only_what_up_added(run):
     assert [f["name"] for f in down["ai_coding_attempts"]["fields"]] == ["status"]
     assert [f["name"] for f in down["take_home_attempts"]["fields"]] == ["files"]
     assert _field(down["take_home_attempts"], "files")["options"]["maxSize"] == BASE_FILES_MAX
+
+
+@pytest.mark.parametrize("fixture, before", [("run", BASE_FILES_MAX), ("fresh_run", DECLARED_FILES_MAX)])
+def test_down_puts_back_the_files_limit_up_found(request, fixture, before):
+    result = request.getfixturevalue(fixture)
+    assert _field(result["up"]["take_home_attempts"], "files")["options"]["maxSize"] == 8 * MIB
+    assert _field(result["down"]["take_home_attempts"], "files")["options"]["maxSize"] == before
+
+
+@pytest.mark.parametrize("fixture, before", [("run", BASE_FILES_MAX), ("fresh_run", DECLARED_FILES_MAX)])
+def test_the_only_row_it_writes_is_its_own_record_which_down_removes(request, fixture, before):
+    params = request.getfixturevalue(fixture)["params"]
+    assert {k: json.loads(v) for k, v in params["afterUp"].items()} == {PRIOR_KEY: {"files": before}}
+    assert params["afterDown"] == {}
+
+
+def test_the_record_is_named_for_the_migration(src):
+    assert f'const PRIOR_KEY = "{MIGRATION.name}";' in src

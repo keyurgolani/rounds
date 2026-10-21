@@ -12,16 +12,18 @@ the pinned binary and no network:
 2. Without the registry, a fresh database holds every JSON field at the
    2,000,000-byte default.
 3. Fresh: every migration on an empty ``pb_data`` leaves every JSON field
-   at its declared limit.
+   at its declared limit, the snapshot store's three among them.
 4. Upgraded: a ``pb_data`` built with every migration before
    ``1700007100_execution_jobs.js``, then given the rest, holds every
-   declared limit, and the registry's own step changes JSON limits only.
+   declared limit, and the registry's own step changes JSON limits only,
+   plus its record of the size each field it changed held before.
 5. Again: on the declared database, where every limit already holds, the
-   registry saves no collection.
+   registry saves no collection and records nothing.
 6. Down: ``pocketbase migrate down 1`` on the upgraded database, confirmed
-   on a pseudo terminal, reverses the registry, puts every JSON field it
-   registers back at 2,000,000 bytes, and changes nothing else; applying it
-   again restores the declared limits.
+   on a pseudo terminal, reverses the registry, puts each JSON field back at
+   the size it held before, so a field that already held its declared size
+   keeps it, removes the record, and changes nothing else; applying it again
+   restores the declared limits.
 
 Prints one PASS/FAIL line per check and exits non-zero on any failure.
 """
@@ -38,11 +40,19 @@ from pathlib import Path
 from admission_migration_check import MIGRATIONS, Checks, _differences, _migrate, _migrate_down_confirmed, _snapshot
 
 REGISTRY = "1702134273_json_limits.js"
+# The _params row the registry records the sizes it changed in.
+PRIOR_KEY = REGISTRY
 # The same names scripts/lint_migrations.py treats as json_limits migrations.
 REGISTRY_FILE = re.compile(r"\A\d+_json_limits(?:_[a-z0-9]+)*\.js\Z")
 # The upgrade starts from every migration before this PR's first.
 UPGRADE_FROM = "1700007100_execution_jobs.js"
 DEFAULT_BYTES = 2_000_000
+# The snapshot store's JSON fields (1700008000_legacy_artifact_snapshots.js).
+SNAPSHOT_LIMITS = {
+    ("legacy_artifact_snapshots", "design"): 64 * 1024,
+    ("legacy_artifact_snapshots", "data"): 2 * 1024 * 1024,
+    ("legacy_artifact_snapshots", "font_families"): 4 * 1024,
+}
 
 
 def _connect(db: Path) -> sqlite3.Connection:
@@ -69,9 +79,34 @@ def _rows(db: Path) -> dict[str, tuple]:
         conn.close()
 
 
+def _params(db: Path) -> dict[str, str]:
+    """Every ``_params`` row but the registry's record."""
+    conn = _connect(db)
+    try:
+        return {key: value for key, value in conn.execute("SELECT key, value FROM _params ORDER BY key")
+                if key != PRIOR_KEY}
+    finally:
+        conn.close()
+
+
+def _record(db: Path) -> dict[tuple[str, str], int] | None:
+    """The registry's record, field to the size it held before, or None."""
+    conn = _connect(db)
+    try:
+        row = conn.execute("SELECT value FROM _params WHERE key = ?", (PRIOR_KEY,)).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    entries = json.loads(row[0])
+    record = {(c, f): size for c, f, size in entries}
+    return record if len(record) == len(entries) else {}
+
+
 def _without_limits(snapshot: dict) -> dict:
-    """The snapshot with each JSON field's maxSize and the json_limits
-    migrations taken out, so what's left is everything else."""
+    """The snapshot with each JSON field's maxSize, the json_limits
+    migrations, and the ``_params`` count taken out, so what's left is
+    everything else; ``_params`` is compared apart, by row."""
     collections = {}
     for name, value in snapshot["collections"].items():
         schema = json.loads(value[1])
@@ -79,7 +114,7 @@ def _without_limits(snapshot: dict) -> dict:
             if field.get("type") == "json":
                 field.setdefault("options", {})["maxSize"] = None
         collections[name] = (value[0], json.dumps(schema, sort_keys=True), *value[2:])
-    return {"counts": snapshot["counts"], "collections": collections,
+    return {"counts": {t: n for t, n in snapshot["counts"].items() if t != "_params"}, "collections": collections,
             "migrations": [m for m in snapshot["migrations"] if not REGISTRY_FILE.match(m)]}
 
 
@@ -136,6 +171,9 @@ def main() -> int:
     fresh = _limits(fresh_data / "data.db")
     c.check("json-limits.fresh.holds-the-declared-limits", up.returncode == 0 and fresh == declared,
             up.stderr[-400:] or _limit_differences(fresh, declared))
+    c.check("json-limits.fresh.snapshot-store-limits",
+            {k: fresh.get(k) for k in SNAPSHOT_LIMITS} == SNAPSHOT_LIMITS == {k: declared.get(k) for k in SNAPSHOT_LIMITS},
+            _limit_differences({k: fresh.get(k) for k in SNAPSHOT_LIMITS}, SNAPSHOT_LIMITS))
 
     # 4. A database upgraded in place, in one step and with the registry's
     #    own step on its own.
@@ -154,30 +192,44 @@ def main() -> int:
     db = data / "data.db"
     up = _migrate(data, repo, "up")
     before = _snapshot(db)
+    held = _limits(db)
+    params = _params(db)
     up_registry = _migrate(data, full, "up")
     after = _snapshot(db)
     c.check("json-limits.upgrade.changes-only-json-limits",
             up.returncode == 0 and up_registry.returncode == 0 and REGISTRY in after["migrations"]
-            and _limits(db) == declared and _without_limits(after) == _without_limits(before),
+            and _limits(db) == declared and _without_limits(after) == _without_limits(before)
+            and _params(db) == params,
             (up.stderr + up_registry.stderr)[-400:] or _differences(_without_limits(after), _without_limits(before)))
+    # Here the fields from 1700007100 on already held their declared sizes,
+    # and the rest held the default.
+    changed = {k: v for k, v in held.items() if v != declared.get(k)}
+    kept = [k for k, v in held.items() if v == declared.get(k)]
+    record = _record(db)
+    c.check("json-limits.upgrade.records-what-it-changed",
+            record == changed and bool(changed) and bool(kept),
+            f"changed={len(changed)} kept={len(kept)} "
+            + ("no record" if record is None else _limit_differences(record, changed)))
 
     # 5. Where every limit already holds.
     rows = _rows(declared_data / "data.db")
     up = _migrate(declared_data, full, "up")
     again = _rows(declared_data / "data.db")
     applied = REGISTRY in _snapshot(declared_data / "data.db")["migrations"]
-    c.check("json-limits.again.saves-no-collection", up.returncode == 0 and applied and again == rows,
-            up.stderr[-400:] or ", ".join(sorted(n for n in set(rows) | set(again) if rows.get(n) != again.get(n))))
+    c.check("json-limits.again.saves-no-collection",
+            up.returncode == 0 and applied and again == rows and _record(declared_data / "data.db") is None,
+            up.stderr[-400:] or ", ".join(sorted(n for n in set(rows) | set(again) if rows.get(n) != again.get(n)))
+            or "recorded a change")
 
     # 6. Reversing it, as an operator would, and applying it again.
     code, out = _migrate_down_confirmed(data, full)
     reverted = _snapshot(db)
     limits = _limits(db)
-    c.check("json-limits.down.restores-the-default",
+    c.check("json-limits.down.restores-what-each-field-held",
             code == 0 and REGISTRY in out and REGISTRY not in reverted["migrations"]
-            and set(limits) == set(declared) and set(limits.values()) == {DEFAULT_BYTES}
-            and _without_limits(reverted) == _without_limits(after),
-            f"exit={code} {out[-300:]!r}" if code else _limit_differences(limits, {k: DEFAULT_BYTES for k in declared}))
+            and limits == held and _record(db) is None and _params(db) == params
+            and reverted["counts"] == before["counts"] and _without_limits(reverted) == _without_limits(before),
+            f"exit={code} {out[-300:]!r}" if code else _limit_differences(limits, held))
     up = _migrate(data, full, "up")
     c.check("json-limits.down.reapplies", up.returncode == 0 and _limits(db) == declared,
             up.stderr[-400:] or _limit_differences(_limits(db), declared))

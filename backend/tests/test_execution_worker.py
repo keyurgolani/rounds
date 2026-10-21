@@ -325,6 +325,63 @@ def test_a_lost_lease_stops_the_run_and_its_late_result_is_rejected(server, caps
     assert any(line.get("metric") == "rounds_job_late_result_rejected_total" for line in lines)
 
 
+def test_a_run_the_replica_stops_mid_way_ends_worker_lost_never_from_the_parts_that_ran(server):
+    key = "0190f000-0000-7000-8000-900000000002"
+    job_id = server.job(key=key)
+    handler = PythonHandler({"case-1": "print(1)", "case-2": "import time; time.sleep(60)", "case-3": "print(3)"},
+                            wall_s=60, budget=3)
+
+    async def stop_once_a_part_passed(workers):
+        await _until(server, _started(job_id))
+        for _ in range(200):
+            if handler.ran:
+                break
+            await asyncio.sleep(0.05)
+        assert handler.ran == ["case-1"]
+        await workers[0].stop()
+
+    started = time.monotonic()
+    state, _ = asyncio.run(_run(server, {"run": handler}, _ended(job_id), during=stop_once_a_part_passed))
+    assert time.monotonic() - started < 20 and handler.ran == ["case-1", "case-2"]
+    job = _job(state, job_id)
+    assert (job["state"], job["outcome_class"]) == ("failed", "worker-lost")
+    (env,) = state["envelopes"]
+    assert env["authoritative"] is False and env["user_view"]["score"] is None
+    # worker-lost is retryable: the same key runs attempt two.
+    assert server.enqueue(A, key).json()["requeued"] is True
+
+
+def test_a_job_the_replica_stops_before_it_started_goes_back_to_the_queue(server, monkeypatch):
+    job_id = server.job()
+    handler = PythonHandler({"case-1": "print(1)"})
+    held: dict = {}
+    acquire = LegacyExecutor.acquire
+
+    async def slot_once_stopping(self, wait_s):
+        # The slot comes only once the replica has begun to stop.
+        while not (held.get("worker") and held["worker"]._stopping.is_set()):
+            await asyncio.sleep(0.02)
+        return await acquire(self, wait_s)
+
+    monkeypatch.setattr(LegacyExecutor, "acquire", slot_once_stopping)
+
+    async def stop_once_claimed(workers):
+        held["worker"] = workers[0]
+        await _until(server, lambda s: any(j["id"] == job_id and j["state"] == "leased" for j in s["jobs"]))
+        await workers[0].stop()
+        server.advance(31)
+        await workers[0]._client.reap()
+
+    asyncio.run(_run(server, {"run": handler}, lambda s: _job(s, job_id)["state"] == "queued",
+                     during=stop_once_claimed))
+    state = server.dump()
+    job = _job(state, job_id)
+    assert (job["state"], job["attempts_started"]) == ("queued", 0) and handler.ran == []
+    # The only envelope is the reaper's, never authoritative.
+    (env,) = state["envelopes"]
+    assert (env["outcome_class"], env["authoritative"]) == ("worker-lost", False)
+
+
 def test_two_replicas_racing_for_one_job_make_one_attempt(server):
     job_id = server.job()
     handler = PythonHandler({"case-1": "print(1)"})

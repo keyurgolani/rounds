@@ -11,14 +11,16 @@ Phases, in the order harness/run.sh runs them:
   reads jobs or attempts, or links an attempt row to an envelope; an
   account reads its own envelopes and nobody else's, without the
   operator view, and a run with hidden material shows the account
-  outcome classes and totals only (D9); enqueue needs the account's admitted command and
+  outcome classes and totals only (D9), and its filters on its envelopes
+  name no field of a job or an attempt; enqueue needs the account's admitted command and
   the runner key, answers a duplicate with its job and a different
   request as a mismatch; another account's cancel is the unknown-id 404;
   two sessions racing for one job make one attempt; a superseded token's
   write is counted and never applied; an envelope outside v1 is refused
   whole; and after a real 31 s, reap re-queues a lease lost before it
   started and ends one lost after it started worker-lost, and a same-key
-  retry runs attempt two.
+  retry runs attempt two. One account's backlog of queued jobs holds
+  no other account's job back.
 - ``execution-runners``, both runner replicas up with the store on and
   the secret: each is ready, and each claims jobs and, with no handler
   for any kind yet, ends them ``denied``, ``definition-invalid``, once.
@@ -63,6 +65,8 @@ OUTCOME_WORDS = {"completed", "timed-out", "denied", "canceled", "failed", "pass
 ENVELOPE = "rounds.execution-envelope/v1"
 DEFINITION = {"track": "coding", "slug": "two-sum", "variant": "python", "version": 1}
 LEASE_S = 30
+# The most accounts one claim considers (pb_hooks/execution.js).
+CLAIM_SCAN = 50
 # The least wall seconds admission admits each operation for.
 WALL = {"run": 3, "evaluate": 3, "run_project": 10, "grade": 45, "take_home_run": 60, "take_home_submit": 120}
 
@@ -113,6 +117,16 @@ def new_job(token: str, kind: str = "run") -> tuple[str, str, str | None]:
     admit(token, key, fingerprint, kind)
     status, body = caller(token, "enqueue", enqueue_body(key, fingerprint, kind))
     return key, fingerprint, ((body or {}).get("job") or {}).get("id") if status == 200 else None
+
+
+def seed_queued(pb: PBClient, admin: str, acct: factory.Account, queued_at: int) -> str | None:
+    """A queued job written straight to the store as the admin, without an
+    admission, so a check can queue many at once."""
+    body = {"account": acct.user_id, "command_id": uuid7(), "kind": "run", "purpose": "scratch",
+            "definition": DEFINITION, "fingerprint": secrets.token_hex(32), "source_checksum": "c" * 64,
+            "input_digest": "d" * 64, "input": {"code": "print(1)"}, "state": "queued", "queued_at": queued_at}
+    resp = pb.create("execution_jobs", admin, body)
+    return (resp.body or {}).get("id") if resp.status == 200 else None
 
 
 def envelope(job_id: str, state: str = "completed", outcome: str = "passed", score: float | None = 1.0) -> dict:
@@ -289,6 +303,12 @@ def run_store(c: Checks) -> None:
             not (other_list.body or {}).get("items") and other_view.status == 404
             and not (anon_list.body or {}).get("items") and anon_view.status == 404,
             f"other={other_list.status}/{other_view.status} anonymous={anon_list.status}/{anon_view.status}")
+    # Nothing in the row an account reads links into the service-only
+    # collections: its filters name no field of a job or an attempt.
+    through = [pb.listing("execution_envelopes", a.token, {"filter": f"{link}.state != ''"}) for link in ("job", "attempt")]
+    c.check("execution.envelopes.filters-reach-no-service-only-field",
+            bool(envs) and all(r.status == 400 or (r.status == 200 and not (r.body or {}).get("items")) for r in through),
+            f"statuses={[r.status for r in through]}")
 
     # A run with hidden material shows the account outcome classes and
     # the server's totals, never output.
@@ -378,6 +398,21 @@ def run_store(c: Checks) -> None:
             and {(x.get("job") or {}).get("id") for x in second} == {starter_job, idle_job},
             f"status={status} attempts={numbers}")
 
+    # One account's backlog holds no other account's job back: more of one
+    # account's jobs queued first than a claim considers, then another's.
+    fair = [factory.make_account("exe-fair-c"), factory.make_account("exe-fair-d")]
+    for acct in fair:
+        factory.register(pb, acct)
+    oldest = int(time.time()) - 1000
+    backlog = [seed_queued(pb, admin, fair[0], oldest + i) for i in range(CLAIM_SCAN + 1)]
+    lone = seed_queued(pb, admin, fair[1], oldest + CLAIM_SCAN + 10)
+    picked = [((service(svc, "claim", {"worker": "harness", "token_hash": sha(token43())})[1] or {}).get("job") or {})
+              .get("account") for _ in range(3)]
+    c.check("execution.claim.one-backlog-holds-no-other-account-back",
+            all(backlog) and bool(lone) and picked == [fair[0].user_id, fair[0].user_id, fair[1].user_id],
+            f"seeded={sum(map(bool, backlog))}+{int(bool(lone))} picked={[p == fair[1].user_id for p in picked]}")
+    for job_id in filter(None, [*backlog, lone]):
+        pb.delete("execution_jobs", job_id, admin)
 
 # ---- with the runners --------------------------------------------------------------
 

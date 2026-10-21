@@ -49,6 +49,7 @@ const MAX_ATTEMPTS = 3;
 // claim skips an account with this many jobs leased or started.
 const ACCOUNT_ACTIVE_JOBS = 2;
 const REAP_BATCH = 100;
+// The most accounts one claim considers.
 const CLAIM_SCAN = 50;
 const INPUT_MAX_CHARS = 8 * 1024 * 1024;
 const USER_VIEW_MAX_CHARS = 1024 * 1024;
@@ -529,18 +530,20 @@ function reap(store, now) {
   return out;
 }
 
-// claim: reap first, then the oldest queued job of an account with fewer
-// than ACCOUNT_ACTIVE_JOBS active, as a new leased attempt under the
-// caller's token hash.
+// claim: reap first, then lease the next queued job under the caller's
+// token hash. Accounts with fewer than ACCOUNT_ACTIVE_JOBS active take
+// turns by their oldest queued job, oldest first, so one account's backlog
+// never holds another's jobs back. The scan reads ids and attempt counts;
+// only the job claimed is read whole.
 function claim(store, input, now) {
   const reaped = reap(store, now);
   if (store.findAttemptByToken(input.token_hash) !== null) {
     return { status: 400, body: { v: VERSION, error: "invalid_request" } };
   }
-  const queued = store.queuedJobs(CLAIM_SCAN);
-  for (let i = 0; i < queued.length; i += 1) {
-    const job = queued[i];
-    if (store.activeJobCount(job.account) >= ACCOUNT_ACTIVE_JOBS) continue;
+  const heads = store.claimable(ACCOUNT_ACTIVE_JOBS, CLAIM_SCAN);
+  for (let i = 0; i < heads.length; i += 1) {
+    const job = store.getJob(heads[i].id);
+    if (job === null) continue;
     if (job.attempts >= MAX_ATTEMPTS) {
       endJob(store, job, "failed", "infrastructure-degraded", "unconfirmed", now);
       continue;
@@ -704,6 +707,16 @@ const JOBS = "execution_jobs";
 const ATTEMPTS = "execution_attempts";
 const ENVELOPES = "execution_envelopes";
 const COMMANDS = "admission_commands";
+// A queued job a claim may take: its account has fewer than {:cap} jobs
+// leased or started, and no queued job before this one.
+const CLAIMABLE =
+  "j.state = 'queued'" +
+  " AND (SELECT COUNT(*) FROM execution_jobs a" +
+  " WHERE a.account = j.account AND a.state IN ('leased', 'started')) < {:cap}" +
+  " AND NOT EXISTS (SELECT 1 FROM execution_jobs o" +
+  " WHERE o.account = j.account AND o.state = 'queued'" +
+  " AND (o.queued_at < j.queued_at OR (o.queued_at = j.queued_at" +
+  " AND (o.created < j.created OR (o.created = j.created AND o.id < j.id)))))";
 
 function pbStore(dao) {
   const collections = {};
@@ -818,11 +831,20 @@ function pbStore(dao) {
       job(first(JOBS, "account = {:account} && command_id = {:id}", { account, id: commandId })),
     getJob: (id) => job(first(JOBS, "id = {:id}", { id })),
     saveJob: (row) => save(JOBS, row, JOB_FIELDS),
-    // Oldest first; jobs queued in the same second, in the order they came.
-    queuedJobs: (limit) =>
-      dao.findRecordsByFilter(JOBS, "state = 'queued'", "queued_at,created", limit, 0).map(job),
-    activeJobCount: (account) =>
-      dao.findRecordsByFilter(JOBS, "account = {:account} && (state = 'leased' || state = 'started')", "", 0, 0, { account }).length,
+    // Each account's oldest queued job, for the accounts with fewer than
+    // `cap` jobs leased or started, oldest first; jobs queued in the same
+    // second, in the order they came. Ids and attempt counts only.
+    claimable: (cap, limit) => {
+      const heads = arrayOf(new DynamicModel({ id: "", account: "", attempts: 0 }));
+      dao.db()
+        .select("j.id", "j.account", "j.attempts")
+        .from(JOBS + " j")
+        .where($dbx.exp(CLAIMABLE, { cap }))
+        .orderBy("j.queued_at ASC", "j.created ASC", "j.id ASC")
+        .limit(limit)
+        .all(heads);
+      return heads.map((h) => ({ id: h.id, account: h.account, attempts: h.attempts }));
+    },
     getAttempt: (id) => attempt(first(ATTEMPTS, "id = {:id}", { id })),
     findAttemptByToken: (tokenHash) => attempt(first(ATTEMPTS, "token_hash = {:hash}", { hash: tokenHash })),
     saveAttempt: (row) => save(ATTEMPTS, row, ATTEMPT_FIELDS),

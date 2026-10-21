@@ -14,7 +14,15 @@ function unique(rows, row, fields, name) {
   }
 }
 
+const ACTIVE = ["leased", "started"];
+
+// Oldest first; jobs queued in the same second, in the order they came.
+function byQueue(a, b) {
+  return a.queued_at - b.queued_at || (a.id < b.id ? -1 : 1);
+}
+
 function memoryStore() {
+  const reads = { jobs: 0 };
   const commands = new Map();
   const jobs = new Map();
   const attempts = new Map();
@@ -51,14 +59,33 @@ function memoryStore() {
       stored.job = row.job;
       return clone(stored);
     },
-    findJob: (account, commandId) =>
-      clone([...jobs.values()].find((j) => j.account === account && j.command_id === commandId) || null),
-    getJob: (id) => clone(jobs.get(id) || null),
+    findJob: (account, commandId) => {
+      reads.jobs += 1;
+      return clone([...jobs.values()].find((j) => j.account === account && j.command_id === commandId) || null);
+    },
+    getJob: (id) => {
+      reads.jobs += 1;
+      return clone(jobs.get(id) || null);
+    },
     saveJob: saver(jobs, [["account", "command_id"]], "execution_jobs"),
-    queuedJobs: (limit) =>
-      [...jobs.values()].filter((j) => j.state === "queued").sort((a, b) => a.queued_at - b.queued_at).slice(0, limit).map(clone),
-    activeJobCount: (account) =>
-      [...jobs.values()].filter((j) => j.account === account && (j.state === "leased" || j.state === "started")).length,
+    // As the PocketBase store's query: each account's oldest queued job,
+    // for the accounts with fewer than cap leased or started, oldest
+    // first, ids and attempt counts only.
+    claimable: (cap, limit) => {
+      const all = Array.from(jobs.values());
+      const busy = (account) => all.filter((j) => j.account === account && ACTIVE.includes(j.state)).length;
+      const queued = all.filter((j) => j.state === "queued").sort(byQueue);
+      const seen = new Set();
+      const heads = [];
+      queued.forEach((j) => {
+        if (seen.has(j.account)) return;
+        seen.add(j.account);
+        if (busy(j.account) < cap) heads.push({ id: j.id, account: j.account, attempts: j.attempts });
+      });
+      return heads.slice(0, limit);
+    },
+    // Whole job rows read so far.
+    jobReads: () => reads.jobs,
     getAttempt: (id) => clone(attempts.get(id) || null),
     findAttemptByToken: (tokenHash) => clone([...attempts.values()].find((a) => a.token_hash === tokenHash) || null),
     saveAttempt: saver(attempts, [["job", "attempt_number"], ["token_hash"]], "execution_attempts"),

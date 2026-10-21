@@ -10,19 +10,23 @@
 // It skips a collection or field the database doesn't have and saves a
 // collection only when one of its limits changes, so on a database upgraded
 // in place it changes only the fields that don't already hold their size.
-// The down step puts PocketBase's 2,000,000-byte default back.
+// It records the size each field it changes held before, in the _params row
+// PRIOR_KEY names, and the down step puts exactly those sizes back and
+// removes the row. A field that already held its size before this migration,
+// as many do on a database upgraded in place, keeps it when this is undone.
 //
 // LIMITS stays a literal, sorted list of [collection, field, bytes]. A
 // migration that adds a JSON field or changes a maxSize registers it in a new
 // NNNNNNNNNN_json_limits_<name>.js copied from this file, with its own LIMITS
-// and sorted after this one, so its entries win. This file is never edited:
-// PocketBase runs each migration once. scripts/lint_migrations.py and
+// and a PRIOR_KEY naming its own file, and sorted after this one, so its
+// entries win. This file is never edited once it ships: PocketBase runs each
+// migration once. scripts/lint_migrations.py and
 // pocketbase/tests/test_json_limits.py hold the registry to the migrations,
 // and harness phase 12c checks it on fresh and upgraded databases
 // (docs/development.md#json-field-limits).
 //
-// 1048576 is 1 MiB, 2097152 is 2 MiB, 4194304 is 4 MiB, 8388608 is 8 MiB, and
-// 16777216 is 16 MiB.
+// 4096 is 4 KiB, 65536 is 64 KiB, 1048576 is 1 MiB, 2097152 is 2 MiB, 4194304
+// is 4 MiB, 8388608 is 8 MiB, and 16777216 is 16 MiB.
 const LIMITS = [
   ["admission_commands", "result", 1048576],
   ["ai_coding_attempts", "ai_chats", 2097152],
@@ -70,6 +74,9 @@ const LIMITS = [
   ["experience_projects", "tags", 2097152],
   ["experience_projects", "tech_stack", 2097152],
   ["interview_rounds", "questions_asked", 2097152],
+  ["legacy_artifact_snapshots", "data", 2097152],
+  ["legacy_artifact_snapshots", "design", 65536],
+  ["legacy_artifact_snapshots", "font_families", 4096],
   ["offers", "trail", 2097152],
   ["relation_quarantine", "payload", 16777216],
   ["relation_quarantine_reports", "findings", 16777216],
@@ -115,14 +122,18 @@ const LIMITS = [
   ["take_home_attempts", "rubric_review", 2097152],
   ["todos", "mentions", 2097152],
 ];
-const DEFAULT_BYTES = 2000000; // PocketBase's JSON default
+// The _params row where the up step records [collection, field, bytes
+// before] for each field it changed, for the down step.
+const PRIOR_KEY = "1702134273_json_limits.js";
 
-// Sets each registered JSON field the database has to size(bytes) and saves
-// each collection whose limits changed, once.
-function apply(dao, size) {
+// Sets each [collection, field, bytes] field the database has to bytes,
+// saves each collection whose limits changed, once, and returns
+// [collection, field, bytes before] for each field it changed.
+function apply(dao, entries) {
   const found = {};
   const changed = [];
-  for (const entry of LIMITS) {
+  const before = [];
+  for (const entry of entries) {
     const name = entry[0];
     if (!(name in found)) {
       try {
@@ -132,15 +143,30 @@ function apply(dao, size) {
       }
     }
     const field = found[name] ? found[name].schema.getFieldByName(entry[1]) : null;
-    const bytes = size(entry[2]);
-    if (!field || field.type !== "json" || field.options.maxSize === bytes) continue;
-    field.options.maxSize = bytes;
+    if (!field || field.type !== "json" || field.options.maxSize === entry[2]) continue;
+    before.push([name, entry[1], field.options.maxSize]);
+    field.options.maxSize = entry[2];
     if (changed.indexOf(name) < 0) changed.push(name);
   }
   for (const name of changed) dao.saveCollection(found[name]);
+  return before;
 }
 
 migrate(
-  (db) => apply(new Dao(db), (bytes) => bytes),
-  (db) => apply(new Dao(db), () => DEFAULT_BYTES),
+  (db) => {
+    const dao = new Dao(db);
+    const before = apply(dao, LIMITS);
+    if (before.length > 0) dao.saveParam(PRIOR_KEY, before);
+  },
+  (db) => {
+    const dao = new Dao(db);
+    let recorded = null;
+    try {
+      recorded = dao.findParamByKey(PRIOR_KEY);
+    } catch (_) {
+      return; // the up step changed nothing
+    }
+    apply(dao, JSON.parse(recorded.value.string()));
+    dao.deleteParam(recorded);
+  },
 );

@@ -264,6 +264,36 @@ def test_claim_skips_an_account_with_two_active_jobs():
     assert [j["account"] if j else None for j in claimed] == [A["id"], A["id"], B["id"], None]
 
 
+CLAIM_SCAN = int(re.search(r"^const CLAIM_SCAN = (\d+);$", (HOOKS / "execution.js").read_text(), re.M).group(1))
+
+
+def test_one_accounts_backlog_never_holds_another_accounts_job_back():
+    # More of A's jobs queued first than one claim considers, then B's one.
+    keys = [new_key() for _ in range(CLAIM_SCAN + 10)]
+    steps = [command(k) for k in keys] + [enqueue(k, now=T0 + i) for i, k in enumerate(keys)]
+    steps += [command(b_key := new_key(), account=B), enqueue(b_key, account=B, now=T0 + 100)]
+    steps += [claim(new_token(), now=T0 + 200) for _ in range(3)]
+    out = run(*steps)
+    claimed = [r["body"]["job"] for r in out["results"][-3:]]
+    assert [j["account"] if j else None for j in claimed] == [A["id"], A["id"], B["id"]]
+
+
+def test_a_claim_reads_only_the_job_it_claims_whole():
+    keys = [new_key() for _ in range(5)]
+    steps = [command(k) for k in keys] + [enqueue(k, now=T0 + i) for i, k in enumerate(keys)]
+    steps += [command(b_key := new_key(), account=B), enqueue(b_key, account=B, now=T0 + 10)]
+    steps += [claim(new_token(), now=T0 + 20) for _ in range(4)]
+    out = run(*steps)
+    claims = out["results"][-4:]
+    assert [c["body"]["job"] is not None for c in claims] == [True, True, True, False]
+    assert [c["job_reads"] for c in claims] == [1, 1, 1, 0]
+
+
+def test_the_harness_queues_past_what_a_claim_considers():
+    probes = (HERE.parents[1] / "harness" / "probes" / "execution_check.py").read_text()
+    assert int(re.search(r"^CLAIM_SCAN = (\d+)$", probes, re.M).group(1)) == CLAIM_SCAN
+
+
 def test_a_reused_token_hash_is_refused():
     k1, k2 = new_key(), new_key()
     token = new_token()

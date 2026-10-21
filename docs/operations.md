@@ -276,7 +276,7 @@ The migration's down step drops the collection only while it's empty. Once a sna
 
 `ROUNDS_GATE_EXECUTION_STORE` turns on the durable job store from [#3](https://github.com/keyurgolani/rounds/issues/3) (`ROUNDS-00A-L03`). It starts `off`. Nothing runs through it yet; #3's later PRs move the execution routes onto it. PocketBase keeps jobs, attempts, and result envelopes in `execution_jobs`, `execution_attempts`, and `execution_envelopes`, and only its hooks write them. An account reads its own envelopes and nothing else in the store ([server-writes.md](security/server-writes.md#execution-job-store)).
 
-Each runner replica runs a worker that logs in as the `execution_service` record `execution-worker`, claims a queued job while it has a free slot (the same 4 as the admitted routes), and holds the job's lease for 30 seconds on PocketBase's clock, renewing it every 10. An account has at most 2 jobs leased or started at once. A lease that runs out before its run starts puts the job back in the queue. Otherwise a job runs again only on a retry with the same key after a `worker-lost` or `infrastructure-degraded` attempt, and only while fewer than 3 attempts have started.
+Each runner replica runs a worker that logs in as the `execution_service` record `execution-worker`, claims a queued job while it has a free slot (the same 4 as the admitted routes), and holds the job's lease for 30 seconds on PocketBase's clock, renewing it every 10. An account has at most 2 jobs leased or started at once. Accounts below that cap take turns by their oldest queued job, so one account's backlog never holds another's jobs back. A lease that runs out before its run starts puts the job back in the queue. Otherwise a job runs again only on a retry with the same key after a `worker-lost` or `infrastructure-degraded` attempt, and only while fewer than 3 attempts have started.
 
 **Turning it on.**
 
@@ -296,7 +296,7 @@ With the gate `on` and no usable secret, PocketBase creates no `execution-worker
 2. A lease that ran out after the run started ends the job `failed`, `worker-lost`.
 3. A started attempt 30 seconds past its declared budget ends `failed`, `infrastructure-degraded`, even while it still heartbeats.
 
-Each reaped attempt gets a server-written envelope that is never authoritative. A runner writing for an attempt it no longer holds is refused and counted in that attempt's `rejected_writes`.
+Each reaped attempt gets a server-written envelope that is never authoritative. A runner that stops ends each of its runs in flight `failed`, `worker-lost`, never with an outcome from the parts that ran. A job it claimed but hadn't started goes back to the queue when its lease runs out. A runner writing for an attempt it no longer holds is refused and counted in that attempt's `rejected_writes`.
 
 **Forced reap.** Jobs stay as they are while no worker runs. To reap without one, run the reap from inside a runner container, which holds the secret, so it never reaches your shell:
 
