@@ -8,7 +8,7 @@
     "rule": "Synthetic: 14 days after the switch, or sooner if a later transfer depends on this context."
   },
   "allowedDowntime": {
-    "freezeMinutes": 15,
+    "freezeMinutes": 12,
     "readsDuringFreeze": "available",
     "note": "Synthetic: writes to the frozen set get 409 context_frozen; reads stay open."
   },

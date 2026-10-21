@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "docs/program/rollback-template.schema.json",
   "title": "Authority transfer rollback template",
-  "description": "ROUNDS-01-L03, DR-0003 decision P4. An authorityTransfer node's PR adds one filled copy per bounded context it lists, at docs/program/transfers/<leaf>-<context>.json (from S2; leaf-gate reads it from the PR head as data, and the operator passes it to #156's switch as the transfer record). It holds the 11 fields of spec 2703-2713, plus upgradeSource (the release a rollback returns to) and backupConsistency. Defaults (spec 2062-2067, decision P5): the final write freeze lasts at most 15 minutes, zero accepted writes are lost, recovery takes at most 30 minutes at the scale floor, and restore is rehearsed. A transfer may tighten a default; loosening one needs a deviations entry with the owner's approval. Fixtures hold synthetic values and placeholder digests only.",
+  "description": "ROUNDS-01-L03, DR-0003 decision P4. An authorityTransfer node's PR adds one filled copy per bounded context it lists, at docs/program/transfers/<leaf>-<context>.json (from S2; leaf-gate reads it from the PR head as data, and the operator passes it to #156's switch as the transfer record). It holds the 11 fields of spec 2703-2713, plus upgradeSource (the release a rollback returns to) and backupConsistency. Defaults (spec 2062-2067, decision P5): the final write freeze stays under 15 minutes, zero accepted writes are lost, recovery takes at most 30 minutes at the scale floor, and restore is rehearsed. A transfer may tighten a default; loosening one needs a deviations entry with the owner's approval. Fixtures hold synthetic values and placeholder digests only.",
   "type": "object",
   "required": [
     "template", "transfer", "context", "rollbackDeadline", "allowedDowntime", "recoveryPointObjective", "recoveryTimeObjective",
@@ -39,7 +39,7 @@
       "required": ["freezeMinutes", "readsDuringFreeze"],
       "additionalProperties": false,
       "properties": {
-        "freezeMinutes": { "description": "Longest final write freeze; default 15 (spec 2062).", "type": "integer", "minimum": 0, "default": 15 },
+        "freezeMinutes": { "description": "Longest final write freeze, in minutes: under 15 (spec 2062).", "type": "integer", "minimum": 0 },
         "readsDuringFreeze": { "enum": ["available", "degraded", "unavailable"] },
         "note": { "type": "string", "minLength": 1 }
       }
@@ -182,7 +182,7 @@
       }
     },
     "deviations": {
-      "description": "Each default this transfer loosens, with the owner's approval. Empty when every default holds.",
+      "description": "Each default this transfer loosens, with the owner's approval: value is the exact value the template uses, and default the bound it loosens (15, 0, 30, or true). Empty when every default holds.",
       "type": "array",
       "items": {
         "type": "object",

@@ -91,7 +91,7 @@ Defaults (draft, decision P5; S3 ratifies them against #18's benchmark):
 
 | Default | Value | Spec |
 | --- | --- | --- |
-| Final write freeze | at most 15 minutes | 2062 |
+| Final write freeze | under 15 minutes | 2062 |
 | Recovery point | zero accepted writes lost | 2063 |
 | Recovery time | at most 30 minutes at the scale floor (spec 2020-2028) | 2064-2065 |
 | Restore | rehearsed, not inferred from a successful backup | 2066-2067 |

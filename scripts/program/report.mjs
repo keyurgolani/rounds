@@ -9,7 +9,7 @@
 //   node scripts/program/report.mjs --state state.json   # offline
 //   node scripts/program/report.mjs --json
 //
-// state.json: { "pulls": <gh pr list --state merged --json number,title,state>,
+// state.json: { "pulls": <gh pr list --state merged --base next --json number,title,state,baseRefName>,
 //               "issues": <gh issue list --state closed --json number,state,stateReason>,
 //               "commits": [<commit message>, ...] (optional) }
 // Exits 0 with a report, 2 on bad arguments or unreadable input.
@@ -53,6 +53,16 @@ function ghJson(args) {
   return JSON.parse(execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 }));
 }
 
+// The read-only gh calls: PRs merged into the integration branch, closed
+// issues, and that branch's commit messages.
+export function ghCommands(opts) {
+  return [
+    ['pr', 'list', '--repo', opts.repo, '--state', 'merged', '--base', opts.branch, '--limit', '2000', '--json', 'number,title,state,baseRefName'],
+    ['issue', 'list', '--repo', opts.repo, '--state', 'closed', '--limit', '2000', '--json', 'number,state,stateReason'],
+    ['api', '--paginate', '--slurp', `repos/${opts.repo}/commits?sha=${encodeURIComponent(opts.branch)}&per_page=100`],
+  ];
+}
+
 export function readState(opts) {
   if (opts.state) {
     const data = JSON.parse(fs.readFileSync(opts.state, 'utf8'));
@@ -60,19 +70,19 @@ export function readState(opts) {
     if (data.commits !== undefined && !Array.isArray(data.commits)) throw new Error(`${opts.state} "commits" must be an array`);
     return data;
   }
-  const pages = ghJson(['api', '--paginate', '--slurp', `repos/${opts.repo}/commits?sha=${encodeURIComponent(opts.branch)}&per_page=100`]);
+  const [pulls, issues, commits] = ghCommands(opts);
   return {
-    pulls: ghJson(['pr', 'list', '--repo', opts.repo, '--state', 'merged', '--limit', '2000', '--json', 'number,title,state']),
-    issues: ghJson(['issue', 'list', '--repo', opts.repo, '--state', 'closed', '--limit', '2000', '--json', 'number,state,stateReason']),
-    commits: pages.flat().map((c) => c?.commit?.message || ''),
+    pulls: ghJson(pulls),
+    issues: ghJson(issues),
+    commits: ghJson(commits).flat().map((c) => c?.commit?.message || ''),
   };
 }
 
-export function buildReport(root, data) {
+export function buildReport(root, data, { base = 'next' } = {}) {
   const ctx = createContext(root, { base: 'none' });
   const program = loadProgram(ctx, []);
   const resolve = refResolver(ctx);
-  const state = stateFrom(data, loadLeafIds(ctx));
+  const state = stateFrom(data, loadLeafIds(ctx), { base });
   return {
     closure: computeClosure(program, state, resolve),
     pendingEdges: pendingEdges(program, state, resolve),
@@ -97,7 +107,7 @@ export function renderReport(report) {
   out.push(`Containment gates (C0 to C7, not part of closure): ${c.filter((r) => r.met).length} of ${c.length} artifacts met`);
   for (const r of c) out.push(`  ${r.id}: ${describe(r)}`);
   out.push(`Pending edges: ${edges.length}, until the re-authorization receipt (docs/program/reauthorization.md)`);
-  for (const e of edges) out.push(`  ${e.id} ${e.change} ${e.dependent} on ${e.prerequisite} (${e.kind}): prerequisite ${e.prerequisiteMerged ? 'merged' : 'open'}`);
+  for (const e of edges) out.push(`  ${e.id} ${e.change} ${e.dependent} on ${e.prerequisite} (${e.kind}): ${e.prerequisiteMet ? 'met' : 'waiting'}, prerequisite ${e.prerequisiteState}`);
   out.push(drift.length ? `Drift: ${drift.length}` : 'Drift: none');
   for (const f of drift) out.push(`  ${f.code} ${f.path}:${f.line} ${f.message}`);
   return `${out.join('\n')}\n`;
@@ -130,7 +140,7 @@ export function main(argv, io = { out: process.stdout, err: process.stderr }) {
     io.err.write(`report.mjs: cannot read PR and issue state: ${err.message}${opts.state ? '' : '; pass --state <file> to run offline'}\n`);
     return 2;
   }
-  const report = buildReport(opts.root, data);
+  const report = buildReport(opts.root, data, { base: opts.branch });
   io.out.write(opts.json ? `${JSON.stringify(report, null, 2)}\n` : renderReport(report));
   return 0;
 }

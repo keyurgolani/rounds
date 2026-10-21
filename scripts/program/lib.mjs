@@ -7,7 +7,7 @@
 // TODO(ROUNDS-01-L03): S2's scripts/conformance/rules/program.mjs runs
 // checkProgram in the conformance job and adds the leaf-dag.json checks.
 
-import { createContext, finding, jsonLine } from '../conformance/lib/context.mjs';
+import { createContext, finding, jsonLine, sha256 } from '../conformance/lib/context.mjs';
 import { validate } from '../conformance/lib/json-schema.mjs';
 import { leafResolver, loadLeafIds } from '../conformance/lib/leaf-ids.mjs';
 
@@ -38,6 +38,21 @@ export const FORCED_BINDINGS = {
   U9: [93, 94, 161],
 };
 export const CAPABILITY_PATTERN = /^ROUNDS-\d{2}[A-Z]?$/;
+
+// What the registers hold, as their sources give it, so a dropped or edited
+// entry fails here and not only through DR-0003's pins. The digests are
+// SHA-256 over the canonical forms below; the approved-sources tests rebuild
+// them from rounds-review (the catalog at leaf-ids.json's pin and the spec).
+// A catalog or spec change updates the register and these together.
+export const SOURCE_SETS = {
+  dod: ['DOD-1', 'DOD-2', 'DOD-3', 'DOD-4', 'DOD-5', 'DOD-6', 'DOD-7'],
+  nonGoals: { count: 7, withProduct: 6, sha256: 'a2f57c7d4cec956ea2fb862bfca28e8b6038d1d7b22b40d146ab203ed56acc15' },
+  tradeoffs: { count: 38, capabilities: 36, sha256: 'cae1b64cf0f2ed7077743eee81518fe4e74fe58fd9ad7e9c7a71c64e8b39ec97' },
+  journeys: { steps: [7, 6, 6, 7, 5], sha256: '5546316eb9cd9fffd8892f986d38f3e59c1300949ac1ec11427ba63268a10819' },
+};
+export const canonicalNonGoals = (list) => JSON.stringify((list || []).map((g) => [g.spec?.lines, g.spec?.text, g.product ? [g.product.lines, g.product.text] : null]));
+export const canonicalTradeoffs = (list) => JSON.stringify((list || []).map((t) => [t.capability, t.text]));
+export const canonicalJourneys = (list) => JSON.stringify((list || []).map((j) => [j.title, j.lines, (j.steps || []).map((s) => [s.lines, s.text])]));
 // A PR title's leaf or stage label: [ROUNDS-00A-L01], [ROUNDS-00A-L01/S3], [ROUNDS-32-L10/SB.3].
 export const TITLE_LABEL = /\[(ROUNDS-\d{2}[A-Z]?-L\d{2})(?:\/([A-Za-z0-9.]+))?\]/g;
 
@@ -205,20 +220,52 @@ function schemaFindings(ctx, value, schema, rel, code, findings) {
   for (const err of validate(value, schema)) findings.push(finding(code, rel, pointerLine(ctx, rel, err.pointer), `${err.pointer || '/'} ${err.message}`));
 }
 
-// Loosened rollback defaults (decision P5) without a deviations entry.
+// The rollback defaults (decision P5): each template field, the bound a
+// deviations entry records as its default, and the test a value must pass.
+export const ROLLBACK_DEFAULTS = [
+  { field: 'allowedDowntime.freezeMinutes', bound: 15, ok: (v) => v < 15, want: 'under 15 minutes (spec 2062)' },
+  { field: 'recoveryPointObjective.acceptedWritesLost', bound: 0, ok: (v) => v === 0, want: 'zero accepted writes lost (spec 2063)' },
+  { field: 'recoveryTimeObjective.minutes', bound: 30, ok: (v) => v <= 30, want: 'at most 30 minutes (spec 2064-2065)' },
+  { field: 'backupConsistency.restoreRehearsed', bound: true, ok: (v) => v === true, want: 'a rehearsed restore (spec 2066-2067)' },
+];
+
+const fieldValue = (record, dotted) => dotted.split('.').reduce((v, k) => (v && typeof v === 'object' ? v[k] : undefined), record);
+
+// Loosened rollback defaults that no deviations entry approves. An entry
+// covers a field only for the exact value it approves.
 export function rollbackDefaultFindings(record) {
   const out = [];
   if (!record || typeof record !== 'object') return out;
-  const allowed = new Set((record.deviations || []).map((d) => d.field));
-  const checks = [
-    ['allowedDowntime.freezeMinutes', record.allowedDowntime?.freezeMinutes, (v) => v <= 15, 'at most 15 minutes'],
-    ['recoveryPointObjective.acceptedWritesLost', record.recoveryPointObjective?.acceptedWritesLost, (v) => v === 0, 'zero accepted writes lost'],
-    ['recoveryTimeObjective.minutes', record.recoveryTimeObjective?.minutes, (v) => v <= 30, 'at most 30 minutes'],
-    ['backupConsistency.restoreRehearsed', record.backupConsistency?.restoreRehearsed, (v) => v === true, 'a rehearsed restore'],
-  ];
-  for (const [field, value, ok, want] of checks) {
-    if (value === undefined || ok(value) || allowed.has(field)) continue;
-    out.push({ field, message: `${field} is ${JSON.stringify(value)}; the default is ${want}, so loosening it needs a deviations entry with the owner's approval` });
+  const deviations = new Map((Array.isArray(record.deviations) ? record.deviations : []).map((d) => [d.field, d]));
+  for (const { field, bound, ok, want } of ROLLBACK_DEFAULTS) {
+    const value = fieldValue(record, field);
+    if (value === undefined || ok(value)) continue;
+    const dev = deviations.get(field);
+    if (!dev) {
+      out.push({ field, message: `${field} is ${JSON.stringify(value)}; the default is ${want}, so loosening it needs a deviations entry with the owner's approval` });
+    } else if (dev.value !== value) {
+      out.push({ field, message: `the ${field} deviation approves ${JSON.stringify(dev.value)}, but the template says ${JSON.stringify(value)}` });
+    } else if (dev.default !== bound) {
+      out.push({ field, message: `the ${field} deviation records the default as ${JSON.stringify(dev.default)}; it is ${JSON.stringify(bound)}` });
+    }
+  }
+  return out;
+}
+
+// A transfer template's node, context, and decision owner (decision P4):
+// the context must sit in the node's list in the context order.
+export function transferTemplateFindings(record, contexts, resolve) {
+  const out = [];
+  if (!record || typeof record !== 'object') return out;
+  for (const [what, value] of [['transfer', record.transfer], ['decisionOwner.leaf', record.decisionOwner?.leaf]]) {
+    if (value === undefined) continue;
+    const r = resolve(value);
+    if (!r.ok) out.push({ code: 'PROGRAM_UNRESOLVED_REF', field: what.split('.')[0], message: `${what}: ${r.reason}` });
+  }
+  if (contexts && record.context !== undefined) {
+    const row = contexts.find((c) => c.context === record.context);
+    if (!row) out.push({ code: 'PROGRAM_ROLLBACK_CONTEXT', field: 'context', message: `context ${record.context} is not in the context order of ${POLICY_PATH}` });
+    else if (row.node !== record.transfer) out.push({ code: 'PROGRAM_ROLLBACK_CONTEXT', field: 'context', message: `context ${record.context} belongs to ${row.node}, not ${record.transfer}` });
   }
   return out;
 }
@@ -247,7 +294,7 @@ export function checkProgram(ctx = createContext(process.cwd(), { base: 'none' }
     const seen = new Set();
     artifacts.forEach((a, i) => {
       const line = at(['gateArtifacts', i]);
-      if (seen.has(a.id)) findings.push(finding('PROGRAM_FILE_INVALID', DR_PATH, line, `artifact ${a.id} is listed twice`));
+      if (seen.has(a.id)) findings.push(finding('PROGRAM_DUPLICATE', DR_PATH, line, `artifact ${a.id} is listed twice`));
       seen.add(a.id);
       if (typeof a.id === 'string' && a.id.split('.')[0] !== a.gate) findings.push(finding('PROGRAM_FILE_INVALID', DR_PATH, line, `artifact ${a.id} sits under gate ${a.gate}; its id must start with ${a.gate}.`));
       const named = (a.producer ? 1 : 0) + (a.producerFrom ? 1 : 0);
@@ -295,7 +342,19 @@ export function checkProgram(ctx = createContext(process.cwd(), { base: 'none' }
     (ng.product || []).forEach((g, i) => {
       if (g.id !== `NG-${i + 1}`) findings.push(finding('PROGRAM_REGISTER', rel, pointerLine(ctx, rel, `/product/${i}`), `product non-goal ${i + 1} is ${g.id}; ids run NG-1 upward`));
     });
-    (ng.tradeoffs || []).forEach((t, i) => ref(t.capability, rel, pointerLine(ctx, rel, `/tradeoffs/${i}`), 'tradeoff capability', { capability: true }));
+    const product = ng.product || [];
+    const want = SOURCE_SETS.nonGoals;
+    const withProduct = product.filter((g) => g.product).length;
+    if (product.length !== want.count || withProduct !== want.withProduct || sha256(canonicalNonGoals(product)) !== want.sha256) {
+      findings.push(finding('PROGRAM_REGISTER', rel, pointerLine(ctx, rel, '/product'), `product non-goals (${product.length}, ${withProduct} with a PRODUCT.md line) differ from spec 177-184 and PRODUCT.md 211-217 (${want.count} and ${want.withProduct}, sha256 ${want.sha256.slice(0, 12)}...); quote each one verbatim`));
+    }
+    const tradeoffs = ng.tradeoffs || [];
+    const capabilities = new Set(tradeoffs.map((t) => t.capability)).size;
+    const wantTradeoffs = SOURCE_SETS.tradeoffs;
+    if (tradeoffs.length !== wantTradeoffs.count || capabilities !== wantTradeoffs.capabilities || sha256(canonicalTradeoffs(tradeoffs)) !== wantTradeoffs.sha256) {
+      findings.push(finding('PROGRAM_REGISTER', rel, pointerLine(ctx, rel, '/tradeoffs'), `tradeoffs (${tradeoffs.length} across ${capabilities} capabilities) differ from the catalog's (${wantTradeoffs.count} across ${wantTradeoffs.capabilities}, sha256 ${wantTradeoffs.sha256.slice(0, 12)}...); copy each catalog tradeoff verbatim`));
+    }
+    tradeoffs.forEach((t, i) => ref(t.capability, rel, pointerLine(ctx, rel, `/tradeoffs/${i}`), 'tradeoff capability', { capability: true }));
     if (ng.referenceLeaf) {
       const r = resolve(ng.referenceLeaf.leaf);
       if (!r.ok) findings.push(finding('PROGRAM_UNRESOLVED_REF', rel, pointerLine(ctx, rel, '/referenceLeaf'), `referenceLeaf: ${r.reason}`));
@@ -309,10 +368,20 @@ export function checkProgram(ctx = createContext(process.cwd(), { base: 'none' }
       if (d.id !== `DOD-${i + 1}`) findings.push(finding('PROGRAM_REGISTER', rel, pointerLine(ctx, rel, `/items/${i}`), `definition-of-done item ${i + 1} is ${d.id}; ids run DOD-1 upward with none dropped`));
       for (const c of d.checkedBy || []) ref(c.leaf, rel, pointerLine(ctx, rel, `/items/${i}`), `${d.id} checkedBy`);
     });
+    const ids = new Set((dod.items || []).map((d) => d.id));
+    const missing = SOURCE_SETS.dod.filter((id) => !ids.has(id));
+    if (missing.length) {
+      findings.push(finding('PROGRAM_REGISTER', rel, pointerLine(ctx, rel, '/items'), `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} missing; dropping a definition-of-done item needs the owner's approval in a superseding DR-0003 revision`));
+    }
   }
   const jr = p.registers.journeys;
   if (jr) {
     const rel = REGISTERS.journeys.path;
+    const counts = (jr.journeys || []).map((j) => (j.steps || []).length);
+    const want = SOURCE_SETS.journeys;
+    if (JSON.stringify(counts) !== JSON.stringify(want.steps) || sha256(canonicalJourneys(jr.journeys)) !== want.sha256) {
+      findings.push(finding('PROGRAM_REGISTER', rel, pointerLine(ctx, rel, '/journeys'), `journey steps (${counts.join(', ')}) differ from spec 1019-1071 (${want.steps.join(', ')}, sha256 ${want.sha256.slice(0, 12)}...); map every step, quoted verbatim`));
+    }
     (jr.journeys || []).forEach((j, ji) => {
       const line = pointerLine(ctx, rel, `/journeys/${ji}`);
       const steps = j.steps || [];
@@ -345,7 +414,7 @@ export function checkProgram(ctx = createContext(process.cwd(), { base: 'none' }
   if (p.rollback && p.rollbackSchema) {
     schemaFindings(ctx, p.rollback, p.rollbackSchema, ROLLBACK_FIXTURE, 'PROGRAM_ROLLBACK_INVALID', findings);
     for (const d of rollbackDefaultFindings(p.rollback)) findings.push(finding('PROGRAM_ROLLBACK_DEFAULT', ROLLBACK_FIXTURE, pointerLine(ctx, ROLLBACK_FIXTURE, `/${d.field.split('.')[0]}`), d.message));
-    if (p.rollback.transfer) ref(p.rollback.transfer, ROLLBACK_FIXTURE, 1, 'fixture transfer');
+    for (const d of transferTemplateFindings(p.rollback, p.contexts, resolve)) findings.push(finding(d.code, ROLLBACK_FIXTURE, pointerLine(ctx, ROLLBACK_FIXTURE, `/${d.field}`), `fixture ${d.message}`));
   }
 
   // Migration stages.
@@ -423,12 +492,14 @@ const CLOSES = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b/gi;
 // whose finishing PR merged: the orchestrator writes "Closes #N" only in the
 // squash message of the PR that finishes leaf #N, and the issue closes when
 // that commit reaches main. done holds leaves whose issue closed as completed.
-// An open PR and a not_planned close count for nothing.
-export function stateFrom({ pulls = [], issues = [], commits = [] } = {}, registry) {
+// An open PR and a not_planned close count for nothing. With options.base, a
+// PR whose baseRefName names another branch counts for nothing either.
+export function stateFrom({ pulls = [], issues = [], commits = [] } = {}, registry, { base = null } = {}) {
   const byIssue = new Map((registry?.leaves || []).filter((l) => l.issue).map((l) => [l.issue, l.id]));
   const merged = new Set();
   for (const pr of pulls) {
     if (String(pr.state || '').toUpperCase() !== 'MERGED') continue;
+    if (base && pr.baseRefName && pr.baseRefName !== base) continue;
     const label = titleLabel(pr.title);
     if (label) merged.add(label.ref);
   }
@@ -480,7 +551,31 @@ export function computeClosure(program, state, resolve) {
   return { capability: dr?.closure?.capability || 'ROUNDS-01', closed: total > 0 && met === total, met, total, leaves, artifacts, containment };
 }
 
+// A leaf is done once its issue closed as completed; a stage is done when its
+// PR merges (decision P13); a capability once every leaf in it is done.
+export function isDone(ref, state, resolve) {
+  const value = String(ref);
+  if (resolve && CAPABILITY_PATTERN.test(value)) {
+    const r = resolve(value, { capability: true });
+    return r.ok && r.members.every((m) => isDone(m, state));
+  }
+  const [leaf, stage] = value.split('/');
+  return state.done.has(leaf) || (Boolean(stage) && state.merged.has(value));
+}
+
+// An edge's prerequisite state (done, merged, or open) and whether it meets
+// the edge's kind: done needs done; merged and closure need merged (closure
+// gates only the dependent's closing PR, decision P13).
+export function edgeStatus(edge, state, resolve) {
+  const done = isDone(edge.prerequisite, state, resolve);
+  const merged = done || isMerged(edge.prerequisite, state, resolve);
+  return { state: done ? 'done' : merged ? 'merged' : 'open', met: edge.kind === 'done' ? done : merged };
+}
+
 // The edge table with each prerequisite's state.
 export function pendingEdges(program, state, resolve) {
-  return (program.edges || []).map((e) => ({ ...e, prerequisiteMerged: isMerged(e.prerequisite, state, resolve) }));
+  return (program.edges || []).map((e) => {
+    const s = edgeStatus(e, state, resolve);
+    return { ...e, prerequisiteState: s.state, prerequisiteMet: s.met };
+  });
 }

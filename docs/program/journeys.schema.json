@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "docs/program/journeys.schema.json",
   "title": "Primary journey map",
-  "description": "Format of docs/program/journeys.json (ROUNDS-01-L03, DR-0003 decision P9): each step of the five primary journeys (spec 1019-1071) mapped to one leaf, the milestone where the step first works, and the readiness gate it waits on, plus the first-run trace.",
+  "description": "Format of docs/program/journeys.json (ROUNDS-01-L03, DR-0003 decision P10): each step of the five primary journeys (spec 1019-1071) mapped to one leaf, the milestone where the step first works, and the readiness gate it waits on, plus the first-run trace.",
   "type": "object",
   "required": ["registry", "revision", "decisionRecord", "description", "source", "journeys", "firstRun"],
   "additionalProperties": false,

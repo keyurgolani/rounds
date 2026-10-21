@@ -449,6 +449,9 @@ describe('vocabulary: data-preserving cutover wording', () => {
 describe('vocabulary: revisions', () => {
   const baseText = fs.readFileSync(path.join(REPO_ROOT, TERMS), 'utf8');
   const base = { files: { [TERMS]: baseText } };
+  // Revisions relative to the committed registry: `same` keeps it, `next` raises it.
+  const same = JSON.parse(baseText).revision;
+  const next = same + 1;
   const removeCalendar = (d, revision, compatibility) => {
     d.terms = d.terms.filter((t) => t.id !== 'calendar-provider');
     d.revision = revision;
@@ -464,24 +467,24 @@ describe('vocabulary: revisions', () => {
   });
 
   it('rejects a breaking change whose revision matches main', () => {
-    const dir = fixture((d) => { editJson(d, TERMS, (x) => removeCalendar(x, 1, 'breaking')); setDr(d, 1, 'breaking'); editJson(d, ADAPTERS, termAdapter(1)); });
+    const dir = fixture((d) => { editJson(d, TERMS, (x) => removeCalendar(x, same, 'breaking')); setDr(d, same, 'breaking'); editJson(d, ADAPTERS, termAdapter(same)); });
     only(run(dir, { base }), 'VOCAB_REVISION_NOT_BUMPED');
   });
 
   it('rejects a removal that is not marked breaking', () => {
-    const dir = fixture((d) => { editJson(d, TERMS, (x) => removeCalendar(x, 2, 'additive')); setDr(d, 2, 'additive'); editJson(d, ADAPTERS, termAdapter(2)); });
+    const dir = fixture((d) => { editJson(d, TERMS, (x) => removeCalendar(x, next, 'additive')); setDr(d, next, 'additive'); editJson(d, ADAPTERS, termAdapter(next)); });
     only(run(dir, { base }), 'VOCAB_COMPATIBILITY_UNDECLARED');
   });
 
   it('keeps adapter entries for names a breaking revision removes', () => {
-    const dir = fixture((d) => { editJson(d, TERMS, (x) => removeCalendar(x, 2, 'breaking')); setDr(d, 2, 'breaking'); });
+    const dir = fixture((d) => { editJson(d, TERMS, (x) => removeCalendar(x, next, 'breaking')); setDr(d, next, 'breaking'); });
     only(run(dir, { base }), 'VOCAB_REMOVED_TERM_UNADAPTED');
-    const withAdapter = fixture((d) => { editJson(d, TERMS, (x) => removeCalendar(x, 2, 'breaking')); setDr(d, 2, 'breaking'); editJson(d, ADAPTERS, termAdapter(2)); });
+    const withAdapter = fixture((d) => { editJson(d, TERMS, (x) => removeCalendar(x, next, 'breaking')); setDr(d, next, 'breaking'); editJson(d, ADAPTERS, termAdapter(next)); });
     assert.deepEqual(run(withAdapter, { base }), []);
   });
 
   it('treats a changed label option as breaking and a new one as additive', () => {
-    const bump = (d, compatibility) => { editJson(d, TERMS, (x) => { x.revision = 2; x.compatibility = compatibility; }); setDr(d, 2, compatibility); };
+    const bump = (d, compatibility) => { editJson(d, TERMS, (x) => { x.revision = next; x.compatibility = compatibility; }); setDr(d, next, compatibility); };
     const option = (fn) => (d) => editJson(d, TERMS, (x) => fn(x.terms.find((t) => t.id === 'career-activity').label));
     // A plural rename, a key rename, and a new default under additive all fail.
     for (const change of [
@@ -497,7 +500,7 @@ describe('vocabulary: revisions', () => {
   });
 
   it('requires terms.json and DR-0001 to share one revision', () => {
-    only(run(fixture((d) => setDr(d, 2, 'additive'))), 'VOCAB_REVISION_MISMATCH');
+    only(run(fixture((d) => setDr(d, next, 'additive'))), 'VOCAB_REVISION_MISMATCH');
   });
 
   it('fails closed when the base ref cannot be read', () => {
@@ -507,11 +510,11 @@ describe('vocabulary: revisions', () => {
 });
 
 describe('vocabulary: journey', () => {
-  it('lets #61 cite DR-0001@1 for the "Proposed change" label', () => {
+  it('lets #61 cite the current DR-0001 revision for the "Proposed change" label', () => {
     const terms = readJson(REPO_ROOT, TERMS);
     const claim = terms.terms.find((t) => t.id === 'extracted-claim');
     assert.equal(claim.label.options.find((o) => o.key === claim.label.default).singular, 'Proposed change');
-    assert.equal(`${terms.decisionRecord}@${terms.revision}`, 'DR-0001@1');
+    assert.equal(`${terms.decisionRecord}@${terms.revision}`, `DR-0001@${readJson(REPO_ROOT, DR).revision}`);
     assert.ok(readJson(REPO_ROOT, DR).consumers.includes('ROUNDS-12-L01'));
   });
 });

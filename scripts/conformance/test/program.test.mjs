@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
-import { createContext } from '../lib/context.mjs';
+import { createContext, sha256 } from '../lib/context.mjs';
 import { validate } from '../lib/json-schema.mjs';
 import { leafResolver, loadLeafIds } from '../lib/leaf-ids.mjs';
 import { cutoverMatches } from '../lib/vocabulary/registry.mjs';
@@ -17,6 +17,8 @@ import {
   checkProgram, computeClosure, isMerged, loadProgram, pendingEdges, producersOf, readContexts, readEdges, readStages,
   refResolver, rollbackDefaultFindings, stateFrom, titleLabel,
 } from '../../program/lib.mjs';
+import * as programLib from '../../program/lib.mjs';
+import * as report from '../../program/report.mjs';
 import { main } from '../../program/report.mjs';
 import { REPO_ROOT, cleanup, codes, ctxFor, editJson, editText, fixture, readJson, tempDir, writeJson } from './helpers.mjs';
 
@@ -165,13 +167,33 @@ describe('program: repository', () => {
     assert.deepEqual(ng.referenceLeaf, { ...ng.referenceLeaf, leaf: L(18), issue: 18, designation: 'default' });
   });
 
-  it('quotes the ROUNDS-32 tradeoff verbatim without an unqualified cutover phrase in the file', () => {
+  it('writes every quote as plain text, and DR-0001@2 allowlists the one unqualified cutover phrase', () => {
     const raw = fs.readFileSync(path.join(REPO_ROOT, NON_GOALS), 'utf8');
-    const quote = JSON.parse(raw).tradeoffs.find((t) => t.capability === 'ROUNDS-32').text;
-    // \x20 keeps this test's own source free of the unqualified phrase.
-    assert.match(quote, /^A clean\x20cutover requires deliberate gates/);
-    assert.equal(cutoverMatches(quote).length, 1);
-    assert.deepEqual(cutoverMatches(raw), []);
+    const ng = JSON.parse(raw);
+    // A quote's raw text equals its parsed text, so no escape hides it from a raw-text check.
+    for (const t of ng.tradeoffs) assert.ok(raw.includes(JSON.stringify(t.text)), t.capability);
+    for (const g of ng.product) assert.ok(raw.includes(JSON.stringify(g.spec.text)), g.id);
+    const hits = cutoverMatches(raw);
+    assert.equal(hits.length, 1);
+    assert.match(raw.split('\n')[hits[0].line - 1], /"ROUNDS-32"|deliberate gates and temporary adapters/);
+    const terms = readJson(REPO_ROOT, 'contracts/vocabulary/terms.json');
+    const entry = terms.cutover.allowlist.find((a) => a.path === NON_GOALS);
+    assert.deepEqual({ path: entry.path, line: entry.line }, { path: NON_GOALS, line: hits[0].line });
+    const dr1 = readJson(REPO_ROOT, 'docs/decisions/DR-0001-product-vocabulary.json');
+    assert.deepEqual([terms.revision, terms.compatibility, dr1.revision, dr1.compatibility, dr1.supersedes], [2, 'additive', 2, 'additive', 'DR-0001@1']);
+    const reauth = fs.readFileSync(path.join(REPO_ROOT, REAUTH_PATH), 'utf8');
+    assert.match(reauth, /A data-preserving clean cutover requires deliberate gates/);
+  });
+
+  it('cites the DR-0003 decision that governs each register and the rollback template', () => {
+    const decisions = Object.fromEntries(dr().decisions.map((d) => [d.id, d]));
+    const files = { 'non-goals.schema.json': 'non-goals.json', 'definition-of-done.schema.json': 'definition-of-done.json', 'journeys.schema.json': 'journeys.json', 'rollback-template.schema.json': 'rollback-template.schema.json' };
+    for (const [schema, governed] of Object.entries(files)) {
+      const text = readJson(REPO_ROOT, `docs/program/${schema}`).description;
+      const cited = /DR-0003 decision (P\d+)/.exec(text)?.[1];
+      assert.ok(cited && decisions[cited], `${schema} cites ${cited}`);
+      assert.ok(decisions[cited].decision.includes(`docs/program/${governed}`), `${schema} cites ${cited}, which doesn't govern ${governed}`);
+    }
   });
 
   it('defines DOD-1 to DOD-7', () => {
@@ -270,6 +292,29 @@ describe('program: failing fixtures', () => {
     only(run(programFixture((d) => editJson(d, NON_GOALS, (x) => { x.referenceLeaf.leaf = L(19); x.referenceLeaf.issue = 19; }))), 'PROGRAM_REGISTER');
   });
 
+  it('fails PROGRAM_REGISTER when the last DOD item, non-goal, tradeoff, or journey step is dropped', () => {
+    only(run(programFixture((d) => editJson(d, DOD, (x) => { x.items.pop(); }))), 'PROGRAM_REGISTER');
+    only(run(programFixture((d) => editJson(d, NON_GOALS, (x) => { x.product.pop(); }))), 'PROGRAM_REGISTER');
+    only(run(programFixture((d) => editJson(d, NON_GOALS, (x) => { x.tradeoffs.pop(); }))), 'PROGRAM_REGISTER');
+    only(run(programFixture((d) => editJson(d, NON_GOALS, (x) => { x.tradeoffs[3].text = `${x.tradeoffs[3].text} Edited.`; }))), 'PROGRAM_REGISTER');
+    only(run(programFixture((d) => editJson(d, JOURNEYS, (x) => { x.journeys[3].steps.pop(); }))), 'PROGRAM_REGISTER');
+  });
+
+  it('fails PROGRAM_DUPLICATE for an artifact id listed twice', () => {
+    const findings = run(editDr((r) => { r.gateArtifacts.push({ ...artifact(r, 'U7.privacy-matrix') }); }));
+    only(findings, 'PROGRAM_DUPLICATE');
+    assert.match(findings[0].message, /U7\.privacy-matrix is listed twice/);
+  });
+
+  it('fails the rollback fixture when its context is not its transfer node\'s or its decision owner is unknown', () => {
+    const edit = (fn) => programFixture((d) => editJson(d, ROLLBACK_FIXTURE, fn));
+    const wrong = run(edit((x) => { x.context = 'materials'; }));
+    only(wrong, 'PROGRAM_ROLLBACK_CONTEXT');
+    assert.match(wrong[0].message, /materials belongs to ROUNDS-32-L07, not ROUNDS-32-L05/);
+    only(run(edit((x) => { x.context = 'no-such-context'; })), 'PROGRAM_ROLLBACK_CONTEXT');
+    only(run(edit((x) => { x.decisionOwner.leaf = 'ROUNDS-99-L99'; })), 'PROGRAM_UNRESOLVED_REF');
+  });
+
   it('fails PROGRAM_EDGE_INVALID or PROGRAM_UNRESOLVED_REF for a bad edge row', () => {
     const swap = (fn) => programFixture((d) => editText(d, REAUTH_PATH, fn));
     only(run(swap((t) => t.replace('| E7 | add | `ROUNDS-34-L07` | `ROUNDS-32-L10` | done |', '| E7 | add | `ROUNDS-34-L07` | `ROUNDS-32-L10` | soon |'))), 'PROGRAM_EDGE_INVALID');
@@ -326,6 +371,26 @@ describe('program: rollback template', () => {
     assert.deepEqual(rollbackDefaultFindings(loose), []);
     assert.deepEqual(validate(loose, schema), []);
     assert.equal(rollbackDefaultFindings({ ...synthetic, backupConsistency: { ...synthetic.backupConsistency, restoreRehearsed: false } }).length, 1);
+  });
+
+  it('keeps the final write freeze below 15 minutes (spec 2062)', () => {
+    assert.ok(synthetic.allowedDowntime.freezeMinutes < 15);
+    const at = structuredClone(synthetic);
+    at.allowedDowntime.freezeMinutes = 15;
+    assert.match(rollbackDefaultFindings(at)[0]?.message || 'no finding', /freezeMinutes is 15/);
+    at.allowedDowntime.freezeMinutes = 14;
+    assert.deepEqual(rollbackDefaultFindings(at), []);
+  });
+
+  it('needs the deviation to approve the value the template uses', () => {
+    const loose = structuredClone(synthetic);
+    loose.allowedDowntime.freezeMinutes = 240;
+    loose.deviations = [{ field: 'allowedDowntime.freezeMinutes', value: 20, default: 15, approvedBy: 'owner (test)', reason: 'test' }];
+    const findings = rollbackDefaultFindings(loose);
+    assert.equal(findings.length, 1);
+    assert.match(findings[0].message, /approves 20, but the template says 240/);
+    loose.deviations[0].value = 240;
+    assert.deepEqual(rollbackDefaultFindings(loose), []);
   });
 
   it('holds placeholder digests only', () => {
@@ -409,8 +474,36 @@ describe('program: report', () => {
     const program = loadProgram(real());
     const edges = pendingEdges(program, stateFrom({ pulls: [pull('x [ROUNDS-00A-L01/S5]')], issues: [] }, registry), refResolver(real()));
     assert.equal(edges.length, program.edges.length);
-    assert.equal(edges.find((e) => e.id === 'E10').prerequisiteMerged, true);
-    assert.equal(edges.find((e) => e.id === 'E5').prerequisiteMerged, false);
+    assert.equal(edges.find((e) => e.id === 'E10').prerequisiteMet, true);
+    assert.equal(edges.find((e) => e.id === 'E5').prerequisiteMet, false);
+  });
+
+  it('holds a done edge until its prerequisite is done, and a merged or closure edge until it merges', () => {
+    const resolve = refResolver(real());
+    const program = loadProgram(real());
+    const edges = pendingEdges(program, stateFrom({ pulls: [pull('x [ROUNDS-01-L01]'), pull('y [ROUNDS-00A-L01/S5]')], issues: [] }, registry), resolve);
+    const e11 = edges.find((e) => e.id === 'E11');
+    assert.deepEqual([e11.kind, e11.prerequisiteState, e11.prerequisiteMet], ['done', 'merged', false]);
+    const e10 = edges.find((e) => e.id === 'E10');
+    assert.deepEqual([e10.kind, e10.prerequisiteState, e10.prerequisiteMet], ['merged', 'done', true]);
+    const status = (edge, data) => programLib.edgeStatus(edge, stateFrom(data, registry), resolve);
+    assert.deepEqual(status({ kind: 'done', prerequisite: L(15) }, { issues: [{ number: 15, state: 'CLOSED', stateReason: 'COMPLETED' }] }), { state: 'done', met: true });
+    assert.deepEqual(status({ kind: 'done', prerequisite: L(9) }, { commits: ['Closes #9'] }), { state: 'merged', met: false });
+    assert.deepEqual(status({ kind: 'done', prerequisite: 'ROUNDS-00A-L01/S2' }, { pulls: [pull('w [ROUNDS-00A-L01/S2]')] }), { state: 'done', met: true });
+    assert.deepEqual(status({ kind: 'closure', prerequisite: L(19) }, { pulls: [pull('z [ROUNDS-02-L02]')] }), { state: 'merged', met: true });
+    assert.deepEqual(status({ kind: 'merged', prerequisite: L(19) }, {}), { state: 'open', met: false });
+  });
+
+  it('counts only PRs merged into the integration branch', () => {
+    const state = stateFrom({
+      pulls: [{ number: 1, title: 'a [ROUNDS-02-L01]', state: 'MERGED', baseRefName: 'main' }, { number: 2, title: 'b [ROUNDS-02-L02]', state: 'MERGED', baseRefName: 'next' }],
+      issues: [],
+    }, registry, { base: 'next' });
+    assert.ok(!isMerged(L(18), state));
+    assert.ok(isMerged(L(19), state));
+    const [prs] = report.ghCommands({ repo: 'o/r', branch: 'next' });
+    assert.deepEqual(prs.slice(prs.indexOf('--base'), prs.indexOf('--base') + 2), ['--base', 'next']);
+    assert.match(prs.join(' '), /--json \S*baseRefName/);
   });
 
   const capture = () => {
@@ -496,12 +589,20 @@ describe('program: approved sources', { skip: !ROUNDS_REVIEW && 'set ROUNDS_REVI
     assert.deepEqual(ng.product.map((g) => g.spec), fromSpec);
     assert.deepEqual(ng.product.filter((g) => g.product).map((g) => g.product), fromProduct);
     const catalog = JSON.parse(fs.readFileSync(path.join(ROUNDS_REVIEW, 'src/data/capabilities.json'), 'utf8'));
-    assert.deepEqual(ng.tradeoffs, catalog.capabilities.flatMap((c) => c.tradeoffs.map((text) => ({ capability: c.id, text }))));
+    const fromCatalog = catalog.capabilities.flatMap((c) => c.tradeoffs.map((text) => ({ capability: c.id, text })));
+    assert.deepEqual(ng.tradeoffs, fromCatalog);
+    // The source sets lib.mjs pins are these sources.
+    assert.equal(sha256(programLib.canonicalTradeoffs(fromCatalog)), programLib.SOURCE_SETS.tradeoffs.sha256);
+    assert.equal(sha256(programLib.canonicalNonGoals(ng.product)), programLib.SOURCE_SETS.nonGoals.sha256);
   });
 
   it('quotes every journey step and migration stage verbatim', () => {
     const src = spec();
     const steps = items(src, 1019, 1071, /^\d+\. (.+)$/);
+    const titles = src.map((l, i) => ({ line: i + 1, m: /^### (.+)$/.exec(l) })).filter((x) => x.line >= 1019 && x.line <= 1071 && x.m).map((x) => x.m[1]);
+    const journeys = readJson(REPO_ROOT, JOURNEYS).journeys;
+    assert.deepEqual(journeys.map((j) => j.title), titles);
+    assert.equal(sha256(programLib.canonicalJourneys(journeys)), programLib.SOURCE_SETS.journeys.sha256);
     assert.deepEqual(readJson(REPO_ROOT, JOURNEYS).journeys.flatMap((j) => j.steps).map((s) => ({ lines: s.lines, text: s.text })), steps.map((s) => ({ lines: span(s), text: s.text })));
     const stages = items(src, 2677, 2695, /^\d+\. (.+)$/);
     assert.deepEqual(readStages(real()).map((s) => ({ spec: s.spec, step: s.step })), stages.map((s) => ({ spec: span(s), step: s.text })));

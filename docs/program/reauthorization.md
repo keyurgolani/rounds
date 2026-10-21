@@ -15,6 +15,10 @@ DR-0003 decision P11. Every issue body and the dependency export render from the
 
 Each refined body's own catalog change, listed under "Owner input needed" in its Refinement review, rides items 2 to 6 with these. From S2, `scripts/program/reconcile.mjs` reports a body whose edges the export lacks as `DAG_BODY_DRIFT`.
 
+## Spec-change requests
+
+- **SCR-1, ROUNDS-32 tradeoff wording.** The catalog's ROUNDS-32 tradeoff names the cutover without "data-preserving", the wording DR-0001 G11 fails in any new text. It rides item 5: change it in rounds-review `src/data/capabilities.json` to "A data-preserving clean cutover requires deliberate gates and temporary adapters but avoids permanently paying for dual writes and reconciliation." Then `non-goals.json` quotes the new wording, and the DR-0001@2 allowlist entry for its line goes (`VOCAB_CUTOVER_ALLOWLIST_STALE` flags the entry once the line no longer holds the unqualified phrase).
+
 ## Edges
 
 `add` puts the edge in the export; `drop` removes a filed edge. A prerequisite is a leaf, a stage, or a capability (all its leaves). `scripts/program/report.mjs` lists these as pending until the receipt.

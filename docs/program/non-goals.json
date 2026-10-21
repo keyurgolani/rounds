@@ -3,7 +3,7 @@
   "registry": "non-goals",
   "revision": 1,
   "decisionRecord": "DR-0003",
-  "description": "The register half of gate U11 (DR-0003 decision P8): the product non-goals, every catalog tradeoff verbatim, and the one fully populated reference leaf issue. Leaf non-goals stay in each issue body. A product non-goal changes only through the owner; adding a tradeoff with a new catalog entry is additive. The ROUNDS-32 tradeoff quotes the catalog's unqualified cutover phrase, so one space in it is written as a JSON \\u0020 escape: the parsed text is the catalog's, and DR-0001 G11's raw-text check reads it as a quotation rather than a new use (DR-0003 departure X6).",
+  "description": "The register half of gate U11 (DR-0003 decision P8): the product non-goals, every catalog tradeoff verbatim, and the one fully populated reference leaf issue. Leaf non-goals stay in each issue body. A product non-goal changes only through the owner; adding a tradeoff with a new catalog entry is additive. The ROUNDS-32 tradeoff names the cutover without \"data-preserving\", so DR-0001@2 allowlists its line under G11 until the catalog wording changes (spec-change request SCR-1 in docs/program/reauthorization.md).",
   "sources": {
     "spec": "rounds-review docs/superpowers/specs/2026-10-18-rounds-review-board-design.md, Product non-goals (lines 173-187)",
     "product": "rounds-review PRODUCT.md, Product Non-Goals (lines 207-217)",
@@ -176,7 +176,7 @@
     },
     {
       "capability": "ROUNDS-32",
-      "text": "A clean\u0020cutover requires deliberate gates and temporary adapters but avoids permanently paying for dual writes and reconciliation."
+      "text": "A clean cutover requires deliberate gates and temporary adapters but avoids permanently paying for dual writes and reconciliation."
     },
     {
       "capability": "ROUNDS-33",
