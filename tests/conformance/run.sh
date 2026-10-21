@@ -2,7 +2,8 @@
 # Containment conformance corpus launcher (ROUNDS-00A-L08, stage 1).
 #
 # Builds the stack from the commit under test (harness/compose.yml plus
-# tests/conformance/compose.yml), generates the run's canaries, brings up
+# tests/conformance/compose.yml), generates the run's canaries and the
+# corpus's take-home definition (conformance/overlay.py), brings up
 # PocketBase and the runner, runs the corpus driver against them, writes a
 # receipt, and tears everything down. No 62d4eae image is pulled.
 #
@@ -25,6 +26,8 @@ OVERLAY_FILE="${CORPUS_DIR}/compose.yml"
 # git-ignored. Different COMPOSE_PROJECT values share nothing.
 ENV_FILE="${CORPUS_DIR}/.env.${PROJECT}"
 RECEIPTS_DIR="${CORPUS_DIR}/.receipts"
+# The take-home definition only the corpus stack has (conformance/overlay.py).
+DEFINITIONS_DIR="${CORPUS_DIR}/.definitions-${PROJECT}"
 export IMAGE_PREFIX="${PROJECT}"
 BUILT_IMAGES="${IMAGE_PREFIX}-pocketbase:test ${IMAGE_PREFIX}-runner:test ${IMAGE_PREFIX}-corpus:test ${IMAGE_PREFIX}-bait:test"
 
@@ -48,11 +51,14 @@ cleanup() {
   compose down -v --remove-orphans >/dev/null 2>&1 || true
   ${CONTAINER_BIN} rmi ${BUILT_IMAGES} >/dev/null 2>&1 || true
   rm -f "${ENV_FILE}"
+  rm -rf "${DEFINITIONS_DIR}"
 }
 trap cleanup EXIT
 
 mkdir -p "${RECEIPTS_DIR}"
 rm -f "${RECEIPTS_DIR}/containment-receipt.json"
+rm -rf "${DEFINITIONS_DIR}"
+python3 "${CORPUS_DIR}/conformance/overlay.py" --out "${DEFINITIONS_DIR}"
 
 # The env file both compose files read. The runner picks up the canaries as
 # its environment (so a leak surfaces), and the corpus reads the same values
@@ -71,6 +77,7 @@ PB_ADMIN_EMAIL=${CANARY_ADMIN_EMAIL}
 PB_ADMIN_PASSWORD=${CANARY_ADMIN_PW}
 ROUNDS_ADMISSION_SECRET=${CANARY_ADMISSION}
 BAIT_CANARY=${BAIT_CANARY}
+CORPUS_DEFINITIONS=${DEFINITIONS_DIR}
 EOF
 
 echo "--- building pocketbase, runner, corpus, and bait images ---"

@@ -41,6 +41,14 @@ services:
       # No renderer runs at stage 1, so the render proxy sees a failed
       # render; RD-07 checks the failure is typed and echoes no sidecar text.
       - PDF_RENDERER_URL=${PDF_RENDERER_URL:-http://pdf-renderer-absent.corpus.invalid:4000}
+    # No take-home definition is active on this branch, so the corpus adds
+    # one beside the real ones (conformance/overlay.py, which the launcher
+    # runs into CORPUS_DEFINITIONS): the real manifest plus one entry, and
+    # the definition it names. Read-only, inside the runner's root-only
+    # definitions directory.
+    volumes:
+      - ${CORPUS_DEFINITIONS:-../tests/conformance/.definitions}/manifest.json:/app/definitions/manifest.json:ro
+      - ${CORPUS_DEFINITIONS:-../tests/conformance/.definitions}/store/take-home/corpus-http-client/python.v1.json:/app/definitions/store/take-home/corpus-http-client/python.v1.json:ro
 
   # The pooled PDF sidecar, built from the commit. It is defined so stage 2's
   # images job and the pending render fixtures (RD-02 to RD-06, RD-08, RD-09)

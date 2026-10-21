@@ -3,6 +3,7 @@ routes they exercise, declare a body size without sending it, and turn
 connection failures into typed answers (issue #8, Required tests Unit)."""
 from __future__ import annotations
 
+import http.client
 import json
 import socket
 import threading
@@ -13,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from conformance.budget import Budget
-from conformance.context import CountingClient, RouteLog, RunnerClient
+from conformance.context import TIMEOUT, UNREACHABLE, CountingClient, RouteLog, RunnerClient
 
 CAP = 1024
 
@@ -73,7 +74,7 @@ def test_a_declared_size_over_the_cap_is_answered_from_the_header():
 def test_a_runner_that_waits_for_the_body_times_out_as_a_typed_answer():
     with server(wait_for_body=True) as base:
         got = _client(base).declare("POST", "/api/run", CAP + 1, timeout=0.5)
-    assert (got.status, got.error) == (0, "timeout")
+    assert (got.status, got.error) == (0, TIMEOUT)
 
 
 def test_a_refused_connection_is_a_typed_answer_not_an_exception():
@@ -84,6 +85,20 @@ def test_a_refused_connection_is_a_typed_answer_not_an_exception():
     assert got.status == 0 and got.error
     got = _client(f"http://127.0.0.1:{port}", timeout=2).declare("POST", "/api/run", 10)
     assert got.status == 0 and got.error
+
+
+@pytest.mark.parametrize("failure", [socket.timeout("timed out"), ConnectionRefusedError(61, "refused")],
+                         ids=["connect-timeout", "refused"])
+def test_both_clients_type_a_failed_connection_the_same(monkeypatch, failure):
+    def no_connection(self):
+        raise failure
+
+    monkeypatch.setattr(http.client.HTTPConnection, "connect", no_connection)
+    client = _client("http://127.0.0.1:9", timeout=1)
+    assert client.declare("POST", "/api/run", CAP + 1).error == UNREACHABLE
+    assert client.request("GET", "/health").error == UNREACHABLE
+    # Only a connection that got no answer is a timeout.
+    assert UNREACHABLE != TIMEOUT
 
 
 def test_requests_are_counted_and_routes_recorded_once_each():

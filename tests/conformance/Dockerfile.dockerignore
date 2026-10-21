@@ -7,4 +7,5 @@
 !harness
 **/__pycache__
 **/.receipts
+**/.definitions*
 **/node_modules

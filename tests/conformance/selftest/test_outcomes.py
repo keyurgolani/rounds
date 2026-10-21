@@ -20,9 +20,15 @@ def test_inconclusive_always_fails():
     assert not v.passed and v.outcome == "inconclusive"
 
 
-def test_not_applicable_met_is_recorded_contained():
+def test_not_applicable_met_passes_and_is_recorded_not_applicable():
     v = decide(Outcome.NOT_APPLICABLE.value, "not-applicable")
-    assert v.passed and v.outcome == "contained"
+    assert v.passed and v.outcome == "not-applicable"
+
+
+def test_a_not_applicable_expectation_is_met_only_by_not_applicable():
+    for observed in (Outcome.CONTAINED.value, Outcome.DETECTED.value, Outcome.INCONCLUSIVE.value):
+        v = decide(observed, "not-applicable")
+        assert not v.passed and v.outcome in ("detected", "inconclusive"), observed
 
 
 def test_contained_expected_but_surface_absent_is_a_finding():

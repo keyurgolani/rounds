@@ -10,6 +10,8 @@ model status codes and response bodies only; nothing here runs code.
 from __future__ import annotations
 
 import json
+import re
+import secrets
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -37,8 +39,11 @@ GUARANTEES = (
     "caller-fields",        # EX-04/05/06: caller-chosen fields are refused by name
     "minimal-env",          # EX-07: candidate processes get a minimal environment
     "health-status-only",   # RD-07: health answers only its status
+    "health-status-value",  # RD-07: that status is one of health's own values
     "typed-render-failure", # RD-07: a failed render is the typed envelope
 )
+# Routes a test turns off by their gate, and the stop each answers.
+GATE_STOPS = {"route_disabled", "definitions_disabled"}
 
 
 def envelope(code: str, detail: str = "A fixed sentence.") -> dict:
@@ -54,14 +59,18 @@ class Account:
     user_id: str
     token: str
     tag: str = ""
+    email: str = ""
 
 
 class FakeRunner:
-    def __init__(self, budget: Budget, log: RouteLog, off: set[str], canaries: CanarySet) -> None:
+    def __init__(self, budget: Budget, log: RouteLog, off: set[str], canaries: CanarySet,
+                 gated: dict[str, str] | None = None) -> None:
         self.budget = budget
         self.log = log
         self.off = off
         self.canaries = canaries
+        # path -> the stop its gate answers, before the account.
+        self.gated = gated or {}
 
     def request(self, method: str, path: str, *, token: str | None = None, json_body: Any = None,
                 headers: dict[str, str] | None = None) -> Http:
@@ -83,6 +92,8 @@ class FakeRunner:
     def _answer(self, method: str, path: str, token: str | None, body: dict) -> Http:
         if (method, path) not in ADMITTED:
             return _http(404, envelope("not_found"))
+        if path in self.gated:
+            return _http(503, envelope(self.gated[path]))
         if not token and "account-before-body" in self.off:
             # A stack that validates the body before the account answers an
             # anonymous caller with a body error, not the account denial.
@@ -95,6 +106,8 @@ class FakeRunner:
             out = {"status": "unavailable"}
             if "health-status-only" in self.off:
                 out["code"] = 503
+            if "health-status-value" in self.off:
+                out["status"] = "URLError: renderer unreachable"
             return _http(503, out)
         if path == "/api/pdf/render":
             detail = "The PDF renderer couldn't finish this document. Try again shortly."
@@ -147,6 +160,10 @@ class FakePocketBase:
 
     def listing(self, collection: str, token: str | None = None, params: dict | None = None) -> Http:
         with self._count("GET", f"/api/collections/{collection}/records"):
+            by_email = re.fullmatch(r'email = "([^"]+)"', (params or {}).get("filter", ""))
+            if token == "admin-token" and by_email:
+                items = [r for r in self.rows.get(collection, {}).values() if r.get("email") == by_email.group(1)]
+                return _http(200, {"items": items, "totalItems": len(items)})
             owner = self.owner_of(token or "")
             items = [r for r in self.rows.get(collection, {}).values()
                      if r.get("user") == owner or "owner-read" in self.off]
@@ -169,25 +186,45 @@ class FakePocketBase:
 
 @dataclass
 class Target:
-    """One fake stack and the accounts the fixtures make on it."""
+    """One fake stack and the accounts the fixtures make on it.
+
+    ``sign_in`` sets how an account is made: ``ready`` makes it whole in
+    one step; the others sign it up, as #9's factory does, and then
+    ``auth-fails`` fails the sign-in after the signup landed, and
+    ``answer-lost`` loses the signup's answer after it landed."""
 
     off: set[str] = field(default_factory=set)
     canaries: CanarySet = field(default_factory=lambda: CanarySet.generate("selftest"))
     made: list[Account] = field(default_factory=list)
+    gated: dict[str, str] = field(default_factory=dict)
+    sign_in: str = "ready"
+    pb: FakePocketBase | None = None
 
     def context(self, budget: Budget) -> RunContext:
         log = RouteLog()
-        pb = FakePocketBase(budget, log, self.off)
+        pb = self.pb = FakePocketBase(budget, log, self.off)
 
         def make_account(tag: str) -> Account:
             n = len(self.made) + 1
-            acct = Account(f"user-{n:010d}", f"token-{n:010d}", tag)
-            pb.rows["users"][acct.user_id] = {"id": acct.user_id, "demo_run_used": False}
+            acct = Account("" if self.sign_in != "ready" else f"user-{n:010d}", "", tag,
+                           f"harness-{tag}-{secrets.token_hex(6)}@harness.invalid")
             self.made.append(acct)
+            if self.sign_in == "ready":
+                acct.token = f"token-{n:010d}"
+                pb.rows["users"][acct.user_id] = {"id": acct.user_id, "email": acct.email, "demo_run_used": False}
             return acct
 
+        def register_account(acct: Account) -> None:
+            n = len(self.made)
+            user_id = f"user-{n:010d}"
+            pb.rows["users"][user_id] = {"id": user_id, "email": acct.email, "demo_run_used": False}
+            if self.sign_in == "answer-lost":
+                raise TimeoutError("signup sent, no answer")
+            acct.user_id = user_id
+            raise RuntimeError("auth failed")
+
         return RunContext(
-            runner=FakeRunner(budget, log, self.off, self.canaries),
+            runner=FakeRunner(budget, log, self.off, self.canaries, self.gated),
             pb=pb,
             admin_token="admin-token",
             canaries=self.canaries,
@@ -195,5 +232,6 @@ class Target:
             log=log,
             content={"assignment": "a0000000000000a"},
             make_account=make_account,
+            register_account=None if self.sign_in == "ready" else register_account,
             admin_pb=pb,
         )
