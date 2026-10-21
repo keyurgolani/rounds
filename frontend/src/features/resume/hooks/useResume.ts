@@ -44,7 +44,12 @@ export type UseResumeResult = {
   // generated value didn't change). Caller should navigate to
   // /resumes/<newSlug> if it differs from the URL.
   rename: (name: string) => Promise<string | null>;
-  flush: () => Promise<void>;
+  // Saves every pending edit now (ROUNDS-00A-L04). Waits for a save
+  // already in flight, rejects when a save fails, and resolves with the
+  // resume's saved `updated`, which server PDF sends as
+  // `expected_updated`. A failed save keeps its edits pending, so the
+  // next save carries them.
+  flush: () => Promise<string>;
 };
 
 // PocketBase column names are snake_case; the patch we send to
@@ -74,6 +79,10 @@ export function useResume(slug: string | undefined): UseResumeResult {
   // Pending patch coalesces calls between debounce ticks.
   const pendingRef = useRef<Pending>({});
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The save in flight; saves run one at a time, each after the last.
+  const savingRef = useRef<Promise<void> | null>(null);
+  // The resume's `updated` as the server last answered it.
+  const savedAtRef = useRef<string | null>(null);
   const lastVersionAtRef = useRef<number>(0);
   const dataRef = useRef<ResumeData>(emptyData());
   const linksRef = useRef<ResumeLinks>(emptyLinks());
@@ -105,6 +114,7 @@ export function useResume(slug: string | undefined): UseResumeResult {
         setLocalTemplateId(r.template_id || 'modern');
         setLocalDesign(r.design || {});
         setLastSavedAt(r.updated_at);
+        savedAtRef.current = r.updated_at;
         loadedSlugRef.current = r.slug;
         if (resolved.changed) scheduleRef.current?.({ data: resolved.data, links: resolved.links });
       })
@@ -116,6 +126,8 @@ export function useResume(slug: string | undefined): UseResumeResult {
   }, [slug]);
 
   // --- Save mechanics --------------------------------------------------
+  // Rejects when the save fails, with its patch put back under anything
+  // typed since.
   const performSave = useCallback(async () => {
     const r = resume;
     const patch = pendingRef.current;
@@ -127,6 +139,7 @@ export function useResume(slug: string | undefined): UseResumeResult {
       const updated = await updateResume(r.id, patch);
       setResume(updated);
       setLastSavedAt(updated.updated_at);
+      savedAtRef.current = updated.updated_at;
       setSaveState('saved');
 
       // Stamp an auto version, but coalesce so we don't write one per
@@ -151,10 +164,29 @@ export function useResume(slug: string | undefined): UseResumeResult {
         setSaveState((s) => (s === 'saved' ? 'idle' : s));
       }, 1200);
     } catch (err) {
+      pendingRef.current = { ...patch, ...pendingRef.current };
       setSaveState('error');
       setError((err as Error).message);
+      throw err;
     }
   }, [resume]);
+
+  // Starts a save once the one in flight ends, and returns it.
+  const save = useCallback((): Promise<void> => {
+    const before = savingRef.current;
+    const next = (before ? before.catch(() => undefined) : Promise.resolve()).then(performSave);
+    savingRef.current = next;
+    const clear = () => {
+      if (savingRef.current === next) savingRef.current = null;
+    };
+    next.then(clear, clear);
+    return next;
+  }, [performSave]);
+
+  // A save nothing waits on: its failure already shows as the save state.
+  const saveInBackground = useCallback(() => {
+    save().catch(() => undefined);
+  }, [save]);
 
   const schedule = useCallback(
     (patch: Pending) => {
@@ -162,10 +194,10 @@ export function useResume(slug: string | undefined): UseResumeResult {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
-        void performSave();
+        saveInBackground();
       }, DEBOUNCE_MS);
     },
-    [performSave],
+    [saveInBackground],
   );
   // Keep the ref current so the initial-load effect can reach schedule
   // without a dependency cycle.
@@ -221,12 +253,13 @@ export function useResume(slug: string | undefined): UseResumeResult {
 
       // Flush any in-flight edits before we re-slug. Otherwise a
       // pending PATCH from a recent keystroke could land after our
-      // rename and clobber the new slug.
+      // rename and clobber the new slug. A failed save keeps its edits
+      // pending and the rename still goes ahead.
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
-        await performSave();
       }
+      await save().catch(() => undefined);
 
       let newSlug = current.slug;
       try {
@@ -251,6 +284,7 @@ export function useResume(slug: string | undefined): UseResumeResult {
         setResume(saved);
         setSaveState('saved');
         setLastSavedAt(saved.updated_at);
+        savedAtRef.current = saved.updated_at;
         // Mark the saved slug as already loaded so the slug-keyed
         // loader effect short-circuits when ResumeStudio navigates.
         loadedSlugRef.current = saved.slug;
@@ -260,16 +294,20 @@ export function useResume(slug: string | undefined): UseResumeResult {
         return current.slug;
       }
     },
-    [resume, performSave],
+    [resume, save],
   );
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (): Promise<string> => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    await performSave();
-  }, [performSave]);
+    // Queued behind the save in flight, so a failure of either rejects.
+    if (savingRef.current) await savingRef.current;
+    await save();
+    if (savedAtRef.current === null) throw new Error('This resume has not loaded yet.');
+    return savedAtRef.current;
+  }, [save]);
 
   // --- Lifecycle: flush on unmount/blur to avoid losing edits ----------
   useEffect(() => {
@@ -280,7 +318,7 @@ export function useResume(slug: string | undefined): UseResumeResult {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
-        void performSave();
+        saveInBackground();
       }
     };
     window.addEventListener('beforeunload', onBeforeUnload);
@@ -290,7 +328,7 @@ export function useResume(slug: string | undefined): UseResumeResult {
         clearTimeout(timerRef.current);
       }
     };
-  }, [performSave]);
+  }, [saveInBackground]);
 
   return {
     resume,
