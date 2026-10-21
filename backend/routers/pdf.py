@@ -6,14 +6,19 @@ network access during render, so we don't expose anything new from
 the inside of our network — but we still keep the sidecar
 inside-only and require this proxy as the public entrypoint.
 
-Both routes are admitted (``app.admission``). A render whose document ran
-out of time answers 422 ``render_timeout``: the sidecar says so within
+Every route here is admitted (``app.admission``). A render whose document
+ran out of time answers 422 ``render_timeout``: the sidecar says so within
 its budgets, the caller's content caused it, so it keeps its charge and
 isn't retried. Any other failed render, a sidecar that couldn't open a
 page in time or didn't answer within ``RENDER_TIMEOUT_S`` included,
 answers a typed 503, which the infrastructure caused and admission
 refunds. Neither repeats the sidecar's text, and health answers only
 ``{"status"}``.
+
+``POST /api/pdf/snapshots`` creates a Legacy Artifact Snapshot through
+PocketBase's hook (``app.legacy_snapshots``, ROUNDS-00A-L04). It ships
+off behind ``ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE``; ``/render`` doesn't
+read snapshots until #4's PR 3.
 
 TODO(ROUNDS-00A-L06): #6's ephemeral no-script render workers replace
 the pooled sidecar behind this proxy.
@@ -30,7 +35,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
-from app import admission
+from app import admission, legacy_snapshots
 from app.errors import TypedError
 from app.limits import StrictModel
 
@@ -121,3 +126,14 @@ async def render(request: Request, req: RenderRequest):
     await admission.begin(request, req, wall_seconds=RENDER_TIMEOUT_S)
     async with admission.allocate():
         return await run_in_threadpool(_render, req.html, req.margin_mm)
+
+
+@router.post("/snapshots")
+async def create_snapshot(request: Request, req: legacy_snapshots.SnapshotRequest):
+    """A Legacy Artifact Snapshot of the caller's own resume or variant
+    (ROUNDS-00A-L04), made by PocketBase's hook (app.legacy_snapshots).
+    It takes no in-flight slot: the runner runs nothing itself."""
+    await admission.begin(request, req, wall_seconds=legacy_snapshots.MATERIALIZE_TIMEOUT_S)
+    token = admission.account(request)["token"]
+    status, body = await legacy_snapshots.create(token, req, legacy_snapshots.command_for(request))
+    return JSONResponse(body, status_code=status)

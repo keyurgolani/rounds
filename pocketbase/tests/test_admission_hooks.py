@@ -64,7 +64,7 @@ def admit(account=A, op="run", key=None, fp=None, wall=None, most=None, mode="en
     """An admit step; its lease token, which only the test (the runner)
     holds, is on the step as ``token``."""
     walls = {"run": 3, "evaluate": 3, "run_project": 10, "grade": 45, "take_home_run": 60,
-             "take_home_submit": 120, "pdf_render": 25}
+             "take_home_submit": 120, "pdf_render": 25, "snapshot_create": 10}
     token = token or new_token()
     body = {"operation": op, "wall_seconds": walls[op] if wall is None else wall, "idempotency": mode,
             "lease_hash": sha256(token)}
@@ -462,6 +462,77 @@ def test_a_completed_command_keeps_only_a_storable_result(result, kept):
     (command,) = out["store"]["commands"]
     assert command["state"] == "completed"
     assert command["result"] == (result if kept else None)
+
+
+# ---- a leaf hook that completes its own command (ROUNDS-00A-L04) ----------------
+
+SNAPSHOT = {"status": 201, "body": {"status": "created", "snapshot_id": "snap00000000001",
+                                    "content_checksum": "sha256:" + "c" * 64}}
+
+
+def complete(command_id=K1, account=A, operation="snapshot_create", result=None) -> dict:
+    return {"call": "completeCommand", "account": account, "command_id": command_id, "operation": operation,
+            "result": SNAPSHOT if result is None else result}
+
+
+def completed_result(command_id=K1, account=A, now=T0) -> dict:
+    return {"call": "completedResult", "account": account, "command_id": command_id, "now": now}
+
+
+def test_a_hook_completes_its_in_flight_command_and_the_runners_finish_leaves_it():
+    first = admit(op="snapshot_create", key=K1)
+    later = {**SNAPSHOT, "body": {**SNAPSHOT["body"], "status": "reused"}}
+    out = run(first, complete(), finish(first, result=later), admit(op="snapshot_create", key=K1))
+    assert out["results"][1] is True
+    (command,) = out["store"]["commands"]
+    assert command["state"] == "completed" and command["result"] == SNAPSHOT
+    # The same key replays what the hook kept.
+    assert out["results"][3]["idempotency"] == "replay" and out["results"][3]["result"] == SNAPSHOT
+    assert out["store"]["leases"] == []
+
+
+@pytest.mark.parametrize("step", [
+    complete(account=B),
+    complete(command_id=K2),
+    complete(operation="pdf_render"),
+    complete(command_id="not-a-command-id"),
+    complete(result={"status": 409, "body": {"status": "conflict"}}),
+    complete(result={"status": 200, "body": "x" * (256 * 1024)}),
+])
+def test_a_hook_completes_only_the_accounts_in_flight_command_for_its_operation(step):
+    out = run(admit(op="snapshot_create", key=K1), step)
+    assert out["results"][1] is False
+    (command,) = out["store"]["commands"]
+    assert command["state"] == "in_flight" and command["result"] is None
+
+
+@pytest.mark.parametrize("outcome", ["completed", "denied", "error"])
+def test_a_hook_never_completes_a_command_the_runner_already_ended(outcome):
+    first = admit(op="snapshot_create", key=K1)
+    out = run(first, finish(first, outcome, result={"status": 200, "body": {}} if outcome == "completed" else None),
+              complete())
+    assert out["results"][2] is False
+    (command,) = out["store"]["commands"]
+    assert command["result"] == ({"status": 200, "body": {}} if outcome == "completed" else None)
+
+
+def test_a_completed_result_is_the_accounts_unexpired_completed_command_only():
+    first = admit(op="snapshot_create", key=K1)
+    out = run(
+        completed_result(),
+        first,
+        completed_result(),
+        complete(),
+        completed_result(),
+        completed_result(account=B),
+        completed_result(command_id=K2),
+        completed_result(command_id="not-a-command-id"),
+        completed_result(now=T0 + 24 * HOUR),
+    )
+    results = out["results"]
+    assert results[0] is None and results[2] is None
+    assert results[4] == SNAPSHOT
+    assert results[5:] == [None, None, None, None]
 
 
 def test_usage_reports_the_accounts_hour():

@@ -22,9 +22,11 @@ Read-only checks an operator runs against a Rounds deployment they operate:
   admins       A pb_data copy holds at least one admin, so PocketBase's
                first-admin setup is closed.
   admission    (--admission, with --url) Through the public URL: each of the
-               nine admitted routes refuses a caller without a bearer before
+               ten admitted routes refuses a caller without a bearer before
                reading the body, 401 unauthenticated (or the 503 that
-               --expect-disabled names for a route that is off), in the typed
+               --expect-disabled names for a route that is off, or for
+               /api/pdf/snapshots, whose gate ships off, 503 route_disabled
+               until the owner turns it on), in the typed
                {detail, code, correlation_id} envelope whose id the
                X-Correlation-Id header repeats, and a body declared over its
                cap gets the typed 413. No account is admitted, so nothing is
@@ -118,6 +120,8 @@ DENIED_ROUTES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     # Outside the collection name alphabet, which the proxy refuses.
     ("deployment.proxy.execution-service.denied", "/api/collections/execution_servic%C3%A9/auth-with-password",
      ("POST",)),
+    ("deployment.proxy.legacy-snapshot-hook.denied", "/api/rounds/legacy-snapshots", ("GET", "POST")),
+    ("deployment.proxy.legacy-snapshot-hook.denied", "/api/rounds/Legacy-Snapshots", ("POST",)),
 )
 
 # Every check id this tool can report, with the guarantee it states. The
@@ -132,6 +136,8 @@ CHECKS: dict[str, str] = {
     "deployment.proxy.admission-hooks.denied": "the admission hook routes are not reachable at the public URL",
     "deployment.proxy.execution-hooks.denied": "the execution job store's hook routes are not reachable at the public URL",
     "deployment.proxy.execution-service.denied": "the execution service record, its login included, is not reachable at the public URL",
+    "deployment.proxy.legacy-snapshot-hook.denied":
+        "the legacy snapshot hook, which only the runner calls, is not reachable at the public URL",
     "deployment.proxy.execute.gone": "/api/execute no longer reaches a code runner",
     "deployment.proxy.health.open": "the health route still reaches PocketBase",
     "deployment.proxy.records.open": "record routes still reach PocketBase",
@@ -521,7 +527,14 @@ ADMITTED_ROUTES: tuple[tuple[str, str, str, int, int], ...] = (
     ("POST", "/api/pdf/render", "PDF_RENDER", 2 * MIB, 6 * MIB),
     ("GET", "/api/pdf/health", "PDF_HEALTH", 0, 6 * MIB),
     ("POST", "/api/ai/ats-rule", "ATS_RULE", 1 * MIB, 6 * MIB),
+    ("POST", "/api/pdf/snapshots", "LEGACY_SNAPSHOT_CREATE", 4 * KIB, 6 * MIB),
 )
+# The admitted routes whose gate ships off (backend/app/gates.py). Until the
+# owner turns one on it answers 503 route_disabled before the account, so
+# either answer passes unless --expect-disabled names the route; the gates
+# check (--expect-gate) pins which one a deployment should give. Kept in
+# step with the registry by backend/tests/test_verify_deployment_admission.py.
+SHIPS_OFF = frozenset({"/api/pdf/snapshots"})
 ENVELOPE_KEYS = frozenset({"detail", "code", "correlation_id"})
 ROUTE_GATE_VALUES = ("enabled", "disabled")
 # The 503 an operator's stop answers, before the account
@@ -638,7 +651,8 @@ def check_admitted_routes(base_url: str, req: Callable[..., Response] = request,
     in ``disabled`` (``PATH[=CODE]``, the ones the operator turned off) the
     503 its stop answers; a route that is off without being named fails, so
     a stop left on after a re-enable shows. One request per route; nothing
-    is charged or run, since no account is admitted."""
+    is charged or run, since no account is admitted. A route that ships
+    off (``SHIPS_OFF``) passes with either answer until it is named."""
     base = base_url.rstrip("/")
     off = parse_expected_disabled(disabled)
     out: list[Result] = []
@@ -646,6 +660,8 @@ def check_admitted_routes(base_url: str, req: Callable[..., Response] = request,
         resp = req(method, base + path, body={} if method == "POST" else None)
         code = _code_of(resp.body)
         want = (503, off[path]) if path in off else (401, "unauthenticated")
+        if path in SHIPS_OFF and path not in off and (resp.status, code) == (503, "route_disabled"):
+            want = (503, "route_disabled")
         refused = (resp.status, code) == want
         if refused:
             why = ""
@@ -1087,8 +1103,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="allow a plain-HTTP --pb-url that is not loopback (a private network you trust)")
     p.add_argument("--admission", action="store_true",
                    help="with --url: every admitted route refuses an anonymous caller in the typed envelope (401, "
-                        "or the 503 --expect-disabled names for a route that is off), and a body declared over its "
-                        "cap gets the typed 413 (headers only; nothing is charged or run)")
+                        "or the 503 --expect-disabled names for a route that is off; a route whose gate ships off "
+                        "may also answer 503 route_disabled), and a body declared over its cap gets the typed 413 "
+                        "(headers only; nothing is charged or run)")
     p.add_argument("--expect-disabled", action="append", metavar="PATH[=CODE]",
                    help="with --url: this admitted route is off, so it answers 503 CODE for every caller: "
                         "route_disabled (the default) when its own gate is off, or definitions_disabled for the six "
