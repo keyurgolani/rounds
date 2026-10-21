@@ -93,6 +93,21 @@ ROUNDS_GATE_SIGNUPS=disabled
 
 Setting both older flags to `true` still works. Frontend hiding is not a security boundary; the PocketBase hook is the server-side enforcement point. A set gate wins over the aliases, so `ROUNDS_GATE_SIGNUPS=enabled` reopens signups even when an alias is `true`.
 
+## Demo Account
+
+| Variable | Default | Layer | Purpose |
+| --- | --- | --- | --- |
+| `ROUNDS_GATE_DEMO` | blank (`disabled`) | PocketBase hooks | `enabled` turns the demo account on. |
+| `ROUNDS_ENABLE_DEMO` | `false` | PocketBase hooks | Alias read while the gate is blank. `true` turns the demo account on. |
+
+Every install creates the demo account (`1700000600_demo_user.js`), and it stays off unless the operator turns it on, as the hosted demo does:
+
+```env
+ROUNDS_ENABLE_DEMO=true
+```
+
+Off, PocketBase refuses a demo account's sign-in with the answer a wrong password gets, and at each start gives every demo account a new random password and token key, so a session from before the restart ends. On or off, a demo account can change only its own name, bio, target, and avatar, can't delete itself or change its email, and can't own a share link, an AI provider, or AI settings: those writes get 403 `demo_not_permitted`, whoever makes them. Restart PocketBase after changing either variable.
+
 ## Gates
 
 Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads them from the root `.env`, and k8s reads them from the `rounds-gates` ConfigMap in `k8s/gates.yaml`. Three readers share the names: the runner (`backend/app/gates.py`), PocketBase (`pocketbase/pb_hooks/gates.js`), and the frontend through `runtime-config.js`, which publishes only the gates the SPA reads.
@@ -100,6 +115,7 @@ Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads the
 | Gate | Values | Default | Read by | Enforced |
 | --- | --- | --- | --- | --- |
 | `ROUNDS_GATE_SIGNUPS` | `enabled`, `disabled` | `enabled` | PocketBase, frontend | yes |
+| `ROUNDS_GATE_DEMO` | `enabled`, `disabled` | `disabled` | PocketBase | yes; disabled, no demo account signs in ([Demo Account](#demo-account)) |
 | `ROUNDS_GATE_RUN` | `enabled`, `disabled` | `enabled` | runner | yes; disabled, `/api/run` answers 503 `route_disabled` |
 | `ROUNDS_GATE_EVALUATE` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/evaluate` |
 | `ROUNDS_GATE_AI_CODING_RUN_PROJECT` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/ai-coding/run-project` |
@@ -127,7 +143,7 @@ Each reader resolves a gate the same way:
 
 1. A set gate with an allowed value wins. Values are trimmed and case-insensitive.
 2. A set gate with any other value takes its most restrictive value (`disabled` or `enforce`), and the reader logs an error that names the gate but not the value.
-3. A blank gate falls back to the reader's alias when the alias is `true`, `1`, or `yes`. Only `SIGNUPS` has aliases: PocketBase reads `ROUNDS_DISABLE_SIGNUPS` and the frontend reads `VITE_DISABLE_SIGNUPS`.
+3. A blank gate falls back to the reader's alias when the alias is `true`, `1`, or `yes`. `SIGNUPS` and `DEMO` have aliases: PocketBase reads `ROUNDS_DISABLE_SIGNUPS` and `ROUNDS_ENABLE_DEMO`, and the frontend reads `VITE_DISABLE_SIGNUPS`.
 4. Otherwise the default applies.
 
 A process reads its gates once at startup, so a change needs a restart. The runner and PocketBase each log one JSON line with every gate they read, its value, and where the value came from (`default`, `env`, `alias`, or `invalid`). The frontend container passes the SPA only the gates it reads, today `ROUNDS_GATE_SIGNUPS` and `ROUNDS_GATE_EXECUTION_DEFINITIONS`, and logs each value it passes. Runner and PocketBase gates never reach the browser. Gate values aren't secret, so never put a secret in one.

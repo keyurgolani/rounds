@@ -174,10 +174,12 @@ Migrations:
 - `1700000700_resume_studio.js`: `resumes`, `resume_versions`, and `bullet_library` collections.
 - `1700000800_ai_providers.js`: per-user `ai_providers` collection storing encrypted provider credentials.
 - `1700000900_share_links_resume_rel.js`: extends `share_links` with a relation to resumes for public read-only views.
+- `1700006700_demo_contain.js`: deletes the share links, AI providers, and AI settings that demo accounts own (forward-only).
 
 Hooks:
 
 - `main.pb.js`: server-side signup disablement.
+- `demo.pb.js`, with its logic in `demo.js`: the demo account's containment. With `ROUNDS_ENABLE_DEMO` off, the default, no demo account signs in, and each one gets a new random password and token key at every start. On or off, a demo account changes only its profile and owns no share link, AI provider, or AI settings row.
 
 PocketBase stores SQLite data and uploads in the `pb_data` Docker volume.
 

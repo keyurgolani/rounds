@@ -50,6 +50,11 @@ spec:
             # Alias of ROUNDS_GATE_SIGNUPS, which wins when it's set.
             - name: ROUNDS_DISABLE_SIGNUPS
               value: "false"
+            # Alias of ROUNDS_GATE_DEMO, which wins when it's set. "true"
+            # only on a hosted demo; off, PocketBase refuses the demo
+            # account's sign-in.
+            - name: ROUNDS_ENABLE_DEMO
+              value: "false"
           envFrom:
             # ROUNDS_ADMISSION_SECRET, shared with the runner (runner.yaml,
             # step 3). Optional: without it the admission store's write

@@ -85,6 +85,8 @@ def test_written_defaults_keep_routes_on_and_outbound_reach_off():
         assert r.value == expected, name
     assert gates.load({}, gates.POCKETBASE)["SIGNUPS"] == gates.Resolved("enabled", "default")
     assert gates.load({}, gates.FRONTEND)["SIGNUPS"] == gates.Resolved("enabled", "default")
+    # ROUNDS-00B-L07: the demo starts off, self-hosted installs included.
+    assert gates.load({}, gates.POCKETBASE)["DEMO"] == gates.Resolved("disabled", "default")
 
 
 # ---- resolution ----------------------------------------------------------
@@ -137,6 +139,29 @@ def test_a_set_signup_gate_wins_over_its_aliases():
 
 def test_the_runner_never_reads_the_signup_gate():
     assert "SIGNUPS" not in gates.load({"ROUNDS_GATE_SIGNUPS": "disabled"}, gates.RUNNER)
+
+
+@pytest.mark.parametrize("truthy", ["true", "TRUE", "1", "yes", " yes "])
+def test_rounds_enable_demo_turns_the_demo_on_for_pocketbase(truthy):
+    assert gates.load({"ROUNDS_ENABLE_DEMO": truthy}, gates.POCKETBASE)["DEMO"] == gates.Resolved("enabled", "alias")
+
+
+@pytest.mark.parametrize("env", [
+    {"ROUNDS_ENABLE_DEMO": "false"},
+    {"ROUNDS_ENABLE_DEMO": "enabled"},
+    {"ROUNDS_ENABLE_DEMO": ""},
+    {"ROUNDS_GATE_DEMO": "on"},
+    {"ROUNDS_GATE_DEMO": "disabled", "ROUNDS_ENABLE_DEMO": "true"},
+])
+def test_anything_else_keeps_the_demo_off(env):
+    assert gates.load(env, gates.POCKETBASE)["DEMO"].value == "disabled"
+
+
+def test_only_pocketbase_reads_the_demo_gate():
+    assert [g.name for g in gates.REGISTRY if "DEMO" == g.name] == ["DEMO"]
+    assert gates.BY_NAME["DEMO"].readers == frozenset({gates.POCKETBASE})
+    assert "DEMO" not in gates.load({"ROUNDS_GATE_DEMO": "enabled"}, gates.RUNNER)
+    assert "DEMO" not in gates.load({"ROUNDS_GATE_DEMO": "enabled"}, gates.FRONTEND)
 
 
 # ---- startup log ---------------------------------------------------------
@@ -220,7 +245,7 @@ def test_the_pocketbase_module_carries_the_pocketbase_gates():
     assert data["prefix"] == gates.PREFIX
     assert data["truthy"] == list(gates.TRUTHY)
     assert data["gates"] == _expected_for(gates.POCKETBASE)
-    assert data["keys"] == ["ROUNDS_GATE_SIGNUPS", "ROUNDS_DISABLE_SIGNUPS"]
+    assert data["keys"] == ["ROUNDS_GATE_SIGNUPS", "ROUNDS_DISABLE_SIGNUPS", "ROUNDS_GATE_DEMO", "ROUNDS_ENABLE_DEMO"]
 
 
 ENV_CASES = [
@@ -234,6 +259,12 @@ ENV_CASES = [
     {"ROUNDS_DISABLE_SIGNUPS": "false"},
     {"ROUNDS_GATE_SIGNUPS": "enabled", "ROUNDS_DISABLE_SIGNUPS": "true"},
     {"VITE_DISABLE_SIGNUPS": "true"},
+    {"ROUNDS_ENABLE_DEMO": "true"},
+    {"ROUNDS_ENABLE_DEMO": "Yes"},
+    {"ROUNDS_ENABLE_DEMO": "false"},
+    {"ROUNDS_GATE_DEMO": "enabled"},
+    {"ROUNDS_GATE_DEMO": "true"},
+    {"ROUNDS_GATE_DEMO": "disabled", "ROUNDS_ENABLE_DEMO": "true"},
 ]
 
 

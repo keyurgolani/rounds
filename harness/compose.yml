@@ -30,6 +30,9 @@ services:
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
       - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
+      # On until the signup restart, so the admission phase's demo accounts
+      # sign in (run.sh); off after it, as on any install by default.
+      - ROUNDS_ENABLE_DEMO=${ROUNDS_ENABLE_DEMO:-false}
       # The runner key, a test placeholder shared with both runners.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}
     healthcheck:

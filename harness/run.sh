@@ -19,9 +19,15 @@
 #                     caller on each, nothing charged, other routes still admit
 #  3d. re-enable    - the gate cleared and both replicas restarted: runs
 #                     admitted on each
+#  3e. demo on      - PocketBase has run with ROUNDS_ENABLE_DEMO=true since
+#                     phase 1, as a hosted demo does: what a demo caller may
+#                     change and own, through PocketBase and the runner
+#                     (harness/probes/demo_check.py)
 #   4. recreate PocketBase with signups disabled; the named pb_data volume
 #      keeps the accounts and rows from phase 2 across the restart
 #   5. hook phase   - signup-disabled probe
+#  5b. demo off     - PocketBase recreated with the demo at its default: no
+#                     demo account signs in and a token from before is refused
 #   6. bring the runner and the nginx frontend up (after the last PocketBase
 #      recreate, since nginx looks PocketBase's address up once at start)
 #   7. deploy       - the deployment verifier (harness/verify_deployment.py)
@@ -41,6 +47,10 @@
 #  12. admission migration - apply and reverse the admission migration with
 #                     the pinned binary on a 62d4eae-shaped pb_data, with no
 #                     network (harness/probes/admission_migration_check.py)
+#  12d. demo containment migration - apply and reverse 1700006700 with the
+#                     pinned binary and no network, on a pb_data whose legacy
+#                     fixture has demo-owned rows in every account-scoped
+#                     collection (harness/probes/demo_contain_migration_check.py)
 #  13. relation quarantine - with the pinned binary and no network: dry-run
 #                     and apply the relation quarantine on a legacy pb_data
 #                     holding cross-owner rows, then delete through the API on
@@ -117,8 +127,14 @@ GIT_COMMIT="${GIT_COMMIT:-$(git -C "${ROOT}" rev-parse --short HEAD 2>/dev/null 
 # environment variable, and both finch and docker compose accept the flag.
 compose() { ${COMPOSE_BIN} -p "${PROJECT}" -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile materializer "$@"; }
 
+# The demo phases carry one test account from phase 3e to 5b here; the run
+# removes it, and it never goes up with the receipts.
+STATE_DIR="${HARNESS_DIR}/.state/${PROJECT}"
+
 cleanup() {
   echo "--- tearing down harness stack ---"
+  rm -rf "${STATE_DIR}"
+  rmdir "${HARNESS_DIR}/.state" 2>/dev/null || true
   compose down -v --remove-orphans >/dev/null 2>&1 || true
   ${CONTAINER_BIN} volume rm "${PBBIN_VOLUME}" >/dev/null 2>&1 || true
   ${CONTAINER_BIN} rmi ${BUILT_IMAGES} >/dev/null 2>&1 || true
@@ -128,9 +144,12 @@ trap cleanup EXIT
 
 # The runners enforce idempotency and quotas for the admission phase. The
 # optional second argument sets ROUNDS_GATE_RUN for the emergency phases.
+# PocketBase runs with the demo on (DEMO_V) until the signup restart, so
+# the admission phase's demo accounts sign in; it's off from then on.
+DEMO_V=true
 set_signups() {
-  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\n' \
-    "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" > "${ENV_FILE}"
+  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_ENABLE_DEMO=%s\n' \
+    "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" "${DEMO_V}" > "${ENV_FILE}"
 }
 
 # A runner replica's startup gates line (only gate names and values,
@@ -237,12 +256,14 @@ probe() {
     -v "${ROOT}/docs/security:/policy:ro" \
     -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
     -v "${RECEIPTS_DIR}:/out" \
+    -v "${STATE_DIR}:/state" \
     "${PROBE_IMAGE}" "${phase}"
 }
 
-# Fresh receipts for this run.
-rm -rf "${RECEIPTS_DIR}"
+# Fresh receipts and demo state for this run.
+rm -rf "${RECEIPTS_DIR}" "${STATE_DIR}"
 mkdir -p "${RECEIPTS_DIR}"
+mkdir -p -m 700 "${STATE_DIR}"
 
 # With PocketBase stopped: the run's pb_data mounted read-only, no network.
 offline() {
@@ -300,6 +321,12 @@ restart_runners
 capture_gates emergency-enable
 capture_gates emergency-enable runner-b
 probe emergency-enable
+
+echo "--- phase 3e: demo on (ROUNDS_ENABLE_DEMO=true since phase 1, the runners up) ---"
+set +e
+probe demo-on
+demo_rc=$?
+set -e
 # TODO(ROUNDS-00A-L02): before step 3 makes legacy act as disabled, a
 # phase here restarts the runners and nginx with
 # ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce and runs the six routes on
@@ -308,12 +335,19 @@ probe emergency-enable
 compose stop runner runner-b frontend
 compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
 
-echo "--- phase 4: recreate PocketBase (signups disabled) ---"
+echo "--- phase 4: recreate PocketBase (signups disabled, the demo at its default) ---"
+DEMO_V=false
 set_signups true
 compose up -d --force-recreate pocketbase
 
 echo "--- phase 5: hook (signup-disabled probe) ---"
 probe hook
+
+echo "--- phase 5b: demo off (no demo account signs in, an earlier token is refused) ---"
+set +e
+probe demo-off
+[ $? -eq 0 ] || demo_rc=1
+set -e
 
 echo "--- phase 6: runner and nginx frontend up ---"
 compose up -d runner frontend
@@ -369,6 +403,16 @@ ${CONTAINER_BIN} run --rm --network none \
   -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
   "${PROBE_IMAGE}" admission-migration
 migration_rc=$?
+
+echo "--- phase 12d: demo containment migration applied and reversed on a legacy demo fixture ---"
+${CONTAINER_BIN} run --rm --network none \
+  -e PB_BIN="/pbbin/pocketbase" \
+  -e PB_MIGRATIONS_DIR="/pb_migrations" \
+  -v "${PBBIN_VOLUME}:/pbbin:ro" \
+  -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+  -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
+  "${PROBE_IMAGE}" demo-contain-migration
+[ $? -eq 0 ] || migration_rc=1
 set -e
 
 echo "--- phase 13: relation quarantine on a legacy pb_data, then deletes on a served copy ---"
@@ -400,7 +444,8 @@ snapshot_rc=$?
 set -e
 
 if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ] || [ "${admission_rc}" -ne 0 ] || [ "${migration_rc}" -ne 0 ] \
-   || [ "${quarantine_rc}" -ne 0 ] || [ "${reach_rc}" -ne 0 ] || [ "${snapshot_rc}" -ne 0 ]; then
+   || [ "${quarantine_rc}" -ne 0 ] || [ "${reach_rc}" -ne 0 ] || [ "${snapshot_rc}" -ne 0 ] \
+   || [ "${demo_rc}" -ne 0 ]; then
   exit 1
 fi
 exit 0

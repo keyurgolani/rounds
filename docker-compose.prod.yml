@@ -29,6 +29,11 @@
 #                          hides the signup form. ROUNDS_DISABLE_SIGNUPS
 #                          (PocketBase) and VITE_DISABLE_SIGNUPS (frontend)
 #                          still work as aliases when it is unset.
+#   ROUNDS_ENABLE_DEMO   - "true" turns the demo account on, for a hosted
+#                          demo. Off by default: PocketBase refuses the
+#                          demo account's sign-in and gives it a random
+#                          password at every start. ROUNDS_GATE_DEMO wins
+#                          when set.
 #   ROUNDS_GATE_*        - the other gates in docs/configuration.md.
 #                          Unset keeps each written default.
 #   ROUNDS_ADMISSION_SECRET - 32+ characters, the same on PocketBase and
@@ -53,6 +58,8 @@ services:
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-}
       - ROUNDS_GATE_SIGNUPS=${ROUNDS_GATE_SIGNUPS:-}
       - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
+      - ROUNDS_GATE_DEMO=${ROUNDS_GATE_DEMO:-}
+      - ROUNDS_ENABLE_DEMO=${ROUNDS_ENABLE_DEMO:-false}
       # Blank, the admission store's write routes answer 503.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-}
     # The private app network, plus the internal one only it shares with

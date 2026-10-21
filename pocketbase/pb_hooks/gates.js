@@ -23,6 +23,13 @@ const GATES = {
     closed: "disabled",
     aliases: [{ env: "ROUNDS_DISABLE_SIGNUPS", value: "disabled" }],
   },
+  // ROUNDS-00B-L07: the demo is off unless an operator opts in.
+  DEMO: {
+    values: ["enabled", "disabled"],
+    default: "disabled",
+    closed: "disabled",
+    aliases: [{ env: "ROUNDS_ENABLE_DEMO", value: "enabled" }],
+  },
 };
 
 function read(env, key) {

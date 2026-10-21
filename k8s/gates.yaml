@@ -45,3 +45,7 @@ data:
   ROUNDS_GATE_EXECUTION_DEFINITIONS: ""
   # Signups, read by PocketBase and the frontend: "enabled" or "disabled".
   ROUNDS_GATE_SIGNUPS: ""
+  # The demo account, read by PocketBase: "enabled" or "disabled". Empty
+  # leaves ROUNDS_ENABLE_DEMO in pocketbase.yaml in charge, which keeps it
+  # off.
+  ROUNDS_GATE_DEMO: ""

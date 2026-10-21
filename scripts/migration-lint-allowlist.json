@@ -19,6 +19,15 @@
       "reason": "Quarantines pre-existing cross-owner relation rows: moves a row whose required or cascading relation crosses accounts, with its cascade dependents, into relation_quarantine (copied first as raw column text, deleted leaf-first), and clears and journals an offending optional reference or a reference to a moved row, moving the row instead when clearing it would break a unique index, so every retained relation points at a same-owner target. The disposition per relation field is in the manifest.",
       "reviewed_by": "pending owner review",
       "manifest": "pocketbase/migration-manifests/1700007000_relation_endpoint_authz.json"
+    },
+    {
+      "path": "pocketbase/pb_migrations/1700006700_demo_contain.js",
+      "rules": ["rewrites-rows"],
+      "sha256": "548fb5e3018e1c04c03fd31e02b24b12de706c8b44400f05e4c8b45314c6f5be",
+      "issue": "#177",
+      "reason": "Demo containment, stage 1 of manifest demo-contain-v1: deletes the resume share links (and with them their views), AI settings, and AI providers that accounts with users.is_demo own, and touches nothing a standard account owns. Forward-only; the owner approves the drops.",
+      "reviewed_by": "pending owner review",
+      "manifest": "pocketbase/migration-manifests/demo-contain-v1.json"
     }
   ]
 }

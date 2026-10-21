@@ -88,7 +88,9 @@ const DEMO_FIELDS = ["is_demo", "demo_run_used", "demo_evaluate_used"];
 // Tier
 // ---------------------------------------------------------------------------
 
-// TODO(ROUNDS-00B-L07): #177 repoints the tier at account_system_state;
+// The one place PocketBase decides an account's tier, and so whether it's
+// a demo account: admission and every check in demo.js ask it.
+// TODO(ROUNDS-00B-L07): stage 2 repoints it at account_system_state, and
 // backend/app/admission.py's tier_of() moves with it.
 function tierOf(record) {
   return record && record.getBool("is_demo") === true ? "demo" : "standard";

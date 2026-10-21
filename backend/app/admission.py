@@ -154,9 +154,10 @@ def account(request: Request) -> dict[str, Any] | None:
 
 
 def tier_of(record: dict[str, Any]) -> str:
-    # TODO(ROUNDS-00B-L07): #177 repoints this accessor at
-    # account_system_state, with tierOf() in pb_hooks/admission.js. A
-    # users hook there keeps clients from setting is_demo.
+    # The runner's copy of tierOf() in pb_hooks/admission.js, which decides
+    # every demo check in PocketBase; test_demo_tier.py keeps the two in
+    # step. A users hook there keeps clients from setting is_demo.
+    # TODO(ROUNDS-00B-L07): stage 2 repoints both at account_system_state.
     return "demo" if record.get("is_demo") is True else "standard"
 
 
