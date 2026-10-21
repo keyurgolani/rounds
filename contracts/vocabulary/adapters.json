@@ -146,7 +146,7 @@
     },
     {
       "kind": "collection",
-      "source": {"path": "pocketbase/pb_migrations/1700007100_execution_jobs.js", "lines": "129"},
+      "source": {"path": "pocketbase/pb_migrations/1700007100_execution_jobs.js", "lines": "138"},
       "legacyName": "execution_attempts",
       "termId": "execution-attempt",
       "targetLabel": null,
@@ -155,16 +155,16 @@
     },
     {
       "kind": "collection",
-      "source": {"path": "pocketbase/pb_migrations/1700007100_execution_jobs.js", "lines": "173"},
+      "source": {"path": "pocketbase/pb_migrations/1700007100_execution_jobs.js", "lines": "185"},
       "legacyName": "execution_envelopes",
       "termId": "execution-attempt",
       "targetLabel": null,
       "retiringLeaf": "ROUNDS-02-L01",
-      "note": "Server-only execution job store: each attempt's durable result envelope; no client reads it. #18 ratifies or migrates it."
+      "note": "Execution job store: each attempt's durable result envelope, which only the store writes and only its own account reads (D9). #18 ratifies or migrates it."
     },
     {
       "kind": "collection",
-      "source": {"path": "pocketbase/pb_migrations/1700007100_execution_jobs.js", "lines": "90"},
+      "source": {"path": "pocketbase/pb_migrations/1700007100_execution_jobs.js", "lines": "99"},
       "legacyName": "execution_jobs",
       "termId": "execution-attempt",
       "targetLabel": null,
@@ -173,7 +173,7 @@
     },
     {
       "kind": "collection",
-      "source": {"path": "pocketbase/pb_migrations/1700007100_execution_jobs.js", "lines": "67"},
+      "source": {"path": "pocketbase/pb_migrations/1700007100_execution_jobs.js", "lines": "76"},
       "legacyName": "execution_service",
       "decidedBy": "ROUNDS-00A-L03",
       "targetLabel": null,

@@ -7,15 +7,18 @@ Phases, in the order harness/run.sh runs them:
 
 - ``execution-store``, PocketBase only: the worker record exists and
   only its secret logs in; a ``users`` token and an anonymous caller are
-  refused on the service routes; no client reads or writes the job
-  collections or links an attempt row to an envelope; enqueue needs the
-  account's admitted command and the runner key, answers a duplicate
-  with its job and a different request as a mismatch; another account's
-  cancel is the unknown-id 404; two sessions racing for one job make one
-  attempt; a superseded token's write is counted and never applied; an
-  envelope outside v1 is refused whole; and after a real 31 s, reap
-  re-queues a lease lost before it started and ends one lost after it
-  started worker-lost, and a same-key retry runs attempt two.
+  refused on the service routes; no client writes the job collections,
+  reads jobs or attempts, or links an attempt row to an envelope; an
+  account reads its own envelopes and nobody else's, without the
+  operator view, and a run with hidden material shows the account
+  outcome classes and totals only (D9); enqueue needs the account's admitted command and
+  the runner key, answers a duplicate with its job and a different
+  request as a mismatch; another account's cancel is the unknown-id 404;
+  two sessions racing for one job make one attempt; a superseded token's
+  write is counted and never applied; an envelope outside v1 is refused
+  whole; and after a real 31 s, reap re-queues a lease lost before it
+  started and ends one lost after it started worker-lost, and a same-key
+  retry runs attempt two.
 - ``execution-runners``, both runner replicas up with the store on and
   the secret: each is ready, and each claims jobs and, with no handler
   for any kind yet, ends them ``denied``, ``definition-invalid``, once.
@@ -31,6 +34,7 @@ Prints one PASS/FAIL line per check and exits non-zero on any failure.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import secrets
 import string
@@ -51,6 +55,11 @@ ROTATED = os.environ.get("ROUNDS_EXECUTION_SECRET_ROTATED", "")
 STORE = "/api/rounds/execution"
 LOGIN = "/api/collections/execution_service/auth-with-password"
 COLLECTIONS = ("execution_jobs", "execution_attempts", "execution_envelopes")
+# What an account reads of a run with hidden material: these and numbers.
+OUTCOME_WORDS = {"completed", "timed-out", "denied", "canceled", "failed", "passed", "candidate-failure",
+                 "resource-limit", "definition-invalid", "policy-violation", "worker-lost", "infrastructure-degraded",
+                 "pending", "confirmed", "unconfirmed", "wall_time", "cpu_time", "memory", "processes", "files",
+                 "output"}
 ENVELOPE = "rounds.execution-envelope/v1"
 DEFINITION = {"track": "coding", "slug": "two-sum", "variant": "python", "version": 1}
 LEASE_S = 30
@@ -121,6 +130,17 @@ def envelope(job_id: str, state: str = "completed", outcome: str = "passed", sco
             "user_view": user, "operator_view": operator}
 
 
+def leaves(value: Any):
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from leaves(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from leaves(item)
+    else:
+        yield value
+
+
 def row(pb: PBClient, admin: str, collection: str, record_id: str) -> dict:
     resp = pb.view(collection, record_id, admin)
     return resp.body if resp.status == 200 and isinstance(resp.body, dict) else {}
@@ -161,12 +181,13 @@ def run_store(c: Checks) -> None:
     status, _ = caller(svc, "enqueue", enqueue_body(uuid7(), "a" * 64))
     c.check("execution.caller.enqueue-refuses-the-service-record", status == 403, f"status={status}")
 
-    # No client reads or writes the job collections.
+    # No client writes the job collections, and none reads a job or an
+    # attempt; an account reads its own envelopes only (below).
     for name in COLLECTIONS:
         listed = pb.listing(name, a.token)
-        created = pb.create(name, a.token, {"account": a.user_id})
+        created = pb.create(name, a.token, {"account": a.user_id, "user": a.user_id})
         c.check(f"execution.collections.{name}-closed-to-clients",
-                listed.status in (200, 403) and not (listed.body or {}).get("items") and created.status in (400, 403),
+                listed.status in (200, 403) and not (listed.body or {}).get("items") and created.status == 403,
                 f"list={listed.status} create={created.status}")
     c.check("execution.collections.service-records-closed", pb.listing("execution_service", a.token).status == 403,
             "a user listed the service records")
@@ -249,6 +270,50 @@ def run_store(c: Checks) -> None:
             late[0] == 409 and (late[1] or {}).get("error") == "superseded"
             and row(pb, admin, "execution_attempts", attempt).get("rejected_writes", 0) >= 1, f"status={late[0]}")
 
+    # D9: the account reads its own envelope, without the operator view,
+    # which stays on the attempt; nobody else reads it.
+    env_id = envs[0]["id"] if envs else "x" * 15
+    own_list = pb.listing("execution_envelopes", a.token)
+    own_view = pb.view("execution_envelopes", env_id, a.token)
+    seen = own_view.body if own_view.status == 200 and isinstance(own_view.body, dict) else {}
+    c.check("execution.envelopes.the-account-reads-its-own",
+            [i.get("id") for i in (own_list.body or {}).get("items", [])] == [env_id] and own_view.status == 200
+            and "user_view" in seen and "operator_view" not in seen
+            and (row(pb, admin, "execution_attempts", attempt).get("operator_view") or {}).get("worker") == "harness",
+            f"list={own_list.status} view={own_view.status}")
+    other_list = pb.listing("execution_envelopes", b.token)
+    other_view = pb.view("execution_envelopes", env_id, b.token)
+    anon_list = pb.listing("execution_envelopes", None)
+    anon_view = pb.view("execution_envelopes", env_id, None)
+    c.check("execution.envelopes.nobody-else-reads-them",
+            not (other_list.body or {}).get("items") and other_view.status == 404
+            and not (anon_list.body or {}).get("items") and anon_view.status == 404,
+            f"other={other_list.status}/{other_view.status} anonymous={anon_list.status}/{anon_view.status}")
+
+    # A run with hidden material shows the account outcome classes and
+    # the server's totals, never output.
+    grade_token = token43()
+    _gkey, _gfp, grade_job = new_job(a.token, "grade")
+    grade_claim = service(svc, "claim", {"worker": "harness", "token_hash": sha(grade_token)})[1] or {}
+    grade_attempt = (grade_claim.get("attempt") or {}).get("id", "")
+    service(svc, "heartbeat", {"attempt_id": grade_attempt, "token": grade_token, "started": True, "budget_s": 45})
+    graded = envelope(grade_job or "", outcome="candidate-failure", score=0.5)
+    graded["user_view"]["parts"] = [{"id": "checkpoint-1", "outcome_class": "passed", "limit": None},
+                                    {"id": "checkpoint-2", "outcome_class": "candidate-failure", "limit": None}]
+    shown = json.loads(json.dumps(graded))
+    shown["user_view"]["output"] = {"stdout": "printed by a hidden test"}
+    refused_output = service(svc, "complete", {"attempt_id": grade_attempt, "token": grade_token, "result": shown})[0]
+    graded_done = service(svc, "complete", {"attempt_id": grade_attempt, "token": grade_token, "result": graded})[0]
+    grade_envs = rows(pb, admin, "execution_envelopes", f"job = '{grade_job}'")
+    grade_seen = pb.view("execution_envelopes", grade_envs[0]["id"] if grade_envs else "x" * 15, a.token)
+    words = OUTCOME_WORDS | {ENVELOPE, grade_job, "checkpoint-1", "checkpoint-2"}
+    only_outcomes = grade_seen.status == 200 and all(
+        leaf is None or isinstance(leaf, (bool, int, float)) or leaf in words
+        for leaf in leaves((grade_seen.body or {}).get("user_view")))
+    c.check("execution.envelopes.hidden-material-shows-outcomes-and-totals-only",
+            refused_output == 400 and graded_done == 200 and len(grade_envs) == 1 and only_outcomes,
+            f"with-output={refused_output} without={graded_done} view={grade_seen.status}")
+
     # An attempt row can't be linked to an envelope by its owner.
     rounds = pb.listing("ai_coding_rounds", a.token, {"perPage": 1})
     round_id = ((rounds.body or {}).get("items") or [{}])[0].get("id")
@@ -261,8 +326,18 @@ def run_store(c: Checks) -> None:
         c.check("execution.attempt-rows.no-client-links-an-envelope",
                 linked.status == 400 and plain.status == 200 and relinked.status == 400,
                 f"create={linked.status} plain={plain.status} update={relinked.status}")
+        # The server links a row to its account's envelope, and the account
+        # reads it through the row (D9).
+        attempt_row_id = (plain.body or {}).get("id", "")
+        pb.update("ai_coding_attempts", attempt_row_id, {"envelope": env_id}, admin)
+        expanded = pb.get(f"/api/collections/ai_coding_attempts/records/{attempt_row_id}?expand=envelope", a.token)
+        got = ((expanded.body or {}).get("expand") or {}).get("envelope") or {}
+        c.check("execution.attempt-rows.the-account-reads-its-envelope-through-the-row",
+                expanded.status == 200 and got.get("id") == env_id and "operator_view" not in got,
+                f"status={expanded.status}")
     else:
         c.check("execution.attempt-rows.no-client-links-an-envelope", False, "no AI-coding round to attach a row to")
+        c.check("execution.attempt-rows.the-account-reads-its-envelope-through-the-row", False, "no AI-coding round")
 
     # Lost leases, after 31 s of PocketBase time.
     early_token, late_token = token43(), token43()

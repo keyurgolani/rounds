@@ -16,6 +16,8 @@ from execution import envelope, kinds
 from execution.envelope import InvalidEnvelope, Part
 
 HOOKS = Path(__file__).resolve().parents[2] / "pocketbase" / "pb_hooks"
+RECEIPT = {"track": "coding", "slug": "two-sum", "variant": "python", "content_version": 1,
+           "checksum": "sha256:" + "e" * 64}
 
 
 def _build(state="completed", outcome_class="passed", limit=None, score=None, **extra):
@@ -117,11 +119,71 @@ def test_only_a_passed_or_failed_solution_scores_and_only_from_0_to_1():
 
 
 def test_the_user_view_has_only_the_v1_keys_and_no_harness_output():
-    env = _build(parts=[Part("case-1", "passed")], definition={"track": "coding", "slug": "two-sum"})
+    env = _build(parts=[Part("case-1", "passed")], definition=RECEIPT)
     assert tuple(env["user_view"]) == envelope.USER_VIEW_KEYS
     assert tuple(env["operator_view"]) == envelope.OPERATOR_VIEW_KEYS
     assert env["user_view"]["output"] is None and env["operator_view"]["image_digest"] is None
     assert env["operator_view"]["executor_kind"] == "legacy-in-process"
+
+
+def _leaves(value):
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _leaves(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _leaves(item)
+    else:
+        yield value
+
+
+def test_a_run_with_hidden_material_shows_only_outcome_classes_and_the_servers_totals():
+    """D9: the account reads its own envelope, so a grading envelope's user
+    view is enums, ids, times, the score, and the receipt, and no text a
+    run printed or a hidden test held."""
+    assert {k for k, kind in kinds.KINDS.items() if kind.hidden_material} == {"grade", "take_home_submit"}
+    parts = [Part("checkpoint-1", "passed"), Part("checkpoint-2", "candidate-failure"),
+             Part("checkpoint-3", "resource-limit", "wall_time")]
+    env = _build("timed-out", "resource-limit", "wall_time", parts=parts, definition=RECEIPT,
+                 rubric={"state": "requested"}, hidden_material=True)
+    user = env["user_view"]
+    assert user["output"] is None and user["score"] is None
+    allowed = (set(kinds.OUTCOME_CLASSES) | set(kinds.LIMITS) | set(kinds.TERMINAL) | set(kinds.CLEANUP)
+               | set(envelope.RUBRIC_STATES) | {envelope.ENVELOPE_VERSION, "job000000000001"}
+               | {p.id for p in parts} | {v for v in RECEIPT.values() if isinstance(v, str)})
+    for leaf in _leaves(user):
+        assert leaf is None or isinstance(leaf, (bool, int, float)) or leaf in allowed, leaf
+    with pytest.raises(InvalidEnvelope):
+        _build(parts=[Part("a", "passed")], output={"stdout": "ok"}, hidden_material=True)
+    # A scratch kind may show visible output, within #2's cap.
+    assert _build(output={"stdout": "ok"})["user_view"]["output"] == {"stdout": "ok"}
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda u: u["parts"][0].update(expected=[1, 2]),
+        lambda u: u["parts"][0].update(stdout="hidden"),
+        lambda u: u["parts"][0].update(id="a b"),
+        lambda u: u["parts"][0].update(outcome_class="skipped"),
+        lambda u: u["parts"].extend([{"id": f"p{i}", "outcome_class": "passed", "limit": None} for i in range(64)]),
+        lambda u: u.update(definition=dict(RECEIPT, harness="tests/hidden.py")),
+        lambda u: u.update(definition=dict(RECEIPT, checksum="e" * 64)),
+        lambda u: u.update(rubric={"state": "completed", "feedback": "text"}),
+        lambda u: u.update(rubric={"state": "graded"}),
+        lambda u: u.update(output="text"),
+        lambda u: u.update(output={"stdout": "x" * envelope.OUTPUT_MAX_CHARS}),
+        lambda u: u.update(job_id="not-a-record-id"),
+        lambda u: u.update(started_at=-1),
+    ],
+    ids=["part-expected", "part-stdout", "part-id", "part-class", "too-many-parts", "receipt-extra", "receipt-checksum",
+         "rubric-text", "rubric-state", "output-text", "output-size", "job-id", "times"],
+)
+def test_nothing_but_the_v1_shapes_gets_into_the_user_view(change):
+    env = _build(parts=[Part("a", "passed")], definition=RECEIPT, score=1.0)
+    change(env["user_view"])
+    with pytest.raises(InvalidEnvelope):
+        envelope.validate(env)
 
 
 # ---- the store makes the same checks --------------------------------------
@@ -162,12 +224,17 @@ def _mutations():
     change("bytes", lambda e: e["operator_view"].update(output_bytes=-1))
     change("bytes-float", lambda e: e["operator_view"].update(output_bytes=1.5))
     change("exit", lambda e: e["operator_view"].update(exit_status="0"))
-    change("user-size", lambda e: e["user_view"].update(output={"stdout": "x" * envelope.USER_VIEW_MAX_CHARS}))
+    change("output-size", lambda e: e["user_view"].update(output={"stdout": "x" * envelope.OUTPUT_MAX_CHARS}))
+    change("part-key", lambda e: e["user_view"]["parts"][0].update(expected=[1]))
+    change("receipt", lambda e: e["user_view"].update(definition={"track": "coding", "slug": "two-sum"}))
+    change("rubric", lambda e: e["user_view"].update(rubric={"state": "completed", "feedback": "x"}))
     change("operator-size", lambda e: e["operator_view"].update(worker="w" * envelope.OPERATOR_VIEW_MAX_CHARS))
     # One emoji is two UTF-16 code units, as JavaScript counts: over the
     # cap in code units, well under it in code points.
-    change("user-size-utf16", lambda e: e["user_view"].update(
-        output={"s": "\U0001F600" * (envelope.USER_VIEW_MAX_CHARS // 2 + 10)}))
+    change("output-size-utf16", lambda e: e["user_view"].update(
+        output={"s": "\U0001F600" * (envelope.OUTPUT_MAX_CHARS // 2 + 10)}))
+    cases.append(("valid-receipt-and-output", _build(parts=[Part("a", "passed")], score=1.0, definition=RECEIPT,
+                                                     rubric={"state": "lost"}, output={"stdout": "ok"})))
     change("state-type", lambda e: e.update(state=["completed"]))
     return cases
 

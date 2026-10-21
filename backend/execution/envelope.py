@@ -22,15 +22,19 @@ channel is ``resource-limit`` when an enforced limit killed the child and
 ``infrastructure-degraded`` otherwise, and each id a partial channel
 leaves out gets the same class.
 
-The user view carries no hidden-harness output: a part is its id, class,
-and limit, and ``output`` is the visible output a handler chose to show,
-or null. The operator view adds the digests, measurements, and the
-executor's kind.
+The account reads its own envelopes (D9), so the user view carries no
+hidden material: a part is its id, class, and limit, ``definition`` is
+#2's receipt, ``rubric`` is the review's state, and ``output`` is the
+visible output a handler chose to show, at most 256 KiB, and always null
+for a kind with hidden material (grading). The operator view adds the
+digests, measurements, and the executor's kind; the store keeps it on the
+attempt, which only the service reads.
 """
 from __future__ import annotations
 
 import json
 import math
+import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -49,6 +53,17 @@ OPERATOR_VIEW_KEYS = (
 # pb_hooks/execution.js caps each view's JSON at as many characters.
 USER_VIEW_MAX_CHARS = 1024 * 1024
 OPERATOR_VIEW_MAX_CHARS = 64 * 1024
+# #2's cap on the visible output a run may show.
+OUTPUT_MAX_CHARS = 256 * 1024
+MAX_PARTS = 64
+PART_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
+RECORD_ID = re.compile(r"[a-z0-9]{15}")
+TRACKS = ("coding", "ai-coding", "take-home")
+SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+VARIANT = re.compile(r"[a-z]{1,16}")
+CHECKSUM = re.compile(r"sha256:[0-9a-f]{64}")
+RUBRIC_STATES = ("requested", "completed", "lost")
+RECEIPT_KEYS = ("track", "slug", "variant", "content_version", "checksum")
 # The order a disagreement between parts resolves in.
 NON_AUTHORITATIVE = ("policy-violation", "definition-invalid", "canceled", "worker-lost", "infrastructure-degraded")
 _STATE_FOR = {
@@ -166,6 +181,7 @@ def build(
     peak_rss_bytes: int | None = None,
     build_revision: str | None = None,
     image_digest: str | None = None,
+    hidden_material: bool = False,
 ) -> dict[str, Any]:
     """The result ``complete`` takes, checked with ``validate``."""
     envelope = {
@@ -208,12 +224,47 @@ def build(
             "graded_row": None,
         },
     }
-    validate(envelope)
+    validate(envelope, hidden_material=hidden_material)
     return envelope
 
 
 def _count(value: Any) -> bool:
     return value is None or (isinstance(value, int) and not isinstance(value, bool) and value >= 0)
+
+
+def _int_at_least(value: Any, least: int) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= least
+
+
+def _part_ok(part: Any) -> bool:
+    """A part is its id, its outcome class, and the limit a resource-limit
+    names, so it can't carry what a test expected or printed."""
+    if not isinstance(part, dict) or set(part) != {"id", "outcome_class", "limit"}:
+        return False
+    if not isinstance(part["id"], str) or not PART_ID.fullmatch(part["id"]):
+        return False
+    if part["outcome_class"] not in kinds.OUTCOME_CLASSES:
+        return False
+    if part["limit"] is None:
+        return part["outcome_class"] != "resource-limit"
+    return part["outcome_class"] == "resource-limit" and part["limit"] in kinds.LIMITS
+
+
+def _receipt_ok(ref: Any) -> bool:
+    """#2's receipt for what ran, or null."""
+    if ref is None:
+        return True
+    if not isinstance(ref, dict) or set(ref) != set(RECEIPT_KEYS):
+        return False
+    if ref["track"] not in TRACKS:
+        return False
+    if not isinstance(ref["slug"], str) or len(ref["slug"]) > 100 or not SLUG.fullmatch(ref["slug"]):
+        return False
+    if ref["variant"] is not None and not (isinstance(ref["variant"], str) and VARIANT.fullmatch(ref["variant"])):
+        return False
+    if not _int_at_least(ref["content_version"], 1) or ref["content_version"] > 9999:
+        return False
+    return isinstance(ref["checksum"], str) and bool(CHECKSUM.fullmatch(ref["checksum"]))
 
 
 def _within(value: Any, limit: int) -> bool:
@@ -226,10 +277,10 @@ def _within(value: Any, limit: int) -> bool:
     return len(text.encode("utf-16-le", errors="surrogatepass")) // 2 <= limit
 
 
-def validate(envelope: Any) -> None:
+def validate(envelope: Any, hidden_material: bool = False) -> None:
     """Raise ``InvalidEnvelope`` unless ``envelope`` is one ``complete``
-    takes. The same checks as ``checkResult`` in
-    pocketbase/pb_hooks/execution.js."""
+    takes for a kind with or without hidden material. The same checks as
+    ``checkResult`` and ``complete`` in pocketbase/pb_hooks/execution.js."""
     if not isinstance(envelope, dict) or set(envelope) != {
         "state", "outcome_class", "authoritative", "cleanup", "user_view", "operator_view",
     }:
@@ -246,6 +297,8 @@ def validate(envelope: Any) -> None:
         raise InvalidEnvelope("the user view's keys")
     if user["version"] != ENVELOPE_VERSION:
         raise InvalidEnvelope("the user view's version")
+    if not isinstance(user["job_id"], str) or not RECORD_ID.fullmatch(user["job_id"]):
+        raise InvalidEnvelope("the job id")
     for key in ("state", "outcome_class", "authoritative", "cleanup"):
         if user[key] != envelope[key] or type(user[key]) is not type(envelope[key]):
             raise InvalidEnvelope(f"the user view's {key}")
@@ -253,7 +306,8 @@ def validate(envelope: Any) -> None:
         raise InvalidEnvelope("the limit")
     if (envelope["outcome_class"] == "resource-limit") != (user["limit"] is not None):
         raise InvalidEnvelope("a resource-limit names its limit, and only it does")
-    if not isinstance(user["parts"], list):
+    parts = user["parts"]
+    if not isinstance(parts, list) or len(parts) > MAX_PARTS or not all(_part_ok(part) for part in parts):
         raise InvalidEnvelope("parts")
     score = user["score"]
     if score is not None:
@@ -261,6 +315,22 @@ def validate(envelope: Any) -> None:
             raise InvalidEnvelope("score")
         if not 0 <= score <= 1 or envelope["outcome_class"] not in ("passed", "candidate-failure"):
             raise InvalidEnvelope("only a passed or failed solution scores")
+    if not _receipt_ok(user["definition"]):
+        raise InvalidEnvelope("the definition receipt")
+    if not _int_at_least(user["queued_at"], 0) or not _int_at_least(user["finished_at"], 0):
+        raise InvalidEnvelope("the times")
+    if user["started_at"] is not None and not _int_at_least(user["started_at"], 0):
+        raise InvalidEnvelope("the times")
+    rubric = user["rubric"]
+    if rubric is not None and not (isinstance(rubric, dict) and set(rubric) == {"state"}
+                                   and rubric["state"] in RUBRIC_STATES):
+        raise InvalidEnvelope("the rubric's state")
+    output = user["output"]
+    if output is not None:
+        if hidden_material:
+            raise InvalidEnvelope("a run with hidden material shows no output")
+        if not isinstance(output, dict) or not _within(output, OUTPUT_MAX_CHARS):
+            raise InvalidEnvelope("the output")
     if not _within(user, USER_VIEW_MAX_CHARS):
         raise InvalidEnvelope("the user view isn't JSON within its size")
     operator = envelope["operator_view"]

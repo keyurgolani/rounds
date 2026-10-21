@@ -47,6 +47,10 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
   execution-migration
             apply and reverse the execution job store's migration with the
             pinned binary; see execution_migration_check.py.
+  json-limits
+            every JSON field's declared limit on fresh and upgraded databases
+            with the pinned binary, and the registry migration's down step
+            (ROUNDS-00A-L03, D10); see json_limits_check.py.
 
 Exit code is non-zero on any failure, any missing result, or any pending
 family that has started to behave like an implemented one.
@@ -454,7 +458,7 @@ def main() -> int:
         print("usage: run.py {main|hook|deploy|degraded|deploy-db|verdict|scan|admission|admission-migration|"
               "admission-deploy|emergency-disable|emergency-enable|relation-quarantine|snapshot-store|"
               "execution-store|execution-runners|execution-unready|execution-ready-again|execution-disabled|"
-              "execution-migration}", file=sys.stderr)
+              "execution-migration|json-limits}", file=sys.stderr)
         return 2
     phase = sys.argv[1]
     if phase == "relation-quarantine":
@@ -481,6 +485,10 @@ def main() -> int:
         import execution_migration_check
 
         return execution_migration_check.main()
+    if phase == "json-limits":
+        import json_limits_check
+
+        return json_limits_check.main()
     if phase.startswith("execution-"):
         import execution_check
 
