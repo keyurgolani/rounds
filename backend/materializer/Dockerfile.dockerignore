@@ -1,0 +1,16 @@
+# The materializer's build context is the repository root
+# (backend/materializer/Dockerfile). Everything is excluded, then only the
+# materializer and the frontend sources it bundles are let back in.
+*
+!backend/materializer/
+backend/materializer/node_modules
+backend/materializer/dist
+backend/materializer/test
+!frontend/src/features/resume/templates/
+frontend/src/features/resume/templates/__tests__
+!frontend/src/features/resume/types.ts
+!frontend/src/features/resume/utils.ts
+!frontend/src/features/resume/links/types.ts
+!frontend/src/features/resume/export/shell.ts
+# Only for its module type, which esbuild reads.
+!frontend/package.json

@@ -4,7 +4,7 @@ Pushes to main publish sha-<short> and move edge. Only a v* tag publishes the
 version tags and moves X.Y and latest, and only after CI passed on a push of
 that exact commit to main; the gate fails closed. Builds push only tags that
 never move; one job, one at a time across the repository, moves edge, X.Y,
-and latest for all four images after every build passed. Pull requests into
+and latest for all five images after every build passed. Pull requests into
 main and next lint their migration changes, and CODEOWNERS routes the files
 that decide all this to the owner."""
 from __future__ import annotations
@@ -86,7 +86,7 @@ def test_the_plan_job_gates_publishing_and_holds_no_publishing_rights():
     assert publish["if"] == "needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release'"
     assert publish["permissions"] == {"contents": "read", "packages": "write"}
     move = jobs["move-tags"]
-    # Needing the matrix job means every one of the four builds passed.
+    # Needing the matrix job means every one of the five builds passed.
     assert move["needs"] == ["plan", "publish"]
     assert move["if"] == publish["if"]
     assert move["permissions"] == {"contents": "read", "packages": "write"}
@@ -197,7 +197,7 @@ def test_codeowners_routes_the_release_and_migration_files_to_the_owner():
 def test_compose_takes_one_image_tag_and_defaults_to_latest():
     compose = yaml.safe_load((ROOT / "docker-compose.prod.yml").read_text())
     images = {name: svc["image"] for name, svc in compose["services"].items() if "image" in svc}
-    assert set(images) == {"frontend", "pocketbase", "runner", "pdf-renderer"}
+    assert set(images) == {"frontend", "pocketbase", "runner", "pdf-renderer", "materializer"}
     for name, image in images.items():
         variable = "ROUNDS_" + name.upper().replace("-", "_") + "_IMAGE"
         assert image == f"${{{variable}:-keyurgolani/rounds-{name}:${{ROUNDS_IMAGE_TAG:-latest}}}}", name
@@ -211,7 +211,7 @@ def test_k8s_pins_every_deployment_image_in_one_place():
         for doc in yaml.safe_load_all((ROOT / "k8s" / manifest).read_text()):
             if doc and doc.get("kind") == "Deployment":
                 images += [c["image"] for c in doc["spec"]["template"]["spec"]["containers"]]
-    assert len(images) == 3
+    assert len(images) == 4
     for image in images:
         name, _, tag = image.rpartition(":")
         # The pin repeats the manifests' tag, so applying the base runs what it ran before.
@@ -519,12 +519,14 @@ def _pushed(prefix: str, tag: str, images=gate.IMAGES) -> set[str]:
     return {f"{prefix}-{image}:{tag}" for image in images}
 
 
-def test_each_tag_moves_for_all_four_images_on_every_registry():
+def test_each_tag_moves_for_all_five_images_on_every_registry():
     docker = FakeDocker(_pushed(GHCR, "1.2.0") | _pushed(HUB, "1.2.0"))
     moved = gate.retag([("1.2", "1.2.0"), ("latest", "1.2.0")], [GHCR, HUB], docker)
     assert moved == [f"{GHCR}-*:1.2 -> 1.2.0", f"{GHCR}-*:latest -> 1.2.0", f"{HUB}-*:1.2 -> 1.2.0", f"{HUB}-*:latest -> 1.2.0"]
     created = docker.created()
-    assert len(created) == 16
+    # Two registries, two moving tags, five images.
+    assert len(gate.IMAGES) == 5
+    assert len(created) == 20
     for prefix in (GHCR, HUB):
         for image in gate.IMAGES:
             for moving in ("1.2", "latest"):
@@ -688,7 +690,7 @@ def test_retag_moves_edge_on_each_configured_registry(actions_env, monkeypatch, 
     assert gate.main(["retag"], run=docker) == 0
     created = docker.created()
     assert {p for p in (GHCR, HUB) for tag, _source in created if tag.startswith(p + "-")} == set(prefixes)
-    assert len(created) == 4 * len(prefixes)
+    assert len(created) == 5 * len(prefixes)
     assert all(tag.endswith(":edge") and source.endswith(":sha-aaaaaaa") for tag, source in created)
     assert not actions_env.exists()
     assert "moved: " in capsys.readouterr().out

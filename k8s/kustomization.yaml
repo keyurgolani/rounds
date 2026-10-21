@@ -7,6 +7,7 @@ resources:
   - namespace.yaml
   - gates.yaml
   - pocketbase.yaml
+  - materializer.yaml
   - runner.yaml
   - frontend.yaml
   - ingress.yaml
@@ -19,6 +20,8 @@ images:
   - name: ghcr.io/your-org/rounds-frontend
     newTag: "1.0.0"
   - name: ghcr.io/your-org/rounds-pocketbase
+    newTag: "1.0.0"
+  - name: ghcr.io/your-org/rounds-materializer
     newTag: "1.0.0"
   - name: ghcr.io/your-org/rounds-runner
     newTag: "1.0.0"

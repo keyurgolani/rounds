@@ -210,6 +210,8 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
                 writer.write(families.create_server_only_denied(pb, name, b.token, payload, admin_token, c.user_id, expected))
             elif pid == families.SERVER_ONLY_UPDATE_FAMILY:
                 writer.write(families.update_server_only_denied(pb, name, a.ids[name], a.token, expected))
+            elif pid == families.SERVER_ONLY_DELETE_FAMILY:
+                writer.write(families.delete_server_only_denied(pb, name, a.ids[name], a.token, expected))
             elif pid == families.SUPERUSER_CREATE_FAMILY:
                 # Owner a owns both the view row and the share link it points
                 # at, so the superuser insert is not a cross-owner relation.
@@ -441,13 +443,17 @@ def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozens
 def main() -> int:
     if len(sys.argv) < 2:
         print("usage: run.py {main|hook|deploy|degraded|deploy-db|verdict|scan|admission|admission-migration|"
-              "admission-deploy|emergency-disable|emergency-enable|relation-quarantine}", file=sys.stderr)
+              "admission-deploy|emergency-disable|emergency-enable|relation-quarantine|snapshot-store}", file=sys.stderr)
         return 2
     phase = sys.argv[1]
     if phase == "relation-quarantine":
         import relation_quarantine_check
 
         return relation_quarantine_check.main()
+    if phase == "snapshot-store":
+        import snapshot_store_check
+
+        return snapshot_store_check.main()
     if phase == "scan":
         import scan_check
 

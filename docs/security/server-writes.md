@@ -47,6 +47,10 @@ A Caller route writes only the caller's rows. The account and its tier come from
 
 `pb_hooks/admission.pb.js` also refuses any client create or update that sets or changes `users.is_demo`, `demo_run_used`, or `demo_evaluate_used`, including an OAuth2 sign-up's `createData`. Superusers, migrations, and server hooks can still set them.
 
+## Legacy Artifact Snapshots
+
+#4's PR 1 adds `legacy_artifact_snapshots` in `pocketbase/pb_migrations/1700008000_legacy_artifact_snapshots.js`. Its owner can list and view a row; create, update, and delete are `null`. Nothing writes it yet. Its one writer is the Caller route in #4's row below, which PR 2 adds behind `legacy_snapshot_create` (default off). That route reads a resume or variant only after checking the caller owns it, and stores the markup the `materializer` service returns for it. The materializer itself writes nothing, holds no credential, and answers only PocketBase. The migration writes no row, and its down step drops the collection only while it's empty.
+
 ## Registry of Planned Writers
 
 Each row restates the leaf's current body. The leaf confirms or corrects its row in the PR that adds the writer. Credentials appear by environment variable name only.
@@ -59,7 +63,7 @@ Each row restates the leaf's current body. The leaf confirms or corrects its row
 | #3 | Caller | `enqueue` and owner `cancel` in `pb_hooks/execution.pb.js`, under `/api/rounds/execution/` | `execution_jobs`, and the `job_id` on #1's admission row | caller's bearer |
 | #3 | Service | `execution_service`, one record (`execution-worker`): `claim`, `heartbeat`, `complete`, `reap` | `execution_jobs`, `execution_attempts`, `execution_envelopes`, and the graded rows in `ai_coding_attempts` and `take_home_attempts`, which `complete` writes with the envelope | `ROUNDS_EXECUTION_SECRET` |
 | #3 | System hook | `onBeforeServe` in `pb_hooks/execution.pb.js`, which creates `execution-worker` or resets its password | `execution_service` | `ROUNDS_EXECUTION_SECRET` |
-| #4 | Caller | `POST /api/rounds/legacy-snapshots`, which the runner calls with the caller's bearer | `legacy_artifact_snapshots`, and it completes the `admission_commands` row | caller's bearer |
+| #4 | Caller | `POST /api/rounds/legacy-snapshots` (PR 2, behind `legacy_snapshot_create`), which the runner calls with the caller's bearer; it gets the markup from the `materializer` service over the internal `materialize` network | `legacy_artifact_snapshots` and its `markup` file, and it completes the `admission_commands` row | caller's bearer |
 | #6 | Service | `execution_service` `claim` and `complete` for render jobs | the render output record and its PDF | `ROUNDS_EXECUTION_SECRET` |
 | #10 | Migration, then operator | `1700007000_relation_endpoint_authz.js` at start; then an operator's replay with `pocketbase/levers/replay_quarantine.template.js`, a one-off `migrate up` whose every write the relation triggers re-check, or the admin API to mark an entry `dropped` ([operations.md](../operations.md#relation-endpoint-authorization-and-quarantine)) | `relation_quarantine` and `relation_quarantine_reports`; it moves or clears the cross-owner rows in the 22 collections that hold a typed relation. A replay writes the replayed row or field and the entry's `status` | none for the migration or the lever; the admin token to mark an entry `dropped` |
 | #11 S2 | Caller | the owner's `POST /api/rounds/share/capabilities/:id/revoke` | `share_capabilities` | caller's bearer |

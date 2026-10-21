@@ -11,3 +11,7 @@ __pycache__
 # full checkout (the definitions CI job), never in the image.
 ai_coding/rounds
 take_home/assignments
+
+# The snapshot materializer is its own image, built from the repository
+# root (backend/materializer/Dockerfile); the runner never runs it.
+materializer

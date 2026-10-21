@@ -331,7 +331,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 
 ## Adapters
 
-163 entries: 49 collection, 3 field, 19 stored-value, 8 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
+164 entries: 50 collection, 3 field, 19 stored-value, 8 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
 
 ### collection
 
@@ -366,6 +366,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 | experience_jobs | `pocketbase/pb_migrations/1700002000_experience_entities.js:24` | `engagement` | Engagement | #164 (ROUNDS-32-L10) |
 | experience_projects | `pocketbase/pb_migrations/1700002000_experience_entities.js:66` | `project` | Project | #164 (ROUNDS-32-L10) |
 | interview_rounds | `pocketbase/pb_migrations/1700000000_init_collections.js:340` | `career-activity` | Interview | #110 (ROUNDS-22-L05) |
+| legacy_artifact_snapshots | `pocketbase/pb_migrations/1700008000_legacy_artifact_snapshots.js:63` | `legacy-artifact-snapshot` |  | #161 (ROUNDS-32-L07) |
 | offers | `pocketbase/pb_migrations/1700000000_init_collections.js:487` | `offer` | Offer | #164 (ROUNDS-32-L10) |
 | question_timers | `pocketbase/pb_migrations/1700001500_question_timers.js:21` | `practice-session` | Practice Session | #164 (ROUNDS-32-L10) |
 | relation_quarantine | `pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js:242` | decided by #10 (ROUNDS-00B-L02) |  | #10 (ROUNDS-00B-L02) |

@@ -20,6 +20,6 @@ def _pod_specs() -> dict[str, dict]:
 
 def test_no_pod_mounts_a_service_account_token():
     specs = _pod_specs()
-    assert set(specs) == {"runner.yaml", "pocketbase.yaml", "frontend.yaml"}
+    assert set(specs) == {"runner.yaml", "pocketbase.yaml", "frontend.yaml", "materializer.yaml"}
     for name, spec in specs.items():
         assert spec.get("automountServiceAccountToken") is False, name

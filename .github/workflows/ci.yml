@@ -76,6 +76,27 @@ jobs:
             -v "$PWD/backend/pdf_renderer/server.test.mjs:/app/server.test.mjs:ro" \
             rounds-pdf-renderer:test node --test server.test.mjs
 
+  materializer:
+    # Legacy Artifact Snapshot materializer (ROUNDS-00A-L04). Builds the
+    # image from the repository root through its Dockerfile.dockerignore and
+    # runs the tests inside it, offline, read-only, and as its own user:
+    # every template twice to the same bytes, each bad input to the same
+    # reason, the output checks, the tests/conformance/rd_02 sub-cases, and
+    # the HTTP surface. Locally use Finch (finch build -f
+    # backend/materializer/Dockerfile .; finch run ... node --test).
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the materializer image
+        run: docker build -f backend/materializer/Dockerfile -t rounds-materializer:test .
+      - name: Tests in the image
+        run: |
+          docker run --rm --network none --read-only \
+            -v "$PWD/backend/materializer/test:/app/test:ro" \
+            -v "$PWD/tests/conformance/rd_02:/tests/conformance/rd_02:ro" \
+            rounds-materializer:test node --test 'test/*.test.mjs'
+
   conformance:
     # Repository conformance rules (ROUNDS-01-L01, ROUNDS-01-L02): the
     # product vocabulary registry and its coverage of baseline names, the

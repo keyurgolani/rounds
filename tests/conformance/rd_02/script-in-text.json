@@ -1,0 +1,42 @@
+{
+  "id": "RD-02.script-in-text",
+  "fixture": "RD-02",
+  "title": "A script tag in text fields renders as text",
+  "closing_leaf": "ROUNDS-00A-L04",
+  "target": "legacy-snapshot-materializer",
+  "input": {
+    "template_id": "modern",
+    "design": {},
+    "data": {
+      "personalInfo": {
+        "fullName": "<script>document.title='rd02'</script>",
+        "email": "rd02@example.test",
+        "title": "Engineer",
+        "summary": "</p><script src=\"https://rd02.invalid/x.js\"></script>"
+      },
+      "experience": [
+        {
+          "id": "e1",
+          "company": "<script>alert(1)</script>",
+          "position": "Engineer",
+          "highlights": [
+            "<script>alert(2)</script>"
+          ]
+        }
+      ],
+      "education": [],
+      "skills": [],
+      "projects": [],
+      "publications": [],
+      "profiles": []
+    }
+  },
+  "expected": {
+    "status": "ok",
+    "template_id": "modern",
+    "template_fallback": false,
+    "markup_excludes": [
+      "<script"
+    ]
+  }
+}

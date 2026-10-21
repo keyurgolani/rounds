@@ -83,8 +83,17 @@ def test_owned_and_server_only_match_the_policy(src, policy):
     assert server_only == ["resume_share_views"]
     assert len(owned) == 29 and len(set(owned)) == 29
 
-    policy_collections = set(policy["collections"]) - {"users"}
-    assert set(owned) | set(server_only) == policy_collections
+    # The rows this migration rules are exactly its two arrays.
+    ruled_here = {
+        name for name, row in policy["collections"].items() if row["target_rule_migration"] == MIGRATION.name
+    }
+    assert set(owned) | set(server_only) == ruled_here
+    # Every other row is users or a collection a later migration creates
+    # with its rules already in place, such as #4's snapshot store.
+    for name in set(policy["collections"]) - ruled_here - {"users"}:
+        row = policy["collections"][name]
+        assert row["migration"] == row["target_rule_migration"] > MIGRATION.name, name
+        assert (MIGRATION.parent / row["migration"]).is_file(), name
     # users keeps its 0.22.22 defaults; the migration must not touch it.
     assert "users" not in owned and "users" not in server_only
 

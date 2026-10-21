@@ -7,6 +7,7 @@ install and no new dependency enters the repo. Every call returns a
 from __future__ import annotations
 
 import json
+import secrets
 import time
 import urllib.error
 import urllib.parse
@@ -35,6 +36,7 @@ class PBClient:
         token: str | None = None,
         params: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
+        raw_body: tuple[bytes, str] | None = None,
     ) -> Response:
         url = self.base_url + path
         if params:
@@ -44,6 +46,8 @@ class PBClient:
         if json_body is not None:
             data = json.dumps(json_body).encode("utf-8")
             headers["Content-Type"] = "application/json"
+        elif raw_body is not None:
+            data, headers["Content-Type"] = raw_body
         if token:
             headers["Authorization"] = "Bearer " + token
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
@@ -108,6 +112,37 @@ class PBClient:
             f"/api/collections/{collection}/records",
             token=token,
             json_body=payload,
+        )
+
+    def create_with_file(
+        self,
+        collection: str,
+        token: str,
+        payload: dict[str, Any],
+        file_field: str,
+        filename: str,
+        content: bytes,
+        content_type: str,
+    ) -> Response:
+        """A multipart create: each payload field as a form field (JSON
+        values encoded as JSON text) and one file."""
+        boundary = "harness" + secrets.token_hex(12)
+        parts: list[bytes] = []
+        for name, value in payload.items():
+            text = value if isinstance(value, str) else json.dumps(value)
+            parts.append(
+                f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{text}\r\n'.encode("utf-8")
+            )
+        parts.append(
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'
+            f"Content-Type: {content_type}\r\n\r\n".encode("utf-8") + content + b"\r\n"
+        )
+        parts.append(f"--{boundary}--\r\n".encode("utf-8"))
+        return self._request(
+            "POST",
+            f"/api/collections/{collection}/records",
+            token=token,
+            raw_body=(b"".join(parts), f"multipart/form-data; boundary={boundary}"),
         )
 
     def update(self, collection: str, record_id: str, payload: dict, token: str | None = None) -> Response:

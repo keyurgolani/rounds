@@ -1,0 +1,43 @@
+{
+  "id": "RD-02.font-injection-unlisted",
+  "fixture": "RD-02",
+  "title": "A font the renderer contract doesn't list",
+  "closing_leaf": "ROUNDS-00A-L04",
+  "target": "legacy-snapshot-materializer",
+  "input": {
+    "template_id": "display",
+    "design": {
+      "typography": {
+        "body": {
+          "family": "rd02-remote-font"
+        }
+      }
+    },
+    "data": {
+      "personalInfo": {
+        "fullName": "RD-02 Fixture",
+        "email": "rd02@example.test",
+        "title": "Engineer"
+      },
+      "experience": [
+        {
+          "id": "e1",
+          "company": "Example Co",
+          "position": "Engineer",
+          "highlights": [
+            "Shipped the thing"
+          ]
+        }
+      ],
+      "education": [],
+      "skills": [],
+      "projects": [],
+      "publications": [],
+      "profiles": []
+    }
+  },
+  "expected": {
+    "status": "ineligible",
+    "reason": "design_out_of_domain"
+  }
+}

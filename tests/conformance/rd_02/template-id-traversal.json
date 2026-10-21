@@ -1,0 +1,41 @@
+{
+  "id": "RD-02.template-id-traversal",
+  "fixture": "RD-02",
+  "title": "A path in the template id falls back to the first template, flagged",
+  "closing_leaf": "ROUNDS-00A-L04",
+  "target": "legacy-snapshot-materializer",
+  "input": {
+    "template_id": "../../../etc/passwd",
+    "design": {},
+    "data": {
+      "personalInfo": {
+        "fullName": "RD-02 Fixture",
+        "email": "rd02@example.test",
+        "title": "Engineer"
+      },
+      "experience": [
+        {
+          "id": "e1",
+          "company": "Example Co",
+          "position": "Engineer",
+          "highlights": [
+            "Shipped the thing"
+          ]
+        }
+      ],
+      "education": [],
+      "skills": [],
+      "projects": [],
+      "publications": [],
+      "profiles": []
+    }
+  },
+  "expected": {
+    "status": "ok",
+    "template_id": "modern",
+    "template_fallback": true,
+    "markup_excludes": [
+      "passwd"
+    ]
+  }
+}

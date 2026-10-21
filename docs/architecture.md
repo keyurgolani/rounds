@@ -157,6 +157,10 @@ Runner schemas live in `backend/schemas.py`. Execution drivers live under `backe
 
 Splitting it from the runner keeps the Python image free of a Chromium dependency and lets the renderer be replaced or scaled independently.
 
+## Snapshot Materializer
+
+`backend/materializer/` renders a resume or variant into a Legacy Artifact Snapshot's markup (ROUNDS-00A-L04). It bundles the frontend's 19 templates, `ResumeData` types, utils, and the export shell (`frontend/src/features/resume/export/shell.ts`) with React 18.3.1, so a snapshot is the client HTML export of the preview's page. It takes a template id, a design, and the data, never markup; it validates the design against the Artifact Renderer Contract and the data against `ResumeData`, renders, and checks the output. `materializer_digest`, the SHA-256 of its bundle, is the template version. Only PocketBase reaches it, and the snapshots live in the `legacy_artifact_snapshots` collection, which only a PocketBase hook writes.
+
 ## PocketBase
 
 PocketBase files live in `pocketbase/`.

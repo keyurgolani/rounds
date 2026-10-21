@@ -28,6 +28,10 @@
 #                     through the real nginx config and at PocketBase's port,
 #                     with its admission and gate checks and the runner's
 #                     saved startup gates line
+#  7b. materializer reach - PocketBase reaches the snapshot materializer over
+#                     the internal materialize network; the runner and nginx
+#                     reach it by neither name nor address, and it has no
+#                     route out (ROUNDS-00A-L04)
 #   8. stop PocketBase; degraded - a runner write through nginx fails closed
 #   9. deploy-db    - the verifier's checks on the run's pb_data (read-only)
 #  10. scan         - the cross-owner relation scan against the run's pb_data
@@ -41,6 +45,10 @@
 #                     and apply the relation quarantine on a legacy pb_data
 #                     holding cross-owner rows, then delete through the API on
 #                     a served copy (harness/probes/relation_quarantine_check.py)
+#  14. snapshot store - with the pinned binary and no network: apply the
+#                     Legacy Artifact Snapshot store, show its down step keeps
+#                     a non-empty store and drops an empty one, and reapply
+#                     (harness/probes/snapshot_store_check.py)
 #
 # The stack is built and brought up with compose; the probe container runs
 # directly on the compose network so the flow is identical under Finch
@@ -71,7 +79,7 @@ RECEIPTS_DIR="${HARNESS_DIR}/.receipts/${PROJECT}"
 # Image tags, network, and volume all derive from the project name.
 export IMAGE_PREFIX="${PROJECT}"
 PROBE_IMAGE="${IMAGE_PREFIX}-probes:test"
-BUILT_IMAGES="${IMAGE_PREFIX}-pocketbase:test ${IMAGE_PREFIX}-probes:test ${IMAGE_PREFIX}-runner:test ${IMAGE_PREFIX}-frontend:test"
+BUILT_IMAGES="${IMAGE_PREFIX}-pocketbase:test ${IMAGE_PREFIX}-probes:test ${IMAGE_PREFIX}-runner:test ${IMAGE_PREFIX}-frontend:test ${IMAGE_PREFIX}-materializer:test"
 # The pinned PocketBase binary, copied out of its image for the migration check.
 PBBIN_VOLUME="${PROJECT}_pbbin"
 RUNNER_URLS="http://runner:8000,http://runner-b:8000"
@@ -145,6 +153,60 @@ restart_runners() {
   compose up -d runner runner-b frontend
 }
 
+# Phase 7b (ROUNDS-00A-L04). The materializer joins only the internal
+# materialize network, which PocketBase also joins: PocketBase reaches it,
+# the runner and nginx find it by neither name nor address, and it has no
+# default route and can't reach the app network. One PASS or FAIL line each.
+check_materializer_reach() {
+  local fails=0 up=1 address="" runner_address=""
+  verdict() {
+    if [ "$2" -eq 0 ]; then echo "PASS $1"; else echo "FAIL $1"; fails=$((fails + 1)); fi
+  }
+  # Exit 0 only when the command fails, for the checks that must be refused.
+  refused() { if "$@" >/dev/null 2>&1; then return 1; fi; return 0; }
+
+  for _ in $(seq 1 30); do
+    if compose exec -T pocketbase wget -q -T 3 -O /dev/null http://materializer:4100/health >/dev/null 2>&1; then
+      up=0
+      break
+    fi
+    sleep 1
+  done
+  verdict materializer.reach.pocketbase-by-name "${up}"
+
+  address="$(compose exec -T materializer node -e \
+    "process.stdout.write(Object.values(require('os').networkInterfaces()).flat().filter((i) => i.family === 'IPv4' && !i.internal).map((i) => i.address).join(' '))" \
+    2>/dev/null || true)"
+  runner_address="$(compose exec -T runner python3 -c \
+    "import socket; print(socket.gethostbyname(socket.gethostname()), end='')" 2>/dev/null || true)"
+  # The address checks below mean something only with both addresses known
+  # and the materializer on exactly one network.
+  verdict materializer.reach.addresses-known \
+    "$([ -n "${address}" ] && [ "${address}" = "${address%% *}" ] && [ -n "${runner_address}" ] && echo 0 || echo 1)"
+
+  refused compose exec -T runner python3 -c "import socket; socket.getaddrinfo('materializer', 4100)"
+  verdict materializer.reach.runner-by-name-refused $?
+  refused compose exec -T runner python3 -c \
+    "import socket, sys; socket.create_connection((sys.argv[1], 4100), timeout=3)" "${address:-0.0.0.0}"
+  verdict materializer.reach.runner-by-address-refused $?
+  refused compose exec -T frontend wget -q -T 3 -O /dev/null http://materializer:4100/health
+  verdict materializer.reach.frontend-by-name-refused $?
+  refused compose exec -T frontend wget -q -T 3 -O /dev/null "http://${address:-0.0.0.0}:4100/health"
+  verdict materializer.reach.frontend-by-address-refused $?
+
+  # No default route: /proc/net/route lists none with destination 00000000.
+  refused compose exec -T materializer node -e \
+    "const routes = require('fs').readFileSync('/proc/net/route', 'utf8').split('\n').slice(1); process.exit(routes.some((r) => r.split(/\s+/)[1] === '00000000') ? 0 : 1)"
+  verdict materializer.egress.no-default-route $?
+  refused compose exec -T materializer node -e \
+    "const s = require('net').connect({ host: process.argv[1], port: 8000, timeout: 3000 }); s.on('connect', () => process.exit(0)); s.on('error', () => process.exit(1)); s.on('timeout', () => process.exit(1));" \
+    "${runner_address:-0.0.0.0}"
+  verdict materializer.egress.runner-refused $?
+
+  echo "materializer reach: ${fails} failed"
+  [ "${fails}" -eq 0 ]
+}
+
 probe() {
   local phase="$1"
   ${CONTAINER_BIN} run --rm --network "${NETWORK}" \
@@ -191,9 +253,9 @@ offline() {
     "${PROBE_IMAGE}" "${phase}"
 }
 
-echo "--- building pocketbase, probes, runner, and frontend images ---"
+echo "--- building pocketbase, probes, runner, frontend, and materializer images ---"
 set_signups false
-compose build pocketbase probes runner frontend
+compose build pocketbase probes runner frontend materializer
 
 echo "--- phase 1: PocketBase up (signups enabled) ---"
 compose up -d pocketbase
@@ -249,6 +311,14 @@ capture_gates deploy
 
 echo "--- phase 7: deploy (verifier through the real nginx config) ---"
 probe deploy
+
+echo "--- phase 7b: materializer reach (only PocketBase reaches it; it reaches nothing) ---"
+compose up -d materializer
+set +e
+check_materializer_reach
+reach_rc=$?
+set -e
+compose stop materializer
 
 echo "--- phase 8: degraded (PocketBase stopped; a runner write fails closed) ---"
 compose stop pocketbase
@@ -307,8 +377,20 @@ ${CONTAINER_BIN} run --rm --network none \
 quarantine_rc=$?
 set -e
 
+echo "--- phase 14: snapshot store applied, kept while it holds a snapshot, and reversed ---"
+set +e
+${CONTAINER_BIN} run --rm --network none \
+  -e PB_BIN="/pbbin/pocketbase" \
+  -e PB_MIGRATIONS_DIR="/pb_migrations" \
+  -v "${PBBIN_VOLUME}:/pbbin:ro" \
+  -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+  -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
+  "${PROBE_IMAGE}" snapshot-store
+snapshot_rc=$?
+set -e
+
 if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ] || [ "${admission_rc}" -ne 0 ] || [ "${migration_rc}" -ne 0 ] \
-   || [ "${quarantine_rc}" -ne 0 ]; then
+   || [ "${quarantine_rc}" -ne 0 ] || [ "${reach_rc}" -ne 0 ] || [ "${snapshot_rc}" -ne 0 ]; then
   exit 1
 fi
 exit 0

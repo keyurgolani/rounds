@@ -1,0 +1,55 @@
+{
+  "id": "RD-02.file-url-in-data",
+  "fixture": "RD-02",
+  "title": "A file: URL in a project renders as text and loads nothing",
+  "closing_leaf": "ROUNDS-00A-L04",
+  "target": "legacy-snapshot-materializer",
+  "input": {
+    "template_id": "timeline",
+    "design": {},
+    "data": {
+      "personalInfo": {
+        "fullName": "RD-02 Fixture",
+        "email": "rd02@example.test",
+        "title": "Engineer"
+      },
+      "experience": [
+        {
+          "id": "e1",
+          "company": "Example Co",
+          "position": "Engineer",
+          "highlights": [
+            "Shipped the thing"
+          ]
+        }
+      ],
+      "education": [],
+      "skills": [],
+      "projects": [
+        {
+          "id": "p1",
+          "name": "Files",
+          "technologies": [
+            "file:///etc/passwd"
+          ],
+          "highlights": [
+            "file:///proc/self/environ"
+          ],
+          "url": "file:///etc/hosts"
+        }
+      ],
+      "publications": [],
+      "profiles": []
+    }
+  },
+  "expected": {
+    "status": "ok",
+    "template_id": "timeline",
+    "template_fallback": false,
+    "markup_excludes": [
+      "src=",
+      "href=",
+      "url("
+    ]
+  }
+}

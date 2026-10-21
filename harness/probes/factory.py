@@ -9,6 +9,7 @@ user-owned collections can be exercised.
 """
 from __future__ import annotations
 
+import hashlib
 import secrets
 from dataclasses import dataclass, field
 from typing import Any
@@ -59,6 +60,32 @@ def register(pb: PBClient, acct: Account) -> None:
     acct.user_id = rec["id"]
     auth = _must(pb.auth_password(acct.email, acct.password), f"auth {acct.tag}")
     acct.token = auth["token"]
+
+
+# A Legacy Artifact Snapshot's fields, for the fixture row and the create
+# probes: a resume source, an empty design, and a small markup document.
+SNAPSHOT_MARKUP = (
+    b'<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="utf-8" />\n  <title>Resume</title>\n</head>\n'
+    b'<body>\n<article data-resume-page="true"></article>\n</body>\n</html>'
+)
+
+
+def snapshot_fields(source_id: str) -> dict[str, Any]:
+    return {
+        "source_kind": "resume",
+        "source_id": source_id,
+        "source_updated": _DATE,
+        "template_id": "modern",
+        "template_fallback": False,
+        "design": {},
+        "data": {"personalInfo": {"fullName": ""}, "experience": [], "education": [], "skills": [],
+                 "projects": [], "publications": [], "profiles": []},
+        "content_checksum": "sha256:" + hashlib.sha256(SNAPSHOT_MARKUP).hexdigest(),
+        "materializer_digest": "sha256:" + hashlib.sha256(b"harness materializer").hexdigest(),
+        "sanitizer_version": "1.0.0",
+        "font_families": ["inter"],
+        "size_bytes": len(SNAPSHOT_MARKUP),
+    }
 
 
 def ensure_content_fixtures(pb: PBClient, admin_token: str) -> dict[str, str]:
@@ -135,6 +162,21 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
     mk("resume_versions", {"resume": resume, "data": {}})
     mk("resume_share_links", {"resume": resume, "token": secrets.token_urlsafe(16)})
     mk_admin("resume_share_views", {"link": ids["resume_share_links"]})
+    # Only a PocketBase hook writes snapshots (ROUNDS-00A-L04), so the
+    # fixture row, with its markup file, goes in with the admin token.
+    rec = _must(
+        pb.create_with_file(
+            "legacy_artifact_snapshots",
+            admin_token,
+            {"user": uid, **snapshot_fields(resume)},
+            "markup",
+            "snapshot.html",
+            SNAPSHOT_MARKUP,
+            "text/html",
+        ),
+        f"seed legacy_artifact_snapshots/{tag}",
+    )
+    ids["legacy_artifact_snapshots"] = rec["id"]
 
     mk("ai_providers", {"kind": "openai", "label": "provider"})
     mk("ai_settings", {})
@@ -203,6 +245,9 @@ def fresh_payload(
         "resume_versions": {"resume": a.ids["resumes"]},
         "resume_share_links": {"resume": a.ids["resumes"], "token": f"probe-{s}"},
         "resume_share_views": {"link": a.ids["resume_share_links"]},
+        # No markup file: only the create probe uses it, and the null create
+        # rule refuses the request before any field is read.
+        "legacy_artifact_snapshots": snapshot_fields(a.ids["resumes"]),
         "ai_providers": {"kind": "openai", "label": "provider"},
         "ai_settings": {},
         "ai_coding_drafts": {"round": content["round"], "file_path": f"probe-{s}.py", "contents": "x=1"},

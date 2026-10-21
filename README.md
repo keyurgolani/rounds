@@ -49,6 +49,7 @@ The demo account is seeded on first PocketBase deployment, can run one custom co
 ├── frontend/              React + Vite SPA, production nginx config
 ├── backend/               FastAPI code runner + AI/PDF/share routers
 ├── backend/pdf_renderer/  Node + Puppeteer sidecar for high-fidelity PDFs
+├── backend/materializer/  Node service that renders resume snapshots for PocketBase
 ├── pocketbase/            PocketBase image, migrations, hooks, seeds
 ├── docs/                  Deployment notes
 ├── k8s/                   Kustomize manifests

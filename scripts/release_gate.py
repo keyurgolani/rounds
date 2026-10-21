@@ -17,9 +17,9 @@ The image workflow runs this three times:
     only tags that never move: ``sha-<short>`` on the edge channel, and
     ``X.Y.Z`` and ``vX.Y.Z`` on the release channel.
 
-``retag``, in the one job that runs after all four builds
+``retag``, in the one job that runs after all five builds
     Decides the moving tags from the repository as it is at that moment and
-    moves them for all four images together with ``docker buildx imagetools
+    moves them for all five images together with ``docker buildx imagetools
     create``, without a rebuild:
 
     - edge: ``edge`` points at main's current tip;
@@ -27,7 +27,7 @@ The image workflow runs this three times:
       ``latest`` at the highest stable version. A pre-release is never one
       of them.
 
-    A tag moves only when all four images already have the tag it points
+    A tag moves only when all five images already have the tag it points
     at; otherwise it stays where it is. Every run of a channel decides the
     same answer from the same repository, and the workflow runs each
     channel's jobs one at a time, so whichever runs last leaves each tag
@@ -65,8 +65,8 @@ WAIT_S = 40 * 60  # how long CI on the tagged commit may still be running
 APPEAR_S = 5 * 60  # how long a CI run may take to show up at all
 POLL_S = 30
 MAX_PAGES = 20
-# The four images every publish builds, as the workflow's matrix names them.
-IMAGES = ("frontend", "pocketbase", "runner", "pdf-renderer")
+# The five images every publish builds, as the workflow's matrix names them.
+IMAGES = ("frontend", "pocketbase", "runner", "pdf-renderer", "materializer")
 # docker/metadata-action's type=sha tag uses the commit's first 7 characters.
 SHORT_SHA = 7
 IMAGE_PREFIX = re.compile(r"[a-z0-9.-]+(?::[0-9]+)?(?:/[a-z0-9._-]+)+")
@@ -288,7 +288,7 @@ def _image_prefix(prefix: str) -> str:
 
 def retag(moves: list[tuple[str, str]], prefixes: list[str], run: Runner) -> list[str]:
     """Points each moving tag at its target on every registry prefix, for
-    all four images together, and returns what moved. A tag whose target
+    all five images together, and returns what moved. A tag whose target
     some image doesn't have yet stays where it is, with a warning."""
     moved: list[str] = []
     for prefix in map(_image_prefix, prefixes):

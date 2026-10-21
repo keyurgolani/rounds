@@ -250,6 +250,15 @@
     },
     {
       "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700008000_legacy_artifact_snapshots.js", "lines": "63"},
+      "legacyName": "legacy_artifact_snapshots",
+      "termId": "legacy-artifact-snapshot",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L07",
+      "note": "The Legacy Artifact Snapshot store, an inspection-only term with no user-facing label. #161 retires it once every snapshot has moved to an Artifact Revision."
+    },
+    {
+      "kind": "collection",
       "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "487"},
       "legacyName": "offers",
       "termId": "offer",

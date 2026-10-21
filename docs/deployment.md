@@ -9,11 +9,13 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Production compose runs three containers on a private network:
+Production compose runs five containers on a private network:
 
 - `frontend`: nginx serving the Vite build and reverse-proxying backend traffic.
 - `pocketbase`: auth, data, migrations, hooks, and SQLite storage.
 - `runner`: FastAPI code execution service.
+- `pdf-renderer`: the headless-Chromium sidecar the runner sends PDF renders to.
+- `materializer`: renders Legacy Artifact Snapshots for PocketBase. It joins only the internal `materialize` network, which PocketBase also joins, so only PocketBase reaches it and it has no route out.
 
 Only `HTTP_PORT` is exposed on the host.
 
@@ -22,14 +24,18 @@ The production compose file pulls published Docker Hub images by default:
 - `keyurgolani/rounds-frontend`
 - `keyurgolani/rounds-pocketbase`
 - `keyurgolani/rounds-runner`
+- `keyurgolani/rounds-pdf-renderer`
+- `keyurgolani/rounds-materializer`
 
 The same images are also published to GHCR:
 
 - `ghcr.io/keyurgolani/rounds-frontend`
 - `ghcr.io/keyurgolani/rounds-pocketbase`
 - `ghcr.io/keyurgolani/rounds-runner`
+- `ghcr.io/keyurgolani/rounds-pdf-renderer`
+- `ghcr.io/keyurgolani/rounds-materializer`
 
-Set `ROUNDS_IMAGE_TAG` to pin all services to a tag. Set `ROUNDS_FRONTEND_IMAGE`, `ROUNDS_POCKETBASE_IMAGE`, or `ROUNDS_RUNNER_IMAGE` to use a different registry or per-service tag. Left unset, the tag is `latest`.
+Set `ROUNDS_IMAGE_TAG` to pin all services to a tag. Set `ROUNDS_FRONTEND_IMAGE`, `ROUNDS_POCKETBASE_IMAGE`, `ROUNDS_RUNNER_IMAGE`, `ROUNDS_PDF_RENDERER_IMAGE`, or `ROUNDS_MATERIALIZER_IMAGE` to use a different registry or per-service tag. Left unset, the tag is `latest`.
 
 Docker Hub publishing requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` GitHub repository secrets. GHCR publishing uses `GITHUB_TOKEN`.
 
@@ -38,16 +44,16 @@ Docker Hub publishing requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` GitHub
 | Tag | What it is | Moves |
 | --- | --- | --- |
 | `1.2.3`, `v1.2.3` | One release | Never |
-| `1.2` | The newest patch release of 1.2 | To the highest stable 1.2.x release, once all four of its images are pushed |
-| `latest` | The newest stable release | To the highest stable `vX.Y.Z` release, once all four of its images are pushed |
-| `edge` | The newest commit on `main` | To `main`'s tip, once all four of its images are pushed |
+| `1.2` | The newest patch release of 1.2 | To the highest stable 1.2.x release, once all five of its images are pushed |
+| `latest` | The newest stable release | To the highest stable `vX.Y.Z` release, once all five of its images are pushed |
+| `edge` | The newest commit on `main` | To `main`'s tip, once all five of its images are pushed |
 | `sha-<short>` | One commit on `main` | Never |
 
 Run a release tag in production, such as `ROUNDS_IMAGE_TAG=1.2.3`, and change it on purpose; [Upgrades](operations.md#upgrades) walks through it, backup and rollback included. `latest` is safe to follow only if you're fine with upgrades, and their migrations, arriving whenever the stack pulls. `edge` isn't for production.
 
 Releases come from `vX.Y.Z` tags on `main`. The workflow checks that CI passed on a push of that exact commit to `main` before it publishes anything, and publishes nothing otherwise. A pre-release tag such as `v1.3.0-rc.1` publishes only `1.3.0-rc.1` and `v1.3.0-rc.1`; it never becomes `1.3` or `latest`. Nothing publishes from `next` or any other branch.
 
-The four image builds push only the tags that never move, and builds for different commits or tags never wait on or cancel each other. Once all four builds pass, one job moves `edge`, or `1.2` and `latest`, for all four images together, by pointing each tag at an image that's already pushed, with no rebuild. It decides each tag from the repository at that moment: `edge` points at `main`'s tip, each `X.Y` at the highest stable patch of its line, and `latest` at the highest stable release. A tag moves only once all four images have its target, so the four never point at different releases; until then it stays where it is. These jobs run one at a time for `edge` and one at a time for the release tags, so an older publish, or a re-run of one, can't move a tag back after a newer one. GitHub keeps only one of them waiting and replaces it with a newer one, and the newer one decides every tag the same way, so it leaves the tags where the replaced one would have.
+The five image builds push only the tags that never move, and builds for different commits or tags never wait on or cancel each other. Once all five builds pass, one job moves `edge`, or `1.2` and `latest`, for all five images together, by pointing each tag at an image that's already pushed, with no rebuild. It decides each tag from the repository at that moment: `edge` points at `main`'s tip, each `X.Y` at the highest stable patch of its line, and `latest` at the highest stable release. A tag moves only once all five images have its target, so the five never point at different releases; until then it stays where it is. These jobs run one at a time for `edge` and one at a time for the release tags, so an older publish, or a re-run of one, can't move a tag back after a newer one. GitHub keeps only one of them waiting and replaces it with a newer one, and the newer one decides every tag the same way, so it leaves the tags where the replaced one would have.
 
 ## Required Production Settings
 
@@ -120,6 +126,8 @@ kubectl apply -k k8s/
 ```
 
 PocketBase should remain single-replica with a `Recreate` strategy when using SQLite. Frontend and runner can scale horizontally.
+
+`k8s/materializer.yaml` runs the snapshot materializer with a `NetworkPolicy` that admits only pods labeled `rounds.io/net: pocketbase` and allows no egress. It needs a CNI that enforces `NetworkPolicy`; without one the policy applies but does nothing.
 
 ## Verification
 

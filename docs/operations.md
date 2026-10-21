@@ -265,6 +265,12 @@ Quotas and idempotency across replicas, a candidate's environment and uid, and t
 
 The harness runs the same checks through its own nginx frontend on every CI run, where nginx is the first hop and an inconclusive check fails the run.
 
+### Legacy Artifact Snapshots
+
+`1700008000_legacy_artifact_snapshots.js` adds `legacy_artifact_snapshots`, the immutable resume snapshots server PDF and sharing will render. Owners can list and view their own; no client can create, update, or delete one. The `materializer` container builds a snapshot's markup for PocketBase. It holds no secret, writes nothing, joins only the internal `materialize` network in Compose, and in Kubernetes accepts only pods labeled `rounds.io/net: pocketbase`. In this release nothing writes the collection and nothing calls the materializer, so a stopped materializer changes nothing.
+
+The migration's down step drops the collection only while it's empty. Once a snapshot exists, `migrate down` fails, PocketBase logs why, and the collection, its rows, and their files stay. Deleting an account deletes its snapshots.
+
 ## Smoke Test Checklist
 
 After deploy or restore, verify:

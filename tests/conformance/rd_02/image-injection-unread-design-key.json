@@ -1,0 +1,51 @@
+{
+  "id": "RD-02.image-injection-unread-design-key",
+  "fixture": "RD-02",
+  "title": "An image in a design key no template reads is dropped",
+  "closing_leaf": "ROUNDS-00A-L04",
+  "target": "legacy-snapshot-materializer",
+  "input": {
+    "template_id": "banner",
+    "design": {
+      "style": {
+        "backgroundImage": "url(https://rd02.invalid/i.png)"
+      },
+      "showPhoto": true,
+      "photo": "https://rd02.invalid/p.png",
+      "colors": {
+        "background": "url(https://rd02.invalid/c.png)"
+      }
+    },
+    "data": {
+      "personalInfo": {
+        "fullName": "RD-02 Fixture",
+        "email": "rd02@example.test",
+        "title": "Engineer"
+      },
+      "experience": [
+        {
+          "id": "e1",
+          "company": "Example Co",
+          "position": "Engineer",
+          "highlights": [
+            "Shipped the thing"
+          ]
+        }
+      ],
+      "education": [],
+      "skills": [],
+      "projects": [],
+      "publications": [],
+      "profiles": []
+    }
+  },
+  "expected": {
+    "status": "ok",
+    "template_id": "banner",
+    "template_fallback": false,
+    "markup_excludes": [
+      "url(",
+      "rd02.invalid"
+    ]
+  }
+}

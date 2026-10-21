@@ -193,15 +193,16 @@ describe('vocabulary: coverage set (schema)', () => {
   const analysis = analyzeCoverage(ctx, reg, byId);
   const cov = analysis.cov;
 
-  it('extracts exactly 46 live and 3 historical collections: the baseline 40, the three admission collections, the definitions journal, and the two relation-quarantine collections', () => {
+  it('extracts exactly 47 live and 3 historical collections: the baseline 40, the three admission collections, the definitions journal, the two relation-quarantine collections, and the snapshot store', () => {
     const live = cov.collections.filter((c) => !c.historical).map((c) => c.name);
     const historical = cov.collections.filter((c) => c.historical).map((c) => c.name).sort();
-    assert.equal(live.length, 46);
+    assert.equal(live.length, 47);
     assert.deepEqual(historical, ['anecdotes', 'experience_items', 'resume_bullets']);
     assert.ok(live.includes('users'));
     for (const c of ['admission_commands', 'admission_counters', 'admission_leases']) assert.ok(live.includes(c), c);
     assert.ok(live.includes('definition_migration_journal'), 'definition_migration_journal');
     for (const c of ['relation_quarantine', 'relation_quarantine_reports']) assert.ok(live.includes(c), c);
+    assert.ok(live.includes('legacy_artifact_snapshots'), 'legacy_artifact_snapshots');
     for (const j of ['exp_job_projects', 'exp_job_anecdotes', 'exp_job_bullets', 'exp_project_anecdotes', 'exp_project_bullets', 'exp_anecdote_bullets']) assert.ok(live.includes(j), j);
     assert.ok(live.includes('ai_settings'), 'ai_settings is dropped and recreated, so it is live');
   });
@@ -313,7 +314,7 @@ describe('vocabulary: stored legacy terms (migration)', () => {
       }
     }
     const collections = adapters.filter((a) => a.kind === 'collection');
-    assert.equal(collections.length, 49);
+    assert.equal(collections.length, 50);
     for (const a of collections) {
       assert.ok(a.termId || a.decidedBy, a.legacyName);
       assert.ok(resolve(a.retiringLeaf).ok, a.legacyName);
@@ -527,6 +528,6 @@ describe('vocabulary: extraction without adapters', () => {
     // The non-literal junction site, plus the relation-quarantine helper that
     // creates two collections through one shared `new Collection` call.
     assert.equal(cov.unresolvedCollections.length, 2);
-    assert.equal(cov.collections.filter((c) => !c.historical).length, 38);
+    assert.equal(cov.collections.filter((c) => !c.historical).length, 39);
   });
 });

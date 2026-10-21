@@ -266,7 +266,7 @@ STANDARD_COLLECTIONS = [
     "question_timers", "experience_jobs", "experience_projects",
     "experience_anecdotes", "experience_bullets", "exp_job_projects",
     "exp_job_anecdotes", "exp_job_bullets", "exp_project_anecdotes",
-    "exp_project_bullets", "exp_anecdote_bullets",
+    "exp_project_bullets", "exp_anecdote_bullets", "legacy_artifact_snapshots",
 ]
 
 
@@ -410,9 +410,14 @@ class _ProbePB:
     owner-count check.
     """
 
-    def __init__(self, *, create=None, update=None, view=None, listing=None):
+    def __init__(self, *, create=None, update=None, view=None, listing=None, delete=None):
         self._create, self._update, self._view, self._listing = create, update, view, listing
+        self._delete = delete
         self.calls: list[tuple] = []
+
+    def delete(self, collection, record_id, token=None):
+        self.calls.append(("delete", collection, record_id, token))
+        return self._delete
 
     def create(self, collection, token, payload):
         self.calls.append(("create", collection, token, dict(payload) if payload else payload))
@@ -522,6 +527,26 @@ def test_server_only_update_denied_fails_if_the_update_went_through():
     pb = _ProbePB(update=Response(200, {"id": "x"}, 1), view=Response(200, {"id": "x"}, 1))
     r = families.update_server_only_denied(pb, "resume_share_views", "rec", "a-token", 403)
     assert not r.passed
+
+
+def test_server_only_delete_denied_passes_when_forbidden_and_the_row_stays():
+    pb = _ProbePB(delete=Response(403, {}, 1), view=Response(200, {"id": "x"}, 1))
+    r = families.delete_server_only_denied(pb, "legacy_artifact_snapshots", "rec", "a-token", 403)
+    assert r.passed
+    assert ("delete", "legacy_artifact_snapshots", "rec", "a-token") in pb.calls
+
+
+def test_server_only_delete_denied_fails_if_the_delete_went_through():
+    pb = _ViewSeq([Response(200, {"id": "x"}, 1), Response(404, {}, 1)], delete=Response(204, None, 1))
+    r = families.delete_server_only_denied(pb, "legacy_artifact_snapshots", "rec", "a-token", 403)
+    assert not r.passed and "owner_view=404" in r.detail
+
+
+def test_server_only_delete_denied_fails_when_forbidden_but_the_row_changed():
+    pb = _ViewSeq([Response(200, {"id": "x", "updated": "t0"}, 1), Response(200, {"id": "x", "updated": "t1"}, 1)],
+                  delete=Response(403, {}, 1))
+    r = families.delete_server_only_denied(pb, "legacy_artifact_snapshots", "rec", "a-token", 403)
+    assert not r.passed and "unchanged=False" in r.detail
 
 
 def test_superuser_create_accepted_passes_on_success_and_fails_on_forbidden():
@@ -776,8 +801,23 @@ def test_every_collection_covers_each_actor_operation_and_resource_state():
     }
     server_only = {"account-scope.create.server-only.denied", "account-scope.update.server-only.denied",
                    "account-scope.create.superuser.accepted"}
+    deletes = {
+        "account-scope.delete.cross-account.denied", "account-scope.delete.anonymous.denied",
+        "account-scope.delete.foreign-or-missing.indistinguishable",
+    }
+    server_written = {"account-scope.create.server-only.denied", "account-scope.update.server-only.denied",
+                      "account-scope.delete.server-only.denied"}
     for name, row in doc["collections"].items():
         probes = set(row["probes"])
+        if all(row["current_rules"].get(op) is None for op in ("create", "update", "delete")):
+            # A store only a hook writes (#4's snapshots): its owner reads it,
+            # and every client write, the owner's own delete included, is
+            # refused, so the not-found delete families give way to
+            # delete.server-only.
+            assert reads - deletes <= probes, (name, sorted(reads - deletes - probes))
+            assert server_written <= probes, (name, sorted(server_written - probes))
+            assert not deletes & probes, name
+            continue
         assert reads <= probes, (name, sorted(reads - probes))
         if name == "resume_share_views":
             assert server_only <= probes, name

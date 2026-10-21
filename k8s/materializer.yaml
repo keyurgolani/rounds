@@ -1,0 +1,104 @@
+---
+# Legacy Artifact Snapshot materializer (ROUNDS-00A-L04). Stateless and
+# secret-free: it renders a resume's server-read records to markup for
+# PocketBase and writes nothing. Nothing calls it until #4's PocketBase hook
+# lands.
+#
+# Only PocketBase reaches it: the NetworkPolicy below admits pods labeled
+# rounds.io/net: pocketbase on 4100 and allows no egress at all, DNS
+# included. #7 (ROUNDS-00A-L07) adds the default-deny set and PocketBase's
+# side of this edge.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: materializer
+  namespace: rounds
+  labels:
+    app: materializer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: materializer
+  template:
+    metadata:
+      labels:
+        app: materializer
+        rounds.io/net: materializer
+    spec:
+      # Nothing here calls the Kubernetes API.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: materializer
+          image: ghcr.io/your-org/rounds-materializer:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 4100
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4100
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4100
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: materializer
+  namespace: rounds
+spec:
+  selector:
+    app: materializer
+  ports:
+    - name: http
+      port: 4100
+      targetPort: 4100
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: materializer
+  namespace: rounds
+spec:
+  podSelector:
+    matchLabels:
+      rounds.io/net: materializer
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              rounds.io/net: pocketbase
+      ports:
+        - protocol: TCP
+          port: 4100
+  # No egress rule: the materializer opens no connection.
+  egress: []
