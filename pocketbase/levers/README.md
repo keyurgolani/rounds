@@ -10,6 +10,14 @@ it.
   forward fix is not ready yet.
 - `restore_collection.template.js` restores the server-derived ownership rules
   once the fix ships.
+- `replay_quarantine.template.js` (ROUNDS-00B-L02) writes listed
+  `relation_quarantine` entries back: a moved row exactly as it was, created
+  and updated included, and a cleared field back to its target, through the
+  relation triggers so only a same-owner entry replays. Run it with
+  `pocketbase migrate up` pointed at a folder holding only the filled-in copy;
+  `docs/operations.md` under "Relation endpoint authorization and quarantine"
+  has the command, and `harness/probes/relation_quarantine_check.py` exercises
+  it.
 
 When to reach for the lock, and the alert that triggers it, are in
 `docs/operations.md` under "Account-scope rules". Never run a lever against a
