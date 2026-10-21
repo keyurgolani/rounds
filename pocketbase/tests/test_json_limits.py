@@ -8,7 +8,8 @@ from its LIMITS registry.
 
 These tests hold the registry to the migrations: every JSON field they
 define is registered at the size they end on, the registry's up and down
-steps behave on a stubbed Dao through node, the migration lint refuses a new
+steps behave on a stubbed Dao through node (down puts back the size each
+field held before up, from up's record), the migration lint refuses a new
 migration whose JSON limit isn't registered, and the account-scope policy's
 oversized probes use the declared limits. Harness phase 12c checks the same
 on fresh and upgraded databases with the pinned PocketBase binary.
@@ -68,6 +69,10 @@ def test_the_limits_d10_names_hold_their_sizes():
     assert registry[("execution_jobs", "input")] == 8 * MIB
     assert registry[("execution_attempts", "operator_view")] == 64 * 1024
     assert registry[("execution_envelopes", "user_view")] == MIB
+    # The snapshot store's (1700008000_legacy_artifact_snapshots.js).
+    assert registry[("legacy_artifact_snapshots", "design")] == 64 * 1024
+    assert registry[("legacy_artifact_snapshots", "data")] == 2 * MIB
+    assert registry[("legacy_artifact_snapshots", "font_families")] == 4 * 1024
 
 
 def test_each_registry_file_sorts_after_the_reset_and_holds_a_sorted_literal_list():
@@ -80,6 +85,11 @@ def test_each_registry_file_sorts_after_the_reset_and_holds_a_sorted_literal_lis
         assert name > lm.JSON_RESET, name
         assert lm.scan(source) == [], name
         assert lm.json_limit_findings(MIG + name, source, {}, {}) == [], name
+
+
+def test_each_registry_file_records_under_its_own_name():
+    for path in sorted(q for q in MIG_DIR.iterdir() if lm.REGISTRY_FILE.match(q.name)):
+        assert f'const PRIOR_KEY = "{path.name}";' in path.read_text(), path.name
 
 
 def test_the_registry_sorts_right_after_pocketbases_reset():
@@ -110,6 +120,12 @@ globalThis.Dao = function (db) {
     return c;
   };
   this.saveCollection = (c) => { db.saves.push(c.name); };
+  this.saveParam = (key, value) => { db.params[key] = JSON.stringify(value); };
+  this.findParamByKey = (key) => {
+    if (!(key in db.params)) throw new Error("sql: no rows in result set");
+    return { key, value: { string: () => db.params[key] } };
+  };
+  this.deleteParam = (param) => { delete db.params[param.key]; };
 };
 require(migrationPath);
 function build(plan) {
@@ -118,7 +134,7 @@ function build(plan) {
     const items = fields.map(([field, type, size]) => ({ name: field, type, options: size === null ? {} : { maxSize: size } }));
     collections[name] = { name, items, schema: { getFieldByName: (f) => items.find((x) => x.name === f) || null } };
   }
-  return { collections, saves: [] };
+  return { collections, saves: [], params: {} };
 }
 function dump(db) {
   const out = {};
@@ -132,10 +148,15 @@ const results = JSON.parse(plansJson).map((plan) => {
   up(db);
   const afterUp = dump(db);
   const upSaves = db.saves.splice(0);
+  const paramsAfterUp = Object.assign({}, db.params);
   up(db);
   const againSaves = db.saves.splice(0);
+  const paramsAfterAgain = Object.assign({}, db.params);
   down(db);
-  return { afterUp, upSaves, againSaves, afterDown: dump(db), downSaves: db.saves.splice(0) };
+  return {
+    afterUp, upSaves, againSaves, afterDown: dump(db), downSaves: db.saves.splice(0),
+    params: { afterUp: paramsAfterUp, afterAgain: paramsAfterAgain, afterDown: db.params },
+  };
 });
 process.stdout.write(JSON.stringify(results));
 """
@@ -207,6 +228,7 @@ def test_up_on_an_upgraded_database_saves_only_the_collections_whose_limits_chan
 
 
 def test_down_puts_pocketbases_default_back(runs, registry):
+    # Every registered field held the default here before up.
     run = runs[0]
     sizes = _sizes(run["afterDown"])
     for key in registry:
@@ -215,6 +237,57 @@ def test_down_puts_pocketbases_default_back(runs, registry):
     assert ["unregistered", "json", 1234] in run["afterDown"]["resumes"]
     assert run["afterDown"]["offers"] == [["trail", "text", None]]
     assert run["downSaves"] == run["upSaves"]
+
+
+def _record(params: dict) -> dict[tuple[str, str], int] | None:
+    raw = params.get(REGISTRY.name)
+    return None if raw is None else {(c, f): size for c, f, size in json.loads(raw)}
+
+
+def test_up_records_the_size_each_field_it_changed_held(runs, registry):
+    skipped = ("todos", "offers")
+    held = [{key: lm.JSON_DEFAULT_BYTES for key in registry if key[0] not in skipped},
+            {key: lm.JSON_DEFAULT_BYTES for key in registry
+             if key[0] not in skipped + ("coding_questions", "resumes")}]
+    for run, want in zip(runs, held):
+        assert set(run["params"]["afterUp"]) == {REGISTRY.name}
+        assert _record(run["params"]["afterUp"]) == want
+
+
+def test_up_again_keeps_the_record(runs):
+    for run in runs:
+        assert run["params"]["afterAgain"] == run["params"]["afterUp"]
+
+
+def test_down_leaves_a_field_that_already_held_its_size_and_removes_the_record(runs, registry):
+    run = runs[1]
+    sizes = _sizes(run["afterDown"])
+    for key, size in registry.items():
+        if key[0] in ("coding_questions", "resumes"):
+            assert sizes[key] == size, key
+        elif key[0] not in ("todos", "offers"):
+            assert sizes[key] == lm.JSON_DEFAULT_BYTES, key
+    assert run["downSaves"] == run["upSaves"]
+    assert [r["params"]["afterDown"] for r in runs] == [{}, {}]
+
+
+@pytest.fixture(scope="module")
+def steady(registry, tmp_path_factory) -> dict:
+    """A run on a database whose every registered field holds its size."""
+    harness = tmp_path_factory.mktemp("json-limits-steady") / "harness.cjs"
+    harness.write_text(_HARNESS)
+    plan = {}
+    for (collection, field), size in sorted(registry.items()):
+        plan.setdefault(collection, []).append([field, "json", size])
+    res = subprocess.run([shutil.which("node"), str(harness), str(REGISTRY), json.dumps([plan])],
+                         capture_output=True, text=True, timeout=60)
+    assert res.returncode == 0, res.stderr
+    return json.loads(res.stdout)[0]
+
+
+def test_up_with_nothing_to_change_saves_and_records_nothing(steady):
+    assert steady["upSaves"] == [] and steady["downSaves"] == []
+    assert steady["params"] == {"afterUp": {}, "afterAgain": {}, "afterDown": {}}
 
 
 # ---- the lint: what a new migration's JSON limits need ----------------------------------------------

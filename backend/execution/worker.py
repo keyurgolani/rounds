@@ -3,9 +3,9 @@
 Each runner replica runs one while ``ROUNDS_GATE_EXECUTION_STORE`` is on
 and ``ROUNDS_EXECUTION_SECRET`` logs in as ``execution-worker``:
 
-1. Claim. While the replica has a free in-flight slot, it claims the
-   oldest queued job of an account with fewer than 2 active, under a new
-   fencing token. A claim reaps first.
+1. Claim. While the replica has a free in-flight slot, it claims the next
+   queued job under a new fencing token: accounts with fewer than 2 active
+   take turns by their oldest queued job. A claim reaps first.
 2. Run. The job's kind's handler runs its parts through the executor in a
    slot. Before the first part, a heartbeat marks the candidate tree
    started with the attempt's wall budget, which is never more than the
@@ -20,6 +20,10 @@ and ``ROUNDS_EXECUTION_SECRET`` logs in as ``execution-worker``:
    An exception in a handler is the infrastructure's failure, never the
    candidate's.
 5. Reap every 15 s, beside the reap each claim runs.
+6. Stop. When the replica stops, a run in flight stops too and ends
+   ``failed``, ``worker-lost``, never with an outcome from the parts that
+   ran, and a claimed job that hasn't started doesn't start: its lease runs
+   out and reap puts it back in the queue.
 
 Each step writes a ``execution.job`` line in #1's kit, labeled by kind,
 purpose, state, outcome class, and executor kind, never by account.
@@ -97,6 +101,8 @@ class _Attempt:
     stop: threading.Event = field(default_factory=threading.Event)
     canceled: bool = False
     lost: bool = False
+    # The replica stopped while the attempt was in flight.
+    interrupted: bool = False
     started_at: int | None = None
 
 
@@ -148,9 +154,10 @@ class Worker:
 
     async def stop(self) -> None:
         """Stops claiming, stops every run in flight, and waits for their
-        tasks to end."""
+        tasks to end. Each run it stops ends ``failed``, ``worker-lost``."""
         self._stopping.set()
         for attempt in self._attempts.values():
+            attempt.interrupted = True
             attempt.stop.set()
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
@@ -245,6 +252,10 @@ class Worker:
     async def _run(self, attempt: _Attempt, handler: Handler, slot: sandbox.Sandbox) -> None:
         job, claim = attempt.claim.job, attempt.claim
         kind = kinds.KINDS[job.kind]
+        if attempt.interrupted:
+            # The replica is stopping before the run started; the lease
+            # runs out and reap puts the job back.
+            return
         try:
             budget = max(1, min(int(handler.budget_s(job)), kind.max_budget_s))
             beat = await self._client.heartbeat(claim.attempt.id, claim.token, budget_s=budget)
@@ -267,6 +278,9 @@ class Worker:
             _log.exception("execution handler failed")
             result, failed = None, True
         finally:
+            # Whether the replica stopped while the handler ran, read before
+            # anything else can wait.
+            interrupted = attempt.interrupted
             beats.cancel()
             await asyncio.gather(beats, return_exceptions=True)
         if attempt.lost:
@@ -277,6 +291,10 @@ class Worker:
         cleanup = observation.cleanup if observation else "confirmed"
         if attempt.canceled:
             await self._finish(attempt, envelope.outcome("canceled", "canceled"), cleanup, result=result)
+            return
+        if interrupted:
+            # What ran before the replica stopped is no result.
+            await self._finish(attempt, envelope.outcome("failed", "worker-lost"), cleanup, result=result)
             return
         if failed or result is None:
             await self._finish(attempt, envelope.outcome("failed", "infrastructure-degraded"), cleanup)

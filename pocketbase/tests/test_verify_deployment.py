@@ -179,6 +179,27 @@ def test_the_admin_ui_served_through_the_proxy_fails():
     assert not results["deployment.proxy.admin-ui.denied"][0].passed
 
 
+@pytest.mark.parametrize("path,method", [
+    ("/api/collections/Execution_Service/auth-with-password", "POST"),
+    ("/api/collections/EXECUTION_SERVICE/records", "GET"),
+])
+def test_the_execution_service_reaching_pocketbase_in_another_case_fails(path, method):
+    dep = Deployment()
+    dep.overrides[(method, path)] = (400, {"code": 400, "message": "Failed to authenticate.", "data": {}})
+    with deployment(dep) as (_, url):
+        results = by_id(vd.check_denied_routes(url))
+    r = results["deployment.proxy.execution-service.denied"][0]
+    assert not r.passed and path in r.detail and "answered_by=pocketbase" in r.detail
+
+
+def test_every_collection_route_is_also_tried_in_another_case():
+    paths = [path for _, path, _ in vd.DENIED_ROUTES if path.lower().startswith("/api/collections/")]
+    for path in paths:
+        if path == path.lower():
+            name = path.split("/")[3]
+            assert any(other != path and other.lower() == path.lower() for other in paths), name
+
+
 def test_collection_metadata_reaching_pocketbase_fails_but_records_stay_open():
     dep = Deployment()
     dep.overrides[("GET", "/api/collections")] = (401, PB_401)

@@ -25,7 +25,9 @@
 // (D9): it has a `user` field like every collection an account reads
 // (docs/security/account-scope.v1.json), and it carries the user view only,
 // outcome classes and the server's totals for a run with hidden material.
-// The operator view stays on the attempt.
+// The operator view stays on the attempt. It names its job and attempt by
+// id in plain text fields, not relations, so nothing in the row an account
+// reads links into the service-only collections.
 //
 // It also adds a nullable `envelope` relation to ai_coding_attempts and
 // take_home_attempts, raises take_home_attempts.files to 8 MiB for #1's
@@ -36,7 +38,12 @@
 // pb_hooks/execution.pb.js refuses a client write that sets `envelope`.
 //
 // Times are whole epoch seconds on PocketBase's clock. No existing row is
-// rewritten. The down step drops only what this adds.
+// rewritten. The up step records the size take_home_attempts.files held
+// before, in the _params row PRIOR_KEY names; the down step drops only what
+// this adds and puts that size back.
+
+// The _params row where the up step records what the down step restores.
+const PRIOR_KEY = "1700007100_execution_jobs.js";
 
 migrate(
   (db) => {
@@ -59,6 +66,7 @@ migrate(
     const CLEANUP = ["pending", "confirmed", "unconfirmed"];
     const COMMAND_ID = "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$";
     const SHA256_HEX = "^[0-9a-f]{64}$";
+    const RECORD_ID = "^[a-z0-9]{15}$";
     const WORKER_ID = "^[a-z0-9][a-z0-9-]{0,62}$";
     const MIB = 1024 * 1024;
 
@@ -196,18 +204,9 @@ migrate(
           required: true,
           options: { collectionId: users.id, cascadeDelete: true, maxSelect: 1 },
         },
-        {
-          name: "job",
-          type: "relation",
-          required: true,
-          options: { collectionId: jobs.id, cascadeDelete: true, maxSelect: 1 },
-        },
-        {
-          name: "attempt",
-          type: "relation",
-          required: true,
-          options: { collectionId: attempts.id, cascadeDelete: true, maxSelect: 1 },
-        },
+        // The job and attempt it was written for, by id.
+        { name: "job", type: "text", required: true, options: { pattern: RECORD_ID } },
+        { name: "attempt", type: "text", required: true, options: { pattern: RECORD_ID } },
         { name: "version", type: "text", required: true, options: { max: 64 } },
         select("state", TERMINAL_STATES, true),
         select("outcome_class", OUTCOME_CLASSES, true),
@@ -238,8 +237,12 @@ migrate(
     takeHomeAttempts.schema.addField(envelopeLink());
     // On a database built from scratch PocketBase's own JSON reset sorts
     // after this migration, and 1702134273_json_limits.js sets this limit
-    // and the ones above back after it (D10).
-    takeHomeAttempts.schema.getFieldByName("files").options.maxSize = 8 * MIB;
+    // and the ones above back after it (D10). The size it held before: the
+    // 2 MiB 1700001300_take_home.js declares, or PocketBase's 2,000,000-byte
+    // default where that reset ran after 1700001300.
+    const files = takeHomeAttempts.schema.getFieldByName("files");
+    dao.saveParam(PRIOR_KEY, { files: files.options.maxSize });
+    files.options.maxSize = 8 * MIB;
     dao.saveCollection(takeHomeAttempts);
 
     admissionCommands.schema.addField(
@@ -266,13 +269,20 @@ migrate(
       if (existing) collection.schema.removeField(existing.id);
       dao.saveCollection(collection);
     }
-    // Back to 2,000,000 bytes, PocketBase's JSON default. The field holds
-    // that before this migration rather than the 2 MiB that
-    // 1700001300_take_home.js declares, because PocketBase's own JSON-size
-    // migration runs after that one and overwrites it.
+    // Back to the size the up step recorded, or, without a record, to the
+    // 2 MiB 1700001300_take_home.js declares.
+    let recorded = null;
+    try {
+      recorded = dao.findParamByKey(PRIOR_KEY);
+    } catch (_) {
+      /* no record */
+    }
     const takeHome = dao.findCollectionByNameOrId("take_home_attempts");
-    takeHome.schema.getFieldByName("files").options.maxSize = 2000000;
+    takeHome.schema.getFieldByName("files").options.maxSize = recorded
+      ? JSON.parse(recorded.value.string()).files
+      : 2 * 1024 * 1024;
     dao.saveCollection(takeHome);
+    if (recorded) dao.deleteParam(recorded);
     for (const name of ["execution_envelopes", "execution_attempts", "execution_jobs", "execution_service"]) {
       try {
         dao.deleteCollection(dao.findCollectionByNameOrId(name));

@@ -2,7 +2,7 @@
 // (ROUNDS-00A-L01), so no path works in dev that answers 404 in prod.
 // nginx's location choice is modeled here: an exact match, else the
 // longest prefix when it's `^~`, else the first matching regex in file
-// order, else the longest prefix.
+// order, else the longest prefix, all on the path with %XX decoded.
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -39,7 +39,7 @@ function nginxLocations(): Location[] {
 const LOCATIONS = nginxLocations();
 
 function nginxDenies(url: string): boolean {
-  const path = url.split('?')[0];
+  const path = decodeURIComponent(url.split('?')[0]);
   const exact = LOCATIONS.find((l) => l.modifier === '=' && l.pattern === path);
   if (exact) return exact.denies;
   const prefixes = LOCATIONS.filter(
@@ -65,7 +65,19 @@ function viteEntry(url: string): ProxyOptions | undefined {
 
 function viteDenies(url: string): boolean {
   const entry = viteEntry(url);
-  return entry?.bypass?.({} as never, {} as never, entry) === false;
+  return entry?.bypass?.({ url } as never, {} as never, entry) === false;
+}
+
+// The socket an upgrade on `url` gets, and whether the entry that takes
+// it passed it on.
+function upgrade(url: string) {
+  const entry = viteEntry(url)!;
+  const forward = vi.fn();
+  const server = { ws: forward } as { ws: (req: unknown, socket: unknown, head: unknown) => void };
+  entry.configure?.(server as never, entry);
+  const socket = { end: vi.fn() };
+  server.ws({ url }, socket, Buffer.alloc(0));
+  return { entry, socket, forwarded: forward.mock.calls.length > 0 };
 }
 
 const NEVER_PROXIED = [
@@ -78,6 +90,10 @@ const NEVER_PROXIED = [
   '/api/rounds/execution/reap?x=1',
   '/api/collections/execution_service/auth-with-password',
   '/api/collections/execution_service/records',
+  '/api/collections/Execution_Service/auth-with-password',
+  '/api/collections/EXECUTION_SERVICE/records?perPage=1',
+  '/api/collections/execution%5Fservice/auth-with-password',
+  '/api/collections/Execution%5FService/auth-with-password',
   '/api/admins',
   '/api/admins/auth-with-password',
   '/api/settings',
@@ -90,6 +106,9 @@ const NEVER_PROXIED = [
   '/api/collections/users',
   '/api/collections/users/',
   '/api/collections/users?fields=schema',
+  '/api/Collections',
+  '/api/COLLECTIONS/users',
+  '/api/collections/Users/',
 ];
 
 const PROXIED = [
@@ -107,6 +126,8 @@ const PROXIED = [
   '/api/collections/users/records',
   '/api/collections/users/records?filter=x',
   '/api/collections/users/auth-with-password',
+  '/api/collections/Users/records',
+  '/api/collections/execution_jobs/records',
 ];
 
 describe('the dev proxy and production nginx', () => {
@@ -124,14 +145,29 @@ describe('the dev proxy and production nginx', () => {
     expect(viteDenies(url)).toBe(false);
   });
 
-  it('refuses a WebSocket upgrade on a denied path too', () => {
-    const entry = viteEntry('/api/rounds/admission/admit')!;
+  it.each([
+    '/_/',
+    '/api/rounds/admission/admit',
+    '/api/collections/execution_service/auth-with-password',
+    '/api/collections/Execution_Service/auth-with-password',
+  ])('refuses a WebSocket upgrade on %s too', (url) => {
+    const { entry, socket, forwarded } = upgrade(url);
     expect(entry.ws).toBe(true);
-    const server = {} as { ws?: (req: unknown, socket: { end: (text: string) => void }) => void };
-    entry.configure?.(server as never, entry);
-    const socket = { end: vi.fn() };
-    server.ws?.({}, socket);
     expect(socket.end).toHaveBeenCalledWith(expect.stringMatching(/^HTTP\/1\.1 404 /));
+    expect(forwarded).toBe(false);
+  });
+
+  it('passes a WebSocket upgrade on an open path to PocketBase', () => {
+    const { entry, socket, forwarded } = upgrade('/api/realtime');
+    expect(entry.target).toBe(viteEntry('/api/health')?.target);
+    expect(socket.end).not.toHaveBeenCalled();
+    expect(forwarded).toBe(true);
+  });
+
+  it.each(PROXY.map(([context]) => context))('refuses a denied path in entry %s too', (context) => {
+    const entry = devProxy[context];
+    const req = { url: '/api/collections/Execution_Service/auth-with-password' };
+    expect(entry.bypass?.(req as never, {} as never, entry)).toBe(false);
   });
 
   it('sends the runner routes to the runner and the rest of /api to PocketBase', () => {

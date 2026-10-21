@@ -197,7 +197,10 @@ store that:
   whole;
 - after a real 31 s wait, reap puts a lease lost before its run started back
   in the queue and ends one lost after it started `worker-lost`, and a
-  same-key retry runs attempt two.
+  same-key retry runs attempt two;
+- an account's filters on its envelopes name no field of a job or an
+  attempt, and one account's backlog of queued jobs holds no other account's
+  job back.
 
 Then both replicas start with the store on (`execution-runners`): each is
 ready, and with no handler for any kind yet, each claims jobs and ends every
@@ -207,7 +210,7 @@ restart with it, both are ready again, and only the new secret logs in
 (`execution-ready-again`). The signup restart runs PocketBase with no worker
 secret, and the last one no longer logs in (`execution-disabled`). The deploy
 phase's verifier checks that nginx answers `/api/rounds/execution/` and the
-worker's login and records with 404.
+worker's login and records with 404, those in other cases too.
 
 After the scan,
 [`probes/admission_migration_check.py`](probes/admission_migration_check.py)
@@ -219,7 +222,10 @@ operator would, checks that the data is back as it was, and applies it again.
 [`probes/execution_migration_check.py`](probes/execution_migration_check.py)
 does the same for `1700007100_execution_jobs.js` on a `pb_data` built from
 every migration before it: the four collections with no client writes, the
-`envelope` and `job` links, and the 8 MiB `files` limit, and nothing else.
+`envelope` and `job` links, and the 8 MiB `files` limit, and nothing else,
+with envelopes that link into no service-only collection and a down step
+that puts back the `files` limit it found, also on a `pb_data` where
+PocketBase's reset ran first and `files` held 2 MiB.
 [`probes/json_limits_check.py`](probes/json_limits_check.py) holds every JSON
 field's maxSize to the limit its migrations declare (D10). PocketBase's own
 `1702134272_set_default_json_max_size` resets them all to 2,000,000 bytes and
@@ -227,9 +233,10 @@ sorts after the repository's migrations, and `1702134273_json_limits.js` sets
 them back. The check takes the declared limits from a `pb_data` where
 PocketBase's migrations ran first, then checks that a fresh `pb_data` and one
 upgraded from every migration before `1700007100_execution_jobs.js` hold them,
-that the registry changes nothing else and saves no collection where they
-already hold, and that `pocketbase migrate down 1` puts the 2,000,000-byte
-default back and a second `migrate up` restores them.
+that the registry changes nothing else but its record and saves and
+records nothing where they already hold, and that `pocketbase migrate down 1`
+puts back the size each field held before it, removes the record, and a
+second `migrate up` restores them.
 
 Last, [`probes/relation_quarantine_check.py`](probes/relation_quarantine_check.py)
 runs the same pinned binary, with no network, against the relation

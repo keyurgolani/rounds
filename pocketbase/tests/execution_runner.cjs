@@ -163,7 +163,10 @@ const results = program.steps.map((step) => {
     case "claim": {
       const input = execution.checkClaim(step.input);
       if (input === null) return { status: 400, body: { error: "invalid_request" } };
-      return execution.claim(store, input, step.now);
+      // With how many whole job rows it read.
+      const before = store.jobReads();
+      const out = execution.claim(store, input, step.now);
+      return Object.assign({ job_reads: store.jobReads() - before }, out);
     }
     case "heartbeat": {
       const input = execution.checkHeartbeat(step.input);
