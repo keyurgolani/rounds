@@ -108,6 +108,9 @@ DENIED_ROUTES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("deployment.proxy.collection-metadata.denied", "/api/collections", ("GET", "POST")),
     ("deployment.proxy.collection-metadata.denied", "/api/collections/users", ("GET",)),
     ("deployment.proxy.admission-hooks.denied", "/api/rounds/admission/", ("GET", "POST")),
+    ("deployment.proxy.execution-hooks.denied", "/api/rounds/execution/", ("GET", "POST")),
+    ("deployment.proxy.execution-service.denied", "/api/collections/execution_service/auth-with-password", ("POST",)),
+    ("deployment.proxy.execution-service.denied", "/api/collections/execution_service/records", ("GET",)),
 )
 
 # Every check id this tool can report, with the guarantee it states. The
@@ -120,6 +123,8 @@ CHECKS: dict[str, str] = {
     "deployment.proxy.logs-api.denied": "PocketBase logs are not reachable at the public URL",
     "deployment.proxy.collection-metadata.denied": "collection schema routes are not reachable at the public URL",
     "deployment.proxy.admission-hooks.denied": "the admission hook routes are not reachable at the public URL",
+    "deployment.proxy.execution-hooks.denied": "the execution job store's hook routes are not reachable at the public URL",
+    "deployment.proxy.execution-service.denied": "the execution service record, its login included, is not reachable at the public URL",
     "deployment.proxy.execute.gone": "/api/execute no longer reaches a code runner",
     "deployment.proxy.health.open": "the health route still reaches PocketBase",
     "deployment.proxy.records.open": "record routes still reach PocketBase",

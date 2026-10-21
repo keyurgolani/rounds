@@ -26,7 +26,9 @@ Admission (``app/admission.py``) enforces the route gates and
 ``EXECUTION_DEFINITIONS`` and runs steps 6 and 7 as
 ``ENFORCE_IDEMPOTENCY`` and ``ENFORCE_QUOTA`` say, the AI router reads
 ``PAPER_FETCH`` and ``PROVIDER_PRIVATE_NETWORK``, and PocketBase and the
-SPA read ``SIGNUPS``.
+SPA read ``SIGNUPS``. ``EXECUTION_STORE`` turns on the execution job
+store (ROUNDS-00A-L03): PocketBase serves its hook routes and each runner
+replica runs its executor and reaper.
 
 The two enforcement gates start at ``observe``: admission records what
 it would deny and denies nothing. The next ``v*`` release sets them to
@@ -54,6 +56,8 @@ ENFORCEMENT_VALUES = ("off", "observe", "enforce")
 # does, enforce takes only definition requests, and disabled turns the
 # six execution routes off.
 DEFINITION_VALUES = ("legacy", "enforce", "disabled")
+# ROUNDS-00A-L03: off until an operator turns the job store on.
+STORE_VALUES = ("off", "on")
 
 _log = logging.getLogger(__name__)
 
@@ -158,6 +162,17 @@ REGISTRY: tuple[Gate, ...] = (
             "PocketBase as stage 2 does; enforce runs only the compiled server-owned "
             "definitions and refuses older request shapes; disabled answers 503 "
             "definitions_disabled."
+        ),
+    ),
+    Gate(
+        name="EXECUTION_STORE",
+        values=STORE_VALUES,
+        default="off",
+        closed="off",
+        readers=frozenset({RUNNER, POCKETBASE}),
+        description=(
+            "The execution job store: on, PocketBase serves the hook routes under "
+            "/api/rounds/execution/ and each runner replica runs its executor and reaper."
         ),
     ),
     Gate(

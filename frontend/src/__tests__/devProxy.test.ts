@@ -73,6 +73,11 @@ const NEVER_PROXIED = [
   '/_/images/logo.svg',
   '/api/rounds/admission/admit',
   '/api/rounds/admission/usage?x=1',
+  '/api/rounds/execution/enqueue',
+  '/api/rounds/execution/claim',
+  '/api/rounds/execution/reap?x=1',
+  '/api/collections/execution_service/auth-with-password',
+  '/api/collections/execution_service/records',
   '/api/admins',
   '/api/admins/auth-with-password',
   '/api/settings',
@@ -106,7 +111,7 @@ const PROXIED = [
 
 describe('the dev proxy and production nginx', () => {
   it('found the denials in nginx.conf', () => {
-    expect(LOCATIONS.filter((l) => l.denies).length).toBeGreaterThanOrEqual(4);
+    expect(LOCATIONS.filter((l) => l.denies).length).toBeGreaterThanOrEqual(5);
   });
 
   it.each(NEVER_PROXIED)('both answer 404 for %s', (url) => {

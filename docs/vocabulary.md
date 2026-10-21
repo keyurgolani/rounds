@@ -331,7 +331,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 
 ## Adapters
 
-164 entries: 50 collection, 3 field, 19 stored-value, 8 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
+169 entries: 54 collection, 3 field, 19 stored-value, 9 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
 
 ### collection
 
@@ -354,6 +354,10 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 | code_drafts | `pocketbase/pb_migrations/1700000000_init_collections.js:555` | `practice-draft` | Practice Draft | #164 (ROUNDS-32-L10) |
 | coding_guides | `pocketbase/pb_migrations/1700000000_init_collections.js:191` | decided by #39 (ROUNDS-07-L01) |  | #43 (ROUNDS-07-L05) |
 | coding_questions | `pocketbase/pb_migrations/1700000000_init_collections.js:74` | `practice-item` | Practice Item | #43 (ROUNDS-07-L05) |
+| execution_attempts | `pocketbase/pb_migrations/1700007100_execution_jobs.js:129` | `execution-attempt` |  | #18 (ROUNDS-02-L01) |
+| execution_envelopes | `pocketbase/pb_migrations/1700007100_execution_jobs.js:173` | `execution-attempt` |  | #18 (ROUNDS-02-L01) |
+| execution_jobs | `pocketbase/pb_migrations/1700007100_execution_jobs.js:90` | `execution-attempt` |  | #18 (ROUNDS-02-L01) |
+| execution_service | `pocketbase/pb_migrations/1700007100_execution_jobs.js:67` | decided by #3 (ROUNDS-00A-L03) |  | #18 (ROUNDS-02-L01) |
 | exp_anecdote_bullets | `pocketbase/pb_migrations/1700003000_experience_connections.js:20-29` | decided by #36 (ROUNDS-06-L01) |  | #164 (ROUNDS-32-L10) |
 | exp_job_anecdotes | `pocketbase/pb_migrations/1700003000_experience_connections.js:20-29` | decided by #36 (ROUNDS-06-L01) |  | #164 (ROUNDS-32-L10) |
 | exp_job_bullets | `pocketbase/pb_migrations/1700003000_experience_connections.js:20-29` | decided by #36 (ROUNDS-06-L01) |  | #164 (ROUNDS-32-L10) |
@@ -432,6 +436,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 | /api/share | `backend/routers/share.py:36` | `share-capability` |  | #164 (ROUNDS-32-L10) |
 | /api/take-home | `backend/routers/take_home.py:26` | `track-take-home` |  | #164 (ROUNDS-32-L10) |
 | /health | `backend/main.py:37` | decided by #174 (ROUNDS-34-L05) |  | #174 (ROUNDS-34-L05) |
+| /ready | `backend/main.py:83` | decided by #174 (ROUNDS-34-L05) |  | #174 (ROUNDS-34-L05) |
 
 ### route-segment
 
