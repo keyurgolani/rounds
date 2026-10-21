@@ -1,0 +1,41 @@
+{
+  "$comment": "Touched-row manifest demo-contain-v1 (ROUNDS-00B-L07, #177): each delete and user-row write a demo containment migration's up step makes, with its disposition. Stage 1 is pocketbase/pb_migrations/1700006700_demo_contain.js; stage 3's migration adds its rows here. Every row it names belongs to an account with users.is_demo set, and each disposition is an intentional drop, which the spec allows only after the owner approves it, so owner_approval stays pending until the owner reviews it and each migration's lint entry waits on that review. Which rows a database holds depends on its data, so the dispositions are per collection.",
+  "manifest": "demo-contain-v1",
+  "issue": "#177",
+  "owner_approval": "pending owner review",
+  "scope": "rows whose user is an account with users.is_demo set",
+  "migrations": [
+    {
+      "migration": "1700006700_demo_contain",
+      "stage": 1,
+      "deletes": [
+        {
+          "collection": "resume_share_links",
+          "owner_field": "user",
+          "disposition": "drop",
+          "with": [
+            {
+              "collection": "resume_share_views",
+              "via": "link",
+              "disposition": "drop",
+              "why": "cascades from its share link"
+            }
+          ]
+        },
+        {
+          "collection": "ai_settings",
+          "owner_field": "user",
+          "disposition": "drop"
+        },
+        {
+          "collection": "ai_providers",
+          "owner_field": "user",
+          "disposition": "drop",
+          "why": "the provider's stored key goes with the row; the account's own ai_settings rows are deleted first, so no reference to it is left to clear"
+        }
+      ],
+      "user_row_writes": [],
+      "untouched": "every row a standard account owns, the demo users records themselves, and every other collection a demo account owns, which stage 3 removes with the account"
+    }
+  ]
+}
