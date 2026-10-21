@@ -104,14 +104,17 @@ COMPOSE_PROJECT=rounds-9s1-b harness/run.sh
 The launcher builds the pocketbase, probe, runner, frontend, and materializer
 images, brings PocketBase up, runs the main probe phase, runs the admission
 check and the admission-deploy phase against two runner replicas, restarts the
-runner with `/api/run` turned off and then on again, recreates PocketBase with
-signups disabled (the named `pb_data` volume keeps the run's accounts and
-rows), runs the signup-hook probe, brings the runner and nginx frontend up and
+runner with `/api/run` turned off and then on again, runs the demo checks with
+the demo on, recreates PocketBase with signups disabled and the demo at its
+default (the named `pb_data` volume keeps the run's accounts and rows), runs
+the signup-hook probe and the demo-off checks, brings the runner and nginx
+frontend up and
 runs the deployment verifier through them, checks that only PocketBase reaches
 the snapshot materializer and that it has no route out, stops PocketBase for
 the degraded probe, runs the verifier's checks and the cross-owner scan on the
 run's `pb_data`, prints the verdict (pass / expected-fail / fail counts), runs
-the admission migration, relation quarantine, and snapshot store checks, and
+the admission migration, demo containment migration, relation quarantine, and
+snapshot store checks, and
 tears the stack down, removing the images and the volume it made.
 Its exit code is non-zero on any failed or missing result.
 
@@ -221,7 +224,36 @@ directory all derive from the compose project name, so runs with different
 `COMPOSE_PROJECT` values do not collide.
 
 The account factory generates fresh credentials for every run and never uses
-the demo account password.
+the demo account password. Only the demo phases sign in with it, to check it
+works with the demo on and fails with it off.
+
+## Demo account
+
+`ROUNDS-00B-L07` stage 1 keeps the demo account off unless PocketBase runs with
+`ROUNDS_ENABLE_DEMO=true`. PocketBase runs with it on from phase 1, as a hosted
+demo does, and [`probes/demo_check.py`](probes/demo_check.py) checks with the
+runner up (`demo-on`) that:
+
+- the seeded demo account signs in, and so does a demo account a superuser
+  makes;
+- a demo caller changes its profile but not its password, email, username, or
+  verification, and can't delete itself or ask for an email change;
+- a demo caller can't create a share link, an AI provider, or AI settings,
+  through PocketBase or the runner, while a standard account still can.
+
+The signup restart turns the demo off, and `demo-off` checks that both demo
+accounts' sign-ins get the answer a wrong password gets, that a token from
+before the restart is refused, and that a standard account still signs in.
+
+After the admission migration check,
+[`probes/demo_contain_migration_check.py`](probes/demo_contain_migration_check.py)
+applies `1700006700_demo_contain.js` with the pinned binary to a `pb_data` whose
+legacy fixture has rows in every account-scoped collection for the seeded demo
+account, a second demo account, and a standard account. It checks that the
+migration deletes only the demo accounts' share links, the views on them, their
+AI providers, and their AI settings, that every other row is as it was, column
+by column, and that `migrate down 1` changes no row and applying it again
+deletes nothing more.
 
 ## Receipts
 

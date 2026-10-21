@@ -312,6 +312,18 @@ ROUNDS_DISABLE_SIGNUPS=true
 
 The published frontend image applies these flags at container startup through `/runtime-config.js`, so no local image rebuild is required.
 
+## Demo Account
+
+Every install creates the demo account `demo@rounds.keyurgolani.name` (`1700000600_demo_user.js`), and it stays off unless PocketBase runs with `ROUNDS_ENABLE_DEMO=true`, or `ROUNDS_GATE_DEMO=enabled`, which wins when set. Only a hosted demo turns it on.
+
+**Turning it on.** Set `ROUNDS_ENABLE_DEMO=true` for the PocketBase service, in `.env` for Compose or in `k8s/pocketbase.yaml`, and restart PocketBase. A hosted demo sets it before it deploys the release that adds `1700006700_demo_contain.js`, or its demo login stops working. PocketBase logs `demo_lock` with `demo` `enabled` at start.
+
+**Turning it off.** This is also the emergency disable. Unset the variable or set it to `false`, and restart PocketBase. At start PocketBase gives each demo account a random 48-character password and a new token key, so every session the demo had ends, and logs `demo_lock` with `demo` `disabled` and the `locked` and `failed` counts; `failed` should be 0. A demo sign-in then gets the same 400 as a wrong password. On a new database the first start logs `code` `not_ready` instead, because PocketBase runs migrations after its start hooks; the demo account they create is refused at sign-in until the next start locks it.
+
+**What a demo account can do, on or off.** It changes only its own name, bio, target, and avatar, and it can't delete itself or change its email. No share link, AI provider, AI credential, model, or AI settings row it owns can be created or changed, through the API or by any other writer. Those requests get 403 `demo_not_permitted`.
+
+**The containment migration.** `1700006700_demo_contain.js` deletes the share links (with their view records), AI settings, and AI providers that demo accounts own, at the first start of the release that adds it, and touches nothing a standard account owns. It's forward-only: `migrate down` puts nothing back, so take the backup in [Upgrades](#upgrades) first. `pocketbase/migration-manifests/demo-contain-v1.json` lists each delete.
+
 ## PocketBase Admin Access
 
 The frontend's nginx answers 404 for the admin UI (`/_/`) and PocketBase's admin API, so neither is reachable on your domain. Reach the admin UI on the host instead.

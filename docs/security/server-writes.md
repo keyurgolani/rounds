@@ -10,7 +10,7 @@ A server-only collection has `null` client create, update, and delete rules. At 
 | --- | --- | --- |
 | Caller | A hook route under `$apis.requireRecordAuth("users")`. It writes only the caller's rows, and touches a shared counter only inside its own transaction, never resetting it. | the leaf that adds the route |
 | Service | A non-superuser auth collection for work no caller owns, matched in rules by `@request.auth.collectionName`. | its leaf, in the registry below |
-| System hook | A PocketBase handler with no caller token: a boot hook (`onBeforeServe`), a `cronAdd` job, or an anonymous hook route. A Service leaf that creates or resets its record at boot registers that hook too. | its leaf, in the registry below |
+| System hook | A PocketBase handler with no caller token: a boot hook (`onAfterBootstrap`, since PocketBase 0.22's JS hooks have no `onBeforeServe`), a `cronAdd` job, or an anonymous hook route. A Service leaf that creates or resets its record at boot registers that hook too. | its leaf, in the registry below |
 
 1. No Service credential goes into the runner's environment before #1's stage 2 ships the minimal child environment. Until then, candidate code can read that environment.
 2. A model hook (`onModel*`), or a library called inside another writer's transaction, rides on that write when it writes a server-only row. Its leaf lists it in its registry row.
@@ -51,6 +51,12 @@ A Caller route writes only the caller's rows. The account and its tier come from
 
 #4's PR 1 adds `legacy_artifact_snapshots` in `pocketbase/pb_migrations/1700008000_legacy_artifact_snapshots.js`. Its owner can list and view a row; create, update, and delete are `null`. Nothing writes it yet. Its one writer is the Caller route in #4's row below, which PR 2 adds behind `legacy_snapshot_create` (default off). That route reads a resume or variant only after checking the caller owns it, and stores the markup the `materializer` service returns for it. The materializer itself writes nothing, holds no credential, and answers only PocketBase. The migration writes no row, and its down step drops the collection only while it's empty.
 
+## Demo Account
+
+#177's stage 1 contains the demo account that `1700000600_demo_user.js` creates on every install. `pb_hooks/demo.pb.js` reads `ROUNDS_GATE_DEMO`, or its alias `ROUNDS_ENABLE_DEMO`, in each handler; the demo is off by default. With it off, the System hook `onAfterBootstrap` gives each demo account a random password and a new token key at every start, so an old password or token stops working, and a demo sign-in gets the wrong-password 400. On or off, a demo caller changes only its `name`, `bio`, `target`, and `avatar`, can't delete its account or change its email, and no demo account owns a `resume_share_links`, `share_capabilities`, `ai_providers`, `ai_credentials`, `ai_provider_models`, or `ai_settings` row. Model hooks on those six refuse the save whoever writes it, so they write nothing themselves. Whether an account is a demo account comes only from #1's tier accessor, `tierOf()` in `pb_hooks/admission.js`, which reads `is_demo` until stage 2 repoints it at `account_system_state`.
+
+`1700006700_demo_contain.js` deletes the demo accounts' share links, their `resume_share_views` with them, and their `ai_settings` and `ai_providers`, forward-only. Manifest `demo-contain-v1` gives each delete its disposition.
+
 ## Registry of Planned Writers
 
 Each row restates the leaf's current body. The leaf confirms or corrects its row in the PR that adds the writer. Credentials appear by environment variable name only.
@@ -84,9 +90,11 @@ Each row restates the leaf's current body. The leaf confirms or corrects its row
 | #93 | Service | `share_resolvers`: `POST /api/rounds/share/view` | `share_view_counters` | `ROUNDS_SHARE_RESOLVER_PASSWORD` |
 | #130, #133, #134, #135 | Service | `execution_service`, inside #3's `complete`, calling #130's `AttachFeedback` | Feedback on Attempts | `ROUNDS_EXECUTION_SECRET` |
 | #161 | set by #161 | written once at the seal, per account through #19 | `legacy_share_history` | never the superuser |
-| #177 | Migration | stage 2's state migration, one `demo` row per demo account | `account_system_state` | none |
-| #177 | System hook | `demo.pb.js`: `onBeforeServe`, the `cronAdd` sweep, and the anonymous `POST /api/rounds/demo/sessions` | demo `users`, `account_system_state`, and the deployment `demo-session-create` bucket in `admission_counters` through `pb_hooks/admission.js` | none |
-| #177 | Caller | `POST /api/rounds/demo/sessions/end` | deletes the demo caller's account and files | caller's bearer |
+| #177 S1 | Migration | `1700006700_demo_contain.js` at start, under manifest `demo-contain-v1` | deletes the demo accounts' `resume_share_links` with their `resume_share_views`, and their `ai_settings` and `ai_providers` | none |
+| #177 S1 | System hook | `onAfterBootstrap` in `pb_hooks/demo.pb.js`: with the demo off, a random password and a new token key for each demo account at every start | demo `users` | none |
+| #177 S2 | Migration | stage 2's state migration, one `demo` row per demo account | `account_system_state` | none |
+| #177 S3 | System hook | `demo.pb.js`: the boot sweep, the `cronAdd` sweep, and the anonymous `POST /api/rounds/demo/sessions` | demo `users`, `account_system_state`, and the deployment `demo-session-create` bucket in `admission_counters` through `pb_hooks/admission.js` | none |
+| #177 S3 | Caller | `POST /api/rounds/demo/sessions/end` | deletes the demo caller's account and files | caller's bearer |
 
 #19's command gateway becomes a Caller hook route if #18 keeps PocketBase, and registers here then.
 
