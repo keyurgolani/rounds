@@ -244,14 +244,23 @@ export default function AICodingDetail() {
     saveNow,
   } = useAICodingDrafts(round, campaignId ?? undefined, rawRound);
 
-  // A reload the denial asks for saves the files first.
+  // A reload the denial asks for saves the files first. When a save
+  // fails the page stays, so nothing is lost, and the notice says the
+  // draft wasn't saved and keeps Reload for another try.
   async function reloadKeepingDrafts() {
+    let saved = false;
     try {
-      await saveNow?.();
+      saved = (await saveNow()) !== false;
     } catch {
-      /* best effort: the autosave keeps retrying until the reload */
+      saved = false;
     }
-    reloadPage();
+    if (saved) {
+      reloadPage();
+      return;
+    }
+    setRunDenial((current) =>
+      current ? { ...current, denial: { ...current.denial, saveFailed: true } } : current,
+    );
   }
 
   useEffect(() => {

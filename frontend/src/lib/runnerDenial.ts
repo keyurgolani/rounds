@@ -40,6 +40,8 @@ export interface RunnerDenial {
   correlationId: string | null;
   /** The server's fixed sentence, for the kinds that show it. */
   detail?: string | null;
+  /** For reload: the draft couldn't be saved first, so the page stayed. */
+  saveFailed?: boolean;
   /** The control that started the action; focus returns to it when
    *  the action dropped focus (a disabled button) and nothing else
    *  took it. */

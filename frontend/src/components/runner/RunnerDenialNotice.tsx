@@ -3,7 +3,8 @@
 // draft kept, too large, and not available for this account. The
 // definition states (ROUNDS-00A-L02) add reload for an out-of-date page,
 // with a Reload button that saves the draft first when the page passes
-// `onReload`, and retired, not here, unsupported, and file not allowed.
+// `onReload` (a page whose save failed stays and says so, keeping the
+// button), and retired, not here, unsupported, and file not allowed.
 //
 // The live region is always in the DOM, so screen readers announce a
 // denial when it appears. The notice never takes focus. If the action
@@ -120,6 +121,12 @@ function copyFor(denial: RunnerDenial, action: RunnerAction): { title: string; b
         body: `${text.subject} isn't available for this account.`,
       };
     case 'reload':
+      if (denial.saveFailed) {
+        return {
+          title: 'Draft not saved',
+          body: `Your draft couldn't be saved, so the page didn't reload. ${text.kept} Try Reload again.`,
+        };
+      }
       return {
         title: 'Reload to continue',
         body: `This page is out of date. ${text.none} ${text.kept}`,

@@ -17,7 +17,7 @@ const drafts = vi.hoisted(() => {
     setFile: () => {},
     hydrated: true,
     resetToStarter: () => {},
-    saveNow: vi.fn(() => Promise.resolve()),
+    saveNow: vi.fn(async (): Promise<boolean> => true),
   };
 });
 
@@ -78,7 +78,7 @@ function renderPage() {
 beforeEach(() => {
   window.localStorage.clear();
   reloadPage.mockReset();
-  drafts.saveNow.mockClear();
+  drafts.saveNow.mockClear().mockResolvedValue(true);
   vi.mocked(getAssignment).mockReset();
   vi.mocked(getAssignment).mockResolvedValue(ASSIGNMENT as never);
   vi.mocked(runProject).mockReset();
@@ -151,5 +151,25 @@ describe('TakeHomeDetail definition requests', () => {
     await user.click(within(region).getByRole('button', { name: 'Reload' }));
     await waitFor(() => expect(reloadPage).toHaveBeenCalledTimes(1));
     expect(drafts.saveNow.mock.invocationCallOrder[0]).toBeLessThan(reloadPage.mock.invocationCallOrder[0]);
+  });
+
+  it('stays on the page and says so when the files could not be saved, then reloads on a retry that saves', async () => {
+    vi.mocked(runProject).mockRejectedValue(new RunnerError({ message: 'x', status: 422, code: 'case_unknown' }));
+    drafts.saveNow.mockRejectedValueOnce(new Error('offline'));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Run' }));
+    const region = screen.getByRole('status');
+    await waitFor(() => expect(region).toHaveTextContent('Reload to continue'));
+    await user.click(within(region).getByRole('button', { name: 'Reload' }));
+    await waitFor(() => expect(region).toHaveTextContent('Draft not saved'));
+    expect(region).toHaveTextContent("Your draft couldn't be saved, so the page didn't reload.");
+    expect(region).toHaveTextContent('Try Reload again.');
+    expect(reloadPage).not.toHaveBeenCalled();
+    expect(within(region).getByRole('button', { name: 'Reload' })).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(reloadPage).toHaveBeenCalledTimes(1));
+    expect(drafts.saveNow).toHaveBeenCalledTimes(2);
   });
 });

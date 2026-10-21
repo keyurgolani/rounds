@@ -158,6 +158,24 @@ describe('definition states (ROUNDS-00A-L02)', () => {
     expect(reloadPage).not.toHaveBeenCalled();
   });
 
+  it('says the draft was not saved after a failed save, and keeps Reload for another try', async () => {
+    const user = userEvent.setup();
+    const onReload = vi.fn();
+    renderNotice(
+      <RunnerDenialNotice denial={denial('reload', { saveFailed: true })} action="grade" onReload={onReload} />,
+    );
+    const region = screen.getByRole('status');
+    expect(region).toHaveAttribute('aria-live', 'polite');
+    expect(within(region).getByText('Draft not saved')).toBeInTheDocument();
+    expect(region).toHaveTextContent(
+      "Your draft couldn't be saved, so the page didn't reload. Your files and notes are still here. Try Reload again.",
+    );
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Reload' })).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onReload).toHaveBeenCalledTimes(1);
+  });
+
   it('reloads the page itself when no handler is passed', async () => {
     const user = userEvent.setup();
     reloadPage.mockClear();
