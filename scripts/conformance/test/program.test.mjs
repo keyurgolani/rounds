@@ -277,6 +277,15 @@ describe('program: failing fixtures', () => {
     only(run(swap((t) => t.replace('| E5 | add | `ROUNDS-27-L02` | `ROUNDS-09` |', '| E5 | add | `ROUNDS-27-L02` | `ROUNDS-99` |'))), 'PROGRAM_UNRESOLVED_REF');
   });
 
+  it('fails DR_APPROVAL_STALE when a governed program file changes after ratification', () => {
+    const r = dr();
+    assert.equal(r.status, 'ratified');
+    assert.ok(r.approvalRef.governedFiles.some((g) => g.path === POLICY_PATH));
+    const recordRun = (dir) => records.check(dir, ctxFor(dir));
+    only(recordRun(programFixture((d) => editText(d, POLICY_PATH, (t) => `${t}\nAn unapproved edit.\n`))), 'DR_APPROVAL_STALE');
+    only(recordRun(programFixture((d) => editJson(d, DOD, (x) => { x.items.pop(); }))), 'DR_APPROVAL_STALE');
+  });
+
   it('fails DR_RECORD_INCOMPLETE when DR-0003 loses a field criterion 3 or the security section asks for', () => {
     const recordRun = (dir) => records.check(dir, ctxFor(dir));
     for (const field of ['owner', 'authorityBoundary', 'affectedPackages', 'versioning', 'supersession', 'securityConsequences']) {

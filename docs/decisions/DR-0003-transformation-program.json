@@ -3,10 +3,25 @@
   "id": "DR-0003",
   "title": "Transformation dependency and data-preserving clean-cutover program",
   "leaf": "ROUNDS-01-L03",
-  "status": "draft",
+  "status": "ratified",
   "owner": "Product Architecture",
-  "approver": "",
-  "approvalRef": null,
+  "approver": "keyurgolani",
+  "approvalRef": {
+    "pr": 199,
+    "governedFiles": [
+      {"path":"docs/program/cutover-policy.md","sha256":"e804179075c9d0ea9434a5f3d2e8dd899be9fac1541a04bb3aa29f0dd6666316"},
+      {"path":"docs/program/reauthorization.md","sha256":"8635537fc6a4eddb82e3fa8796fc5629a57473b4a3491cd736eccb60082364d6"},
+      {"path":"docs/program/rollback-template.schema.json","sha256":"9cb7f0c6fe0958ce0e443dc8de0f8bb5f35a4601a49007c43fdebc5dea712500"},
+      {"path":"docs/program/non-goals.json","sha256":"c99262133ec0e96a9cff48ba93459cf0a71d2d1c8738d91db5c9813adbc3254a"},
+      {"path":"docs/program/non-goals.schema.json","sha256":"9e7a26dbe4252e659e5c22688dac7acb509b419a402d877bbf2b0c9e9035c1b3"},
+      {"path":"docs/program/definition-of-done.json","sha256":"724536a802989c993a6ac468dfda9943e5d6c910f1d05a1532c33f3e137a16d8"},
+      {"path":"docs/program/definition-of-done.schema.json","sha256":"fe06032731eb6880495bf678bc2467caa9785f9143c35178672fcf7452f8466b"},
+      {"path":"docs/program/journeys.json","sha256":"4b8ffc7210ca1b6e87e3828efb7c56a1c65a87d897262fdaf52ffb39bb4ace3a"},
+      {"path":"docs/program/journeys.schema.json","sha256":"682adee967738976b92f7597347b4dd3f57308a144822360e86202fed323aa32"},
+      {"path":"docs/program/program-record.schema.json","sha256":"530dbe0bd33507b008e087375c4c225392a17b789ac7c32517e3233a33a34e42"}
+    ]
+  },
+  "ratifiedOn": "2026-10-20",
   "compatibility": "additive",
   "revision": 1,
   "supersedes": null,
