@@ -27,6 +27,11 @@ services:
       # since a known password would log in; set both in .env to try it.
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
       - ROUNDS_EXECUTION_SECRET=${ROUNDS_EXECUTION_SECRET:-}
+      # Legacy Artifact Snapshot creation (ROUNDS-00A-L04), off by
+      # default. Only with it on does PocketBase call the materializer,
+      # so turn it on together with `--profile materializer`.
+      - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
+      - MATERIALIZER_URL=${MATERIALIZER_URL:-http://materializer:4100}
     # The app network, plus the internal one only it shares with the
     # materializer.
     networks:
@@ -38,9 +43,10 @@ services:
   # the repository root because it bundles the resume templates. Only
   # PocketBase reaches it, over the internal materialize network; it has no
   # host port, no secret, no other network, and a read-only filesystem.
-  # Nothing calls it yet, so it sits behind the `materializer` profile and
-  # does not start on a plain `up`; #4 PR 2 wires PocketBase to it and
-  # removes the profile. Enable it now with `--profile materializer`.
+  # PocketBase calls it only while ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE is
+  # enabled, so it sits behind the `materializer` profile and does not
+  # start on a plain `up`. Start it with `--profile materializer` when you
+  # turn the gate on.
   materializer:
     profiles: ["materializer"]
     build:
@@ -96,6 +102,7 @@ services:
       - ROUNDS_GATE_ENFORCE_QUOTA=${ROUNDS_GATE_ENFORCE_QUOTA:-}
       - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
+      - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
     depends_on:
       - pdf-renderer
       - pocketbase
