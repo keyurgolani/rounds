@@ -1,0 +1,5 @@
+{
+  "schema": "containment-corpus-skip-ledger/v1",
+  "note": "Every skip needs an owner, an expiry (YYYY-MM-DD), and a reason. An expired skip, or one for a fixture the manifest does not carry, fails the lane. A quarantined containment fixture blocks promotion unless its route ships disabled by default. No fixture is skipped at stage 1.",
+  "skips": []
+}

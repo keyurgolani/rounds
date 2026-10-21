@@ -1,0 +1,10 @@
+# The corpus image needs only the corpus itself and #9's harness client.
+# Keeping the build context to these two trees makes the context transfer
+# small (the repository root holds node_modules, build output, and .git).
+# BuildKit and Finch both honour this Dockerfile-specific ignore file.
+*
+!tests
+!harness
+**/__pycache__
+**/.receipts
+**/node_modules
