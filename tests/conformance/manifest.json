@@ -2,10 +2,17 @@
   "schema": "containment-corpus-manifest/v1",
   "corpus_version": "1",
   "audited_revision": "62d4eae",
-  "targets": ["ci", "compose", "k8s"],
+  "targets": [
+    "ci",
+    "compose",
+    "k8s"
+  ],
   "defaults": {
-    "languages": ["python", "javascript"],
-    "control": "fault profile in tests/conformance/faults/ (ci-fault-*), landing with the closing leaf; never committed (decision D4)",
+    "languages": [
+      "python",
+      "javascript"
+    ],
+    "control": "a negative control that lands with the closing leaf, in the same pull request (decision D4)",
     "destructive": false,
     "environment_sensitive": false,
     "schemas": {
@@ -31,14 +38,33 @@
       "status": "contained",
       "closing_leaf": "ROUNDS-00A-L01",
       "module": "ex_01_anonymous",
-      "routes": ["POST /api/run", "POST /api/evaluate", "POST /api/ai-coding/run-project", "POST /api/ai-coding/grade", "POST /api/take-home/run", "POST /api/take-home/submit", "POST /api/pdf/render"],
+      "routes": [
+        "POST /api/run",
+        "POST /api/evaluate",
+        "POST /api/ai-coding/run-project",
+        "POST /api/ai-coding/grade",
+        "POST /api/take-home/run",
+        "POST /api/take-home/submit",
+        "POST /api/pdf/render"
+      ],
       "languages": [],
       "environment_sensitive": true,
-      "control": "ci-fault-admission-open (the account step removed)",
+      "control": "selftest/test_negative_controls.py: the account step off, and the body checked before the account",
       "setup": "none; the fixture sends no account",
       "teardown": "none",
-      "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
-      "guarantee": "every admitted route refuses a request that carries no account before it starts work"
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "every admitted route refuses a request that carries no account before it starts work",
+      "subcases": [
+        {
+          "id": "EX-01.anonymous-denied",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        }
+      ]
     },
     {
       "id": "EX-02",
@@ -47,14 +73,44 @@
       "status": "contained",
       "closing_leaf": "ROUNDS-00B-L01",
       "module": "ex_02_cross_account_result",
-      "routes": ["GET /api/collections/take_home_attempts/records/{id}"],
+      "routes": [
+        "POST /api/collections/take_home_attempts/records",
+        "GET /api/collections/take_home_attempts/records/:id",
+        "GET /api/collections/take_home_attempts/records"
+      ],
       "languages": [],
       "environment_sensitive": true,
-      "control": "ci-fault-pb-open-attempts (the owner read rule removed)",
+      "control": "selftest/test_negative_controls.py: another account's rows readable, and a foreign id answering unlike a missing one",
       "setup": "two synthetic accounts; account A creates one result row",
       "teardown": "both accounts removed with the admin token",
-      "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
-      "guarantee": "a signed-in account cannot read another account's result by id, and a foreign id reads the same as a missing one; the quota-drain and in-flight sub-cases are a pending row for ROUNDS-00A-L03"
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "a signed-in account cannot read another account's result by id, and a foreign id reads the same as a missing one; the quota-drain and in-flight sub-cases are a pending row for ROUNDS-00A-L03",
+      "subcases": [
+        {
+          "id": "EX-02.result-read-denied",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00B-L01"
+        },
+        {
+          "id": "EX-02.foreign-reads-as-missing",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00B-L01"
+        },
+        {
+          "id": "EX-02.quota-drain",
+          "status": "pending",
+          "closing_leaf": "ROUNDS-00A-L03"
+        },
+        {
+          "id": "EX-02.in-flight-cap",
+          "status": "pending",
+          "closing_leaf": "ROUNDS-00A-L03"
+        }
+      ]
     },
     {
       "id": "EX-03",
@@ -63,14 +119,28 @@
       "status": "contained",
       "closing_leaf": "ROUNDS-00A-L01",
       "module": "ex_03_demo_flag_immutable",
-      "routes": ["PATCH /api/collections/users/records/{id}"],
+      "routes": [
+        "PATCH /api/collections/users/records/:id",
+        "GET /api/collections/users/records/:id"
+      ],
       "languages": [],
       "environment_sensitive": true,
-      "control": "ci-fault-demo-flags-writable (the demo-field guard removed)",
+      "control": "selftest/test_negative_controls.py: client writes to the demo flags accepted",
       "setup": "one synthetic account",
       "teardown": "the account removed with the admin token",
-      "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
-      "guarantee": "a client write to is_demo or the demo usage flags on its own record does not change them"
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "a client write to is_demo or the demo usage flags on its own record does not change them",
+      "subcases": [
+        {
+          "id": "EX-03.demo-flags-server-owned",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        }
+      ]
     },
     {
       "id": "EX-04",
@@ -79,14 +149,36 @@
       "status": "contained",
       "closing_leaf": "ROUNDS-00A-L01",
       "module": "ex_04_oversized_input",
-      "routes": ["POST /api/run", "POST /api/evaluate"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/run",
+        "POST /api/evaluate"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "environment_sensitive": true,
-      "control": "ci-fault-no-byte-cap (the byte step removed)",
+      "control": "selftest/test_negative_controls.py: the byte cap waiting for the body, and caller fields accepted",
       "setup": "none; the fixture sends filler bytes",
       "teardown": "none",
-      "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
-      "guarantee": "a body over the route cap is refused 413 payload_too_large before it is read; the caller-limit sub-cases close with ROUNDS-00A-L02"
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "a body over the route cap is refused 413 payload_too_large before it is read; the caller-limit sub-cases close with ROUNDS-00A-L02",
+      "subcases": [
+        {
+          "id": "EX-04.body-cap",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        },
+        {
+          "id": "EX-04.caller-limits-refused",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L02"
+        }
+      ]
     },
     {
       "id": "EX-05",
@@ -95,14 +187,32 @@
       "status": "contained",
       "closing_leaf": "ROUNDS-00A-L02",
       "module": "ex_05_caller_command",
-      "routes": ["POST /api/run", "POST /api/ai-coding/run-project"],
-      "languages": ["python", "javascript", "typescript"],
+      "routes": [
+        "POST /api/run",
+        "POST /api/ai-coding/run-project"
+      ],
+      "languages": [
+        "python",
+        "javascript",
+        "typescript"
+      ],
       "environment_sensitive": false,
-      "control": "ci-fault-definitions-legacy (the enforced gate honouring caller fields)",
+      "control": "selftest/test_negative_controls.py: caller fields accepted",
       "setup": "one synthetic account; the enforced execution-definitions gate",
       "teardown": "the account removed with the admin token",
-      "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
-      "guarantee": "with server-owned definitions enforced, a caller-supplied test_command is refused legacy_request_rejected before anything runs"
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "with server-owned definitions enforced, a caller-supplied test_command is refused legacy_request_rejected before anything runs",
+      "subcases": [
+        {
+          "id": "EX-05.caller-command-refused",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L02"
+        }
+      ]
     },
     {
       "id": "EX-06",
@@ -111,14 +221,41 @@
       "status": "contained",
       "closing_leaf": "ROUNDS-00A-L02",
       "module": "ex_06_caller_validator",
-      "routes": ["POST /api/evaluate", "POST /api/run"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/evaluate",
+        "POST /api/run"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "environment_sensitive": false,
-      "control": "ci-fault-definitions-legacy (the enforced gate honouring caller fields)",
+      "control": "selftest/test_negative_controls.py: caller fields accepted",
       "setup": "one synthetic account; the enforced execution-definitions gate",
       "teardown": "the account removed with the admin token",
-      "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
-      "guarantee": "caller validators and a caller-supplied driver are refused legacy_request_rejected; running a caller validator in the worker is a pending row for ROUNDS-00A-L05"
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "caller validators and a caller-supplied driver are refused legacy_request_rejected; running a caller validator in the worker is a pending row for ROUNDS-00A-L05",
+      "subcases": [
+        {
+          "id": "EX-06.caller-validators-refused",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        },
+        {
+          "id": "EX-06.caller-driver-refused",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        },
+        {
+          "id": "EX-06.validators-in-worker",
+          "status": "pending",
+          "closing_leaf": "ROUNDS-00A-L05"
+        }
+      ]
     },
     {
       "id": "EX-07",
@@ -127,14 +264,34 @@
       "status": "contained",
       "closing_leaf": "ROUNDS-00A-L01",
       "module": "ex_07_candidate_env_absence",
-      "routes": ["POST /api/run"],
-      "languages": ["python"],
+      "routes": [
+        "POST /api/run"
+      ],
+      "languages": [
+        "python"
+      ],
       "environment_sensitive": true,
-      "control": "ci-fault-child-full-env (the candidate given the runner's environment)",
+      "control": "selftest/test_negative_controls.py: the candidate given the runner's environment",
       "setup": "one synthetic account; the runner given the run's canaries as its environment",
       "teardown": "the account removed with the admin token",
-      "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
-      "guarantee": "the candidate's environment holds no runner secret; the /proc and other-uid reads are pending rows for ROUNDS-00A-L05 and ROUNDS-00A-L07"
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "the candidate's environment holds no runner secret; the /proc and other-uid reads are pending rows for ROUNDS-00A-L05 and ROUNDS-00A-L07",
+      "subcases": [
+        {
+          "id": "EX-07.candidate-env-minimal",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        },
+        {
+          "id": "EX-07.other-process-env",
+          "status": "pending",
+          "closing_leaf": "ROUNDS-00A-L05"
+        }
+      ]
     },
     {
       "id": "EX-08",
@@ -142,8 +299,15 @@
       "spec_ref": "security gate 3491; issue #8 EX-08",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L05",
-      "routes": ["POST /api/run", "POST /api/ai-coding/run-project", "POST /api/take-home/run"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/run",
+        "POST /api/ai-coding/run-project",
+        "POST /api/take-home/run"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "environment_sensitive": true,
       "control": "ci-fault-worker-network (a worker with network), landing with the closing leaf",
       "setup": "the bait network (fake metadata, fake RFC1918 service, logging DNS resolver)",
@@ -156,8 +320,14 @@
       "spec_ref": "security gate 3491; issue #8 EX-09",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L05",
-      "routes": ["POST /api/run", "POST /api/ai-coding/run-project"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/run",
+        "POST /api/ai-coding/run-project"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "environment_sensitive": true,
       "control": "ci-fault-worker-network (a worker with a resolver), landing with the closing leaf",
       "setup": "the logging DNS resolver on the bait network",
@@ -170,8 +340,14 @@
       "spec_ref": "security gate 3484; issue #8 EX-10",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L05",
-      "routes": ["POST /api/run", "POST /api/ai-coding/run-project"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/run",
+        "POST /api/ai-coding/run-project"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "destructive": true,
       "control": "ci-fault-shared-scratch (jobs sharing a scratch root), landing with the closing leaf",
       "setup": "two sequential runs",
@@ -184,8 +360,13 @@
       "spec_ref": "security gate 3485; issue #8 EX-11",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L05",
-      "routes": ["POST /api/run"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/run"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "destructive": true,
       "control": "ci-fault-no-pid-limit (the process cap raised), landing with the closing leaf",
       "setup": "a resource-profile limit plus one",
@@ -198,8 +379,13 @@
       "spec_ref": "security gate 3485; issue #8 EX-12",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L05",
-      "routes": ["POST /api/run"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/run"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "destructive": true,
       "control": "ci-fault-no-memory-limit (the limits raised), landing with the closing leaf",
       "setup": "a resource-profile limit plus one",
@@ -212,8 +398,14 @@
       "spec_ref": "design-spec 1753; issue #8 EX-13",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L05",
-      "routes": ["POST /api/run", "POST /api/take-home/submit"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/run",
+        "POST /api/take-home/submit"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "destructive": true,
       "control": "ci-fault-soft-kill (the worker not hard-killing the group), landing with the closing leaf",
       "setup": "a program that ignores SIGTERM",
@@ -226,8 +418,13 @@
       "spec_ref": "security gate 3486; issue #8 EX-14",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L05",
-      "routes": ["POST /api/run"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/run"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "destructive": true,
       "control": "ci-fault-no-stream-cap (the output stream uncapped), landing with the closing leaf",
       "setup": "a program that writes far past the output cap",
@@ -240,8 +437,14 @@
       "spec_ref": "security gate 3484; issue #8 EX-15",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L05",
-      "routes": ["POST /api/run", "POST /api/ai-coding/run-project"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/run",
+        "POST /api/ai-coding/run-project"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "destructive": true,
       "control": "ci-fault-no-reap (the worker left running), landing with the closing leaf",
       "setup": "two sequential runs",
@@ -254,8 +457,14 @@
       "spec_ref": "security gate 3487; issue #8 EX-16",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L05",
-      "routes": ["POST /api/run", "POST /api/ai-coding/run-project"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/run",
+        "POST /api/ai-coding/run-project"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "environment_sensitive": true,
       "control": "ci-fault-privileged-worker (capabilities and a mounted socket), landing with the closing leaf",
       "setup": "the worker's security context",
@@ -268,8 +477,13 @@
       "spec_ref": "security gate 3488; issue #8 EX-17",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L03",
-      "routes": ["POST /api/take-home/submit", "GET /health"],
-      "languages": ["python"],
+      "routes": [
+        "POST /api/take-home/submit",
+        "GET /health"
+      ],
+      "languages": [
+        "python"
+      ],
       "control": "ci-fault-blocking-loop (the event loop held), landing with the closing leaf",
       "setup": "one, then four, concurrent submissions",
       "teardown": "the accounts removed",
@@ -281,8 +495,13 @@
       "spec_ref": "security gate 3494; issue #8 EX-18",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L07",
-      "routes": ["POST /api/run", "POST /api/take-home/submit"],
-      "languages": ["python"],
+      "routes": [
+        "POST /api/run",
+        "POST /api/take-home/submit"
+      ],
+      "languages": [
+        "python"
+      ],
       "environment_sensitive": true,
       "control": "ci-fault-log-canary (a sink that keeps the value), landing with the closing leaf",
       "setup": "a canary planted in the candidate's input",
@@ -295,8 +514,14 @@
       "spec_ref": "design-spec 1753; issue #8 FG-01",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L02",
-      "routes": ["POST /api/evaluate", "POST /api/ai-coding/grade"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/evaluate",
+        "POST /api/ai-coding/grade"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "control": "ci-fault-trust-stdout (the runner trusting a printed result), landing with the closing leaf",
       "setup": "a program that prints a forged result marker",
       "teardown": "the account removed",
@@ -308,8 +533,14 @@
       "spec_ref": "design-spec 1753; issue #8 FG-02",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L02",
-      "routes": ["POST /api/ai-coding/run-project", "POST /api/take-home/submit"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/ai-coding/run-project",
+        "POST /api/take-home/submit"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "control": "ci-fault-trust-exit (the runner trusting the exit code), landing with the closing leaf",
       "setup": "a program that prints a fake summary and exits 0",
       "teardown": "the account removed",
@@ -321,8 +552,13 @@
       "spec_ref": "design-spec 1753; issue #8 FG-03",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L02",
-      "routes": ["POST /api/take-home/submit"],
-      "languages": ["python", "javascript"],
+      "routes": [
+        "POST /api/take-home/submit"
+      ],
+      "languages": [
+        "python",
+        "javascript"
+      ],
       "control": "ci-fault-trust-score (the runner trusting a printed score), landing with the closing leaf",
       "setup": "a program that prints {criteria, score: 1e9}",
       "teardown": "the account removed",
@@ -334,8 +570,13 @@
       "spec_ref": "security gate 3489; issue #8 FG-04",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L02",
-      "routes": ["POST /api/ai-coding/run-project", "POST /api/take-home/run"],
-      "languages": ["python"],
+      "routes": [
+        "POST /api/ai-coding/run-project",
+        "POST /api/take-home/run"
+      ],
+      "languages": [
+        "python"
+      ],
       "control": "ci-fault-no-path-check (the submission path check removed), landing with the closing leaf",
       "setup": "a submission carrying a reserved file name",
       "teardown": "the account removed",
@@ -347,7 +588,9 @@
       "spec_ref": "security gate 3490; issue #8 FG-05",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L03",
-      "routes": ["POST /api/collections/take_home_attempts/records"],
+      "routes": [
+        "POST /api/collections/take_home_attempts/records"
+      ],
       "languages": [],
       "environment_sensitive": true,
       "control": "ci-fault-client-graded (the attempt create rule loosened), landing with the closing leaf",
@@ -361,7 +604,10 @@
       "spec_ref": "security gate 3489; issue #8 FG-06",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L02",
-      "routes": ["GET /api/collections/ai_coding_rounds/records", "GET /api/collections/take_home_assignments/records"],
+      "routes": [
+        "GET /api/collections/ai_coding_rounds/records",
+        "GET /api/collections/take_home_assignments/records"
+      ],
       "languages": [],
       "environment_sensitive": true,
       "control": "ci-fault-harness-readable (the hidden fields exposed), landing with the closing leaf",
@@ -375,7 +621,9 @@
       "spec_ref": "renderer gate 2579; issue #8 RD-01",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L04",
-      "routes": ["POST /api/pdf/render"],
+      "routes": [
+        "POST /api/pdf/render"
+      ],
       "languages": [],
       "environment_sensitive": true,
       "control": "ci-fault-snapshot-cross-account (the snapshot owner rule removed), landing with the closing leaf",
@@ -389,7 +637,9 @@
       "spec_ref": "renderer gate 2580; issue #8 RD-02",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L04",
-      "routes": ["POST /api/pdf/render"],
+      "routes": [
+        "POST /api/pdf/render"
+      ],
       "languages": [],
       "control": "ci-fault-snapshot-unsanitised (the snapshot sanitiser weakened), landing with the closing leaf",
       "setup": "a snapshot built from hostile resume data",
@@ -402,7 +652,9 @@
       "spec_ref": "security gate 3491; issue #8 RD-03",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L06",
-      "routes": ["POST /api/pdf/render"],
+      "routes": [
+        "POST /api/pdf/render"
+      ],
       "languages": [],
       "environment_sensitive": true,
       "control": "ci-fault-render-network (the render worker given network), landing with the closing leaf",
@@ -416,7 +668,9 @@
       "spec_ref": "security gate 3486; issue #8 RD-04",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L06",
-      "routes": ["POST /api/pdf/render"],
+      "routes": [
+        "POST /api/pdf/render"
+      ],
       "languages": [],
       "destructive": true,
       "control": "ci-fault-no-render-limits (the render limits raised), landing with the closing leaf",
@@ -430,7 +684,9 @@
       "spec_ref": "renderer gate 2581; issue #8 RD-05",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L06",
-      "routes": ["POST /api/pdf/render"],
+      "routes": [
+        "POST /api/pdf/render"
+      ],
       "languages": [],
       "destructive": true,
       "control": "ci-fault-pooled-browser (a reused browser), landing with the closing leaf",
@@ -444,7 +700,9 @@
       "spec_ref": "renderer gate 2582; issue #8 RD-06",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L06",
-      "routes": ["POST /api/pdf/render"],
+      "routes": [
+        "POST /api/pdf/render"
+      ],
       "languages": [],
       "environment_sensitive": true,
       "control": "ci-fault-shared-profile (a shared browser profile), landing with the closing leaf",
@@ -459,14 +717,38 @@
       "status": "contained",
       "closing_leaf": "ROUNDS-00A-L01",
       "module": "rd_07_render_no_echo",
-      "routes": ["POST /api/pdf/render", "GET /api/pdf/health"],
+      "routes": [
+        "GET /api/pdf/health",
+        "POST /api/pdf/render"
+      ],
       "languages": [],
       "environment_sensitive": true,
-      "control": "ci-fault-echo-sidecar (the proxy echoing the sidecar body)",
+      "control": "selftest/test_negative_controls.py: health answering more than its status, and the renderer's text in a failed render",
       "setup": "one synthetic account; the stack runs no renderer at stage 1",
       "teardown": "the account removed with the admin token",
-      "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
-      "guarantee": "the proxy answers a failed render with a typed status and fixed text and health answers only its status; the sidecar's own echo is a white-box pending row for ROUNDS-00A-L06"
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "the proxy answers a failed render with a typed status and fixed text and health answers only its status; the sidecar's own echo is a white-box pending row for ROUNDS-00A-L06",
+      "subcases": [
+        {
+          "id": "RD-07.health-status-only",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        },
+        {
+          "id": "RD-07.render-failure-typed",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L01"
+        },
+        {
+          "id": "RD-07.renderer-own-echo",
+          "status": "pending",
+          "closing_leaf": "ROUNDS-00A-L06"
+        }
+      ]
     },
     {
       "id": "RD-08",
@@ -474,7 +756,9 @@
       "spec_ref": "renderer gate 2582; issue #8 RD-08",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L06",
-      "routes": ["POST /api/pdf/render"],
+      "routes": [
+        "POST /api/pdf/render"
+      ],
       "languages": [],
       "destructive": true,
       "control": "ci-fault-no-render-reap (render processes left running), landing with the closing leaf",
@@ -488,7 +772,9 @@
       "spec_ref": "renderer gate 2582; issue #8 RD-09",
       "status": "pending",
       "closing_leaf": "ROUNDS-00A-L06",
-      "routes": ["POST /api/pdf/render"],
+      "routes": [
+        "POST /api/pdf/render"
+      ],
       "languages": [],
       "control": "ci-fault-nondeterministic-render (a nondeterministic renderer), landing with the closing leaf",
       "setup": "the same document rendered twice",

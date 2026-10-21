@@ -51,6 +51,16 @@ class ManifestError(ValueError):
     """A malformed manifest or skip ledger. Fails the lane."""
 
 
+SUBCASE_STATUSES = ("contained", "pending")
+
+
+@dataclass(frozen=True)
+class Subcase:
+    id: str
+    status: str
+    closing_leaf: str
+
+
 @dataclass
 class Fixture:
     id: str
@@ -69,6 +79,7 @@ class Fixture:
     expected: dict[str, str] = field(default_factory=dict)
     reason: str = ""
     guarantee: str = ""
+    subcases: list[Subcase] = field(default_factory=list)
 
     @property
     def runnable(self) -> bool:
@@ -76,6 +87,31 @@ class Fixture:
 
     def expectation(self, target: str) -> str:
         return self.expected.get(target, self.status)
+
+    def contained_subcases(self) -> list[Subcase]:
+        return [s for s in self.subcases if s.status == "contained"]
+
+
+def _subcases(fid: str, status: str, raw: Any) -> list[Subcase]:
+    if raw is None:
+        _require(status != "contained", f"{fid}: a contained fixture lists its sub-cases")
+        return []
+    _require(isinstance(raw, list) and raw, f"{fid}: subcases must be a non-empty list")
+    out: list[Subcase] = []
+    for entry in raw:
+        _require(isinstance(entry, dict), f"{fid}: each sub-case is an object")
+        sid, sstatus, leaf = entry.get("id"), entry.get("status"), entry.get("closing_leaf")
+        _require(isinstance(sid, str) and sid.startswith(fid + "."), f"{fid}: sub-case ids start with {fid}.")
+        _require(sstatus in SUBCASE_STATUSES, f"{sid}: status must be one of {SUBCASE_STATUSES}")
+        _require(isinstance(leaf, str) and leaf.startswith("ROUNDS-"), f"{sid}: closing_leaf names a leaf")
+        out.append(Subcase(sid, sstatus, leaf))
+    ids = [s.id for s in out]
+    _require(len(ids) == len(set(ids)), f"{fid}: duplicate sub-case id")
+    if status == "contained":
+        _require(any(s.status == "contained" for s in out), f"{fid}: a contained fixture has a contained sub-case")
+    else:
+        _require(all(s.status == "pending" for s in out), f"{fid}: only a contained fixture has contained sub-cases")
+    return out
 
 
 @dataclass
@@ -182,6 +218,7 @@ def load_manifest(
                 expected=dict(expected),
                 reason=merged.get("reason", ""),
                 guarantee=merged.get("guarantee", ""),
+                subcases=_subcases(fid, status, merged.get("subcases")),
             )
         )
 

@@ -46,6 +46,20 @@
           "teardown": {"type": "string"},
           "reason": {"type": "string"},
           "guarantee": {"type": "string"},
+          "subcases": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "status", "closing_leaf"],
+              "additionalProperties": false,
+              "properties": {
+                "id": {"type": "string", "pattern": "^(EX|FG|RD)-[0-9]{2}\\.[a-z0-9-]+$"},
+                "status": {"enum": ["contained", "pending"]},
+                "closing_leaf": {"type": "string", "pattern": "^ROUNDS-"}
+              }
+            }
+          },
           "expected": {
             "type": "object",
             "properties": {
@@ -58,7 +72,7 @@
         "allOf": [
           {
             "if": {"properties": {"status": {"const": "contained"}}},
-            "then": {"required": ["module", "expected"]}
+            "then": {"required": ["module", "expected", "subcases"]}
           },
           {
             "if": {"properties": {"status": {"const": "pending"}}},

@@ -1,50 +1,58 @@
 """EX-02: one account cannot read another account's result row.
 
-Guarantee (the applicable part is closed by ROUNDS-00B-L01's account
-scope; the job and quota sub-cases close with ROUNDS-00A-L03): a signed-in
-account cannot read another account's execution result by id, and a
-foreign id reads the same as one that does not exist. The contained
-answer is 404 for the foreign row and no leak in a filtered list; a 200
-that returns the other account's row is a finding.
+Guarantee (the result-read sub-cases close with ROUNDS-00B-L01's account
+scope; the quota and in-flight sub-cases close with ROUNDS-00A-L03 and
+are pending rows in the manifest): a signed-in account cannot read
+another account's execution result by id or find it under a filter, and
+reading a foreign id answers exactly as reading one that doesn't exist.
 
 The fixture makes two synthetic accounts, has A create one result row,
-and has B try to read it by id and to list it under a filter naming A's
-id. It touches only result ownership; the in-flight quota sub-cases are a
-pending row for ROUNDS-00A-L03.
+and has B view it by id, list it under a filter naming its id, and view
+an id that doesn't exist.
 """
 from __future__ import annotations
 
-from corpus._base import Result, contained, detected, inconclusive
+from conformance.outcomes import Outcome
+from corpus._base import inconclusive, result
 
-_COLLECTION = "take_home_attempts"
+READ = "EX-02.result-read-denied"
+SAME = "EX-02.foreign-reads-as-missing"
+COLLECTION = "take_home_attempts"
+MISSING_ID = "zzzzzzzzzzzzzzz"
 
 
-def run(ctx) -> Result:
+def _shape(resp) -> tuple[int, object]:
+    return resp.status, resp.body
+
+
+def run(ctx):
     ctx.ensure_content()
     a = ctx.new_account("ex02a")
     b = ctx.new_account("ex02b")
-    with ctx.budget.spend():
-        created = ctx.pb.create(
-            _COLLECTION,
-            a.token,
-            {"user": a.user_id, "assignment": ctx.content["assignment"], "status": "in-progress"},
-        )
+    created = ctx.pb.create(COLLECTION, a.token, {"user": a.user_id, "assignment": ctx.content["assignment"],
+                                                  "status": "in-progress"})
     if created.status not in (200, 201) or not isinstance(created.body, dict):
-        return inconclusive(f"could not seed account A's result row (status {created.status})")
-    a_row = created.body["id"]
+        return inconclusive(READ, f"couldn't seed account A's result row (status {created.status})")
+    row = created.body["id"]
 
-    with ctx.budget.spend():
-        view = ctx.pb.view(_COLLECTION, a_row, token=b.token)
-    with ctx.budget.spend():
-        listing = ctx.pb.listing(
-            _COLLECTION, token=b.token, params={"filter": f"id='{a_row}'", "perPage": 50}
-        )
+    view = ctx.pb.view(COLLECTION, row, token=b.token)
+    listing = ctx.pb.listing(COLLECTION, token=b.token, params={"filter": f"id='{row}'", "perPage": 50})
+    missing = ctx.pb.view(COLLECTION, MISSING_ID, token=b.token)
     items = (listing.body or {}).get("items") or [] if isinstance(listing.body, dict) else []
-    leaked = view.status == 200 or any(it.get("id") == a_row for it in items)
-    evidence = {"view_status": str(view.status), "list_items": str(len(items))}
+
+    leaked = view.status == 200 or any(item.get("id") == row for item in items)
+    same = _shape(view) == _shape(missing)
+    evidence = {
+        "answers": f"view {view.status}, listed {len(items)}, missing-id view {missing.status}",
+    }
+    subcases = {
+        READ: Outcome.DETECTED.value if leaked else Outcome.CONTAINED.value,
+        SAME: Outcome.CONTAINED.value if same and not leaked else Outcome.DETECTED.value,
+    }
     if leaked:
-        return detected("account B read account A's result row", evidence=evidence)
-    return contained(
-        f"account B could not read account A's result (view {view.status}, {len(items)} listed)",
-        evidence=evidence,
-    )
+        note = "account B read account A's result row"
+    elif not same:
+        note = "a foreign id answered differently from a missing one"
+    else:
+        note = f"account B couldn't read account A's result, and it read as missing (view {view.status})"
+    return result(subcases, note, evidence=evidence)

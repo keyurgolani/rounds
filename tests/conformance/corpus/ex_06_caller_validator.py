@@ -1,49 +1,46 @@
-"""EX-06: the caller cannot supply the validators or a custom driver.
+"""EX-06: the caller cannot supply the validators or a driver.
 
-Guarantee (closed by ROUNDS-00A-L01 for caller validators and the
-``custom`` driver, and ROUNDS-00A-L02 for keeping evaluation out of the
-API): with server-owned definitions enforced, a request that carries
-caller ``validators`` or a caller ``entry`` is refused 422
-``legacy_request_rejected`` before anything runs; validators come only
-from the definition's pinned revision and run in the validator process,
-never in the API. The contained answer is that typed refusal.
-
-The request names fields the server no longer takes and carries no
-validator or driver body that could execute, so it reveals no escape
-recipe. The negative control evaluates a caller-supplied validator.
+Guarantee (closed by ROUNDS-00A-L01 for caller validators and drivers,
+and ROUNDS-00A-L02 for keeping evaluation out of the API; running a
+definition's validators inside the worker is a pending row for
+ROUNDS-00A-L05): with server-owned definitions enforced, a well-formed
+request that also carries its own ``validators`` or ``entry`` is refused
+422 ``legacy_request_rejected`` before anything runs. Validators come
+only from the definition's pinned revision and run in the validator
+process, never in the API.
 """
 from __future__ import annotations
 
-from corpus._base import Result, contained, detected
+from conformance.outcomes import Outcome
+from corpus._base import code_of, result
+from corpus._requests import bodies
 
-_CODE = "code-placeholder"
+VALIDATORS = "EX-06.caller-validators-refused"
+DRIVER = "EX-06.caller-driver-refused"
+CHECKS = (
+    (VALIDATORS, ("POST", "/api/evaluate"), "validators", []),
+    (DRIVER, ("POST", "/api/run"), "entry", {"kind": "custom"}),
+)
 
 
-def run(ctx) -> Result:
+def run(ctx):
     acct = ctx.new_account("ex06")
-    findings: list[str] = []
-    statuses: list[str] = []
-    # Each request names one field the enforced server refuses: caller
-    # validators, and a caller-supplied entry (the path a custom driver
-    # would have taken).
-    for field, body in (
-        ("validators", {"validators": [], "code": _CODE, "case_ids": []}),
-        ("entry", {"entry": {"kind": "custom"}, "code": _CODE, "input": {}}),
-    ):
-        route = "/api/evaluate" if field == "validators" else "/api/run"
-        with ctx.budget.spend():
-            resp = ctx.runner.request("POST", route, token=acct.token, json_body=body)
-        code = (resp.body or {}).get("code") if isinstance(resp.body, dict) else None
-        statuses.append(f"{field} -> {resp.status}/{code}")
-        if not (resp.status == 422 and code == "legacy_request_rejected"):
-            findings.append(f"{field}: status {resp.status}, code {code}")
-    evidence = {"attempts": "\n".join(statuses)}
-    if findings:
-        return detected(
-            "a caller-supplied validator or driver field was not refused: " + "; ".join(findings),
-            evidence=evidence,
-        )
-    return contained(
-        "caller validators and a caller-supplied driver were both refused legacy_request_rejected",
-        evidence=evidence,
-    )
+    all_bodies = bodies()
+    answers: list[str] = []
+    subcases: dict[str, str] = {}
+    for subcase, (method, path), field, value in CHECKS:
+        body = dict(all_bodies[(method, path)])
+        body[field] = value
+        resp = ctx.runner.request(method, path, token=acct.token, json_body=body)
+        code = code_of(resp.body)
+        answers.append(f"{field} on {path} -> {resp.status or resp.error} {code}")
+        if resp.error:
+            subcases[subcase] = Outcome.INCONCLUSIVE.value
+        elif (resp.status, code) == (422, "legacy_request_rejected"):
+            subcases[subcase] = Outcome.CONTAINED.value
+        else:
+            subcases[subcase] = Outcome.DETECTED.value
+    open_ = [s for s, o in subcases.items() if o != Outcome.CONTAINED.value]
+    note = ("caller validators and a caller driver were both refused by name" if not open_
+            else "not contained: " + ", ".join(open_))
+    return result(subcases, note, evidence={"answers": "\n".join(answers)})

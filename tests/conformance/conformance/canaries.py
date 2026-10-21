@@ -42,6 +42,10 @@ CANARY_NAMES = {
 }
 
 
+class CanaryMissing(RuntimeError):
+    """A canary that has landed wasn't planted for this run. Fails the run."""
+
+
 @dataclass(frozen=True)
 class Canary:
     name: str
@@ -72,14 +76,21 @@ class CanarySet:
         return cls(canaries=out)
 
     @classmethod
-    def from_env(cls) -> "CanarySet":
+    def from_env(cls, environ: "dict[str, str] | None" = None) -> "CanarySet":
         """The set the launcher planted, read back from the environment the
-        corpus container was given. A present canary whose variable is unset
-        is treated as absent for this run."""
+        corpus container was given. Every canary that has landed must be
+        set: one that is missing or empty raises ``CanaryMissing``, so a run
+        never passes with a canary it couldn't look for."""
+        env = os.environ if environ is None else environ
         out: list[Canary] = []
+        missing: list[str] = []
         for name, meta in CANARY_NAMES.items():
-            value = os.environ.get(meta["env"]) if meta["landed"] else None
+            value = env.get(meta["env"]) if meta["landed"] else None
+            if meta["landed"] and not value:
+                missing.append(meta["env"])
             out.append(Canary(name, value or None, meta["landed"] and bool(value), meta["landed_by"]))
+        if missing:
+            raise CanaryMissing("canaries not planted for this run: " + ", ".join(sorted(missing)))
         return cls(canaries=out)
 
     def present_values(self) -> dict[str, str]:

@@ -104,3 +104,52 @@ def test_contained_module_file_must_exist(tmp_path):
                                         expected={"ci": "contained", "compose": "contained", "k8s": "contained"})])
     with pytest.raises(m.ManifestError):
         m.load_manifest(path, corpus_dir=cdir, required_ids=("EX-01",))
+
+
+ALL_TARGETS = {"ci": "contained", "compose": "contained", "k8s": "contained"}
+
+
+def _contained_row(tmp_path, subcases):
+    (tmp_path / "ex_x.py").write_text("def run(ctx):\n    pass\n")
+    over = {"module": "ex_x", "expected": ALL_TARGETS}
+    if subcases is not None:
+        over["subcases"] = subcases
+    return _write(tmp_path, [_row("EX-01", status="contained", **over)])
+
+
+def test_every_real_contained_fixture_lists_a_contained_subcase():
+    man = m.load_manifest()
+    for fx in man.contained():
+        assert fx.contained_subcases(), fx.id
+        for sub in fx.subcases:
+            assert sub.id.startswith(fx.id + "."), sub.id
+            assert sub.closing_leaf.startswith("ROUNDS-"), sub.id
+
+
+def test_a_contained_fixture_without_subcases_is_rejected(tmp_path):
+    path, cdir = _contained_row(tmp_path, None)
+    with pytest.raises(m.ManifestError, match="sub-cases"):
+        m.load_manifest(path, corpus_dir=cdir, required_ids=("EX-01",))
+
+
+def test_a_contained_fixture_with_only_pending_subcases_is_rejected(tmp_path):
+    path, cdir = _contained_row(tmp_path, [{"id": "EX-01.a", "status": "pending", "closing_leaf": "ROUNDS-00A-L05"}])
+    with pytest.raises(m.ManifestError):
+        m.load_manifest(path, corpus_dir=cdir, required_ids=("EX-01",))
+
+
+def test_duplicate_or_misnamed_subcases_are_rejected(tmp_path):
+    dup = {"id": "EX-01.a", "status": "contained", "closing_leaf": "ROUNDS-00A-L01"}
+    path, cdir = _contained_row(tmp_path, [dup, dict(dup)])
+    with pytest.raises(m.ManifestError, match="duplicate"):
+        m.load_manifest(path, corpus_dir=cdir, required_ids=("EX-01",))
+    path, cdir = _contained_row(tmp_path, [{"id": "EX-02.a", "status": "contained", "closing_leaf": "ROUNDS-00A-L01"}])
+    with pytest.raises(m.ManifestError):
+        m.load_manifest(path, corpus_dir=cdir, required_ids=("EX-01",))
+
+
+def test_a_pending_row_cannot_claim_a_contained_subcase(tmp_path):
+    sub = [{"id": "EX-01.a", "status": "contained", "closing_leaf": "ROUNDS-00A-L01"}]
+    path, cdir = _write(tmp_path, [_row("EX-01", subcases=sub)])
+    with pytest.raises(m.ManifestError):
+        m.load_manifest(path, corpus_dir=cdir, required_ids=("EX-01",))

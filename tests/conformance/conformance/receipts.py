@@ -2,20 +2,21 @@
 
 One receipt file per run, ``rounds-containment-receipt/v1`` (#7's
 wrapper). It carries the run context (commit, corpus version, target,
-image references, the contract versions #2, #3, #6, and the resource
-profile pin, and the canary-set id) and one entry per fixture. A
-contained fixture records its outcome, the expectation it met, the
-verdict, the checksums of its redacted request and response summaries,
-and a canary-hit boolean per canary. A pending fixture records only that
-it is pending and the leaf that closes it.
+image references, the contract versions, the canary-set id, and the
+run's total probe spend) and one entry for every manifest row:
 
-Receipts state ``contained`` or ``pending`` only (orchestrator decision
-D4): the corpus commits no receipt that shows a sub-case exploitable, and
-a ``detected`` outcome never reaches a committed receipt because a
-detecting fixture fails the lane. Unlanded context fields read ``absent``.
+- a fixture that ran records its outcome and verdict, one status per
+  sub-case (``contained`` with the outcome it reached, or ``pending``
+  with the leaf that closes it), the routes it actually exercised, the
+  redacted evidence and its checksums, a canary-hit boolean per canary,
+  its budget spend, the reason for its verdict, and its own note;
+- a quarantined fixture records the skip ledger's owner and expiry;
+- a pending row records the leaf that closes it.
 
-The receipts file is written to a run directory that is git-ignored and
-uploaded as a CI artifact; nothing here is committed to the repository.
+Receipts state ``contained``, ``pending``, or ``quarantined`` only on a
+passing run (orchestrator decision D4): a ``detected`` or
+``inconclusive`` entry exists only in a failing run's receipt, which is
+a CI artifact, never committed. Unlanded context fields read ``absent``.
 """
 from __future__ import annotations
 
@@ -23,30 +24,55 @@ import hashlib
 import json
 import os
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Any, Iterable
 
 from . import RECEIPT_SCHEMA
+
+# The most redacted evidence one fixture keeps in the receipt.
+EVIDENCE_MAX_CHARS = 256 * 1024
 
 
 def checksum(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def cap_evidence(evidence: dict[str, str]) -> dict[str, str]:
+    """The evidence, cut to ``EVIDENCE_MAX_CHARS`` in all, with a marker
+    where it was cut."""
+    out: dict[str, str] = {}
+    left = EVIDENCE_MAX_CHARS
+    for name, text in evidence.items():
+        if left <= 0:
+            out[name] = "<truncated>"
+            continue
+        if len(text) > left:
+            out[name] = text[:left] + "<truncated>"
+            left = 0
+        else:
+            out[name] = text
+            left -= len(text)
+    return out
+
+
 @dataclass
 class FixtureReceipt:
     id: str
-    status: str  # "contained" or "pending"
+    status: str  # "ran", "quarantined", or "pending"
     closing_leaf: str
     target: str = ""
     outcome: str = ""
     expectation: str = ""
     verdict: str = ""
     legacy_classified: bool = False
+    subcases: list[dict[str, Any]] = field(default_factory=list)
     routes: list[str] = field(default_factory=list)
+    evidence: dict[str, str] = field(default_factory=dict)
     checksums: dict[str, str] = field(default_factory=dict)
     canary_hits: dict[str, bool] = field(default_factory=dict)
     budget: dict[str, float] = field(default_factory=dict)
+    reason: str = ""
     note: str = ""
+    quarantine: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -59,16 +85,27 @@ class RunReceipt:
     versions: dict[str, str] = field(default_factory=dict)
     schema: str = RECEIPT_SCHEMA
     run_id: str = ""
+    budget_total: dict[str, float] = field(default_factory=dict)
     fixtures: list[FixtureReceipt] = field(default_factory=list)
 
     def add(self, receipt: FixtureReceipt) -> None:
+        if any(f.id == receipt.id for f in self.fixtures):
+            raise ValueError(f"{receipt.id} already has a receipt entry")
         self.fixtures.append(receipt)
+
+    def ids(self) -> list[str]:
+        return [f.id for f in self.fixtures]
+
+    def missing(self, manifest_ids: Iterable[str]) -> dict[str, list[str]]:
+        """The manifest rows without an entry, and entries no row names."""
+        want, have = set(manifest_ids), set(self.ids())
+        return {"missing": sorted(want - have), "unknown": sorted(have - want)}
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     def write(self, path: str) -> None:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "w") as fh:
             json.dump(self.to_dict(), fh, indent=2, sort_keys=False)
             fh.write("\n")
