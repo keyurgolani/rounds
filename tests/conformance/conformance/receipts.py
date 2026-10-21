@@ -13,10 +13,11 @@ run's total probe spend) and one entry for every manifest row:
 - a quarantined fixture records the skip ledger's owner and expiry;
 - a pending row records the leaf that closes it.
 
-Receipts state ``contained``, ``pending``, or ``quarantined`` only on a
-passing run (orchestrator decision D4): a ``detected`` or
-``inconclusive`` entry exists only in a failing run's receipt, which is
-a CI artifact, never committed. Unlanded context fields read ``absent``.
+Receipts state ``contained``, ``not-applicable``, ``pending``, or
+``quarantined`` only on a passing run (orchestrator decision D4): a
+``detected`` or ``inconclusive`` entry exists only in a failing run's
+receipt, which is a CI artifact, never committed. Unlanded context
+fields read ``absent``.
 """
 from __future__ import annotations
 

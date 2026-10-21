@@ -74,7 +74,7 @@ class Session:
                                                 note=f"pending: closes with {fx.closing_leaf}"))
             elif fx.status == "not-applicable" and not fx.module:
                 self.receipt.add(FixtureReceipt(id=fx.id, status="ran", closing_leaf=fx.closing_leaf,
-                                                target=self.target, outcome="contained",
+                                                target=self.target, outcome="not-applicable",
                                                 expectation="not-applicable", verdict="pass",
                                                 note=f"not-applicable: {fx.reason}"))
 
@@ -133,15 +133,17 @@ def corpus_session():
 
 def pytest_sessionfinish(session, exitstatus):
     # Zero collected or everything skipped fails the corpus lane (#8
-    # acceptance criteria). Only applies to the live corpus run.
+    # acceptance criteria). Only applies to the live corpus run. Only the
+    # fixture cases count: the receipt-coverage case passes on its own,
+    # even when every fixture was quarantined.
     if not corpus_enabled():
         return
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
     if reporter is None:
         return
-    passed = len(reporter.stats.get("passed", []))
-    failed = len(reporter.stats.get("failed", []))
-    errors = len(reporter.stats.get("error", []))
-    if failed == 0 and errors == 0 and passed == 0:
+    from conformance.execute import fixtures_decided
+
+    decided = fixtures_decided(reporter.stats.get("passed", []) + reporter.stats.get("failed", []))
+    if decided == 0:
         reporter.write_line("containment-corpus: no fixture ran; failing the lane", red=True)
         session.exitstatus = 1

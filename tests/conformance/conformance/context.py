@@ -5,9 +5,16 @@ PocketBase), the run's canary set, its probe budget, and #9's
 synthetic-account factory. Both clients charge the budget and record the
 route on every request themselves, so the receipt lists the routes a
 fixture actually exercised and nothing a fixture sends goes uncounted.
-The context also tracks the accounts a fixture makes, so the plugin can
-remove them and fail the run if that fails (#8 body, Domain ownership
-and invariants).
+The context also tracks the accounts a fixture makes, from before the
+first request that creates one, so the plugin can remove every one of
+them, even one whose signup landed before its sign-in failed, the budget
+refused, or the deadline fired, and fail the run if that fails (#8 body,
+Domain ownership and invariants).
+
+Both clients type a failed connection the same way, ``unreachable``
+(refused, unresolvable, or not connected in time), apart from
+``timeout``, a connection that got no answer in time; a fixture reads
+the first as inconclusive.
 
 The harness account factory and PocketBase client (``harness/probes``)
 are imported lazily, so the self-tests exercise the framework without the
@@ -17,6 +24,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import socket
 import time
 import urllib.error
@@ -28,6 +36,13 @@ from typing import Any, Callable
 from .budget import Budget
 from .canaries import CanarySet
 
+# No connection was made: refused, unresolvable, or not connected in time.
+UNREACHABLE = "unreachable"
+# Connected, and no answer came in time.
+TIMEOUT = "timeout"
+# The emails #9's factory makes, the only ones teardown looks up.
+_FACTORY_EMAIL = re.compile(r"harness-[a-z0-9-]{1,40}-[0-9a-f]{12}@harness\.invalid")
+
 
 @dataclass
 class Http:
@@ -35,9 +50,10 @@ class Http:
     body: Any
     text: str
     headers: dict[str, str]
-    # "" when the request got an answer; "timeout" when nothing answered in
-    # time; otherwise the name of the connection error. A fixture turns
-    # these into typed outcomes instead of letting them escape.
+    # "" when the request got an answer; UNREACHABLE when no connection
+    # was made; TIMEOUT when a connection got no answer in time; otherwise
+    # the name of the error that ended it. A fixture turns these into
+    # typed outcomes instead of letting them escape.
     error: str = ""
 
 
@@ -99,9 +115,13 @@ class RunnerClient:
             except urllib.error.HTTPError as err:
                 text = err.read().decode("utf-8", "replace")
                 return Http(err.code, _maybe_json(text), text, dict(err.headers or {}))
+            except urllib.error.URLError:
+                # urllib wraps every failure to connect, a connect timeout
+                # included.
+                return Http(0, None, "", {}, UNREACHABLE)
             except (socket.timeout, TimeoutError):
-                return Http(0, None, "", {}, "timeout")
-            except (urllib.error.URLError, OSError, http.client.HTTPException) as err:
+                return Http(0, None, "", {}, TIMEOUT)
+            except (OSError, http.client.HTTPException) as err:
                 return Http(0, None, "", {}, type(err).__name__)
 
     def declare(self, method: str, path: str, declared: int, *, timeout: float = 10.0) -> Http:
@@ -114,6 +134,13 @@ class RunnerClient:
             try:
                 conn = http.client.HTTPConnection(parts.netloc, timeout=timeout)
                 try:
+                    try:
+                        conn.connect()
+                    except OSError:
+                        # As request() types it: no connection, whether
+                        # refused or not made in time. Only a connection
+                        # that got no answer is a timeout.
+                        return Http(0, None, "", {}, UNREACHABLE)
                     conn.putrequest(method, (parts.path.rstrip("/") or "") + path)
                     conn.putheader("Content-Type", "application/json")
                     conn.putheader("Content-Length", str(declared))
@@ -124,7 +151,7 @@ class RunnerClient:
                 finally:
                     conn.close()
             except (socket.timeout, TimeoutError):
-                return Http(0, None, "", {}, "timeout")
+                return Http(0, None, "", {}, TIMEOUT)
             except (OSError, http.client.HTTPException) as err:
                 return Http(0, None, "", {}, type(err).__name__)
 
@@ -177,17 +204,22 @@ class CountingClient:
         return counted
 
 
-def harness_accounts(pb: Any) -> Callable[[str], Any]:
-    """#9's account factory: a fresh synthetic account per call."""
+def _harness_make(tag: str) -> Any:
+    """#9's factory: a fresh synthetic identity, before any request."""
+    import factory  # harness/probes
 
-    def make(tag: str) -> Any:
+    return factory.make_account(tag)
+
+
+def _harness_register(pb: Any) -> Callable[[Any], None]:
+    """#9's factory: the signup, then the sign-in."""
+
+    def register(acct: Any) -> None:
         import factory  # harness/probes
 
-        acct = factory.make_account(tag)
         factory.register(pb, acct)
-        return acct
 
-    return make
+    return register
 
 
 @dataclass
@@ -199,16 +231,27 @@ class RunContext:
     budget: Budget
     log: RouteLog = field(default_factory=RouteLog)
     content: dict[str, str] = field(default_factory=dict)
+    # Makes an account's identity (no request); #9's factory unless a test
+    # passes its own.
     make_account: Callable[[str], Any] | None = None
+    # Signs that identity up and in; #9's factory over ``pb`` unless a test
+    # passes its own. A test's make_account alone returns a ready account.
+    register_account: Callable[[Any], None] | None = None
     # The uncounted client teardown uses, so cleaning up never fails on a
     # fixture's spent budget.
     admin_pb: Any = None
     _accounts: list[Any] = field(default_factory=list)
 
     def new_account(self, tag: str) -> Any:
-        make = self.make_account or harness_accounts(self.pb)
-        acct = make(tag)
+        """A fresh synthetic account. It is tracked before the request that
+        creates it, so teardown removes it whatever stops its sign-in."""
+        if self.make_account is not None and self.register_account is None:
+            acct = self.make_account(tag)
+            self._accounts.append(acct)
+            return acct
+        acct = (self.make_account or _harness_make)(tag)
         self._accounts.append(acct)
+        (self.register_account or _harness_register(self.pb))(acct)
         return acct
 
     def ensure_content(self) -> None:
@@ -219,19 +262,36 @@ class RunContext:
             self.content.update(factory.ensure_content_fixtures(self.pb, self.admin_token))
 
     def teardown(self) -> list[str]:
-        """Remove the accounts this fixture made. Returns the ids of any
-        that could not be removed; a non-empty list fails the run."""
+        """Remove the accounts this fixture made, each one whose signup may
+        have landed included. Returns a label for each that could not be
+        removed or looked up; a non-empty list fails the run."""
         failed: list[str] = []
         client = self.admin_pb if self.admin_pb is not None else self.pb
         for acct in self._accounts:
+            label = getattr(acct, "user_id", "") or f"unknown id ({getattr(acct, 'tag', '')})"
             try:
-                resp = client.delete("users", acct.user_id, token=self.admin_token)
+                user_id = getattr(acct, "user_id", "") or self._landed(client, acct)
+                if not user_id:
+                    continue  # its signup never landed
+                resp = client.delete("users", user_id, token=self.admin_token)
                 if resp.status not in (200, 204, 404):
-                    failed.append(acct.user_id)
+                    failed.append(user_id)
             except Exception:
-                failed.append(acct.user_id)
+                failed.append(label)
         self._accounts.clear()
         return failed
+
+    def _landed(self, client: Any, acct: Any) -> str:
+        """The id of an account whose signup got no answer, found by its
+        email, or "" when it never landed."""
+        email = getattr(acct, "email", "")
+        if not isinstance(email, str) or not _FACTORY_EMAIL.fullmatch(email):
+            raise RuntimeError("an account without a factory email can't be looked up")
+        resp = client.listing("users", token=self.admin_token, params={"filter": f'email = "{email}"', "perPage": 1})
+        if resp.status != 200 or not isinstance(resp.body, dict):
+            raise RuntimeError(f"the account lookup answered {resp.status}")
+        items = resp.body.get("items") or []
+        return items[0].get("id", "") if items and isinstance(items[0], dict) else ""
 
 
 def wait_for_runner(base_url: str, attempts: int = 60, delay: float = 1.0) -> None:

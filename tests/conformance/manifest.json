@@ -57,7 +57,7 @@
         "compose": "contained",
         "k8s": "contained"
       },
-      "guarantee": "every admitted route refuses a request that carries no account before it starts work",
+      "guarantee": "every admitted route refuses a request that carries no account before it starts work; a route its gate turned off answers the gate's typed 503 first and is recorded as contained by its gate",
       "subcases": [
         {
           "id": "EX-01.anonymous-denied",
@@ -159,14 +159,14 @@
       ],
       "environment_sensitive": true,
       "control": "selftest/test_negative_controls.py: the byte cap waiting for the body, and caller fields accepted",
-      "setup": "none; the fixture sends filler bytes",
-      "teardown": "none",
+      "setup": "one synthetic account (#9's factory) for the caller-limit requests; the body-cap requests declare their size in the headers and send no body",
+      "teardown": "the plugin removes the account; a failed removal fails the fixture",
       "expected": {
         "ci": "contained",
         "compose": "contained",
         "k8s": "contained"
       },
-      "guarantee": "a body over the route cap is refused 413 payload_too_large before it is read; the caller-limit sub-cases close with ROUNDS-00A-L02",
+      "guarantee": "a body over the route cap is refused 413 payload_too_large from its declared length, before it is read, and a request naming its own time limit is refused legacy_request_rejected before anything runs (closed by ROUNDS-00A-L02); a failed connection is inconclusive, never a finding",
       "subcases": [
         {
           "id": "EX-04.body-cap",
@@ -279,7 +279,7 @@
         "compose": "contained",
         "k8s": "contained"
       },
-      "guarantee": "the candidate's environment holds no runner secret; the /proc and other-uid reads are pending rows for ROUNDS-00A-L05 and ROUNDS-00A-L07",
+      "guarantee": "the candidate's environment is the minimal one and holds no runner secret, and the receipt keeps the output's checksum and any unexpected variable's name, never a value; the /proc and other-uid reads are pending rows for ROUNDS-00A-L05 and ROUNDS-00A-L07",
       "subcases": [
         {
           "id": "EX-07.candidate-env-minimal",
@@ -723,7 +723,7 @@
       ],
       "languages": [],
       "environment_sensitive": true,
-      "control": "selftest/test_negative_controls.py: health answering more than its status, and the renderer's text in a failed render",
+      "control": "selftest/test_negative_controls.py: health answering more than its status or a status of its own, and the renderer's text in a failed render",
       "setup": "one synthetic account; the stack runs no renderer at stage 1",
       "teardown": "the account removed with the admin token",
       "expected": {
@@ -731,7 +731,7 @@
         "compose": "contained",
         "k8s": "contained"
       },
-      "guarantee": "the proxy answers a failed render with a typed status and fixed text and health answers only its status; the sidecar's own echo is a white-box pending row for ROUNDS-00A-L06",
+      "guarantee": "the proxy answers a failed render with a typed status and fixed text and health answers only its status, ok or unavailable; the sidecar's own echo is a white-box pending row for ROUNDS-00A-L06",
       "subcases": [
         {
           "id": "RD-07.health-status-only",
