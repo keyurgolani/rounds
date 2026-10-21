@@ -64,6 +64,12 @@ The migration also adds a nullable `envelope` link to `ai_coding_attempts` and `
 
 An account reads its own envelopes (orchestrator decision D9). An envelope's `user` is the job's account and its list and view rule is `user = @request.auth.id`, so nobody else reads it, and a graded row's server-written `envelope` link points only at a row that row's account can read. The envelope holds the account's view alone: state, outcome classes, part ids and limits, the server's score and times, the cleanup state, the definition receipt, and the rubric state, each held to its v1 shape. The operator view (worker, sandbox, and cleanup detail) is on the attempt, which only `execution-worker` reads. For the kinds that run hidden material, `grade` and `take_home_submit`, `complete` refuses a result that carries output, so the account sees outcome classes and the server's totals and never hidden test content.
 
+## Demo Account
+
+#177's stage 1 contains the demo account that `1700000600_demo_user.js` creates on every install. `pb_hooks/demo.pb.js` reads `ROUNDS_GATE_DEMO`, or its alias `ROUNDS_ENABLE_DEMO`, in each handler; the demo is off by default. With it off, the System hook `onAfterBootstrap` gives each demo account a random password and a new token key at every start, so an old password or token stops working, and a demo sign-in gets the wrong-password 400. On or off, a demo caller changes only its `name`, `bio`, `target`, and `avatar`, can't delete its account or change its email, and no demo account owns a `resume_share_links`, `share_capabilities`, `ai_providers`, `ai_credentials`, `ai_provider_models`, or `ai_settings` row. Model hooks on those six refuse the save whoever writes it, so they write nothing themselves. Whether an account is a demo account comes only from #1's tier accessor, `tierOf()` in `pb_hooks/admission.js`, which reads `is_demo` until stage 2 repoints it at `account_system_state`.
+
+`1700006700_demo_contain.js` deletes the demo accounts' share links, their `resume_share_views` with them, and their `ai_settings` and `ai_providers`, forward-only. Manifest `demo-contain-v1` gives each delete its disposition.
+
 ## Registry of Planned Writers
 
 Each row restates the leaf's current body. The leaf confirms or corrects its row in the PR that adds the writer. Credentials appear by environment variable name only.
@@ -97,9 +103,11 @@ Each row restates the leaf's current body. The leaf confirms or corrects its row
 | #93 | Service | `share_resolvers`: `POST /api/rounds/share/view` | `share_view_counters` | `ROUNDS_SHARE_RESOLVER_PASSWORD` |
 | #130, #133, #134, #135 | Service | `execution_service`, inside #3's `complete`, calling #130's `AttachFeedback` | Feedback on Attempts | `ROUNDS_EXECUTION_SECRET` |
 | #161 | set by #161 | written once at the seal, per account through #19 | `legacy_share_history` | never the superuser |
-| #177 | Migration | stage 2's state migration, one `demo` row per demo account | `account_system_state` | none |
-| #177 | System hook | `demo.pb.js`: `onBeforeServe`, the `cronAdd` sweep, and the anonymous `POST /api/rounds/demo/sessions` | demo `users`, `account_system_state`, and the deployment `demo-session-create` bucket in `admission_counters` through `pb_hooks/admission.js` | none |
-| #177 | Caller | `POST /api/rounds/demo/sessions/end` | deletes the demo caller's account and files | caller's bearer |
+| #177 S1 | Migration | `1700006700_demo_contain.js` at start, under manifest `demo-contain-v1` | deletes the demo accounts' `resume_share_links` with their `resume_share_views`, and their `ai_settings` and `ai_providers` | none |
+| #177 S1 | System hook | `onAfterBootstrap` in `pb_hooks/demo.pb.js`: with the demo off, a random password and a new token key for each demo account at every start | demo `users` | none |
+| #177 S2 | Migration | stage 2's state migration, one `demo` row per demo account | `account_system_state` | none |
+| #177 S3 | System hook | `demo.pb.js`: the boot sweep, the `cronAdd` sweep, and the anonymous `POST /api/rounds/demo/sessions` | demo `users`, `account_system_state`, and the deployment `demo-session-create` bucket in `admission_counters` through `pb_hooks/admission.js` | none |
+| #177 S3 | Caller | `POST /api/rounds/demo/sessions/end` | deletes the demo caller's account and files | caller's bearer |
 
 #19's command gateway becomes a Caller hook route if #18 keeps PocketBase, and registers here then.
 
