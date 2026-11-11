@@ -261,7 +261,12 @@ export default function ResumeStudio() {
           className="h-full px-5 sm:px-8 py-5 flex flex-col min-h-0"
           data-resume-studio-body
         >
-          {result.error ? (
+          {/* Only a resume that didn't load shows its error here. A save
+              that fails keeps the Studio on screen: the header says so,
+              the edits stay pending, and the Export tab shows its own
+              notice while the client formats keep working
+              (ROUNDS-00A-L04). */}
+          {result.error && !result.resume ? (
             <div className="card p-8 text-center" style={{ color: 'var(--plum)' }}>
               {result.error}
             </div>
