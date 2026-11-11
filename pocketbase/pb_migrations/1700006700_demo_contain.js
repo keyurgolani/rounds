@@ -6,9 +6,15 @@
 // collections a demo account may no longer hold: its resume share links,
 // whose views go with them (resume_share_views cascades from its link),
 // its AI settings, and then its AI providers with their stored keys.
-// pb_hooks/demo.pb.js refuses new ones from now on. It touches nothing a
-// standard account owns, and nothing else a demo account owns; stage 3
-// handles the rest.
+// pb_hooks/demo.pb.js refuses new ones from now on.
+//
+// It writes no row a standard account owns. Every demo account's settings
+// go before any provider, so no demo row still points at one. A demo
+// provider that another account's AI settings point at keeps its row, with
+// its stored key cleared, so deleting it doesn't rewrite that account's
+// settings: 1700007000_relation_endpoint_authz.js, which runs after this on
+// an upgrade, journals and clears that reference. Nothing else a demo
+// account owns changes; stage 3 handles the rest.
 //
 // The spec allows these drops only with the owner's approval, so the
 // lint entry in scripts/migration-lint-allowlist.json is pinned to this
@@ -20,12 +26,27 @@
 migrate(
   (db) => {
     const dao = new Dao(db);
-    // Settings point at providers, so they go first.
-    const CONTAINED = ["resume_share_links", "ai_settings", "ai_providers"];
-    for (const account of dao.findRecordsByFilter("users", "is_demo = true")) {
-      for (const name of CONTAINED) {
-        for (const row of dao.findRecordsByFilter(name, "user = {:user}", "", 0, 0, { user: account.id })) {
+    const owned = (name, account) =>
+      dao.findRecordsByFilter(name, "user = {:user}", "", 0, 0, { user: account.id });
+    const accounts = dao.findRecordsByFilter("users", "is_demo = true");
+    // Share links and settings first, for every demo account.
+    for (const name of ["resume_share_links", "ai_settings"]) {
+      for (const account of accounts) {
+        for (const row of owned(name, account)) dao.deleteRecord(row);
+      }
+    }
+    for (const account of accounts) {
+      for (const row of owned("ai_providers", account)) {
+        const referenced = dao.findRecordsByFilter(
+          "ai_settings", "text_provider = {:provider} || vision_provider = {:provider}", "", 1, 0,
+          { provider: row.id },
+        );
+        if (referenced.length === 0) {
           dao.deleteRecord(row);
+        } else {
+          row.set("encrypted_key", "");
+          row.set("key_iv", "");
+          dao.saveRecord(row);
         }
       }
     }

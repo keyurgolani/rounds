@@ -23,9 +23,9 @@
     {
       "path": "pocketbase/pb_migrations/1700006700_demo_contain.js",
       "rules": ["rewrites-rows"],
-      "sha256": "548fb5e3018e1c04c03fd31e02b24b12de706c8b44400f05e4c8b45314c6f5be",
+      "sha256": "25994c9a2df6a17da62e6c3f088822bc4c135d4757e0d174ecaf8af7d62f7c03",
       "issue": "#177",
-      "reason": "Demo containment, stage 1 of manifest demo-contain-v1: deletes the resume share links (and with them their views), AI settings, and AI providers that accounts with users.is_demo own, and touches nothing a standard account owns. Forward-only; the owner approves the drops.",
+      "reason": "Demo containment, stage 1 of manifest demo-contain-v1: deletes the resume share links (and with them their views), AI settings, and AI providers that accounts with users.is_demo own, except that a demo provider another account's AI settings point at keeps its row with its stored key cleared, and writes no row a standard account owns. Forward-only; the owner approves the drops.",
       "reviewed_by": "pending owner review",
       "manifest": "pocketbase/migration-manifests/demo-contain-v1.json"
     }
