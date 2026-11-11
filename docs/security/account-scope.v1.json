@@ -537,6 +537,20 @@
       ],
       "guarantee": "a demo caller can't create a share link, an AI provider, or AI settings, and no demo account signs in when the demo is off"
     },
+    "isolation.render.snapshot.uniform-not-found": {
+      "surface": "runner:render",
+      "actor": "authenticated-other",
+      "variant": "foreign_owner",
+      "expected": "uniform_not_found",
+      "control": "the owner's own render of the same snapshot answers its PDF",
+      "owner_leaf": "ROUNDS-00A-L04",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "isolation.render.snapshot.uniform-not-found"
+      ],
+      "guarantee": "another account's snapshot, named with its own checksum, renders nothing and answers exactly like a snapshot that doesn't exist"
+    },
     "account-scope.create.owner-shape.uniform": {
       "surface": "pb:{collection}",
       "actor": "authenticated-other",
