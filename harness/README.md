@@ -115,8 +115,8 @@ and that it has no route out, stops PocketBase for the degraded probe, runs
 the verifier's checks and the cross-owner scan on the run's `pb_data`, prints
 the verdict (pass / expected-fail / fail counts), runs the admission
 migration, execution migration, JSON limits, demo containment migration,
-relation quarantine, and snapshot store checks, and tears the stack down,
-removing the images and the volume it made.
+relation quarantine, snapshot store, and older share links' migration checks,
+and tears the stack down, removing the images and the volumes it made.
 Its exit code is non-zero on any failed or missing result.
 
 ## Admission state across two replicas
@@ -427,6 +427,46 @@ The direct calls to a replica name test clients in `X-Real-IP`, which the
 runners trust from the compose network as they do from nginx, so they keep the
 probe's own count for the calls through nginx. Secrets and passwords stay in
 the state folder; receipts carry check ids and counts only.
+
+## Older share links
+
+`ROUNDS-00B-L06` stage 1 turns off every share link made before it, for good,
+and gives each owner "Get a new link". Two parts of the run check it.
+
+Phase 3o runs after the share secrets phases, still before signups close.
+[`probes/legacy_share_check.py`](probes/legacy_share_check.py) makes a pb_data
+shaped like `62d4eae` offline, in a volume of its own, with older links for
+two accounts, their views, and one link on another account's resume; then
+PocketBase starts on it and runs every later migration before its first
+request. Both runners reach PocketBase through the recorder
+([`probes/recorder.py`](probes/recorder.py)), with nginx, snapshot creation,
+and the materializer on, and the probe checks, in three phases:
+
+- `legacy-shares-fixture`: the pb_data, with the pinned binary and no network.
+- `legacy-shares`: every older link's value, and as many random ones, gets
+  one answer per path and caller (the older read path through nginx and at
+  each replica, the resolver, the `/r/<value>` page, and PocketBase's REST API
+  by filter and by query parameter, anonymously, as the owner, and as another
+  account); the owner's list and Get a new link, its replay and second press,
+  and the refusals; revoke, then resolve at once on both replicas; deleting
+  the resume revokes its variant's new link; every way a capability fails to
+  resolve has one shape; the quarantined link shows to nobody; and the
+  recorder shows public share requests reaching PocketBase only as the share
+  resolver's own login and identity.
+- `legacy-shares-scan`: no fixture value, viewer hash, or user agent is in any
+  service's log or in that pb_data.
+
+PocketBase then goes back to the main volume. The recorder publishes no port,
+and its log stays on its own volume, never the receipts.
+
+Phase 15, after the verdict, is offline:
+[`probes/legacy_share_migration_check.py`](probes/legacy_share_migration_check.py)
+runs the migration with the pinned binary on a fixture with every outcome a
+database can hold once #10 has run, and 10,000 more links: a dry run on a copy
+with `pocketbase legacy-share-receipt`, forward, killed at its first batch and
+run again, reversed with `migrate down 1` after a new link, and forward again,
+with the same journal checksum each time. A native run outside a container
+names the seeds folder in `PB_SEEDS_DIR`.
 
 ## Two-account isolation suite
 

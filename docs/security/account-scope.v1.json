@@ -591,8 +591,11 @@
       "expected": "uniform_not_found",
       "control": "an available capability resolves",
       "owner_leaf": "ROUNDS-00B-L03",
-      "status": "pending",
+      "status": "pass",
       "lane": "pr",
+      "evidence": [
+        "isolation.share-resolver.not-found.uniform"
+      ],
       "guarantee": "whatever stops a capability from resolving, the answer is one not-found carrying the share headers"
     },
     "isolation.share-resolver.password.uniform": {
@@ -658,8 +661,11 @@
       "expected": "uniform_not_found",
       "control": "the capability resolves before it is revoked",
       "owner_leaf": "ROUNDS-00B-L03",
-      "status": "pending",
+      "status": "pass",
       "lane": "pr",
+      "evidence": [
+        "isolation.share-chain.capability-revoked"
+      ],
       "guarantee": "once the owner revokes a capability, every path that served it answers as an unknown one"
     },
     "isolation.share-legacy.replaced": {
@@ -669,9 +675,25 @@
       "expected": "uniform_not_found",
       "control": "the owner's new link resolves",
       "owner_leaf": "ROUNDS-00B-L06",
-      "status": "pending",
+      "status": "pass",
       "lane": "pr",
+      "evidence": [
+        "isolation.share-legacy.replaced"
+      ],
       "guarantee": "once legacy share links are replaced, a legacy link answers as an unknown one on every path"
+    },
+    "isolation.share-public.resolver-identity": {
+      "surface": "share:upstream",
+      "actor": "anonymous",
+      "expected": "absent",
+      "control": "the recorder logs the resolver's own login on the same requests",
+      "owner_leaf": "ROUNDS-00B-L06",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "isolation.share-public.resolver-identity"
+      ],
+      "guarantee": "a public share request reaches PocketBase only as the share resolver's own service identity"
     },
     "isolation.demo.reset.zero-rows": {
       "surface": "pb:{collection}",
