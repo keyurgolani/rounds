@@ -39,6 +39,11 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
             through PocketBase and the runner; after a restart with the demo
             at its default, no demo account signs in and an earlier token is
             refused; see demo_check.py.
+  snapshot-create, snapshot-create-down, snapshot-create-retry,
+  snapshot-scan, snapshot-create-off, snapshot-create-again
+            Legacy Artifact Snapshot creation (ROUNDS-00A-L04 PR 2) with its
+            gate on, the materializer stopped and back, the operator's scan,
+            the gate off, and on again; see legacy_snapshot_check.py.
   admission-deploy
             with both replicas up: the admission policy, its order and byte
             caps, and stage 2's closures on each replica (ROUNDS-00A-L01 stage
@@ -468,7 +473,9 @@ def main() -> int:
         print("usage: run.py {main|hook|deploy|degraded|deploy-db|verdict|scan|admission|admission-migration|"
               "admission-deploy|emergency-disable|emergency-enable|relation-quarantine|snapshot-store|"
               "execution-store|execution-runners|execution-unready|execution-ready-again|execution-disabled|"
-              "execution-migration|json-limits|demo-on|demo-off|demo-contain-migration}", file=sys.stderr)
+              "execution-migration|json-limits|demo-on|demo-off|demo-contain-migration|snapshot-create|"
+              "snapshot-create-down|snapshot-create-retry|snapshot-scan|snapshot-create-off|snapshot-create-again}",
+              file=sys.stderr)
         return 2
     phase = sys.argv[1]
     if phase == "relation-quarantine":
@@ -479,6 +486,13 @@ def main() -> int:
         import snapshot_store_check
 
         return snapshot_store_check.main()
+    if phase.startswith("snapshot-create") or phase == "snapshot-scan":
+        import legacy_snapshot_check
+
+        if phase not in legacy_snapshot_check.PHASES:
+            print(f"unknown phase {phase!r}", file=sys.stderr)
+            return 2
+        return legacy_snapshot_check.main(phase)
     if phase == "scan":
         import scan_check
 
