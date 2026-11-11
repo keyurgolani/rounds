@@ -2,30 +2,38 @@
 
 Endpoints:
   POST   /api/share                          create a link (authed)
-  GET    /api/share                          list my links + view counts (authed)
+  GET    /api/share                          list my links (authed)
   DELETE /api/share/{id}                     delete a link (authed)
-  GET    /api/share/by-token/{token}         public read — returns the resume data
-                                             rendered against the chosen template
+  GET    /api/share/by-token/{token}         public read of the link's projection
 
-The public endpoint pierces PocketBase's owner rules via a cached
-admin token (see ``app.pb_auth.admin_token``). Each call inserts a
-``resume_share_views`` row so the owner can see how many times the
-link was opened.
+The owner routes go through PocketBase with the caller's own token, so the
+collection rules decide (``resume_share_links`` reads only its owner's rows
+and takes no updates, ROUNDS-00B-L03 stage 1).
+
+The public read answers only ``{data, template_id, design}``: hidden sections
+are emptied and every key the templates don't read is dropped, so it never
+carries the owner's resume name, the link's kind, a record id, or the owner.
+Every failure (kill switch, malformed token, unknown link, missing target,
+PocketBase down) is the same 404 with the same body and headers, and the read
+writes nothing. It still reads through the cached superuser token until
+ROUNDS-00B-L06 replaces legacy links.
 """
 from __future__ import annotations
 
-import logging
+import os
+import re
 import secrets
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app import obs
+from app.errors import TypedError
 from app.pb_auth import (
-    admin_token,
     current_user,
     pb_admin_get,
-    pb_admin_post,
     pb_get,
     pb_post,
 )
@@ -34,7 +42,27 @@ from app.pb_auth import POCKETBASE_URL
 
 
 router = APIRouter(prefix="/api/share", tags=["share"])
-_log = logging.getLogger(__name__)
+
+# The public read's kill switch: true, 1, or yes (any case) turns every public
+# read into the uniform not-found before any lookup. Read on each request.
+# TODO(ROUNDS-00B-L03): stage 2 registers it as a gate with this as its alias.
+KILL_SWITCH_ENV = "ROUNDS_DISABLE_PUBLIC_SHARES"
+_TRUTHY = ("true", "1", "yes")
+
+# What a token in a public URL may look like. Anything else is answered
+# before any lookup.
+PUBLIC_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{16,64}")
+
+# The headers every public read answers with, found or not.
+PUBLIC_HEADERS: dict[str, str] = {
+    "Cache-Control": "no-store",
+    "X-Robots-Tag": "noindex, nofollow, noarchive",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+}
+NOT_FOUND_BODY = {"detail": "Not found."}
 
 
 class CreateShareRequest(BaseModel):
@@ -49,13 +77,22 @@ class ShareLinkOut(BaseModel):
     resume_id: str | None
     variant_id: str | None
     created: str
-    view_count: int
 
 
 def _new_token() -> str:
-    # 22 chars of urlsafe entropy — ~130 bits, comfortable for a
-    # public secret while staying short enough for a clean URL.
+    # 22 chars of urlsafe entropy (~130 bits), the format the link hook
+    # requires (pocketbase/pb_hooks/share_links.js).
     return secrets.token_urlsafe(16)
+
+
+def _link_out(record: dict[str, Any]) -> ShareLinkOut:
+    return ShareLinkOut(
+        id=record["id"],
+        token=record["token"],
+        resume_id=record.get("resume") or None,
+        variant_id=record.get("variant") or None,
+        created=record.get("created") or "",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -82,17 +119,18 @@ async def create_link(request: Request, body: CreateShareRequest) -> ShareLinkOu
     if body.variant_id:
         payload["variant"] = body.variant_id
 
-    record = await pb_post(
-        user["token"], "/api/collections/resume_share_links/records", payload
-    )
-    return ShareLinkOut(
-        id=record["id"],
-        token=record["token"],
-        resume_id=record.get("resume") or None,
-        variant_id=record.get("variant") or None,
-        created=record.get("created") or "",
-        view_count=0,
-    )
+    try:
+        record = await pb_post(
+            user["token"], "/api/collections/resume_share_links/records", payload
+        )
+    except HTTPException as exc:
+        # PocketBase gives a target the caller doesn't own and one that
+        # doesn't exist the same denial (ROUNDS-00B-L02's relation check);
+        # the runner answers both with one not-found and no PocketBase text.
+        if exc.status_code in (400, 403, 404):
+            raise TypedError("not_found") from None
+        raise
+    return _link_out(record)
 
 
 @router.get("")
@@ -108,22 +146,7 @@ async def list_my_links(request: Request) -> list[ShareLinkOut]:
         },
     )
     items = (links or {}).get("items") or []
-    if not items:
-        return []
-    # Bulk-count views per link via the admin token. PocketBase's
-    # filter API supports OR; chunk to keep URLs sane.
-    counts = await _view_counts([it["id"] for it in items])
-    return [
-        ShareLinkOut(
-            id=it["id"],
-            token=it["token"],
-            resume_id=it.get("resume") or None,
-            variant_id=it.get("variant") or None,
-            created=it.get("created") or "",
-            view_count=counts.get(it["id"], 0),
-        )
-        for it in items
-    ]
+    return [_link_out(it) for it in items]
 
 
 @router.delete("/{link_id}")
@@ -144,125 +167,185 @@ async def delete_link(request: Request, link_id: str) -> dict[str, bool]:
 # ---------------------------------------------------------------------------
 
 
-def _link_not_found() -> HTTPException:
-    """The one not-found a share token gets. A link with no target, or whose
-    variant or resume is gone, answers exactly like a token that never existed,
-    so the response never says whether a link is behind the token
-    (ROUNDS-00B-L02)."""
-    return HTTPException(status_code=404, detail="Share link not found.")
+class _NotFound(Exception):
+    """Any reason a public read answers the uniform not-found."""
+
+    def __init__(self, outcome: str, record: str | None = None) -> None:
+        super().__init__(outcome)
+        self.outcome = outcome
+        self.record = record
+
+
+def public_shares_disabled() -> bool:
+    return (os.environ.get(KILL_SWITCH_ENV) or "").strip().lower() in _TRUTHY
+
+
+def _log_read(outcome: str, record: str | None) -> None:
+    # Only the link's record id and a coarse outcome: never the token, the
+    # caller's address or user agent, the owner, or any content.
+    obs.emit("share.resolve", correlation_id=obs.current_correlation_id(), record=record, code=outcome)
+
+
+def _public_response(status: int, body: dict[str, Any]) -> JSONResponse:
+    return JSONResponse(body, status_code=status, headers=dict(PUBLIC_HEADERS))
 
 
 @router.get("/by-token/{token}")
-async def public_read(token: str, request: Request) -> dict[str, Any]:
-    """Returns the resume data + template + design for a share token.
+async def public_read(token: str) -> JSONResponse:
+    """The link's projection, or the uniform not-found."""
+    try:
+        if public_shares_disabled():
+            raise _NotFound("kill_switch")
+        if PUBLIC_TOKEN_RE.fullmatch(token) is None:
+            raise _NotFound("not_found")
+        out, record = await _resolve(token)
+    except _NotFound as nf:
+        _log_read(nf.outcome, nf.record)
+        return _public_response(404, NOT_FOUND_BODY)
+    except Exception:  # noqa: BLE001 - PocketBase or the admin login failed
+        _log_read("degraded", None)
+        return _public_response(404, NOT_FOUND_BODY)
+    _log_read("available", record)
+    return _public_response(200, out)
 
-    Records a view per call. Anonymous; PB's own listRule on
-    ``resume_share_links`` stays owner-only — we proxy with the
-    server-held admin token instead of widening the rule.
-    """
-    safe = token.replace('"', "")
+
+async def _resolve(token: str) -> tuple[dict[str, Any], str]:
+    # The token matched PUBLIC_TOKEN_RE, so it holds no quote and the filter
+    # can't be widened.
     body = await pb_admin_get(
         "/api/collections/resume_share_links/records",
-        params={"filter": f'token = "{safe}"', "perPage": 1},
+        params={"filter": f'token = "{token}"', "perPage": 1},
     )
     items = (body or {}).get("items") or []
-    if not items:
-        raise _link_not_found()
+    if not items or not isinstance(items[0], dict):
+        raise _NotFound("not_found")
     link = items[0]
+    link_id = link.get("id") if isinstance(link.get("id"), str) else None
 
-    # Fetch the underlying record. Variant first if both are set.
-    if link.get("variant"):
-        record = await pb_admin_get(
-            f"/api/collections/resume_variants/records/{link['variant']}"
-        )
-        if not record:
-            raise _link_not_found()
-        master = await pb_admin_get(
-            f"/api/collections/resumes/records/{record['resume']}"
-        )
-        out = {
-            "data": record.get("data") or {},
-            "template_id": (master or {}).get("template_id") or "modern",
-            "design": (master or {}).get("design") or {},
-            "name": record.get("name") or (master or {}).get("name") or "",
-            "kind": "variant",
-        }
-    elif link.get("resume"):
-        record = await pb_admin_get(
-            f"/api/collections/resumes/records/{link['resume']}"
-        )
-        if not record:
-            raise _link_not_found()
-        out = {
-            "data": record.get("data") or {},
-            "template_id": record.get("template_id") or "modern",
-            "design": record.get("design") or {},
-            "name": record.get("name") or "",
-            "kind": "resume",
-        }
+    variant_id, resume_id = link.get("variant"), link.get("resume")
+    if variant_id:
+        variant = await pb_admin_get(f"/api/collections/resume_variants/records/{variant_id}")
+        if not isinstance(variant, dict) or not variant.get("resume"):
+            raise _NotFound("not_found", link_id)
+        parent = await pb_admin_get(f"/api/collections/resumes/records/{variant['resume']}")
+        if not isinstance(parent, dict):
+            raise _NotFound("not_found", link_id)
+        source, look = variant, parent
+    elif resume_id:
+        resume = await pb_admin_get(f"/api/collections/resumes/records/{resume_id}")
+        if not isinstance(resume, dict):
+            raise _NotFound("not_found", link_id)
+        source, look = resume, resume
     else:
-        # A legacy link with neither target (e.g. cleared before the
-        # quarantine moved such rows): the same not-found, not a 500.
-        raise _link_not_found()
+        raise _NotFound("not_found", link_id)
 
-    # Best-effort view tracking. Failures here shouldn't block the
-    # viewer, but we want the full traceback in logs so a broken
-    # admin token / missing `resume_share_views` collection / PB outage
-    # doesn't silently drop view counts on the floor.
-    try:
-        ip = request.client.host if request.client else ""
-        ua = request.headers.get("user-agent", "")[:300]
-        await pb_admin_post(
-            "/api/collections/resume_share_views/records",
-            {
-                "user": link["user"],
-                "link": link["id"],
-                "viewer_ip_hash": _hash_ip(ip),
-                "user_agent": ua,
-                "viewed_at": _utc_now_iso(),
-            },
-        )
-    except Exception:  # noqa: BLE001
-        _log.exception("view tracking failed for share link %s", link["id"])
+    return project(source.get("data"), look.get("template_id"), look.get("design")), link_id or ""
 
+
+# ---------------------------------------------------------------------------
+#                              The projection
+# ---------------------------------------------------------------------------
+#
+# Only what the templates read (frontend/src/features/resume/types.ts):
+# unknown keys at any level are dropped, values of the wrong type are dropped,
+# and a section the owner hid is emptied. hiddenSections itself is not sent.
+
+_PERSONAL = ("fullName", "email", "phone", "location", "website", "linkedin", "github",
+             "title", "subtitle", "summary")
+_SECTIONS: dict[str, dict[str, str]] = {
+    "experience": {"id": "str", "company": "str", "position": "str", "location": "str",
+                   "startDate": "str", "endDate": "str", "current": "bool",
+                   "description": "str", "highlights": "strs"},
+    "education": {"id": "str", "institution": "str", "degree": "str", "field": "str",
+                  "location": "str", "startDate": "str", "endDate": "str", "gpa": "str",
+                  "description": "str"},
+    "skills": {"id": "str", "category": "str", "items": "strs"},
+    "projects": {"id": "str", "name": "str", "description": "str", "technologies": "strs",
+                 "url": "str", "github": "str", "startDate": "str", "endDate": "str",
+                 "highlights": "strs"},
+    "publications": {"id": "str", "title": "str", "publisher": "str", "releaseDate": "str",
+                     "url": "str", "summary": "str"},
+    "profiles": {"id": "str", "network": "str", "username": "str", "url": "str"},
+}
+SECTION_KEYS = ("personal", *_SECTIONS)
+
+_DESIGN: dict[str, Any] = {
+    "layout": "str",
+    "colors": {k: "str" for k in ("primary", "secondary", "background", "text", "accent")},
+    "typography": {
+        "heading": {"family": "str", "weight": "num", "transform": "str", "size": "num"},
+        "body": {"family": "str", "size": "num", "lineHeight": "num"},
+    },
+    "spacing": {k: "num" for k in ("margin", "padding", "gap")},
+    "style": {"borderRadius": "num", "borderWidth": "num", "shadow": "str"},
+    "showPhoto": "bool",
+    "showIcons": "bool",
+    "divider": "str",
+    "bulletStyle": "str",
+}
+_TEMPLATE_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
+DEFAULT_TEMPLATE = "modern"
+
+
+def _value(kind: Any, value: Any) -> Any:
+    """``value`` if it has the type ``kind`` names, else a sentinel."""
+    if isinstance(kind, dict):
+        return _shape(kind, value) if isinstance(value, dict) else _DROP
+    if kind == "str":
+        return value if isinstance(value, str) else _DROP
+    if kind == "bool":
+        return value if isinstance(value, bool) else _DROP
+    if kind == "num":
+        ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+        return value if ok else _DROP
+    if kind == "strs":
+        return [v for v in value if isinstance(v, str)] if isinstance(value, list) else _DROP
+    return _DROP
+
+
+_DROP = object()
+
+
+def _shape(spec: dict[str, Any], value: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, kind in spec.items():
+        if key in value:
+            v = _value(kind, value[key])
+            if v is not _DROP:
+                out[key] = v
     return out
 
 
-# ---------------------------------------------------------------------------
-#                                Helpers
-# ---------------------------------------------------------------------------
+def project(data: Any, template_id: Any, design: Any) -> dict[str, Any]:
+    """The only shape a public read returns."""
+    data = data if isinstance(data, dict) else {}
+    hidden_raw = data.get("hiddenSections")
+    hidden = {k for k in hidden_raw if isinstance(k, str)} if isinstance(hidden_raw, list) else set()
 
+    personal = data.get("personalInfo")
+    if "personal" in hidden or not isinstance(personal, dict):
+        personal_out: dict[str, Any] = {"fullName": ""}
+    else:
+        personal_out = _shape({k: "str" for k in _PERSONAL}, personal)
+        personal_out.setdefault("fullName", "")
 
-def _utc_now_iso() -> str:
-    from datetime import datetime, timezone
+    out_data: dict[str, Any] = {"personalInfo": personal_out}
+    for section, spec in _SECTIONS.items():
+        items = data.get(section)
+        if section in hidden or not isinstance(items, list):
+            out_data[section] = []
+        else:
+            out_data[section] = [_shape(spec, it) for it in items if isinstance(it, dict)]
 
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    order = data.get("sectionOrder")
+    if isinstance(order, list) and all(isinstance(k, str) for k in order):
+        # The templates read the order only when it names every section once.
+        if sorted(order) == sorted(SECTION_KEYS):
+            out_data["sectionOrder"] = list(order)
 
-
-def _hash_ip(ip: str) -> str:
-    import hashlib
-
-    if not ip:
-        return ""
-    return hashlib.sha256(ip.encode("utf-8")).hexdigest()[:24]
-
-
-async def _view_counts(link_ids: list[str]) -> dict[str, int]:
-    if not link_ids:
-        return {}
-    counts: dict[str, int] = {lid: 0 for lid in link_ids}
-    token = await admin_token()
-    # PocketBase doesn't expose count directly; getList returns
-    # totalItems. One call per link keeps the filter expression simple.
-    async with httpx.AsyncClient(base_url=POCKETBASE_URL, timeout=8) as client:
-        for lid in link_ids:
-            resp = await client.get(
-                "/api/collections/resume_share_views/records",
-                params={"filter": f'link = "{lid}"', "perPage": 1},
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            if resp.status_code != 200:
-                continue
-            body = resp.json()
-            counts[lid] = int(body.get("totalItems") or 0)
-    return counts
+    tid = template_id if isinstance(template_id, str) and _TEMPLATE_ID_RE.fullmatch(template_id) else DEFAULT_TEMPLATE
+    return {
+        "data": out_data,
+        "template_id": tid,
+        "design": _shape(_DESIGN, design) if isinstance(design, dict) else {},
+    }
