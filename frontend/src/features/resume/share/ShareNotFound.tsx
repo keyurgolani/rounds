@@ -13,9 +13,15 @@ export const SHARE_NOT_FOUND_MESSAGE =
   'It may have been turned off, or the address may be incomplete. Ask the person who shared it for a new link.';
 export const SHARE_THROTTLED_HEADING = 'Too many attempts';
 
-/** "Too many attempts right now. Wait N minutes and try again." */
+/** "Wait N minutes, then try again.", under the throttled page's heading. */
+export function throttledWait(minutes: number): string {
+  return `Wait ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, then try again.`;
+}
+
+/** "Too many attempts. Wait N minutes, then try again.", where no heading
+ *  says it first. */
 export function throttledText(minutes: number): string {
-  return `Too many attempts right now. Wait ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} and try again.`;
+  return `${SHARE_THROTTLED_HEADING}. ${throttledWait(minutes)}`;
 }
 
 export function ShareNotFound({ children }: { children?: ReactNode }) {
@@ -27,7 +33,7 @@ export function ShareNotFound({ children }: { children?: ReactNode }) {
 }
 
 export function ShareThrottled({ minutes }: { minutes: number }) {
-  return <ShareMessage heading={SHARE_THROTTLED_HEADING} message={throttledText(minutes)} />;
+  return <ShareMessage heading={SHARE_THROTTLED_HEADING} message={throttledWait(minutes)} />;
 }
 
 function ShareMessage({ heading: text, message, children }: { heading: string; message: string; children?: ReactNode }) {

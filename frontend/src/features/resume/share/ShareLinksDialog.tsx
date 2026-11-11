@@ -139,9 +139,12 @@ export function stateLabel(state: CapabilityState): string {
   }
 }
 
+// A live link reads forest, one that ran out ochre, and one its owner
+// revoked plum; one whose resume is gone stays neutral. The words carry
+// the state; the tone only backs them up.
 const BADGE_TONE: Record<CapabilityState['kind'], React.CSSProperties> = {
-  expires: { background: 'var(--bg-sunken)', color: 'var(--text-2)' },
-  expired: { background: 'var(--status-warn-soft)', color: 'var(--text)' },
+  expires: { background: 'var(--forest-soft)', color: 'var(--text)' },
+  expired: { background: 'var(--ochre-soft)', color: 'var(--text)' },
   revoked: { background: 'var(--plum-soft)', color: 'var(--text)' },
   'source-deleted': { background: 'var(--bg-sunken)', color: 'var(--text-2)' },
 };

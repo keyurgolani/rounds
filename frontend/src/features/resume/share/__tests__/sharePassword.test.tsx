@@ -15,7 +15,7 @@ vi.mock('../../../../lib/pocketbase', () => ({
 
 import SharedArtifact from '../../../../pages/SharedArtifact';
 import { SHARED_FRAME_TITLE } from '../SharedArtifactFrame';
-import { SHARE_NOT_FOUND_HEADING, SHARE_THROTTLED_HEADING, throttledText } from '../ShareNotFound';
+import { SHARE_NOT_FOUND_HEADING, SHARE_THROTTLED_HEADING, throttledText, throttledWait } from '../ShareNotFound';
 import { SHARE_PASSWORD_HINT, SHARE_PASSWORD_RETRY } from '../SharePasswordForm';
 
 const TOKEN = 'sd1_AbCdEfGhIjKlMnOpQrStUv';
@@ -93,7 +93,7 @@ describe('the password field', () => {
     open(`/r#${TOKEN}`);
     await user.type(await screen.findByLabelText('Password'), PASSWORD);
     await user.click(screen.getByRole('button', { name: 'Open' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Too many attempts right now. Wait 1 minute and try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Too many attempts. Wait 1 minute, then try again.');
   });
 
   it('has no field without a token', async () => {
@@ -106,9 +106,9 @@ describe('the password field', () => {
 
 describe('a throttled resolve', () => {
   it.each([
-    ['120', 'Too many attempts right now. Wait 2 minutes and try again.'],
-    ['61', 'Too many attempts right now. Wait 2 minutes and try again.'],
-    [null, 'Too many attempts right now. Wait 1 minute and try again.'],
+    ['120', 'Wait 2 minutes, then try again.'],
+    ['61', 'Wait 2 minutes, then try again.'],
+    [null, 'Wait 1 minute, then try again.'],
   ])('with Retry-After %s says only how long to wait', async (wait, text) => {
     fetchMock.mockResolvedValue(
       answer(429, { detail: 'Server text that is never shown' }, wait === null ? {} : { 'Retry-After': wait }),
@@ -123,7 +123,8 @@ describe('a throttled resolve', () => {
   });
 
   it('reads "minute" for one and "minutes" for more', () => {
-    expect(throttledText(1)).toBe('Too many attempts right now. Wait 1 minute and try again.');
-    expect(throttledText(15)).toBe('Too many attempts right now. Wait 15 minutes and try again.');
+    expect(throttledWait(1)).toBe('Wait 1 minute, then try again.');
+    expect(throttledWait(15)).toBe('Wait 15 minutes, then try again.');
+    expect(throttledText(1)).toBe('Too many attempts. Wait 1 minute, then try again.');
   });
 });
