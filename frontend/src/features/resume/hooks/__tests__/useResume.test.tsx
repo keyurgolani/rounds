@@ -3,7 +3,7 @@
 // server PDF sends as `expected_updated`. A failed save keeps its edits
 // pending, so the next save carries them.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 
 vi.mock('../../api', () => ({
@@ -178,5 +178,82 @@ describe('useResume flush', () => {
     await act(async () => saves[0].reject());
     await expect(second!).rejects.toThrow('offline');
     await expect(first!).rejects.toThrow('offline');
+  });
+});
+
+// No edit sits unsaved or is dropped: a failed save tries again on its
+// own, and leaving the Studio saves what's left.
+describe('useResume keeps every edit', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function advance(ms: number) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  it('tries a failed save again on its own, waiting longer each time', async () => {
+    const hook = await loaded();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    edit(hook, 'Typed offline');
+    await advance(700);
+    expect(saves).toHaveLength(1);
+    await act(async () => saves[0].reject());
+
+    await advance(1_999);
+    expect(saves).toHaveLength(1);
+    await advance(1);
+    expect(saves).toHaveLength(2);
+    expect(saves[1].patch).toEqual({ data: { personalInfo: { fullName: 'Typed offline' } } });
+    await act(async () => saves[1].reject());
+
+    // The second wait is twice the first.
+    await advance(3_999);
+    expect(saves).toHaveLength(2);
+    await advance(1);
+    expect(saves).toHaveLength(3);
+    await act(async () => saves[2].resolve('2026-11-11 08:00:04.000Z'));
+    expect(hook.result.current.saveState).toBe('saved');
+    expect(hook.result.current.lastSavedAt).toBe('2026-11-11 08:00:04.000Z');
+  });
+
+  it('saves an edit typed while a save is in flight once that save lands', async () => {
+    const hook = await loaded();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    edit(hook, 'First');
+    await advance(700);
+    edit(hook, 'Second');
+    // The first save lands while the second edit's debounce is waiting.
+    await act(async () => saves[0].resolve('2026-11-11 08:00:01.000Z'));
+    await advance(700);
+    expect(saves).toHaveLength(2);
+    expect(saves[1].patch).toEqual({ data: { personalInfo: { fullName: 'Second' } } });
+  });
+
+  it('saves a pending edit when the Studio unmounts', async () => {
+    const hook = await loaded();
+    edit(hook, 'Typed then left');
+    hook.unmount();
+    await tick();
+    expect(saves).toHaveLength(1);
+    expect(saves[0].patch).toEqual({ data: { personalInfo: { fullName: 'Typed then left' } } });
+  });
+
+  it('saves the edits of a failed save when the Studio unmounts, once', async () => {
+    const hook = await loaded();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    edit(hook, 'Failed then left');
+    await advance(700);
+    await act(async () => saves[0].reject());
+    hook.unmount();
+    await advance(0);
+    expect(saves).toHaveLength(2);
+    expect(saves[1].patch).toEqual({ data: { personalInfo: { fullName: 'Failed then left' } } });
+    await act(async () => saves[1].reject());
+    // Unmounted, it doesn't keep trying.
+    await advance(60_000);
+    expect(saves).toHaveLength(2);
   });
 });
