@@ -2,15 +2,41 @@
 // (pages/PublicResume and pages/SharedArtifact, ROUNDS-00B-L03). The server
 // answers one not-found for every reason, and nothing from a response is
 // shown. Focus lands on the heading so a screen reader announces it right
-// away.
+// away. The share capability page puts its password field under the
+// message, and a throttled resolve gets the same page with its own words
+// (ROUNDS-00B-L04).
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 export const SHARE_NOT_FOUND_HEADING = 'This link isn’t available';
 export const SHARE_NOT_FOUND_MESSAGE =
   'It may have been turned off, or the address may be incomplete. Ask the person who shared it for a new link.';
+export const SHARE_THROTTLED_HEADING = 'Too many attempts';
 
-export function ShareNotFound() {
+/** "Wait N minutes, then try again.", under the throttled page's heading. */
+export function throttledWait(minutes: number): string {
+  return `Wait ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, then try again.`;
+}
+
+/** "Too many attempts. Wait N minutes, then try again.", where no heading
+ *  says it first. */
+export function throttledText(minutes: number): string {
+  return `${SHARE_THROTTLED_HEADING}. ${throttledWait(minutes)}`;
+}
+
+export function ShareNotFound({ children }: { children?: ReactNode }) {
+  return (
+    <ShareMessage heading={SHARE_NOT_FOUND_HEADING} message={SHARE_NOT_FOUND_MESSAGE}>
+      {children}
+    </ShareMessage>
+  );
+}
+
+export function ShareThrottled({ minutes }: { minutes: number }) {
+  return <ShareMessage heading={SHARE_THROTTLED_HEADING} message={throttledWait(minutes)} />;
+}
+
+function ShareMessage({ heading: text, message, children }: { heading: string; message: string; children?: ReactNode }) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     heading.current?.focus();
@@ -43,7 +69,7 @@ export function ShareNotFound() {
             outline: 'none',
           }}
         >
-          {SHARE_NOT_FOUND_HEADING}
+          {text}
         </h1>
         <p
           style={{
@@ -56,8 +82,9 @@ export function ShareNotFound() {
             textWrap: 'pretty',
           }}
         >
-          {SHARE_NOT_FOUND_MESSAGE}
+          {message}
         </p>
+        {children}
       </div>
     </main>
   );

@@ -97,6 +97,14 @@ const NEVER_PROXIED = [
   '/api/collections/execution_servic%C3%A9/auth-with-password',
   '/api/collections/execution_servicé/records',
   '/api/collections/no-such-name/records',
+  '/api/collections/share_resolvers/auth-with-password',
+  '/api/collections/share_resolvers/records',
+  '/api/collections/Share_Resolvers/auth-with-password',
+  '/api/collections/SHARE_RESOLVERS/records?perPage=1',
+  '/api/collections/share%5Fresolvers/auth-with-password',
+  '/api/rounds/share/lookup',
+  '/api/rounds/share/commands',
+  '/api/rounds/share/capabilities/capaaaaaaaaaaa1/rotate',
   '/api/collections/users%2E/records',
   '/api/rounds/legacy-snapshots',
   '/api/rounds/legacy-snapshots/',
@@ -152,6 +160,9 @@ const PROXIED = [
   '/api/share/capabilities',
   '/api/share/capabilities/capaaaaaaaaaaa1/revoke',
   '/api/share/resolve',
+  '/api/share/capabilities/capaaaaaaaaaaa1/rotate',
+  '/api/share/by-token/AbCdEfGhIjKlMnOpQrStUv',
+  '/api/collections/share_throttle/records',
 ];
 
 describe('the dev proxy and production nginx', () => {
@@ -175,6 +186,7 @@ describe('the dev proxy and production nginx', () => {
     '/api/collections/execution_service/auth-with-password',
     '/api/collections/Execution_Service/auth-with-password',
     '/api/collections/execution_servic%C3%A9/auth-with-password',
+    '/api/collections/share_resolvers/auth-with-password',
     '/api/rounds/legacy-snapshots',
     '/api/rounds/share/capabilities',
   ])('refuses a WebSocket upgrade on %s too', (url) => {
@@ -198,6 +210,7 @@ describe('the dev proxy and production nginx', () => {
       '/api/collections/execution_servic%C3%A9/auth-with-password',
       '/api/rounds/Legacy-Snapshots',
       '/api/rounds/Share/capabilities',
+      '/api/collections/Share_Resolvers/auth-with-password',
     ]) {
       expect(entry.bypass?.({ url } as never, {} as never, entry)).toBe(false);
     }
@@ -233,7 +246,7 @@ describe('the dev proxy and production nginx', () => {
   });
 
   it('sends the share capability routes to the runner and keeps their hooks from PocketBase', () => {
-    for (const url of ['/api/share/capabilities', '/api/share/resolve']) {
+    for (const url of ['/api/share/capabilities', '/api/share/resolve', '/api/share/capabilities/x/rotate']) {
       expect(viteEntry(url)?.target).toBe(viteEntry('/api/run')?.target);
     }
     expect(viteDenies('/api/rounds/share/capabilities')).toBe(true);

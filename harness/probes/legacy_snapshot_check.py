@@ -269,14 +269,18 @@ def fingerprint(pb: PBClient, token: str) -> dict[str, str]:
 
 
 def wait_frontend() -> None:
+    """Until nginx answers, and the runner behind it: right after a restart,
+    nginx and PocketBase can be up a moment before the runner is, and nginx
+    answers the runner's routes 502 until then."""
     for _ in range(60):
         try:
-            if call(FRONTEND_URL, "GET", "/api/health", timeout=3)[0] == 200:
+            if call(FRONTEND_URL, "GET", "/api/health", timeout=3)[0] == 200 \
+                    and call(FRONTEND_URL, "GET", ROUTE, timeout=3)[0] not in (502, 504):
                 return
         except (urllib.error.URLError, OSError):
             pass
         time.sleep(1)
-    raise RuntimeError("the frontend never answered /api/health")
+    raise RuntimeError("the frontend never answered /api/health and the runner's route")
 
 
 def load_state() -> dict:
@@ -741,6 +745,8 @@ def run_again(c: Checks) -> None:
     state = load_state()
     token = sign_in(pb, "a", state["accounts"]["a"])
     differed = []
+    # Each differing answer's status and kind or code, never an id.
+    answers: dict[str, int] = {}
     for snap_id, want in state["snapshots"].items():
         collection = "resumes" if want["kind"] == "resume" else "resume_variants"
         source = pb.view(collection, want["source"], token).body or {}
@@ -748,8 +754,13 @@ def run_again(c: Checks) -> None:
         if not (status == 200 and isinstance(body, dict) and body.get("status") == "reused"
                 and body.get("snapshot_id") == snap_id and body.get("content_checksum") == want["checksum"]):
             differed.append(snap_id)
+            kind = (body.get("status") or code_of(body)) if isinstance(body, dict) else None
+            same = isinstance(body, dict) and body.get("snapshot_id") == snap_id
+            label = f"{status}:{kind}:{'same-id' if same else 'other-id'}"
+            answers[label] = answers.get(label, 0) + 1
     c.check("snapshot.forward-again.every-snapshot-reused-with-its-checksum",
-            not differed and bool(state["snapshots"]), f"differed={len(differed)}")
+            not differed and bool(state["snapshots"]),
+            f"differed={len(differed)} answers={','.join(f'{k}x{v}' for k, v in sorted(answers.items()))}")
     c.check("snapshot.forward-again.no-source-row-changed",
             fingerprint(pb, token) == state["fingerprints"]["a"], "a source row changed")
     gone = state["ids"]["gone"]

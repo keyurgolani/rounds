@@ -75,6 +75,10 @@ CODES: dict[str, int] = {
     "checksum_mismatch": 409,
     # The owner's share capability routes (ROUNDS-00B-L03).
     "shares_unavailable": 503,
+    # RotateShareBearer (ROUNDS-00B-L04).
+    "capability_version_conflict": 409,
+    "capability_revoked": 409,
+    "capability_expired": 409,
 }
 
 # The fixed sentence each code answers with unless a caller passes its own.
@@ -111,6 +115,9 @@ DETAILS: dict[str, str] = {
     "materializer_unavailable": "Server PDF can't be prepared right now. Try again shortly.",
     "checksum_mismatch": "The saved copy doesn't match this request. Export again.",
     "shares_unavailable": "Share links can't be loaded right now. Try again shortly.",
+    "capability_version_conflict": "This link changed since the list loaded. Reload it to continue.",
+    "capability_revoked": "This link was revoked.",
+    "capability_expired": "This link has expired.",
 }
 
 # Pydantic error type a field validator raises for an over-limit value.

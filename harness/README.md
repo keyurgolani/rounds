@@ -408,6 +408,38 @@ collection's null rules, and the deploy phase checks that nginx answers the
 hook routes itself and that the resolver gives the uniform not-found while its
 gate is closed.
 
+## Share Secrets
+
+`ROUNDS-00B-L04` runs next, still with signups and the demo on. PocketBase and
+both runners restart with snapshot creation and share capability resolution
+on, the materializer up, and nginx, and
+[`probes/share_secrets_check.py`](probes/share_secrets_check.py) checks, in
+three phases:
+
+- `share-secrets`: a new link's secret comes back once, and the same key
+  answers `already-issued` without it, as it is and after the source changes;
+  Rotate recovers a lost link, a repeated rotate key answers `already-issued`,
+  and ten rotations at one version across both replicas make one new secret
+  while the old one stops on both; a revoked or expired link can't be
+  rotated, and a demo account's create is ineligible; a wrong, missing, or
+  impossible password answers exactly as an unknown link does; password
+  tries and resolves per client are limited, 1,000 random well-formed links
+  from one client meet the limit, and a throttled client gets the same 429
+  for a live link as for an unknown one; a client's own `X-Real-IP` doesn't
+  reach the runner through nginx, and nginx's backstop answers a burst.
+- `share-secrets-down`: with PocketBase stopped, a live link gets the unknown
+  answer.
+- `share-secrets-scan`: no issued secret (raw, URL-encoded, or base64) or
+  password (raw, or its SHA-1, SHA-256, or MD5) is in any service's log or in
+  pb_data, and no log line for a share resolve or the share page has the
+  probe's address. The launcher puts the logs and a pb_data tarball in the
+  state folder, never the receipts, and removes them after the scan.
+
+The direct calls to a replica name test clients in `X-Real-IP`, which the
+runners trust from the compose network as they do from nginx, so they keep the
+probe's own count for the calls through nginx. Secrets and passwords stay in
+the state folder; receipts carry check ids and counts only.
+
 ## Two-account isolation suite
 
 `ROUNDS-00B-L05` grows this harness into the suite every later isolation

@@ -29,7 +29,9 @@ OTHER = "capbbbbbbbbbbb1"
 
 def item(cid: str = CAP, **over) -> dict:
     row = {"id": cid, "status": "active", "revoked_reason": "", "purpose": "For recruiters",
-           "expires_at": "2027-02-09 12:00:00.000Z", "created": "2026-11-11 12:00:00.000Z", "revoked_at": ""}
+           "expires_at": "2027-02-09 12:00:00.000Z", "created": "2026-11-11 12:00:00.000Z", "revoked_at": "",
+           # ROUNDS-00B-L04: the version Rotate expects, and whether a password protects the link.
+           "capability_version": 1, "password_set": False}
     row.update(over)
     return row
 
@@ -96,6 +98,11 @@ def test_an_empty_list_is_empty(client, hooks, signed_in):
     (200, {"v": V, "items": [item(id="short")]}),
     (200, {"v": V, "items": [item(status="paused")]}),
     (200, {"v": V, "items": [item(purpose=7)]}),
+    (200, {"v": V, "items": [item(capability_version="1")]}),
+    (200, {"v": V, "items": [item(capability_version=0)]}),
+    (200, {"v": V, "items": [item(capability_version=True)]}),
+    (200, {"v": V, "items": [item(password_set="yes")]}),
+    (200, {"v": V, "items": [{k: v for k, v in item().items() if k != "password_set"}]}),
     (200, {"v": V, "items": "not a list"}),
     (200, {"v": "other/v9", "items": []}),
     (200, None),

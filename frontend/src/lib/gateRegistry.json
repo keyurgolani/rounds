@@ -9,6 +9,12 @@
       "closed": "disabled",
       "aliases": []
     },
+    "SHARE_CAPABILITY_RESOLUTION": {
+      "values": ["enabled", "disabled"],
+      "default": "disabled",
+      "closed": "disabled",
+      "aliases": []
+    },
     "SIGNUPS": {
       "values": ["enabled", "disabled"],
       "default": "enabled",

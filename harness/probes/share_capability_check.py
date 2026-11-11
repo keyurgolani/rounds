@@ -20,8 +20,8 @@ replicas and nginx up and signups still on:
   leaves none of its capabilities or snapshots.
 
 The superuser seeds the snapshots and capabilities, through the same model
-hooks and owner triggers every writer meets; nothing creates a capability
-any other way until #12.
+hooks and owner triggers every writer meets. #12's CreateShare, which makes
+them the other way, has its own phase (share_secrets_check.py).
 
 Prints one PASS/FAIL line per check and exits non-zero on any failure.
 """
@@ -42,7 +42,8 @@ POCKETBASE_URL = os.environ.get("POCKETBASE_URL", "http://pocketbase:8090")
 RUNNER_URL = os.environ.get("RUNNER_URL", "http://runner:8000")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://frontend").rstrip("/")
 ROUTE = "/api/share/capabilities"
-OWNER_FIELDS = {"id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at"}
+OWNER_FIELDS = {"id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at",
+                "capability_version", "password_set"}
 NOT_FOUND = {"detail": "Not found.", "code": "not_found"}
 CAPS = "share_capabilities"
 SNAPSHOTS = "legacy_artifact_snapshots"

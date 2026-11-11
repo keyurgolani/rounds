@@ -80,6 +80,8 @@ docker compose -f docker-compose.prod.yml start pocketbase
 
 The volume is named after the compose project, which defaults to the checkout's directory name, so `rounds_pb_data` assumes a checkout named `rounds`; `docker volume ls` shows yours. Check that each archive isn't empty, and test a restore on another host now and then.
 
+Keep `AI_KEY_SECRET` with the same care as the archives, stored apart from them. It encrypts saved AI provider keys and keys every share link's digest, so a restore under another value can't read those keys, and every share link answers not-found until its owner rotates it.
+
 ## Restore
 
 1. Stop the stack.
@@ -402,7 +404,7 @@ A share link answers only its owner, and the public share read answers only the 
 
 To turn every public share answer off, the public share read and the resolver below, set `ROUNDS_GATE_PUBLIC_SHARES=disabled` on the runner and restart it (Compose passes it through; in Kubernetes set it in the `rounds-gates` ConfigMap, which the runner reads). Its older alias, `ROUNDS_DISABLE_PUBLIC_SHARES=true`, still works while the gate is empty, and it fails closed: any value other than empty, `false`, `0`, `no`, or `off` turns them off. A set gate wins over the alias. Owners keep their links. Turn answers back on with `ROUNDS_GATE_PUBLIC_SHARES=enabled`, or an empty gate and the alias `false`.
 
-**Share capabilities.** `1700008200_share_capabilities.js` adds `share_capabilities`, the store for Share Capabilities, the share links #12 starts creating. Every rule is `null`, so no client lists, views, or writes a row; PocketBase's hooks and the runner's owner routes are the only way in. A row names one of its account's Legacy Artifact Snapshots and holds a keyed digest of its bearer, never the bearer. Nothing creates a row yet.
+**Share capabilities.** `1700008200_share_capabilities.js` adds `share_capabilities`, the store for Share Capabilities. Every rule is `null`, so no client lists, views, or writes a row; PocketBase's hooks and the runner's owner routes are the only way in. A row names one of its account's Legacy Artifact Snapshots and holds a keyed digest of its bearer, never the bearer. CreateShare makes rows while resolution is on (below).
 
 - An owner lists their capabilities with `GET /api/share/capabilities` and revokes one with `POST /api/share/capabilities/{id}/revoke`. A revoke takes effect at once and can't be undone, and revoking again answers the same. Another account's capability answers like a missing one.
 - A capability lasts 90 days unless its creator picks less, and never more than 365. Its expiry can only move earlier.
@@ -415,9 +417,27 @@ To turn every public share answer off, the public share read and the resolver be
 | Gate | Default | Effect |
 | --- | --- | --- |
 | `ROUNDS_GATE_PUBLIC_SHARES` | `enabled` | `disabled` answers every public share request with the uniform not-found before any lookup |
-| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | `disabled` | `enabled` lets the resolver look a capability up. Leave it `disabled`: until #12 ships the lookup, an open gate still resolves nothing |
+| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | `disabled` | `enabled` lets the resolver look a capability up and turns on CreateShare and rotation below. Leave it `disabled` until the steps under One-time links are done |
 
-The resolver answers `{"projection_version": 1, "markup"}`, or the public share read's 404 bytes and headers for every failure: a gate, a body that isn't a JSON object holding only `token`, a token in another format, a capability that's unknown, expired, revoked, another account's, or whose source is gone, and PocketBase being down. The `/r` page shows resolved markup in a sandboxed frame that can't run scripts, under the share page CSP.
+The resolver answers `{"projection_version": 1, "markup"}`, or the public share read's 404 bytes and headers for every failure: a gate, a body that isn't a JSON object holding a `token` and at most a `password`, a token in another format, a capability that's unknown, expired, revoked, another account's, or whose source is gone, a missing or wrong password, and PocketBase being down. A throttled client gets 429 with `Retry-After` instead, whatever its token. The `/r` page shows resolved markup in a sandboxed frame that can't run scripts, under the share page CSP.
+
+**One-time links.** While resolution is on, `POST /api/share` is CreateShare and the share dialog follows it (#12):
+
+- A link is `/r#<secret>`; the secret rides the fragment, which no request carries. Rounds shows it once, in the response that makes it, and keeps only a keyed digest under `AI_KEY_SECRET`. A retry under the same `Idempotency-Key` answers `already-issued` with the same link and no secret. An owner who lost a link rotates it, `POST /api/share/capabilities/{id}/rotate` with the version from the list: one transaction swaps the digest, and the old link stops at once. A stale version is 409 `capability_version_conflict`; a revoked or expired link is 409 `capability_revoked` or `capability_expired`.
+- A link may have a password, 8 to 128 characters, set when it's made and stored as an Argon2id verifier (profile `pw1`). Each submitted password costs one verify, at most two at once per runner, and an unknown link costs the same.
+- The resolver counts before it looks: 60 resolves a minute per client, 10 password tries on one link from one client in 15 minutes, and 100 resolves a day per link. Counters live in `share_throttle` as keys only the runner can make, so a row names neither an address nor a link, and each lookup removes up to 100 that are over a day old. nginx adds a backstop of 2 resolves a second per client on each frontend replica, with a burst of 20.
+- The runner resolves as `share-resolver`, a record in `share_resolvers` whose password follows `ROUNDS_SHARE_RESOLVER_PASSWORD`. It reaches only its lookup route; PocketBase refuses it everywhere else, and nginx and the Vite proxy answer `/api/collections/share_resolvers/` with 404.
+- Share pages and resolves leave no access-log line in nginx or the runner, and nginx keeps only critical error lines on its share locations, since its error lines name the client. The runner logs `share.resolve` with `throttled`, `password_required`, or `password_wrong` besides the codes above, and one `share.create` or `share.rotate` line per command with the account's pseudonym, the capability id once there is one, and `issued`, `already_issued`, `ineligible`, or the refusal's code. None holds a secret, a password, or an address.
+
+Before you set the gate to `enabled`:
+
+1. Set `ROUNDS_SHARE_RESOLVER_PASSWORD` on PocketBase and every runner, then restart PocketBase, then the runners.
+2. Turn on Legacy Artifact Snapshot creation with its signed scan and the materializer ([Legacy Artifact Snapshots](#legacy-artifact-snapshots)), and set `ROUNDS_ADMISSION_SECRET`: every link is made over a snapshot.
+3. Back up `AI_KEY_SECRET` ([Backups](#backups)).
+4. If anything sits in front of the frontend, a front proxy, a tunnel, or the k8s ingress controller, set `ROUNDS_FRONTEND_REAL_IP_FROM` on the frontend to the addresses it connects from, and have it send each client's address in `X-Forwarded-For`, the header the frontend reads. This holds for compose too: when nginx's port is published only to a local proxy, nginx sees that proxy for every client, and without the setting every client shares one count, so one client can throttle every link. `ROUNDS_TRUSTED_PROXY_CIDRS` is the runner's list of nginx addresses; its default covers nginx in the compose files and on k8s, so leave it unless nginx reaches the runner from elsewhere.
+5. Set the gate for the runner and the frontend together, so the dialog matches the create the runner serves.
+
+Check a deployment with the gate on, signed in, from the public URL: make a link and open it; rotate it and check that the old link answers not-found and the new one opens; and resolve one unknown token 61 times within a minute, which answers 429 with `Retry-After` from the 61st on. Right after, resolve once from a second client on another network: it answers 404. A 429 there means every client shares one count; set `ROUNDS_FRONTEND_REAL_IP_FROM` (step 4).
 
 Check the pages and the resolver from the public URL:
 
@@ -429,7 +449,7 @@ curl -s -i -X POST https://your-domain/api/share/resolve -H 'Content-Type: appli
 
 Both pages answer `Cache-Control: no-store` with the share page CSP and `X-Frame-Options: DENY`, and the resolver answers 404 `{"detail":"Not found."}` with the same headers as the public share read.
 
-[Deployment verification](#deployment-verification) checks these from the public URL: `deployment.proxy.share-page.headers` for the share pages, `deployment.proxy.share-read.uniform` for the public share read, `deployment.proxy.share-resolve.uniform` for the resolver, and `deployment.proxy.share-hooks.denied` for the hook routes, which nginx answers itself.
+[Deployment verification](#deployment-verification) checks these from the public URL: `deployment.proxy.share-page.headers` for the share pages, `deployment.proxy.share-read.uniform` for the public share read, `deployment.proxy.share-resolve.uniform` for the resolver, `deployment.proxy.share-hooks.denied` for the hook routes, and `deployment.proxy.share-resolvers.denied` for the share resolver record's routes, which nginx answers itself.
 
 ## Smoke Test Checklist
 

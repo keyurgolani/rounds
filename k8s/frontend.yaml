@@ -34,6 +34,15 @@ spec:
             - configMapRef:
                 name: rounds-gates
                 optional: true
+          # Behind the ingress controller, nginx sees the controller's pod
+          # as every request's peer. Set ROUNDS_FRONTEND_REAL_IP_FROM to the
+          # controller's pod CIDR (comma-separated for more than one), and
+          # nginx takes each client's address from X-Forwarded-For past it
+          # (docker-entrypoint.d/20-real-ip.sh). Unset, every client shares
+          # one address for the share resolver's backstop and throttle.
+          # env:
+          #   - name: ROUNDS_FRONTEND_REAL_IP_FROM
+          #     value: "10.42.0.0/16"
           readinessProbe:
             httpGet:
               path: /
