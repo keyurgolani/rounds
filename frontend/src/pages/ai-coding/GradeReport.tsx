@@ -1,26 +1,26 @@
-import type { AICodingRound, AIChatLogEntry, GradeResponse } from './aiCodingApi';
+import type { AICodingRound, AIChatLogEntry, CheckpointResult } from './aiCodingApi';
 import BlockMarkdown from '../../components/shell/BlockMarkdown';
 import AIPatchView from '../../components/ai/AIPatchView';
 import { normaliseProposedWhitespace } from '../../components/ai/AIChatPanel';
 import { splitPatches } from '../../components/ai/aiPatches';
+import { limitTitle } from '../../components/runner/RunnerJobStatus';
+import { ReviewStatusNote } from '../../components/runner/ReviewStatus';
+import type { ReviewStatus } from '../../hooks/useRubricReview';
+import type { RubricReview } from '../../lib/gradedRows';
 
 type Props = {
   /** At enforce each checkpoint carries its result ids' outcomes, and
-   *  never what the harness printed (ROUNDS-00A-L02). */
-  testResults: GradeResponse['test_results'];
+   *  never what the harness printed (ROUNDS-00A-L02). A grading job's row
+   *  names each checkpoint's class and limit (ROUNDS-00A-L03 PR 3). */
+  testResults: CheckpointResult[];
   rubric: AICodingRound['rubric'];
-  rubricReview: {
-    items: Array<{
-      id: string;
-      score: number;
-      evidence: string;
-      suggestions: string[];
-      evidence_quotes?: Array<{ file: string; line: number; quote: string }>;
-    }>;
-    total: number;
-    skipped?: boolean;
-    reason?: string;
-    parse_error?: string;
+  /** Null while the result has no review: `review` says where it stands. */
+  rubricReview: RubricReview | null;
+  review?: {
+    status: ReviewStatus | null;
+    retryAfterSeconds?: number | null;
+    onRetry?: () => void;
+    onRequest?: () => void;
   };
   aiChats?: AIChatLogEntry[];
   /** Final workspace files — used as the baseline for any AI patch
@@ -29,10 +29,26 @@ type Props = {
   files?: Record<string, string>;
 };
 
+/** The limit that stopped a checkpoint, or null for one the run earned. */
+export function checkpointLimit(result: CheckpointResult): string | null {
+  if (result.outcome_class !== 'resource-limit') return null;
+  return limitTitle(result.limit);
+}
+
+/** "2 of 3 checkpoints passed", and how many a limit stopped. */
+export function gradeSummary(results: CheckpointResult[]): string | undefined {
+  if (results.length === 0) return undefined;
+  const passed = results.filter((r) => r.passed === true).length;
+  const limited = results.filter((r) => checkpointLimit(r) !== null).length;
+  const summary = `${passed} of ${results.length} checkpoints passed`;
+  return limited > 0 ? `${summary} · ${limited} stopped at a limit` : summary;
+}
+
 export default function GradeReport({
   testResults,
   rubric,
   rubricReview,
+  review,
   aiChats = [],
   files = {},
 }: Props) {
@@ -42,40 +58,62 @@ export default function GradeReport({
       <section>
         <h3>Deterministic checkpoint results</h3>
         <ul className="grid gap-2">
-          {testResults.map((tr, i) => (
-            <li key={i} className="card" style={{ padding: 12 }}>
-              <div className="flex items-center gap-2">
-                <strong>Checkpoint {i + 1}</strong>
-                <span style={{ color: tr.passed ? 'var(--success)' : 'var(--danger)' }}>
-                  {tr.passed ? 'pass' : 'fail'}
-                </span>
-                <span className="text-3 text-sm">
-                  {tr.passed_count} passed · {tr.failed_count} failed
-                </span>
-              </div>
-              {tr.error && (
-                <pre className="text-xs mt-2" style={{ whiteSpace: 'pre-wrap' }}>
-                  {tr.error}
-                </pre>
-              )}
-              {tr.outcomes && tr.outcomes.length > 0 && (
-                <ul className="text-xs mt-2 grid gap-1">
-                  {tr.outcomes.map((o) => (
-                    <li key={o.id} className="mono">
-                      {o.id}: {o.outcome === 'passed' ? 'pass' : `${o.outcome} (${o.reason})`}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
+          {testResults.map((tr, i) => {
+            const limit = checkpointLimit(tr);
+            return (
+              <li key={i} className="card" style={{ padding: 12 }} data-checkpoint-outcome={tr.outcome_class ?? ''}>
+                <div className="flex items-center gap-2">
+                  <strong>Checkpoint {(tr.index ?? i) + 1}</strong>
+                  {limit !== null ? (
+                    // A limit stopped it: no verdict and no counts, since
+                    // the run didn't earn either.
+                    <span style={{ color: 'var(--status-warn)' }}>{limit}</span>
+                  ) : (
+                    <>
+                      <span style={{ color: tr.passed ? 'var(--success)' : 'var(--danger)' }}>
+                        {tr.passed ? 'pass' : 'fail'}
+                      </span>
+                      <span className="text-3 text-sm">
+                        {tr.passed_count} passed · {tr.failed_count} failed
+                      </span>
+                    </>
+                  )}
+                </div>
+                {tr.label && <div className="text-3 text-sm mt-1">{tr.label}</div>}
+                {tr.error && (
+                  <p className="text-sm" style={{ margin: '8px 0 0', color: 'var(--text-2)' }}>
+                    {tr.error}
+                  </p>
+                )}
+                {tr.outcomes && tr.outcomes.length > 0 && (
+                  <ul className="text-xs mt-2 grid gap-1">
+                    {tr.outcomes.map((o) => (
+                      <li key={o.id} className="mono">
+                        {o.id}: {o.outcome === 'passed' ? 'pass' : `${o.outcome} (${o.reason})`}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </section>
       <section>
         <h3>AI rubric review</h3>
-        {rubricReview.skipped ? (
+        {review && (
+          <ReviewStatusNote
+            status={review.status}
+            retryAfterSeconds={review.retryAfterSeconds ?? null}
+            onRetry={review.onRetry}
+            onRequest={review.onRequest}
+          />
+        )}
+        {rubricReview === null ? (
+          !review?.status && <div className="text-3 text-sm">This submission has no rubric review.</div>
+        ) : rubricReview.skipped ? (
           <div className="card" style={{ padding: 12 }}>
-            Rubric review skipped: {rubricReview.reason ?? 'no AI provider configured'}.
+            Rubric review skipped: {(rubricReview.reason ?? 'no AI provider configured').replace(/\.$/, '')}.
           </div>
         ) : (
           <>

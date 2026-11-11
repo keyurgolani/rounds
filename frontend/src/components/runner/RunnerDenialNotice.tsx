@@ -4,7 +4,8 @@
 // definition states (ROUNDS-00A-L02) add reload for an out-of-date page,
 // with a Reload button that saves the draft first when the page passes
 // `onReload` (a page whose save failed stays and says so, keeping the
-// button), and retired, not here, unsupported, and file not allowed.
+// button), and retired, not here, unsupported, and file not allowed. A
+// practice item the server can't grade (ROUNDS-00A-L03 PR 3) says so.
 //
 // The live region is always in the DOM, so screen readers announce a
 // denial when it appears. The notice never takes focus. If the action
@@ -90,6 +91,7 @@ const ICONS: Record<RunnerDenialKind, LucideIcon> = {
   not_found: SearchX,
   unsupported: Languages,
   path_not_allowed: FileX,
+  not_gradable: FileX,
 };
 
 function copyFor(denial: RunnerDenial, action: RunnerAction): { title: string; body: string } {
@@ -155,6 +157,11 @@ function copyFor(denial: RunnerDenial, action: RunnerAction): { title: string; b
       return {
         title: 'File not allowed',
         body: `${denial.detail ?? "A file in this submission can't be sent."} ${text.none} ${text.kept}`,
+      };
+    case 'not_gradable':
+      return {
+        title: "Can't grade here",
+        body: `This practice item can't be graded on this server. ${text.none} ${text.kept}`,
       };
   }
 }

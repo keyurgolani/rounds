@@ -24,10 +24,13 @@ import { RunDock } from '../coding/RunDock';
 import {
   deleteInProgressTakeHomeAttempt,
   getAssignment,
+  getGradedTakeHomeAttempt,
   getLatestTakeHomeAttempt,
+  requestSubmissionReview,
   runProject,
   submitAttempt,
   upsertInProgressTakeHomeAttempt,
+  type HarnessOutput,
   type RunResult,
   type SubmitResponse,
   type TakeHomeAssignment,
@@ -46,15 +49,62 @@ import {
 import {
   activeTrigger,
   classifyRunnerError,
+  gradeFailureText,
   runFailureText,
   type RunnerDenial,
 } from '../../lib/runnerDenial';
 import { useRunnerJob } from '../../hooks/useRunnerJob';
-import { earnedOutput, type JobAnswer } from '../../lib/executionJobs';
-import type { RunnerJobView } from '../../components/runner/RunnerJobStatus';
+import { useRubricReview, type ReviewStatus } from '../../hooks/useRubricReview';
+import { earnedOutput, isJobAnswer, type JobAnswer } from '../../lib/executionJobs';
+import { envelopeJob, rubricState, type RubricReview, type RubricState } from '../../lib/gradedRows';
+import { limitTitle, type RunnerJobView } from '../../components/runner/RunnerJobStatus';
 import { RunErrorOutput } from '../../components/runner/RunErrorOutput';
+import { ReportProblem } from '../../components/runner/ReportProblem';
+import { ReviewStatusNote } from '../../components/runner/ReviewStatus';
 
 type SideTab = 'rubric' | 'notes' | 'guidance';
+
+// The report the modal shows: a submission's harness result and its
+// review, and for a row the server wrote, the job and envelope its review
+// asks by.
+type ReportView = {
+  harness: HarnessOutput;
+  rubric_review: RubricReview | null;
+  jobId?: string | null;
+  envelope?: string | null;
+};
+
+// A report that can't show: what happened, as a fixed sentence.
+type ReportTrouble = { title: string; body: string; retry?: () => void };
+
+const REPORT_UNREAD =
+  "The submission was graded and saved, but this page couldn't load its report. Try again in a moment.";
+
+// The words a review state's tile shows in place of a score.
+const REVIEW_TILE: Partial<Record<ReviewStatus, string>> = {
+  reviewing: 'reviewing',
+  not_requested: 'not reviewed',
+  no_provider: 'no provider',
+  files_changed: 'files changed',
+  lost: "didn't finish",
+  not_reviewable: 'unavailable',
+  limit: 'limit reached',
+  unavailable: 'unavailable',
+};
+
+/** The report's subtitle: the harness score, or the limit that stopped it
+ *  (no score), and the review's. */
+function reportSubtitle(report: ReportView, review: RubricReview | null): string {
+  const harness = report.harness;
+  const harnessText =
+    harness.score === null
+      ? harness.outcome_class === 'resource-limit'
+        ? `Harness stopped: ${limitTitle(harness.limit).toLowerCase()}`
+        : 'Harness —'
+      : `Harness ${Math.round(harness.score * 100)}/100`;
+  const reviewText = review && !review.skipped ? `${Math.round(review.total * 100)}/100` : '—';
+  return `${harnessText} · Rubric ${reviewText}`;
+}
 
 // A run job's output as the route's in-request body, when the run earned
 // its end (ROUNDS-00A-L03). Any other end shows only its own notice.
@@ -103,8 +153,12 @@ export default function TakeHomeDetail() {
   const [runError, setRunError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [report, setReport] = useState<SubmitResponse | null>(null);
+  const [report, setReport] = useState<ReportView | null>(null);
+  const [reportTrouble, setReportTrouble] = useState<ReportTrouble | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
+  // Which action's job the runner notice shows: the one last started, or
+  // a submission the tab picked back up.
+  const [jobShown, setJobShown] = useState<'run' | 'submit' | null>(null);
   const [chatLog, setChatLog] = useState<TakeHomeChatEntry[]>([]);
   const [notes, setNotes] = useState('');
   const [aiEnabled, setAiEnabled] = usePersistedState<boolean>(
@@ -136,6 +190,14 @@ export default function TakeHomeDetail() {
   const startedAtRef = useRef(Date.now());
   const runReqIdRef = useRef(0);
   const [, setPracticeStatus] = usePracticeStatus('take-home', slug);
+  // The submission's review (ROUNDS-00A-L03 PR 3), asked once per graded
+  // result with the files this page sent.
+  const gradedRef = useRef<{ jobId: string; files: Record<string, string> } | null>(null);
+  const review = useRubricReview(
+    (jobId, sent, key, signal) => requestSubmissionReview(jobId, sent, key, signal),
+    async (jobId) => (await getGradedTakeHomeAttempt(jobId))?.rubric_review ?? null,
+  );
+  const { ask: askReview, show: showReview, reset: resetReview, retry: retryReview } = review;
 
   useEffect(() => {
     let cancelled = false;
@@ -144,11 +206,15 @@ export default function TakeHomeDetail() {
     setRunResult(null);
     setRunError(null);
     setReport(null);
+    setReportTrouble(null);
     setReportOpen(false);
     setChatLog([]);
     setNotes('');
     setDockOpen(false);
     setRunDenial(null);
+    setJobShown(null);
+    resetReview();
+    gradedRef.current = null;
     startedAtRef.current = Date.now();
     getAssignment(slug)
       .then(async (a) => {
@@ -163,15 +229,17 @@ export default function TakeHomeDetail() {
           );
           if (cancelled || !latest) return;
           if (latest.ai_chats?.length) setChatLog(latest.ai_chats);
-          if (
-            latest.status === 'graded' &&
-            latest.harness_output &&
-            latest.rubric_review
-          ) {
+          // A row the server wrote has no review until one finishes.
+          if (latest.status === 'graded' && latest.harness_output && (latest.rubric_review || latest.envelope)) {
             setReport({
               harness: latest.harness_output,
-              rubric_review: latest.rubric_review,
+              rubric_review: latest.rubric_review ?? null,
+              envelope: latest.envelope || null,
             });
+            // Asks only when the candidate does: only they know the
+            // files are the ones submitted.
+            if (latest.rubric_review) showReview(latest.rubric_review);
+            else showReview(null, 'not_requested');
           }
         } catch {
           /* best-effort */
@@ -183,7 +251,7 @@ export default function TakeHomeDetail() {
     return () => {
       cancelled = true;
     };
-  }, [slug, campaignId]);
+  }, [slug, campaignId, resetReview, showReview]);
 
   // Persist chat log to PocketBase (debounced) so a refresh doesn't
   // discard the conversation. Mirrors the same pattern in AICodingDetail.
@@ -239,7 +307,22 @@ export default function TakeHomeDetail() {
       if (denial) setRunDenial({ action: 'run', denial });
     },
   });
+  // While ROUNDS_GATE_EXECUTION_GRADING is on, a submission is a durable
+  // job too (ROUNDS-00A-L03 PR 3). An authoritative end has a graded row
+  // the server wrote, and the report opens from it.
+  const submitTriggerRef = useRef<HTMLElement | null>(null);
+  const submitJob = useRunnerJob(
+    assignment ? `take-home:${assignment.slug}:${assignment.language}:${campaignId ?? ''}:submit` : null,
+    {
+      onEnded: (job) => void openGraded(job),
+      onDenied: (err) => {
+        const denial = classifyRunnerError(err, submitTriggerRef.current);
+        if (denial) setRunDenial({ action: 'grade', denial });
+      },
+    },
+  );
   const busy = running || runJob.active;
+  const grading = submitting || submitJob.active;
   const jobView: RunnerJobView = {
     job: runJob.job,
     gone: runJob.gone,
@@ -248,9 +331,20 @@ export default function TakeHomeDetail() {
     action: 'run',
     onCancel: () => void runJob.cancel(),
     // None while a retry is on its way, so one press sends one.
-    onRetry: busy ? undefined : () => void handleRun(true),
+    onRetry: busy || grading ? undefined : () => void handleRun(true),
     trigger: jobTriggerRef.current,
   };
+  const submitView: RunnerJobView = {
+    job: submitJob.job,
+    gone: submitJob.gone,
+    reconnecting: submitJob.reconnecting,
+    runningSince: submitJob.runningSince,
+    action: 'submit',
+    onCancel: () => void submitJob.cancel(),
+    onRetry: busy || grading ? undefined : () => void handleSubmit(true),
+    trigger: submitTriggerRef.current,
+  };
+  const shownJob = jobShown ?? (submitJob.job !== null || submitJob.gone ? 'submit' : 'run');
 
   // A reload the denial asks for saves the files first. When a save
   // fails the page stays, so nothing is lost, and the notice says the
@@ -288,6 +382,7 @@ export default function TakeHomeDetail() {
     const trigger = activeTrigger();
     jobTriggerRef.current = trigger;
     const reqId = ++runReqIdRef.current;
+    setJobShown('run');
     setRunning(true);
     setRunResult(null);
     setRunError(null);
@@ -327,29 +422,48 @@ export default function TakeHomeDetail() {
     }
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(retry = false) {
     if (!assignment) return;
     const trigger = activeTrigger();
+    submitTriggerRef.current = trigger;
+    setJobShown('submit');
     setSubmitting(true);
     setReport(null);
+    setReportTrouble(null);
     setRunDenial(null);
+    resetReview();
+    // What this submission sends, which its review sends again.
+    const sent = files;
     try {
-      const result = await retrySuperseded(
+      const answer = await retrySuperseded(
         definitionVersionRef.current,
-        (version) =>
-          submitAttempt({
+        (version) => {
+          const work = {
             assignment_slug: assignment.slug,
-            files,
+            files: sent,
             notes,
             ai_chats: chatLog,
             campaign_id: campaignId ?? undefined,
-            duration_ms: Date.now() - startedAtRef.current,
             language: assignment.language,
             definition_version: version,
-          }),
+          };
+          // The session time isn't part of the work, so a retry of the
+          // same files, notes, and chats stays the same command.
+          return submitAttempt(
+            { ...work, duration_ms: Date.now() - startedAtRef.current },
+            { idempotencyKey: submitJob.begin(work, retry) },
+          );
+        },
         rereadDefinitionVersion,
       );
-      setReport(result);
+      // A job: the notice follows it, and an authoritative end opens the
+      // report from the row the server wrote.
+      if (isJobAnswer(answer)) gradedRef.current = { jobId: answer.job_id, files: sent };
+      if (submitJob.follow(answer)) return;
+      // TODO(ROUNDS-00A-L03): PR 4 retires the in-request submission.
+      const result = answer as SubmitResponse;
+      setReport({ harness: result.harness, rubric_review: result.rubric_review });
+      showReview(result.rubric_review);
       setReportOpen(true);
       if (
         result.harness.criteria.length > 0 &&
@@ -364,26 +478,79 @@ export default function TakeHomeDetail() {
         setRunDenial({ action: 'grade', denial });
         return;
       }
-      setReport({
-        harness: {
-          score: 0,
-          criteria: [],
-          stdout: '',
-          stderr: '',
-          error: e instanceof Error ? e.message : String(e),
-          duration_ms: 0,
-        },
-        rubric_review: {
-          items: [],
-          total: 0,
-          skipped: true,
-          reason: e instanceof Error ? e.message : String(e),
-        },
-      });
+      // Nothing came back to grade, so no report or score shows: only
+      // what happened, as a fixed sentence, never the server's own text.
+      setReportTrouble({ title: "Grading didn't finish", body: gradeFailureText(e) });
       setReportOpen(true);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // A submission job ended. Only an end the candidate's code earned, or a
+  // limit it reached, has a graded row; every other end shows its notice.
+  async function openGraded(job: JobAnswer) {
+    const envelope = job.envelope;
+    if (envelope === null || !envelope.authoritative || job.outcome_class !== envelope.outcome_class) return;
+    // Mastered only when every criterion passed, which is what a passed
+    // envelope means.
+    if (envelope.outcome_class === 'passed') setPracticeStatus('mastered');
+    const sent = gradedRef.current?.jobId === job.job_id ? gradedRef.current.files : null;
+    await loadGraded(job.job_id, sent, rubricState(envelope));
+  }
+
+  async function loadGraded(jobId: string, sent: Record<string, string> | null, state: RubricState | null) {
+    setReportTrouble(null);
+    let row: Awaited<ReturnType<typeof getGradedTakeHomeAttempt>> = null;
+    try {
+      row = await getGradedTakeHomeAttempt(jobId);
+    } catch {
+      row = null;
+    }
+    if (row === null || !row.harness_output) {
+      setReport(null);
+      setReportTrouble({
+        title: "Couldn't load the report",
+        body: REPORT_UNREAD,
+        retry: () => void loadGraded(jobId, sent, state),
+      });
+      setReportOpen(true);
+      return;
+    }
+    setReport({
+      harness: row.harness_output,
+      rubric_review: row.rubric_review ?? null,
+      jobId,
+      envelope: row.envelope || null,
+    });
+    setReportOpen(true);
+    if (row.rubric_review) showReview(row.rubric_review);
+    else if (state === 'lost') showReview(null, 'lost');
+    // Asked once, with the files this page sent; a submission the tab
+    // picked back up asks when the candidate does.
+    else if (sent !== null) askReview(jobId, sent);
+    else showReview(null, 'not_requested');
+  }
+
+  // Asks for the review of the report on show, by its job: the one this
+  // page followed, or the one its row's envelope names.
+  async function requestReview() {
+    const shown = report;
+    if (shown === null) return;
+    let jobId = shown.jobId ?? null;
+    if (jobId === null) {
+      try {
+        jobId = await envelopeJob(shown.envelope);
+      } catch {
+        jobId = null;
+      }
+    }
+    if (jobId === null) {
+      showReview(null, 'unavailable');
+      return;
+    }
+    const sent = gradedRef.current?.jobId === jobId ? gradedRef.current.files : files;
+    askReview(jobId, sent);
   }
 
   return (
@@ -562,10 +729,10 @@ export default function TakeHomeDetail() {
                   bottomActions={
                     <EditorActions
                       onRun={() => void handleRun()}
-                      onSubmit={handleSubmit}
+                      onSubmit={() => void handleSubmit()}
                       onOpenLast={() => setReportOpen(true)}
                       running={busy}
-                      submitting={submitting}
+                      submitting={grading}
                       hasReport={Boolean(report)}
                       runResult={runResult}
                     />
@@ -580,7 +747,7 @@ export default function TakeHomeDetail() {
               onReload={reloadKeepingDrafts}
               className="flex-shrink-0"
               contentStyle={{ margin: '8px 12px' }}
-              job={jobView}
+              job={shownJob === 'submit' ? submitView : jobView}
             />
 
             <RunDock
@@ -651,12 +818,25 @@ export default function TakeHomeDetail() {
         onClose={() => setReportOpen(false)}
         title={`Submission · ${assignment?.title ?? 'Real World Problem'}`}
         subtitle={
-          report
-            ? `Harness ${Math.round(report.harness.score * 100)}/100 · Rubric ${report.rubric_review.skipped ? '—' : Math.round(report.rubric_review.total * 100) + '/100'}`
-            : undefined
+          reportTrouble === null && report ? reportSubtitle(report, review.review ?? report.rubric_review) : undefined
         }
       >
-        {report && <ReportPanel report={report} />}
+        {reportTrouble !== null ? (
+          <ReportProblem title={reportTrouble.title} body={reportTrouble.body} onRetry={reportTrouble.retry} />
+        ) : (
+          report && (
+            <ReportPanel
+              harness={report.harness}
+              review={review.review ?? report.rubric_review}
+              reviewStatus={review.status}
+              retryAfterSeconds={review.retryAfterSeconds}
+              onRetryReview={() => {
+                if (!retryReview()) void requestReview();
+              }}
+              onRequestReview={() => void requestReview()}
+            />
+          )
+        )}
       </SubmissionModal>
     </div>
   );
@@ -1392,33 +1572,63 @@ function RunOutput({ result }: { result: RunResult }) {
   );
 }
 
-function ReportPanel({ report }: { report: SubmitResponse }) {
-  const harnessPct = Math.round(report.harness.score * 100);
-  const review = report.rubric_review;
-  const reviewPct = Math.round(review.total * 100);
+// A criterion's mark: passed, missed, or no verdict where a limit stopped
+// the grader before it could earn one.
+function criterionMark(passed: boolean | null): { mark: string; label: string; color: string } {
+  if (passed === null) return { mark: '–', label: 'not scored', color: 'var(--text-4)' };
+  return passed
+    ? { mark: '✓', label: 'passed', color: 'var(--forest)' }
+    : { mark: '✗', label: 'missed', color: 'var(--plum)' };
+}
+
+function ReportPanel({
+  harness,
+  review,
+  reviewStatus,
+  retryAfterSeconds,
+  onRetryReview,
+  onRequestReview,
+}: {
+  harness: HarnessOutput;
+  review: RubricReview | null;
+  reviewStatus: ReviewStatus | null;
+  retryAfterSeconds: number | null;
+  onRetryReview: () => void;
+  onRequestReview: () => void;
+}) {
+  // A limit stopped the grader: no score, and the tile names the limit.
+  const limited = harness.outcome_class === 'resource-limit';
+  const harnessPct = harness.score === null ? 0 : Math.round(harness.score * 100);
+  const reviewPct = review ? Math.round(review.total * 100) : 0;
+  const reviewMuted = review === null || Boolean(review.skipped);
+  const reviewSubline = review?.skipped
+    ? 'skipped'
+    : review === null && reviewStatus
+      ? REVIEW_TILE[reviewStatus]
+      : undefined;
 
   return (
     <div className="flex flex-col gap-5">
       <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 1fr' }}>
-        <ScoreTile label="Harness" pct={harnessPct} />
         <ScoreTile
-          label="Rubric review"
-          pct={reviewPct}
-          muted={review.skipped}
-          subline={review.skipped ? 'skipped' : undefined}
+          label="Harness"
+          pct={harnessPct}
+          muted={harness.score === null}
+          subline={harness.score === null && limited ? limitTitle(harness.limit) : undefined}
         />
+        <ScoreTile label="Rubric review" pct={reviewPct} muted={reviewMuted} subline={reviewSubline} />
       </div>
 
       <div>
         <div className="eyebrow" style={{ marginBottom: 8 }}>
           Harness criteria
         </div>
-        {report.harness.error && (
+        {harness.error && (
           <pre
             className="mono"
             style={{
               fontSize: 12,
-              color: 'var(--plum)',
+              color: limited ? 'var(--text-2)' : 'var(--plum)',
               background: 'var(--bg-sunken)',
               padding: 10,
               borderRadius: 'var(--radius)',
@@ -1426,48 +1636,53 @@ function ReportPanel({ report }: { report: SubmitResponse }) {
               whiteSpace: 'pre-wrap',
             }}
           >
-            {report.harness.error}
+            {harness.error}
           </pre>
         )}
         <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 6 }}>
-          {report.harness.criteria.map((c) => (
-            <li
-              key={c.id}
-              style={{
-                fontSize: 12.5,
-                display: 'flex',
-                alignItems: 'baseline',
-                gap: 8,
-              }}
-            >
-              <span
+          {harness.criteria.map((c) => {
+            const mark = criterionMark(c.passed);
+            return (
+              <li
+                key={c.id}
+                data-criterion={mark.label}
                 style={{
-                  color: c.passed ? 'var(--forest)' : 'var(--plum)',
-                  fontWeight: 600,
-                  width: 12,
+                  fontSize: 12.5,
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: 8,
                 }}
               >
-                {c.passed ? '✓' : '✗'}
-              </span>
-              <span style={{ color: 'var(--text)' }}>{c.id}</span>
-              {!c.passed && c.logs && (
-                <span className="text-3" style={{ fontSize: 11.5 }}>
-                  — {c.logs.slice(0, 200)}
+                <span
+                  style={{
+                    color: mark.color,
+                    fontWeight: 600,
+                    width: 12,
+                  }}
+                >
+                  <span aria-hidden="true">{mark.mark}</span>
+                  <span className="sr-only">{mark.label}</span>
                 </span>
-              )}
-              <span
-                className="mono"
-                style={{
-                  marginLeft: 'auto',
-                  fontSize: 10.5,
-                  color: 'var(--text-4)',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                ×{c.weight}
-              </span>
-            </li>
-          ))}
+                <span style={{ color: 'var(--text)' }}>{c.id}</span>
+                {c.passed === false && c.logs && (
+                  <span className="text-3" style={{ fontSize: 11.5 }}>
+                    — {c.logs.slice(0, 200)}
+                  </span>
+                )}
+                <span
+                  className="mono"
+                  style={{
+                    marginLeft: 'auto',
+                    fontSize: 10.5,
+                    color: 'var(--text-4)',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  ×{c.weight}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       </div>
 
@@ -1475,7 +1690,17 @@ function ReportPanel({ report }: { report: SubmitResponse }) {
         <div className="eyebrow" style={{ marginBottom: 8 }}>
           AI rubric review
         </div>
-        {review.skipped ? (
+        <ReviewStatusNote
+          status={reviewStatus}
+          retryAfterSeconds={retryAfterSeconds}
+          onRetry={onRetryReview}
+          onRequest={onRequestReview}
+        />
+        {review === null ? (
+          !reviewStatus && (
+            <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>This submission has no rubric review.</div>
+          )
+        ) : review.skipped ? (
           <div
             style={{
               padding: 12,
@@ -1485,7 +1710,7 @@ function ReportPanel({ report }: { report: SubmitResponse }) {
               color: 'var(--text-3)',
             }}
           >
-            Skipped: {review.reason ?? 'no AI provider configured'}.
+            Skipped: {(review.reason ?? 'no AI provider configured').replace(/\.$/, '')}.
           </div>
         ) : review.parse_error ? (
           <pre

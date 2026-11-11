@@ -25,21 +25,24 @@ import SubmissionModal from '../../components/shell/SubmissionModal';
 import MultiFileEditor from '../../components/editor/MultiFileEditor';
 import AIChatPanel from '../../components/ai/AIChatPanel';
 import { RunDock } from '../coding/RunDock';
-import GradeReport from './GradeReport';
+import GradeReport, { gradeSummary } from './GradeReport';
 import HeaderCheckpointStepper from './HeaderCheckpointStepper';
 import {
   deleteInProgressAttempt,
   effectiveLanguages,
+  getGradedAttempt,
   getLatestAttempt,
   getRound,
   gradeAttempt,
   persistAttempt,
+  requestGradeReview,
   resolveRound,
   runProject,
   upsertInProgressAttempt,
   type AIChatLogEntry,
   type AICodingRound,
   type AICodingRoundRaw,
+  type CheckpointResult,
   type GradeResponse,
   type RunProjectResult,
 } from './aiCodingApi';
@@ -56,15 +59,33 @@ import {
 import {
   activeTrigger,
   classifyRunnerError,
+  gradeFailureText,
   runFailureText,
   type RunnerDenial,
 } from '../../lib/runnerDenial';
 import { useRunnerJob } from '../../hooks/useRunnerJob';
-import { earnedOutput, type JobAnswer } from '../../lib/executionJobs';
+import { useRubricReview } from '../../hooks/useRubricReview';
+import { earnedOutput, isJobAnswer, type JobAnswer } from '../../lib/executionJobs';
+import { envelopeJob, rubricState, type RubricReview, type RubricState } from '../../lib/gradedRows';
 import type { RunnerJobView } from '../../components/runner/RunnerJobStatus';
 import { RunErrorOutput } from '../../components/runner/RunErrorOutput';
+import { ReportProblem } from '../../components/runner/ReportProblem';
 
 type SideTab = 'checkpoints' | 'rubric' | 'guidance';
+
+// The report the modal shows: a grade's checkpoints and its review, and
+// for a row the server wrote, the job and envelope its review asks by.
+type ReportView = {
+  test_results: CheckpointResult[];
+  rubric_review: RubricReview | null;
+  jobId?: string | null;
+  envelope?: string | null;
+};
+
+// A report that can't show: what happened, as a fixed sentence.
+type ReportTrouble = { title: string; body: string; retry?: () => void };
+
+const REPORT_UNREAD = "The grade finished and was saved, but this page couldn't load its report. Try again in a moment.";
 
 // A run job's output as the route's in-request body, when the run earned
 // its end (ROUNDS-00A-L03). Any other end shows only its own notice.
@@ -118,8 +139,12 @@ export default function AICodingDetail() {
   const [passedByCheckpoint, setPassedByCheckpoint] = useState<boolean[]>([]);
   const [chatLog, setChatLog] = useState<AIChatLogEntry[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [report, setReport] = useState<GradeResponse | null>(null);
+  const [report, setReport] = useState<ReportView | null>(null);
+  const [reportTrouble, setReportTrouble] = useState<ReportTrouble | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
+  // Which action's job the runner notice shows: the one last started, or
+  // a grade the tab picked back up.
+  const [jobShown, setJobShown] = useState<'run' | 'grade' | null>(null);
   const [chatOpen, setChatOpen] = usePersistedState<boolean>(
     'rounds.aiCoding.chatOpen',
     true,
@@ -183,7 +208,29 @@ export default function AICodingDetail() {
       },
     },
   );
+  // While ROUNDS_GATE_EXECUTION_GRADING is on, a grade is a durable job
+  // too (ROUNDS-00A-L03 PR 3). An authoritative end has a graded row the
+  // server wrote: the report opens from it, and asks for the review once
+  // with the files this page sent.
+  const gradeTriggerRef = useRef<HTMLElement | null>(null);
+  const gradedRef = useRef<{ jobId: string; files: Record<string, string> } | null>(null);
+  const review = useRubricReview(
+    (jobId, sent, key, signal) => requestGradeReview(jobId, sent, key, signal),
+    async (jobId) => (await getGradedAttempt(jobId))?.rubric_review ?? null,
+  );
+  const { ask: askReview, show: showReview, reset: resetReview, retry: retryReview } = review;
+  const gradeJob = useRunnerJob(
+    round ? `ai-coding:${round.slug}:${round.language}:${campaignId ?? ''}:grade` : null,
+    {
+      onEnded: (job) => void openGraded(job),
+      onDenied: (err) => {
+        const denial = classifyRunnerError(err, gradeTriggerRef.current);
+        if (denial) setRunDenial({ action: 'grade', denial });
+      },
+    },
+  );
   const busy = running || runJob.active;
+  const grading = submitting || gradeJob.active;
   const jobView: RunnerJobView = {
     job: runJob.job,
     gone: runJob.gone,
@@ -192,9 +239,20 @@ export default function AICodingDetail() {
     action: 'run',
     onCancel: () => void runJob.cancel(),
     // None while a retry is on its way, so one press sends one.
-    onRetry: busy ? undefined : () => void handleRun(true),
+    onRetry: busy || grading ? undefined : () => void handleRun(true),
     trigger: jobTriggerRef.current,
   };
+  const gradeView: RunnerJobView = {
+    job: gradeJob.job,
+    gone: gradeJob.gone,
+    reconnecting: gradeJob.reconnecting,
+    runningSince: gradeJob.runningSince,
+    action: 'grade',
+    onCancel: () => void gradeJob.cancel(),
+    onRetry: busy || grading ? undefined : () => void handleSubmit(true),
+    trigger: gradeTriggerRef.current,
+  };
+  const shownJob = jobShown ?? (gradeJob.job !== null || gradeJob.gone ? 'grade' : 'run');
 
   useEffect(() => {
     let cancelled = false;
@@ -206,9 +264,13 @@ export default function AICodingDetail() {
     setRunError(null);
     setChatLog([]);
     setReport(null);
+    setReportTrouble(null);
     setReportOpen(false);
     setDockOpen(false);
     setRunDenial(null);
+    setJobShown(null);
+    resetReview();
+    gradedRef.current = null;
     startedAtRef.current = Date.now();
     getRound(slug)
       .then(async (r) => {
@@ -242,11 +304,14 @@ export default function AICodingDetail() {
           if (latest.status === 'graded' && latest.test_results) {
             setReport({
               test_results: latest.test_results,
-              rubric_review: latest.rubric_review ?? {
-                items: [],
-                total: 0,
-              },
+              rubric_review: latest.rubric_review ?? null,
+              envelope: latest.envelope || null,
             });
+            // A row the server wrote and nobody reviewed yet asks only
+            // when the candidate does: only they know the files are the
+            // ones graded.
+            if (latest.rubric_review) showReview(latest.rubric_review);
+            else showReview(null, latest.envelope ? 'not_requested' : null);
           }
         } catch {
           /* best-effort rehydrate — safe to ignore */
@@ -258,7 +323,7 @@ export default function AICodingDetail() {
     return () => {
       cancelled = true;
     };
-  }, [slug, campaignId]);
+  }, [slug, campaignId, resetReview, showReview]);
 
   // Persist chat log to PocketBase (debounced) so a refresh won't
   // discard in-flight conversations. Only fires once we have a round
@@ -329,6 +394,7 @@ export default function AICodingDetail() {
     const trigger = activeTrigger();
     jobTriggerRef.current = trigger;
     const reqId = ++runReqIdRef.current;
+    setJobShown('run');
     setRunning(true);
     setRunResult(null);
     setRunError(null);
@@ -383,26 +449,51 @@ export default function AICodingDetail() {
     }
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(retry = false) {
     if (!round) return;
     const trigger = activeTrigger();
+    gradeTriggerRef.current = trigger;
+    setJobShown('grade');
     setSubmitting(true);
     setReport(null);
+    setReportTrouble(null);
     setRunDenial(null);
+    resetReview();
+    // What this grade sends, which its review sends again.
+    const sent = files;
+    const chats = chatLog;
+    let graded = false;
     try {
-      const result = await retrySuperseded(
+      const answer = await retrySuperseded(
         definitionVersionRef.current,
-        (version) =>
-          gradeAttempt({
+        (version) => {
+          const work = {
             round_slug: round.slug,
-            files,
-            ai_chats: chatLog,
+            files: sent,
+            ai_chats: chats,
             language: round.language,
             definition_version: version,
-          }),
+            campaign_id: campaignId ?? undefined,
+          };
+          // The session time isn't part of the work, so a retry of the
+          // same files and chats stays the same command.
+          return gradeAttempt(
+            { ...work, duration_ms: Date.now() - startedAtRef.current },
+            { idempotencyKey: gradeJob.begin(work, retry) },
+          );
+        },
         rereadDefinitionVersion,
       );
-      setReport(result);
+      // A job: the notice follows it, and an authoritative end opens the
+      // report from the row the server wrote. The page writes no row.
+      if (isJobAnswer(answer)) gradedRef.current = { jobId: answer.job_id, files: sent };
+      if (gradeJob.follow(answer)) return;
+      // TODO(ROUNDS-00A-L03): PR 4 retires the in-request grade, and
+      // with it this answer and the row the page writes for it.
+      const result = answer as GradeResponse;
+      graded = true;
+      setReport({ test_results: result.test_results, rubric_review: result.rubric_review });
+      showReview(result.rubric_review);
       setReportOpen(true);
       if (
         result.test_results.length > 0 &&
@@ -414,32 +505,94 @@ export default function AICodingDetail() {
         roundId: round.id,
         campaignId: campaignId ?? undefined,
         currentCheckpoint: checkpointIdx,
-        files,
+        files: sent,
         test_results: result.test_results,
         rubric_review: result.rubric_review,
-        ai_chats: chatLog,
+        ai_chats: chats,
         duration_ms: Date.now() - startedAtRef.current,
       });
     } catch (e) {
+      // The report already shows; only saving it failed.
+      if (graded) return;
       // A denied grade isn't a graded attempt, so no report opens.
       const denial = classifyRunnerError(e, trigger);
       if (denial) {
         setRunDenial({ action: 'grade', denial });
         return;
       }
-      setReport({
-        test_results: [],
-        rubric_review: {
-          items: [],
-          total: 0,
-          skipped: true,
-          reason: e instanceof Error ? e.message : String(e),
-        },
-      });
+      // Nothing came back to grade, so no report or score shows: only
+      // what happened, as a fixed sentence, never the server's own text.
+      setReportTrouble({ title: "Grading didn't finish", body: gradeFailureText(e) });
       setReportOpen(true);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // A grading job ended. Only an end the candidate's code earned, or a
+  // limit it reached, has a graded row; every other end shows its notice.
+  async function openGraded(job: JobAnswer) {
+    const envelope = job.envelope;
+    if (envelope === null || !envelope.authoritative || job.outcome_class !== envelope.outcome_class) return;
+    // Mastered only when every checkpoint passed, which is what a passed
+    // envelope means.
+    if (envelope.outcome_class === 'passed') setPracticeStatus('mastered');
+    const sent = gradedRef.current?.jobId === job.job_id ? gradedRef.current.files : null;
+    await loadGraded(job.job_id, sent, rubricState(envelope));
+  }
+
+  async function loadGraded(jobId: string, sent: Record<string, string> | null, state: RubricState | null) {
+    setReportTrouble(null);
+    let row: Awaited<ReturnType<typeof getGradedAttempt>> = null;
+    try {
+      row = await getGradedAttempt(jobId);
+    } catch {
+      row = null;
+    }
+    if (row === null) {
+      setReport(null);
+      setReportTrouble({
+        title: "Couldn't load the report",
+        body: REPORT_UNREAD,
+        retry: () => void loadGraded(jobId, sent, state),
+      });
+      setReportOpen(true);
+      return;
+    }
+    setReport({
+      test_results: row.test_results ?? [],
+      rubric_review: row.rubric_review ?? null,
+      jobId,
+      envelope: row.envelope || null,
+    });
+    setReportOpen(true);
+    if (row.rubric_review) showReview(row.rubric_review);
+    else if (state === 'lost') showReview(null, 'lost');
+    // Asked once, with the files this page sent; a grade the tab picked
+    // back up asks when the candidate does.
+    else if (sent !== null) askReview(jobId, sent);
+    else showReview(null, 'not_requested');
+  }
+
+  // Asks for the review of the report on show, by its job: the one this
+  // page followed, or the one its row's envelope names.
+  async function requestReview() {
+    const shown = report;
+    if (shown === null) return;
+    let jobId = shown.jobId ?? null;
+    if (jobId === null) {
+      try {
+        jobId = await envelopeJob(shown.envelope);
+      } catch {
+        jobId = null;
+      }
+    }
+    if (jobId === null) {
+      showReview(null, 'unavailable');
+      return;
+    }
+    const sent = gradedRef.current?.jobId === jobId ? gradedRef.current.files : files;
+    askReview(jobId, sent);
   }
 
   function selectCheckpoint(i: number) {
@@ -710,10 +863,10 @@ export default function AICodingDetail() {
                     bottomActions={
                       <EditorActions
                         onRun={() => void handleRun()}
-                        onSubmit={handleSubmit}
+                        onSubmit={() => void handleSubmit()}
                         onOpenLast={() => setReportOpen(true)}
                         running={busy}
-                        submitting={submitting}
+                        submitting={grading}
                         hasReport={Boolean(report)}
                         hideRunResult={runResult ? false : true}
                         runResult={runResult}
@@ -729,7 +882,7 @@ export default function AICodingDetail() {
                 onReload={reloadKeepingDrafts}
                 className="flex-shrink-0"
                 contentStyle={{ margin: '8px 12px' }}
-                job={jobView}
+                job={shownJob === 'grade' ? gradeView : jobView}
               />
 
               <RunDock
@@ -797,20 +950,29 @@ export default function AICodingDetail() {
         open={reportOpen}
         onClose={() => setReportOpen(false)}
         title={`Submission · ${round?.title ?? 'AI Round'}`}
-        subtitle={
-          report?.test_results.length
-            ? `${report.test_results.filter((t) => t.passed).length} of ${report.test_results.length} checkpoints passed`
-            : undefined
-        }
+        subtitle={reportTrouble === null && report ? gradeSummary(report.test_results) : undefined}
       >
-        {report && round && (
-          <GradeReport
-            testResults={report.test_results}
-            rubric={round.rubric}
-            rubricReview={report.rubric_review}
-            aiChats={chatLog}
-            files={files}
-          />
+        {reportTrouble !== null ? (
+          <ReportProblem title={reportTrouble.title} body={reportTrouble.body} onRetry={reportTrouble.retry} />
+        ) : (
+          report &&
+          round && (
+            <GradeReport
+              testResults={report.test_results}
+              rubric={round.rubric}
+              rubricReview={review.review ?? report.rubric_review}
+              review={{
+                status: review.status,
+                retryAfterSeconds: review.retryAfterSeconds,
+                onRetry: () => {
+                  if (!retryReview()) void requestReview();
+                },
+                onRequest: () => void requestReview(),
+              }}
+              aiChats={chatLog}
+              files={files}
+            />
+          )
         )}
       </SubmissionModal>
     </div>

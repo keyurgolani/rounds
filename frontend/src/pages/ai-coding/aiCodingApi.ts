@@ -1,5 +1,6 @@
 import { definitionRef, definitionsEnforced } from '../../lib/definitions';
-import type { JobAnswer, RunnerCallInit } from '../../lib/executionJobs';
+import type { JobAnswer, JobLimit, OutcomeClass, RunnerCallInit } from '../../lib/executionJobs';
+import { readGradedRow, requestReview, type ReviewAnswer, type RubricReview } from '../../lib/gradedRows';
 import { pb } from '../../lib/pocketbase';
 import { runnerJSON } from '../../lib/runnerFetch';
 import type { DefinitionReceipt } from '../coding/types';
@@ -263,27 +264,30 @@ export async function runProject(
 /** One result id's outcome from a grade (ROUNDS-00A-L02). */
 export type ResultOutcome = { id: string; outcome: string; reason: string };
 
+/** One checkpoint's result in a grade. A grading job's graded row
+ *  (ROUNDS-00A-L03 PR 3) also names the checkpoint's outcome class and
+ *  limit, and keeps a verdict and a score only where the run earned one:
+ *  a checkpoint a limit stopped has neither. */
+export type CheckpointResult = {
+  passed: boolean | null;
+  passed_count: number;
+  failed_count: number;
+  /** #1's grade only; at enforce a grade answers outcomes, never
+   *  what the harness printed. */
+  stdout?: string;
+  error: string | null;
+  index?: number;
+  label?: string;
+  score?: number | null;
+  executed?: number;
+  outcomes?: ResultOutcome[];
+  outcome_class?: OutcomeClass;
+  limit?: JobLimit | null;
+};
+
 export type GradeResponse = {
-  test_results: Array<{
-    passed: boolean;
-    passed_count: number;
-    failed_count: number;
-    /** #1's grade only; at enforce a grade answers outcomes, never
-     *  what the harness printed. */
-    stdout?: string;
-    error: string | null;
-    index?: number;
-    label?: string;
-    score?: number;
-    executed?: number;
-    outcomes?: ResultOutcome[];
-  }>;
-  rubric_review: {
-    items: Array<{ id: string; score: number; evidence: string; suggestions: string[] }>;
-    total: number;
-    skipped?: boolean;
-    reason?: string;
-  };
+  test_results: CheckpointResult[];
+  rubric_review: RubricReview;
   passed?: boolean;
   score?: number;
   definition?: DefinitionReceipt | null;
@@ -304,26 +308,58 @@ export type GradeRequest = {
    *  at enforce, where the definition names the variant. */
   language?: string;
   definition_version?: number | null;
+  /** The campaign the attempt belongs to and its session time; sent only
+   *  at enforce, where a grading job's row is the server's to write
+   *  (ROUNDS-00A-L03 PR 3). */
+  campaign_id?: string;
+  duration_ms?: number;
 };
 
 /** The body /api/ai-coding/grade takes under the current gate value. */
 export function gradeBody(req: GradeRequest): Record<string, unknown> {
-  const { round_slug, files, ai_chats, language, definition_version } = req;
+  const { round_slug, files, ai_chats, language, definition_version, campaign_id, duration_ms } = req;
   if (!definitionsEnforced()) return { round_slug, files, ai_chats };
   return {
     definition: definitionRef('ai-coding', round_slug, language ?? '', definition_version),
     files,
     ai_chats,
+    ...(campaign_id ? { campaign_id } : {}),
+    ...(duration_ms !== undefined && Number.isFinite(duration_ms)
+      ? { duration_ms: Math.max(0, Math.floor(duration_ms)) }
+      : {}),
   };
 }
 
-export async function gradeAttempt(req: GradeRequest): Promise<GradeResponse> {
-  return runnerJSON<GradeResponse>('/api/ai-coding/grade', {
+/** A grade. While ROUNDS_GATE_EXECUTION_GRADING is on it answers a job
+ *  (lib/executionJobs), whose end the server writes as the graded row;
+ *  otherwise the grade itself. */
+export async function gradeAttempt(
+  req: GradeRequest,
+  init: RunnerCallInit = {},
+): Promise<GradeResponse | JobAnswer> {
+  return runnerJSON<GradeResponse | JobAnswer>('/api/ai-coding/grade', {
     method: 'POST',
     body: gradeBody(req),
     auth: 'required',
     errorPrefix: 'grade',
+    idempotencyKey: init.idempotencyKey,
   });
+}
+
+/** The graded row grading job `jobId` wrote, as the account reads it. */
+export async function getGradedAttempt(jobId: string): Promise<AttemptRow | null> {
+  return readGradedRow<AttemptRow>(jobId, 'ai_coding_attempts');
+}
+
+/** Asks for the rubric review of grading job `jobId`'s result
+ *  (lib/gradedRows). */
+export async function requestGradeReview(
+  jobId: string,
+  files: Record<string, string>,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<ReviewAnswer> {
+  return requestReview('/api/ai-coding/grade', jobId, files, idempotencyKey, signal);
 }
 
 /**
@@ -339,9 +375,13 @@ export type AttemptRow = {
   current_checkpoint?: number;
   ai_chats?: AIChatLogEntry[];
   test_results?: GradeResponse['test_results'];
-  rubric_review?: GradeResponse['rubric_review'];
+  /** Null on a row the server wrote, until its review finishes. */
+  rubric_review?: GradeResponse['rubric_review'] | null;
   status: 'in-progress' | 'submitted' | 'graded';
   duration_ms?: number;
+  /** The envelope of the grading job that wrote this row, when the
+   *  server wrote it (ROUNDS-00A-L03 PR 3). */
+  envelope?: string;
   updated: string;
 };
 
