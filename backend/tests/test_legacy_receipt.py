@@ -205,3 +205,106 @@ def test_an_operator_secret_of_32_bytes_signs():
 def test_usage_errors_are_exit_2(tmp_path):
     assert run([])[0] == 2
     assert run(["sign", str(tmp_path / "missing.json")])[0] == 2
+
+
+# ---- the older share links' receipt (ROUNDS-00B-L06 stage 1) ----------------------------
+
+SHARES_RUNNER = ROOT / "pocketbase" / "tests" / "legacy_shares_runner.cjs"
+MIGRATIONS = ROOT / "pocketbase" / "pb_migrations"
+SHARE_LABEL = "rounds/legacy-share-receipt/v1"
+
+
+def _journal_row(n: int, outcome: str, reason: str, origin: str = "live", views: int = 0) -> dict:
+    return {"id": f"j{n:014d}", "manifest": "legacy-shares-v1", "predicate_version": 1, "link": f"link{n:011d}",
+            "origin": origin, "quarantine_entry": "" if origin == "live" else f"q{n:014d}", "outcome": outcome,
+            "reason": reason, "views": views, "first_view_day": "2024-01-02" if views else "",
+            "last_view_day": "2024-02-03" if views else "",
+            "incident": outcome == "revoked_ownership" and views > 0}
+
+
+def share_receipt() -> dict:
+    """A receipt from the hook's own receipt(), over a clean migration of
+    three live links and one quarantined one."""
+    node = shutil.which("node")
+    assert node, "node is required for the PocketBase hook checks; CI installs it"
+    data = {
+        "journal": [_journal_row(0, "migrated", "eligible", views=3), _journal_row(1, "migrated", "eligible"),
+                    _journal_row(2, "revoked_demo", "demo_account"),
+                    _journal_row(3, "revoked_ownership", "quarantined_cross_owner", origin="quarantine", views=2)],
+        "links": [{"id": "link00000000000", "status": "migrated", "replaced": True},
+                  {"id": "link00000000001", "status": "migrated", "replaced": False},
+                  {"id": "link00000000002", "status": "revoked_demo", "replaced": False}],
+        "linkColumns": ["user", "resume", "variant", "legacy_status", "legacy_reason", "turned_off_at", "manifest_id",
+                        "replaced_by"],
+        "linkEntries": [{"link": "link00000000003", "secret_keys": 0}],
+        "viewRows": {"rows": 3, "detailed": 0},
+        "viewEntries": {"entries": 2, "detailed": 0},
+        "commit": "abc1234",
+        "unavailable": None,
+    }
+    program = {"steps": [{"call": "receipt", "input": data}]}
+    out = subprocess.run([node, str(SHARES_RUNNER), str(HOOKS), str(MIGRATIONS)], input=json.dumps(program),
+                         capture_output=True, text=True, timeout=60, check=True)
+    (receipt,) = json.loads(out.stdout)["results"]
+    return receipt
+
+
+def test_the_share_receipts_label_is_the_one_share_secrets_reserved():
+    from app import share_secrets
+
+    assert legacy_receipt.LABELS["legacy-share-receipt/v1"] == share_secrets.LEGACY_RECEIPT_INFO.decode() == SHARE_LABEL
+
+
+def test_the_share_receipt_signs_and_verifies_under_its_own_label(tmp_path):
+    receipt = share_receipt()
+    assert receipt["schema"] == "legacy-share-receipt/v1" and receipt["reconciled"] is True
+    legacy_receipt.check_checksum(receipt)
+    code, signed_text, err = run(["sign", write(tmp_path, "receipt.json", receipt)])
+    assert code == 0, err
+    signed = json.loads(signed_text)
+    assert {k: v for k, v in signed.items() if k != "signature"} == receipt
+    assert (signed["signature"]["alg"], signed["signature"]["key"]) == ("HMAC-SHA256", SHARE_LABEL)
+    key = hkdf_sha256(SECRET.encode(), SHARE_LABEL.encode())
+    assert signed["signature"]["value"] == hmac.new(key, canonical.canonical(receipt), hashlib.sha256).hexdigest()
+    code, out, err = run(["verify", write(tmp_path, "signed.json", signed)])
+    assert code == 0, err
+    assert out.startswith(f"verified legacy-share-receipt/v1 {receipt['checksum']} reconciled=true ")
+    assert "migrated=2" in out and "revoked_ownership=1" in out
+    for text in (signed_text, out, err):
+        assert SECRET not in text and "link00000000000" not in text and "j00000000000000" not in text
+
+
+def test_the_share_receipts_key_is_not_the_scans():
+    assert legacy_receipt.key_for(SHARE_LABEL, SECRET) != legacy_receipt.key_for("rounds/legacy-snapshot-scan/v1", SECRET)
+
+
+def _bump(receipt: dict) -> dict:
+    return {**receipt, "outcomes": {**receipt["outcomes"], "migrated": receipt["outcomes"]["migrated"] + 1}}
+
+
+@pytest.mark.parametrize("tamper, why", [
+    (_bump, "checksum"),
+    (lambda r: _recount(_bump(r)), "signature"),
+    (lambda r: _recount({**r, "reconciled": False}), "signature"),
+    (lambda r: {**r, "signature": {**r["signature"], "key": "rounds/legacy-snapshot-scan/v1"}}, "schema's"),
+    (lambda r: {k: v for k, v in r.items() if k != "signature"}, "isn't signed"),
+], ids=["a-count", "a-count-rechecksummed", "reconciled-rechecksummed", "the-scans-label", "unsigned"])
+def test_a_changed_share_receipt_doesnt_verify(tmp_path, tamper, why):
+    signed = legacy_receipt.sign(share_receipt(), SECRET)
+    code, _, err = run(["verify", write(tmp_path, "r.json", tamper(signed))])
+    assert code == 1 and why in err
+
+
+def test_a_scan_signature_doesnt_pass_for_a_share_receipt(tmp_path):
+    receipt = share_receipt()
+    scan_key = legacy_receipt.key_for("rounds/legacy-snapshot-scan/v1", SECRET)
+    forged = {**receipt, "signature": {"alg": "HMAC-SHA256", "key": SHARE_LABEL,
+                                       "value": legacy_receipt.signature_of(receipt, scan_key)}}
+    code, _, err = run(["verify", write(tmp_path, "r.json", forged)])
+    assert code == 1 and "signature" in err
+
+
+@pytest.mark.parametrize("secret", [None, "", legacy_receipt.DEV_SECRET, "x" * 31])
+def test_no_secret_a_short_one_or_the_development_placeholder_signs_no_share_receipt(tmp_path, secret):
+    code, out, err = run(["sign", write(tmp_path, "r.json", share_receipt())], secret=secret)
+    assert code == 2 and out == ""

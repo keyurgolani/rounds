@@ -225,7 +225,6 @@ migrate(
     let step = "lookup";
     try {
       const dao = new Dao(db);
-      const q = (sql) => db.newQuery(sql);
       const sha256 = (text) => $security.sha256(text);
       const find = (name) => {
         try {
@@ -327,19 +326,19 @@ migrate(
         // save; check the relation only when it, or the row's owner, changed.
         const changed =
           '(NEW."' + r.f + '" IS NOT OLD."' + r.f + '" OR NEW."' + OWNER + '" IS NOT OLD."' + OWNER + '")';
-        q('DROP TRIGGER IF EXISTS "' + base + '_ins"').execute();
-        q('DROP TRIGGER IF EXISTS "' + base + '_upd"').execute();
-        q('DROP TRIGGER IF EXISTS "' + base + '_tgt"').execute();
-        q(
+        db.newQuery('DROP TRIGGER IF EXISTS "' + base + '_ins"').execute();
+        db.newQuery('DROP TRIGGER IF EXISTS "' + base + '_upd"').execute();
+        db.newQuery('DROP TRIGGER IF EXISTS "' + base + '_tgt"').execute();
+        db.newQuery(
           'CREATE TRIGGER "' + base + '_ins" BEFORE INSERT ON "' + r.c + '" FOR EACH ROW WHEN ' +
           mismatch + " BEGIN SELECT RAISE(ABORT, 'relation endpoint denied'); END",
         ).execute();
-        q(
+        db.newQuery(
           'CREATE TRIGGER "' + base + '_upd" BEFORE UPDATE OF "' + r.f + '", "' + OWNER + '" ON "' + r.c +
           '" FOR EACH ROW WHEN ' + changed + " AND " + mismatch +
           " BEGIN SELECT RAISE(ABORT, 'relation endpoint denied'); END",
         ).execute();
-        q(
+        db.newQuery(
           'CREATE TRIGGER "' + base + '_tgt" BEFORE UPDATE OF "' + OWNER + '" ON "' + r.t +
           '" FOR EACH ROW WHEN NEW."' + OWNER + '" != OLD."' + OWNER + '" AND EXISTS ' +
           '(SELECT 1 FROM "' + r.c + '" src WHERE src."' + r.f + '" = OLD."id" AND src."' + OWNER + '" != NEW."' + OWNER + '") ' +
@@ -354,7 +353,7 @@ migrate(
         reason: "", views: 0, first_view_day: "", last_view_day: "", incident: false, created: "",
       });
       const insertJournal = (row) => {
-        q(
+        db.newQuery(
           "INSERT INTO " + JOURNAL + " (id, created, updated, manifest, predicate_version, link, origin, " +
           "quarantine_entry, outcome, reason, views, first_view_day, last_view_day, incident) VALUES " +
           "({:id}, {:now}, {:now}, {:manifest}, {:pv}, {:link}, {:origin}, {:entry}, {:outcome}, {:reason}, " +
@@ -388,7 +387,7 @@ migrate(
           owner_found: 0, owner_demo: 0, resume_found: 0, resume_owner: "", variant_found: 0, variant_owner: "",
           parent_found: 0, parent_owner: "",
         }));
-        q(
+        db.newQuery(
           "SELECT l.id AS id, l.user AS user, l.resume AS resume, l.variant AS variant, l.token AS token, " +
           "(CASE WHEN l.is_password THEN 1 ELSE 0 END) AS is_password, l.password_hash AS password_hash, " +
           "l.expires_at AS expires_at, " +
@@ -410,7 +409,7 @@ migrate(
 
         const kept = {};
         const keptRows = arrayOf(journalModel());
-        q(
+        db.newQuery(
           "SELECT " + JOURNAL_COLUMNS + " FROM " + JOURNAL + " WHERE manifest = {:m} AND link > {:after} AND link <= {:last}",
         ).bind({ m: MANIFEST, after, last }).all(keptRows);
         keptRows.forEach((r) => {
@@ -419,7 +418,7 @@ migrate(
 
         const viewed = {};
         const viewRows = arrayOf(new DynamicModel({ link: "", day: "" }));
-        q("SELECT link AS link, " + DAY("viewed_at") + " AS day FROM " + VIEWS + " WHERE link > {:after} AND link <= {:last}")
+        db.newQuery("SELECT link AS link, " + DAY("viewed_at") + " AS day FROM " + VIEWS + " WHERE link > {:after} AND link <= {:last}")
           .bind({ after, last }).all(viewRows);
         viewRows.forEach((v) => {
           viewed[v.link] = countView(viewed[v.link] || noViews(), v.day);
@@ -445,7 +444,7 @@ migrate(
 
         for (let i = 0; i < decided.length; i += 1) {
           const d = decided[i];
-          q(
+          db.newQuery(
             "UPDATE " + LINKS + " SET legacy_status = {:status}, legacy_reason = {:reason}, turned_off_at = {:at}, " +
             "manifest_id = {:m} WHERE id = {:id}",
           ).bind({ status: d.outcome, reason: d.reason, at: d.at, m: MANIFEST, id: d.link }).execute();
@@ -457,15 +456,15 @@ migrate(
       step = "views";
       const viewChange = "viewer_ip_hash != '' OR user_agent != '' OR viewed_at IS NOT " + DAY("viewed_at");
       const changedViews = new DynamicModel({ n: 0 });
-      q("SELECT COUNT(*) AS n FROM " + VIEWS + " WHERE " + viewChange).one(changedViews);
+      db.newQuery("SELECT COUNT(*) AS n FROM " + VIEWS + " WHERE " + viewChange).one(changedViews);
       counts.view_rows_stripped = changedViews.n;
-      q("UPDATE " + VIEWS + " SET viewer_ip_hash = '', user_agent = '', viewed_at = " + DAY("viewed_at") +
+      db.newQuery("UPDATE " + VIEWS + " SET viewer_ip_hash = '', user_agent = '', viewed_at = " + DAY("viewed_at") +
         " WHERE " + viewChange).execute();
 
       // --- 5. relation_quarantine's share entries -------------------------
       step = "quarantine";
       const notObjects = new DynamicModel({ n: 0 });
-      q(
+      db.newQuery(
         "SELECT COUNT(*) AS n FROM " + QUARANTINE + " WHERE source_collection IN ({:links}, {:views}) AND " +
         "(payload IS NULL OR json_valid(payload) = 0 OR json_type(payload) != 'object')",
       ).bind({ links: LINKS, views: VIEWS }).one(notObjects);
@@ -477,7 +476,7 @@ migrate(
       const viewedAt = "json_extract(payload, " + path("viewed_at") + ")";
       const quarantinedViews = {};
       const entryViews = arrayOf(new DynamicModel({ link: "", day: "" }));
-      q(
+      db.newQuery(
         "SELECT COALESCE(json_extract(payload, " + path("link") + "), '') AS link, " + DAY(viewedAt) + " AS day FROM " +
         QUARANTINE + " WHERE source_collection = {:views}",
       ).bind({ views: VIEWS }).all(entryViews);
@@ -490,14 +489,14 @@ migrate(
         "(source_collection = {:views} AND (" + holds(VIEW_PAYLOAD_DROPS) + " OR COALESCE(" + viewedAt + ", '') IS NOT " +
         DAY(viewedAt) + "))";
       const changedEntries = new DynamicModel({ n: 0 });
-      q("SELECT COUNT(*) AS n FROM " + QUARANTINE + " WHERE " + entryChange)
+      db.newQuery("SELECT COUNT(*) AS n FROM " + QUARANTINE + " WHERE " + entryChange)
         .bind({ links: LINKS, views: VIEWS }).one(changedEntries);
       counts.entries_stripped = changedEntries.n;
-      q(
+      db.newQuery(
         "UPDATE " + QUARANTINE + " SET payload = json_remove(payload, " + LINK_PAYLOAD_DROPS.map(path).join(", ") + ") " +
         "WHERE source_collection = {:links}",
       ).bind({ links: LINKS }).execute();
-      q(
+      db.newQuery(
         "UPDATE " + QUARANTINE + " SET payload = json_set(json_remove(payload, " + VIEW_PAYLOAD_DROPS.map(path).join(", ") +
         "), " + path("viewed_at") + ", " + DAY(viewedAt) + ") WHERE source_collection = {:views}",
       ).bind({ views: VIEWS }).execute();
@@ -505,7 +504,7 @@ migrate(
       // One journal row per quarantined link, unless it's back in the live
       // table (journaled above) or a run before this one journaled it.
       const entries = arrayOf(new DynamicModel({ id: "", source_id: "", kind: "" }));
-      q("SELECT id, source_id, kind FROM " + QUARANTINE + " WHERE source_collection = {:links} ORDER BY source_id, id")
+      db.newQuery("SELECT id, source_id, kind FROM " + QUARANTINE + " WHERE source_collection = {:links} ORDER BY source_id, id")
         .bind({ links: LINKS }).all(entries);
       const done = {};
       for (let i = 0; i < entries.length; i += 1) {
@@ -514,7 +513,7 @@ migrate(
         done[e.source_id] = true;
         counts.quarantined += 1;
         const prior = arrayOf(journalModel());
-        q("SELECT " + JOURNAL_COLUMNS + " FROM " + JOURNAL + " WHERE manifest = {:m} AND link = {:link}")
+        db.newQuery("SELECT " + JOURNAL_COLUMNS + " FROM " + JOURNAL + " WHERE manifest = {:m} AND link = {:link}")
           .bind({ m: MANIFEST, link: e.source_id }).all(prior);
         if (prior.length > 0) {
           tally(prior[0], true);

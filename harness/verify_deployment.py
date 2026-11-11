@@ -528,8 +528,9 @@ def check_oversized_body(base_url: str, declared: int = NGINX_BODY_CAP + 1, time
                   got.elapsed_ms, "" if ok else f"status={got.status} code={code!r}")
 
 
-# The headers the public share page and the public share read answer with
-# (ROUNDS-00B-L03 stage 1; frontend/nginx.conf `/r`, backend/routers/share.py).
+# The headers the public share page and the share reads answer with
+# (ROUNDS-00B-L03 stage 1; frontend/nginx.conf `/r`, and the older share path,
+# which nginx answers itself since ROUNDS-00B-L06).
 SHARE_HEADERS: dict[str, str] = {
     "cache-control": "no-store",
     "x-robots-tag": "noindex, nofollow, noarchive",

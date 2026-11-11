@@ -99,6 +99,12 @@ def test_a_capability_that_resolves_answers_only_its_markup_and_the_projection_v
     assert lookup.calls == [TOKEN]
 
 
+def test_with_the_gate_unset_a_capability_resolves(client, monkeypatch, lookup):
+    res = _post(client, monkeypatch, env={})
+    assert (res.status_code, res.json()["markup"]) == (200, MARKUP)
+    assert lookup.calls == [TOKEN]
+
+
 def test_the_answer_names_no_capability_owner_snapshot_or_purpose(client, monkeypatch, lookup):
     text = _post(client, monkeypatch).text
     for value in (CAP_ID, TOKEN, "snapshot", "purpose", "user", "expires_at", "password"):
@@ -117,8 +123,8 @@ FAILURES = {
     "switch-alias": dict(env={**OPEN, ALIAS: "true"}),
     "switch-alias-garbage": dict(env={**OPEN, ALIAS: "on"}),
     "switch-gate": dict(env={**OPEN, SWITCH: "disabled"}),
-    # Resolution closed: by default, or by a value outside the gate's list.
-    "gate-default": dict(env={}),
+    # Resolution closed, or set to a value outside the gate's list. Unset,
+    # it's open (ROUNDS-00B-L06).
     "gate-disabled": dict(env={GATE: "disabled"}),
     "gate-invalid": dict(env={GATE: "true"}),
     # Any other shape of request.
@@ -224,7 +230,7 @@ def test_nothing_is_cached_between_requests(client, monkeypatch, lookup):
 @pytest.mark.parametrize("case, code, record", [
     ("available", "available", CAP_ID),
     ("switch-alias", "kill_switch", None),
-    ("gate-default", "gate_closed", None),
+    ("gate-disabled", "gate_closed", None),
     ("extra-field", "not_found", None),
     ("unknown", "not_found", None),
     ("degraded", "degraded", None),
@@ -265,8 +271,12 @@ def test_the_not_found_matches_what_the_deployment_verifier_checks(client, monke
     assert share_capabilities.TOKEN_RE.fullmatch(unknown) is not None
 
 
-def test_both_resolvers_answer_with_one_set_of_headers():
-    from routers import share
+def test_nginx_answers_the_older_share_path_with_the_resolvers_own_body_and_headers():
+    # ROUNDS-00B-L06: nginx answers that path itself, with this not-found.
+    from tests.test_share_older_links import nginx_older_read
 
-    assert share.PUBLIC_HEADERS is share_capabilities.RESOLVER_HEADERS
-    assert share.NOT_FOUND_BODY is share_capabilities.NOT_FOUND_BODY
+    status, body, headers = nginx_older_read()
+    assert status == 404
+    assert json.loads(body) == share_capabilities.NOT_FOUND_BODY
+    assert body == json.dumps(share_capabilities.NOT_FOUND_BODY, separators=(",", ":"))
+    assert headers == share_capabilities.RESOLVER_HEADERS

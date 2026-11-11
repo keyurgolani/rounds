@@ -69,6 +69,7 @@ HOOKS = Path(os.environ.get("PB_HOOKS_DIR", "/pb_hooks"))
 LEVERS = Path(os.environ.get("PB_LEVERS_DIR", "/pb_levers"))
 MIGRATION = "1700007000_relation_endpoint_authz.js"
 MIGRATION_ID = MIGRATION[: -len(".js")]
+LEGACY_SHARES = "1700008400_legacy_share_migration.js"
 PSEUDONYM = re.compile(r"^acct-\d{2}$")
 STAMP = "2024-01-01 00:00:00.000Z"
 BIG_INT = 9007199254740993  # 2^53 + 1: a JS number can't hold it
@@ -829,7 +830,12 @@ def main() -> int:
         base.mkdir()
         full.mkdir()
         for path in sorted(MIGRATIONS.glob("*.js")):
-            shutil.copy(path, full / path.name)
+            # The older share links' migration (ROUNDS-00B-L06) turns off the
+            # share rows this fixture plants, quarantined ones included, so
+            # this check of the quarantine leaves it out; phase 15 checks it
+            # on its own fixture.
+            if path.name != LEGACY_SHARES:
+                shutil.copy(path, full / path.name)
             if path.name < MIGRATION:
                 shutil.copy(path, base / path.name)
         # Generated per run, never printed: the bootstrap migration creates

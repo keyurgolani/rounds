@@ -1,0 +1,81 @@
+{
+  "$comment": "Touched-row manifest legacy-shares-v1 (ROUNDS-00B-L06, #14): what pocketbase/pb_migrations/1700008400_legacy_share_migration.js changes, with each change's disposition. Every share link made before the release that carries it stops working, its owner can get a new link for a migrated one, and no secret any of them was made with survives. Which rows a database holds depends on its data, so the dispositions are per collection. The owner approves the drops and the quarantine strip, so owner_approval stays pending until the owner reviews it, and the migration's lint entry waits on that review.",
+  "manifest": "legacy-shares-v1",
+  "issue": "#14",
+  "owner_approval": "pending owner review",
+  "predicate_version": 1,
+  "batch_size": 500,
+  "journal": {
+    "collection": "legacy_share_migration",
+    "rows": "one per share link, live or quarantined, keyed by (manifest, link)",
+    "id": "the first 15 characters of the lowercase RFC 4648 base32 of SHA-256 over \"legacy-shares-v1:<link id>\"",
+    "checksum": "sha256 over the canonical JSON of the rows sorted by id: id, manifest, predicate_version, link, origin, quarantine_entry, outcome, reason, views, first_view_day, last_view_day, incident; never their dates",
+    "rerun": "a link that already has a journal row keeps its outcome, reason, view counts, and date, so a second forward run writes the same journal"
+  },
+  "outcomes": {
+    "migrated": ["eligible"],
+    "revoked_ownership": ["target_owner", "parent_owner", "quarantined_cross_owner", "quarantined_missing_target", "quarantined_dependent", "quarantined_other"],
+    "revoked_demo": ["demo_account"],
+    "revoked_unverified": ["owner_missing", "no_target", "target_missing", "token_format", "password_set", "expiry_set"]
+  },
+  "precedence": "ownership, then the demo account, then the other reasons in the order listed",
+  "migrations": [
+    {
+      "migration": "1700008400_legacy_share_migration",
+      "stage": 1,
+      "user_row_writes": [
+        {
+          "collection": "resume_share_links",
+          "owner_field": "user",
+          "fields": ["legacy_status", "legacy_reason", "turned_off_at", "manifest_id"],
+          "disposition": "set",
+          "why": "every link is turned off with its outcome; a migrated one can get a new link, which sets replaced_by later, and nothing else on the row changes after this"
+        },
+        {
+          "collection": "resume_share_views",
+          "owner_field": "user",
+          "fields": ["viewer_ip_hash", "user_agent", "viewed_at"],
+          "disposition": "clear",
+          "why": "a view keeps only its day; the per-link count and first and last day go to the journal"
+        }
+      ],
+      "server_row_writes": [
+        {
+          "collection": "relation_quarantine",
+          "when": "an entry whose source_collection is resume_share_links",
+          "payload_keys": ["token", "password_hash", "expires_at"],
+          "disposition": "drop",
+          "why": "a quarantined link is turned off like every other one, and a replay restores only what the entry still holds"
+        },
+        {
+          "collection": "relation_quarantine",
+          "when": "an entry whose source_collection is resume_share_views",
+          "payload_keys": ["viewer_ip_hash", "user_agent", "viewed_at"],
+          "disposition": "clear",
+          "why": "the first two go and viewed_at keeps only its day, as for live views"
+        },
+        {
+          "collection": "legacy_share_migration",
+          "disposition": "insert",
+          "why": "the journal: one row per link, every rule null"
+        }
+      ],
+      "schema": {
+        "adds": [
+          {"collection": "resume_share_links", "fields": ["legacy_status", "legacy_reason", "turned_off_at", "manifest_id", "replaced_by"]},
+          {"collection": "legacy_share_migration", "fields": ["manifest", "predicate_version", "link", "origin", "quarantine_entry", "outcome", "reason", "views", "first_view_day", "last_view_day", "incident"]}
+        ],
+        "drops": [
+          {"collection": "resume_share_links", "fields": ["token", "is_password", "password_hash", "expires_at"], "index": "idx_share_links_token", "disposition": "drop"}
+        ],
+        "rules": {
+          "resume_share_links": {"list": "user = @request.auth.id && legacy_status != \"revoked_ownership\"", "view": "user = @request.auth.id && legacy_status != \"revoked_ownership\"", "create": null, "update": null, "delete": null},
+          "resume_share_views": {"list": "user = @request.auth.id && link.legacy_status != \"revoked_ownership\"", "view": "user = @request.auth.id && link.legacy_status != \"revoked_ownership\"", "create": null, "update": null, "delete": null}
+        },
+        "triggers": ["rel_authz_resume_share_links_replaced_by_ins", "rel_authz_resume_share_links_replaced_by_upd", "rel_authz_resume_share_links_replaced_by_tgt"]
+      },
+      "down": "keeps the journal, the rules, legacy_status, replaced_by, and its triggers; removes legacy_reason, turned_off_at, and manifest_id; adds token, is_password, password_hash, and expires_at back empty, none required, with no index. It restores no secret and turns no link back on.",
+      "untouched": "every other collection, and every other field of the two share collections"
+    }
+  ]
+}

@@ -17,8 +17,11 @@ The guarantees checked here:
   * a rotation shows the new bearer once and answers a stale version, a
     revoked or expired capability, and another account's as the contract
     says;
-  * with the gate closed, POST /api/share is the create it was, and rotate
-    is turned off;
+  * with the gate closed, POST /api/share makes no link at all and rotate
+    is turned off (ROUNDS-00B-L06);
+  * "Get a new link" snapshots only the older link's own target, as
+    PocketBase names it, and a replaced link answers already-issued
+    (ROUNDS-00B-L06);
   * no line holds a bearer or a password.
 
 PocketBase's hook routes are a fake with their contract here; the hooks
@@ -26,6 +29,7 @@ themselves run under node (pocketbase/tests/test_share_secrets_hooks.py).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -62,6 +66,9 @@ class FakeShareHooks:
                                                        "expires_at": LATER, "digest": "e" * 64}}
         self.answers: dict[str, tuple[int, object]] = {}
         self.made = 0
+        # The signed-in account's older links (ROUNDS-00B-L06), each over
+        # its own resume, and whether a new link replaced it.
+        self.legacy: dict[str, dict] = {}
 
     async def __call__(self, path: str, token: str, payload: dict):
         self.calls.append((path, token, json.loads(json.dumps(payload))))
@@ -96,9 +103,29 @@ class FakeShareHooks:
             return 409, {"v": V, "error": "idempotency_mismatch"}
         if verdict == "replay":
             return 200, {"v": V, "verdict": "replay", "result": command["result"]}
+        target = None
+        if "legacy_link_id" in p:
+            link = self.legacy.get(p["legacy_link_id"])
+            own = None if link is None else {"kind": "resume", "id": link["resume"]}
+            if link is None or link["status"] != "migrated" or p.get("target") not in (None, own):
+                return self._refuse(verdict, p["command_id"], self.commands, 404, "not_found")
+            if link["replaced_by"]:
+                command["state"], command["result"] = "completed", self.capability_result(link["replaced_by"])
+                return 200, {"v": V, "verdict": "replay", "result": command["result"]}
+            target = own
         if command["snapshot"] is None:
             command["snapshot"] = p["snapshot_command_id"]
-        return 200, {"v": V, "verdict": verdict, "snapshot_command_id": command["snapshot"]}
+        out = {"v": V, "verdict": verdict, "snapshot_command_id": command["snapshot"]}
+        if target is not None:
+            out["legacy_target"] = target
+        return 200, out
+
+    def capability_result(self, cid: str) -> dict:
+        cap = self.capabilities[cid]
+        return {"status": 201, "body": {
+            "capability_id": cid,
+            "scope": {"target_kind": "legacy_artifact_snapshot", "resume_id": RESUME, "projection_version": 1},
+            "state": cap["status"], "expires_at": cap["expires_at"], "capability_version": cap["version"]}}
 
     def create(self, _path, p):
         verdict, command = self._begin(p["command_id"], "share_create", p["fingerprint"])
@@ -108,15 +135,20 @@ class FakeShareHooks:
             return 200, {"v": V, "delivery": "already_issued", "result": command["result"]}
         if p["snapshot_id"] != SNAPSHOT:
             return self._refuse(verdict, p["command_id"], self.commands, 404, "not_found")
+        link = self.legacy.get(p["legacy_link_id"]) if "legacy_link_id" in p else None
+        if "legacy_link_id" in p and link is None:
+            return self._refuse(verdict, p["command_id"], self.commands, 404, "not_found")
+        if link is not None and link["replaced_by"]:
+            command["state"], command["result"] = "completed", self.capability_result(link["replaced_by"])
+            return 200, {"v": V, "delivery": "already_issued", "result": command["result"]}
         self.made += 1
         cid = f"capnew{self.made:09d}"
         self.capabilities[cid] = {"owner": TEST_ACCOUNT_ID, "status": "active", "version": 1,
                                   "expires_at": p["expires_at"] or LATER, "digest": p["bearer_digest"],
                                   "verifier": p["password_policy_ref"]}
-        result = {"status": 201, "body": {
-            "capability_id": cid,
-            "scope": {"target_kind": "legacy_artifact_snapshot", "resume_id": RESUME, "projection_version": 1},
-            "state": "active", "expires_at": self.capabilities[cid]["expires_at"], "capability_version": 1}}
+        if link is not None:
+            link["replaced_by"] = cid
+        result = self.capability_result(cid)
         command["state"], command["result"] = "completed", result
         return 201, {"v": V, "delivery": "issued", "result": result}
 
@@ -424,52 +456,120 @@ def test_each_write_answer_maps_to_one_typed_answer_with_no_pocketbase_text(clie
     assert "PocketBase" not in res.text and "token" not in res.json()
 
 
-def test_with_the_gate_closed_post_api_share_is_the_create_it_was(client, world, monkeypatch):
-    from routers import share
-
+@pytest.mark.parametrize("body", [{"resume_id": RESUME}, {"resume_id": RESUME, "password": "correct horse battery"},
+                                  {"legacy_link_id": "linkaaaaaaaaaa1"}, {"resume_id": 5}],
+                         ids=["create", "with-a-password", "get-a-new-link", "malformed"])
+def test_with_the_gate_closed_post_api_share_makes_no_link_of_any_kind(client, world, monkeypatch, capsys, body):
+    # ROUNDS-00B-L06: CreateShare is the only way to make a link, so a closed
+    # gate is 503 route_disabled, and nothing reaches PocketBase.
     monkeypatch.setenv(GATE, "disabled")
-    sent = {}
-
-    async def current_user(_request):
-        return {"id": TEST_ACCOUNT_ID, "token": TEST_TOKEN}
-
-    async def pb_post(_token, _path, payload):
-        sent.update(payload)
-        return {"id": "lnk000000000001", **payload, "created": ""}
-
-    monkeypatch.setattr(share, "current_user", current_user)
-    monkeypatch.setattr(share, "pb_post", pb_post)
-    res = client.post("/api/share", json={"resume_id": RESUME}, headers=world.headers)
-    assert res.status_code == 200 and set(res.json()) == {"id", "token", "resume_id", "variant_id", "created"}
-    assert world.hooks.calls == []
-    # Its body checks are FastAPI's, as before.
-    assert client.post("/api/share", json={"resume_id": 5}, headers=world.headers).status_code == 422
-
-
-@pytest.mark.parametrize("extra", [{"password": "correct horse battery"}, {"expires_at": "2030-01-01"},
-                                   {"purpose": "For recruiters"}, {"password": None}])
-def test_with_the_gate_closed_a_create_asking_for_more_is_refused_and_makes_nothing(client, world, monkeypatch,
-                                                                                   extra):
-    # A dialog that reads the gate as open, during a flip, never gets a
-    # weaker link than it asked for: the fixed 400, and nothing written.
-    from routers import share
-
-    monkeypatch.setenv(GATE, "disabled")
-    made = []
-
-    async def current_user(_request):
-        return {"id": TEST_ACCOUNT_ID, "token": TEST_TOKEN}
-
-    async def pb_post(_token, _path, payload):
-        made.append(payload)
-        return {"id": "lnk000000000001", **payload, "created": ""}
-
-    monkeypatch.setattr(share, "current_user", current_user)
-    monkeypatch.setattr(share, "pb_post", pb_post)
-    res = client.post("/api/share", json={"resume_id": RESUME, **extra}, headers=world.headers)
-    assert _typed(res) == (400, "invalid_request")
-    assert made == [] and world.hooks.calls == []
+    capsys.readouterr()
+    res = create(client, world, body=body)
+    assert _typed(res) == (503, "route_disabled")
+    assert world.hooks.calls == [] and world.snapshots.calls == []
     assert "correct horse" not in res.text and "token" not in res.json()
+    lines = [json.loads(x) for x in capsys.readouterr().out.splitlines() if x.startswith("{") and '"share.' in x]
+    assert [(line["event"], line["code"]) for line in lines] == [("share.create", "route_disabled")]
+
+
+# ---- "Get a new link" for an older link (ROUNDS-00B-L06) --------------------------------------------------
+
+LINK = "linkaaaaaaaaaa1"
+
+
+def older(world, **over) -> dict:
+    link = {"status": "migrated", "resume": RESUME, "replaced_by": ""}
+    link.update(over)
+    world.hooks.legacy[LINK] = link
+    return link
+
+
+def test_get_a_new_link_snapshots_the_older_links_own_target_and_marks_it(client, world):
+    link = older(world)
+    res = create(client, world, body={"legacy_link_id": LINK})
+    assert res.status_code == 201 and res.json()["secret_delivery"] == "issued"
+    assert share_secrets.current(res.json()["token"])
+    begin_payload, create_payload = world.hooks.calls[0][2], world.hooks.calls[1][2]
+    assert begin_payload["legacy_link_id"] == LINK and "target" not in begin_payload
+    assert create_payload["legacy_link_id"] == LINK
+    # The source is the one PocketBase named for the link, never one from the body.
+    ((_, req, _key),) = world.snapshots.calls
+    assert (req["source_kind"], req["source_id"]) == ("resume", RESUME)
+    assert link["replaced_by"] == res.json()["capability_id"]
+
+
+def test_a_target_named_with_the_older_link_goes_to_pocketbase_to_check(client, world):
+    older(world)
+    res = create(client, world, body={"legacy_link_id": LINK, "resume_id": RESUME})
+    assert res.status_code == 201
+    assert world.hooks.calls[0][2]["target"] == {"kind": "resume", "id": RESUME}
+    other = create(client, world, body={"legacy_link_id": LINK, "resume_id": "resumebbbbbbbb1"}, key=OTHER_KEY)
+    assert _typed(other) == (404, "not_found")
+
+
+@pytest.mark.parametrize("over", [{"status": "revoked_unverified"}, {"status": "revoked_demo"},
+                                  {"status": "revoked_ownership"}, {"status": ""}])
+def test_any_link_that_cant_get_a_new_link_is_the_one_not_found(client, world, over):
+    older(world, **over)
+    res = create(client, world, body={"legacy_link_id": LINK})
+    assert _typed(res) == (404, "not_found") and "token" not in res.json()
+    assert world.snapshots.calls == []
+    missing = create(client, world, body={"legacy_link_id": "linkmissingaaa1"}, key=OTHER_KEY)
+    assert _typed(missing) == (404, "not_found")
+
+
+def test_a_replaced_link_answers_its_capability_as_already_issued_under_a_new_key(client, world):
+    older(world)
+    first = create(client, world, body={"legacy_link_id": LINK}).json()
+    again = create(client, world, body={"legacy_link_id": LINK}, key=OTHER_KEY)
+    assert again.status_code == 200
+    body = again.json()
+    assert body["secret_delivery"] == "already-issued" and "token" not in body
+    assert body["capability_id"] == first["capability_id"]
+    assert len(world.snapshots.calls) == 1
+
+
+def test_get_a_new_link_takes_one_target_at_most(client, world):
+    older(world)
+    res = create(client, world, body={"legacy_link_id": LINK, "resume_id": RESUME, "variant_id": VARIANT})
+    assert _typed(res) == (400, "invalid_request")
+    assert _typed(create(client, world, body={"legacy_link_id": "LINK"}, key=OTHER_KEY)) == (400, "invalid_request")
+    assert world.hooks.calls == []
+
+
+def test_an_ineligible_source_answers_as_it_is_and_the_link_stays_unreplaced(client, world):
+    link = older(world)
+    world.snapshots.answer = (200, {"status": "ineligible", "reason": "data_too_large"})
+    res = create(client, world, body={"legacy_link_id": LINK})
+    assert res.status_code == 200 and res.json() == {"status": "ineligible", "reason": "data_too_large"}
+    assert link["replaced_by"] == ""
+
+
+@pytest.mark.parametrize("target", [None, {"kind": "snapshot", "id": RESUME}, {"kind": "resume", "id": "x"},
+                                    {"kind": "resume", "id": RESUME, "extra": 1}, "resume"])
+def test_a_target_pocketbase_names_oddly_is_503_and_snapshots_nothing(client, world, target):
+    older(world)
+    answer = {"v": V, "verdict": "new", "snapshot_command_id": OTHER_KEY}
+    if target is not None:
+        answer["legacy_target"] = target
+    world.hooks.answers["begin"] = (200, answer)
+    assert _typed(create(client, world, body={"legacy_link_id": LINK})) == (503, "shares_unavailable")
+    assert world.snapshots.calls == []
+
+
+def test_a_create_keeps_its_fingerprint_and_get_a_new_link_has_its_own():
+    asked = dict(resume_id=RESUME, variant_id=None, expires_at=None, purpose=None, password_set=False)
+    plain = admission_state.fingerprint(share_commands.CREATE_ROUTE, "share_create",
+                                        share_commands._CreateFingerprint(**asked))
+    # The fields a create's fingerprint covered before ROUNDS-00B-L06, so a
+    # retry across the release still replays.
+    want = hashlib.sha256(json.dumps(
+        {"v": admission_state.VERSION, "route": "POST /api/share", "fields": asked}, sort_keys=True,
+        separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    assert plain == want
+    again = admission_state.fingerprint(share_commands.CREATE_ROUTE, "share_create",
+                                        share_commands._ReissueFingerprint(**asked, legacy_link_id=LINK))
+    assert again != plain
 
 
 # ---- RotateShareBearer --------------------------------------------------------------------------------------
