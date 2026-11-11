@@ -1,0 +1,154 @@
+# Containment conformance corpus overlay (ROUNDS-00A-L08, stage 1).
+#
+# Overlays #9's harness stack (harness/compose.yml) with what the corpus
+# needs: the runner configured to enforce server-owned definitions and
+# carry the run's canaries as its environment, an internal bait network of
+# decoys a contained worker must never reach, and the `corpus` driver that
+# runs the fixtures. Run it through the launcher, or directly:
+#
+#   docker compose -f harness/compose.yml -f tests/conformance/compose.yml \
+#     run --rm corpus -k EX-07
+#
+# The driver, the runner's enforced gate, and the bait network all build
+# from the commit under test; no 62d4eae image is pulled (decision D4).
+#
+# Build contexts are `..`: both docker and nerdctl compose resolve relative
+# build contexts against the project directory, which is the first `-f`
+# file's directory (harness/), so `..` is the repository root. The launcher
+# and the documented repro always pass harness/compose.yml first.
+
+services:
+  # The runner, enforcing server-owned definitions so the caller-field and
+  # definition fixtures exercise the enforced path, with idempotency and
+  # quota off so no admission-store state is needed, and pointed at an
+  # unreachable renderer so the render-proxy containment fixture (RD-07)
+  # sees a failed render. Its environment carries the run's canaries (the
+  # launcher sets AI_KEY_SECRET, PB_ADMIN_*, and ROUNDS_ADMISSION_SECRET to
+  # canary values), so a leak into candidate output is unambiguous. The full
+  # list is given here so it holds whether compose merges or replaces it.
+  runner:
+    environment:
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-}
+      - POCKETBASE_URL=http://pocketbase:8090
+      - AI_KEY_SECRET=${AI_KEY_SECRET:-rounds-dev-key-DO-NOT-USE-IN-PROD}
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
+      - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}
+      - ROUNDS_GATE_ENFORCE_IDEMPOTENCY=${ROUNDS_GATE_ENFORCE_IDEMPOTENCY:-off}
+      - ROUNDS_GATE_ENFORCE_QUOTA=${ROUNDS_GATE_ENFORCE_QUOTA:-off}
+      - ROUNDS_GATE_RUN=${ROUNDS_GATE_RUN:-}
+      - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-enforce}
+      # No renderer runs at stage 1, so the render proxy sees a failed
+      # render; RD-07 checks the failure is typed and echoes no sidecar text.
+      - PDF_RENDERER_URL=${PDF_RENDERER_URL:-http://pdf-renderer-absent.corpus.invalid:4000}
+    # No take-home definition is active on this branch, so the corpus adds
+    # one beside the real ones (conformance/overlay.py, which the launcher
+    # runs into CORPUS_DEFINITIONS): the real manifest plus one entry, and
+    # the definition it names. Read-only, inside the runner's root-only
+    # definitions directory.
+    volumes:
+      - ${CORPUS_DEFINITIONS:-../tests/conformance/.definitions}/manifest.json:/app/definitions/manifest.json:ro
+      - ${CORPUS_DEFINITIONS:-../tests/conformance/.definitions}/store/take-home/corpus-http-client/python.v1.json:/app/definitions/store/take-home/corpus-http-client/python.v1.json:ro
+
+  # The pooled PDF sidecar, built from the commit. It is defined so stage 2's
+  # images job and the pending render fixtures (RD-02 to RD-06, RD-08, RD-09)
+  # have it, but it sits behind the `stage2` profile and does not start at
+  # stage 1: no stage-1 fixture needs a working renderer, and RD-07 needs the
+  # renderer unreachable.
+  pdf-renderer:
+    profiles: ["stage2"]
+    build:
+      context: ..
+      dockerfile: backend/pdf_renderer/Dockerfile
+    image: ${IMAGE_PREFIX:-rounds-9s1}-pdf-renderer:test
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges
+    restart: "no"
+
+  # Decoys on the internal bait network: a fake metadata endpoint, a fake
+  # RFC1918 service, and a logging DNS resolver. They embed the run's bait
+  # canary and log every request, so a later leaf's worker fixture can prove
+  # from their logs that a no-network worker reached none of them (EX-08,
+  # EX-09, RD-03). They idle at stage 1 (those fixtures are pending rows).
+  bait-metadata:
+    build:
+      context: ..
+      dockerfile: tests/conformance/bait/Dockerfile
+    image: ${IMAGE_PREFIX:-rounds-9s1}-bait:test
+    command: ["metadata"]
+    environment:
+      - BAIT_CANARY=${BAIT_CANARY:-bait-canary-unset}
+    networks:
+      bait:
+        aliases:
+          - metadata
+          - metadata.bait
+    restart: "no"
+
+  bait-rfc1918:
+    image: ${IMAGE_PREFIX:-rounds-9s1}-bait:test
+    command: ["rfc1918"]
+    environment:
+      - BAIT_CANARY=${BAIT_CANARY:-bait-canary-unset}
+    networks:
+      bait:
+        aliases:
+          - internal-service.bait
+    depends_on:
+      - bait-metadata
+    restart: "no"
+
+  bait-dns:
+    image: ${IMAGE_PREFIX:-rounds-9s1}-bait:test
+    command: ["dns"]
+    environment:
+      - BAIT_CANARY=${BAIT_CANARY:-bait-canary-unset}
+    networks:
+      bait:
+        aliases:
+          - dns.bait
+    depends_on:
+      - bait-metadata
+    restart: "no"
+
+  # The corpus driver. It joins the app network (to drive the runner and
+  # PocketBase) and the bait network (so later worker fixtures can read the
+  # decoys' logs). CORPUS_RUN turns on the live run; the launcher appends
+  # pytest args (for example -k EX-07).
+  corpus:
+    build:
+      context: ..
+      dockerfile: tests/conformance/Dockerfile
+    image: ${IMAGE_PREFIX:-rounds-9s1}-corpus:test
+    environment:
+      - CORPUS_RUN=1
+      - POCKETBASE_URL=http://pocketbase:8090
+      - RUNNER_URL=http://runner:8000
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
+      - AI_KEY_SECRET=${AI_KEY_SECRET:-rounds-dev-key-DO-NOT-USE-IN-PROD}
+      - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}
+      - RUN_ID=${RUN_ID:-local}
+      - GIT_COMMIT=${GIT_COMMIT:-unknown}
+      - CORPUS_TARGET=${CORPUS_TARGET:-ci}
+      - RECEIPTS_PATH=/out/containment-receipt.json
+    volumes:
+      - ./.receipts:/out
+    networks:
+      - default
+      - bait
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+      runner:
+        condition: service_started
+    restart: "no"
+
+networks:
+  # No route out: a worker a later leaf attaches here reaches only the
+  # decoys, and the decoys reach nothing.
+  bait:
+    internal: true

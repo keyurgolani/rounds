@@ -218,3 +218,38 @@ jobs:
           name: account-scope-migration-receipts
           path: harness/.receipts/
           if-no-files-found: warn
+
+  containment-corpus:
+    # Adversarial execution and rendering conformance corpus
+    # (ROUNDS-00A-L08, stage 1). Builds the stack from this commit and runs
+    # the hostile-fixture corpus against it, then uploads the receipt. Runs
+    # on pull requests into main and next and on pushes to them. Not yet a
+    # required check: the owner adds it to the ruleset at stage 2.
+    if: >-
+      (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'next'))
+      || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # The framework's own unit tests, fast and without a stack: the
+      # manifest validator, outcome comparison, redaction, the probe budget,
+      # receipt serialization, and fixture discovery.
+      - name: Framework self-tests
+        run: |
+          python -m pip install --disable-pip-version-check -q "pytest==8.3.3"
+          python -m pytest tests/conformance/selftest -q
+      # The corpus itself, against the built stack. Docker on ubuntu; locally
+      # use Finch.
+      - name: Run the containment corpus
+        run: COMPOSE_BIN="docker compose" tests/conformance/run.sh
+      - name: Upload receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: containment-corpus-receipt
+          path: tests/conformance/.receipts/
+          if-no-files-found: warn

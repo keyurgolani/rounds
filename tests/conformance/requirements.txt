@@ -1,0 +1,6 @@
+# Corpus driver dependencies. Pinned exactly, matching the backend's
+# pytest pin (backend/requirements.txt). The framework and the fixtures
+# use the standard library and #9's harness client otherwise, so nothing
+# else is needed. Stage 2's images job pins the base image and these by
+# digest; stage 1 keeps the version pin to match the rest of the repo.
+pytest==8.3.3
