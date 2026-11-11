@@ -305,18 +305,23 @@ def _nginx_block(conf: str, loc: str) -> str:
     return conf[start: conf.index("}", start)]
 
 
+SHARE_LOCATIONS = ("location = /r {", "location ^~ /r/ {", "location ~* ^/r(/|$) {",
+                   "location = /api/share/resolve {", "location @share_throttled {", "location @share_too_large {",
+                   "location ~* ^/api/share/by-token(/|$) {")
+
+
 def test_share_requests_leave_no_nginx_access_line():
     # The share pages, the resolver and the two answers it hands off to, and
     # the public share read (ROUNDS-00B-L04); the runner's side is
     # backend/tests/test_access_log.py.
     conf = (ROOT / "frontend" / "nginx.conf").read_text()
-    for loc in ("location = /r {", "location ^~ /r/ {", "location ~* ^/r(/|$) {",
-                "location = /api/share/resolve {", "location @share_throttled {", "location @share_too_large {",
-                "location ~* ^/api/share/by-token(/|$) {"):
+    for loc in SHARE_LOCATIONS:
         assert "access_log off;" in _nginx_block(conf, loc), loc
-    # A request's error lines name its client: the resolver keeps only
-    # critical ones, wherever its answer comes from.
-    for loc in ("location = /api/share/resolve {", "location @share_throttled {", "location @share_too_large {"):
+
+
+def test_share_locations_keep_only_critical_error_lines():
+    conf = (ROOT / "frontend" / "nginx.conf").read_text()
+    for loc in SHARE_LOCATIONS:
         assert "error_log /var/log/nginx/error.log crit;" in _nginx_block(conf, loc), loc
 
 
