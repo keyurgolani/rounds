@@ -171,11 +171,32 @@ export function A4Page({
   );
 }
 
+// The only link schemes a resume renders as links. Anything else, a
+// relative path or a scheme like javascript: or data: included, renders as
+// plain text (ROUNDS-00B-L03).
+export const SAFE_LINK_SCHEMES: readonly string[] = ['http:', 'https:', 'mailto:', 'tel:'];
+
+export function safeHref(href: string | undefined): string | null {
+  if (!href) return null;
+  const value = href.trim();
+  // Only an explicit scheme counts, so nothing is resolved against the
+  // page's own origin.
+  if (!/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)) return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  return SAFE_LINK_SCHEMES.includes(url.protocol) ? url.href : null;
+}
+
 export function Hyperlink({ href, children }: { href?: string; children: ReactNode }) {
-  if (!href) return <>{children}</>;
+  const safe = safeHref(href);
+  if (!safe) return <>{children}</>;
   return (
     <a
-      href={href}
+      href={safe}
       target="_blank"
       rel="noreferrer"
       style={{ color: 'inherit', textDecoration: 'none' }}
