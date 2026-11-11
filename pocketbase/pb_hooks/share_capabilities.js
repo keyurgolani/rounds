@@ -380,8 +380,8 @@ function screenCreate(row, snapshot, now) {
 // never changes again. Otherwise only these move: the version up; the
 // digest, only with a version raise (#12's rotate); the expiry earlier; and
 // active to revoked, with a version raise, a reason, and a time.
-// TODO(ROUNDS-15-L04): #80's retarget to an Artifact Revision is the one
-// other change.
+// TODO(ROUNDS-15-L04): #80 adds the one other change, moving a capability
+// from its snapshot onto an Artifact Revision.
 function screenUpdate(before, after) {
   for (let i = 0; i < FIXED.length; i += 1) {
     if (before[FIXED[i]] !== after[FIXED[i]]) return FIXED[i];

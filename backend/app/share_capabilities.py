@@ -23,9 +23,9 @@ The lookup has no implementation until #12 (ROUNDS-00B-L04) brings the
 digest and its service identity, so until then even an open gate resolves
 nothing.
 
-Logs carry the capability id when one resolves, and a coarse outcome, never
-a token, an address, an owner, or content; owner events carry the account
-pseudonym.
+A log line holds the capability id when one resolves and an outcome code.
+It holds no token, address, owner, or content; owner events name the
+account by its pseudonym.
 """
 from __future__ import annotations
 
