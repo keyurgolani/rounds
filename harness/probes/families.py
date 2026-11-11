@@ -285,8 +285,8 @@ def create_superuser_accepted(pb, collection, admin_token, payload, expected) ->
 
 def share_owner_only_isolated(pb, collection, a, b, expected) -> Receipt:
     # A share link answers only its owner: another account and an anonymous
-    # caller get an empty list and the ordinary not-found, whatever the
-    # request carries, and the owner still reads it.
+    # caller never list it and get the ordinary not-found on a view,
+    # whatever the request carries, and the owner still reads it.
     import urllib.parse
 
     problems: list[str] = []
@@ -296,8 +296,9 @@ def share_owner_only_isolated(pb, collection, a, b, expected) -> Receipt:
         listing = pb.listing(collection, token=token, params=extra)
         first = first or listing
         items = listing.body.get("items") if isinstance(listing.body, dict) else None
-        if listing.status != expected or items != []:
-            problems.append(f"{actor} list status={listing.status} rows={None if items is None else len(items)}")
+        # B still lists its own link; A's must be absent for both callers.
+        if listing.status != expected or items is None or a.ids[collection] in _ids_in(listing.body):
+            problems.append(f"{actor} list status={listing.status} a_present={a.ids[collection] in _ids_in(listing.body)}")
         view = pb.get(f"/api/collections/{collection}/records/{a.ids[collection]}?{urllib.parse.urlencode(extra)}",
                       token=token)
         if view.status != 404:

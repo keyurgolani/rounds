@@ -388,6 +388,20 @@ def test_a_foreign_target_and_a_missing_one_get_the_same_answer(client, body):
     assert "PocketBase" not in first.text
 
 
+def test_another_create_refusal_keeps_its_status_and_code(client):
+    # Only the uniform relation denial becomes the not-found; a refusal such
+    # as the demo account's passes through with PocketBase's code.
+    refusal = HTTPException(status_code=403, detail='PocketBase error: {"code":"demo_not_permitted"}')
+
+    async def refused(_token, _path, _payload):
+        raise refusal
+
+    with patch("routers.share.current_user", _caller), patch("routers.share.pb_post", refused):
+        res = client.post("/api/share", json={"resume_id": "res000000000001"})
+    assert res.status_code == 403
+    assert "demo_not_permitted" in res.text
+
+
 def test_a_create_still_names_the_caller_and_one_target(client):
     sent = {}
 

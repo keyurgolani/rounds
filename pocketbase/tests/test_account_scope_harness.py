@@ -870,7 +870,10 @@ class _SharePB:
         self.calls.append(("list", collection, token, dict(params or {})))
         if params and "filter" in params:  # the superuser's owner count
             return Response(200, {"items": [], "totalItems": self.owner_rows}, 1)
-        rows = [{"id": "a-resume_share_links-id"}] if self.loose_read else []
+        # B always lists its own link; a looser rule adds A's.
+        rows = [{"id": "b-resume_share_links-id"}] if token == "b-token" else []
+        if self.loose_read:
+            rows.append({"id": "a-resume_share_links-id"})
         return Response(200, {"items": rows, "totalItems": len(rows)}, 1)
 
     def get(self, path, token=None):
@@ -912,7 +915,7 @@ def test_share_owner_only_passes_when_only_the_owner_reads_the_link():
 def test_share_owner_only_fails_when_another_caller_reads_the_link():
     a, b = _share_accounts()
     r = families.share_owner_only_isolated(_SharePB(loose_read=True), "resume_share_links", a, b, 200)
-    assert not r.passed and "other list status=200 rows=1" in r.detail and "anonymous view status=200" in r.detail
+    assert not r.passed and "other list status=200 a_present=True" in r.detail and "anonymous view status=200" in r.detail
 
 
 def test_share_create_shape_passes_when_every_shape_is_denied_alike():

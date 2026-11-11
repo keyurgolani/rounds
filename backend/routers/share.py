@@ -127,9 +127,10 @@ async def create_link(request: Request, body: CreateShareRequest) -> ShareLinkOu
         )
     except HTTPException as exc:
         # PocketBase gives a target the caller doesn't own and one that
-        # doesn't exist the same denial (ROUNDS-00B-L02's relation check);
-        # the runner answers both with one not-found and no PocketBase text.
-        if exc.status_code in (400, 403, 404):
+        # doesn't exist the same 400 (ROUNDS-00B-L02's relation check); the
+        # runner answers both with one not-found and no PocketBase text.
+        # Other refusals, such as the demo account's 403, pass through.
+        if exc.status_code == 400:
             raise TypedError("not_found") from None
         raise
     return _link_out(record)
