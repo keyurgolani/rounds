@@ -6,13 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp
 
-from app import admission, definitions, errors, gates, obs
+from app import access_log, admission, definitions, errors, gates, obs
 from execution import runtime as execution_runtime
 from routers import ai, ai_coding, pdf, runner, sd_practice, share, share_capabilities, take_home
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Public share requests leave no access-log line (ROUNDS-00B-L04).
+    access_log.install()
     # Gates are read once per process; the startup log lists each value.
     gates.init()
     # Every stored definition's checksum is checked once per process; a
