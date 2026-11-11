@@ -1,9 +1,9 @@
 """Harness checks for Legacy Artifact Snapshot creation (ROUNDS-00A-L04
 PR 2), on the real PocketBase, both runner replicas, nginx, and the
 materializer built from this commit. Every account is generated for the
-run; the probe keeps only account emails and record ids between phases
-(``/out/snapshot-state.json``), and signs back in with a password it
-derives from the run's test runner key.
+run; between phases the probe keeps only account emails and record ids
+(``/state/snapshot.json``, which never goes up with the receipts), and
+signs back in with a password it derives from the run's test runner key.
 
 Phases, in the order harness/run.sh runs them:
 
@@ -59,7 +59,7 @@ RUNNER_KEY = os.environ.get("ROUNDS_ADMISSION_SECRET", "")
 RUN_ID = os.environ.get("RUN_ID", "local")
 RD02_DIR = Path(os.environ.get("RD02_DIR", "/rd02"))
 OUT = Path(os.environ.get("SNAPSHOT_OUT", "/out"))
-STATE = OUT / "snapshot-state.json"
+STATE = Path(os.environ.get("SNAPSHOT_STATE_PATH", "/state/snapshot.json"))
 ROUTE = "/api/pdf/snapshots"
 SNAPSHOTS = "legacy_artifact_snapshots"
 STALE = "2000-01-01 00:00:00.000Z"
@@ -179,6 +179,7 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
+    STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
 
 

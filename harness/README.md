@@ -319,6 +319,38 @@ fresh `pb_data` with every migration and the hooks, the demo at its default:
 the first start logs `demo_lock` `not_ready`, the published password gets the
 wrong-password answer, and the next start locks the demo account.
 
+## Legacy Artifact Snapshots
+
+`ROUNDS-00A-L04` PR 2 runs after the execution store phases, while signups are
+still on. PocketBase, both runners, and nginx restart with
+`ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=enabled` and the materializer up, and
+[`probes/legacy_snapshot_check.py`](probes/legacy_snapshot_check.py) checks
+through nginx (`snapshot-create`) that:
+
+- each `tests/conformance/rd_02/` input, stored as an account's own resume, gets
+  its declared outcome; an ineligible one writes nothing, and a created
+  snapshot's markup hashes to its checksum and leaves out what the input
+  declares;
+- a replayed key returns the first answer, the same inputs under a new key are
+  `reused`, and a variant with its parent's markup gets its own snapshot;
+- a stale `expected_updated` is a conflict that writes nothing, another
+  account's source answers exactly like a missing one, and nobody but the owner
+  reads a snapshot or its file;
+- a variant naming another account's resume, and the demo account, get no
+  snapshot;
+- every snapshot reconciles with its checksum, owner, and source rows.
+
+run.sh then runs the operator's scan in the PocketBase container and signs and
+verifies the report on the runner. With the materializer stopped, creation
+answers 503 `materializer_unavailable` and writes nothing; back up, the same key
+makes one snapshot. With the gate off, creation answers 503 `route_disabled`
+and every snapshot still reads back; a rescan gives the same report, which
+`snapshot-scan` compares with the signed one. With the gate on again, every
+snapshot's source gives `reused` with the same checksum, no resume, variant, or
+version row changed through any of it, and deleting an account deletes its
+snapshots. The scan secret is a per-run test value. Between phases the probe
+keeps only emails and ids, under `harness/.state/`.
+
 ## Receipts
 
 Each probe appends one JSON line to `harness/.receipts/<project>/receipts.jsonl`
