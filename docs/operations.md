@@ -288,7 +288,7 @@ With the gate `on` and no usable secret, PocketBase creates no `execution-worker
 
 **Rotating the secret.** Set the new value everywhere, restart PocketBase, then every runner replica. At its start PocketBase sets `execution-worker`'s password to the new value, which ends every session the old one had. Until a runner restarts with the new value, its logins fail: it logs `execution.worker` with `code` `login_rejected` and its `/ready` answers 503. On k8s an unready runner leaves the Service, so a secret that PocketBase doesn't take stops every runner route there, not only the store's work. Restart the runners right after PocketBase.
 
-**Turning it off.** Set the gate `off`, or empty, and restart PocketBase and the runners. The store's routes answer 503 `store_off`, no worker starts, and the rows stay. A job that was leased or started when the store went off is reaped the next time a worker claims.
+**Turning it off.** Set the gate `off`, or empty, and restart PocketBase and the runners. The store's routes answer 503 `store_off`, no worker starts, and the rows stay. A job that was leased or started when the store went off is reaped the next time a worker claims. The migration's down step drops the store only while it holds no job, attempt, or envelope and no attempt row links an envelope. Otherwise `migrate down` fails, PocketBase logs why, and the store and its rows stay.
 
 **Stuck jobs.** Nobody needs to end a job by hand. Every claim reaps first, and each worker reaps every 15 seconds too:
 
@@ -296,7 +296,7 @@ With the gate `on` and no usable secret, PocketBase creates no `execution-worker
 2. A lease that ran out after the run started ends the job `failed`, `worker-lost`.
 3. A started attempt 30 seconds past its declared budget ends `failed`, `infrastructure-degraded`, even while it still heartbeats.
 
-Each reaped attempt gets a server-written envelope that is never authoritative. A runner that stops ends each of its runs in flight `failed`, `worker-lost`, never with an outcome from the parts that ran. A job it claimed but hadn't started goes back to the queue when its lease runs out. A runner writing for an attempt it no longer holds is refused and counted in that attempt's `rejected_writes`.
+Each reaped attempt gets a server-written envelope that is never authoritative. A runner that stops ends each of its runs in flight `failed`, `worker-lost`, never with an outcome from the parts that ran. A job it claimed but hadn't started, one still waiting for a slot included, goes back to the queue when its lease runs out. A runner writing for an attempt it no longer holds is refused and counted in that attempt's `rejected_writes`.
 
 **Forced reap.** Jobs stay as they are while no worker runs. To reap without one, run the reap from inside a runner container, which holds the secret, so it never reaches your shell:
 

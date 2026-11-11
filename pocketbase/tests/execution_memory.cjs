@@ -110,12 +110,14 @@ function installGlobals(hooksDir) {
   class BadRequestError extends Error {}
   class UnauthorizedError extends Error {}
   class ForbiddenError extends Error {}
+  class NotFoundError extends Error {}
   globalThis.BadRequestError = BadRequestError;
   globalThis.UnauthorizedError = UnauthorizedError;
   globalThis.ForbiddenError = ForbiddenError;
+  globalThis.NotFoundError = NotFoundError;
   globalThis.$apis = { requestInfo: (ctx) => ctx.info };
   globalThis.__hooks = hooksDir;
-  return { BadRequestError, UnauthorizedError, ForbiddenError };
+  return { BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError };
 }
 
 module.exports = { memoryStore, installGlobals };

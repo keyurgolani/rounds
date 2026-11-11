@@ -5,7 +5,8 @@ stubbed Dao through node, like test_definitions_expand.py: the four
 collections and their rules, fields, and indexes, the links it adds to
 the attempt collections and admission_commands, take_home_attempts.files
 at 8 MiB, and a down() that drops only what up() added and puts back the
-files limit up() found, whichever it was. The values that
+files limit up() found, whichever it was, and only while the store holds
+no rows. The values that
 pb_hooks/execution.js also holds are checked against it, so the two stay
 in step. The migration also runs on real databases in #9's harness and
 in harness/migration_check.sh.
@@ -46,10 +47,29 @@ def test_the_file_is_a_migration(src):
     assert "migrate(" in src
 
 
-def test_neither_step_reads_or_writes_a_record(src):
-    for call in ("saveRecord", "deleteRecord", "findRecordsByFilter", "findFirstRecordByData", "newQuery",
-                 "new Record("):
+def _steps(src: str) -> tuple[str, str]:
+    return src[src.index("(db) =>"):src.rindex("(db) =>")], src[src.rindex("(db) =>"):]
+
+
+def test_neither_step_writes_a_record_and_only_down_counts_them(src):
+    up, down = _steps(src)
+    for call in ("saveRecord", "deleteRecord", "findRecordsByFilter", "findFirstRecordByData", "new Record("):
         assert call not in src, call
+    assert "newQuery" not in up
+    # down's one query counts rows for its guard and reads nothing else.
+    assert down.count("newQuery(") == 1
+    sql = [s for s in re.findall(r'"([^"\\]*)"', down)
+           if re.search(r"\b(SELECT|DELETE|UPDATE|INSERT|DROP|ALTER)\b", s, re.I)]
+    assert sql and all(s == "SELECT COUNT(*) AS n FROM " for s in sql)
+
+
+def test_down_refuses_before_it_changes_anything_while_the_store_holds_rows(src):
+    _, down = _steps(src)
+    refuse = down.index("throw new Error(")
+    assert refuse < down.index("saveCollection") and refuse < down.index("deleteCollection")
+    assert '["execution_jobs", "execution_attempts", "execution_envelopes"]' in down[:refuse]
+    assert '["ai_coding_attempts", "take_home_attempts"]' in down[:refuse]
+    assert "if (held.length > 0)" in down
 
 
 def test_up_resolves_every_collection_it_changes_before_it_writes(src):
@@ -71,9 +91,13 @@ def test_the_migration_lint_finds_nothing(src):
 # ---- behavioural: up() and down() through node against a stub Dao ---------
 
 _HARNESS = r"""
-const [migrationPath, hooksDir, filesMax] = process.argv.slice(2);
+const [migrationPath, hooksDir, filesMax, heldJson] = process.argv.slice(2);
+// The rows each table holds, by name, or "<name>.envelope" for attempt
+// rows that link an envelope; none unless the test says.
+const held = JSON.parse(heldJson || "{}");
 let up, down;
 globalThis.migrate = (u, d) => { up = u; down = d; };
+globalThis.DynamicModel = function (shape) { Object.assign(this, shape); };
 let ids = 0;
 class Schema {
   constructor(fields) { this.items = []; (fields || []).forEach((f) => this.addField(new SchemaField(f))); }
@@ -127,7 +151,17 @@ function baseDb() {
   add("admission_commands", "base", [{ name: "command_id", type: "text" }]);
   add("ai_coding_attempts", "base", [{ name: "status", type: "select" }]);
   add("take_home_attempts", "base", [{ name: "files", type: "json", options: { maxSize: Number(filesMax) } }]);
-  return { collections, saves: [], deleted: [], params: {} };
+  const db = { collections, saves: [], deleted: [], params: {}, queries: [] };
+  // Counts only, from `held`.
+  db.newQuery = (sql) => ({
+    one: (model) => {
+      db.queries.push(sql);
+      const m = /^SELECT COUNT\(\*\) AS n FROM (\w+)( WHERE COALESCE\(envelope, ''\) != '')?$/.exec(sql);
+      if (!m) throw new Error("unexpected query " + sql);
+      model.n = held[m[2] ? m[1] + ".envelope" : m[1]] || 0;
+    },
+  });
+  return db;
 }
 
 function dump(db) {
@@ -149,12 +183,21 @@ up(db);
 const afterUp = dump(db);
 const saves = db.saves.slice();
 const paramsAfterUp = JSON.parse(JSON.stringify(db.params));
-down(db);
+const savesBeforeDown = db.saves.length;
+let downError = null;
+try {
+  down(db);
+} catch (err) {
+  downError = String(err && err.message);
+}
 const execution = require(require("path").join(hooksDir, "execution.js"));
 process.stdout.write(JSON.stringify({
   up: afterUp,
   saves,
   down: dump(db),
+  downError,
+  downSaves: db.saves.slice(savesBeforeDown),
+  queries: db.queries,
   deleted: db.deleted,
   params: { afterUp: paramsAfterUp, afterDown: db.params },
   hooks: {
@@ -168,15 +211,15 @@ process.stdout.write(JSON.stringify({
 """
 
 
-def _run(tmp_path_factory, files_max: int) -> dict:
+def _run(tmp_path_factory, files_max: int, held: dict | None = None) -> dict:
     node = shutil.which("node")
     assert node, "node is required for the PocketBase migration checks; CI installs it"
     harness = tmp_path_factory.mktemp("execution-jobs") / "harness.cjs"
     # The hooks need these globals to load.
     prelude = "globalThis.__hooks = process.argv[3];"
     harness.write_text(prelude + _HARNESS)
-    res = subprocess.run([node, str(harness), str(MIGRATION), str(HOOKS), str(files_max)], capture_output=True,
-                         text=True, timeout=60)
+    res = subprocess.run([node, str(harness), str(MIGRATION), str(HOOKS), str(files_max), json.dumps(held or {})],
+                         capture_output=True, text=True, timeout=60)
     assert res.returncode == 0, res.stderr
     return json.loads(res.stdout)
 
@@ -323,6 +366,36 @@ def test_take_home_files_hold_8_mib_and_admission_rows_link_their_job(run):
     assert job["type"] == "relation" and job["required"] is False
     assert job["options"] == {"collectionId": run["up"]["execution_jobs"]["id"], "cascadeDelete": False,
                               "maxSelect": 1}
+
+
+@pytest.mark.parametrize(
+    "held",
+    [{"execution_jobs": 1}, {"execution_attempts": 2}, {"execution_envelopes": 1},
+     {"ai_coding_attempts.envelope": 1}, {"take_home_attempts.envelope": 3}],
+    ids=["a-job", "an-attempt", "an-envelope", "an-ai-coding-row-links-one", "a-take-home-row-links-one"],
+)
+def test_down_keeps_the_store_while_it_holds_rows_and_changes_nothing(tmp_path_factory, held):
+    result = _run(tmp_path_factory, BASE_FILES_MAX, held)
+    assert result["downError"] and "still holds rows" in result["downError"]
+    assert result["down"] == result["up"]
+    assert result["downSaves"] == [] and result["deleted"] == []
+    assert result["params"]["afterDown"] == result["params"]["afterUp"]
+
+
+def test_down_counts_the_store_before_it_drops_an_empty_one(run):
+    assert run["downError"] is None
+    assert sorted(run["queries"]) == sorted([
+        "SELECT COUNT(*) AS n FROM execution_jobs",
+        "SELECT COUNT(*) AS n FROM execution_attempts",
+        "SELECT COUNT(*) AS n FROM execution_envelopes",
+        "SELECT COUNT(*) AS n FROM ai_coding_attempts WHERE COALESCE(envelope, '') != ''",
+        "SELECT COUNT(*) AS n FROM take_home_attempts WHERE COALESCE(envelope, '') != ''",
+    ])
+
+
+def test_a_claim_finds_each_accounts_oldest_queued_job_on_an_index(run):
+    assert ("CREATE INDEX idx_execution_jobs_account_queue ON execution_jobs (account, state, queued_at)"
+            in run["up"]["execution_jobs"]["indexes"])
 
 
 def test_down_drops_only_what_up_added(run):

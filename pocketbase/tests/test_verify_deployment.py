@@ -16,6 +16,7 @@ import sqlite3
 import sys
 import threading
 import time
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -186,6 +187,18 @@ def test_the_admin_ui_served_through_the_proxy_fails():
 def test_the_execution_service_reaching_pocketbase_in_another_case_fails(path, method):
     dep = Deployment()
     dep.overrides[(method, path)] = (400, {"code": 400, "message": "Failed to authenticate.", "data": {}})
+    with deployment(dep) as (_, url):
+        results = by_id(vd.check_denied_routes(url))
+    r = results["deployment.proxy.execution-service.denied"][0]
+    assert not r.passed and path in r.detail and "answered_by=pocketbase" in r.detail
+
+
+def test_the_worker_login_reaching_pocketbase_outside_the_name_alphabet_fails():
+    (path,) = [p for c, p, _ in vd.DENIED_ROUTES if c == "deployment.proxy.execution-service.denied"
+               and not re.fullmatch(r"[A-Za-z0-9_]+", urllib.parse.unquote(p.split("/")[3]))]
+    assert path.endswith("/auth-with-password")
+    dep = Deployment()
+    dep.overrides[("POST", path)] = (400, {"code": 400, "message": "Failed to authenticate.", "data": {}})
     with deployment(dep) as (_, url):
         results = by_id(vd.check_denied_routes(url))
     r = results["deployment.proxy.execution-service.denied"][0]

@@ -115,6 +115,9 @@ DENIED_ROUTES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("deployment.proxy.execution-service.denied", "/api/collections/execution_service/records", ("GET",)),
     ("deployment.proxy.execution-service.denied", "/api/collections/Execution_Service/auth-with-password", ("POST",)),
     ("deployment.proxy.execution-service.denied", "/api/collections/EXECUTION_SERVICE/records", ("GET",)),
+    # Outside the collection name alphabet, which the proxy refuses.
+    ("deployment.proxy.execution-service.denied", "/api/collections/execution_servic%C3%A9/auth-with-password",
+     ("POST",)),
 )
 
 # Every check id this tool can report, with the guarantee it states. The

@@ -13,7 +13,7 @@ const { memoryStore, installGlobals } = require("./execution_memory.cjs");
 const [hooksDir] = process.argv.slice(2);
 const program = JSON.parse(fs.readFileSync(0, "utf8"));
 
-const { BadRequestError } = installGlobals(hooksDir);
+const { BadRequestError, NotFoundError } = installGlobals(hooksDir);
 
 const execution = require(path.join(hooksDir, "execution.js"));
 const admission = require(path.join(hooksDir, "admission.js"));
@@ -199,8 +199,17 @@ const results = program.steps.map((step) => {
     }
     case "syncWorkerForLogin": {
       const app = fakeApp(step);
-      const e = { identity: step.identity, record: null };
-      execution.syncWorkerForLogin(e);
+      // The login request, under the collection segment its path named.
+      const segment = step.segment === undefined ? "execution_service" : step.segment;
+      const httpContext = segment === null ? null : { pathParam: (name) => (name === "collection" ? segment : "") };
+      const e = { identity: step.identity, record: null, httpContext };
+      try {
+        execution.syncWorkerForLogin(e);
+      } catch (err) {
+        app.done();
+        if (!(err instanceof NotFoundError)) throw err;
+        return { not_found: true, records: app.records.map(app.view) };
+      }
       // What it did, from its obs line; it logs every change, not a
       // login that changed nothing.
       const lines = app.done().filter((line) => line.startsWith("{")).map((line) => JSON.parse(line));

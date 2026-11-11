@@ -347,6 +347,8 @@ def test_a_run_the_replica_stops_mid_way_ends_worker_lost_never_from_the_parts_t
     assert (job["state"], job["outcome_class"]) == ("failed", "worker-lost")
     (env,) = state["envelopes"]
     assert env["authoritative"] is False and env["user_view"]["score"] is None
+    # Nothing from the parts that ran reaches the account: no parts, no output.
+    assert env["user_view"]["parts"] == [] and env["user_view"]["output"] is None
     # worker-lost is retryable: the same key runs attempt two.
     assert server.enqueue(A, key).json()["requeued"] is True
 
@@ -369,6 +371,79 @@ def test_a_job_the_replica_stops_before_it_started_goes_back_to_the_queue(server
         held["worker"] = workers[0]
         await _until(server, lambda s: any(j["id"] == job_id and j["state"] == "leased" for j in s["jobs"]))
         await workers[0].stop()
+        server.advance(31)
+        await workers[0]._client.reap()
+
+    asyncio.run(_run(server, {"run": handler}, lambda s: _job(s, job_id)["state"] == "queued",
+                     during=stop_once_claimed))
+    state = server.dump()
+    job = _job(state, job_id)
+    assert (job["state"], job["attempts_started"]) == ("queued", 0) and handler.ran == []
+    # The only envelope is the reaper's, never authoritative.
+    (env,) = state["envelopes"]
+    assert (env["outcome_class"], env["authoritative"]) == ("worker-lost", False)
+
+
+def _leased(job_id: str):
+    return lambda state: any(j["id"] == job_id and j["state"] == "leased" for j in state["jobs"])
+
+
+def test_a_claim_that_returns_once_the_replica_is_stopping_never_starts(server, monkeypatch):
+    job_id = server.job()
+    handler = PythonHandler({"case-1": "print(1)"})
+    held: dict = {}
+    claim = store.ServiceClient.claim
+
+    async def claim_back_once_stopping(self, *args, **kwargs):
+        out = await claim(self, *args, **kwargs)
+        if out is not None:
+            # The claim is still in flight when the replica begins to stop.
+            while not (held.get("worker") and held["worker"]._stopping.is_set()):
+                await asyncio.sleep(0.02)
+        return out
+
+    monkeypatch.setattr(store.ServiceClient, "claim", claim_back_once_stopping)
+
+    async def stop_once_claimed(workers):
+        held["worker"] = workers[0]
+        await _until(server, _leased(job_id))
+        await workers[0].stop()
+        # Long enough for a run the claim started to get going.
+        await asyncio.sleep(1.0)
+        job = _job(server.dump(), job_id)
+        assert (job["state"], job["attempts_started"]) == ("leased", 0) and handler.ran == []
+        server.advance(31)
+        await workers[0]._client.reap()
+
+    asyncio.run(_run(server, {"run": handler}, lambda s: _job(s, job_id)["state"] == "queued",
+                     during=stop_once_claimed))
+    state = server.dump()
+    job = _job(state, job_id)
+    assert (job["state"], job["attempts_started"]) == ("queued", 0) and handler.ran == []
+    # The only envelope is the reaper's, never authoritative.
+    (env,) = state["envelopes"]
+    assert (env["outcome_class"], env["authoritative"]) == ("worker-lost", False)
+
+
+def test_a_slot_wait_that_runs_out_while_the_replica_stops_puts_the_job_back_in_the_queue(server, monkeypatch):
+    job_id = server.job()
+    handler = PythonHandler({"case-1": "print(1)"})
+    held: dict = {}
+
+    async def starved_once_stopping(self, wait_s):
+        while not (held.get("worker") and held["worker"]._stopping.is_set()):
+            await asyncio.sleep(0.02)
+        raise Starved
+
+    monkeypatch.setattr(LegacyExecutor, "acquire", starved_once_stopping)
+
+    async def stop_once_claimed(workers):
+        held["worker"] = workers[0]
+        await _until(server, _leased(job_id))
+        await workers[0].stop()
+        # No terminal result: the job is still leased and never started.
+        job = _job(server.dump(), job_id)
+        assert (job["state"], job["attempts_started"]) == ("leased", 0)
         server.advance(31)
         await workers[0]._client.reap()
 

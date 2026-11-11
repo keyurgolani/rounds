@@ -985,9 +985,23 @@ function bootstrapWorker() {
   return did;
 }
 
-// Before PocketBase checks an execution_service login: execution-worker
-// follows the secret first, and the check uses the record as it is now.
+// Whether a login request named the service collection exactly. A login
+// under any other spelling of it, or under its id, gets the 404 an
+// unknown collection gets, whatever the proxy in front let through.
+function exactServicePath(httpContext) {
+  if (!httpContext) return false;
+  try {
+    return httpContext.pathParam("collection") === SERVICE_COLLECTION;
+  } catch (_) {
+    return false;
+  }
+}
+
+// Before PocketBase checks an execution_service login: the worker login
+// answers only its exact collection name. Then execution-worker follows
+// the secret, and the check uses the record as it is now.
 function syncWorkerForLogin(e) {
+  if (!exactServicePath(e.httpContext)) throw new NotFoundError();
   if (e.identity !== WORKER_USERNAME) return;
   const dao = $app.dao();
   const accounts = workerAccounts(dao);

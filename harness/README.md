@@ -224,8 +224,9 @@ does the same for `1700007100_execution_jobs.js` on a `pb_data` built from
 every migration before it: the four collections with no client writes, the
 `envelope` and `job` links, and the 8 MiB `files` limit, and nothing else,
 with envelopes that link into no service-only collection and a down step
-that puts back the `files` limit it found, also on a `pb_data` where
-PocketBase's reset ran first and `files` held 2 MiB.
+that keeps a store holding a job and, on an empty one, puts back the
+`files` limit it found, also on a `pb_data` where PocketBase's reset ran
+first and `files` held 2 MiB.
 [`probes/json_limits_check.py`](probes/json_limits_check.py) holds every JSON
 field's maxSize to the limit its migrations declare (D10). PocketBase's own
 `1702134272_set_default_json_max_size` resets them all to 2,000,000 bytes and

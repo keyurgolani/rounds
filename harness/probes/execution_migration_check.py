@@ -14,9 +14,10 @@ and the demo account included:
    ``take_home_attempts.files`` to 8 MiB, records the size that field held
    in its own ``_params`` row, and changes no other table, row,
    collection, or field.
-2. Reversing it (``pocketbase migrate down 1``, confirmed on a pseudo
-   terminal as an operator would) puts the data back to the base snapshot
-   and removes the record.
+2. With one job in the store, reversing it (``pocketbase migrate down 1``,
+   confirmed on a pseudo terminal as an operator would) fails and keeps
+   the store. Once the store is empty, reversing it puts the data back to
+   the base snapshot and removes the record.
 3. Applying it again after the reversal works.
 4. On a ``pb_data`` where PocketBase's own JSON reset ran first, so
    ``files`` still holds the 2 MiB ``1700001300_take_home.js`` declares,
@@ -112,6 +113,39 @@ def _record(db: Path) -> dict | None:
     return None if row is None else json.loads(row[0])
 
 
+PLANTED_JOB = "harnessjob00001"
+
+
+def _plant_job(db: Path) -> None:
+    """One job row, so the down step has a store to keep. Every column
+    but the id takes its default."""
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute("INSERT INTO execution_jobs (id) VALUES (?)", (PLANTED_JOB,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _remove_planted_job(db: Path) -> None:
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute("DELETE FROM execution_jobs WHERE id = ?", (PLANTED_JOB,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _jobs(db: Path) -> int | None:
+    conn = sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        return conn.execute("SELECT COUNT(*) FROM execution_jobs").fetchone()[0]
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+
+
 def _without_changes(snapshot: dict, base: dict) -> dict:
     """The snapshot with the new collections and the ``_params`` count left
     out (``_params`` is compared apart, by row), the changed collections'
@@ -202,6 +236,13 @@ def main() -> int:
             _differences(_without_changes(applied, before), _without_changes(before, before)))
     c.check("execution-migration.records-the-files-limit-it-found", _record(db) == {"files": base_files},
             f"record={_record(db)} base={base_files}")
+
+    _plant_job(db)
+    code, out = _migrate_down_confirmed(data, full)
+    kept = _jobs(db) == 1 and all(n in _snapshot(db)["collections"] for n in NEW) and _record(db) is not None
+    c.check("execution-migration.down-keeps-a-store-that-holds-a-job", kept,
+            f"exit={code} jobs={_jobs(db)} {out[-300:]!r}")
+    _remove_planted_job(db)
 
     code, out = _migrate_down_confirmed(data, full)
     c.check("execution-migration.reverses", code == 0 and MIGRATION in out, f"exit={code} {out[-300:]!r}")

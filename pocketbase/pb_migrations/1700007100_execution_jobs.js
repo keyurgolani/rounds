@@ -40,7 +40,10 @@
 // Times are whole epoch seconds on PocketBase's clock. No existing row is
 // rewritten. The up step records the size take_home_attempts.files held
 // before, in the _params row PRIOR_KEY names; the down step drops only what
-// this adds and puts that size back.
+// this adds and puts that size back. The down step runs only while the
+// store holds no job, attempt, or envelope and no attempt row links an
+// envelope; otherwise it fails and changes nothing, so reverting never
+// deletes one.
 
 // The _params row where the up step records what the down step restores.
 const PRIOR_KEY = "1700007100_execution_jobs.js";
@@ -137,7 +140,9 @@ migrate(
       indexes: [
         "CREATE UNIQUE INDEX idx_execution_jobs_command ON execution_jobs (account, command_id)",
         "CREATE INDEX idx_execution_jobs_queue ON execution_jobs (state, queued_at)",
-        "CREATE INDEX idx_execution_jobs_active ON execution_jobs (account, state)",
+        // A claim's per-account count and oldest-queued check
+        // (pb_hooks/execution.js CLAIMABLE).
+        "CREATE INDEX idx_execution_jobs_account_queue ON execution_jobs (account, state, queued_at)",
       ],
     });
     dao.saveCollection(jobs);
@@ -257,6 +262,37 @@ migrate(
 
   (db) => {
     const dao = new Dao(db);
+    // Never drops a job, an attempt, or an envelope. While any of the three
+    // collections holds a row, or an attempt row links an envelope, this
+    // fails before it changes anything. execution_service's one record
+    // isn't counted: pb_hooks/execution.pb.js makes it again from the
+    // secret.
+    const rows = (sql) => {
+      const count = new DynamicModel({ n: 0 });
+      db.newQuery(sql).one(count);
+      return count.n;
+    };
+    const held = [];
+    for (const name of ["execution_jobs", "execution_attempts", "execution_envelopes"]) {
+      try {
+        dao.findCollectionByNameOrId(name);
+      } catch (_) {
+        continue; // already dropped
+      }
+      if (rows("SELECT COUNT(*) AS n FROM " + name) > 0) held.push(name);
+    }
+    for (const name of ["ai_coding_attempts", "take_home_attempts"]) {
+      if (!dao.findCollectionByNameOrId(name).schema.getFieldByName("envelope")) continue;
+      if (rows("SELECT COUNT(*) AS n FROM " + name + " WHERE COALESCE(envelope, '') != ''") > 0) {
+        held.push(name + ".envelope");
+      }
+    }
+    if (held.length > 0) {
+      throw new Error(
+        "the execution job store still holds rows (" + held.join(", ") + "), so this down step keeps it; " +
+          "reverting #3 never deletes a job, an attempt, or an envelope (docs/operations.md)",
+      );
+    }
     // The links into the job store go first, then the collections, which
     // point at each other in this order.
     for (const [name, field] of [

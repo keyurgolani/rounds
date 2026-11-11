@@ -156,10 +156,12 @@ class Worker:
         """Stops claiming, stops every run in flight, and waits for their
         tasks to end. Each run it stops ends ``failed``, ``worker-lost``."""
         self._stopping.set()
-        for attempt in self._attempts.values():
-            attempt.interrupted = True
-            attempt.stop.set()
-        if self._tasks:
+        # Until no task is left: a task that began before the stop marks
+        # its own attempt interrupted (_process).
+        while self._tasks:
+            for attempt in self._attempts.values():
+                attempt.interrupted = True
+                attempt.stop.set()
             await asyncio.gather(*self._tasks, return_exceptions=True)
 
     async def _pause(self, seconds: float) -> None:
@@ -191,6 +193,11 @@ class Worker:
             if claim is None:
                 await self._pause(CLAIM_IDLE_S * (0.5 + random.random()))
                 continue
+            if self._stopping.is_set():
+                # A claim that came back once the replica began to stop
+                # never starts: its lease runs out and reap puts the job
+                # back in the queue.
+                return
             self._claimed += 1
             task = asyncio.create_task(self._process(claim))
             self._tasks.add(task)
@@ -221,7 +228,9 @@ class Worker:
 
     async def _process(self, claim: store.Claim) -> None:
         job = claim.job
-        attempt = _Attempt(claim)
+        # A task that begins once the replica is stopping is interrupted
+        # from the start, so its run never starts.
+        attempt = _Attempt(claim, interrupted=self._stopping.is_set())
         self._attempts[claim.attempt.id] = attempt
         _metric("rounds_job_queue_wait_seconds", max(0, int(time.time()) - job.queued_at), job)
         slot: sandbox.Sandbox | None = None
@@ -236,6 +245,10 @@ class Worker:
                 slot = await self._executor.acquire(SLOT_WAIT_S)
             except Starved:
                 self._claimed, waiting = self._claimed - 1, False
+                if attempt.interrupted:
+                    # The replica is stopping, so the job never started:
+                    # the lease runs out and reap puts it back in the queue.
+                    return
                 await self._finish(attempt, envelope.outcome("timed-out", "infrastructure-degraded"), "confirmed")
                 return
             self._claimed, waiting = self._claimed - 1, False
@@ -293,8 +306,9 @@ class Worker:
             await self._finish(attempt, envelope.outcome("canceled", "canceled"), cleanup, result=result)
             return
         if interrupted:
-            # What ran before the replica stopped is no result.
-            await self._finish(attempt, envelope.outcome("failed", "worker-lost"), cleanup, result=result)
+            # What ran before the replica stopped is no result: no parts
+            # and no output.
+            await self._finish(attempt, envelope.outcome("failed", "worker-lost"), cleanup)
             return
         if failed or result is None:
             await self._finish(attempt, envelope.outcome("failed", "infrastructure-degraded"), cleanup)

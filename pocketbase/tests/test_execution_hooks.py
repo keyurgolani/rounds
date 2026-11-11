@@ -739,6 +739,19 @@ def test_a_login_syncs_the_worker_record_first_and_checks_the_record_as_it_is_no
         assert out["record"] == {"username": "execution-worker", "password": password}
 
 
+@pytest.mark.parametrize(
+    "segment",
+    ["Execution_Service", "EXECUTION_SERVICE", "execution_servicé", "c0llection0id00", None],
+    ids=["another-case", "upper-case", "outside-the-name-alphabet", "the-collection-id", "no-request"],
+)
+def test_the_worker_login_answers_only_its_exact_collection_name(segment):
+    existing = {"username": "execution-worker", "password": "o" * 40}
+    (out,) = run({"call": "syncWorkerForLogin", "existing": existing, "identity": "execution-worker",
+                  "secret": SECRET, "segment": segment})["results"]
+    # The uniform 404, before the record follows the secret or is checked.
+    assert out == {"not_found": True, "records": [existing]}
+
+
 def test_bootstrap_waits_for_the_collection_the_migration_makes():
     (out,) = run({"call": "bootstrapWorker", "collection": False, "secret": SECRET})["results"]
     assert out == {"did": "absent", "records": []}

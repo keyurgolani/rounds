@@ -94,6 +94,10 @@ const NEVER_PROXIED = [
   '/api/collections/EXECUTION_SERVICE/records?perPage=1',
   '/api/collections/execution%5Fservice/auth-with-password',
   '/api/collections/Execution%5FService/auth-with-password',
+  '/api/collections/execution_servic%C3%A9/auth-with-password',
+  '/api/collections/execution_servicé/records',
+  '/api/collections/no-such-name/records',
+  '/api/collections/users%2E/records',
   '/api/admins',
   '/api/admins/auth-with-password',
   '/api/settings',
@@ -150,6 +154,7 @@ describe('the dev proxy and production nginx', () => {
     '/api/rounds/admission/admit',
     '/api/collections/execution_service/auth-with-password',
     '/api/collections/Execution_Service/auth-with-password',
+    '/api/collections/execution_servic%C3%A9/auth-with-password',
   ])('refuses a WebSocket upgrade on %s too', (url) => {
     const { entry, socket, forwarded } = upgrade(url);
     expect(entry.ws).toBe(true);
@@ -166,8 +171,23 @@ describe('the dev proxy and production nginx', () => {
 
   it.each(PROXY.map(([context]) => context))('refuses a denied path in entry %s too', (context) => {
     const entry = devProxy[context];
-    const req = { url: '/api/collections/Execution_Service/auth-with-password' };
-    expect(entry.bypass?.(req as never, {} as never, entry)).toBe(false);
+    for (const url of [
+      '/api/collections/Execution_Service/auth-with-password',
+      '/api/collections/execution_servic%C3%A9/auth-with-password',
+    ]) {
+      expect(entry.bypass?.({ url } as never, {} as never, entry)).toBe(false);
+    }
+  });
+
+  it('refuses every collection segment outside the name alphabet', () => {
+    for (const url of ['/api/collections/a%C3%A9/records', '/api/collections/a.b/records', '/api/collections/a-b']) {
+      expect(nginxDenies(url)).toBe(true);
+      expect(viteDenies(url)).toBe(true);
+    }
+    for (const url of ['/api/collections/a_B9/records', '/api/collections/abcdefghij12345/records']) {
+      expect(nginxDenies(url)).toBe(false);
+      expect(viteDenies(url)).toBe(false);
+    }
   });
 
   it('sends the runner routes to the runner and the rest of /api to PocketBase', () => {
