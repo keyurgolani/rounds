@@ -183,11 +183,14 @@ def _gate_table(value: Any) -> bool:
 
 
 # definition.* lines name a definition by its identity, never its content.
-# share.resolve lines carry the share link's record id and a coarse outcome
-# in `code` (available, not_found, kill_switch, degraded), never the token.
+# share.resolve lines carry the record id of the share link or capability
+# that resolved and a coarse outcome in `code` (available, not_found,
+# gate_closed, kill_switch, degraded), never the token. share.revoke lines
+# (ROUNDS-00B-L03 stage 2) carry the owner's pseudonym, the capability id,
+# and revoked, unchanged, or not_found.
 EVENTS = frozenset({
     "decision", "gates", "definitions.loaded", "definition.resolved", "definition.rejected", "execution.job",
-    "execution.worker", "share.resolve",
+    "execution.worker", "share.resolve", "share.revoke",
 })
 # The job metrics' names (ROUNDS-00A-L03). #54, #22, #154, and #174 reuse
 # the shape.
@@ -241,8 +244,8 @@ FIELDS: dict[str, Callable[[Any], bool]] = {
         "worker-lost", "infrastructure-degraded",
     ),
     "executor_kind": _one_of("legacy-in-process", "isolated-worker"),
-    # A PocketBase record id, such as the share link a share.resolve line
-    # names.
+    # A PocketBase record id, such as the share link or capability a
+    # share.resolve or share.revoke line names.
     "record": _matches(r"[a-z0-9]{15}", 15),
 }
 # The fields an event may carry, where that's fewer than FIELDS: a job
@@ -252,6 +255,7 @@ EVENT_FIELDS: dict[str, frozenset[str]] = {
                                 "service"}),
     "execution.worker": frozenset({"code", "service"}),
     "share.resolve": frozenset({"correlation_id", "record", "code"}),
+    "share.revoke": frozenset({"correlation_id", "account", "record", "code"}),
 }
 
 

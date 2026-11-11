@@ -230,7 +230,7 @@ There is no rollback. Account isolation is forward-only: `migrate down` keeps th
 
 `harness/verify_deployment.py` checks a deployment you operate. It only reads: every request is a read, a login that should fail, or a request nginx refuses on its headers alone. It prints no email, password, or token, and it never uses `http_proxy` or any other environment proxy. It needs Python 3.9 or newer and nothing else; run it from a checkout of this repository.
 
-- `--url`: through the public URL, the routes nginx must answer itself (`/_/`, `/api/admins`, `/api/settings`, `/api/backups`, `/api/logs`, collection schema routes, `/api/rounds/admission/`, `/api/rounds/execution/`, and the execution service record's login and records) never reach PocketBase or the runner; `/api/execute` is gone; record, auth, OAuth redirect, realtime, file, and health routes still reach PocketBase; and a body over the 1 MiB cap gets the typed 413.
+- `--url`: through the public URL, the routes nginx must answer itself (`/_/`, `/api/admins`, `/api/settings`, `/api/backups`, `/api/logs`, collection schema routes, `/api/rounds/admission/`, `/api/rounds/execution/`, the legacy snapshot and share capability hooks, and the execution service record's login and records) never reach PocketBase or the runner; `/api/execute` is gone; record, auth, OAuth redirect, realtime, file, and health routes still reach PocketBase; and a body over the 1 MiB cap gets the typed 413.
 - `--pb-url`: at PocketBase's own port, the development default admin login and the demo account's login fail as an admin. This URL carries your admin password and token, so it must be `https` or a loopback address such as `http://127.0.0.1:8090`; `--allow-insecure` lifts that for a private network you trust.
 - `--admin-email`, with the password in `PB_ADMIN_PASSWORD`: the live rules match the rule table, and no admin account accepts a shipped default password. These are reads with your admin login.
 - `--db`: on a `pb_data` copy taken with PocketBase stopped (the cross-owner scan's copy), the rules match the rule table and at least one admin exists, so PocketBase's first-admin setup is closed.
@@ -374,11 +374,38 @@ A share link answers only its owner, and the public share read answers only the 
 - `1700008100_share_link_owner_rules.js` makes `resume_share_links` readable by its owner only and takes no client updates, so nobody can change a link once it exists. `pocketbase/pb_hooks/share_links.pb.js` rejects a link create without exactly one target, the caller as owner, and a 22-character URL-safe token, with the same body as a foreign or missing target. Its down step keeps the rules.
 - The public share read answers `{data, template_id, design}` with hidden sections emptied, only when the link's owner owns what it points at, or one 404 `{"detail":"Not found."}` for every failure, PocketBase being down included. Both carry `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow, noarchive`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. Nothing is written, so the share dialog no longer shows view counts.
 - nginx serves the share pages, in any letter case, with the same headers and the share page CSP.
-- The runner logs one `share.resolve` line per read with an outcome in `code`: `available`, `not_found`, `kill_switch`, or `degraded`. A run of `degraded` means the runner can't read PocketBase.
+- The runner logs one `share.resolve` line per read with an outcome in `code`: `available`, `not_found`, `kill_switch`, `gate_closed` (the resolver only), or `degraded`. A run of `degraded` means the runner can't read PocketBase.
 
-To turn every public share read off, set `ROUNDS_DISABLE_PUBLIC_SHARES=true` on the runner and restart it (Compose passes it through; in Kubernetes add it to the `rounds-gates` ConfigMap, which the runner reads). It fails closed: any value other than empty, `false`, `0`, `no`, or `off` turns reads off. Owners keep their links. Turn reads back on with `false`.
+To turn every public share answer off, the public share read and the resolver below, set `ROUNDS_GATE_PUBLIC_SHARES=disabled` on the runner and restart it (Compose passes it through; in Kubernetes set it in the `rounds-gates` ConfigMap, which the runner reads). Its older alias, `ROUNDS_DISABLE_PUBLIC_SHARES=true`, still works while the gate is empty, and it fails closed: any value other than empty, `false`, `0`, `no`, or `off` turns them off. A set gate wins over the alias. Owners keep their links. Turn answers back on with `ROUNDS_GATE_PUBLIC_SHARES=enabled`, or an empty gate and the alias `false`.
 
-[Deployment verification](#deployment-verification) checks both from the public URL: `deployment.proxy.share-page.headers` for the share pages and `deployment.proxy.share-read.uniform` for the public share read.
+**Share capabilities.** `1700008200_share_capabilities.js` adds `share_capabilities`, the store for Share Capabilities, the share links #12 starts creating. Every rule is `null`, so no client lists, views, or writes a row; PocketBase's hooks and the runner's owner routes are the only way in. A row names one of its account's Legacy Artifact Snapshots and holds a keyed digest of its bearer, never the bearer. Nothing creates a row yet.
+
+- An owner lists their capabilities with `GET /api/share/capabilities` and revokes one with `POST /api/share/capabilities/{id}/revoke`. A revoke takes effect at once and can't be undone, and revoking again answers the same. Another account's capability answers like a missing one.
+- A capability lasts 90 days unless its creator picks less, and never more than 365. Its expiry can only move earlier.
+- PocketBase holds every writer to this, the admin UI included: a capability's owner, snapshot, and checksum never change, a revoked one stays revoked, and its snapshot must be in its account. PocketBase refuses to delete a snapshot a capability names.
+- Deleting a resume or a variant revokes every active capability over its snapshots, with `revoked_reason` `source_deleted`. The delete always goes through, and the snapshots stay, as they do for any source delete, until the account goes. The resolver also refuses a capability whose source is gone, so it stops resolving even if that revoke fails, which PocketBase logs as a `share_capability` line with `outcome` `revoke_failed`.
+- Deleting an account deletes its capabilities first; its snapshots then go with the account, as before.
+
+**Resolution.** `POST /api/share/resolve` on the runner turns a bearer into a capability's markup. Two runner gates decide it; restart the runner after changing either:
+
+| Gate | Default | Effect |
+| --- | --- | --- |
+| `ROUNDS_GATE_PUBLIC_SHARES` | `enabled` | `disabled` answers every public share request with the uniform not-found before any lookup |
+| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | `disabled` | `enabled` lets the resolver look a capability up. Leave it `disabled`: until #12 ships the lookup, an open gate still resolves nothing |
+
+The resolver answers `{"projection_version": 1, "markup"}`, or the public share read's 404 bytes and headers for every failure: a gate, a body that isn't a JSON object holding only `token`, a token in another format, a capability that's unknown, expired, revoked, another account's, or whose source is gone, and PocketBase being down. The `/r` page shows resolved markup in a sandboxed frame that can't run scripts, under the share page CSP.
+
+Check the pages and the resolver from the public URL:
+
+```sh
+curl -sI https://your-domain/r | grep -i -e '^cache-control' -e '^content-security-policy'
+curl -sI https://your-domain/r/x | grep -i -e '^cache-control' -e '^x-frame-options'
+curl -s -i -X POST https://your-domain/api/share/resolve -H 'Content-Type: application/json' -d '{"token":"x"}'
+```
+
+Both pages answer `Cache-Control: no-store` with the share page CSP and `X-Frame-Options: DENY`, and the resolver answers 404 `{"detail":"Not found."}` with the same headers as the public share read.
+
+[Deployment verification](#deployment-verification) checks these from the public URL: `deployment.proxy.share-page.headers` for the share pages, `deployment.proxy.share-read.uniform` for the public share read, `deployment.proxy.share-resolve.uniform` for the resolver, and `deployment.proxy.share-hooks.denied` for the hook routes, which nginx answers itself.
 
 ## Smoke Test Checklist
 

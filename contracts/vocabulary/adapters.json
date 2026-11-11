@@ -379,6 +379,15 @@
     },
     {
       "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700008200_share_capabilities.js", "lines": "71"},
+      "legacyName": "share_capabilities",
+      "termId": "share-capability",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-02-L01",
+      "note": "Server-only Share Capability store: one row per capability, holding a keyed digest of its bearer, never the bearer. All rules null; only hooks read or write it, and an owner sees it as a Share link. #18 ratifies or migrates it."
+    },
+    {
+      "kind": "collection",
       "source": {"path": "pocketbase/pb_migrations/1700000000_init_collections.js", "lines": "176"},
       "legacyName": "system_design_guides",
       "decidedBy": "ROUNDS-07-L01",

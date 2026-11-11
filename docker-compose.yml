@@ -103,8 +103,13 @@ services:
       - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
-      # true turns every public share read into the uniform not-found
-      # (docs/operations.md, "Public shares").
+      # Public shares (docs/operations.md, "Public shares"): PUBLIC_SHARES
+      # turns every public share read off, and capability resolution stays
+      # closed until #12 lands.
+      - ROUNDS_GATE_PUBLIC_SHARES=${ROUNDS_GATE_PUBLIC_SHARES:-}
+      - ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=${ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION:-}
+      # PUBLIC_SHARES's alias: anything but false, 0, no, off, or empty
+      # turns every public share read into the uniform not-found.
       - ROUNDS_DISABLE_PUBLIC_SHARES=${ROUNDS_DISABLE_PUBLIC_SHARES:-false}
     depends_on:
       - pdf-renderer

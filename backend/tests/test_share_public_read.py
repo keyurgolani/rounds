@@ -28,6 +28,9 @@ from fastapi import HTTPException
 from routers import share
 
 TOKEN = "AbCdEfGhIjKlMnOpQrStUv"
+# The switch as a registry gate, which the capability resolver reads too
+# (ROUNDS-00B-L03 stage 2).
+SWITCH_GATE = "ROUNDS_GATE_PUBLIC_SHARES"
 OTHER = "other0000000000b"
 LINK = {"id": "lnk000000000001", "user": "owner000000000a", "resume": "res000000000001", "variant": "",
         "token": TOKEN, "expires_at": ""}
@@ -80,6 +83,7 @@ def _read(client, token=TOKEN, store=None, env=None, monkeypatch=None):
     store = store or FakeStore(LINK, {RESUME["id"]: RESUME})
     if monkeypatch is not None:
         monkeypatch.delenv(share.KILL_SWITCH_ENV, raising=False)
+        monkeypatch.delenv(SWITCH_GATE, raising=False)
         for k, v in (env or {}).items():
             monkeypatch.setenv(k, v)
     with patch("routers.share.pb_admin_get", store.get):
@@ -199,6 +203,8 @@ FAILURES = {
     "kill-switch-on": dict(env={share.KILL_SWITCH_ENV: "on"}),
     "kill-switch-disabled": dict(env={share.KILL_SWITCH_ENV: "disabled"}),
     "kill-switch-garbage": dict(env={share.KILL_SWITCH_ENV: "TRUE!"}),
+    "kill-switch-gate": dict(env={SWITCH_GATE: "disabled"}),
+    "kill-switch-gate-invalid": dict(env={SWITCH_GATE: "nope"}),
     # The link's owner must own the target, and a variant's parent too.
     "cross-account": dict(store=FakeStore(LINK, {RESUME["id"]: {**RESUME, "user": OTHER}})),
     "link-without-owner": dict(store=FakeStore({**LINK, "user": ""}, {RESUME["id"]: RESUME})),
@@ -249,7 +255,8 @@ def test_the_headers_and_body_match_what_the_deployment_verifier_checks(client, 
     assert missing.content == vd.SHARE_NOT_FOUND
 
 
-@pytest.mark.parametrize("env, token", [({share.KILL_SWITCH_ENV: "1"}, TOKEN), ({}, "x"), ({}, "ab cd" * 4)])
+@pytest.mark.parametrize("env, token", [({share.KILL_SWITCH_ENV: "1"}, TOKEN), ({SWITCH_GATE: "disabled"}, TOKEN),
+                                        ({}, "x"), ({}, "ab cd" * 4)])
 def test_the_kill_switch_and_token_format_come_before_any_lookup(client, monkeypatch, env, token):
     res, store = _read(client, token=token, env=env, monkeypatch=monkeypatch)
     assert res.status_code == 404

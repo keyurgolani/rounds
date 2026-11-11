@@ -20,7 +20,6 @@ TODO(ROUNDS-00B-L06): legacy links move to share capabilities.
 """
 from __future__ import annotations
 
-import os
 import re
 import secrets
 from typing import Any
@@ -29,7 +28,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app import obs
+from app import obs, share_capabilities
 from app.errors import TypedError
 from app.pb_auth import (
     current_user,
@@ -43,28 +42,21 @@ from app.pb_auth import POCKETBASE_URL
 
 router = APIRouter(prefix="/api/share", tags=["share"])
 
-# The public read's kill switch. It fails closed: unset, empty, false, 0, no,
-# or off (any case) leaves public reads on, and any other value turns every
-# public read into the uniform not-found before any lookup. Read on each
-# request.
-# TODO(ROUNDS-00B-L03): stage 2 registers it as a gate with this as its alias.
+# The public read's kill switch is the PUBLIC_SHARES gate (app/gates.py),
+# which the capability resolver reads too. This is its alias, and it fails
+# closed: unset, empty, false, 0, no, or off (any case) leaves public reads
+# on, and any other value turns every public read into the uniform
+# not-found before any lookup. Read on each request.
 KILL_SWITCH_ENV = "ROUNDS_DISABLE_PUBLIC_SHARES"
-_KILL_SWITCH_OFF = ("", "false", "0", "no", "off")
 
 # What a share token may look like. Anything else is answered before any
 # lookup.
 PUBLIC_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{16,64}")
 
-# The headers every public read answers with, found or not.
-PUBLIC_HEADERS: dict[str, str] = {
-    "Cache-Control": "no-store",
-    "X-Robots-Tag": "noindex, nofollow, noarchive",
-    "Referrer-Policy": "no-referrer",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
-}
-NOT_FOUND_BODY = {"detail": "Not found."}
+# The headers and the not-found every public read answers with, the same as
+# the capability resolver's.
+PUBLIC_HEADERS: dict[str, str] = share_capabilities.RESOLVER_HEADERS
+NOT_FOUND_BODY = share_capabilities.NOT_FOUND_BODY
 
 
 class CreateShareRequest(BaseModel):
@@ -180,7 +172,7 @@ class _NotFound(Exception):
 
 
 def public_shares_disabled() -> bool:
-    return (os.environ.get(KILL_SWITCH_ENV) or "").strip().lower() not in _KILL_SWITCH_OFF
+    return share_capabilities.public_shares_disabled()
 
 
 def _log_read(outcome: str, record: str | None) -> None:

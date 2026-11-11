@@ -66,6 +66,12 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
             every JSON field's declared limit on fresh and upgraded databases
             with the pinned binary, and the registry migration's down step
             (ROUNDS-00A-L03, D10); see json_limits_check.py.
+  share-capabilities
+            Share Capabilities (ROUNDS-00B-L03 stage 2) with both replicas and
+            nginx up: the owner list and revoke through nginx, resume and
+            variant deletes with active and revoked capabilities, the named
+            snapshot's delete refused, superuser changes refused, and an
+            account delete; see share_capability_check.py.
 
 Exit code is non-zero on any failure, any missing result, or any pending
 family that has started to behave like an implemented one.
@@ -582,7 +588,8 @@ def main() -> int:
               "admission-deploy|emergency-disable|emergency-enable|relation-quarantine|snapshot-store|"
               "execution-store|execution-runners|execution-unready|execution-ready-again|execution-disabled|"
               "execution-migration|json-limits|demo-on|demo-off|demo-contain-migration|snapshot-create|"
-              "snapshot-create-down|snapshot-create-retry|snapshot-scan|snapshot-create-off|snapshot-create-again}",
+              "snapshot-create-down|snapshot-create-retry|snapshot-scan|snapshot-create-off|snapshot-create-again|"
+              "share-capabilities}",
               file=sys.stderr)
         return 2
     phase = sys.argv[1]
@@ -601,6 +608,10 @@ def main() -> int:
             print(f"unknown phase {phase!r}", file=sys.stderr)
             return 2
         return legacy_snapshot_check.main(phase)
+    if phase == "share-capabilities":
+        import share_capability_check
+
+        return share_capability_check.main()
     if phase == "scan":
         import scan_check
 
