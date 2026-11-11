@@ -205,6 +205,8 @@ class Receipt:
     binary_arch: str = ""
     phase: str = ""
     migrations: list[str] = field(default_factory=list)
+    policy_checksum: str = ""
+    migrations_checksum: str = ""
 
 
 def to_receipt(r: Result, context: dict[str, Any]) -> Receipt:
@@ -224,6 +226,8 @@ def to_receipt(r: Result, context: dict[str, Any]) -> Receipt:
         binary_arch=context.get("binary_arch", ""),
         phase=context.get("phase", "deployment"),
         migrations=list(context.get("migrations", [])),
+        policy_checksum=context.get("policy_checksum", ""),
+        migrations_checksum=context.get("migrations_checksum", ""),
     )
 
 

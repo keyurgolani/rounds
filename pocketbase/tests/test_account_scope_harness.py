@@ -50,6 +50,15 @@ def minimal_doc() -> dict:
                 "probes": [ENFORCED, PENDING],
             }
         },
+        # A policy needs a case table (ROUNDS-00B-L05); one slot row is the
+        # smallest that loads and changes no verdict.
+        "cases": {
+            "isolation.synthetic.slot": {
+                "surface": "runner:synthetic", "actor": "authenticated-other", "expected": "uniform_not_found",
+                "control": "the owner's own request", "owner_leaf": "ROUNDS-00B-L02", "status": "slot",
+                "lane": "pr", "guarantee": "a synthetic surface for the verdict tests",
+            }
+        },
     }
 
 

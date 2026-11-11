@@ -72,6 +72,7 @@ family that has started to behave like an implemented one.
 """
 from __future__ import annotations
 
+import datetime
 import os
 import sys
 
@@ -82,7 +83,7 @@ import factory
 import policy
 from factory import Account, ensure_content_fixtures, make_account, register, seed_account
 from pbclient import PBClient
-from receipts import Receipt, ReceiptWriter, read_all
+from receipts import Receipt, ReceiptWriter, file_checksum, list_checksum, read_all
 
 READBACK_PROBE = "account-scope.rules.readback.match"
 # Policy rule-key -> PocketBase collection field. Each collection is checked
@@ -118,7 +119,25 @@ def _context(phase: str) -> dict:
         "binary_arch": os.environ.get("PB_BINARY_ARCH", ""),
         "phase": phase,
         "migrations": migrations,
+        # The fixture manifest's pins (ROUNDS-00B-L05): which rule table and
+        # which migration set a receipt was produced against.
+        "policy_checksum": file_checksum(os.environ.get("POLICY_PATH", "/policy/account-scope.v1.json")),
+        "migrations_checksum": list_checksum(migrations),
     }
+
+
+def new_writer(receipts_path: str, phase: str) -> ReceiptWriter:
+    """A phase's receipt writer. The harness admin password has no fixed
+    shape the redactor knows, so every phase registers it."""
+    writer = ReceiptWriter(receipts_path, _context(phase))
+    writer.register_secret(os.environ.get("PB_ADMIN_PASSWORD", ""), "password:superuser")
+    return writer
+
+
+def _register_account(writer: ReceiptWriter, acct: Account) -> None:
+    # Receipts carry neither an account's password nor its session token.
+    writer.register_secret(acct.password, f"password:{acct.tag}")
+    writer.register_secret(acct.token, f"token:{acct.tag}")
 
 
 def _pb() -> PBClient:
@@ -196,6 +215,9 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
     # because the account is not allowed to create it.
     c = make_account("c")
     register(pb, c)
+    for acct in (a, b, c):
+        _register_account(writer, acct)
+    writer.register_secret(admin_token, "token:superuser")
 
     fam = doc["probe_families"]
     for name, row in doc["collections"].items():
@@ -369,7 +391,69 @@ def admission_check_ids() -> set[str]:
     return set(vd.ADMISSION_CHECKS) | set(admission_deploy.CHECKS)
 
 
-def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozenset[str] = frozenset()) -> int:
+def _verdict_cases(doc: dict, receipts: list[dict],
+                   today: datetime.date) -> tuple[list[str], set[str], set[tuple[str, str]]]:
+    """The case table's part of the verdict: (failures, ids a receipt may
+    carry, the (target, id) pairs a quarantine covers).
+
+    - a `pass` row needs passing receipts for every check it names, on the
+      named target when it names one (a `phase:` entry is the launcher's own
+      exit code, so it needs none here);
+    - a `pending` or `slot` row has no implementation and no receipt;
+    - a `quarantined` row still runs; a failure on a target it covers is
+      reported as the known flake, a failure anywhere else under the same id
+      fails the run, and a pass on every covered target fails the run until
+      the row is flipped back;
+    - a quarantine that starts in the future or ends more than 14 days from
+      today fails the run, and so does any row past its expiry.
+    """
+    cases = doc.get("cases") or {}
+    by_id: dict[str, list[dict]] = {}
+    for r in receipts:
+        by_id.setdefault(r["probe_id"], []).append(r)
+    failures: list[str] = []
+    allowed: set[str] = set()
+    covered = policy.quarantined_targets(doc)
+    for cid in policy.expired_cases(doc, today):
+        failures.append(f"case {cid} expired on {cases[cid]['expires']}; renew it with an owner or fix it")
+    failures += policy.quarantine_window_problems(doc, today)
+    for cid, row in sorted(cases.items()):
+        status = row["status"]
+        checks = [(ident, target) for kind, ident, target in map(policy.parse_evidence, row.get("evidence", []))
+                  if kind == "check"]
+        if status == "pass":
+            for ident, target in checks:
+                allowed.add(ident)
+                results = [x for x in by_id.get(ident, []) if target is None or x["collection"] == target]
+                label = ident if target is None else f"{target}:{ident}"
+                if not results:
+                    failures.append(f"missing result for case {cid} ({label})")
+                elif not all(x["passed"] for x in results):
+                    bad = next(x for x in results if not x["passed"])
+                    failures.append(f"case {cid} failed ({label}): {bad.get('detail', '')}")
+        elif status == "quarantined":
+            results = []
+            for ident, target in checks:
+                allowed.add(ident)
+                for x in by_id.get(ident, []):
+                    if x["collection"] == target:
+                        results.append(x)
+                    elif not x["passed"]:
+                        failures.append(f"case {cid} failed on {x['collection']}, which its quarantine doesn't cover")
+            if not results:
+                failures.append(f"missing result for quarantined case {cid}")
+            elif all(x["passed"] for x in results):
+                failures.append(f"quarantined case {cid} passed; flip it back to pass")
+        else:
+            if cid in families.IMPLEMENTED_FAMILIES:
+                failures.append(f"{status} case {cid} is implemented; flip it to pass in the same PR")
+            if cid in by_id:
+                failures.append(f"{status} case {cid} produced a receipt")
+    return failures, allowed, covered
+
+
+def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozenset[str] = frozenset(),
+                today: datetime.date | None = None) -> int:
     receipts = read_all(receipts_path)
     fam = doc["probe_families"]
     enforced = set(policy.enforced_pairs(doc))
@@ -434,11 +518,19 @@ def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozens
             bad = next(x for x in results if not x["passed"])
             failures.append(f"admission check {check_id} failed on {bad['collection']}: {bad.get('detail', '')}")
 
+    # 4c. The case table (ROUNDS-00B-L05).
+    case_failures, case_ids, quarantined_pairs = _verdict_cases(doc, receipts, today or datetime.date.today())
+    failures += case_failures
+
     # 5. No stray receipts for unknown or pending families.
-    known = families.IMPLEMENTED_FAMILIES | {READBACK_PROBE} | set(deployment) | admission_ids
+    known = families.IMPLEMENTED_FAMILIES | {READBACK_PROBE} | set(deployment) | admission_ids | case_ids
     for (coll, pid), results in seen.items():
         if pid not in known:
             failures.append(f"receipt for unknown probe id {pid} ({coll})")
+
+    # 5b. A run that collected nothing proves nothing.
+    if not receipts:
+        failures.append("no receipts were collected")
 
     # 6. Every receipt has the same fields, so a denial reads like any other.
     shapes = {tuple(sorted(r)) for r in receipts}
@@ -447,8 +539,11 @@ def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozens
 
     total = len(receipts)
     passed = sum(1 for r in receipts if r["passed"])
-    failed = sum(1 for r in receipts if not r["passed"])
-    expected_fail = 0  # D4: no expected-fail probes are committed for open gaps.
+    # A failure on a target a quarantine covers is its known flake, reported
+    # apart; a failure on any other target counts as a failure.
+    expected_fail = sum(1 for r in receipts
+                        if not r["passed"] and (r["collection"], r["probe_id"]) in quarantined_pairs)
+    failed = sum(1 for r in receipts if not r["passed"]) - expected_fail
 
     print("=" * 60)
     print("account-scope harness verdict")
@@ -460,6 +555,8 @@ def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozens
     print(f"  deploy checks:  {len(deployment)}")
     print(f"  admission checks: {len(admission_ids)}")
     print(f"  pending pairs:  {len(pending)} (no probe committed; closed by later leaves)")
+    for status in policy.CASE_STATUSES:
+        print(f"  cases {status + ':':<12} {len(policy.cases_by_status(doc, status))}")
     print("=" * 60)
     if failures:
         print("FAIL:")
@@ -537,7 +634,7 @@ def main() -> int:
     if phase == "verdict":
         return run_verdict(doc, receipts_path, admission_check_ids())
 
-    writer = ReceiptWriter(receipts_path, _context(phase))
+    writer = new_writer(receipts_path, phase)
     if phase == "main":
         run_main(doc, writer)
     elif phase == "hook":
