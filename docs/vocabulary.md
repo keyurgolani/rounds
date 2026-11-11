@@ -331,7 +331,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 
 ## Adapters
 
-170 entries: 55 collection, 3 field, 19 stored-value, 9 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
+172 entries: 57 collection, 3 field, 19 stored-value, 9 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
 
 ### collection
 
@@ -358,6 +358,8 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 | execution_envelopes | `pocketbase/pb_migrations/1700007100_execution_jobs.js:198` | `execution-attempt` |  | #18 (ROUNDS-02-L01) |
 | execution_jobs | `pocketbase/pb_migrations/1700007100_execution_jobs.js:110` | `execution-attempt` |  | #18 (ROUNDS-02-L01) |
 | execution_service | `pocketbase/pb_migrations/1700007100_execution_jobs.js:87` | decided by #3 (ROUNDS-00A-L03) |  | #18 (ROUNDS-02-L01) |
+| share_resolvers | `pocketbase/pb_migrations/1700008300_share_secrets.js:40` | decided by #12 (ROUNDS-00B-L04) |  | #18 (ROUNDS-02-L01) |
+| share_throttle | `pocketbase/pb_migrations/1700008300_share_secrets.js:63` | decided by #12 (ROUNDS-00B-L04) |  | #18 (ROUNDS-02-L01) |
 | exp_anecdote_bullets | `pocketbase/pb_migrations/1700003000_experience_connections.js:20-29` | decided by #36 (ROUNDS-06-L01) |  | #164 (ROUNDS-32-L10) |
 | exp_job_anecdotes | `pocketbase/pb_migrations/1700003000_experience_connections.js:20-29` | decided by #36 (ROUNDS-06-L01) |  | #164 (ROUNDS-32-L10) |
 | exp_job_bullets | `pocketbase/pb_migrations/1700003000_experience_connections.js:20-29` | decided by #36 (ROUNDS-06-L01) |  | #164 (ROUNDS-32-L10) |
