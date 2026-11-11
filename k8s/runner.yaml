@@ -34,8 +34,9 @@
 #
 #      Restart PocketBase, then the runners, after adding or rotating it.
 #
-#   5. Before turning ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION on
-#      (gates.yaml), add the password the runner logs in with as
+#   5. Before you deploy the release that turns older share links off
+#      (ROUNDS-00B-L06), when share capability resolution goes on by
+#      default (gates.yaml), add the password the runner logs in with as
 #      share-resolver to resolve share links (ROUNDS-00B-L04). It goes in
 #      the step 1 secret too, and PocketBase reads that one key:
 #
