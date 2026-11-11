@@ -82,7 +82,7 @@ These flags only control whether buttons render. The corresponding providers mus
 
 | Variable | Default | Layer | Purpose |
 | --- | --- | --- | --- |
-| `ROUNDS_DISABLE_PUBLIC_SHARES` | `false` | runner | `true`, `1`, or `yes` answers every public share read (`/api/share/by-token/...`) with the uniform not-found, before any lookup. Read on each request. See [Public shares](operations.md#public-shares). |
+| `ROUNDS_DISABLE_PUBLIC_SHARES` | `false` | runner | Any value other than empty, `false`, `0`, `no`, or `off` answers every public share read with the uniform not-found, before any lookup. Read on each request. See [Public shares](operations.md#public-shares). |
 
 ## Signup Policy
 

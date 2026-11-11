@@ -28,6 +28,7 @@ from fastapi import HTTPException
 from routers import share
 
 TOKEN = "AbCdEfGhIjKlMnOpQrStUv"
+OTHER = "other0000000000b"
 LINK = {"id": "lnk000000000001", "user": "owner000000000a", "resume": "res000000000001", "variant": "",
         "token": TOKEN, "expires_at": ""}
 RESUME = {
@@ -194,6 +195,17 @@ def missing(client, monkeypatch):
 FAILURES = {
     "kill-switch": dict(env={share.KILL_SWITCH_ENV: "true"}),
     "kill-switch-yes": dict(env={share.KILL_SWITCH_ENV: "YES"}),
+    # Any value outside the off list closes the read too.
+    "kill-switch-on": dict(env={share.KILL_SWITCH_ENV: "on"}),
+    "kill-switch-disabled": dict(env={share.KILL_SWITCH_ENV: "disabled"}),
+    "kill-switch-garbage": dict(env={share.KILL_SWITCH_ENV: "TRUE!"}),
+    # The link's owner must own the target, and a variant's parent too.
+    "cross-account": dict(store=FakeStore(LINK, {RESUME["id"]: {**RESUME, "user": OTHER}})),
+    "link-without-owner": dict(store=FakeStore({**LINK, "user": ""}, {RESUME["id"]: RESUME})),
+    "variant-foreign": dict(store=FakeStore({**LINK, "resume": "", "variant": VARIANT["id"]},
+                                            {VARIANT["id"]: {**VARIANT, "user": OTHER}, RESUME["id"]: RESUME})),
+    "variant-parent-foreign": dict(store=FakeStore({**LINK, "resume": "", "variant": VARIANT["id"]},
+                                                   {VARIANT["id"]: VARIANT, RESUME["id"]: {**RESUME, "user": OTHER}})),
     "malformed-short": dict(token="short"),
     "malformed-long": dict(token="a" * 65),
     "malformed-chars": dict(token="AbCdEfGhIjKlMnOp.Qr!"),
@@ -244,10 +256,21 @@ def test_the_kill_switch_and_token_format_come_before_any_lookup(client, monkeyp
     assert store.calls == []
 
 
-@pytest.mark.parametrize("value", ["false", "0", "", "no"])
-def test_a_falsy_kill_switch_leaves_reads_on(client, monkeypatch, value):
+@pytest.mark.parametrize("value", ["false", "0", "", "no", "off", " OFF ", "False"])
+def test_a_kill_switch_set_off_leaves_reads_on(client, monkeypatch, value):
     res, _ = _read(client, env={share.KILL_SWITCH_ENV: value}, monkeypatch=monkeypatch)
     assert res.status_code == 200
+
+
+def test_list_fields_the_templates_read_are_always_lists():
+    out = share.project({
+        "experience": [{"id": "e1", "highlights": "not a list"}],
+        "skills": [{"id": "s1"}],
+        "projects": [{"id": "p1", "technologies": None, "highlights": {"a": 1}}],
+    }, "modern", {})["data"]
+    assert out["experience"] == [{"id": "e1", "highlights": []}]
+    assert out["skills"] == [{"id": "s1", "items": []}]
+    assert out["projects"] == [{"id": "p1", "technologies": [], "highlights": []}]
 
 
 # ---- nothing written, nothing sensitive logged ------------------------------

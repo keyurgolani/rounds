@@ -74,7 +74,7 @@ def test_a_link_that_leads_nowhere_answers_like_a_missing_token(client, missing_
 
 def test_a_link_with_a_target_still_resolves(client):
     link = {"id": "l1", "user": LINK_OWNER, "resume": "r1", "variant": "", "token": TOKEN}
-    record = {"id": "r1", "data": {}, "template_id": "modern", "design": {}, "name": "R"}
+    record = {"id": "r1", "user": LINK_OWNER, "data": {}, "template_id": "modern", "design": {}, "name": "R"}
     res, views = _read(client, link, {"resumes": record})
     assert res.status_code == 200
     assert set(res.json()) == {"data", "template_id", "design"}

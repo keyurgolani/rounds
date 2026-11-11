@@ -167,7 +167,7 @@ def test_public_read_writes_no_row(client):
         if "resume_share_links" in path:
             return {"items": [{"id": "l1", "user": link_owner, "resume": "r1", "token": "AbCdEfGhIjKlMnOpQrStUv"}]}
         if "resumes" in path:
-            return {"id": "r1", "data": {}, "template_id": "modern", "design": {}, "name": "R"}
+            return {"id": "r1", "user": link_owner, "data": {}, "template_id": "modern", "design": {}, "name": "R"}
         return None
 
     async def fake_write(*args, **kwargs):

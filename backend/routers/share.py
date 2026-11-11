@@ -43,14 +43,16 @@ from app.pb_auth import POCKETBASE_URL
 
 router = APIRouter(prefix="/api/share", tags=["share"])
 
-# The public read's kill switch: true, 1, or yes (any case) turns every public
-# read into the uniform not-found before any lookup. Read on each request.
+# The public read's kill switch. It fails closed: unset, empty, false, 0, no,
+# or off (any case) leaves public reads on, and any other value turns every
+# public read into the uniform not-found before any lookup. Read on each
+# request.
 # TODO(ROUNDS-00B-L03): stage 2 registers it as a gate with this as its alias.
 KILL_SWITCH_ENV = "ROUNDS_DISABLE_PUBLIC_SHARES"
-_TRUTHY = ("true", "1", "yes")
+_KILL_SWITCH_OFF = ("", "false", "0", "no", "off")
 
-# What a token in a public URL may look like. Anything else is answered
-# before any lookup.
+# What a share token may look like. Anything else is answered before any
+# lookup.
 PUBLIC_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{16,64}")
 
 # The headers every public read answers with, found or not.
@@ -177,7 +179,7 @@ class _NotFound(Exception):
 
 
 def public_shares_disabled() -> bool:
-    return (os.environ.get(KILL_SWITCH_ENV) or "").strip().lower() in _TRUTHY
+    return (os.environ.get(KILL_SWITCH_ENV) or "").strip().lower() not in _KILL_SWITCH_OFF
 
 
 def _log_read(outcome: str, record: str | None) -> None:
@@ -236,6 +238,12 @@ async def _resolve(token: str) -> tuple[dict[str, Any], str]:
             raise _NotFound("not_found", link_id)
         source, look = resume, resume
     else:
+        raise _NotFound("not_found", link_id)
+
+    # The link's owner must own what it points at, the variant's parent
+    # resume included; anything else is the same not-found.
+    owner = link.get("user")
+    if not isinstance(owner, str) or not owner or any(r.get("user") != owner for r in (source, look)):
         raise _NotFound("not_found", link_id)
 
     return project(source.get("data"), look.get("template_id"), look.get("design")), link_id or ""
@@ -298,7 +306,9 @@ def _value(kind: Any, value: Any) -> Any:
         ok = isinstance(value, (int, float)) and not isinstance(value, bool)
         return value if ok else _DROP
     if kind == "strs":
-        return [v for v in value if isinstance(v, str)] if isinstance(value, list) else _DROP
+        # The templates read these lists without a guard, so a missing or
+        # odd value is an empty list, never dropped.
+        return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
     return _DROP
 
 
@@ -308,7 +318,9 @@ _DROP = object()
 def _shape(spec: dict[str, Any], value: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, kind in spec.items():
-        if key in value:
+        if kind == "strs":
+            out[key] = _value(kind, value.get(key))
+        elif key in value:
             v = _value(kind, value[key])
             if v is not _DROP:
                 out[key] = v

@@ -284,10 +284,9 @@ def create_superuser_accepted(pb, collection, admin_token, payload, expected) ->
 
 
 def share_owner_only_isolated(pb, collection, a, b, expected) -> Receipt:
-    # Another account and an anonymous caller list and view A's share link,
-    # with every value A's link holds on the request too, and read nothing:
-    # the list is empty and the view is the ordinary not-found. Only the
-    # owner reads it.
+    # A share link answers only its owner: another account and an anonymous
+    # caller get an empty list and the ordinary not-found, whatever the
+    # request carries, and the owner still reads it.
     import urllib.parse
 
     problems: list[str] = []

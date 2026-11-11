@@ -82,7 +82,7 @@ class Deployment:
             return 307, b"", {"Location": vd.OAUTH_FAILURE_LOCATION}
         if bare.startswith("/api/files/"):
             return 404, PB_404
-        if bare == "/r" or bare.startswith("/r/"):
+        if bare.lower() == "/r" or bare.lower().startswith("/r/"):
             headers = dict(SHARE_HEADERS, **{"Content-Security-Policy": vd.SHARE_PAGE_CSP})
             headers.update(self.share_page_headers)
             return 200, b"<!doctype html><div id=root></div>", {k: v for k, v in headers.items() if v is not None}
@@ -235,10 +235,18 @@ def test_a_share_read_without_its_headers_fails():
     assert not r.passed and "cache-control" in r.detail and "content-security-policy" in r.detail
 
 
+def test_a_share_page_case_variant_without_the_headers_fails():
+    dep = Deployment()
+    dep.overrides[("GET", "/R/verify0deployment0000")] = (200, b"<!doctype html><div id=root></div>")
+    with deployment(dep) as (_, url):
+        r = vd.check_share_page_headers(url)
+    assert not r.passed and "/R/verify0deployment0000 headers differ" in r.detail
+
+
 def test_the_share_page_headers_match_nginx():
     # The runner side is backend/tests/test_share_public_read.py.
     conf = (ROOT / "frontend" / "nginx.conf").read_text()
-    for loc in ("location = /r {", "location ^~ /r/ {"):
+    for loc in ("location = /r {", "location ^~ /r/ {", "location ~* ^/r(/|$) {"):
         start = conf.index(loc)
         block = conf[start: conf.index("}", start)]
         got = dict(re.findall(r'add_header\s+(\S+)\s+"([^"]*)"\s+always;', block))

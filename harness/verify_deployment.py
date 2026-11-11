@@ -514,7 +514,8 @@ SHARE_PAGE_CSP = (
     "form-action 'none'; frame-ancestors 'none'"
 )
 SHARE_READ_CSP = "default-src 'none'; frame-ancestors 'none'"
-SHARE_PAGE_PATHS = ("/r", "/r/verify0deployment0000")
+# The share pages, a case variant included: every letter case gets the headers.
+SHARE_PAGE_PATHS = ("/r", "/r/verify0deployment0000", "/R/verify0deployment0000")
 # A token too short to be one, and a well-formed one no link has.
 SHARE_READ_PATHS = ("/api/share/by-token/x", "/api/share/by-token/verify0deployment0unknown0")
 SHARE_NOT_FOUND = b'{"detail":"Not found."}'
