@@ -6,7 +6,9 @@ subprocess, sidecar, or provider call, in this order:
 1. Byte cap: 413 ``payload_too_large``.
 2. Gate: 503 ``route_disabled``; on the six execution routes,
    ``ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled`` is 503
-   ``definitions_disabled`` (ROUNDS-00A-L02).
+   ``definitions_disabled`` (ROUNDS-00A-L02); on the four scratch routes,
+   ``ROUNDS_GATE_EXECUTION_SCRATCH`` acting as ``off`` is 503
+   ``execution_disabled`` (ROUNDS-00A-L03).
 3. Account from the bearer through PocketBase's auth-refresh: 401
    ``unauthenticated``; PocketBase down or 5xx: 503 ``auth_unavailable``.
 4. ``(tier, operation)`` table: 403 ``not_permitted``.
@@ -40,7 +42,10 @@ stops counting when its window ends, and the sweep repairs its command.
 ``ENFORCE_IDEMPOTENCY`` and ``ENFORCE_QUOTA`` decide what steps 6 and 7
 do: ``off`` skips the step, ``observe`` records what it would have
 answered in the decision line (``would_deny``) and denies nothing, and
-``enforce`` denies. Idempotency doesn't depend on the quota gate: with
+``enforce`` denies. A job-backed route (``begin_job``, ROUNDS-00A-L03)
+always runs step 6, since its key is its job's identity: a duplicate gets
+its job and is never charged, and its request leaves its charge with the
+job in the store. Idempotency doesn't depend on the quota gate: with
 quota ``off`` nothing is counted or charged, and the command is still
 recorded. ``ats-rule`` and ``pdf/health`` skip steps 6, 7, and 9. Routes
 outside ``ROUTES`` are untouched; the 23 routes already on
@@ -65,6 +70,7 @@ from app import admission_state, errors, gates, obs, sandbox
 from app.errors import TypedError
 from app.limits import KIB, MIB
 from app.pb_auth import POCKETBASE_URL
+from execution import keys
 
 STATE_KEY = "admission"
 AUTH_REFRESH_PATH = "/api/collections/users/auth-refresh"
@@ -309,6 +315,8 @@ class AdmissionMiddleware:
             raise TypedError("route_disabled")
         if route.operation in DEFINITION_OPERATIONS and gates.value("EXECUTION_DEFINITIONS") == "disabled":
             raise TypedError("definitions_disabled")
+        if route.operation in keys.SCRATCH_OPERATIONS and keys.scratch() == "off":
+            raise TypedError("execution_disabled")
         # 3. Account.
         token = bearer_from(headers)
         if token is None:
@@ -461,6 +469,69 @@ async def begin(
         admitted.would_deny = admitted.would_deny or _quota_code(decision.quota)
     elif decision.quota == "ok" and decision.leased:
         admitted.quota = "charged"
+
+
+async def begin_job(
+    request: Request, fingerprint: str, wall_seconds: int, max_wall_seconds: int | None = None
+) -> str | None:
+    """Steps 6 and 7 for a job-backed route (ROUNDS-00A-L03 PR 2), once
+    FastAPI has parsed its body, before any lookup. ``fingerprint`` is the
+    job's (``execution.jobs``), never the body's.
+
+    Step 6 always runs: the key is the job's identity, so a missing or
+    malformed one is 400 ``idempotency_key_required`` whatever
+    ``ENFORCE_IDEMPOTENCY`` says, a different request under a used key is
+    409 ``idempotency_mismatch``, and a duplicate of a job answers that
+    job's id, which this returns for the route to answer, uncharged. A
+    same-key retry the store would run again (``retry_job``) is charged
+    wall seconds and a lease, never a request. Step 7 follows
+    ``ENFORCE_QUOTA`` as ``begin`` does. Returns None when the route goes
+    on to enqueue."""
+    admitted = state(request)
+    if admitted is None:
+        raise RuntimeError("a job-backed route runs behind the admission middleware")
+    admitted.begun = True
+    key = admission_state.command_id(request.scope.get("headers") or [])
+    if key is None:
+        admitted.idempotency = "missing"
+        raise TypedError("idempotency_key_required")
+    quota = gates.value("ENFORCE_QUOTA")
+    token = admitted.account["token"]
+    lease = store.new_lease()
+    try:
+        decision = await store.admit(
+            token, admitted.route.operation, wall_seconds, key, fingerprint, "enforce",
+            lease=lease, quota=quota, max_wall_seconds=max_wall_seconds,
+        )
+    except store.Unavailable as unavailable:
+        # As in begin: an answer that may have been lost after the store
+        # wrote the lease ends it, and nothing goes ahead without the store.
+        if not isinstance(unavailable, store.Refused):
+            await _end_lease(token, lease, "infrastructure", None)
+        admitted.idempotency = admitted.quota = "unavailable"
+        raise TypedError("quota_unavailable") from None
+    if decision.leased:
+        admitted.lease = lease
+    admitted.idempotency = decision.idempotency
+    if decision.idempotency == "job":
+        admitted.quota = "skipped"
+        return decision.job
+    if decision.idempotency == "replay":
+        if decision.result is None:
+            raise TypedError("already_completed")
+        raise errors.Replayed(decision.result["status"], decision.result["body"])
+    refusal = _REFUSALS.get(decision.idempotency)
+    if refusal is not None:
+        wait = decision.retry_after if refusal == "already_in_flight" and decision.retry_after > 0 else None
+        raise TypedError(refusal, retry_after=wait)
+    if decision.quota in ("exceeded", "demo_limit"):
+        admitted.quota = decision.quota
+        if quota == "enforce":
+            raise TypedError(_quota_code(decision.quota), retry_after=decision.retry_after)
+        admitted.would_deny = admitted.would_deny or _quota_code(decision.quota)
+    elif decision.quota == "ok" and decision.leased:
+        admitted.quota = "charged"
+    return None
 
 
 async def settle(request: Request, wall_seconds: int) -> None:

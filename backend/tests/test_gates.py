@@ -89,6 +89,9 @@ def test_written_defaults_keep_routes_on_and_outbound_reach_off():
         elif name == "EXECUTION_STORE":
             # #3 PR 1 ships the job store off.
             expected = "off"
+        elif name == "EXECUTION_SCRATCH":
+            # #3 PR 2 keeps the four scratch routes in their request.
+            expected = "legacy"
         elif name == "SHARE_CAPABILITY_RESOLUTION":
             # #11 stage 2 ships capability resolution closed until #12.
             expected = "disabled"

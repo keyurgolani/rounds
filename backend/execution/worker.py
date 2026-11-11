@@ -11,7 +11,11 @@ and ``ROUNDS_EXECUTION_SECRET`` logs in as ``execution-worker``:
    started with the attempt's wall budget, which is never more than the
    kind is admitted for. A kind with no handler here ends ``denied``,
    ``definition-invalid``, before anything runs, and a job that gets no
-   slot in time ends ``timed-out``, ``infrastructure-degraded``.
+   slot in time ends ``timed-out``, ``infrastructure-degraded``. A
+   handler's ``prepare``, before a slot, may withdraw the job (``canceled``,
+   when its key is off) or refuse it (``denied``, ``definition-invalid``,
+   when its input or definition isn't one it can run); either way nothing
+   started.
 3. Heartbeat every 10 s. A cancel the heartbeat reports stops the run,
    which ends ``canceled``. A heartbeat or complete the store refuses as
    superseded means the lease was lost: the run stops and its result is
@@ -28,8 +32,8 @@ and ``ROUNDS_EXECUTION_SECRET`` logs in as ``execution-worker``:
 Each step writes a ``execution.job`` line in #1's kit, labeled by kind,
 purpose, state, outcome class, and executor kind, never by account.
 
-No kind has a handler yet: PR 2 adds the scratch kinds and PR 3 the
-grading ones.
+PR 2's handlers (``execution/handlers.py``) run the scratch kinds; the
+grading kinds have none until PR 3.
 """
 from __future__ import annotations
 
@@ -83,7 +87,19 @@ class Result:
     observation: Observation | None = None
 
 
+class Withdrawn(Exception):
+    """The job's key turned off: it ends canceled before anything runs."""
+
+
+class InvalidJob(Exception):
+    """The job's input or definition isn't one the handler can run: it
+    ends denied, definition-invalid, before anything runs."""
+
+
 class Handler(Protocol):
+    # Optionally, ``prepare(job)``, called before the job takes a slot,
+    # which raises Withdrawn or InvalidJob to end it without a start.
+
     def budget_s(self, job: store.Job) -> int:
         """The attempt's wall budget, at most the kind's ``max_budget_s``."""
         ...
@@ -241,6 +257,11 @@ class Worker:
                 self._claimed, waiting = self._claimed - 1, False
                 await self._finish(attempt, envelope.outcome("denied", "definition-invalid"), "confirmed")
                 return
+            refused = self._prepare(handler, job)
+            if refused is not None:
+                self._claimed, waiting = self._claimed - 1, False
+                await self._finish(attempt, refused, "confirmed")
+                return
             try:
                 slot = await self._executor.acquire(SLOT_WAIT_S)
             except Starved:
@@ -261,6 +282,25 @@ class Worker:
             self._attempts.pop(claim.attempt.id, None)
             if slot is not None:
                 await self._executor.release(slot)
+
+    @staticmethod
+    def _prepare(handler: Handler, job: store.Job) -> Outcome | None:
+        """The handler's own check before a slot: how the job ends without
+        a start, or None to run it. A check that fails unexpectedly is the
+        infrastructure's failure."""
+        prepare = getattr(handler, "prepare", None)
+        if prepare is None:
+            return None
+        try:
+            prepare(job)
+        except Withdrawn:
+            return envelope.outcome("canceled", "canceled")
+        except InvalidJob:
+            return envelope.outcome("denied", "definition-invalid")
+        except Exception:  # noqa: BLE001
+            _log.exception("execution handler prepare failed")
+            return envelope.outcome("failed", "infrastructure-degraded")
+        return None
 
     async def _run(self, attempt: _Attempt, handler: Handler, slot: sandbox.Sandbox) -> None:
         job, claim = attempt.claim.job, attempt.claim

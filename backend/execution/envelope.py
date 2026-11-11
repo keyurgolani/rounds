@@ -156,6 +156,87 @@ def channel_parts(expected: Iterable[str], reported: Mapping[str, str] | None, k
     return out
 
 
+def harness_parts(score: Any, timed_out: bool) -> list[Part]:
+    """A graded run's parts from #2's scored fd 3 channel
+    (``app.harness_results.Score``, PR 2). A passed or failed result is the
+    candidate's. A malformed channel is the driver's: every part is
+    ``definition-invalid``. A result that never came back reads as
+    ``channel_parts`` reads an absent one: ``resource-limit`` ``wall_time``
+    when the run ran out of time, ``infrastructure-degraded`` otherwise."""
+    if score.malformed:
+        return [Part(result.id, "definition-invalid") for result in score.results]
+    reported = {r.id: r.outcome for r in score.results if r.outcome in ("passed", "failed")}
+    return channel_parts([r.id for r in score.results], reported, "wall_time" if timed_out else None)
+
+
+# How many cuts fit_output makes before it drops whole fields.
+_FIT_ROUNDS = 128
+# A run's own values, whatever JSON the candidate returned or a case
+# expects: cut whole, never walked.
+_VALUE_KEYS = frozenset({"return_value", "output", "expected"})
+# The shortest a cut text gets.
+_KEEP_CHARS = 64
+
+
+def _size(value: Any) -> int:
+    """``value``'s JSON length as JavaScript counts it."""
+    text = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+    return len(text.encode("utf-16-le", errors="surrogatepass")) // 2
+
+
+def _leaves(value: Any, path: tuple = ()) -> list[tuple[tuple, Any]]:
+    """The body's texts and values, each with its path. A dict or list is
+    walked, except under a key in ``_VALUE_KEYS``."""
+    if isinstance(value, dict):
+        return [leaf for key, item in value.items()
+                for leaf in ([(path + (key,), item)] if key in _VALUE_KEYS else _leaves(item, path + (key,)))]
+    if isinstance(value, list):
+        return [leaf for i, item in enumerate(value) for leaf in _leaves(item, path + (i,))]
+    return [(path, value)]
+
+
+def _set(target: Any, path: tuple, value: Any) -> None:
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+
+
+def fit_output(body: Mapping[str, Any], limit: int = OUTPUT_MAX_CHARS) -> dict[str, Any]:
+    """``body`` cut to fit the envelope's visible-output cap: the longest
+    text is shortened first, then the largest value dropped, and
+    ``truncated`` is set when anything was cut. Past ``_FIT_ROUNDS`` cuts,
+    whole fields go, largest first."""
+    out = json.loads(json.dumps(body))
+    if _size(out) <= limit:
+        return out
+    for _ in range(_FIT_ROUNDS):
+        excess = _size(out) - limit
+        if excess <= 0:
+            return out
+        leaves = [(path, value) for path, value in _leaves(out) if path != ("truncated",)]
+        texts = [(len(v), path, v) for path, v in leaves if isinstance(v, str) and len(v) > _KEEP_CHARS]
+        values = [(_size(v), path) for path, v in leaves if v is not None and not isinstance(v, str)]
+        biggest_text = max(texts, key=lambda t: t[0]) if texts else None
+        biggest_value = max(values, key=lambda t: t[0]) if values else None
+        if biggest_value and biggest_value[0] > excess and (not biggest_text or biggest_value[0] > biggest_text[0]):
+            _set(out, biggest_value[1], None)
+        elif biggest_text:
+            length, path, text = biggest_text
+            _set(out, path, text[: max(_KEEP_CHARS, length - excess - _KEEP_CHARS)])
+        elif biggest_value:
+            _set(out, biggest_value[1], None)
+        else:
+            break
+        out["truncated"] = True
+    while _size(out) > limit:
+        fields = [(_size(v), key) for key, v in out.items() if key != "truncated" and v is not None]
+        if not fields:
+            return {"truncated": True}
+        out[max(fields, key=lambda t: t[0])[1]] = None
+        out["truncated"] = True
+    return out
+
+
 def build(
     *,
     job_id: str,

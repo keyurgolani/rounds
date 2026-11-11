@@ -7,14 +7,19 @@ from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp
 
 from app import admission, definitions, errors, gates, obs
+from execution import keys as execution_keys
 from execution import runtime as execution_runtime
 from routers import ai, ai_coding, pdf, runner, sd_practice, share, share_capabilities, take_home
+from routers import execution as execution_jobs
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # Gates are read once per process; the startup log lists each value.
     gates.init()
+    # ROUNDS_GATE_EXECUTION_SCRATCH on without what it needs acts as off,
+    # and says so once here (ROUNDS-00A-L03).
+    execution_keys.log_startup()
     # Every stored definition's checksum is checked once per process; a
     # mismatch logs definition.rejected and that version fails closed.
     definitions.init()
@@ -68,6 +73,8 @@ app.include_router(sd_practice.router)
 app.include_router(share.router)
 app.include_router(share_capabilities.router)
 app.include_router(take_home.router)
+# The account's own execution jobs: read and cancel (ROUNDS-00A-L03).
+app.include_router(execution_jobs.router)
 
 
 # Plain /health (no /api prefix) — the top-level /api/health path is

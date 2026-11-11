@@ -48,6 +48,13 @@ data:
   # runs its worker. Turn it on in both, and set ROUNDS_EXECUTION_SECRET
   # first (runner.yaml, step 4).
   ROUNDS_GATE_EXECUTION_STORE: ""
+  # Run, evaluate, run-project, and take-home run, read by the runner:
+  # "legacy" (the default, in their request), "on" (as durable jobs), or
+  # "off" (503 execution_disabled, drafts kept). "on" needs
+  # ROUNDS_GATE_EXECUTION_STORE "on" and ROUNDS_GATE_EXECUTION_DEFINITIONS
+  # "enforce"; without either it acts as "off" and the runner's start log
+  # says which it needs.
+  ROUNDS_GATE_EXECUTION_SCRATCH: ""
   # Legacy Artifact Snapshot creation, read by the runner and PocketBase:
   # "enabled" or "disabled". Empty is "disabled". Turn it on only with
   # the materializer applied (k8s/overlays/materializer) and after the

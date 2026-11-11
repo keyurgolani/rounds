@@ -32,8 +32,10 @@ Admission (``app/admission.py``) enforces the route gates and
 ``PAPER_FETCH`` and ``PROVIDER_PRIVATE_NETWORK``, PocketBase and the
 SPA read ``SIGNUPS``, and PocketBase reads ``DEMO``. ``EXECUTION_STORE``
 turns on the execution job store (ROUNDS-00A-L03): PocketBase serves its
-hook routes and each runner replica runs its executor and reaper. The
-share routes read ``PUBLIC_SHARES`` and ``SHARE_CAPABILITY_RESOLUTION``
+hook routes and each runner replica runs its executor and reaper.
+``EXECUTION_SCRATCH`` moves run, evaluate, run-project, and take-home run
+onto it; ``execution/keys.py`` gives its effective value. The share routes
+read ``PUBLIC_SHARES`` and ``SHARE_CAPABILITY_RESOLUTION``
 on each request (ROUNDS-00B-L03); the startup log still lists both.
 
 The two enforcement gates start at ``observe``: admission records what
@@ -66,6 +68,9 @@ ENFORCEMENT_VALUES = ("off", "observe", "enforce")
 DEFINITION_VALUES = ("legacy", "enforce", "disabled")
 # ROUNDS-00A-L03: off until an operator turns the job store on.
 STORE_VALUES = ("off", "on")
+# ROUNDS-00A-L03 PR 2: legacy runs the four scratch routes in their
+# request as before, on runs them as jobs, and off turns them off.
+SCRATCH_VALUES = ("legacy", "on", "off")
 
 _log = logging.getLogger(__name__)
 
@@ -187,6 +192,18 @@ REGISTRY: tuple[Gate, ...] = (
         description=(
             "The execution job store: on, PocketBase serves the hook routes under "
             "/api/rounds/execution/ and each runner replica runs its executor and reaper."
+        ),
+    ),
+    Gate(
+        name="EXECUTION_SCRATCH",
+        values=SCRATCH_VALUES,
+        default="legacy",
+        closed="off",
+        readers=frozenset({RUNNER}),
+        description=(
+            "Run, evaluate, run-project, and take-home run: legacy runs each in its request as before; on runs "
+            "each as a durable job, and acts as off unless EXECUTION_STORE is on and EXECUTION_DEFINITIONS is "
+            "enforce; off answers 503 execution_disabled and keeps every draft."
         ),
     ),
     Gate(

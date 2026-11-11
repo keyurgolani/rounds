@@ -171,11 +171,12 @@ class _Drain(threading.Thread):
 @dataclass
 class Control:
     """Lets another thread stop a run (ROUNDS-00A-L03's cancel), and
-    records the process group it ran in, so the caller can confirm the
-    group is gone afterwards."""
+    records the process group and the directory it ran in, so the caller
+    can confirm both are gone afterwards."""
 
     stop: threading.Event = field(default_factory=threading.Event)
     pid: int | None = None
+    cwd: str | None = None
 
 
 class Stopped(subprocess.SubprocessError):
@@ -214,7 +215,7 @@ def run(
         kwargs.update(user=sandbox.uid, group=sandbox.gid, extra_groups=[], umask=0o077)
     proc = subprocess.Popen(list(cmd), **kwargs)
     if control is not None:
-        control.pid = proc.pid
+        control.pid, control.cwd = proc.pid, cwd
     stop = control.stop if control is not None else None
     drains = [_Drain(proc.stdout, STREAM_KEEP_BYTES), _Drain(proc.stderr, STREAM_KEEP_BYTES)]
     for drain in drains:
@@ -254,12 +255,14 @@ def run_with_channel(
     timeout_s: float,
     sandbox: Sandbox,
     channel_max: int,
+    control: Control | None = None,
 ) -> tuple[bytes, bool]:
     """Run ``cmd`` contained, like ``run``, with the write end of a fresh
     pipe at fd 3 (ROUNDS-00A-L02's result channel). Its stdout and stderr
     go nowhere. Returns what came back on the pipe, at most
     ``channel_max + 1`` bytes so an over-long channel shows, and whether
-    the step ran out of time."""
+    the step didn't exit: it ran out of time, or ``control`` stopped it,
+    which the caller tells apart by ``control.stop``."""
     read_end, write_end = os.pipe()
     kwargs: dict = {
         "cwd": cwd,
@@ -279,11 +282,13 @@ def run_with_channel(
         raise
     finally:
         os.close(write_end)
+    if control is not None:
+        control.pid, control.cwd = proc.pid, cwd
     drain = _Drain(os.fdopen(read_end, "rb"), channel_max + 1)
     drain.start()
     exited = False
     try:
-        exited = _wait(proc, timeout_s)
+        exited = _wait(proc, timeout_s) if control is None else _wait(proc, timeout_s, control.stop)
     finally:
         _end(proc, sandbox)
     drain.join(DRAIN_GRACE_S)
