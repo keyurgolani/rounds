@@ -346,16 +346,16 @@ The runner target is `VITE_API_PROXY_TARGET` (default `http://runner:8000`) and 
 
 | Stack | Service | Host port | Source |
 | --- | --- | --- | --- |
-| dev compose | pocketbase | `POCKETBASE_PORT`, default 8090 | [`docker-compose.yml:4-5`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/docker-compose.yml#L4-L5) |
-| dev compose | runner | `RUNNER_PORT`, default 3099, to 8000 | [`docker-compose.yml:21-22`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/docker-compose.yml#L21-L22) |
-| dev compose | frontend (Vite) | `FRONTEND_PORT`, default 3001, to 3000 | [`docker-compose.yml:51-52`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/docker-compose.yml#L51-L52) |
+| dev compose | pocketbase | `POCKETBASE_PORT`, default 8090, on `127.0.0.1` since #11 S2 (Changes 9) | [`docker-compose.yml:4-5`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/docker-compose.yml#L4-L5) |
+| dev compose | runner | `RUNNER_PORT`, default 3099, to 8000, on `127.0.0.1` since #11 S2 | [`docker-compose.yml:21-22`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/docker-compose.yml#L21-L22) |
+| dev compose | frontend (Vite) | `FRONTEND_PORT`, default 3001, to 3000, on `127.0.0.1` since #11 S2 | [`docker-compose.yml:51-52`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/docker-compose.yml#L51-L52) |
 | dev compose | pdf-renderer | none (`expose: 4000`) | [`docker-compose.yml:43-44`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/docker-compose.yml#L43-L44) |
 | prod compose | frontend (nginx) | `HTTP_PORT`, default 80 | [`docker-compose.prod.yml:83-84`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/docker-compose.prod.yml#L83-L84) |
 | prod compose | pocketbase, pdf-renderer, runner | none | [`docker-compose.prod.yml:35-75`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/docker-compose.prod.yml#L35-L75) |
 | k8s | frontend | the Ingress host | [`k8s/ingress.yaml:25-35`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/k8s/ingress.yaml#L25-L35) |
 | k8s | pocketbase, runner | none; cluster-internal Services | [`k8s/runner.yaml:87-98`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/k8s/runner.yaml#L87-L98), [`k8s/pocketbase.yaml:74-85`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/k8s/pocketbase.yaml#L74-L85) |
 
-Dev compose binds every host interface, so in dev the runner and PocketBase answer directly with no proxy in front.
+Dev compose publishes its three ports on `127.0.0.1` since #11 S2, so in dev the runner and PocketBase answer on the host directly, with no proxy in front.
 
 ### Planned Proxy Changes
 

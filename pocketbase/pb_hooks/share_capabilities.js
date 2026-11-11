@@ -452,16 +452,17 @@ function revoke(deps, caller, id) {
 // ---------------------------------------------------------------------------
 
 // A resume or variant was deleted: revoke the active capabilities over its
-// snapshots (source_deleted). The snapshots stay, so a revoked capability
-// keeps pointing at what it granted until the account goes (#76 purges
-// later). The snapshots name their source as plain text, so the delete
-// itself never reaches them.
-// txStore: snapshotsOf(kind, id) -> snapshot ids, activeOn(snapshotId) -> rows, update(id, fields)
-function revokeForSource(deps, kind, id) {
-  if (SOURCE_KINDS.indexOf(kind) < 0 || !isId(id)) return { revoked: 0 };
+// owner's snapshots of it (source_deleted). Only the owner's snapshots are
+// read, through the store's index that starts with the account. The
+// snapshots stay, so a revoked capability keeps pointing at what it granted
+// until the account goes (#76 purges later). The snapshots name their
+// source as plain text, so the delete itself never reaches them.
+// txStore: snapshotsOf(user, kind, id) -> snapshot ids, activeOn(snapshotId) -> rows, update(id, fields)
+function revokeForSource(deps, kind, id, owner) {
+  if (SOURCE_KINDS.indexOf(kind) < 0 || !isId(id) || !isId(owner)) return { revoked: 0 };
   let revoked = 0;
   deps.transaction((tx) => {
-    tx.snapshotsOf(kind, id).forEach((snapshotId) => {
+    tx.snapshotsOf(owner, kind, id).forEach((snapshotId) => {
       tx.activeOn(snapshotId).forEach((row) => {
         tx.update(row.id, revokedFields(row, "source_deleted", deps.now));
         revoked += 1;
@@ -473,7 +474,8 @@ function revokeForSource(deps, kind, id) {
 
 // An account is being deleted: delete its capabilities first, in the same
 // transaction, so the account's cascade into its snapshots never meets a
-// capability that still names one. The only hard delete of a capability.
+// capability that still names one. It's the only runtime code that
+// hard-deletes a capability; an admin UI delete is an operator action.
 // store: ofAccount(user, limit) -> rows, remove(id)
 function deleteForAccount(deps, user) {
   if (!isId(user)) return { deleted: 0 };
@@ -589,8 +591,9 @@ function pbStore(dao) {
     },
     ownRows: (user, limit) => rows(COLLECTION, "user = {:user}", "-created,-id", limit, { user }).map(rowOf),
     ofAccount: (user, limit) => rows(COLLECTION, "user = {:user}", "", limit, { user }).map(rowOf),
-    snapshotsOf: (kind, id) =>
-      rows(SNAPSHOTS, "source_kind = {:kind} && source_id = {:id}", "", 0, { kind, id }).map((r) => r.id),
+    snapshotsOf: (user, kind, id) =>
+      rows(SNAPSHOTS, "user = {:user} && source_kind = {:kind} && source_id = {:id}", "", 0, { user, kind, id })
+        .map((r) => r.id),
     activeOn: (snapshotId) =>
       rows(COLLECTION, "snapshot = {:snapshot} && status = 'active'", "", 0, { snapshot: snapshotId }).map(rowOf),
     insert: (fields) => {
@@ -693,6 +696,7 @@ function onSourceDeleted(e, kind) {
       { transaction: (fn) => dao.runInTransaction((txDao) => fn(pbStore(txDao))), now: Date.now() },
       kind,
       e.model.id,
+      e.model.getString("user"),
     );
     if (out.revoked > 0) emit({ outcome: "revoked", reason: "source_deleted", count: out.revoked });
   } catch (err) {

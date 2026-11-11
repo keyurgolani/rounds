@@ -232,10 +232,13 @@ def run_superuser_changes(c: Checks, pb: PBClient, admin: str, a: factory.Accoun
     before = {cid: _row(pb, admin, CAPS, cid) for cid in (active, revoked)}
     answers = {name: pb.update(CAPS, cid, change, admin).status for name, (cid, change) in changes.items()}
     after = {cid: _row(pb, admin, CAPS, cid) for cid in (active, revoked)}
-    # The model hook refuses with 400; a move to another account meets #10's
-    # relation check first, which answers like a missing record.
+    # The model hook refuses each change with 400. A move to another account
+    # may meet #10's relation check first, which answers like a missing
+    # record (404).
+    refused = (answers["another-account"] in (400, 404)
+               and all(status == 400 for name, status in answers.items() if name != "another-account"))
     c.check("share.capability.superuser-change.refused",
-            all(400 <= status < 500 for status in answers.values()) and before == after and None not in after.values(),
+            refused and before == after and None not in after.values(),
             " ".join(f"{k}={v}" for k, v in answers.items()) + f" unchanged={before == after}")
 
 

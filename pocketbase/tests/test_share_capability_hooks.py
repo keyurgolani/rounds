@@ -585,7 +585,7 @@ def _source_state() -> dict:
 def test_a_deleted_resume_revokes_its_active_capability_and_keeps_its_snapshots():
     state = _source_state()
     del state["resumes"]["resumeaaaaaaaa1"]  # the delete has committed
-    out = run([{"call": "revokeForSource", "kind": "resume", "id": "resumeaaaaaaaa1"}], state)
+    out = run([{"call": "revokeForSource", "kind": "resume", "id": "resumeaaaaaaaa1", "owner": A}], state)
     (res,) = out["results"]
     assert res["value"] == {"revoked": 1}
     caps = out["state"]["capabilities"]
@@ -605,34 +605,48 @@ def test_a_deleted_resume_revokes_its_active_capability_and_keeps_its_snapshots(
 def test_a_deleted_variant_revokes_its_capability_too():
     state = _source_state()
     del state["variants"]["variantaaaaaaa1"]
-    out = run([{"call": "revokeForSource", "kind": "variant", "id": "variantaaaaaaa1"}], state)
+    out = run([{"call": "revokeForSource", "kind": "variant", "id": "variantaaaaaaa1", "owner": A}], state)
     assert out["results"][0]["value"] == {"revoked": 1}
     assert out["state"]["capabilities"]["capvariantactiv"]["revoked_reason"] == "source_deleted"
     assert out["state"]["snapshots"] == state["snapshots"]
 
 
+def test_a_source_delete_reaches_only_its_owners_snapshots():
+    # Another account's snapshot naming the same source id, which creation
+    # never makes, keeps its capability: the revoke reads the owner's rows.
+    state = _source_state()
+    state["snapshots"]["snapcrossbbbbb1"] = snap(B, "resume", "resumeaaaaaaaa1", MARKUP_B)
+    state["capabilities"]["capcrossaccount"] = cap_row("capcrossaccount", B, "snapcrossbbbbb1", "8" * 64, state)
+    out = run([{"call": "revokeForSource", "kind": "resume", "id": "resumeaaaaaaaa1", "owner": A}], state)
+    assert out["results"][0]["value"] == {"revoked": 1}
+    caps = out["state"]["capabilities"]
+    assert caps["capresumeactive"]["revoked_reason"] == "source_deleted"
+    assert caps["capcrossaccount"] == state["capabilities"]["capcrossaccount"]
+
+
 def test_a_source_with_only_a_revoked_capability_changes_nothing():
     state = _source_state()
     del state["capabilities"]["capresumeactive"]
-    out = run([{"call": "revokeForSource", "kind": "resume", "id": "resumeaaaaaaaa1"}], state)
+    out = run([{"call": "revokeForSource", "kind": "resume", "id": "resumeaaaaaaaa1", "owner": A}], state)
     (res,) = out["results"]
     assert res["value"] == {"revoked": 0}
     assert "update" not in res["calls"]
     assert out["state"] == state
 
 
-@pytest.mark.parametrize("kind, sid", [("resume", "resumenotshared"), ("version", "resumeaaaaaaaa1"),
-                                       ("resume", "BAD")])
-def test_a_source_with_no_capability_or_an_odd_one_revokes_nothing(kind, sid):
+@pytest.mark.parametrize("kind, sid, owner", [("resume", "resumenotshared", A), ("version", "resumeaaaaaaaa1", A),
+                                              ("resume", "BAD", A), ("resume", "resumeaaaaaaaa1", ""),
+                                              ("resume", "resumeaaaaaaaa1", "BAD")])
+def test_a_source_with_no_capability_or_an_odd_one_revokes_nothing(kind, sid, owner):
     state = _source_state()
-    out = run([{"call": "revokeForSource", "kind": kind, "id": sid}], state)
+    out = run([{"call": "revokeForSource", "kind": kind, "id": sid, "owner": owner}], state)
     assert out["results"][0]["value"] == {"revoked": 0}
     assert out["state"] == state
 
 
 def test_a_failed_revoke_leaves_the_store_as_it_was():
     state = _source_state()
-    out = run([{"call": "revokeForSource", "kind": "resume", "id": "resumeaaaaaaaa1",
+    out = run([{"call": "revokeForSource", "kind": "resume", "id": "resumeaaaaaaaa1", "owner": A,
                 "options": {"failUpdate": True}}], state)
     assert "busy" in out["results"][0]["threw"]
     assert out["state"] == state
@@ -643,7 +657,7 @@ def test_the_source_delete_hook_never_throws_so_the_delete_always_finishes(kind)
     # PocketBase 0.22 runs it after the delete commits; a throw would only
     # turn a finished delete into an error. lookup refuses the capability
     # anyway, since its source is gone.
-    out = run([{"call": "onSourceDeleted", "kind": kind, "id": "resumeaaaaaaaa1"}])
+    out = run([{"call": "onSourceDeleted", "kind": kind, "id": "resumeaaaaaaaa1", "owner": A}])
     (res,) = out["results"]
     assert "threw" not in res
     assert {"level": "error", "line": {"v": "obs/v1", "event": "share_capability", "service": "pocketbase",
@@ -692,7 +706,7 @@ def test_hook_logs_carry_no_id_owner_digest_purpose_or_content():
     out = run([
         {"call": "guardCreate", "row": _row(), "snapshot": None},
         {"call": "guardUpdate", "original": _row(), "row": dict(_row(), user=B)},
-        {"call": "onSourceDeleted", "kind": "resume", "id": "resumeaaaaaaaa1"},
+        {"call": "onSourceDeleted", "kind": "resume", "id": "resumeaaaaaaaa1", "owner": A},
         {"call": "onAccountDelete", "id": A},
         {"call": "create", "input": create_input(snapshot_id="snapresumebbbb1")},
     ], state)

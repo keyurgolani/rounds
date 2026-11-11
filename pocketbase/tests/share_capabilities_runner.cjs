@@ -95,10 +95,11 @@ function storeOver(state, calls, options) {
       if (opts.failStore) throw new Error("database unavailable");
       return rows().filter((row) => row.user === user).slice(0, limit);
     },
-    snapshotsOf: (kind, id) => {
+    snapshotsOf: (user, kind, id) => {
       call("snapshotsOf");
       return Object.keys(state.snapshots).filter(
-        (sid) => state.snapshots[sid].source_kind === kind && state.snapshots[sid].source_id === id,
+        (sid) => state.snapshots[sid].user === user && state.snapshots[sid].source_kind === kind &&
+          state.snapshots[sid].source_id === id,
       );
     },
     activeOn: (snapshotId) => {
@@ -206,7 +207,7 @@ for (const step of program.steps) {
       out = attempt(() => caps.revoke({ transaction, now: step.now || now }, step.caller, step.id));
       break;
     case "revokeForSource":
-      out = attempt(() => caps.revokeForSource({ transaction, now: step.now || now }, step.kind, step.id));
+      out = attempt(() => caps.revokeForSource({ transaction, now: step.now || now }, step.kind, step.id, step.owner));
       break;
     case "deleteForAccount":
       out = attempt(() => transaction((tx) => caps.deleteForAccount({ store: tx }, step.user)));
@@ -228,7 +229,7 @@ for (const step of program.steps) {
     case "onSourceDeleted": {
       // A Dao whose transaction fails, as a busy database would.
       const dao = { runInTransaction: () => { throw new Error("database is locked"); } };
-      out = attempt(() => caps.onSourceDeleted({ model: record({ id: step.id }), dao }, step.kind));
+      out = attempt(() => caps.onSourceDeleted({ model: record({ id: step.id, user: step.owner }), dao }, step.kind));
       break;
     }
     case "onAccountDelete": {
