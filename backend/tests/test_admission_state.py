@@ -927,6 +927,30 @@ def test_any_other_store_answer_is_unavailable(monkeypatch, runner_key, respond)
         asyncio.run(admission_state.admit("t", "run", 3, None, None, "observe", lease=LEASE))
 
 
+def test_a_duplicate_of_a_job_answers_its_job_and_only_then(monkeypatch, runner_key):
+    """ROUNDS-00A-L03 PR 2: the job verdict carries the job's id, and no
+    other verdict carries one."""
+    job = {**DECISION, "idempotency": "job", "quota": "skipped", "leased": False, "job": "job000000000001"}
+    retry = {**DECISION, "idempotency": "retry_job", "job": None}
+    answers = [
+        httpx.Response(200, json=job),
+        httpx.Response(200, json=retry),
+        httpx.Response(200, json={**job, "job": None}),
+        httpx.Response(200, json={**job, "job": "JOB-1"}),
+        httpx.Response(200, json={**DECISION, "job": "job000000000001"}),
+    ]
+    _with_store(monkeypatch, lambda r: answers.pop(0))
+
+    def admit():
+        return asyncio.run(admission_state.admit("t", "run", 3, KEY, "f" * 64, "enforce", lease=LEASE))
+
+    assert admit() == admission_state.Decision("job", "skipped", 0, False, None, "job000000000001")
+    assert admit() == admission_state.Decision("retry_job", "ok", 0, True, None)
+    for _ in range(3):
+        with pytest.raises(admission_state.Unavailable):
+            admit()
+
+
 def test_settle_answers_the_quota_verdict_of_a_raise_the_hour_cant_fit(monkeypatch, runner_key):
     answers = [
         httpx.Response(200, json={"v": "admission/v1", "wall_seconds": 30}),

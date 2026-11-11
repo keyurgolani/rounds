@@ -65,6 +65,19 @@ class Server:
                               headers={"Authorization": f"Bearer {self.token(account)}",
                                        "X-Rounds-Admission-Key": RUNNER_KEY})
 
+    def readmit(self, account: str, key: str, kind: str = "run") -> dict:
+        """Admits the same key again, as a route does before it retries a
+        job (ROUNDS-00A-L03 PR 2): a retryable job's command ends with
+        it, and admission's retry verdict puts it back in flight."""
+        wall = {"run": 3, "evaluate": 3, "run_project": 10, "take_home_run": 60}[kind]
+        body = {"operation": kind, "command_id": key, "fingerprint": "a" * 64, "wall_seconds": wall,
+                "lease_hash": "b" * 64}
+        res = self.http.post("/api/rounds/admission/admit", json=body,
+                             headers={"Authorization": f"Bearer {self.token(account)}",
+                                      "X-Rounds-Admission-Key": RUNNER_KEY})
+        assert res.status_code == 200, res.text
+        return res.json()
+
     def cancel(self, account: str, job_id: str) -> httpx.Response:
         return self.http.post("/api/rounds/execution/cancel", json={"job_id": job_id},
                               headers={"Authorization": f"Bearer {self.token(account)}",
@@ -252,6 +265,7 @@ def test_a_handler_that_raises_is_the_infrastructures_failure_and_retryable(serv
     job = _job(state, job_id)
     assert (job["state"], job["outcome_class"]) == ("failed", "infrastructure-degraded")
     assert state["envelopes"][0]["authoritative"] is False
+    assert server.readmit(A, key)["idempotency"] == "retry_job"
     assert server.enqueue(A, key).json()["requeued"] is True
 
 
@@ -264,6 +278,36 @@ def test_a_job_that_gets_no_slot_in_time_ends_starved_and_never_started(server, 
     state, _ = asyncio.run(_run(server, {"run": PythonHandler({"case-1": "print(1)"})}, _ended(job_id)))
     job = _job(state, job_id)
     assert (job["state"], job["outcome_class"], job["attempts_started"]) == ("timed-out", "infrastructure-degraded", 0)
+
+
+class Refusing(PythonHandler):
+    """A handler whose check before a slot refuses the job (PR 2)."""
+
+    def __init__(self, refusal: Exception) -> None:
+        super().__init__({"case-1": "print(1)"})
+        self.refusal = refusal
+
+    def prepare(self, job):
+        raise self.refusal
+
+
+@pytest.mark.parametrize(
+    "refusal, ended",
+    [
+        (worker_mod.Withdrawn(), ("canceled", "canceled")),
+        (worker_mod.InvalidJob(), ("denied", "definition-invalid")),
+        (RuntimeError("the check broke"), ("failed", "infrastructure-degraded")),
+    ],
+)
+def test_a_job_its_handler_refuses_before_a_slot_ends_without_a_start(server, refusal, ended):
+    job_id = server.job()
+    handler = Refusing(refusal)
+    state, _ = asyncio.run(_run(server, {"run": handler}, _ended(job_id)))
+    job = _job(state, job_id)
+    assert (job["state"], job["outcome_class"]) == ended
+    assert job["attempts_started"] == 0 and handler.ran == []
+    (env,) = state["envelopes"]
+    assert env["user_view"]["started_at"] is None and env["user_view"]["parts"] == []
 
 
 # ---- cancel, lost leases, and races -----------------------------------------------
@@ -350,6 +394,7 @@ def test_a_run_the_replica_stops_mid_way_ends_worker_lost_never_from_the_parts_t
     # Nothing from the parts that ran reaches the account: no parts, no output.
     assert env["user_view"]["parts"] == [] and env["user_view"]["output"] is None
     # worker-lost is retryable: the same key runs attempt two.
+    assert server.readmit(A, key)["idempotency"] == "retry_job"
     assert server.enqueue(A, key).json()["requeued"] is True
 
 

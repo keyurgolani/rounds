@@ -263,6 +263,19 @@ def test_a_stopped_run_kills_its_group_and_says_it_was_stopped(tmp_path):
     assert control.pid is not None and sandbox.group_gone(control.pid, wait_s=5)
 
 
+def test_a_stopped_channel_run_ends_early_and_records_its_group(tmp_path):
+    control = sandbox.Control()
+    threading.Timer(0.3, control.stop.set).start()
+    started = time.monotonic()
+    channel, unfinished = sandbox.run_with_channel(
+        ["bash", "-c", "sleep 30 & wait"], cwd=str(tmp_path), env=sandbox.candidate_env(str(tmp_path)),
+        timeout_s=30, sandbox=sandbox.sandbox_for(0), channel_max=1024, control=control,
+    )
+    assert time.monotonic() - started < 10
+    assert (channel, unfinished) == (b"", True) and control.stop.is_set()
+    assert control.cwd == str(tmp_path) and sandbox.group_gone(control.pid, wait_s=5)
+
+
 def test_a_stop_set_after_the_run_exits_changes_nothing(tmp_path):
     control = sandbox.Control()
     done = sandbox.run(["true"], cwd=str(tmp_path), env=sandbox.candidate_env(str(tmp_path)), timeout_s=10,

@@ -171,12 +171,17 @@ _GATE_VALUE = _matches(r"[a-z_]{1,16}", 16)
 _GATE_SOURCE = _one_of("default", "env", "alias", "invalid")
 
 
-_GATE_REQUIREMENT = _matches(r"[A-Z][A-Z0-9_]{0,63}=[a-z_]{1,16}", 81)
+# The gate settings a key can need (execution/keys.py), and nothing else.
+GATE_REQUIREMENTS = frozenset({"EXECUTION_STORE=on", "EXECUTION_DEFINITIONS=enforce"})
 
 
 def _gate_requirements(value: Any) -> bool:
-    """A short list of NAME=value gate settings."""
-    return isinstance(value, list) and 0 < len(value) <= 8 and all(_GATE_REQUIREMENT(v) for v in value)
+    """A short list of the settings in GATE_REQUIREMENTS."""
+    return (
+        isinstance(value, list)
+        and 0 < len(value) <= len(GATE_REQUIREMENTS)
+        and all(isinstance(v, str) and v in GATE_REQUIREMENTS for v in value)
+    )
 
 
 def _gate_table(value: Any) -> bool:
