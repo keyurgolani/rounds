@@ -363,6 +363,7 @@ export default function ExportTab({ resume, data, onBeforeExport }: Props) {
                   denial={denial}
                   action="pdf"
                   onPrint={printSlot ? () => void run(printSlot) : undefined}
+                  actionMinHeight={44}
                 />
               </div>
             )}

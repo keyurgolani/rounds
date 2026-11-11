@@ -182,7 +182,7 @@ describe('ExportTab server PDF', () => {
     const { onBeforeExport } = renderTab();
     await user.click(pdfDownload());
     const notice = (await screen.findByText('Turned off')).closest('[role="status"]') as HTMLElement;
-    expect(notice).toHaveTextContent('Server PDF export is turned off on this server.');
+    expect(notice).toHaveTextContent('Server PDF export is turned off on this server. Your resume is unchanged.');
     expect(pdfDownload()).toHaveAttribute('aria-disabled', 'true');
     await user.click(within(notice).getByRole('button', { name: 'Print to PDF instead' }));
     await waitFor(() => expect(exportPdfPrint).toHaveBeenCalledTimes(1));
@@ -220,8 +220,11 @@ describe('ExportTab server PDF', () => {
     expect(pdfDownload()).not.toHaveAttribute('aria-disabled');
   });
 
-  it('never shows raw error text', async () => {
-    vi.mocked(exportPdfServer).mockRejectedValue(new Error('chromium crashed at 0x1'));
+  it.each([
+    ['a runner error with no code', () => new RunnerError({ message: 'PDF render failed 502: chromium crashed at 0x1', status: 502 })],
+    ['an error from outside the runner', () => new Error('chromium crashed at 0x1')],
+  ])('reads %s as unavailable, never as its raw text', async (_kind, failure) => {
+    vi.mocked(exportPdfServer).mockRejectedValue(failure());
     const user = userEvent.setup();
     renderTab();
     await user.click(pdfDownload());

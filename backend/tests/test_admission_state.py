@@ -61,7 +61,9 @@ FIRST_CHARGE = {
 MOST = {"evaluate": 32 * 10, "grade": 8 * 45}
 JSON_ROUTES = [name for name in ALLOCATING if name != "pdf_render"]
 WITH_LOOKUPS = ("run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit")
-ENFORCE = {"ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "enforce", "ROUNDS_GATE_ENFORCE_QUOTA": "enforce"}
+# A render's step 8 reads the caller's snapshot (ROUNDS-00A-L04).
+WITH_LOOKUPS += ("pdf_render",)
+ENFORCE ={"ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "enforce", "ROUNDS_GATE_ENFORCE_QUOTA": "enforce"}
 PDF = b"%PDF-1.4 rendered"
 # A test value, not a deployment's.
 RUNNER_KEY = "test-runner-key-" + "0" * 32
@@ -567,6 +569,25 @@ def test_a_step_8_denial_leaves_the_command_retryable_and_its_key_runs_admission
     assert admission_store.leases == {}
     _assert_typed(_send(client, name, keyed(signed_in)), 404, "not_found")
     assert len(admission_store.called("admit")) == 2 and tripwires == []
+
+
+def test_a_render_whose_stored_file_doesnt_match_its_checksum_is_refunded_and_renders_nothing(
+    client, signed_in, seeded, tripwires, admission_store, enforcing, monkeypatch
+):
+    from app import legacy_snapshots
+    from routers import pdf
+
+    async def changed(_token, _snapshot_id, _name):
+        return b"not the markup the checksum names"
+
+    monkeypatch.setattr(legacy_snapshots, "read_markup", changed)
+    res = _send(client, "pdf_render", keyed(signed_in))
+    _assert_typed(res, 503, "worker_unavailable")
+    assert res.json()["detail"] == pdf.RENDER_FAILED
+    # Refused at step 8, before a slot: refunded, and the key can run again.
+    assert [f["outcome"] for f in admission_store.called("finish")] == ["denied"]
+    assert admission_store.commands[(TEST_TOKEN, KEY)]["state"] == "retryable"
+    assert admission_store.leases == {} and tripwires == []
 
 
 def test_a_full_replica_is_a_step_9_denial(client, signed_in, seeded, tripwires, busy, admission_store, enforcing):

@@ -3,8 +3,9 @@
 // in words with an icon beside them. Focus never leaves server PDF's
 // button. When that button can't act, it says so through aria-disabled,
 // takes its description from the message, and can still be focused. The
-// six other formats work in every state, and all seven buttons measure
-// at least 44 by 44 CSS pixels. Layout at 390 px is checked in a real
+// six other formats work in every state. All seven buttons measure at
+// least 44 by 44 CSS pixels, and every action a message offers is at
+// least 44 tall. Layout at 390 px is checked in a real
 // browser (the design review's screenshots); jsdom has no layout.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -133,6 +134,12 @@ describe('Export tab accessibility', () => {
       expect(exportPdfServer).toHaveBeenCalledTimes(c.save ? 0 : 1);
     } else {
       expect(pdf).not.toHaveAttribute('aria-disabled');
+    }
+
+    // Every action in the message is a 44 px target too.
+    const message = document.getElementById(pdf.getAttribute('aria-describedby') ?? '');
+    for (const a of message ? [...message.querySelectorAll<HTMLElement>('button, a')] : []) {
+      expect(parseFloat(a.style.minHeight)).toBeGreaterThanOrEqual(44);
     }
 
     // The six other formats stay usable.
