@@ -3,9 +3,14 @@
 // the run earned shows as before, a limit or an end the harness or the
 // infrastructure caused shows its notice with no score, and a run that
 // failed without a result shows a fixed sentence and no score.
+//
+// Submissions as durable jobs (PR 3): the report opens from the row the
+// server wrote and asks for its review once, a limit shows no score and
+// no criterion verdict, mastery needs a passed envelope, and a submission
+// that failed without a result shows a fixed sentence, never a score of 0.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
@@ -13,6 +18,7 @@ const drafts = vi.hoisted(() => {
   const files = { 'kv.py': 'class KV:\n    pass\n' };
   return { files, savedFiles: files, setFile: () => {}, hydrated: true, resetToStarter: () => {} };
 });
+const practice = vi.hoisted(() => ({ set: vi.fn() }));
 
 vi.mock('../../lib/pocketbase', () => ({ pb: { authStore: { token: 'test-token-placeholder' } } }));
 vi.mock('../../pages/take-home/takeHomeApi', async (importOriginal) => ({
@@ -21,11 +27,13 @@ vi.mock('../../pages/take-home/takeHomeApi', async (importOriginal) => ({
   getLatestTakeHomeAttempt: vi.fn().mockResolvedValue(null),
   runProject: vi.fn(),
   submitAttempt: vi.fn(),
+  getGradedTakeHomeAttempt: vi.fn(),
+  requestSubmissionReview: vi.fn(),
   upsertInProgressTakeHomeAttempt: vi.fn().mockResolvedValue(undefined),
   deleteInProgressTakeHomeAttempt: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../hooks/useTakeHomeDrafts', () => ({ useTakeHomeDrafts: () => drafts }));
-vi.mock('../../hooks/usePracticeStatus', () => ({ usePracticeStatus: () => [null, vi.fn()] }));
+vi.mock('../../hooks/usePracticeStatus', () => ({ usePracticeStatus: () => [null, practice.set] }));
 vi.mock('../../campaign/CampaignContext', () => ({ useCampaign: () => ({ currentId: null }) }));
 vi.mock('../../components/shell/AppHeader', () => ({ default: () => <header /> }));
 vi.mock('../../components/shell/StatusAction', () => ({ default: () => null }));
@@ -35,9 +43,19 @@ vi.mock('../../components/editor/MultiFileEditor', () => ({
 }));
 
 import TakeHomeDetail from '../../pages/take-home/TakeHomeDetail';
-import { getAssignment, runProject } from '../../pages/take-home/takeHomeApi';
+import {
+  getAssignment,
+  getGradedTakeHomeAttempt,
+  requestSubmissionReview,
+  runProject,
+  submitAttempt,
+  type HarnessOutput,
+  type TakeHomeAttemptRow,
+} from '../../pages/take-home/takeHomeApi';
 import { RunnerError } from '../../lib/runnerFetch';
+import { UUID_V7_PATTERN } from '../../lib/idempotency';
 import type { JobAnswer, JobEnvelope, JobLimit, OutcomeClass } from '../../lib/executionJobs';
+import type { ReviewAnswer } from '../../lib/gradedRows';
 
 const ASSIGNMENT = {
   id: 'a1',
@@ -101,6 +119,10 @@ beforeEach(() => {
   answers = [];
   vi.mocked(getAssignment).mockResolvedValue(ASSIGNMENT as never);
   vi.mocked(runProject).mockReset();
+  vi.mocked(submitAttempt).mockReset();
+  vi.mocked(getGradedTakeHomeAttempt).mockReset();
+  vi.mocked(requestSubmissionReview).mockReset();
+  practice.set.mockReset();
   fetchMock.mockReset().mockImplementation(async (_url, init) => {
     while (answers.length === 0) {
       await new Promise((wake) => setTimeout(wake, 5));
@@ -166,5 +188,103 @@ describe('TakeHomeDetail jobs', () => {
     expect(await screen.findByText("The runner couldn't read this run. Reload the page and run it again.")).toBeInTheDocument();
     expect(screen.getByText('HARNESS ERROR')).toBeInTheDocument();
     expect(screen.queryByText(/Field required|\/ 100|\/100|criteria/)).not.toBeInTheDocument();
+  });
+});
+
+const DEFINITION = { track: 'take-home', slug: 'kv-store-py', variant: 'python', version: 1, checksum: 'a'.repeat(64) };
+
+function harness(extra: Partial<HarnessOutput> = {}): HarnessOutput {
+  return {
+    outcome_class: 'passed', limit: null, score: 1, passed: true,
+    criteria: [{ id: 'gets', passed: true, weight: 0.5, logs: 'ok' }, { id: 'sets', passed: true, weight: 0.5, logs: 'ok' }],
+    outcomes: [], stdout: '', stderr: '', error: null, duration_ms: 900, truncated: false, definition: DEFINITION as never,
+    ...extra,
+  };
+}
+
+function gradedRow(output: HarnessOutput, review: TakeHomeAttemptRow['rubric_review'] = null): TakeHomeAttemptRow {
+  return {
+    id: 'rowaaaaaaaaaaa1', user: 'useraaaaaaaaaa1', campaign: '', assignment: 'a1', files: drafts.files, notes: '',
+    harness_output: output, rubric_review: review, status: 'graded', envelope: 'envaaaaaaaaaaa1', updated: '',
+  };
+}
+
+function reviewAnswer(extra: Partial<ReviewAnswer>): ReviewAnswer {
+  return { job_id: 'jobaaaaaaaaaaa1', rubric_state: null, rubric_review: null, unavailable: null, ...extra };
+}
+
+const REVIEW = { items: [{ id: 'design', score: 0.6, evidence: 'Small API.', suggestions: [] }], total: 0.6 };
+
+describe('TakeHomeDetail submission jobs', () => {
+  it('follows a submission to the report the server wrote, and asks for its review once', async () => {
+    vi.mocked(submitAttempt).mockResolvedValue(job('queued'));
+    vi.mocked(getGradedTakeHomeAttempt).mockResolvedValue(gradedRow(harness()));
+    vi.mocked(requestSubmissionReview).mockResolvedValue(reviewAnswer({ rubric_state: 'completed', rubric_review: REVIEW }));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Submit' }));
+    const region = screen.getByTestId('runner-denial');
+    await waitFor(() => expect(region).toHaveTextContent('Grading starts when a runner is free.'));
+    answers.push(job('started'));
+    await waitFor(() => expect(region).toHaveTextContent('Your submission is being graded on the server.'));
+    answers.push(ended('completed', 'passed', null));
+    const dialog = await screen.findByRole('dialog', { name: 'Submission · KV store' });
+    await waitFor(() => expect(within(dialog).getByText('Harness 100/100 · Rubric 60/100')).toBeInTheDocument());
+    expect(requestSubmissionReview).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(requestSubmissionReview).mock.calls[0].slice(0, 2)).toEqual(['jobaaaaaaaaaaa1', drafts.files]);
+    expect(practice.set).toHaveBeenCalledWith('mastered');
+    expect(vi.mocked(submitAttempt).mock.calls[0][1]?.idempotencyKey).toMatch(UUID_V7_PATTERN);
+  });
+
+  it('shows a limit with no harness score and no criterion verdict, and sets no mastery', async () => {
+    vi.mocked(submitAttempt).mockResolvedValue(job('started'));
+    const limited = harness({
+      outcome_class: 'resource-limit', limit: 'wall_time', score: null, passed: null, error: 'The grader ran out of time.',
+      criteria: [{ id: 'gets', passed: null, weight: 0.5, logs: 'timeout' }, { id: 'sets', passed: null, weight: 0.5, logs: 'timeout' }],
+    });
+    vi.mocked(getGradedTakeHomeAttempt).mockResolvedValue(gradedRow(limited));
+    vi.mocked(requestSubmissionReview).mockResolvedValue(reviewAnswer({ rubric_state: 'lost' }));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Submit' }));
+    answers.push(ended('timed-out', 'resource-limit', null, 'wall_time'));
+    const dialog = await screen.findByRole('dialog');
+    expect(screen.getByTestId('runner-denial')).toHaveTextContent('The grader reached its time limit, so this submission has no score.');
+    expect(within(dialog).getByText('Harness stopped: time limit reached · Rubric —')).toBeInTheDocument();
+    expect(within(dialog).getByText('TIME LIMIT REACHED')).toBeInTheDocument();
+    expect(within(dialog).getByText('The grader ran out of time.')).toBeInTheDocument();
+    const criteria = dialog.querySelectorAll('[data-criterion]');
+    expect([...criteria].map((c) => c.getAttribute('data-criterion'))).toEqual(['not scored', 'not scored']);
+    expect(dialog.textContent).not.toMatch(/\d+ ?\/ ?100|✓|✗/);
+    await waitFor(() => expect(within(dialog).getByTestId('review-status')).toHaveTextContent("Review didn't finish"));
+    expect(practice.set).not.toHaveBeenCalledWith('mastered');
+  });
+
+  it("retries a submission the runner lost under the same command id, with no report", async () => {
+    vi.mocked(submitAttempt).mockResolvedValue(job('queued'));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Submit' }));
+    const lost = ended('failed', 'worker-lost', null);
+    answers.push({ ...lost, retryable: true, envelope: lost.envelope && { ...lost.envelope, authoritative: false } });
+    const region = screen.getByTestId('runner-denial');
+    await waitFor(() => expect(region).toHaveTextContent('Interrupted'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(within(region).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(submitAttempt).toHaveBeenCalledTimes(2));
+    const [first, second] = vi.mocked(submitAttempt).mock.calls;
+    expect(second[1]?.idempotencyKey).toBe(first[1]?.idempotencyKey);
+    expect(getGradedTakeHomeAttempt).not.toHaveBeenCalled();
+  });
+
+  it('says a submission that failed without a result in a fixed sentence, never a score of 0 or the server text', async () => {
+    vi.mocked(submitAttempt).mockRejectedValue(new TypeError('Cannot read properties of undefined (reading "harness")'));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Submit' }));
+    const dialog = await screen.findByRole('dialog');
+    const problem = within(dialog).getByTestId('report-problem');
+    expect(problem).toHaveTextContent("Grading didn't finish, so nothing was graded. Submit again.");
+    expect(dialog.textContent).not.toMatch(/Cannot read|harness"|\b0\b|\/100|Harness/);
   });
 });

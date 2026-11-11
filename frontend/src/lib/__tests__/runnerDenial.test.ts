@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../pocketbase', () => ({ pb: { authStore: { token: '' } } }));
 
 import { RunnerError } from '../runnerFetch';
-import { activeTrigger, classifyRunnerError, formatWait, runFailureText } from '../runnerDenial';
+import { activeTrigger, classifyRunnerError, formatWait, gradeFailureText, runFailureText } from '../runnerDenial';
 
 function err(status: number, code: string | null = null, extra: Partial<{ retryAfterSeconds: number; correlationId: string }> = {}) {
   return new RunnerError({ message: `Request ${status}: x`, status, code, ...extra });
@@ -91,8 +91,14 @@ describe('definition refusals (ROUNDS-00A-L02)', () => {
     [typed(422, 'runtime_unsupported'), 'unsupported'],
     [typed(422, 'path_not_allowed'), 'path_not_allowed'],
     [typed(503, 'definition_integrity_mismatch'), 'unavailable'],
+    // A practice item the server can't grade (ROUNDS-00A-L03 PR 3).
+    [typed(422, 'definition_invalid'), 'not_gradable'],
   ])('maps %o to %s', (error, kind) => {
     expect(classifyRunnerError(error)?.kind).toBe(kind);
+  });
+
+  it("shows no server sentence for a practice item it can't grade", () => {
+    expect(classifyRunnerError(typed(422, 'definition_invalid'))?.detail).toBeNull();
   });
 
   it("keeps the server's fixed sentence only where the notice shows it", () => {
@@ -155,5 +161,28 @@ describe('runFailureText (ROUNDS-00A-L03)', () => {
       detail: 'field files.solution.py: <html>upstream</html>',
     });
     expect(runFailureText(leaked)).not.toMatch(/files|upstream|html/);
+  });
+});
+
+describe('gradeFailureText (ROUNDS-00A-L03 PR 3)', () => {
+  it.each([
+    [err(422, 'invalid_request'), "The runner couldn't read this submission. Reload the page and submit again."],
+    [err(400), "The runner couldn't read this submission. Reload the page and submit again."],
+    [err(404, 'not_found'), "The runner couldn't find this practice item. Reload the page and submit again."],
+    [err(409), 'Grading failed with status 409, so nothing was graded. Submit again.'],
+    [new TypeError('x is undefined'), "Grading didn't finish, so nothing was graded. Submit again."],
+  ])('gives %s a fixed sentence', (error, text) => {
+    expect(gradeFailureText(error)).toBe(text);
+  });
+
+  it("never repeats the server's text or shows a score", () => {
+    const leaked = new RunnerError({
+      message: 'grade 422: field files.solution.py: <html>upstream</html>',
+      status: 422,
+      detail: 'field files.solution.py: <html>upstream</html>',
+    });
+    const text = gradeFailureText(leaked);
+    expect(text).not.toMatch(/files|upstream|html/);
+    expect(text).not.toMatch(/\d+ ?\/ ?100|score/);
   });
 });
