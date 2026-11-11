@@ -488,8 +488,8 @@ export default function AICodingDetail() {
       // report from the row the server wrote. The page writes no row.
       if (isJobAnswer(answer)) gradedRef.current = { jobId: answer.job_id, files: sent };
       if (gradeJob.follow(answer)) return;
-      // TODO(ROUNDS-00A-L03): PR 4 retires the in-request grade, and
-      // with it this answer and the row the page writes for it.
+      // TODO(ROUNDS-00A-L03): PR 4 retires the in-request grade and
+      // this answer.
       const result = answer as GradeResponse;
       graded = true;
       setReport({ test_results: result.test_results, rubric_review: result.rubric_review });

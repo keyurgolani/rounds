@@ -12,6 +12,7 @@ are tested without that server.
 from __future__ import annotations
 
 import json
+import sys
 
 import httpx
 import pytest
@@ -22,6 +23,7 @@ from execution import envelope, handlers, keys, kinds
 from execution.worker import InvalidJob, Withdrawn
 from tests.test_definitions_enforce import FIXED_CLIENT, FORGING_CLIENT, _project, _store, _take_home_document
 from tests.test_execution_scratch import (  # noqa: F401  (node and runner are fixtures)
+    ROOT,
     A,
     B,
     Node,
@@ -661,3 +663,26 @@ def test_nothing_the_candidate_wrote_or_the_provider_answered_reaches_a_log(runn
         assert marker not in logged.out and marker not in logged.err
     lines = [json.loads(l) for l in logged.out.splitlines() if l.startswith('{"') and '"execution.review"' in l]
     assert {line["code"] for line in lines} >= {"requested", "completed"}
+
+
+# ---- the harness's grading phase ----------------------------------------------------
+
+
+def _grading_probe():
+    for extra in (ROOT / "harness", ROOT / "harness" / "probes"):
+        if str(extra) not in sys.path:
+            sys.path.insert(0, str(extra))
+    import grading_check
+
+    return grading_check
+
+
+def test_the_harness_grading_phase_grades_what_these_tests_grade_and_proves_its_case():
+    probe = _grading_probe()
+    assert set(probe.PHASES) == {"execution-grading"}
+    assert probe.GRADE == GRADE_REF and probe.FIXED_CLIENT == FIXED_CLIENT
+    assert probe.GATES == {"EXECUTION_STORE": "on", "EXECUTION_GRADING": "on", "EXECUTION_DEFINITIONS": "enforce"}
+    cases = json.loads((ROOT / "docs" / "security" / "account-scope.v1.json").read_text())["cases"]
+    case = cases["isolation.execution-review.foreign"]
+    assert (case["surface"], case["status"], case["evidence"]) == (
+        "runner:execution-review", "pass", ["isolation.execution-review.foreign"])

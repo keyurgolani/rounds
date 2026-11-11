@@ -37,6 +37,11 @@
 #                     cancel, a cancel mid-run, a time limit, and a replica
 #                     killed mid-run whose job a same-key retry finishes
 #                     (ROUNDS-00A-L03 PR 2, harness/probes/scratch_check.py)
+#  3g3. execution grading - both replicas and nginx with the grading key on
+#                     and definitions enforced: a grade as a job whose
+#                     graded row the server writes, a duplicate, another
+#                     account's review, and a review with no provider
+#                     (ROUNDS-00A-L03 PR 3, harness/probes/grading_check.py)
 #  3h. legacy snapshots - PocketBase, both replicas, and nginx with
 #                     ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE on and the
 #                     materializer up: each RD-02 input's declared outcome,
@@ -217,14 +222,16 @@ SNAPSHOT_GATE=""
 SHARE_GATE=""
 # SCRATCH_GATE and DEFINITIONS_GATE set ROUNDS_GATE_EXECUTION_SCRATCH and
 # ROUNDS_GATE_EXECUTION_DEFINITIONS for both runners, for the scratch job
-# phases (ROUNDS-00A-L03 PR 2).
+# phases (ROUNDS-00A-L03 PR 2), and GRADING_GATE sets
+# ROUNDS_GATE_EXECUTION_GRADING for them, for the grading phase (PR 3).
 SCRATCH_GATE=""
 DEFINITIONS_GATE=""
+GRADING_GATE=""
 set_signups() {
-  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\nROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=%s\nROUNDS_GATE_EXECUTION_SCRATCH=%s\nROUNDS_GATE_EXECUTION_DEFINITIONS=%s\nAI_KEY_SECRET=%s\nROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=%s\nROUNDS_SHARE_RESOLVER_PASSWORD=%s\n' \
+  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\nROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=%s\nROUNDS_GATE_EXECUTION_SCRATCH=%s\nROUNDS_GATE_EXECUTION_DEFINITIONS=%s\nAI_KEY_SECRET=%s\nROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=%s\nROUNDS_SHARE_RESOLVER_PASSWORD=%s\nROUNDS_GATE_EXECUTION_GRADING=%s\n' \
     "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${DEMO_V}" \
     "${SNAPSHOT_GATE}" "${SCRATCH_GATE}" "${DEFINITIONS_GATE}" "${SCAN_SECRET_V}" "${SHARE_GATE}" \
-    "${SHARE_RESOLVER_SECRET_V}" > "${ENV_FILE}"
+    "${SHARE_RESOLVER_SECRET_V}" "${GRADING_GATE}" > "${ENV_FILE}"
 }
 
 # Waits until PocketBase answers its health route again.
@@ -511,6 +518,19 @@ restart_runners
 probe execution-scratch-retry
 rc_step=$?
 [ "${rc_step}" -eq 0 ] || execution_rc=1
+# Both replicas and nginx again, with the grading key on in place of the
+# scratch key (ROUNDS-00A-L03 PR 3).
+echo "--- phase 3g3: execution grading (grading on, definitions enforced, both replicas and nginx) ---"
+SCRATCH_GATE=""
+GRADING_GATE=on
+set_signups false "" on "${EXECUTION_ROTATED_V}" "${EXECUTION_ROTATED_V}"
+restart_runners
+capture_gates execution-grading
+capture_gates execution-grading runner-b
+probe execution-grading
+rc_step=$?
+[ "${rc_step}" -eq 0 ] || execution_rc=1
+GRADING_GATE=""
 SCRATCH_GATE=""
 DEFINITIONS_GATE=""
 set -e

@@ -11,7 +11,8 @@ Phases, in the order harness/run.sh runs them:
   reads jobs or attempts, or links an attempt row to an envelope; an
   account reads its own envelopes and nobody else's, without the
   operator view, and a run with hidden material shows the account
-  outcome classes and totals only (D9), and its filters on its envelopes
+  outcome classes and totals only (D9), its authoritative result writing
+  the graded row with its envelope (PR 3), and its filters on its envelopes
   name no field of a job or an attempt; enqueue needs the account's admitted command and
   the runner key, answers a duplicate with its job and a different
   request as a mismatch; another account's cancel is the unknown-id 404;
@@ -22,10 +23,10 @@ Phases, in the order harness/run.sh runs them:
   retry runs attempt two. One account's backlog of queued jobs holds
   no other account's job back.
 - ``execution-runners``, both runner replicas up with the store on and
-  the secret: each is ready, and each claims jobs and ends each once: a
-  scratch kind ``canceled`` before it starts, since
-  ``ROUNDS_GATE_EXECUTION_SCRATCH`` isn't on, and a grading kind, which
-  has no handler until PR 3, ``denied``, ``definition-invalid``.
+  the secret: each is ready, and each claims jobs and ends each once,
+  ``canceled`` before it starts: a scratch kind since
+  ``ROUNDS_GATE_EXECUTION_SCRATCH`` isn't on, and a grading kind since
+  ``ROUNDS_GATE_EXECUTION_GRADING`` isn't (PR 3).
 - ``execution-unready``, after PocketBase restarts with another secret:
   neither replica stays ready.
 - ``execution-ready-again``, after the replicas restart with that secret:
@@ -66,13 +67,14 @@ OUTCOME_WORDS = {"completed", "timed-out", "denied", "canceled", "failed", "pass
                  "output"}
 ENVELOPE = "rounds.execution-envelope/v1"
 DEFINITION = {"track": "coding", "slug": "two-sum", "variant": "python", "version": 1}
+# A grade names the seeded round, so its graded row has a round to point
+# at (PR 3).
+GRADE_DEFINITION = {"track": "ai-coding", "slug": "hallucinated-http-client", "variant": "python", "version": 1}
 LEASE_S = 30
 # The most accounts one claim considers (pb_hooks/execution.js).
 CLAIM_SCAN = 50
 # The least wall seconds admission admits each operation for.
 WALL = {"run": 3, "evaluate": 3, "run_project": 10, "grade": 45, "take_home_run": 60, "take_home_submit": 120}
-# The kinds with a handler since PR 2 (backend/execution/handlers.py).
-SCRATCH_KINDS = frozenset({"evaluate", "run", "take_home_run", "run_project"})
 
 
 def token43() -> str:
@@ -109,18 +111,26 @@ def admit(token: str, key: str, fingerprint: str, operation: str = "run") -> int
     return status
 
 
-def enqueue_body(key: str, fingerprint: str, kind: str = "run") -> dict:
-    return {"command_id": key, "kind": kind, "definition": DEFINITION, "fingerprint": fingerprint,
+def enqueue_body(key: str, fingerprint: str, kind: str = "run", definition: dict | None = None) -> dict:
+    return {"command_id": key, "kind": kind, "definition": definition or DEFINITION, "fingerprint": fingerprint,
             "source_checksum": "c" * 64, "input_digest": "d" * 64, "input": {"code": "print(1)"}}
 
 
-def new_job(token: str, kind: str = "run") -> tuple[str, str, str | None]:
+def new_job(token: str, kind: str = "run", definition: dict | None = None) -> tuple[str, str, str | None]:
     """An admitted command and its job: the key, the fingerprint, and the
     job id (None when enqueue refused it)."""
     key, fingerprint = uuid7(), secrets.token_hex(32)
     admit(token, key, fingerprint, kind)
-    status, body = caller(token, "enqueue", enqueue_body(key, fingerprint, kind))
+    status, body = caller(token, "enqueue", enqueue_body(key, fingerprint, kind, definition))
     return key, fingerprint, ((body or {}).get("job") or {}).get("id") if status == 200 else None
+
+
+def checkpoint(index: int, outcome: str) -> dict:
+    """One checkpoint's graded content, as a grade's result carries it."""
+    passed = outcome == "passed"
+    return {"index": index, "label": f"Checkpoint {index}", "outcome_class": outcome, "limit": None,
+            "passed": passed, "score": 1.0 if passed else 0.0, "executed": 1, "passed_count": int(passed),
+            "failed_count": int(not passed), "outcomes": [], "error": None}
 
 
 def seed_queued(pb: PBClient, admin: str, acct: factory.Account, queued_at: int) -> str | None:
@@ -317,17 +327,22 @@ def run_store(c: Checks) -> None:
     # A run with hidden material shows the account outcome classes and
     # the server's totals, never output.
     grade_token = token43()
-    _gkey, _gfp, grade_job = new_job(a.token, "grade")
+    _gkey, _gfp, grade_job = new_job(a.token, "grade", GRADE_DEFINITION)
     grade_claim = service(svc, "claim", {"worker": "harness", "token_hash": sha(grade_token)})[1] or {}
     grade_attempt = (grade_claim.get("attempt") or {}).get("id", "")
     service(svc, "heartbeat", {"attempt_id": grade_attempt, "token": grade_token, "started": True, "budget_s": 45})
     graded = envelope(grade_job or "", outcome="candidate-failure", score=0.5)
     graded["user_view"]["parts"] = [{"id": "checkpoint-1", "outcome_class": "passed", "limit": None},
                                     {"id": "checkpoint-2", "outcome_class": "candidate-failure", "limit": None}]
+    # An authoritative grade carries its graded content, one checkpoint
+    # per part (PR 3).
+    content = {"test_results": [checkpoint(1, "passed"), checkpoint(2, "candidate-failure")]}
     shown = json.loads(json.dumps(graded))
     shown["user_view"]["output"] = {"stdout": "printed by a hidden test"}
-    refused_output = service(svc, "complete", {"attempt_id": grade_attempt, "token": grade_token, "result": shown})[0]
-    graded_done = service(svc, "complete", {"attempt_id": grade_attempt, "token": grade_token, "result": graded})[0]
+    refused_output = service(svc, "complete", {"attempt_id": grade_attempt, "token": grade_token, "result": shown,
+                                               "graded": content})[0]
+    graded_done = service(svc, "complete", {"attempt_id": grade_attempt, "token": grade_token, "result": graded,
+                                            "graded": content})[0]
     grade_envs = rows(pb, admin, "execution_envelopes", f"job = '{grade_job}'")
     grade_seen = pb.view("execution_envelopes", grade_envs[0]["id"] if grade_envs else "x" * 15, a.token)
     words = OUTCOME_WORDS | {ENVELOPE, grade_job, "checkpoint-1", "checkpoint-2"}
@@ -337,6 +352,16 @@ def run_store(c: Checks) -> None:
     c.check("execution.envelopes.hidden-material-shows-outcomes-and-totals-only",
             refused_output == 400 and graded_done == 200 and len(grade_envs) == 1 and only_outcomes,
             f"with-output={refused_output} without={graded_done} view={grade_seen.status}")
+    # The same transaction wrote the graded row for the job's account,
+    # and the row and the envelope name each other (PR 3).
+    grade_env = grade_envs[0] if grade_envs else {}
+    graded_rows = rows(pb, admin, "ai_coding_attempts", f"envelope = '{grade_env.get('id', 'x' * 15)}'")
+    graded_row = graded_rows[0] if len(graded_rows) == 1 else {}
+    c.check("execution.graded.complete-writes-the-row-with-its-envelope",
+            grade_env.get("graded_collection") == "ai_coding_attempts" and grade_env.get("graded_row") == graded_row.get("id")
+            and graded_row.get("user") == a.user_id and graded_row.get("status") == "graded"
+            and [t.get("outcome_class") for t in graded_row.get("test_results") or []] == ["passed", "candidate-failure"],
+            f"rows={len(graded_rows)}")
 
     # An attempt row can't be linked to an envelope by its owner.
     rounds = pb.listing("ai_coding_rounds", a.token, {"perPage": 1})
@@ -455,11 +480,10 @@ def run_runners(c: Checks) -> None:
         if len(ended) == len(jobs) and all(e.get("finished_at") for e in ended):
             break
         time.sleep(1)
-    # PR 2: a scratch kind's handler ends a job claimed while
-    # ROUNDS_GATE_EXECUTION_SCRATCH isn't on canceled, before it starts;
-    # the grading kinds have no handler until PR 3.
-    want = [("canceled", "canceled") if kind in SCRATCH_KINDS else ("denied", "definition-invalid")
-            for _acct, kind in kinds]
+    # A kind's handler ends a job claimed while its key isn't on canceled,
+    # before it starts: ROUNDS_GATE_EXECUTION_SCRATCH for a scratch kind
+    # (PR 2), ROUNDS_GATE_EXECUTION_GRADING for a grading kind (PR 3).
+    want = [("canceled", "canceled") for _acct, _kind in kinds]
     c.check("execution.runners.claim-and-end-every-job",
             len(ended) == 5 and [(e.get("state"), e.get("outcome_class")) for e in ended] == want,
             repr([(e.get("state"), e.get("outcome_class")) for e in ended]))

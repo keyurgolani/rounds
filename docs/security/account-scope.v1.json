@@ -568,6 +568,20 @@
       ],
       "guarantee": "canceling another account's execution job answers the same 404 as an unknown job id and leaves the job as it was"
     },
+    "isolation.execution-review.foreign": {
+      "surface": "runner:execution-review",
+      "actor": "authenticated-other",
+      "variant": "foreign_owner",
+      "expected": "uniform_not_found",
+      "control": "the owner asks for its own review",
+      "owner_leaf": "ROUNDS-00A-L03",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "isolation.execution-review.foreign"
+      ],
+      "guarantee": "asking for the review of another account's grading result answers the same 404 as an unknown job id and charges nothing"
+    },
     "account-scope.create.owner-shape.uniform": {
       "surface": "pb:{collection}",
       "actor": "authenticated-other",
