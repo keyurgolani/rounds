@@ -39,7 +39,10 @@ function retriable(err: unknown): boolean {
   return !(typeof status === 'number' && PERMANENT_STATUSES.has(status));
 }
 
-export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+// 'error' is a failed save that tries again on its own; 'refused' is one
+// PocketBase refused (PERMANENT_STATUSES), which nothing retries until the
+// next edit or export.
+export type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'refused';
 
 export type UseResumeResult = {
   resume: Resume | null;
@@ -47,6 +50,8 @@ export type UseResumeResult = {
   templateId: string;
   design: TemplateConfig;
   loading: boolean;
+  // Why the slug on screen didn't load, or null. A failed save never sets
+  // it: saveState says so, and the Studio stays on screen.
   error: string | null;
   saveState: SaveState;
   lastSavedAt: string | null;
@@ -86,13 +91,25 @@ export function useResume(slug: string | undefined): UseResumeResult {
   const [templateId, setLocalTemplateId] = useState<string>('modern');
   const [design, setLocalDesign] = useState<TemplateConfig>({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // A failed load and the slug it was for, so a later slug in the same
+  // Studio shows its own outcome and never an earlier one's.
+  const [loadError, setLoadError] = useState<{ slug: string; message: string } | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [links, setLocalLinks] = useState<ResumeLinks>(emptyLinks());
 
-  // Pending patch coalesces calls between debounce ticks.
+  // Pending patch coalesces calls between debounce ticks. It belongs to
+  // the resume it was typed in (pendingForRef) and only ever saves to it.
   const pendingRef = useRef<Pending>({});
+  const pendingForRef = useRef<string | null>(null);
+  // The id of the resume on screen; null while the next one loads.
+  const shownIdRef = useRef<string | null>(null);
+  // Unsaved edits of resumes the Studio has moved on from, by id. Each
+  // saves to its own resume, stays here if that fails, and comes back when
+  // that resume loads again in this Studio.
+  const keptRef = useRef<Map<string, Pending>>(new Map());
+  // Those saves, chained; a load waits for them, so it reads what they wrote.
+  const leavingRef = useRef<Promise<void>>(Promise.resolve());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The save in flight; saves run one at a time, each after the last.
   const savingRef = useRef<Promise<void> | null>(null);
@@ -118,31 +135,81 @@ export function useResume(slug: string | undefined): UseResumeResult {
   // without being listed as a dependency (schedule is defined below).
   const scheduleRef = useRef<((patch: Pending) => void) | null>(null);
 
+  // Edits for a resume no longer on screen, merged under any kept since.
+  const keep = (id: string, patch: Pending) => {
+    if (Object.keys(patch).length === 0) return;
+    keptRef.current.set(id, { ...patch, ...(keptRef.current.get(id) ?? {}) });
+  };
+  // One save of a resume's kept edits, to that resume. If it fails they
+  // stay kept for it.
+  const saveKept = async (id: string): Promise<void> => {
+    const patch = keptRef.current.get(id);
+    if (!patch) return;
+    keptRef.current.delete(id);
+    try {
+      await updateResume(id, patch);
+    } catch {
+      keep(id, patch);
+    }
+  };
+
   // --- Initial load ----------------------------------------------------
   useEffect(() => {
     if (!slug) return;
     if (loadedSlugRef.current === slug) return; // already loaded
+    // Moving to another resume in the same Studio: what's unsaved here is
+    // the shown resume's, so it's kept for it and saved to it, after the
+    // save in flight for it, and nothing of it is left for the next one.
+    const leaving = shownIdRef.current ?? pendingForRef.current;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    timerRef.current = null;
+    retryTimerRef.current = null;
+    const inFlight = savingRef.current;
+    savingRef.current = null;
+    if (leaving) {
+      keep(leaving, pendingRef.current);
+      const saved = (inFlight ?? Promise.resolve()).catch(() => undefined).then(() => saveKept(leaving));
+      leavingRef.current = Promise.all([leavingRef.current, saved]).then(() => undefined);
+    }
+    pendingRef.current = {};
+    pendingForRef.current = null;
+    shownIdRef.current = null;
+    loadedSlugRef.current = null;
+    savedAtRef.current = null;
+    failuresRef.current = 0;
+    lastVersionAtRef.current = 0;
+    setResume(null);
+    setSaveState('idle');
+    setLastSavedAt(null);
+    setLoadError(null);
+
     let cancelled = false;
     setLoading(true);
     const emptySnapshot: LibrarySnapshot = { jobs: {}, projects: {}, bullets: {} };
-    Promise.all([
-      getResumeBySlug(slug),
-      loadLibrarySnapshot().catch(() => emptySnapshot),
-    ])
+    leavingRef.current
+      .then(() => Promise.all([getResumeBySlug(slug), loadLibrarySnapshot().catch(() => emptySnapshot)]))
       .then(([r, lib]) => {
         if (cancelled) return;
         const resolved = resolveAndSync(r.data, r.links, lib);
+        // Edits kept from an earlier visit that never saved come back.
+        const kept = keptRef.current.get(r.id);
+        keptRef.current.delete(r.id);
+        const shownData = kept?.data ?? resolved.data;
+        const shownLinks = kept?.links ?? resolved.links;
+        shownIdRef.current = r.id;
         setResume(r);
-        setLocalData(resolved.data); dataRef.current = resolved.data;
-        setLocalLinks(resolved.links); linksRef.current = resolved.links;
-        setLocalTemplateId(r.template_id || 'modern');
-        setLocalDesign(r.design || {});
+        setLocalData(shownData); dataRef.current = shownData;
+        setLocalLinks(shownLinks); linksRef.current = shownLinks;
+        setLocalTemplateId(kept?.template_id ?? (r.template_id || 'modern'));
+        setLocalDesign(kept?.design ?? (r.design || {}));
         setLastSavedAt(r.updated_at);
         savedAtRef.current = r.updated_at;
         loadedSlugRef.current = r.slug;
-        if (resolved.changed) scheduleRef.current?.({ data: resolved.data, links: resolved.links });
+        const patch: Pending = { ...(resolved.changed ? { data: resolved.data, links: resolved.links } : {}), ...kept };
+        if (Object.keys(patch).length > 0) scheduleRef.current?.(patch);
       })
-      .catch((err: Error) => { if (!cancelled) setError(err.message); })
+      .catch((err: Error) => { if (!cancelled) setLoadError({ slug, message: err.message }); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => {
       cancelled = true;
@@ -150,17 +217,21 @@ export function useResume(slug: string | undefined): UseResumeResult {
   }, [slug]);
 
   // --- Save mechanics --------------------------------------------------
-  // Rejects when the save fails, with its patch put back under anything
-  // typed since.
+  // Saves the pending patch to the resume it belongs to. Rejects when the
+  // save fails, with its patch put back under anything typed since; if the
+  // Studio moved on from that resume meanwhile, the patch is kept for it.
   const performSave = useCallback(async () => {
-    const r = resume;
+    const id = pendingForRef.current;
     const patch = pendingRef.current;
-    if (!r || Object.keys(patch).length === 0) return;
+    if (!id || Object.keys(patch).length === 0) return;
     pendingRef.current = {};
+    // Only the resume on screen shows how its save went.
+    const shown = () => shownIdRef.current === id;
 
-    setSaveState('saving');
+    if (shown()) setSaveState('saving');
     try {
-      const updated = await updateResume(r.id, patch);
+      const updated = await updateResume(id, patch);
+      if (!shown()) return;
       setResume(updated);
       setLastSavedAt(updated.updated_at);
       savedAtRef.current = updated.updated_at;
@@ -175,7 +246,7 @@ export function useResume(slug: string | undefined): UseResumeResult {
         lastVersionAtRef.current = now;
         // Best-effort; failure here doesn't affect the save.
         createVersion({
-          resumeId: r.id,
+          resumeId: id,
           data: patch.data,
           links: patch.links ?? linksRef.current,
           isAuto: true,
@@ -189,16 +260,21 @@ export function useResume(slug: string | undefined): UseResumeResult {
         setSaveState((s) => (s === 'saved' ? 'idle' : s));
       }, 1200);
     } catch (err) {
+      if (!shown()) {
+        keep(id, patch);
+        throw err;
+      }
       pendingRef.current = { ...patch, ...pendingRef.current };
-      setSaveState('error');
-      setError((err as Error).message);
+      pendingForRef.current = id;
       // Try again on its own, waiting longer after each failure in a row,
       // so the edits never sit unsaved until the next keystroke; unless
       // another try can't succeed (PERMANENT_STATUSES).
+      const refused = !retriable(err);
+      setSaveState(refused ? 'refused' : 'error');
       failuresRef.current += 1;
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
-      if (!mountedRef.current || !retriable(err)) throw err;
+      if (!mountedRef.current || refused) throw err;
       const wait = Math.min(RETRY_MAX_MS, RETRY_FIRST_MS * 2 ** (failuresRef.current - 1));
       retryTimerRef.current = setTimeout(() => {
         retryTimerRef.current = null;
@@ -206,7 +282,9 @@ export function useResume(slug: string | undefined): UseResumeResult {
       }, wait);
       throw err;
     }
-  }, [resume]);
+    // Reads only refs, so one instance serves every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Starts a save once the one in flight ends, and returns it. A save
   // started for any reason replaces a retry still waiting.
@@ -233,6 +311,14 @@ export function useResume(slug: string | undefined): UseResumeResult {
 
   const schedule = useCallback(
     (patch: Pending) => {
+      // Edits belong to the resume on screen; anything still pending for
+      // another one is kept for that one.
+      const id = shownIdRef.current;
+      if (pendingForRef.current && pendingForRef.current !== id) {
+        keep(pendingForRef.current, pendingRef.current);
+        pendingRef.current = {};
+      }
+      pendingForRef.current = id;
       pendingRef.current = { ...pendingRef.current, ...patch };
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
@@ -368,6 +454,11 @@ export function useResume(slug: string | undefined): UseResumeResult {
       if (Object.keys(pendingRef.current).length > 0 || savingRef.current) {
         saveRef.current?.().catch(() => undefined);
       }
+      // And the edits kept for resumes the Studio moved on from, each to
+      // its own resume.
+      for (const id of [...keptRef.current.keys()]) {
+        leavingRef.current = leavingRef.current.then(() => saveKept(id));
+      }
     };
     // Best-effort; modern browsers don't wait for async work during
     // unload, so this only dispatches the save.
@@ -394,7 +485,7 @@ export function useResume(slug: string | undefined): UseResumeResult {
     design,
     links,
     loading,
-    error,
+    error: loadError && loadError.slug === slug ? loadError.message : null,
     saveState,
     lastSavedAt,
     setData,

@@ -23,13 +23,16 @@ import { loadLibrarySnapshot } from '../../links/library';
 import type { Resume, ResumeData } from '../../types';
 
 const LOADED_AT = '2026-11-11 08:00:00.000Z';
+const JANE = 'resume000000001';
+const OTHER = 'resume000000002';
 
-function resumeAt(updated: string): Resume {
+function resumeAt(updated: string, id = JANE): Resume {
+  const other = id === OTHER;
   return {
-    id: 'resume000000001',
-    slug: 'jane-doe',
-    name: 'Jane Doe',
-    data: { personalInfo: { fullName: 'Jane Doe' } },
+    id,
+    slug: other ? 'other' : 'jane-doe',
+    name: other ? 'Other' : 'Jane Doe',
+    data: { personalInfo: { fullName: other ? 'Other' : 'Jane Doe' } },
     links: {},
     template_id: 'modern',
     design: {},
@@ -38,6 +41,7 @@ function resumeAt(updated: string): Resume {
 }
 
 interface Save {
+  id: string;
   patch: Record<string, unknown>;
   resolve: (updated: string) => void;
   // No status is a save that got no answer; a status is PocketBase's.
@@ -48,17 +52,23 @@ let saves: Save[];
 
 beforeEach(() => {
   saves = [];
-  vi.mocked(getResumeBySlug).mockReset().mockResolvedValue(resumeAt(LOADED_AT));
+  vi.mocked(getResumeBySlug)
+    .mockReset()
+    .mockImplementation(async (slug: string) => {
+      if (slug === 'missing') throw new Error('Not found.');
+      return resumeAt(LOADED_AT, slug === 'other' ? OTHER : JANE);
+    });
   vi.mocked(loadLibrarySnapshot).mockReset().mockResolvedValue({ jobs: {}, projects: {}, bullets: {} } as never);
   vi.mocked(createVersion).mockReset().mockResolvedValue(undefined as never);
   vi.mocked(updateResume)
     .mockReset()
     .mockImplementation(
-      (_id, patch) =>
+      (id, patch) =>
         new Promise<Resume>((resolve, reject) => {
           saves.push({
+            id: id as string,
             patch: patch as Record<string, unknown>,
-            resolve: (updated) => resolve(resumeAt(updated)),
+            resolve: (updated) => resolve(resumeAt(updated, id as string)),
             reject: (status) =>
               reject(status === undefined ? new Error('offline') : Object.assign(new Error('refused'), { status })),
           });
@@ -151,6 +161,9 @@ describe('useResume flush', () => {
     await act(async () => saves[0].reject());
     await expect(flushed!).rejects.toThrow('offline');
     expect(hook.result.current.saveState).toBe('error');
+    // A failed save isn't a failed load: the Studio stays on screen.
+    expect(hook.result.current.error).toBeNull();
+    expect(hook.result.current.resume).not.toBeNull();
 
     let retried: Promise<string>;
     act(() => {
@@ -296,7 +309,9 @@ describe('useResume keeps every edit', () => {
       await act(async () => saves[0].reject(status));
       await advance(60_000);
       expect(saves).toHaveLength(1);
-      expect(hook.result.current.saveState).toBe('error');
+      // Says so: nothing will try again until the next edit or export.
+      expect(hook.result.current.saveState).toBe('refused');
+      expect(hook.result.current.error).toBeNull();
 
       // The edits stay pending: the next edit's save carries them.
       edit(hook, 'Refused, then edited');
@@ -321,7 +336,98 @@ describe('useResume keeps every edit', () => {
     edit(hook, 'Try again');
     await advance(700);
     await act(async () => saves[0].reject(status));
+    expect(hook.result.current.saveState).toBe('error');
     await advance(2_000);
     expect(saves).toHaveLength(2);
+  });
+});
+
+// The Studio can move to another resume without remounting (the command
+// center's New resume, or Back). What's unsaved stays with the resume it
+// was typed in, and each slug shows its own load.
+describe('useResume across resumes', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function advance(ms: number) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  async function studio() {
+    const hook = renderHook(({ slug }: { slug: string }) => useResume(slug), { initialProps: { slug: 'jane-doe' } });
+    await waitFor(() => expect(hook.result.current.resume?.id).toBe(JANE));
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    return hook;
+  }
+
+  function typeName(hook: Awaited<ReturnType<typeof studio>>, fullName: string) {
+    act(() => {
+      hook.result.current.setData({ personalInfo: { fullName } } as unknown as ResumeData);
+    });
+  }
+
+  it('never saves a resume’s unsaved edits into the next resume it moves to', async () => {
+    const hook = await studio();
+    typeName(hook, 'Typed in Jane');
+    await advance(700);
+    await act(async () => saves[0].reject()); // a retry is due in 2 s
+    hook.rerender({ slug: 'other' });
+    await advance(0);
+    for (const s of saves.slice(1)) await act(async () => s.resolve('2026-11-11 08:00:05.000Z'));
+    await advance(60_000);
+    expect(hook.result.current.resume?.id).toBe(OTHER);
+    expect(hook.result.current.data.personalInfo.fullName).toBe('Other');
+    // Nothing typed in Jane Doe went to the next resume.
+    expect(saves.filter((s) => s.id === OTHER).map((s) => s.patch)).toEqual([]);
+    // It saved to Jane Doe, once more, as the Studio moved on.
+    expect(saves.map((s) => [s.id, s.patch])).toEqual([
+      [JANE, { data: { personalInfo: { fullName: 'Typed in Jane' } } }],
+      [JANE, { data: { personalInfo: { fullName: 'Typed in Jane' } } }],
+    ]);
+  });
+
+  it('lands a save in flight on its own resume, and keeps what failed for it until it comes back', async () => {
+    const hook = await studio();
+    typeName(hook, 'In flight');
+    await advance(700);
+    typeName(hook, 'Typed after');
+    hook.rerender({ slug: 'other' });
+    await advance(0);
+    // The save in flight fails, then so does the one try of what's left.
+    await act(async () => saves[0].reject());
+    await advance(0);
+    expect(saves.map((s) => s.id)).toEqual([JANE, JANE]);
+    await act(async () => saves[1].reject());
+    await advance(0);
+    expect(hook.result.current.resume?.id).toBe(OTHER);
+    expect(hook.result.current.saveState).toBe('idle');
+    await advance(60_000);
+    expect(saves).toHaveLength(2);
+
+    // Back on Jane Doe, the edits are there again and save to it.
+    hook.rerender({ slug: 'jane-doe' });
+    await advance(0);
+    expect(hook.result.current.resume?.id).toBe(JANE);
+    expect(hook.result.current.data.personalInfo.fullName).toBe('Typed after');
+    await advance(700);
+    expect(saves.map((s) => [s.id, s.patch])).toEqual([
+      [JANE, { data: { personalInfo: { fullName: 'In flight' } } }],
+      [JANE, { data: { personalInfo: { fullName: 'Typed after' } } }],
+      [JANE, { data: { personalInfo: { fullName: 'Typed after' } } }],
+    ]);
+  });
+
+  it('shows a failed load for its own slug, never the resume shown before it', async () => {
+    const hook = await studio();
+    vi.useRealTimers();
+    hook.rerender({ slug: 'missing' });
+    await waitFor(() => expect(hook.result.current.error).toBe('Not found.'));
+    expect(hook.result.current.resume).toBeNull();
+    hook.rerender({ slug: 'jane-doe' });
+    await waitFor(() => expect(hook.result.current.resume?.id).toBe(JANE));
+    expect(hook.result.current.error).toBeNull();
   });
 });
