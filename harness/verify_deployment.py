@@ -39,14 +39,17 @@ Read-only checks an operator runs against a Rounds deployment they operate:
                route's own gate is off, definitions_disabled when
                ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled stops the six
                execution routes, or execution_disabled when
-               ROUNDS_GATE_EXECUTION_SCRATCH stops the four scratch routes.
+               ROUNDS_GATE_EXECUTION_SCRATCH stops the four scratch routes
+               or ROUNDS_GATE_EXECUTION_GRADING stops grade, take-home
+               submit, and their two review routes. A review route's
+               {job_id} is sent as an id no job has.
   gates        (--gates-log FILE) A saved runner log from its start: the
                gates line lists every admitted route's gate and both
                enforcement gates with valid values, none fell back from an
-               invalid setting, ROUNDS_GATE_EXECUTION_SCRATCH isn't on
-               without the store on and definitions enforced (the runner
-               then acts as if it were off), and each --expect-gate
-               NAME=VALUE holds.
+               invalid setting, neither ROUNDS_GATE_EXECUTION_SCRATCH nor
+               ROUNDS_GATE_EXECUTION_GRADING is on without the store on and
+               definitions enforced (the runner then acts as if it were
+               off), and each --expect-gate NAME=VALUE holds.
 
 It never writes. Every request is a read, a login that is expected to fail, a
 request nginx refuses on its headers before PocketBase sees it, or a request to
@@ -636,7 +639,39 @@ ADMITTED_ROUTES: tuple[tuple[str, str, str, int, int], ...] = (
     ("GET", "/api/pdf/health", "PDF_HEALTH", 0, 6 * MIB),
     ("POST", "/api/ai/ats-rule", "ATS_RULE", 1 * MIB, 6 * MIB),
     ("POST", "/api/pdf/snapshots", "LEGACY_SNAPSHOT_CREATE", 4 * KIB, 6 * MIB),
+    # ROUNDS-00A-L03 PR 3: a grading job's rubric review, one path segment
+    # for the job's id, behind its grading route's own gate.
+    ("POST", "/api/ai-coding/grade/{job_id}/review", "AI_CODING_GRADE", 6 * MIB, 6 * MIB),
+    ("POST", "/api/take-home/submit/{job_id}/review", "TAKE_HOME_SUBMIT", 6 * MIB, 6 * MIB),
 )
+# What a request puts in a route's {job_id} segment: an id of the right
+# shape that no job has, so nothing is found even past the account check.
+JOB_ID_PLACEHOLDER = "000000000000000"
+
+
+def concrete(path: str) -> str:
+    """The path a request to an admitted route uses."""
+    return path.replace("{job_id}", JOB_ID_PLACEHOLDER)
+
+
+def template_of(path: str) -> str:
+    """The admitted route a concrete path names: the path itself, or the
+    template whose {job_id} segment it fills with one segment."""
+    for _method, route, *_rest in ADMITTED_ROUTES:
+        if "{job_id}" in route:
+            head, tail = route.split("{job_id}")
+            middle = path[len(head):len(path) - len(tail)] if path.startswith(head) and path.endswith(tail) else ""
+            if middle and "/" not in middle and len(path) >= len(head) + len(tail) + 1:
+                return route
+    return path
+
+
+# The review routes serve only while ROUNDS_GATE_EXECUTION_GRADING is on;
+# until then each answers 503 execution_disabled before the account, so
+# either answer passes unless --expect-disabled names the route.
+SERVED_WHILE_GRADING = frozenset({
+    "/api/ai-coding/grade/{job_id}/review", "/api/take-home/submit/{job_id}/review",
+})
 # The admitted routes whose gate ships off (backend/app/gates.py). Until the
 # owner turns one on it answers 503 route_disabled before the account, so
 # either answer passes unless --expect-disabled names the route; the gates
@@ -648,22 +683,26 @@ ROUTE_GATE_VALUES = ("enabled", "disabled")
 # The 503 an operator's stop answers, before the account
 # (backend/app/admission.py): a route's own gate,
 # ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled, which stops the six routes
-# that run a definition, and ROUNDS_GATE_EXECUTION_SCRATCH off, which stops
-# the four scratch routes (ROUNDS-00A-L03 PR 2). Kept in step with the
-# runner by backend/tests/test_verify_deployment_admission.py.
+# that run a definition, ROUNDS_GATE_EXECUTION_SCRATCH off, which stops
+# the four scratch routes (ROUNDS-00A-L03 PR 2), and
+# ROUNDS_GATE_EXECUTION_GRADING off, which stops grade, take-home submit,
+# and both review routes (PR 3). Kept in step with the runner by
+# backend/tests/test_verify_deployment_admission.py.
 STOP_CODES = ("route_disabled", "definitions_disabled", "execution_disabled")
 STOPPED_BY = {
     "route_disabled": "its gate is off",
     "definitions_disabled": "ROUNDS_GATE_EXECUTION_DEFINITIONS is disabled",
-    "execution_disabled": "ROUNDS_GATE_EXECUTION_SCRATCH is off, or on without what it needs",
+    "execution_disabled": "ROUNDS_GATE_EXECUTION_SCRATCH or ROUNDS_GATE_EXECUTION_GRADING is off, or on "
+                          "without what it needs",
 }
 DEFINITION_ROUTES = frozenset({
     "/api/run", "/api/evaluate", "/api/ai-coding/run-project", "/api/ai-coding/grade",
     "/api/take-home/run", "/api/take-home/submit",
 })
 SCRATCH_ROUTES = frozenset({"/api/evaluate", "/api/run", "/api/take-home/run", "/api/ai-coding/run-project"})
+GRADING_ROUTES = frozenset({"/api/ai-coding/grade", "/api/take-home/submit"}) | SERVED_WHILE_GRADING
 # Each stop's routes; a route gate stops any admitted route.
-STOP_ROUTES = {"definitions_disabled": DEFINITION_ROUTES, "execution_disabled": SCRATCH_ROUTES}
+STOP_ROUTES = {"definitions_disabled": DEFINITION_ROUTES, "execution_disabled": SCRATCH_ROUTES | GRADING_ROUTES}
 ENFORCEMENT_GATES: dict[str, tuple[str, ...]] = {
     "ENFORCE_IDEMPOTENCY": ("off", "observe", "enforce"),
     "ENFORCE_QUOTA": ("off", "observe", "enforce"),
@@ -674,10 +713,13 @@ EXECUTION_GATES: dict[str, tuple[str, ...]] = {
     "EXECUTION_DEFINITIONS": ("legacy", "enforce", "disabled"),
     "EXECUTION_STORE": ("off", "on"),
     "EXECUTION_SCRATCH": ("legacy", "on", "off"),
+    "EXECUTION_GRADING": ("legacy", "on", "off"),
 }
-# What ROUNDS_GATE_EXECUTION_SCRATCH=on needs (backend/execution/keys.py);
-# without either it acts as off.
+# What ROUNDS_GATE_EXECUTION_SCRATCH=on and ROUNDS_GATE_EXECUTION_GRADING=on
+# need (backend/execution/keys.py); without either, each acts as off.
 SCRATCH_NEEDS = (("EXECUTION_STORE", "on"), ("EXECUTION_DEFINITIONS", "enforce"))
+GRADING_NEEDS = SCRATCH_NEEDS
+KEY_NEEDS = {"EXECUTION_SCRATCH": SCRATCH_NEEDS, "EXECUTION_GRADING": GRADING_NEEDS}
 # A made-up bearer no deployment ever issued: a disabled route must refuse
 # it before it asks PocketBase who it is.
 BOGUS_BEARER = "verify-deployment-not-a-token"
@@ -760,7 +802,7 @@ def parse_expected_disabled(items: Iterable[str]) -> dict[str, str]:
         routes = STOP_ROUTES.get(code)
         if routes is not None and path not in routes:
             gate = "ROUNDS_GATE_EXECUTION_DEFINITIONS" if code == "definitions_disabled" else \
-                "ROUNDS_GATE_EXECUTION_SCRATCH"
+                "ROUNDS_GATE_EXECUTION_SCRATCH or ROUNDS_GATE_EXECUTION_GRADING"
             raise ConfigError(f"{gate} doesn't stop {path}; it stops {', '.join(sorted(routes))}")
         if out.get(path, code) != code:
             raise ConfigError(f"--expect-disabled names {path} with two codes")
@@ -785,11 +827,13 @@ def check_admitted_routes(base_url: str, req: Callable[..., Response] = request,
     off = parse_expected_disabled(disabled)
     out: list[Result] = []
     for method, path, _gate, _runner_cap, _edge_cap in ADMITTED_ROUTES:
-        resp = req(method, base + path, body={} if method == "POST" else None)
+        resp = req(method, base + concrete(path), body={} if method == "POST" else None)
         code = _code_of(resp.body)
         want = (503, off[path]) if path in off else (401, "unauthenticated")
         if path in SHIPS_OFF and path not in off and (resp.status, code) == (503, "route_disabled"):
             want = (503, "route_disabled")
+        if path in SERVED_WHILE_GRADING and path not in off and (resp.status, code) == (503, "execution_disabled"):
+            want = (503, "execution_disabled")
         refused = (resp.status, code) == want
         if refused:
             why = ""
@@ -828,7 +872,7 @@ def check_admission_body_caps(base_url: str, *, at_runner: bool = False, timeout
         if method != "POST":
             continue
         cap = runner_cap if at_runner else edge_cap
-        got = declare_oversize(base, path, cap + 1, timeout=timeout)
+        got = declare_oversize(base, concrete(path), cap + 1, timeout=timeout)
         target = f"{path} ({cap + 1} bytes declared)"
         if got.error == "timeout":
             out.append(Result("deployment.admission.body-cap.rejected", target, "admission", actor, 413, 0, False,
@@ -873,7 +917,7 @@ def check_disabled_routes(base_url: str, paths: Iterable[str], req: Callable[...
         method = admitted_method(path)
         failures, last = [], None
         for actor, token in (("anonymous", ""), ("unknown-bearer", BOGUS_BEARER)):
-            last = req(method, base + path, body={} if method == "POST" else None, token=token)
+            last = req(method, base + concrete(path), body={} if method == "POST" else None, token=token)
             code = _code_of(last.body)
             problem = envelope_problem(last.status, last.body, last.headers)
             if last.status != 503 or code != want or problem:
@@ -902,17 +946,23 @@ def parse_gates_log(text: str) -> dict[str, dict[str, str]] | None:
     return found
 
 
-def scratch_acting_off(gates: dict[str, Any]) -> list[str]:
-    """When the gates line has ROUNDS_GATE_EXECUTION_SCRATCH on without
-    what it needs, the missing settings as NAME=value; the runner then acts
-    as if it were off. Empty otherwise."""
+def key_acting_off(gates: dict[str, Any], key: str = "EXECUTION_SCRATCH") -> list[str]:
+    """When the gates line has ``key`` (ROUNDS_GATE_EXECUTION_SCRATCH or
+    ROUNDS_GATE_EXECUTION_GRADING) on without what it needs, the missing
+    settings as NAME=value; the runner then acts as if it were off. Empty
+    otherwise."""
     def value(name: str) -> Any:
         entry = gates.get(name)
         return entry.get("value") if isinstance(entry, dict) else None
 
-    if value("EXECUTION_SCRATCH") != "on":
+    if value(key) != "on":
         return []
-    return [f"{name}={want}" for name, want in SCRATCH_NEEDS if value(name) != want]
+    return [f"{name}={want}" for name, want in KEY_NEEDS[key] if value(name) != want]
+
+
+def scratch_acting_off(gates: dict[str, Any]) -> list[str]:
+    """``key_acting_off`` for ROUNDS_GATE_EXECUTION_SCRATCH."""
+    return key_acting_off(gates, "EXECUTION_SCRATCH")
 
 
 def check_gates_log(text: str, expected: dict[str, str] | None = None, source: str = "runner log") -> list[Result]:
@@ -949,11 +999,13 @@ def check_gates_log(text: str, expected: dict[str, str] | None = None, source: s
                                                                  or EXECUTION_GATES.get(name))
         if allowed is not None and value not in allowed:
             problems.append(f"{name}={value!r} isn't one of {', '.join(allowed)}")
-    needs = scratch_acting_off(gates)
-    acting_off = (f"EXECUTION_SCRATCH is on but the runner acts as if it were off: it also needs "
-                  f"{' and '.join(needs)}") if needs else ""
-    if acting_off:
-        problems.append(acting_off)
+    acting_off = {}
+    for key in KEY_NEEDS:
+        needs = key_acting_off(gates, key)
+        if needs:
+            acting_off[key] = (f"{key} is on but the runner acts as if it were off: it also needs "
+                               f"{' and '.join(needs)}")
+            problems.append(acting_off[key])
     out.append(Result("deployment.gates.valid", source, "gates", "operator", 200, 200, not problems, 0,
                       "; ".join(problems)))
     if expected:
@@ -962,8 +1014,8 @@ def check_gates_log(text: str, expected: dict[str, str] | None = None, source: s
             got = (gates.get(name) or {}).get("value")
             if got != want:
                 wrong.append(f"{name}={got!r}, expected {want!r}")
-            elif name == "EXECUTION_SCRATCH" and acting_off:
-                wrong.append(acting_off)
+            elif name in acting_off:
+                wrong.append(acting_off[name])
         out.append(Result("deployment.gates.expected", source, "gates", "operator", 200, 200, not wrong, 0,
                           "; ".join(wrong)))
     return out

@@ -62,6 +62,15 @@ def runner_scratch_routes() -> set[str]:
     return {path for (_m, path), route in admission.ROUTES.items() if route.operation in keys.SCRATCH_OPERATIONS}
 
 
+def runner_grading_routes() -> set[str]:
+    """The routes ROUNDS_GATE_EXECUTION_GRADING off stops, from the
+    runner's own table (ROUNDS-00A-L03 PR 3)."""
+    from app import admission
+    from execution import keys
+
+    return {path for (_m, path), route in admission.ROUTES.items() if route.operation in keys.GRADING_OPERATIONS}
+
+
 def ingress_body_cap() -> int:
     """proxy-body-size on the repository's Kubernetes ingress."""
     text = (ROOT / "k8s" / "ingress.yaml").read_text()
@@ -79,6 +88,8 @@ class Admission:
         self.definitions_off = False
         # ROUNDS_GATE_EXECUTION_SCRATCH off, or on without what it needs.
         self.scratch_off = False
+        # ROUNDS_GATE_EXECUTION_GRADING off (ROUNDS-00A-L03 PR 3).
+        self.grading_off = False
         self.overrides: dict[str, tuple[int, object, dict]] = {}
         self.caps = {path: edge for _m, path, _g, _r, edge in vd.ADMITTED_ROUTES}
         self.buffering = False
@@ -97,6 +108,8 @@ class Admission:
         if self.definitions_off and path in runner_definition_routes():
             return 503, envelope("definitions_disabled"), {"X-Correlation-Id": CID}
         if self.scratch_off and path in runner_scratch_routes():
+            return 503, envelope("execution_disabled"), {"X-Correlation-Id": CID}
+        if self.grading_off and path in runner_grading_routes():
             return 503, envelope("execution_disabled"), {"X-Correlation-Id": CID}
         return 401, envelope("unauthenticated"), {"X-Correlation-Id": CID}
 
@@ -123,7 +136,9 @@ def fake(dep: Admission):
                 self._send(*PROXY_413)
                 self.close_connection = True
                 return
-            cap = dep.caps.get(self.path)
+            # A review route's path fills its {job_id} segment.
+            path = vd.template_of(self.path)
+            cap = dep.caps.get(path)
             if cap is not None and length > cap:
                 if dep.buffering:
                     time.sleep(3)
@@ -135,7 +150,7 @@ def fake(dep: Admission):
                 return
             if length:
                 self.rfile.read(length)
-            self._send(*dep.answer(self.path, self.headers.get("Authorization", "")))
+            self._send(*dep.answer(path, self.headers.get("Authorization", "")))
 
         do_GET = do_POST = _handle
 
@@ -341,7 +356,8 @@ def test_a_capped_proxy_in_front_makes_the_caps_over_its_own_inconclusive():
     assert [r.target for r in results if not r.passed and not r.inconclusive] == []
     over = {path for method, path, _g, _r, edge in vd.ADMITTED_ROUTES if method == "POST" and edge + 1 > dep.proxy_cap}
     hidden = [r for r in results if r.inconclusive]
-    assert {r.target.split(" ")[0] for r in hidden} == over and len(over) == 7
+    # Seven 6 MiB routes, and the two review routes from ROUNDS-00A-L03 PR 3.
+    assert {r.target.split(" ")[0] for r in hidden} == over and len(over) == 9
     assert all(r.detail.startswith("inconclusive (capped proxy in front)") for r in hidden)
     assert {r.target.split(" ")[0] for r in results if r.passed} == {"/api/run", "/api/evaluate"}
 
@@ -463,10 +479,12 @@ def test_expected_stops_parse_to_a_code_per_route():
 
 @pytest.mark.parametrize(
     "items",
-    [["/api/pdf/render=definitions_disabled"], ["/api/ai-coding/grade=execution_disabled"],
+    # From ROUNDS-00A-L03 PR 3 grade is stopped by the grading key, so the
+    # route neither key stops is the PDF render.
+    [["/api/pdf/render=definitions_disabled"], ["/api/pdf/render=execution_disabled"],
      ["/api/run=unauthenticated"], ["/api/run="], ["/api/run", "/api/run=definitions_disabled"],
      ["/api/not-admitted=route_disabled"]],
-    ids=["not-a-definition-route", "not-a-scratch-route", "not-a-stop", "empty-code", "two-codes", "not-admitted"],
+    ids=["not-a-definition-route", "not-a-job-route", "not-a-stop", "empty-code", "two-codes", "not-admitted"],
 )
 def test_an_expected_stop_that_cant_happen_is_a_usage_error(items):
     with pytest.raises(vd.ConfigError):
@@ -617,6 +635,10 @@ def _every_route_on(monkeypatch):
     from app import gates
 
     env = {f"{gates.PREFIX}{gate}": "enabled" for _m, _p, gate, _r, _e in vd.ADMITTED_ROUTES}
+    # The review routes serve only while grading runs as jobs, which needs
+    # the store on and definitions enforced (ROUNDS-00A-L03 PR 3).
+    env.update({"ROUNDS_GATE_EXECUTION_GRADING": "on", "ROUNDS_GATE_EXECUTION_STORE": "on",
+                "ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce"})
     monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
 
 
@@ -629,11 +651,16 @@ def test_the_runners_anonymous_denials_are_the_safe_shape(client, monkeypatch, s
     else:
         _every_route_on(monkeypatch)
     for method, path, _g, _r, _e in vd.ADMITTED_ROUTES:
-        res = client.request(method, path, json={} if method == "POST" else None)
+        res = client.request(method, vd.concrete(path), json={} if method == "POST" else None)
         headers = {k.lower(): v for k, v in res.headers.items()}
         assert vd.envelope_problem(res.status_code, res.content, headers) == "", path
-        # A route whose gate ships off answers its stop before the account.
-        want = "route_disabled" if shipped and path in vd.SHIPS_OFF else "unauthenticated"
+        # A route whose gate ships off answers its stop before the account,
+        # and so does a review route while grading isn't on.
+        want = "unauthenticated"
+        if shipped and path in vd.SHIPS_OFF:
+            want = "route_disabled"
+        elif shipped and path in vd.SERVED_WHILE_GRADING:
+            want = "execution_disabled"
         assert res.json()["code"] == want, path
 
 
@@ -646,7 +673,7 @@ def test_the_runners_field_refusals_repeat_none_of_the_request(client, signed_in
     for method, path, _g, _r, _e in vd.ADMITTED_ROUTES:
         if method != "POST":
             continue
-        res = client.post(path, json={marker: marker, "code": f"# {marker}"}, headers=signed_in)
+        res = client.post(vd.concrete(path), json={marker: marker, "code": f"# {marker}"}, headers=signed_in)
         headers = {k.lower(): v for k, v in res.headers.items()}
         assert res.status_code == 422 and res.json()["code"] == "invalid_request", path
         assert vd.envelope_problem(res.status_code, res.content, headers) == "", path
@@ -670,11 +697,69 @@ def test_the_stop_codes_and_definition_routes_match_the_runner():
 
     assert vd.DEFINITION_ROUTES == runner_definition_routes()
     assert vd.SCRATCH_ROUTES == runner_scratch_routes()
+    assert vd.GRADING_ROUTES == runner_grading_routes()
+    assert vd.SERVED_WHILE_GRADING == {p for (_m, p), r in admission_routes().items() if r.operation == "review"}
     assert set(vd.STOPPED_BY) == set(vd.STOP_CODES)
     assert all(errors.CODES[code] == 503 for code in vd.STOP_CODES)
-    assert vd.SCRATCH_NEEDS == keys.SCRATCH_NEEDS
+    assert vd.SCRATCH_NEEDS == keys.SCRATCH_NEEDS and vd.GRADING_NEEDS == keys.GRADING_NEEDS
     for name, values in vd.EXECUTION_GATES.items():
         assert tuple(gates.BY_NAME[name].values) == values
+
+
+def admission_routes():
+    from app import admission
+
+    return admission.ROUTES
+
+
+def test_a_review_routes_request_fills_its_job_id_and_names_its_template():
+    for path in vd.SERVED_WHILE_GRADING:
+        sent = vd.concrete(path)
+        assert "{" not in sent and vd.template_of(sent) == path
+        assert vd.template_of(sent + "/x") == sent + "/x"
+    assert vd.template_of("/api/run") == "/api/run"
+
+
+def test_the_runners_grading_stop_is_the_one_the_verifier_expects(client, monkeypatch):
+    from app import gates
+
+    for env in ({"ROUNDS_GATE_EXECUTION_GRADING": "off"}, {"ROUNDS_GATE_EXECUTION_GRADING": "on"}):
+        monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
+        req = _in_process(client)
+        named = [f"{path}=execution_disabled" for path in sorted(vd.GRADING_ROUTES)]
+        results = vd.check_admitted_routes("http://runner", req, disabled=named)
+        results += vd.check_disabled_routes("http://runner", named, req)
+        assert failed(results) == []
+
+
+def test_a_review_route_passes_off_or_on_until_it_is_named():
+    dep = Admission()
+    dep.grading_off = True
+    with fake(dep) as url:
+        results = vd.check_admitted_routes(url)
+    bad = [r.target for r in results if not r.passed]
+    # Grade and submit are left off unnamed; the review routes may be off.
+    assert sorted(bad) == ["/api/ai-coding/grade", "/api/take-home/submit"]
+    with fake(dep) as url:
+        named = [f"{p}=execution_disabled" for p in sorted(vd.GRADING_ROUTES)]
+        assert failed(vd.check_admitted_routes(url, disabled=named) + vd.check_disabled_routes(url, named)) == []
+
+
+@pytest.mark.parametrize("missing", ["EXECUTION_STORE", "EXECUTION_DEFINITIONS"])
+def test_a_gates_log_with_grading_on_without_what_it_needs_fails_and_says_why(missing):
+    table = {gate: {"value": "enabled", "source": "default"} for _m, _p, gate, _r, _e in vd.ADMITTED_ROUTES}
+    table.update({name: {"value": "observe", "source": "default"} for name in vd.ENFORCEMENT_GATES})
+    table.update({"EXECUTION_STORE": {"value": "on", "source": "env"},
+                  "EXECUTION_DEFINITIONS": {"value": "enforce", "source": "env"},
+                  "EXECUTION_GRADING": {"value": "on", "source": "env"}})
+    table[missing] = {"value": {"EXECUTION_STORE": "off", "EXECUTION_DEFINITIONS": "legacy"}[missing],
+                      "source": "default"}
+    log = json.dumps({"v": "obs/v1", "event": "gates", "service": "runner", "gates": table})
+    results = vd.check_gates_log(log, {"EXECUTION_GRADING": "on"})
+    bad = {r.check_id: r.detail for r in results if not r.passed}
+    want = "EXECUTION_STORE=on" if missing == "EXECUTION_STORE" else "EXECUTION_DEFINITIONS=enforce"
+    assert set(bad) == {"deployment.gates.valid", "deployment.gates.expected"}
+    assert all("EXECUTION_GRADING is on" in why and want in why for why in bad.values())
 
 
 def test_the_runners_scratch_stop_is_the_one_the_verifier_expects(client, monkeypatch):
