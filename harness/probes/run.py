@@ -265,6 +265,8 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
             elif pid == families.RELATION_UPDATE_INDISTINGUISHABLE_FAMILY:
                 writer.write(families.update_relation_foreign_or_missing_indistinguishable(
                     pb, name, row.get("relation_endpoints", []), b, a, expected))
+            elif pid == families.SHARE_CREATE_SHAPE_FAMILY:
+                writer.write(families.share_create_shape_denied(pb, name, b, content, admin_token, expected))
             # hook-phase families run in run_hook, degraded ones in run_degraded
 
     _readback(pb, doc, admin_token, writer)

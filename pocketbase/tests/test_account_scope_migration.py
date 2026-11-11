@@ -101,11 +101,19 @@ def test_owned_and_server_only_match_the_policy(src, policy):
 def test_rule_constants_match_the_policy(src, policy):
     create_rule = _const(src, "CREATE_RULE")
     update_rule = _const(src, "UPDATE_RULE")
-    # Every owned collection gets these exact create/update rules.
+    # Every owned collection gets these exact create/update rules, unless a
+    # later migration the row names in rule_overrides sets that rule again
+    # (#11's 1700008100 makes the share link update rule null).
     for name in _string_array(src, "OWNED"):
-        cur = policy["collections"][name]["current_rules"]
-        assert cur["create"] == create_rule, name
-        assert cur["update"] == update_rule, name
+        row = policy["collections"][name]
+        cur = row["current_rules"]
+        later = {k for o in row.get("rule_overrides", []) for k in o["rules"]}
+        for o in row.get("rule_overrides", []):
+            assert o["migration"] > MIGRATION.name and (MIGRATION.parent / o["migration"]).is_file(), name
+        if "create" not in later:
+            assert cur["create"] == create_rule, name
+        if "update" not in later:
+            assert cur["update"] == update_rule, name
     # resume_share_views is superuser-only: create and update are null.
     rsv = policy["collections"]["resume_share_views"]["current_rules"]
     assert rsv["create"] is None and rsv["update"] is None

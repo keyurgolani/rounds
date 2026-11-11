@@ -10,15 +10,14 @@ export type ShareLink = {
   resume_id: string | null;
   variant_id: string | null;
   created: string;
-  view_count: number;
 };
 
+// The only shape a public read answers (backend/routers/share.py,
+// project()): no owner name, link kind, ids, or view counts.
 export type PublicResumePayload = {
   data: ResumeData;
   template_id: string;
   design: TemplateConfig;
-  name: string;
-  kind: 'resume' | 'variant';
 };
 
 export function listShareLinks(): Promise<ShareLink[]> {

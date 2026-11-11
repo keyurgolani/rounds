@@ -8,11 +8,10 @@ mis-sets `user`.
 
 Each test drives a real write endpoint with the PocketBase layer mocked to
 record the written payload, then asserts the invariant: a create names the
-caller, an update omits `user` or resends the caller's own id. The one
-exception is the public share viewer's view-tracking insert, which runs under
-the admin token (bypassing the rules) and names the share link's owner on
-purpose; it is asserted separately. The two-account harness proves the live
-rules accept exactly these shapes.
+caller, an update omits `user` or resends the caller's own id. The public
+share viewer writes no row at all since ROUNDS-00B-L03 stage 1, which is
+asserted separately. The two-account harness proves the live rules accept
+exactly these shapes.
 """
 from unittest.mock import patch
 
@@ -146,7 +145,7 @@ def test_put_settings_update_branch_resends_the_caller(client):
 
 
 # ---------------------------------------------------------------------------
-# resume_share_links (user token) + resume_share_views (admin insert)
+# resume_share_links (user token); the public read writes nothing
 # ---------------------------------------------------------------------------
 
 
@@ -158,30 +157,30 @@ def test_create_share_link_names_the_caller(client):
     _assert_create_names_caller(rec.writes)
 
 
-def test_public_view_insert_uses_admin_token_and_names_the_link_owner(client):
+def test_public_read_writes_no_row(client):
+    # ROUNDS-00B-L03 stage 1: the public read writes nothing, so no
+    # resume_share_views row is inserted under any token.
     link_owner = "owner-of-the-link"
-    captured = {}
+    writes = []
 
     async def fake_admin_get(path, params=None):
         if "resume_share_links" in path:
-            return {"items": [{"id": "l1", "user": link_owner, "resume": "r1", "token": "tok"}]}
+            return {"items": [{"id": "l1", "user": link_owner, "resume": "r1", "token": "AbCdEfGhIjKlMnOpQrStUv"}]}
         if "resumes" in path:
-            return {"id": "r1", "data": {}, "template_id": "modern", "design": {}, "name": "R"}
+            return {"id": "r1", "user": link_owner, "data": {}, "template_id": "modern", "design": {}, "name": "R"}
         return None
 
-    async def fake_admin_post(path, body):
-        captured["path"] = path
-        captured["body"] = dict(body)
+    async def fake_write(*args, **kwargs):
+        writes.append(args)
         return {"id": "v1"}
 
     with patch("routers.share.pb_admin_get", fake_admin_get), \
-         patch("routers.share.pb_admin_post", fake_admin_post):
-        res = client.get("/api/share/by-token/sometoken")
+         patch("app.pb_auth.pb_admin_post", fake_write), \
+         patch("app.pb_auth.pb_post", fake_write), \
+         patch("routers.share.pb_post", fake_write):
+        res = client.get("/api/share/by-token/AbCdEfGhIjKlMnOpQrStUv")
     assert res.status_code == 200
-    # The view insert is server-only (create rule null); it runs under the
-    # admin token and stamps the share link's owner, read from the stored link.
-    assert _collection(captured["path"]) == "resume_share_views"
-    assert captured["body"]["user"] == link_owner
+    assert not writes
 
 
 # ---------------------------------------------------------------------------

@@ -825,6 +825,14 @@ def test_every_collection_covers_each_actor_operation_and_resource_state():
         assert reads <= probes, (name, sorted(reads - probes))
         if name == "resume_share_views":
             assert server_only <= probes, name
+        elif name != "users" and row["current_rules"].get("update", "") is None:
+            # Owner creates, and no client updates at all (#11's share links):
+            # the not-found and accepted update families give way to
+            # update.server-only, which refuses even the owner's own update.
+            creates = {p for p in owned_writes if p.startswith("account-scope.create.")}
+            assert creates <= probes, (name, sorted(creates - probes))
+            assert "account-scope.update.server-only.denied" in probes, name
+            assert not (owned_writes - creates) & probes, name
         elif name != "users":
             assert owned_writes <= probes, (name, sorted(owned_writes - probes))
 
@@ -840,3 +848,97 @@ def test_open_exceptions_name_their_closing_leaf():
     ids = {e["id"] for e in doc["open_exceptions"]}
     assert {"timing", "error-shapes", "owner-id-create-shape"} <= ids
     assert all(e["closed_by"].startswith("ROUNDS-") for e in doc["open_exceptions"])
+
+
+# --------------------------------------------------------------------------
+# share links answer only their owner (ROUNDS-00B-L03 stage 1)
+# --------------------------------------------------------------------------
+
+
+class _SharePB:
+    """Answers the share families' reads and creates like PocketBase would
+    under the owner-only rules and the link create hook, unless told to
+    answer like a looser read rule or a create without the hook."""
+
+    def __init__(self, loose_read: bool = False, accept_shapes: bool = False, owner_rows: int = 1):
+        self.loose_read = loose_read
+        self.accept_shapes = accept_shapes
+        self.owner_rows = owner_rows
+        self.calls: list[tuple] = []
+
+    def listing(self, collection, token=None, params=None):
+        self.calls.append(("list", collection, token, dict(params or {})))
+        if params and "filter" in params:  # the superuser's owner count
+            return Response(200, {"items": [], "totalItems": self.owner_rows}, 1)
+        # B always lists its own link; a looser rule adds A's.
+        rows = [{"id": "b-resume_share_links-id"}] if token == "b-token" else []
+        if self.loose_read:
+            rows.append({"id": "a-resume_share_links-id"})
+        return Response(200, {"items": rows, "totalItems": len(rows)}, 1)
+
+    def get(self, path, token=None):
+        self.calls.append(("get", path, token))
+        return Response(200 if self.loose_read else 404, {}, 1)
+
+    def view(self, collection, record_id, token=None):
+        return Response(200 if token == "a-token" else 404, {"id": record_id}, 1)
+
+    def create(self, collection, token, payload):
+        self.calls.append(("create", collection, token, dict(payload)))
+        if self.accept_shapes:
+            self.owner_rows += 1
+            return Response(200, {"id": "new", **payload}, 1)
+        return Response(400, {"code": 400, "message": "Failed to create record.", "data": {}}, 1)
+
+
+SHARE_CONTENT = {"round": "round-id", "assignment": "assignment-id"}
+
+
+def _share_accounts():
+    a, b = _acct("a"), _acct("b")
+    a.token, b.token = "a-token", "b-token"
+    a.share_fields = {"resume": "a-resumes-id", "token": "AbCdEfGhIjKlMnOpQrStUv"}
+    return a, b
+
+
+def test_share_owner_only_passes_when_only_the_owner_reads_the_link():
+    a, b = _share_accounts()
+    pb = _SharePB()
+    r = families.share_owner_only_isolated(pb, "resume_share_links", a, b, 200)
+    assert r.passed, r.detail
+    # B and an anonymous caller both tried, each carrying A's link values.
+    lists = [c for c in pb.calls if c[0] == "list"]
+    assert [c[2] for c in lists] == ["b-token", None]
+    assert all(c[3] == {**a.share_fields} for c in lists)
+
+
+def test_share_owner_only_fails_when_another_caller_reads_the_link():
+    a, b = _share_accounts()
+    r = families.share_owner_only_isolated(_SharePB(loose_read=True), "resume_share_links", a, b, 200)
+    assert not r.passed and "other list status=200 a_present=True" in r.detail and "anonymous view status=200" in r.detail
+
+
+def test_share_create_shape_passes_when_every_shape_is_denied_alike():
+    _a, b = _share_accounts()
+    pb = _SharePB()
+    r = families.share_create_shape_denied(pb, "resume_share_links", b, SHARE_CONTENT, "admin", 400)
+    assert r.passed, r.detail
+    creates = [c for c in pb.calls if c[0] == "create"]
+    shapes = [c[3] for c in creates]
+    assert len(shapes) == 4 and all(c[2] == "b-token" for c in creates)
+    assert any(not s["resume"] for s in shapes)
+    assert any(s.get("variant") == b.ids["resume_variants"] and s["resume"] for s in shapes)
+    assert any(not re.fullmatch(r"[A-Za-z0-9_-]{22}", s["token"]) for s in shapes)
+
+
+def test_share_create_shape_fails_when_a_shape_is_accepted():
+    _a, b = _share_accounts()
+    r = families.share_create_shape_denied(_SharePB(accept_shapes=True), "resume_share_links", b, SHARE_CONTENT, "admin", 400)
+    assert not r.passed and "status=200" in r.detail and "rows_before=1" in r.detail
+
+
+def test_the_share_link_fixture_token_has_the_hook_format():
+    a, b = _acct("a"), _acct("b")
+    for suffix in ("0123456789ab", "x", "a" * 40):
+        payload = factory.fresh_payload("resume_share_links", "owner-id", a, b, SHARE_CONTENT, suffix)
+        assert re.fullmatch(r"[A-Za-z0-9_-]{22}", payload["token"]), payload["token"]

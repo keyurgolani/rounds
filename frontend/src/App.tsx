@@ -34,7 +34,9 @@ export default function App() {
     <Routes>
       <Route path="login" element={<Login />} />
       <Route path="signup" element={<Signup />} />
-      <Route path="r/:token" element={<PublicResume />} />
+      {/* Only the lowercase path renders the share page, the one nginx
+          serves with the share headers (ROUNDS-00B-L03). */}
+      <Route path="r/:token" caseSensitive element={<PublicResume />} />
 
       <Route
         element={

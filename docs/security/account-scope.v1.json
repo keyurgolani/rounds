@@ -43,7 +43,7 @@
     },
     "server_only": {
       "status": 403,
-      "guarantee": "a client create, update, or delete on a server-only collection is forbidden"
+      "guarantee": "a client create, update, or delete on a collection whose rule for it is null is forbidden"
     },
     "update_own": {
       "status": 200,
@@ -51,7 +51,7 @@
     },
     "superuser_create": {
       "status": 200,
-      "guarantee": "the superuser view-tracking insert succeeds"
+      "guarantee": "a superuser insert on a server-only collection succeeds"
     },
     "auth_unavailable": {
       "status": 503,
@@ -154,12 +154,18 @@
     },
     "deployment.admins.present": {
       "guarantee": "at least one admin exists, so first-admin setup is closed"
+    },
+    "deployment.proxy.share-page.headers": {
+      "guarantee": "every path that renders the share page answers the app page with no-store, noindex, no-referrer, nosniff, DENY framing, and the share page CSP"
+    },
+    "deployment.proxy.share-read.uniform": {
+      "guarantee": "a public share read of a malformed or unknown token answers one byte-identical 404 with no-store, noindex, no-referrer, nosniff, DENY framing, and the resolver CSP"
     }
   },
   "server_derivation": {
     "pocketbase": "@request.auth.id",
     "runner": "backend/app/pb_auth.py:current_user",
-    "superuser_bypass": "superuser requests and $app.dao() writes bypass collection rules; hook routes and the public view-tracking insert rely on this"
+    "superuser_bypass": "superuser requests and $app.dao() writes bypass collection rules; hook routes rely on this"
   },
   "probe_families": {
     "account-scope.list.cross-account.isolated": {
@@ -277,8 +283,9 @@
       "actor": "authenticated-owner",
       "status": "enforced",
       "deny_key": "server_only",
-      "guarantee": "a client update on a server-only collection is forbidden",
+      "guarantee": "a client update on a collection whose update rule is null is forbidden, even the owner's, and the row is unchanged",
       "resource": [
+        "resume_share_links",
         "resume_share_views",
         "legacy_artifact_snapshots"
       ]
@@ -299,7 +306,7 @@
       "actor": "superuser",
       "status": "enforced",
       "deny_key": "superuser_create",
-      "guarantee": "the superuser view-tracking insert still succeeds",
+      "guarantee": "a superuser insert on a server-only collection still succeeds",
       "resource": "resume_share_views"
     },
     "account-scope.list.filter.isolated": {
@@ -387,6 +394,22 @@
       "status": "enforced",
       "deny_key": "relation_update",
       "guarantee": "a foreign and a missing relation target are denied alike on update, so neither reveals the target exists"
+    },
+    "account-scope.share.owner-only.isolated": {
+      "operation": "list",
+      "actor": "anonymous",
+      "status": "enforced",
+      "deny_key": "list",
+      "guarantee": "a share link answers only its owner: another account and an anonymous caller read no link row",
+      "resource": "resume_share_links"
+    },
+    "account-scope.share.create-shape.denied": {
+      "operation": "create",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "relation_create",
+      "guarantee": "a share link create without exactly one target or with a malformed token is rejected with the uniform create denial and writes nothing",
+      "resource": "resume_share_links"
     }
   },
   "collections": {
@@ -1007,18 +1030,28 @@
       "fixture": "resume_share_links",
       "owner_field": "user",
       "current_rules": {
-        "list": "user = @request.auth.id || token = @request.query.token",
-        "view": "user = @request.auth.id || token = @request.query.token",
+        "list": "user = @request.auth.id",
+        "view": "user = @request.auth.id",
         "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
+        "update": null,
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
         "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+        "update": null
       },
       "target_rule_migration": "1700006000_account_scope_rules.js",
-      "hook": null,
+      "rule_overrides": [
+        {
+          "migration": "1700008100_share_link_owner_rules.js",
+          "rules": [
+            "list",
+            "view",
+            "update"
+          ]
+        }
+      ],
+      "hook": "pocketbase/pb_hooks/share_links.pb.js",
       "relation_exceptions": [
         "variant",
         "resume"
@@ -1033,13 +1066,7 @@
           "target": "resumes"
         }
       ],
-      "exceptions": [
-        {
-          "id": "share-token-read",
-          "closed_by": "ROUNDS-00B-L03/S1",
-          "note": "token = @request.query.token read path and owner edits of token/resume/variant"
-        }
-      ],
+      "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
         "account-scope.list.anonymous.isolated",
@@ -1050,20 +1077,16 @@
         "account-scope.list.filter.isolated",
         "account-scope.view.foreign-or-missing.indistinguishable",
         "account-scope.delete.foreign-or-missing.indistinguishable",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
         "account-scope.create.anonymous.denied",
         "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted",
-        "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
         "account-scope.create.nonexistent-owner.denied",
         "account-scope.create.relation-foreign.denied",
         "account-scope.create.relation-foreign-or-missing.indistinguishable",
         "account-scope.create.relation-superuser.denied",
-        "account-scope.update.relation-foreign.denied",
-        "account-scope.update.relation-foreign-or-missing.indistinguishable"
+        "account-scope.update.server-only.denied",
+        "account-scope.share.owner-only.isolated",
+        "account-scope.share.create-shape.denied"
       ]
     },
     "resume_share_views": {
@@ -1092,13 +1115,7 @@
           "target": "resume_share_links"
         }
       ],
-      "exceptions": [
-        {
-          "id": "superuser-view-insert",
-          "closed_by": "ROUNDS-00B-L03",
-          "note": "superuser-token insert of view-tracking rows in share.py (then ROUNDS-00B-L06)"
-        }
-      ],
+      "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
         "account-scope.list.anonymous.isolated",

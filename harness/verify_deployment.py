@@ -8,8 +8,10 @@ Read-only checks an operator runs against a Rounds deployment they operate:
                denies answer nginx's own 404 and never reach PocketBase or the
                runner, /api/execute is gone, the routes it leaves open (records,
                auth, OAuth redirect, realtime, files, health) still reach
-               PocketBase, and a body declared over the default 1 MiB cap gets
-               the typed 413.
+               PocketBase, a body declared over the default 1 MiB cap gets
+               the typed 413, every path that renders the share page carries its headers
+               and CSP, and a public share read of a malformed or unknown
+               token is one byte-identical 404 with the resolver headers.
   credentials  At PocketBase's own port (127.0.0.1:8090 inside its container):
                the repository's shipped default admin login and the demo
                account's login do not authenticate as an admin. When the admin
@@ -146,6 +148,8 @@ CHECKS: dict[str, str] = {
     "deployment.proxy.realtime.open": "the realtime stream still reaches PocketBase",
     "deployment.proxy.files.open": "file routes still reach PocketBase",
     "deployment.proxy.oversized-body.rejected": "a body over the default 1 MiB cap gets the typed 413",
+    "deployment.proxy.share-page.headers": "every path that renders the share page answers the app page with no-store, noindex, no-referrer, nosniff, DENY framing, and the share page CSP",
+    "deployment.proxy.share-read.uniform": "a public share read of a malformed or unknown token answers one byte-identical 404 with no-store, noindex, no-referrer, nosniff, DENY framing, and the resolver CSP",
     "deployment.credentials.defaults.rejected": "no shipped default login authenticates as an admin",
     "deployment.credentials.admin-passwords.rejected": "no admin account accepts a shipped default password",
     "deployment.rules.match": "the collection rules match the account-scope rule table",
@@ -501,10 +505,64 @@ def check_oversized_body(base_url: str, declared: int = NGINX_BODY_CAP + 1, time
                   got.elapsed_ms, "" if ok else f"status={got.status} code={code!r}")
 
 
+# The headers the public share page and the public share read answer with
+# (ROUNDS-00B-L03 stage 1; frontend/nginx.conf `/r`, backend/routers/share.py).
+SHARE_HEADERS: dict[str, str] = {
+    "cache-control": "no-store",
+    "x-robots-tag": "noindex, nofollow, noarchive",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+}
+SHARE_PAGE_CSP = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; "
+    "form-action 'none'; frame-ancestors 'none'"
+)
+SHARE_READ_CSP = "default-src 'none'; frame-ancestors 'none'"
+# The share pages, a case variant included: every letter case gets the headers.
+SHARE_PAGE_PATHS = ("/r", "/r/verify0deployment0000", "/R/verify0deployment0000")
+# A token too short to be one, and a well-formed one no link has.
+SHARE_READ_PATHS = ("/api/share/by-token/x", "/api/share/by-token/verify0deployment0unknown0")
+SHARE_NOT_FOUND = b'{"detail":"Not found."}'
+
+
+def _header_problems(resp: Response, csp: str) -> list[str]:
+    want = dict(SHARE_HEADERS, **{"content-security-policy": csp})
+    return [name for name, value in want.items() if resp.headers.get(name) != value]
+
+
+def check_share_page_headers(base_url: str, req: Callable[..., Response] = request) -> Result:
+    problems, last = [], None
+    for path in SHARE_PAGE_PATHS:
+        last = req("GET", base_url + path)
+        ctype = last.headers.get("content-type", "")
+        if last.status != 200 or not ctype.startswith("text/html"):
+            problems.append(f"{path} status={last.status} content_type={ctype!r}")
+        bad = _header_problems(last, SHARE_PAGE_CSP)
+        if bad:
+            problems.append(f"{path} headers differ: {','.join(bad)}")
+    return Result("deployment.proxy.share-page.headers", "/r", "proxy", "anonymous", 200, last.status,
+                  not problems, last.elapsed_ms, "; ".join(problems))
+
+
+def check_share_read_uniform(base_url: str, req: Callable[..., Response] = request) -> Result:
+    problems, last = [], None
+    for path in SHARE_READ_PATHS:
+        last = req("GET", base_url + path)
+        if last.status != 404 or last.body != SHARE_NOT_FOUND:
+            problems.append(f"{path} status={last.status} answered_by={answered_by(last)} uniform_body={last.body == SHARE_NOT_FOUND}")
+        bad = _header_problems(last, SHARE_READ_CSP)
+        if bad:
+            problems.append(f"{path} headers differ: {','.join(bad)}")
+    return Result("deployment.proxy.share-read.uniform", "/api/share/by-token", "proxy", "anonymous", 404,
+                  last.status, not problems, last.elapsed_ms, "; ".join(problems))
+
+
 def check_proxy(base_url: str) -> list[Result]:
     base = base_url.rstrip("/")
     return (check_denied_routes(base) + [check_execute_gone(base)] + check_open_routes(base)
-            + [check_oversized_body(base)])
+            + [check_oversized_body(base), check_share_page_headers(base), check_share_read_uniform(base)])
 
 
 # --------------------------------------------------------------------------
