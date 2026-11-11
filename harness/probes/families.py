@@ -360,7 +360,10 @@ def share_create_shape_denied(pb, collection, caller, content, admin_token, expe
 # The owner's hook routes, which only the runner reaches; the harness calls
 # them at PocketBase inside the stack.
 CAPABILITY_ROUTE = "/api/rounds/share/capabilities"
-CAPABILITY_OWNER_FIELDS = frozenset({"id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at"})
+# #12 (ROUNDS-00B-L04) adds the version Rotate expects and whether a
+# password protects the link.
+CAPABILITY_OWNER_FIELDS = frozenset({"id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at",
+                                     "capability_version", "password_set"})
 
 
 def list_server_only_denied(pb, collection, a, b, expected) -> Receipt:
