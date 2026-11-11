@@ -181,6 +181,7 @@ def test_each_outcome_passes_through_as_the_hook_answered_it(
     (hook_error(404, "not_found"), 404, "not_found"),
     (httpx.Response(409, json={"status": "conflict", "snapshot_id": None, "content_checksum": None}), 409,
      "snapshot_conflict"),
+    (hook_error(409, "idempotency_mismatch"), 409, "idempotency_mismatch"),
     (hook_error(429, "snapshot_quota_exceeded"), 429, "snapshot_quota_exceeded"),
     (hook_error(503, "route_disabled"), 503, "route_disabled"),
     (httpx.Response(401, json={"code": 401, "message": "The request requires valid record authorization token."}),
@@ -329,6 +330,22 @@ def test_the_runner_and_the_hook_agree_on_the_contract():
     # The request patterns, written the same on both sides.
     assert f"const RECORD_ID = /{legacy_snapshots.RECORD_ID}/;" in source
     assert f"const PB_DATETIME = /{legacy_snapshots.PB_DATETIME}/;" in source
+
+
+@pytest.mark.parametrize("kind, source", [("resume", "resumeaaaaaaaa1"), ("variant", "variantaaaaaaa1")])
+def test_the_hook_fingerprints_a_request_as_the_runners_admission_records_it(kind, source):
+    # The hook replays a completed key only for the request admission
+    # recorded under it, so both sides must compute the same fingerprint.
+    req = legacy_snapshots.SnapshotRequest(source_kind=kind, source_id=source,
+                                           expected_updated="2026-10-20 10:00:00.000Z")
+    node = shutil.which("node")
+    assert node, "node is required for the PocketBase hook checks; CI installs it"
+    script = ("const s = require(process.argv[1]); const c = require('crypto');"
+              "process.stdout.write(s.fingerprintOf(JSON.parse(process.argv[2]),"
+              " (t) => c.createHash('sha256').update(t, 'utf8').digest('hex')));")
+    out = subprocess.run([node, "-e", script, str(HOOKS / "legacy_snapshots.js"), json.dumps(req.model_dump())],
+                         capture_output=True, text=True, timeout=60, check=True)
+    assert out.stdout == admission_state.fingerprint("POST /api/pdf/snapshots", "snapshot_create", req)
 
 
 def test_the_call_ends_inside_the_leases_window():

@@ -23,6 +23,7 @@ The hook's answers, and the runner's:
                                             admission keeps for replay
   404 not_found                             404 not_found
   409 conflict                              409 snapshot_conflict
+  409 idempotency_mismatch                  409 idempotency_mismatch
   429 snapshot_quota_exceeded               429 snapshot_quota_exceeded
   503 route_disabled                        503 route_disabled
   401                                       401 unauthenticated
@@ -119,6 +120,8 @@ def read_answer(status: int, body: Any) -> tuple[int, dict[str, Any]]:
         raise TypedError("not_found")
     if status == 409 and isinstance(body, dict) and body.get("status") == "conflict":
         raise TypedError("snapshot_conflict")
+    if status == 409 and error == "idempotency_mismatch":
+        raise TypedError("idempotency_mismatch")
     if status == 429 and error == "snapshot_quota_exceeded":
         raise TypedError("snapshot_quota_exceeded")
     if status == 503 and error == "route_disabled":

@@ -475,8 +475,9 @@ def complete(command_id=K1, account=A, operation="snapshot_create", result=None)
             "result": SNAPSHOT if result is None else result}
 
 
-def completed_result(command_id=K1, account=A, now=T0) -> dict:
-    return {"call": "completedResult", "account": account, "command_id": command_id, "now": now}
+def completed_result(command_id=K1, account=A, now=T0, operation="snapshot_create", fp=FP1) -> dict:
+    return {"call": "completedResult", "account": account, "command_id": command_id, "now": now,
+            "operation": operation, "fingerprint": fp}
 
 
 def test_a_hook_completes_its_in_flight_command_and_the_runners_finish_leaves_it():
@@ -531,8 +532,17 @@ def test_a_completed_result_is_the_accounts_unexpired_completed_command_only():
     )
     results = out["results"]
     assert results[0] is None and results[2] is None
-    assert results[4] == SNAPSHOT
+    assert results[4] == {"result": SNAPSHOT}
     assert results[5:] == [None, None, None, None]
+
+
+@pytest.mark.parametrize("step", [
+    completed_result(operation="pdf_render"),
+    completed_result(fp="0" * 64),
+])
+def test_a_completed_result_replays_only_for_its_operation_and_request(step):
+    out = run(admit(op="snapshot_create", key=K1), complete(), step)
+    assert out["results"][2] == {"mismatch": True}
 
 
 def test_usage_reports_the_accounts_hour():

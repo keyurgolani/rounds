@@ -81,8 +81,11 @@ def create(account=A, kind="resume", source="resumeaaaaaaaa1", expected=T1, comm
     return step
 
 
-def admit(account=A, command=K1, operation="snapshot_create") -> dict:
-    return {"op": "admit", "account": account, "command_id": command, "operation": operation}
+def admit(account=A, command=K1, operation="snapshot_create", kind="resume", source="resumeaaaaaaaa1",
+          expected=T1) -> dict:
+    """The runner's admit for a create with these fields."""
+    request = {"source_kind": kind, "source_id": source, "expected_updated": expected}
+    return {"op": "admit", "account": account, "command_id": command, "operation": operation, "request": request}
 
 
 def sha256(text: str) -> str:
@@ -268,6 +271,27 @@ def test_a_replayed_command_returns_its_result_before_any_lookup():
     assert len(out["state"]["snapshots"]) == 1
 
 
+@pytest.mark.parametrize("admitted", [
+    {"expected": T2},
+    {"source": "resumebbbbbbbb1"},
+    {"operation": "pdf_render"},
+])
+def test_a_completed_key_replays_only_for_its_own_operation_and_request(admitted):
+    # The key completed another request (or another operation): no stored
+    # result comes back, nothing is materialized, and nothing is written.
+    first = run([admit(**admitted), create(**{k: v for k, v in admitted.items() if k != "operation"})])
+    state = first["state"]
+    state["commands"][0]["state"] = "completed"
+    state["commands"][0]["result"] = {"status": 201, "body": {"status": "created", "snapshot_id": "x" * 15,
+                                                             "content_checksum": "sha256:" + "0" * 64}}
+    before = len(state["snapshots"])
+    out = run([create()], state=state)
+    result = only(out)
+    assert result["out"] == {"status": 409, "body": {"v": "legacy-snapshot/v1", "error": "idempotency_mismatch"}}
+    assert result["calls"] == []
+    assert len(out["state"]["snapshots"]) == before
+
+
 def test_the_same_inputs_under_a_new_key_are_reused_with_the_same_checksum():
     out = run([admit(), create(), admit(command=K2), create(command=K2)])
     created, reused = out["results"][1]["out"], out["results"][3]["out"]
@@ -394,6 +418,27 @@ def test_the_scan_counts_by_reason_and_pseudonymous_account_and_writes_nothing()
     text = json.dumps(report)
     for raw in (A["id"], B["id"], DEMO["id"], "resumeaaaaaaaa1", "variantaaaaaaa1", "Resume"):
         assert raw not in text
+
+
+@pytest.mark.parametrize("out, data_dir, refused", [
+    ("/tmp/scan.json", "/pb/pb_data", False),
+    ("/pb/pb_data_reports/scan.json", "/pb/pb_data", False),
+    ("/pb/pb_data/scan.json", "/pb/pb_data", True),
+    ("/pb/pb_data", "/pb/pb_data/", True),
+    ("/pb/other/../pb_data/scan.json", "/pb/pb_data", True),
+    ("/pb/pb_data/./backups/../scan.json", "/pb/pb_data", True),
+    ("//pb//pb_data//scan.json", "/pb/pb_data", True),
+    ("/srv/app/pb_data/scan.json", "pb_data", True),
+    ("/srv/app/scan.json", "./pb_data", False),
+    ("scan.json", "/pb/pb_data", True),
+    ("", "/pb/pb_data", True),
+])
+def test_the_scan_writes_its_report_only_outside_the_data_directory(out, data_dir, refused):
+    script = ("const s = require(process.argv[1]);"
+              "process.stdout.write(JSON.stringify(s.reportPathError(process.argv[2], process.argv[3], '/srv/app')));")
+    res = subprocess.run([shutil.which("node"), "-e", script, str(HOOKS / "legacy_snapshots.js"), out, data_dir],
+                         capture_output=True, text=True, timeout=60, check=True)
+    assert (json.loads(res.stdout) is not None) is refused
 
 
 def test_the_scan_report_carries_its_own_checksum_and_repeats_exactly():

@@ -413,13 +413,17 @@ function finish(store, account, input, now) {
 }
 
 // For a leaf whose own hook finishes its command in the same transaction
-// as its write (ROUNDS-00A-L04's legacy snapshots): the stored result of
-// the account's completed command, or null when there is none to replay.
-function completedResult(store, account, commandId, now) {
+// as its write (ROUNDS-00A-L04's legacy snapshots). The account's
+// completed command under this key, checked as admit() checks one:
+//   { result }          the same operation and request, to replay
+//   { mismatch: true }  the key completed another operation or request
+//   null                nothing completed under the key, or nothing kept
+function completedResult(store, account, commandId, now, operation, fingerprint) {
   if (typeof commandId !== "string" || !COMMAND_ID.test(commandId)) return null;
   const existing = store.findCommand(account.id, commandId);
   if (existing === null || existing.state !== "completed" || existing.expires_at <= now) return null;
-  return existing.result;
+  if (existing.operation !== operation || existing.fingerprint !== fingerprint) return { mismatch: true };
+  return existing.result === null || existing.result === undefined ? null : { result: existing.result };
 }
 
 // Completes the account's in-flight command for `operation` with a result

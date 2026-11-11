@@ -18,7 +18,8 @@
 //   gate off                            503 route_disabled
 //   no runner key                       503 unconfigured or 403 forbidden
 //   malformed request                   400 invalid_request
-//   completed (account, command_id)     its stored result, before any lookup
+//   completed (account, command_id)     its stored result, before any lookup,
+//     for the same operation and request; else 409 idempotency_mismatch
 //   source missing or another's         404 not_found, one answer for both
 //   updated differs from expected       409 conflict, nothing written
 //   demo account                        ineligible demo_account
@@ -114,6 +115,21 @@ function checkCreate(data, commandPattern) {
     expected_updated: data.expected_updated,
     command_id: commandId,
   };
+}
+
+// The request's fingerprint as the runner's admission records it
+// (backend/app/admission_state.py fingerprint()): SHA-256 over the sorted,
+// compact JSON of the admission version, the route, and the request
+// fields. The fields are ASCII by checkCreate, so both encode them alike.
+const ADMISSION_VERSION = "admission/v1";
+const ROUTE = "POST /api/pdf/snapshots";
+
+function fingerprintOf(input, sha256) {
+  return sha256(canonical({
+    v: ADMISSION_VERSION,
+    route: ROUTE,
+    fields: { source_kind: input.source_kind, source_id: input.source_id, expected_updated: input.expected_updated },
+  }));
 }
 
 // UTF-8 byte length, a lone surrogate counting as U+FFFD (3 bytes), as the
@@ -228,10 +244,15 @@ function create(deps, account, data) {
   }
 
   if (input.command_id !== null) {
-    const kept = deps.admission.completedResult(deps.store.commands, account, input.command_id, deps.now);
+    const kept = deps.admission.completedResult(deps.store.commands, account, input.command_id, deps.now,
+      OPERATION, fingerprintOf(input, deps.sha256));
+    if (kept !== null && kept.mismatch) {
+      log({ outcome: "mismatch" });
+      return error(409, "idempotency_mismatch");
+    }
     if (kept !== null) {
       log({ outcome: "replayed" });
-      return kept;
+      return kept.result;
     }
   }
 
@@ -696,6 +717,33 @@ function handle(c) {
   return c.json(out.status, out.body);
 }
 
+// A slash path with "." and ".." resolved and no trailing slash.
+function cleanPath(path) {
+  const parts = [];
+  path.split("/").forEach((part) => {
+    if (part === "" || part === ".") return;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  });
+  return "/" + parts.join("/");
+}
+
+// Why the scan won't write its report at `out`, or null. The report goes
+// outside pb_data, so backups never carry it: `out` must be absolute, and
+// neither it nor any `..` in it may lead under the data directory (made
+// absolute against `cwd`). The check is on the path as written; the
+// operator picks a directory outside pb_data that isn't a link into it.
+function reportPathError(out, dataDir, cwd) {
+  if (typeof out !== "string" || out === "") return "give --out PATH for the report";
+  if (out[0] !== "/" || out.indexOf("\0") >= 0) return "--out must be an absolute path";
+  const data = cleanPath(dataDir[0] === "/" ? dataDir : (cwd || "/") + "/" + dataDir);
+  const target = cleanPath(out);
+  if (target === data || target.indexOf(data === "/" ? "/" : data + "/") === 0) {
+    return "write the report outside pb_data, so backups never carry it";
+  }
+  return null;
+}
+
 // pocketbase legacy-snapshot-scan --out PATH [--commit SHA]
 //
 // The operator's dry run before turning LEGACY_SNAPSHOT_CREATE on: writes
@@ -713,12 +761,23 @@ function scanCommand(args) {
     else if (arg.indexOf("--commit=") === 0) commit = arg.slice(9);
     // PocketBase's own flags (--dir and the rest) are read before this runs.
   }
-  if (out === "") throw new Error("legacy-snapshot-scan: give --out PATH for the report");
-  if (!/^\/[^\0]*$/.test(out)) throw new Error("legacy-snapshot-scan: --out must be an absolute path");
-  const dataDir = $app.dataDir().replace(/\/+$/, "") + "/";
-  if (out.indexOf(dataDir) === 0) {
-    throw new Error("legacy-snapshot-scan: write the report outside pb_data, so backups never carry it");
+  let cwd = "/";
+  try {
+    cwd = $os.getwd();
+  } catch (err) {
+    cwd = "/";
   }
+  const refused = reportPathError(out, $app.dataDir(), cwd);
+  if (refused !== null) throw new Error("legacy-snapshot-scan: " + refused);
+  let exists = true;
+  try {
+    $os.readFile(out);
+  } catch (err) {
+    exists = false;
+  }
+  // A new file only, so the report never replaces one, or lands through a
+  // link to one, that a backup already carries.
+  if (exists) throw new Error("legacy-snapshot-scan: --out names a file that exists; give a new path");
   if (commit !== "" && !/^[0-9A-Za-z._-]{1,64}$/.test(commit)) {
     throw new Error("legacy-snapshot-scan: --commit takes a commit or tag name");
   }
@@ -750,6 +809,8 @@ module.exports = {
   MATERIALIZER_REASONS,
   MATERIALIZE_TIMEOUT_S,
   checkCreate,
+  fingerprintOf,
+  reportPathError,
   utf8Length,
   readMaterialized,
   materializerInput,

@@ -301,7 +301,7 @@ docker compose -f docker-compose.prod.yml exec -T runner python -m app.legacy_re
 docker compose -f docker-compose.prod.yml exec -T runner python -m app.legacy_receipt verify - < scan.signed.json
 ```
 
-On Kubernetes, apply `k8s/overlays/materializer` instead of the base, then run the same two commands with `kubectl -n rounds exec`. The report must be written outside `pb_data` (the scan refuses a path inside it), so backups never carry it. Keep the signed report as the inventory for the switch. Read `complete`: `false` means the materializer failed for some source or more than one materializer build answered, so fix that and scan again before going on.
+On Kubernetes, apply `k8s/overlays/materializer` instead of the base, then run the same two commands with `kubectl -n rounds exec`. The report goes to a new file outside `pb_data`, so backups never carry it: the scan refuses a relative path, a path that leads under `pb_data` (with any `..` resolved), and a file that already exists. Pick a directory that isn't a link into `pb_data`. Keep the signed report as the inventory for the switch. Read `complete`: `false` means the materializer failed for some source or more than one materializer build answered, so fix that and scan again before going on.
 
 **Turning it on.**
 

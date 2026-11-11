@@ -164,7 +164,8 @@ const results = program.steps.map((step) => {
       return admission.usage(store, step.account, step.now);
     // A leaf hook that completes its own command (ROUNDS-00A-L04).
     case "completedResult":
-      return admission.completedResult(store, step.account, step.command_id, step.now);
+      return admission.completedResult(store, step.account, step.command_id, step.now, step.operation,
+        step.fingerprint);
     case "completeCommand":
       return admission.completeCommand(store, step.account, step.command_id, step.operation, step.result);
     // Earlier use in this hour, without a request for each unit.

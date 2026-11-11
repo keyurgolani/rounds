@@ -184,7 +184,8 @@ for (const step of program.steps) {
       account: step.account.id,
       command_id: step.command_id,
       operation: step.operation || "snapshot_create",
-      fingerprint: "f".repeat(64),
+      // The runner's fingerprint of the request this admit was for.
+      fingerprint: step.fingerprint || snapshots.fingerprintOf(step.request, sha256),
       state: "in_flight",
       wall_seconds: 10,
       result: null,
