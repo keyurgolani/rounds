@@ -715,6 +715,15 @@
     },
     {
       "kind": "api-route",
+      "source": {"path": "backend/routers/execution.py", "lines": "29"},
+      "legacyName": "/api/execution",
+      "termId": "execution-attempt",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10",
+      "note": "Where an account reads or cancels its own execution jobs, which ROUNDS-00A-L03 adds for the scratch runs."
+    },
+    {
+      "kind": "api-route",
       "source": {"path": "backend/main.py", "lines": "37"},
       "legacyName": "/health",
       "decidedBy": "ROUNDS-34-L05",

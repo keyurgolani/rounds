@@ -9,8 +9,7 @@ from starlette.types import ASGIApp
 from app import admission, definitions, errors, gates, obs
 from execution import keys as execution_keys
 from execution import runtime as execution_runtime
-from routers import ai, ai_coding, pdf, runner, sd_practice, share, share_capabilities, take_home
-from routers import execution as execution_jobs
+from routers import ai, ai_coding, execution, pdf, runner, sd_practice, share, share_capabilities, take_home
 
 
 @asynccontextmanager
@@ -74,7 +73,7 @@ app.include_router(share.router)
 app.include_router(share_capabilities.router)
 app.include_router(take_home.router)
 # The account's own execution jobs: read and cancel (ROUNDS-00A-L03).
-app.include_router(execution_jobs.router)
+app.include_router(execution.router)
 
 
 # Plain /health (no /api prefix) — the top-level /api/health path is
