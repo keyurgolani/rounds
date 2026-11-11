@@ -21,6 +21,37 @@ onRecordBeforeAuthWithPasswordRequest((e) => {
   require(`${__hooks}/share_secrets.js`).syncResolverForLogin(e);
 }, "share_resolvers");
 
+// The lookup: share-resolver only. nginx and the Vite proxy answer
+// /api/rounds/share with 404, so only the runner reaches these routes.
+routerAdd(
+  "POST",
+  "/api/rounds/share/lookup",
+  (c) => require(`${__hooks}/share_secrets.js`).handleLookup(c),
+  $apis.requireRecordAuth("share_resolvers"),
+);
+
+// CreateShare and RotateShareBearer: the owner's bearer and the runner key.
+routerAdd(
+  "POST",
+  "/api/rounds/share/commands",
+  (c) => require(`${__hooks}/share_secrets.js`).handleBegin(c),
+  $apis.requireRecordAuth("users"),
+);
+
+routerAdd(
+  "POST",
+  "/api/rounds/share/capabilities",
+  (c) => require(`${__hooks}/share_secrets.js`).handleCreate(c),
+  $apis.requireRecordAuth("users"),
+);
+
+routerAdd(
+  "POST",
+  "/api/rounds/share/capabilities/:id/rotate",
+  (c) => require(`${__hooks}/share_secrets.js`).handleRotate(c),
+  $apis.requireRecordAuth("users"),
+);
+
 // The share-resolver record gets 403 on every route but its own.
 routerUse((next) => {
   return (c) => {

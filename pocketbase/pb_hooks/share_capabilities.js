@@ -5,8 +5,9 @@
 //
 //   create_capability   a library that #12's create and #14's re-issue call
 //                       inside their own transaction
-//   lookup_capability   the read #12's lookup route makes; nothing calls it
-//                       until then
+//   rotate_bearer       the library #12's rotate calls inside its own
+//                       transaction (ROUNDS-00B-L04)
+//   lookup_capability   the read #12's lookup route makes
 //   listOwn, revoke     the owner's two hook routes (share_capabilities.pb.js),
 //                       which only the runner reaches, with the owner's
 //                       bearer; nginx and the Vite proxy answer
@@ -56,17 +57,21 @@ const MAX_MARKUP_BYTES = 2 * 1024 * 1024;
 const RECORD_ID = /^[a-z0-9]{15}$/;
 const DIGEST = /^[0-9a-f]{64}$/;
 const CHECKSUM = /^sha256:[0-9a-f]{64}$/;
-// TODO(ROUNDS-00B-L04): #12 pins its verifier's format. Until then, any
-// printable value up to 512 characters, or none.
-const VERIFIER = /^[!-~]{1,512}$/;
+// The verifier #12 stores (ROUNDS-00B-L04): profile pw1, Argon2id with its
+// pinned parameters (backend/app/share_password.py), or none.
+const VERIFIER = /^pw1\$argon2id\$v=19\$m=19456,t=2,p=1\$[A-Za-z0-9+\/]{22}\$[A-Za-z0-9+\/]{43}$/;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 const CONTROLS = /[\u0000-\u001f\u007f]/g;
 // PocketBase 0.22's datetime text, "2006-01-02 15:04:05.000Z", or the same
 // with a T.
 const DATETIME = /^([0-9]{4})-([0-9]{2})-([0-9]{2})[ T]([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,9}))?Z$/;
 
-// What the owner sees, and all the owner's routes answer with.
-const OWNER_FIELDS = ["id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at"];
+// What the owner sees, and all the owner's routes answer with: the version
+// Rotate expects, and whether a password protects it, never the verifier.
+const OWNER_FIELDS = [
+  "id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at", "capability_version",
+  "password_set",
+];
 // What lookup_capability answers with, for #12's route: #12's fields plus
 // the markup, which is projection v1.
 const LOOKUP_FIELDS = ["id", "status", "expires_at", "capability_version", "snapshot", "password_policy_ref", "markup"];
@@ -179,7 +184,9 @@ function defaultPurpose(name) {
 function ownerView(row) {
   const out = {};
   OWNER_FIELDS.forEach((key) => {
-    out[key] = typeof row[key] === "string" ? row[key] : "";
+    if (key === "capability_version") out[key] = isInt(row.capability_version) ? row.capability_version : 0;
+    else if (key === "password_set") out[key] = typeof row.password_policy_ref === "string" && row.password_policy_ref !== "";
+    else out[key] = typeof row[key] === "string" ? row[key] : "";
   });
   return out;
 }
@@ -447,6 +454,41 @@ function revoke(deps, caller, id) {
   return out;
 }
 
+// #12's RotateShareBearer (ROUNDS-00B-L04), inside its transaction: the
+// owner's active, unexpired capability at the expected version gets the new
+// digest and the next version. Its target, password, and expiry stay, and
+// the old digest resolves nothing from the moment this commits.
+// deps.store: byId(id), update(id, fields)
+//
+// Answers { status: "rotated", capability } with the owner's fields, or,
+// writing nothing: "not_found" (another account's, a missing, or a
+// malformed id, one answer for all three), "revoked", "expired", "conflict"
+// (another version), or "invalid" with the bad argument.
+function rotate(deps, input) {
+  if (!only(input, ["owner", "id", "expected_version", "bearer_digest", "digest_key_version"])) {
+    return { status: "invalid", field: "arguments" };
+  }
+  if (!isId(input.owner) || !isId(input.id)) return { status: "not_found" };
+  if (!isInt(input.expected_version) || input.expected_version < 1) return { status: "invalid", field: "expected_version" };
+  if (typeof input.bearer_digest !== "string" || !DIGEST.test(input.bearer_digest)) {
+    return { status: "invalid", field: "bearer_digest" };
+  }
+  if (!isInt(input.digest_key_version) || input.digest_key_version < 1 || input.digest_key_version > 999) {
+    return { status: "invalid", field: "digest_key_version" };
+  }
+  const row = deps.store.byId(input.id);
+  if (row === null || row.user !== input.owner) return { status: "not_found" };
+  if (row.status !== "active") return { status: "revoked" };
+  const expires = parseDate(row.expires_at);
+  if (expires === null || expires <= deps.now) return { status: "expired" };
+  if (row.capability_version !== input.expected_version) return { status: "conflict" };
+  // The key version is fixed for a capability's life (#73 brings a keyring).
+  if (row.digest_key_version !== input.digest_key_version) return { status: "invalid", field: "digest_key_version" };
+  const fields = { bearer_digest: input.bearer_digest, capability_version: row.capability_version + 1 };
+  deps.store.update(row.id, fields);
+  return { status: "rotated", capability: ownerView(Object.assign({}, row, fields)) };
+}
+
 // ---------------------------------------------------------------------------
 // Deletes
 // ---------------------------------------------------------------------------
@@ -627,6 +669,15 @@ function create_capability(txDao, owner, snapshot_id, purpose, expires_at, passw
   );
 }
 
+// rotate_bearer(txDao, owner, id, expected_version, bearer_digest,
+// digest_key_version), for #12's rotate route, inside its transaction.
+function rotate_bearer(txDao, owner, id, expected_version, bearer_digest, digest_key_version) {
+  return rotate(
+    { store: pbStore(txDao), now: Date.now() },
+    { owner, id, expected_version, bearer_digest, digest_key_version },
+  );
+}
+
 // lookup_capability(digest), for #12's lookup route: LOOKUP_FIELDS, or null.
 function lookup_capability(digest) {
   return lookup(
@@ -736,12 +787,14 @@ module.exports = {
   screenUpdate,
   listOwn,
   revoke,
+  rotate,
   revokeForSource,
   deleteForAccount,
   ownerView,
   rowOf,
   pbStore,
   create_capability,
+  rotate_bearer,
   lookup_capability,
   handleList,
   handleRevoke,

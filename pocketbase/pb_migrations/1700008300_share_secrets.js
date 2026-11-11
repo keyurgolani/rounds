@@ -18,18 +18,22 @@
 // at runtime (docs/security/server-writes.md). Neither has a JSON field, so
 // nothing joins the JSON limit registry.
 //
-// It also lists three operations in admission_commands.operation that hooks
-// already record or will: snapshot_create (ROUNDS-00A-L04's snapshot
-// command), and share_create and share_rotate (this leaf's commands). Hooks
-// save those rows through the DAO, which doesn't check the list, so this
-// changes no row and no write; the list matches what the rows hold.
+// On admission_commands it lists three operations that hooks already record
+// or will: snapshot_create (ROUNDS-00A-L04's snapshot command), and
+// share_create and share_rotate (this leaf's commands). Hooks save those
+// rows through the DAO, which doesn't check the list, so this changes no row
+// and no write; the list matches what the rows hold. It also adds a nullable
+// share_snapshot_command: the key a share_create row's snapshot call runs
+// under, made on its first attempt so a retry reuses it.
 //
 // down() drops both collections: a counter only lasts a day, and the
 // share-resolver record comes back from the secret at the next start. It
-// takes the three operations off the list again and leaves every row as it
-// is.
+// takes the three operations off the list again, drops
+// share_snapshot_command, and leaves every row as it is otherwise.
 
 const OPERATIONS = ["snapshot_create", "share_create", "share_rotate"];
+const SNAPSHOT_COMMAND = "share_snapshot_command";
+const COMMAND_ID = "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$";
 
 migrate(
   (db) => {
@@ -91,6 +95,16 @@ migrate(
       if (values.indexOf(name) < 0) values.push(name);
     });
     operation.options.values = values;
+    if (!commands.schema.getFieldByName(SNAPSHOT_COMMAND)) {
+      commands.schema.addField(
+        new SchemaField({
+          name: SNAPSHOT_COMMAND,
+          type: "text",
+          required: false,
+          options: { min: null, max: 36, pattern: COMMAND_ID },
+        }),
+      );
+    }
     dao.saveCollection(commands);
   },
 
@@ -106,6 +120,8 @@ migrate(
     const commands = dao.findCollectionByNameOrId("admission_commands");
     const operation = commands.schema.getFieldByName("operation");
     operation.options.values = (operation.options.values || []).filter((name) => OPERATIONS.indexOf(name) < 0);
+    const link = commands.schema.getFieldByName(SNAPSHOT_COMMAND);
+    if (link) commands.schema.removeField(link.id);
     dao.saveCollection(commands);
   },
 );
