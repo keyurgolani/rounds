@@ -4,8 +4,10 @@
 // and result envelopes.
 //
 // These functions are the only writers of execution_jobs,
-// execution_attempts, and execution_envelopes, and of the `job` link on
-// admission_commands (docs/security/server-writes.md). execution.pb.js
+// execution_attempts, and execution_envelopes, of the `job` link on
+// admission_commands, and, from PR 3, of graded rows in ai_coding_attempts
+// and take_home_attempts, which complete writes with their envelope
+// (docs/security/server-writes.md). execution.pb.js
 // calls them from the routes under /api/rounds/execution/, which nginx
 // answers with 404, while ROUNDS_GATE_EXECUTION_STORE is on. Every call
 // runs in one transaction, and PocketBase runs each write transaction on
@@ -13,11 +15,15 @@
 //
 // Two kinds of caller:
 //
-// - enqueue, cancel, and status act for an account: the caller's bearer
-//   names it, and, as with admission's writes, the runner key
-//   (ROUNDS_ADMISSION_SECRET) has to come too. enqueue needs the account's
-//   in-flight admission command for the same key and fingerprint, and
-//   records the job on it. status reads the account's own job (PR 2).
+// - enqueue, cancel, status, review_start, and review_finish act for an
+//   account: the caller's bearer names it, and, as with admission's
+//   writes, the runner key (ROUNDS_ADMISSION_SECRET) has to come too.
+//   enqueue needs the account's in-flight admission command for the same
+//   key and fingerprint, and records the job on it. status reads the
+//   account's own job (PR 2). The review pair (PR 3) marks a grading
+//   result's rubric requested, with its own admission charge, before the
+//   runner calls a provider, and then writes the review into the graded
+//   row, once per result.
 // - claim, heartbeat, complete, and reap are the execution_service
 //   record's, which only the runner can log in as (ROUNDS_EXECUTION_SECRET).
 //
@@ -130,6 +136,31 @@ const OPERATOR_VIEW_KEYS = [
   "version", "executor_kind", "worker", "attempt_number", "source_checksum", "input_digest", "output_sha256",
   "output_bytes", "exit_status", "cpu_time_ms", "peak_rss_bytes", "build_revision", "image_digest", "graded_row",
 ];
+
+// PR 3: each grading kind's graded row. `content` is the field the runner
+// sends with an authoritative result, `item` the collection of the
+// practice item's own row, found by the definition's slug, and `link` the
+// row's field for it.
+const GRADED_FIELDS = {
+  grade: { collection: "ai_coding_attempts", content: "test_results", item: "ai_coding_rounds", link: "round" },
+  take_home_submit: {
+    collection: "take_home_attempts", content: "harness_output", item: "take_home_assignments", link: "assignment",
+  },
+};
+// The classes an authoritative envelope's parts can carry.
+const AUTHORITATIVE_CLASSES = ["passed", "candidate-failure", "resource-limit"];
+// #2's fd 3 channel, as app/harness_results.py reads it.
+const HARNESS_OUTCOMES = ["passed", "failed", "not-run"];
+const HARNESS_REASONS = ["ok", "assertion", "exception", "timeout", "no-result", "bad-result"];
+// A grade runs at most this many checkpoints (backend/execution/kinds.py).
+const MAX_CHECKPOINTS = 8;
+const LABEL_MAX_CHARS = 200;
+const GRADED_MAX_CHARS = 256 * 1024;
+const REVIEW_MAX_CHARS = 256 * 1024;
+// The admission operation a review is charged under (admission.js), and
+// the prefix of the fingerprint that ties its command to one envelope.
+const REVIEW_OPERATION = "review";
+const REVIEW_FINGERPRINT_PREFIX = "rounds.execution-review/v1:";
 
 // ---------------------------------------------------------------------------
 // Input checks, before any transaction
@@ -297,13 +328,150 @@ function checkResult(result) {
   };
 }
 
+// `graded` (PR 3) is what a grading run's graded row holds besides what
+// the job already holds: the per-checkpoint or per-criterion results
+// complete checks against the envelope (checkGraded). Only an
+// authoritative grading result carries it.
 function checkComplete(data) {
-  if (!only(data, ["attempt_id", "token", "result"])) return null;
+  if (!only(data, ["attempt_id", "token", "result", "graded"])) return null;
   if (typeof data.attempt_id !== "string" || !RECORD_ID.test(data.attempt_id)) return null;
   if (typeof data.token !== "string" || !TOKEN.test(data.token)) return null;
   const result = checkResult(data.result);
   if (result === null) return null;
-  return { attempt_id: data.attempt_id, token: data.token, result };
+  const graded = data.graded === undefined ? null : data.graded;
+  if (graded !== null && !(isObject(graded) && jsonWithin(graded, GRADED_MAX_CHARS))) return null;
+  return { attempt_id: data.attempt_id, token: data.token, result, graded };
+}
+
+// ---------------------------------------------------------------------------
+// Graded rows (PR 3)
+// ---------------------------------------------------------------------------
+
+// Whether a class is one the candidate's code earned, which alone keeps a
+// verdict and a score.
+function earned(outcomeClass) {
+  return outcomeClass === "passed" || outcomeClass === "candidate-failure";
+}
+
+function isUnitScore(value) {
+  return typeof value === "number" && isFinite(value) && value >= 0 && value <= 1;
+}
+
+function shortText(value, max) {
+  return value === null || (typeof value === "string" && value.length <= max);
+}
+
+// Each result id's outcome, as #2's fd 3 channel reports it.
+function checkOutcomes(list) {
+  return Array.isArray(list) && list.length <= MAX_PARTS && list.every((o) =>
+    only(o, ["id", "outcome", "reason"]) && typeof o.id === "string" && PART_ID.test(o.id) &&
+    HARNESS_OUTCOMES.indexOf(o.outcome) >= 0 && HARNESS_REASONS.indexOf(o.reason) >= 0);
+}
+
+// A verdict and a score that agree with a part's class: kept on a class
+// the run earned, null on any other.
+function verdictFits(outcomeClass, passed, score) {
+  if (!earned(outcomeClass)) return passed === null && score === null;
+  return passed === (outcomeClass === "passed") && isUnitScore(score);
+}
+
+// A graded checkpoint, one per part (`checkpoint-<index>`), in order.
+function checkCheckpoint(entry, part, index) {
+  const keys = ["index", "label", "outcome_class", "limit", "passed", "score", "executed", "passed_count",
+    "failed_count", "outcomes", "error"];
+  if (!only(entry, keys) || keys.some((key) => !has(entry, key))) return false;
+  if (entry.index !== index || part.id !== "checkpoint-" + index) return false;
+  if (entry.outcome_class !== part.outcome_class || entry.limit !== part.limit) return false;
+  if (AUTHORITATIVE_CLASSES.indexOf(entry.outcome_class) < 0) return false;
+  if (!verdictFits(entry.outcome_class, entry.passed, entry.score)) return false;
+  if (!(typeof entry.label === "string" && entry.label.length <= LABEL_MAX_CHARS)) return false;
+  if (![entry.executed, entry.passed_count, entry.failed_count].every((n) => isInt(n) && n >= 0 && n <= MAX_PARTS)) {
+    return false;
+  }
+  return checkOutcomes(entry.outcomes) && shortText(entry.error, LABEL_MAX_CHARS);
+}
+
+// What a take-home submission's row keeps: the server's score and verdict,
+// each criterion's result, and the definition, never what the harness
+// printed. Its criteria are the envelope's parts, in order.
+function checkHarnessOutput(out, result) {
+  const keys = ["outcome_class", "limit", "score", "passed", "criteria", "outcomes", "stdout", "stderr", "error",
+    "duration_ms", "truncated", "definition"];
+  if (!only(out, keys) || keys.some((key) => !has(out, key))) return false;
+  const user = result.user_view;
+  if (out.outcome_class !== result.outcome_class || out.limit !== user.limit) return false;
+  if (!verdictFits(out.outcome_class, out.passed, out.score)) return false;
+  if (out.stdout !== "" || out.stderr !== "" || out.truncated !== false) return false;
+  if (!(isInt(out.duration_ms) && out.duration_ms >= 0) || !shortText(out.error, LABEL_MAX_CHARS)) return false;
+  if (!checkReceipt(out.definition) || !checkOutcomes(out.outcomes)) return false;
+  const parts = user.parts;
+  if (!Array.isArray(out.criteria) || out.criteria.length !== parts.length) return false;
+  return out.criteria.every((c, i) => {
+    if (!only(c, ["id", "passed", "weight", "logs"]) || c.id !== parts[i].id) return false;
+    const cls = parts[i].outcome_class;
+    const verdict = cls === "passed" ? true : cls === "candidate-failure" ? false : null;
+    return c.passed === verdict && typeof c.weight === "number" && isFinite(c.weight) && c.weight >= 0 &&
+      HARNESS_REASONS.indexOf(c.logs) >= 0;
+  });
+}
+
+// Whether `graded` is the graded content for an authoritative result of a
+// grading `kind`: grade's checkpoints match its parts one to one, and a
+// take-home submission's criteria do. Nothing scores on a limit.
+function checkGraded(kind, graded, result) {
+  const field = GRADED_FIELDS[kind];
+  if (!field || !only(graded, [field.content]) || !has(graded, field.content)) return false;
+  if (kind === "grade") {
+    const entries = graded.test_results;
+    const parts = result.user_view.parts;
+    if (!Array.isArray(entries) || entries.length === 0 || entries.length > MAX_CHECKPOINTS) return false;
+    if (entries.length !== parts.length) return false;
+    return entries.every((entry, i) => checkCheckpoint(entry, parts[i], i));
+  }
+  return checkHarnessOutput(graded.harness_output, result);
+}
+
+// ---------------------------------------------------------------------------
+// Rubric reviews (PR 3)
+// ---------------------------------------------------------------------------
+
+// review_start: the job, the SHA-256 of the files the caller resent, the
+// caller's key for the review's own admission command, and the hash of
+// the lease token the runner made for it.
+function checkReviewStart(data) {
+  if (!only(data, ["job_id", "source_checksum", "command_id", "lease_hash", "quota"])) return null;
+  if (typeof data.job_id !== "string" || !RECORD_ID.test(data.job_id)) return null;
+  if (typeof data.source_checksum !== "string" || !SHA256_HEX.test(data.source_checksum)) return null;
+  if (typeof data.command_id !== "string" || !COMMAND_ID.test(data.command_id)) return null;
+  if (typeof data.lease_hash !== "string" || !SHA256_HEX.test(data.lease_hash)) return null;
+  const quota = data.quota === undefined ? "enforce" : data.quota;
+  if (["enforce", "observe", "off"].indexOf(quota) < 0) return null;
+  return { job_id: data.job_id, source_checksum: data.source_checksum, command_id: data.command_id,
+    lease_hash: data.lease_hash, quota };
+}
+
+// The review the provider gave, as the runner normalized it: its items,
+// their scores, evidence, and suggestions, and the total; or a review that
+// was skipped, with a fixed reason.
+function checkReview(review) {
+  if (!isObject(review) || !jsonWithin(review, REVIEW_MAX_CHARS)) return false;
+  if (!only(review, ["items", "total", "skipped", "reason"]) || !Array.isArray(review.items)) return false;
+  if (!(typeof review.total === "number" && isFinite(review.total))) return false;
+  if (has(review, "skipped") && typeof review.skipped !== "boolean") return false;
+  if (has(review, "reason") && !(typeof review.reason === "string" && review.reason.length <= LABEL_MAX_CHARS)) {
+    return false;
+  }
+  return review.items.length <= MAX_PARTS && review.items.every(isObject);
+}
+
+// review_finish: the job, the lease token review_start was answered for,
+// and the review.
+function checkReviewFinish(data) {
+  if (!only(data, ["job_id", "lease", "review"])) return null;
+  if (typeof data.job_id !== "string" || !RECORD_ID.test(data.job_id)) return null;
+  if (typeof data.lease !== "string" || !TOKEN.test(data.lease)) return null;
+  if (!checkReview(data.review)) return null;
+  return { job_id: data.job_id, lease: data.lease, review: data.review };
 }
 
 function checkReap(data) {
@@ -723,15 +891,220 @@ function complete(store, input, now) {
   if (HIDDEN_MATERIAL.indexOf(job.kind) >= 0 && result.user_view.output !== null) {
     return { status: 400, body: { v: VERSION, error: "invalid_request" } };
   }
+  // A grading run's authoritative result comes with its graded content,
+  // and nothing else does (PR 3).
+  const grading = has(GRADED_FIELDS, job.kind) && result.authoritative;
+  if (grading ? !(input.graded !== null && checkGraded(job.kind, input.graded, result)) : input.graded !== null) {
+    return { status: 400, body: { v: VERSION, error: "invalid_request" } };
+  }
   // Only a run that started can end with what the candidate did. A run
   // that never got a slot ends timed-out, infrastructure-degraded.
   if (result.authoritative && attempt.state !== "started") {
     return { status: 409, body: { v: VERSION, error: "not_started" } };
   }
+  if (grading) return completeGraded(store, job, attempt, input, now);
   const envelope = writeEnvelope(store, job, attempt, result);
   endAttempt(store, attempt, result.state, result.outcome_class, result.cleanup, now, result.operator_view);
   endJob(store, job, result.state, result.outcome_class, result.cleanup, now);
   return { status: 200, body: { v: VERSION, envelope_id: envelope.id, job: jobView(store.getJob(job.id)) } };
+}
+
+// An authoritative grading result: its envelope, the graded row it names
+// and that names it back, and both ends, all in complete's transaction.
+// The row is the account's own: its item is the practice item's row for
+// the definition's slug, and its campaign is kept only while that
+// campaign is still the account's. When the item's row is gone, no row
+// can hold the result, so nothing scores: the job ends failed,
+// infrastructure-degraded, with the store's own envelope, and a same-key
+// retry runs it again.
+function completeGraded(store, job, attempt, input, now) {
+  const result = input.result;
+  const fields = GRADED_FIELDS[job.kind];
+  const item = store.itemRow(fields.item, job.definition.slug);
+  if (item === null) {
+    const unsaved = serverEnvelope(job, attempt, "failed", "infrastructure-degraded", result.cleanup, now);
+    const envelope = writeEnvelope(store, job, attempt, unsaved);
+    endAttempt(store, attempt, "failed", "infrastructure-degraded", result.cleanup, now, result.operator_view);
+    endJob(store, job, "failed", "infrastructure-degraded", result.cleanup, now);
+    return { status: 200, body: { v: VERSION, envelope_id: envelope.id, job: jobView(store.getJob(job.id)) } };
+  }
+  const envelope = writeEnvelope(store, job, attempt, result);
+  const row = store.saveGradedRow(fields.collection, gradedRow(store, job, envelope.id, input.graded, item));
+  store.linkGradedRow(envelope, fields.collection, row.id);
+  const operatorView = Object.assign({}, result.operator_view, { graded_row: row.id });
+  endAttempt(store, attempt, result.state, result.outcome_class, result.cleanup, now, operatorView);
+  endJob(store, job, result.state, result.outcome_class, result.cleanup, now);
+  return { status: 200, body: { v: VERSION, envelope_id: envelope.id, job: jobView(store.getJob(job.id)) } };
+}
+
+function nonNegativeInt(value) {
+  return isInt(value) && value >= 0 ? value : 0;
+}
+
+// The graded row for a job's authoritative result: the account, the item,
+// what the job's input recorded (files, chats, notes, session time, and
+// the campaign while it's the account's), and the graded content. Its
+// rubric review is empty until the review route fills it.
+function gradedRow(store, job, envelopeId, graded, itemId) {
+  const input = isObject(job.input) ? job.input : {};
+  const campaignId = typeof input.campaign_id === "string" && RECORD_ID.test(input.campaign_id) &&
+    store.ownsCampaign(job.account, input.campaign_id) ? input.campaign_id : "";
+  const chats = Array.isArray(input.ai_chats) ? input.ai_chats : [];
+  const row = {
+    user: job.account,
+    campaign: campaignId,
+    ai_chats: chats,
+    rubric_review: null,
+    status: "graded",
+    duration_ms: nonNegativeInt(input.duration_ms),
+    envelope: envelopeId,
+  };
+  row[GRADED_FIELDS[job.kind].link] = itemId;
+  if (job.kind === "grade") {
+    row.test_results = graded.test_results;
+    row.current_checkpoint = graded.test_results.length - 1;
+  } else {
+    row.harness_output = graded.harness_output;
+    row.files = isObject(input.files) ? input.files : {};
+    row.notes = typeof input.notes === "string" ? input.notes : "";
+    row.ai_assist_used = chats.length > 0;
+  }
+  return row;
+}
+
+// ---------------------------------------------------------------------------
+// Rubric reviews (PR 3)
+// ---------------------------------------------------------------------------
+
+// The fingerprint of an envelope's review command: one envelope, one
+// review.
+function reviewFingerprint(store, envelopeId) {
+  return store.hash(REVIEW_FINGERPRINT_PREFIX + envelopeId);
+}
+
+// The envelope a review is for: the job's own, the one its last attempt
+// ended with, when it's authoritative, matches how the job ended, and
+// names a graded row that's still there. Null otherwise.
+function reviewable(store, job) {
+  if (!isTerminal(job.state)) return null;
+  const envelope = store.currentEnvelopeRecord(job);
+  if (envelope === null || !envelope.authoritative || envelope.state !== job.state ||
+      envelope.outcome_class !== job.outcome_class || !envelope.graded_row) return null;
+  const row = store.getGradedRow(envelope.graded_collection, envelope.graded_row);
+  if (row === null || row.user !== job.account || row.envelope !== envelope.id) return null;
+  return { envelope, row };
+}
+
+// What a review's prompt is made of, besides the files the caller resent
+// and the rubric the runner reads from the definition: the server's
+// results and the chats the graded row holds.
+function reviewMaterial(job, row) {
+  return {
+    kind: job.kind,
+    definition: job.definition,
+    results: job.kind === "grade" ? row.test_results : row.harness_output,
+    ai_chats: Array.isArray(row.ai_chats) ? row.ai_chats : [],
+  };
+}
+
+function reviewState(envelope) {
+  const rubric = envelope.user_view ? envelope.user_view.rubric : null;
+  return rubric && typeof rubric.state === "string" ? rubric.state : null;
+}
+
+function markRubric(store, envelope, state) {
+  envelope.user_view = Object.assign({}, envelope.user_view, { rubric: { state } });
+  store.saveEnvelopeView(envelope);
+}
+
+// review_start: before the runner calls a provider. For the account's own
+// grading job that ended with an authoritative envelope and a graded row,
+// and only when the resent files are the ones that ran:
+//   - no review yet: its admission command is admitted (one request, no
+//     wall seconds, a lease for the call) and the rubric is marked
+//     requested, both or neither, and the answer carries what the prompt
+//     needs. This is the only way a review is charged, so it's charged
+//     once per envelope.
+//   - requested, its lease live: in flight, 409.
+//   - requested, its lease gone: the call never came back, so it's lost
+//     (until #74 stages provider outcomes).
+//   - completed or lost: answered as it is.
+// Another account's job, an unknown one, and a scratch job are the same
+// 404.
+function reviewStart(store, account, input, now) {
+  const job = store.getJob(input.job_id);
+  if (job === null || job.account !== account.id || !has(GRADED_FIELDS, job.kind)) {
+    return { status: 404, body: { v: VERSION, error: "not_found" } };
+  }
+  const found = reviewable(store, job);
+  if (found === null) return { status: 409, body: { v: VERSION, error: "not_reviewable" } };
+  if (job.source_checksum !== input.source_checksum) return { status: 409, body: { v: VERSION, error: "files_changed" } };
+  const envelope = found.envelope;
+  const fingerprint = reviewFingerprint(store, envelope.id);
+  const state = reviewState(envelope);
+  if (state === "requested") {
+    const command = store.reviewCommand(account.id, fingerprint);
+    if (command !== null && store.liveLeaseForCommand(command.id, now)) {
+      return { status: 409, body: { v: VERSION, error: "in_flight", state } };
+    }
+    markRubric(store, envelope, "lost");
+    return { status: 200, body: { v: VERSION, state: "lost" } };
+  }
+  if (state !== null) return { status: 200, body: { v: VERSION, state } };
+  const admission = require(`${__hooks}/admission.js`);
+  const admitted = admission.admit(store.admission(), { id: account.id, demo: account.demo === true }, {
+    operation: REVIEW_OPERATION,
+    command_id: input.command_id,
+    fingerprint,
+    wall_seconds: 0,
+    max_wall_seconds: 0,
+    idempotency: "enforce",
+    quota: input.quota,
+    lease_hash: input.lease_hash,
+  }, now);
+  if (admitted.invalid) return { status: 400, body: { v: VERSION, error: "invalid_request" } };
+  if (admitted.idempotency !== "new" && admitted.idempotency !== "retry") {
+    // The key already named another command, or this one is settled.
+    return { status: 409, body: { v: VERSION, error: "mismatch" } };
+  }
+  if (!admitted.leased) {
+    return { status: 429, body: { v: VERSION, error: "quota", quota: admitted.quota, retry_after: admitted.retry_after } };
+  }
+  markRubric(store, envelope, "requested");
+  return { status: 200, body: { v: VERSION, state: "requested", material: reviewMaterial(job, found.row) } };
+}
+
+// review_finish: the review, into the graded row, while the lease
+// review_start was answered for is still live. Then the rubric is
+// completed and its command ends, its lease gone. A finish after the
+// lease ran out comes too late: the rubric is lost, and nothing is
+// written to the row.
+function reviewFinish(store, account, input, now) {
+  const job = store.getJob(input.job_id);
+  if (job === null || job.account !== account.id || !has(GRADED_FIELDS, job.kind)) {
+    return { status: 404, body: { v: VERSION, error: "not_found" } };
+  }
+  const found = reviewable(store, job);
+  if (found === null || reviewState(found.envelope) !== "requested") {
+    return { status: 409, body: { v: VERSION, error: "superseded" } };
+  }
+  const envelope = found.envelope;
+  const admissionStore = store.admission();
+  const lease = admissionStore.findLease(store.hash(input.lease));
+  const command = lease !== null && lease.account === account.id ? admissionStore.getCommand(lease.command) : null;
+  if (command === null || command.operation !== REVIEW_OPERATION ||
+      command.fingerprint !== reviewFingerprint(store, envelope.id)) {
+    return { status: 409, body: { v: VERSION, error: "superseded" } };
+  }
+  if (lease.expires_at <= now) {
+    markRubric(store, envelope, "lost");
+    return { status: 409, body: { v: VERSION, error: "superseded", state: "lost" } };
+  }
+  store.saveRubricReview(envelope.graded_collection, found.row, input.review);
+  markRubric(store, envelope, "completed");
+  const admission = require(`${__hooks}/admission.js`);
+  admission.finish(admissionStore, { id: account.id }, { lease: input.lease, outcome: "completed", result: null }, now);
+  return { status: 200, body: { v: VERSION, state: "completed" } };
 }
 
 // ---------------------------------------------------------------------------
@@ -934,6 +1307,80 @@ function pbStore(dao) {
         user_view: json(record, "user_view"),
       };
     },
+    // The same envelope as a row this transaction may update (PR 3).
+    currentEnvelopeRecord: (job) => {
+      const last = first(ATTEMPTS, "job = {:job} && attempt_number = {:n}", { job: job.id, n: job.attempts });
+      if (last === null) return null;
+      const record = first(ENVELOPES, "attempt = {:attempt}", { attempt: last.id });
+      if (record === null) return null;
+      return {
+        id: record.id,
+        state: record.getString("state"),
+        outcome_class: record.getString("outcome_class"),
+        authoritative: record.getBool("authoritative"),
+        user_view: json(record, "user_view"),
+        graded_collection: record.getString("graded_collection"),
+        graded_row: record.getString("graded_row"),
+        _record: record,
+      };
+    },
+    saveEnvelopeView: (row) => {
+      row._record.set("user_view", row.user_view);
+      dao.saveRecord(row._record);
+      return row;
+    },
+    // The graded row a grading job's envelope names, and names it back.
+    linkGradedRow: (envelope, collectionName, rowId) => {
+      const record = envelope._record || dao.findRecordById(ENVELOPES, envelope.id);
+      record.set("graded_collection", collectionName);
+      record.set("graded_row", rowId);
+      dao.saveRecord(record);
+    },
+    // The practice item's own row, by its slug, or null.
+    itemRow: (collectionName, slug) => {
+      const record = first(collectionName, "slug = {:slug}", { slug });
+      return record === null ? null : record.id;
+    },
+    // Whether the campaign is still the account's own.
+    ownsCampaign: (account, campaignId) => {
+      const record = first("campaigns", "id = {:id}", { id: campaignId });
+      return record !== null && record.getString("user") === account;
+    },
+    saveGradedRow: (collectionName, row) => {
+      const record = new Record(collection(collectionName));
+      Object.keys(row).forEach((field) => record.set(field, row[field]));
+      dao.saveRecord(record);
+      return { id: record.id };
+    },
+    getGradedRow: (collectionName, id) => {
+      if (collectionName !== "ai_coding_attempts" && collectionName !== "take_home_attempts") return null;
+      const record = first(collectionName, "id = {:id}", { id });
+      if (record === null) return null;
+      return {
+        id: record.id,
+        user: record.getString("user"),
+        envelope: record.getString("envelope"),
+        test_results: json(record, "test_results"),
+        harness_output: json(record, "harness_output"),
+        ai_chats: json(record, "ai_chats"),
+        _record: record,
+      };
+    },
+    saveRubricReview: (_collectionName, row, review) => {
+      row._record.set("rubric_review", review);
+      dao.saveRecord(row._record);
+    },
+    // An envelope's review command, by the fingerprint that names the
+    // envelope, and whether a lease of it is still live.
+    reviewCommand: (account, fingerprint) => {
+      const record = first(COMMANDS, "account = {:account} && operation = 'review' && fingerprint = {:fp}",
+        { account, fp: fingerprint });
+      return record === null ? null : { id: record.id };
+    },
+    liveLeaseForCommand: (commandId, now) =>
+      first("admission_leases", "command = {:id} && expires_at > {:now}", { id: commandId, now }) !== null,
+    // admission.js's store over the same transaction.
+    admission: () => require(`${__hooks}/admission.js`).pbStore(dao),
     // The job's admission charge (admission.js), in this transaction.
     jobStarted: (row) => {
       const admission = require(`${__hooks}/admission.js`);
@@ -989,7 +1436,19 @@ function maxBudget(kind) {
   return admission.OPERATIONS[KINDS[kind].operation][1];
 }
 
-const CALLER_CHECKS = { enqueue: checkEnqueue, cancel: checkCancel, status: checkStatus };
+const CALLER_CHECKS = {
+  enqueue: checkEnqueue,
+  cancel: checkCancel,
+  status: checkStatus,
+  review_start: checkReviewStart,
+  review_finish: checkReviewFinish,
+};
+const CALLER_WRITES = {
+  enqueue: (store, account, input, now) => enqueue(store, account, input, now),
+  cancel: (store, account, input, now) => cancel(store, account, input, now),
+  review_start: (store, account, input, now) => reviewStart(store, account, input, now),
+  review_finish: (store, account, input, now) => reviewFinish(store, account, input, now),
+};
 const SERVICE_CHECKS = { claim: checkClaim, heartbeat: checkHeartbeat, complete: checkComplete, reap: checkReap };
 
 function inTransaction(fn) {
@@ -1000,9 +1459,10 @@ function inTransaction(fn) {
   return out;
 }
 
-// enqueue, cancel, and status: the account comes from the bearer, never
-// the body, and the runner key has to come too. status only reads, so it
-// runs outside a transaction and never waits on the write connection.
+// enqueue, cancel, status, and the review's start and finish (PR 3): the
+// account and its tier come from the bearer, never the body, and the
+// runner key has to come too. status only reads, so it runs outside a
+// transaction and never waits on the write connection.
 function handleCaller(c, action) {
   if (!storeOn()) return c.json(503, { v: VERSION, error: "store_off" });
   const info = $apis.requestInfo(c);
@@ -1013,13 +1473,13 @@ function handleCaller(c, action) {
   if (refused !== null) return c.json(refused.status, { v: VERSION, error: refused.body.error });
   const input = CALLER_CHECKS[action](info.data);
   if (input === null) return c.json(400, { v: VERSION, error: "invalid_request" });
-  const account = { id: record.id };
+  const account = { id: record.id, demo: admission.tierOf(record) === "demo" };
   if (action === "status") {
     const read = status(pbStore($app.dao()), account, input);
     return c.json(read.status, read.body);
   }
   const now = nowSeconds();
-  const out = inTransaction((store) => (action === "enqueue" ? enqueue(store, account, input, now) : cancel(store, account, input, now)));
+  const out = inTransaction((store) => CALLER_WRITES[action](store, account, input, now));
   return c.json(out.status, out.body);
 }
 
@@ -1201,6 +1661,11 @@ module.exports = {
   checkComplete,
   checkResult,
   checkReap,
+  checkGraded,
+  checkReviewStart,
+  checkReviewFinish,
+  GRADED_FIELDS,
+  REVIEW_OPERATION,
   retryable,
   enqueue,
   cancel,
@@ -1210,6 +1675,8 @@ module.exports = {
   complete,
   reap,
   purge,
+  reviewStart,
+  reviewFinish,
   ensureWorker,
   usableSecret,
   pbStore,

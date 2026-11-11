@@ -34,7 +34,8 @@ SPA read ``SIGNUPS``, and PocketBase reads ``DEMO``. ``EXECUTION_STORE``
 turns on the execution job store (ROUNDS-00A-L03): PocketBase serves its
 hook routes and each runner replica runs its executor and reaper.
 ``EXECUTION_SCRATCH`` moves run, evaluate, run-project, and take-home run
-onto it; ``execution/keys.py`` gives its effective value. The share routes
+onto it, and ``EXECUTION_GRADING`` moves grade, take-home submit, and their
+reviews; ``execution/keys.py`` gives both effective values. The share routes
 read ``PUBLIC_SHARES`` and ``SHARE_CAPABILITY_RESOLUTION``
 on each request (ROUNDS-00B-L03); the startup log still lists both.
 
@@ -69,7 +70,8 @@ DEFINITION_VALUES = ("legacy", "enforce", "disabled")
 # ROUNDS-00A-L03: off until an operator turns the job store on.
 STORE_VALUES = ("off", "on")
 # ROUNDS-00A-L03 PR 2: legacy runs the four scratch routes in their
-# request as before, on runs them as jobs, and off turns them off.
+# request as before, on runs them as jobs, and off turns them off. PR 3's
+# grading key takes the same three.
 SCRATCH_VALUES = ("legacy", "on", "off")
 
 _log = logging.getLogger(__name__)
@@ -204,6 +206,19 @@ REGISTRY: tuple[Gate, ...] = (
             "Run, evaluate, run-project, and take-home run: legacy runs each in its request as before; on runs "
             "each as a durable job, and acts as off unless EXECUTION_STORE is on and EXECUTION_DEFINITIONS is "
             "enforce; off answers 503 execution_disabled and keeps every draft."
+        ),
+    ),
+    Gate(
+        name="EXECUTION_GRADING",
+        values=SCRATCH_VALUES,
+        default="legacy",
+        closed="off",
+        readers=frozenset({RUNNER}),
+        description=(
+            "Grade, take-home submit, and their review routes: legacy grades each in its request as before; on "
+            "grades each as a durable job whose graded row the server writes, reviewed once per result, and acts "
+            "as off unless EXECUTION_STORE is on and EXECUTION_DEFINITIONS is enforce; off answers 503 "
+            "execution_disabled and keeps every draft."
         ),
     ),
     Gate(

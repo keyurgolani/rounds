@@ -8,7 +8,9 @@ subprocess, sidecar, or provider call, in this order:
    ``ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled`` is 503
    ``definitions_disabled`` (ROUNDS-00A-L02); on the four scratch routes,
    ``ROUNDS_GATE_EXECUTION_SCRATCH`` acting as ``off`` is 503
-   ``execution_disabled`` (ROUNDS-00A-L03).
+   ``execution_disabled`` (ROUNDS-00A-L03), and on grade and take-home
+   submit ``ROUNDS_GATE_EXECUTION_GRADING`` is (PR 3). The two review
+   routes serve only while that key is ``on``.
 3. Account from the bearer through PocketBase's auth-refresh: 401
    ``unauthenticated``; PocketBase down or 5xx: 503 ``auth_unavailable``.
 4. ``(tier, operation)`` table: 403 ``not_permitted``.
@@ -47,14 +49,20 @@ always runs step 6, since its key is its job's identity: a duplicate gets
 its job and is never charged, and its request leaves its charge with the
 job in the store. Idempotency doesn't depend on the quota gate: with
 quota ``off`` nothing is counted or charged, and the command is still
-recorded. ``ats-rule`` and ``pdf/health`` skip steps 6, 7, and 9. Routes
-outside ``ROUTES`` are untouched; the 23 routes already on
-``current_user`` and the anonymous share read stay outside admission.
+recorded. ``ats-rule`` and ``pdf/health`` skip steps 6, 7, and 9, and so
+do the two review routes (PR 3), whose steps 6 and 7 run in the store's
+own transaction, once per result (``execution.review``). Routes outside
+``ROUTES`` are untouched; the 23 routes already on ``current_user`` and
+the anonymous share read stay outside admission. A ``ROUTES`` path with a
+``{job_id}`` segment matches that one segment and nothing wider, the way
+the app's own router matches it, and the decision line names the
+template, never the id.
 """
 from __future__ import annotations
 
 import contextvars
 import json
+import re
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -119,10 +127,40 @@ ROUTES: dict[tuple[str, str], Route] = {
     # slot, since the runner only forwards to PocketBase's hook and runs
     # nothing itself.
     ("POST", "/api/pdf/snapshots"): Route("LEGACY_SNAPSHOT_CREATE", "snapshot_create", 4 * KIB),
+    # ROUNDS-00A-L03 PR 3: the rubric review of a grade or a take-home
+    # submission, behind its grading route's own gate. Its charge and its
+    # key are the store's (execution.js reviewStart), once per result, so
+    # admission runs steps 1 to 4 here and nothing runs in a slot.
+    ("POST", "/api/ai-coding/grade/{job_id}/review"): Route("AI_CODING_GRADE", "review", 6 * MIB, allocates=False),
+    ("POST", "/api/take-home/submit/{job_id}/review"): Route("TAKE_HOME_SUBMIT", "review", 6 * MIB, allocates=False),
 }
+
+# A ROUTES path segment written {name} matches one path segment, as the
+# app's router matches a path parameter: anything but a slash, at least one
+# character. Anchored at both ends, so it matches nothing wider.
+_SEGMENT = re.compile(r"\{[a-z_]+\}")
+_TEMPLATES: tuple[tuple[str, re.Pattern[str], str, Route], ...] = tuple(
+    (method, re.compile("^" + "[^/]+".join(re.escape(part) for part in _SEGMENT.split(path)) + "$"), path, route)
+    for (method, path), route in ROUTES.items()
+    if _SEGMENT.search(path)
+)
+
+
+def route_for(method: str, path: str) -> tuple[str, Route] | None:
+    """The admitted route a request names, with the path its decision line
+    records: the path itself, or a templated route's template."""
+    route = ROUTES.get((method, path))
+    if route is not None:
+        return path, route
+    for template_method, pattern, template, templated in _TEMPLATES:
+        if template_method == method and pattern.fullmatch(path):
+            return template, templated
+    return None
 
 # The routes that run a definition's code and tests (ROUNDS-00A-L02).
 DEFINITION_OPERATIONS = frozenset({"run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit"})
+# The fixed sentence a grading route answers while its key is off.
+GRADING_OFF = "Grading practice code is turned off on this server."
 
 TIERS = ("standard", "demo")
 # (tier, operation) -> permitted. Every pair is permitted, as #1 starts;
@@ -226,13 +264,14 @@ class AdmissionMiddleware:
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
-        route = ROUTES.get((scope.get("method", ""), scope.get("path", "")))
-        if route is None:
+        found = route_for(scope.get("method", ""), scope.get("path", ""))
+        if found is None:
             await self.app(scope, receive, send)
             return
 
         started = time.monotonic()
-        admitted = Admission(route=route, path=scope["path"], method=scope["method"])
+        path, route = found
+        admitted = Admission(route=route, path=path, method=scope["method"])
         scope.setdefault("state", {})[STATE_KEY] = admitted
         response: dict[str, Any] = {}
         # A leased request's response waits until the store has recorded
@@ -315,8 +354,14 @@ class AdmissionMiddleware:
             raise TypedError("route_disabled")
         if route.operation in DEFINITION_OPERATIONS and gates.value("EXECUTION_DEFINITIONS") == "disabled":
             raise TypedError("definitions_disabled")
-        if route.operation in keys.SCRATCH_OPERATIONS and keys.scratch() == "off":
-            raise TypedError("execution_disabled")
+        key = keys.for_operation(route.operation)
+        if key == "off" or (route.operation == "review" and key != "on"):
+            # A review exists only for a grading job, so it serves only
+            # while grading runs as jobs.
+            raise TypedError(
+                "execution_disabled",
+                GRADING_OFF if route.operation in keys.GRADING_OPERATIONS else None,
+            )
         # 3. Account.
         token = bearer_from(headers)
         if token is None:
