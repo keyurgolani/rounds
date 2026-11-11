@@ -631,6 +631,12 @@ async def _end_lease(token: str, lease: str, outcome: str, result: dict[str, Any
     return recorded
 
 
+async def end_lease(token: str, lease: str, outcome: str, result: dict[str, Any] | None) -> bool:
+    """``_end_lease`` for a command that admits another one itself, as
+    ROUNDS-00B-L04's CreateShare admits its snapshot command."""
+    return await _end_lease(token, lease, outcome, result)
+
+
 async def _finish(admitted: Admission, status: int | None, kept: _Kept) -> None:
     lease, admitted.lease = admitted.lease, None
     outcome, result = _outcome(admitted, status, kept)

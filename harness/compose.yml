@@ -45,6 +45,9 @@ services:
       # phases turn it on and off, here and on both runners.
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
       - MATERIALIZER_URL=http://materializer:4100
+      # The share resolver's password (ROUNDS-00B-L04), a test placeholder
+      # shared with both runners.
+      - ROUNDS_SHARE_RESOLVER_PASSWORD=${ROUNDS_SHARE_RESOLVER_PASSWORD:-}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/api/health >/dev/null 2>&1 || exit 1"]
       interval: 3s
@@ -108,6 +111,10 @@ services:
       - ROUNDS_GATE_EXECUTION_SCRATCH=${ROUNDS_GATE_EXECUTION_SCRATCH:-}
       - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
+      # The share secrets phases open share capability resolution
+      # (ROUNDS-00B-L04).
+      - ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=${ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION:-}
+      - ROUNDS_SHARE_RESOLVER_PASSWORD=${ROUNDS_SHARE_RESOLVER_PASSWORD:-}
     depends_on:
       pocketbase:
         condition: service_healthy

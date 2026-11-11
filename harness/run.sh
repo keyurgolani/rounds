@@ -54,6 +54,16 @@
 #                     a named snapshot can't be deleted, superuser changes
 #                     are refused, and an account delete leaves nothing
 #                     (ROUNDS-00B-L03 stage 2, harness/probes/share_capability_check.py)
+#  3l. share secrets - PocketBase and both replicas with snapshot creation
+#                     and share resolution on, the materializer, and nginx:
+#                     a bearer shown once, already-issued, rotation (ten at
+#                     once included), password and throttle answers that
+#                     don't depend on the bearer, and nginx's backstop
+#                     (ROUNDS-00B-L04, harness/probes/share_secrets_check.py)
+#  3m. PocketBase stopped: a live share bearer gets the unknown answer
+#  3n. the scan: no share bearer or password in any service log or in
+#                     pb_data, and no client address for a share request,
+#                     from files kept out of the receipts
 #   4. recreate PocketBase with signups disabled; the named pb_data volume
 #      keeps the accounts and rows from phase 2 across the restart
 #   5. hook phase   - signup-disabled probe
@@ -143,6 +153,8 @@ ADMISSION_SECRET_V="${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secre
 # test placeholders too.
 EXECUTION_SECRET_V="${ROUNDS_EXECUTION_SECRET:-harness-execution-key-not-a-secret-0123}"
 EXECUTION_ROTATED_V="harness-execution-key-rotated-not-a-secret-4567"
+# The share resolver's password, a test placeholder too (ROUNDS-00B-L04).
+SHARE_RESOLVER_SECRET_V="harness-share-resolver-not-a-secret-0123456789"
 
 # The verified PocketBase binary digest comes from the Dockerfile's ARGs, the
 # one source of truth, rather than a copy kept in sync here. Prod/CI build
@@ -198,17 +210,30 @@ trap cleanup EXIT
 # the admission phase's demo accounts sign in; it's off from then on.
 DEMO_V=true
 # SNAPSHOT_GATE sets ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE for PocketBase and
-# both runners, for the snapshot phases.
+# both runners, for the snapshot phases; SHARE_GATE sets
+# ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION for both runners, for the share
+# secrets phases.
 SNAPSHOT_GATE=""
+SHARE_GATE=""
 # SCRATCH_GATE and DEFINITIONS_GATE set ROUNDS_GATE_EXECUTION_SCRATCH and
 # ROUNDS_GATE_EXECUTION_DEFINITIONS for both runners, for the scratch job
 # phases (ROUNDS-00A-L03 PR 2).
 SCRATCH_GATE=""
 DEFINITIONS_GATE=""
 set_signups() {
-  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\nROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=%s\nROUNDS_GATE_EXECUTION_SCRATCH=%s\nROUNDS_GATE_EXECUTION_DEFINITIONS=%s\nAI_KEY_SECRET=%s\n' \
+  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\nROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=%s\nROUNDS_GATE_EXECUTION_SCRATCH=%s\nROUNDS_GATE_EXECUTION_DEFINITIONS=%s\nAI_KEY_SECRET=%s\nROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=%s\nROUNDS_SHARE_RESOLVER_PASSWORD=%s\n' \
     "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${DEMO_V}" \
-    "${SNAPSHOT_GATE}" "${SCRATCH_GATE}" "${DEFINITIONS_GATE}" "${SCAN_SECRET_V}" > "${ENV_FILE}"
+    "${SNAPSHOT_GATE}" "${SCRATCH_GATE}" "${DEFINITIONS_GATE}" "${SCAN_SECRET_V}" "${SHARE_GATE}" \
+    "${SHARE_RESOLVER_SECRET_V}" > "${ENV_FILE}"
+}
+
+# Waits until PocketBase answers its health route again.
+wait_pocketbase() {
+  for _ in $(seq 1 60); do
+    compose exec -T pocketbase wget -q -T 3 -O /dev/null http://127.0.0.1:8090/api/health >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  return 1
 }
 
 # Waits until PocketBase reaches the materializer over its network.
@@ -541,6 +566,44 @@ compose stop runner runner-b frontend
 compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
 set -e
 
+# Share secrets run while signups and the demo are still on, so they can
+# make their accounts and a demo one (ROUNDS-00B-L04). Every service log and
+# a pb_data tarball go to the state folder for the scan, never to the
+# receipts, and are removed right after it.
+echo "--- phase 3l: share secrets (create once, rotate, password, throttle, through nginx and both replicas) ---"
+share_secrets_rc=0
+set +e
+SNAPSHOT_GATE=enabled
+SHARE_GATE=enabled
+set_signups false
+compose up -d materializer
+compose up -d --force-recreate pocketbase
+restart_runners
+wait_materializer || share_secrets_rc=1
+probe share-secrets || share_secrets_rc=1
+
+echo "--- phase 3m: share secrets with PocketBase stopped (a live bearer gets the unknown answer) ---"
+compose stop pocketbase
+probe share-secrets-down || share_secrets_rc=1
+compose start pocketbase
+wait_pocketbase || share_secrets_rc=1
+
+echo "--- phase 3n: share secrets scan (every service log and pb_data, outside the receipts) ---"
+SCAN_DIR="${STATE_DIR}/share-scan"
+mkdir -p -m 700 "${SCAN_DIR}"
+for svc in pocketbase runner runner-b frontend; do
+  compose logs --no-color "${svc}" > "${SCAN_DIR}/${svc}.log" 2>&1 || share_secrets_rc=1
+done
+compose exec -T pocketbase tar -C /pb -cf - pb_data > "${SCAN_DIR}/pb_data.tar" || share_secrets_rc=1
+probe share-secrets-scan || share_secrets_rc=1
+rm -rf "${SCAN_DIR}"
+SNAPSHOT_GATE=""
+SHARE_GATE=""
+set_signups false
+compose stop runner runner-b frontend materializer
+compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
+set -e
+
 echo "--- phase 4: recreate PocketBase (signups disabled, the demo at its default) ---"
 DEMO_V=false
 set_signups true
@@ -680,7 +743,7 @@ set -e
 if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ] || [ "${admission_rc}" -ne 0 ] || [ "${migration_rc}" -ne 0 ] \
    || [ "${execution_rc}" -ne 0 ] || [ "${quarantine_rc}" -ne 0 ] || [ "${reach_rc}" -ne 0 ] \
    || [ "${snapshot_rc}" -ne 0 ] || [ "${demo_rc}" -ne 0 ] || [ "${legacy_rc}" -ne 0 ] \
-   || [ "${share_rc}" -ne 0 ]; then
+   || [ "${share_rc}" -ne 0 ] || [ "${share_secrets_rc}" -ne 0 ]; then
   exit 1
 fi
 exit 0

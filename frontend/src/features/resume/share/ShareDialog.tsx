@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { Copy, ExternalLink, Plus, Trash2, X } from 'lucide-react';
+import { gateValue } from '../../../lib/gates';
 import {
   buildShareUrl,
   createShareLink,
@@ -12,6 +13,7 @@ import {
   listShareLinks,
   type ShareLink,
 } from './client';
+import ShareLinksDialog from './ShareLinksDialog';
 
 type Props = {
   open: boolean;
@@ -19,7 +21,19 @@ type Props = {
   resumeId: string;
 };
 
-export default function ShareDialog({ open, onClose, resumeId }: Props) {
+// While share capability resolution is on, the share links dialog
+// (ROUNDS-00B-L04), which shows each link once. The gate is the runner's
+// too, so the dialog always matches the create the runner serves.
+export default function ShareDialog(props: Props) {
+  return gateValue('SHARE_CAPABILITY_RESOLUTION') === 'enabled' ? (
+    <ShareLinksDialog {...props} />
+  ) : (
+    <StageOneShareDialog {...props} />
+  );
+}
+
+// #11 stage 1's dialog, which a closed gate keeps (ROUNDS-00B-L03).
+function StageOneShareDialog({ open, onClose, resumeId }: Props) {
   const [links, setLinks] = useState<ShareLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);

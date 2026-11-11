@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp
 
-from app import admission, definitions, errors, gates, obs
+from app import access_log, admission, definitions, errors, gates, obs, share_password
 from execution import keys as execution_keys
 from execution import runtime as execution_runtime
 from routers import ai, ai_coding, execution, pdf, runner, sd_practice, share, share_capabilities, take_home
@@ -14,6 +14,8 @@ from routers import ai, ai_coding, execution, pdf, runner, sd_practice, share, s
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Public share requests leave no access-log line (ROUNDS-00B-L04).
+    access_log.install()
     # Gates are read once per process; the startup log lists each value.
     gates.init()
     # ROUNDS_GATE_EXECUTION_SCRATCH on without what it needs acts as off,
@@ -22,6 +24,9 @@ async def lifespan(_app: FastAPI):
     # Every stored definition's checksum is checked once per process; a
     # mismatch logs definition.rejected and that version fails closed.
     definitions.init()
+    # The share resolver's dummy verifier, made before the first resolve
+    # (ROUNDS-00B-L04).
+    await share_password.warm()
     # The execution worker runs only while ROUNDS_GATE_EXECUTION_STORE is
     # on and ROUNDS_EXECUTION_SECRET logs in (ROUNDS-00A-L03).
     await execution_runtime.start()

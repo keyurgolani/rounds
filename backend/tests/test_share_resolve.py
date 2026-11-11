@@ -38,14 +38,16 @@ NOT_FOUND = b'{"detail":"Not found."}'
 
 
 class FakeLookup:
-    """Answers per token; a token it doesn't know resolves nothing."""
+    """Answers per token; a token it doesn't know resolves nothing. #12's
+    lookup (app/share_resolver.py) also takes any password and the client's
+    address; its own tests are test_share_resolver.py."""
 
     def __init__(self, answers: dict | None = None, fail: Exception | None = None) -> None:
         self.answers = dict(answers or {})
         self.fail = fail
         self.calls: list[str] = []
 
-    async def __call__(self, token: str):
+    async def __call__(self, token: str, password: str | None = None, address: str | None = None):
         self.calls.append(token)
         if self.fail is not None:
             raise self.fail
@@ -107,7 +109,7 @@ def test_the_answer_names_no_capability_owner_snapshot_or_purpose(client, monkey
 
 
 def _oversized() -> bytes:
-    return ('{"token": "' + TOKEN + '"' + " " * 1100 + "}").encode()
+    return ('{"token": "' + TOKEN + '"' + " " * 2100 + "}").encode()
 
 
 FAILURES = {
@@ -126,7 +128,10 @@ FAILURES = {
     "not-utf8": dict(raw=b'{"token": "\xff"}', media="application/json"),
     "array": dict(body=[TOKEN]),
     "empty-object": dict(body={}),
-    "extra-field": dict(body={"token": TOKEN, "password": "placeholder"}),
+    "extra-field": dict(body={"token": TOKEN, "purpose": "placeholder"}),
+    "password-number": dict(body={"token": TOKEN, "password": 7}),
+    "password-list": dict(body={"token": TOKEN, "password": ["placeholder"]}),
+    "password-only": dict(body={"password": "placeholder"}),
     "number": dict(body={"token": 7}),
     "null": dict(body={"token": None}),
     "oversized": dict(raw=_oversized(), media="application/json"),
@@ -174,11 +179,9 @@ def test_a_lookup_answer_without_markup_gets_the_same_not_found(client, monkeypa
     assert (res.status_code, res.content) == (404, NOT_FOUND)
 
 
-def test_until_rounds_00b_l04_an_open_gate_still_resolves_nothing(client, monkeypatch):
-    # The shipped lookup has no digest or service identity to use yet.
-    assert share_capabilities.lookup is share_capabilities._no_lookup
-    res = _post(client, monkeypatch)
-    assert (res.status_code, res.content, _headers(res)) == (404, NOT_FOUND, WANT_HEADERS)
+def test_the_shipped_lookup_is_the_share_resolvers():
+    # ROUNDS-00B-L04's digest, throttle, and password step (app/share_resolver.py).
+    assert share_capabilities.lookup is share_capabilities._resolver_lookup
 
 
 # ---- the order: nothing is looked up before the request is decided ---------------------------------

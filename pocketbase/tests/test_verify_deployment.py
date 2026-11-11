@@ -126,6 +126,9 @@ def _server(dep: Deployment):
             self.wfile.write(raw)
 
         def _handle(self):
+            seen = getattr(dep, "seen_user_agents", None)
+            if seen is not None:
+                seen.append(self.headers.get("User-Agent"))
             length = int(self.headers.get("Content-Length") or 0)
             if self.command == "POST" and self.path == "/api/collections/campaigns/records" and length > vd.NGINX_BODY_CAP:
                 if dep.buffering_proxy:
@@ -309,6 +312,43 @@ def test_the_share_page_headers_match_nginx():
         want = dict(vd.SHARE_HEADERS, **{"content-security-policy": vd.SHARE_PAGE_CSP})
         assert {k.lower(): v for k, v in got.items()} == want, loc
         assert "try_files /index.html =404;" in block, loc
+
+
+def _nginx_block(conf: str, loc: str) -> str:
+    start = conf.index(loc)
+    return conf[start: conf.index("}", start)]
+
+
+SHARE_LOCATIONS = ("location = /r {", "location ^~ /r/ {", "location ~* ^/r(/|$) {",
+                   "location = /api/share/resolve {", "location @share_throttled {", "location @share_too_large {",
+                   "location ~* ^/api/share/by-token(/|$) {")
+
+
+def test_share_requests_leave_no_nginx_access_line():
+    # The share pages, the resolver and the two answers it hands off to, and
+    # the public share read (ROUNDS-00B-L04); the runner's side is
+    # backend/tests/test_access_log.py.
+    conf = (ROOT / "frontend" / "nginx.conf").read_text()
+    for loc in SHARE_LOCATIONS:
+        assert "access_log off;" in _nginx_block(conf, loc), loc
+
+
+def test_share_locations_keep_only_critical_error_lines():
+    conf = (ROOT / "frontend" / "nginx.conf").read_text()
+    for loc in SHARE_LOCATIONS:
+        assert "error_log /var/log/nginx/error.log crit;" in _nginx_block(conf, loc), loc
+
+
+def test_the_resolver_location_has_its_backstop():
+    conf = (ROOT / "frontend" / "nginx.conf").read_text()
+    assert "limit_req_zone $binary_remote_addr zone=share_resolve:10m rate=2r/s;" in conf
+    block = _nginx_block(conf, "location = /api/share/resolve {")
+    for line in ("limit_req zone=share_resolve burst=20 nodelay;", "limit_req_status 429;",
+                 "error_page 413 = @share_too_large;", "error_page 429 = @share_throttled;",
+                 "proxy_pass         http://runner:8000;"):
+        assert line in block, line
+    throttled = _nginx_block(conf, "location @share_throttled {")
+    assert "return 429" in throttled and 'add_header Retry-After "1" always;' in throttled
 
 
 def test_a_denied_route_that_reaches_pocketbase_fails():
@@ -729,3 +769,25 @@ def test_a_full_run_prints_no_credential_and_writes_receipts(tmp_path, capsys):
     assert code == 1
     assert {r["probe_id"] for r in rows if r["passed"]} >= {
         "deployment.credentials.defaults.rejected", "deployment.credentials.admin-passwords.rejected"}
+
+
+def test_every_request_names_the_tool_by_default():
+    dep = Deployment()
+    dep.seen_user_agents = []
+    with deployment(dep) as (_, url):
+        vd.main(["--url", url], env={})
+    assert dep.seen_user_agents and set(dep.seen_user_agents) == {vd.DEFAULT_USER_AGENT}
+
+
+def test_user_agent_replaces_it_on_every_request(monkeypatch):
+    monkeypatch.setattr(vd, "_user_agent", vd.DEFAULT_USER_AGENT)
+    dep = Deployment()
+    dep.seen_user_agents = []
+    with deployment(dep) as (_, url):
+        vd.main(["--url", url, "--user-agent", "ops-check/2"], env={})
+    assert dep.seen_user_agents and set(dep.seen_user_agents) == {"ops-check/2"}
+
+
+def test_a_user_agent_with_a_line_break_is_refused(capsys):
+    assert vd.main(["--url", "http://127.0.0.1:9", "--user-agent", "a\r\nb"], env={}) == 2
+    assert "--user-agent" in capsys.readouterr().err

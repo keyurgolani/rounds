@@ -182,6 +182,24 @@
     },
     {
       "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700008300_share_secrets.js", "lines": "44"},
+      "legacyName": "share_resolvers",
+      "decidedBy": "ROUNDS-00B-L04",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-02-L01",
+      "note": "Service-login auth collection whose one record, share-resolver, looks up public share links for recipients; never user-facing. #18 ratifies or migrates it."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700008300_share_secrets.js", "lines": "67"},
+      "legacyName": "share_throttle",
+      "decidedBy": "ROUNDS-00B-L04",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-02-L01",
+      "note": "Server-only counters for public share lookups, keyed by hashes only the runner can make; all rules null, never user-facing. #18 ratifies or migrates it."
+    },
+    {
+      "kind": "collection",
       "source": {"path": "pocketbase/pb_migrations/1700003000_experience_connections.js", "lines": "20-29"},
       "legacyName": "exp_anecdote_bullets",
       "decidedBy": "ROUNDS-06-L01",

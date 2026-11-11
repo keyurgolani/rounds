@@ -25,6 +25,8 @@ SECRETS = {
     "PB_ADMIN_EMAIL": "test-admin@example.test",
     "PB_ADMIN_PASSWORD": "test-secret-value-2",
     "ROUNDS_OBS_SECRET": "test-secret-value-3",
+    # The share resolver's PocketBase login (ROUNDS-00B-L04).
+    "ROUNDS_SHARE_RESOLVER_PASSWORD": "test-secret-value-4-share-resolver-0123",
     "POCKETBASE_URL": "http://pocketbase.test:8090",
 }
 
@@ -47,6 +49,14 @@ def test_the_candidate_environment_is_an_allowlist(app_secrets):
     assert env["HOME"] == env["TMPDIR"] == "/scratch/run-1"
     for value in app_secrets.values():
         assert value not in env.values()
+
+
+def test_the_share_resolver_password_never_reaches_a_candidate(app_secrets):
+    secret = app_secrets["ROUNDS_SHARE_RESOLVER_PASSWORD"]
+    # Even when a caller passes extra variables, only what it names gets in.
+    env = sandbox.candidate_env("/scratch/run-1", {"PYTHONPATH": "/scratch/run-1"})
+    assert "ROUNDS_SHARE_RESOLVER_PASSWORD" not in env
+    assert all(secret not in value for value in env.values())
 
 
 def test_snippet_code_sees_no_app_secret(app_secrets):

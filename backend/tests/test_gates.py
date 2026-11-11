@@ -215,9 +215,14 @@ def test_capability_resolution_opens_only_on_enabled(raw, want):
 
 
 def test_only_the_runner_reads_the_share_gates_and_fail_closed_aliases():
-    for name in ("PUBLIC_SHARES", "SHARE_CAPABILITY_RESOLUTION"):
-        assert gates.BY_NAME[name].readers == frozenset({gates.RUNNER}), name
-        assert name not in gates.load({}, gates.POCKETBASE) and name not in gates.load({}, gates.FRONTEND)
+    assert gates.BY_NAME["PUBLIC_SHARES"].readers == frozenset({gates.RUNNER})
+    assert "PUBLIC_SHARES" not in gates.load({}, gates.POCKETBASE) and "PUBLIC_SHARES" not in gates.load({}, gates.FRONTEND)
+    # ROUNDS-00B-L04: the SPA reads resolution too, so the share dialog
+    # matches the runner's create; it has no alias, and PocketBase never
+    # reads it.
+    resolution = gates.BY_NAME["SHARE_CAPABILITY_RESOLUTION"]
+    assert resolution.readers == frozenset({gates.RUNNER, gates.FRONTEND}) and resolution.aliases == ()
+    assert "SHARE_CAPABILITY_RESOLUTION" not in gates.load({}, gates.POCKETBASE)
     # PocketBase and the SPA resolve every alias the truthy way (gates.js,
     # gateRegistry.json), so a fail-closed alias stays on a runner-only gate.
     for gate in gates.REGISTRY:

@@ -80,6 +80,8 @@ docker compose -f docker-compose.prod.yml start pocketbase
 
 The volume is named after the compose project, which defaults to the checkout's directory name, so `rounds_pb_data` assumes a checkout named `rounds`; `docker volume ls` shows yours. Check that each archive isn't empty, and test a restore on another host now and then.
 
+Keep `AI_KEY_SECRET` with the same care as the archives, stored apart from them. It encrypts saved AI provider keys and keys every share link's digest, so a restore under another value can't read those keys, and every share link answers not-found until its owner rotates it.
+
 ## Restore
 
 1. Stop the stack.
@@ -164,7 +166,8 @@ Dry-run it on a copy of each deployment first, so you see exactly what the apply
 
 ```sh
 mkdir -p ~/rounds-scan/reports
-docker run --rm --network none \
+docker run --rm --network none --user "$(id -u):$(id -g)" \
+  -e ROUNDS_ENABLE_DEMO="${ROUNDS_ENABLE_DEMO:-false}" \
   -e ROUNDS_RELATION_QUARANTINE=dry-run \
   -e ROUNDS_RELATION_QUARANTINE_REPORT=/reports/quarantine-$(date +%F).json \
   -v ~/rounds-scan/pb_data:/pb/pb_data \
@@ -173,10 +176,10 @@ docker run --rm --network none \
   /pb/pocketbase migrate up --dir=/pb/pb_data --migrationsDir=/pb/pb_migrations
 ```
 
-`~/rounds-scan/pb_data` is the stopped-PocketBase copy the cross-owner scan already uses; set `ROUNDS_IMAGE_TAG` to the release you are about to deploy so the copy runs the same migrations. The container's report path is `/reports/...`, which resolves outside `/pb/pb_data`. This runs the migration without serving, and `--network none` keeps it offline.
+`~/rounds-scan/pb_data` is the stopped-PocketBase copy the cross-owner scan already uses; set `ROUNDS_IMAGE_TAG` to the release you are about to deploy so the copy runs the same migrations, and `ROUNDS_ENABLE_DEMO` to the deployment's own value (`true` on a hosted demo), since every `pocketbase` command runs the demo lock at start ([Demo Account](#demo-account)). With the demo off, that lock gives the copy's demo account a new random password and token key, the only change it makes to the copy. `--user` runs it as you, so the copy you unpacked stays yours and you can read the `0600` report without `sudo`. The container's report path is `/reports/...`, which resolves outside `/pb/pb_data`. This runs the migration without serving, and `--network none` keeps it offline.
 
 - The report path must be set and must resolve outside `pb_data`; the migration refuses a path containing `pb_data` and refuses an unset path. Create its directory first (the migration writes the file, not the directory), and the file is written mode `0600`.
-- The dry run takes the apply's own path: it moves, clears, and journals inside the migration's transaction, writes the report, logs `relation_quarantine_dry_run`, and then throws, so PocketBase rolls everything back. Nothing in the copy changes. Because it runs the same code, it also hits any failure the apply would hit, from creating the triggers onward; then the report's `status` is `failed`, its `stage` names the step it reached, and its `error` names the cause, so fix that before you deploy.
+- The dry run takes the apply's own path: it moves, clears, and journals inside the migration's transaction, writes the report, logs `relation_quarantine_dry_run`, and then throws, so PocketBase rolls everything back. The migrations change nothing in the copy. Because it runs the same code, it also hits any failure the apply would hit, from creating the triggers onward; then the report's `status` is `failed`, its `stage` names the step it reached, and its `error` names the cause, so fix that before you deploy.
 - PocketBase 0.22 exits 0 even when a migration fails, so the exit code tells you nothing. Judge the run by the report's `status` (`ok` or `failed`) and the `relation_quarantine_dry_run` log line, which carries the same status, the counts, and the checksum (or, on a failure, the stage and reason).
 - The report's `summary` carries `owned_collections`, `relations_checked`, `rows_scanned`, `references_checked`, `cross_owner`, `missing_target`, `rows_moved`, `dependents_moved`, `references_cleared`, and `unique_fallbacks`. `findings` lists each cross-owner or missing-target reference, and `outcomes` lists each row the apply moves and each reference it clears, all with per-report account pseudonyms (`acct-01`, ...), never account ids. Keep the report and the scanned copy no longer than its `expires_at` (14 days), same as the cross-owner scan.
 
@@ -192,6 +195,7 @@ cp pocketbase/levers/replay_quarantine.template.js ~/rounds-replay/$(date +%s)_r
 # In the copy, replace "__ENTRY_ID__" with the entry ids, each quoted, comma-separated.
 docker compose -f docker-compose.prod.yml stop pocketbase
 docker run --rm --network none \
+  -e ROUNDS_ENABLE_DEMO="${ROUNDS_ENABLE_DEMO:-false}" \
   -v rounds_pb_data:/pb/pb_data \
   -v ~/rounds-replay:/replay:ro \
   keyurgolani/rounds-pocketbase:${ROUNDS_IMAGE_TAG} \
@@ -199,7 +203,7 @@ docker run --rm --network none \
 docker compose -f docker-compose.prod.yml start pocketbase
 ```
 
-Pointing `--migrationsDir` at a folder holding only the lever runs just the lever. It sets each replayed entry's `status` to `replayed`. If any listed entry isn't `quarantined` or can't be replayed, the run changes nothing and PocketBase logs why but still exits 0, so check the entries afterwards. To set aside an entry the owner decides not to restore, set its `status` to `dropped` through the admin API with the admin token; that update keeps the `payload`. The replay and the migration's own writes are recorded in [server-writes.md](security/server-writes.md).
+Set `ROUNDS_ENABLE_DEMO` in your shell to the deployment's own value first: this runs on the live data, and on a hosted demo a run without it locks the demo account. Pointing `--migrationsDir` at a folder holding only the lever runs just the lever. It sets each replayed entry's `status` to `replayed`. If any listed entry isn't `quarantined` or can't be replayed, the run changes nothing and PocketBase logs why but still exits 0, so check the entries afterwards. To set aside an entry the owner decides not to restore, set its `status` to `dropped` through the admin API with the admin token; that update keeps the `payload`. The replay and the migration's own writes are recorded in [server-writes.md](security/server-writes.md).
 
 **Alert.** Each denial logs one `relation_denied` line carrying `collection`, `field`, `operation`, and `actor` only (no ids or values). A low background rate is normal. Alert on a sustained rise in `relation_denied` per `collection`/`field` after a deploy, or on the first `relation_denied` for a `field` that never denied before: either points at a client that started sending a cross-owner or stale id, or at a predicate that is now too tight for a legitimate write.
 
@@ -237,6 +241,7 @@ There is no rollback. Account isolation is forward-only: `migrate down` keeps th
 - `--admission`, with `--url`: each of the nine admitted runner routes refuses a caller with no bearer before it reads the body, with 401 `unauthenticated`, in the typed `{"detail", "code", "correlation_id"}` envelope whose id the `X-Correlation-Id` header repeats, and a body declared over the route's cap gets the typed 413. A route you turned off answers 503 instead: `route_disabled` when its own gate is off, or `definitions_disabled` for the six execution routes while `ROUNDS_GATE_EXECUTION_DEFINITIONS` is `disabled`. Name it with `--expect-disabled`, or the check fails. It sends no bearer and, for the caps, only headers, so nothing is charged or run.
 - `--gates-log FILE`: a runner log saved from its start (`docker compose -f docker-compose.prod.yml logs --no-color runner > runner.log`) has the gates line, which lists every admitted route's gate and both enforcement gates with valid values, and no gate fell back from a value it doesn't know. Add `--expect-gate NAME=VALUE` (repeatable), such as `--expect-gate ENFORCE_QUOTA=enforce`, to check a value you set.
 - `--expect-disabled PATH[=CODE]`, with `--url`: after you turned that route off, it answers 503 `CODE` with no bearer and with a made-up one. `CODE` is `route_disabled` (the default) for the route's own gate, or `definitions_disabled` for each of the six execution routes after you set `ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled`, such as `--expect-disabled /api/run=definitions_disabled`. The [execution runbook](security/execution-runbook.md#turning-a-gate-off) has the whole disable and re-enable cycle.
+- `--user-agent VALUE`: the `User-Agent` every request sends, `rounds-verify-deployment/1` unless you name another. A front proxy that refuses clients it doesn't recognize, such as Cloudflare's browser integrity check, may refuse it too (item 7 below).
 
 The rule table is `docs/security/account-scope.v1.json` in the checkout you run from; `--policy` names another copy, and is only accepted with `--admin-email` or `--db`, which supply the rules to compare.
 
@@ -262,6 +267,7 @@ It prints one line per check and exits `0` when nothing failed, `1` on any failu
 4. `FAIL` on the admin check: PocketBase's first-admin setup is open; create an admin as above.
 5. `FAIL` on an admission check: a route answered something other than the typed refusal, so it isn't behind this release's runner, or a proxy rewrote its answer. A route that is still off fails until you name it with `--expect-disabled` and the code it answers; the failure names both. `INCONCLUSIVE` on an admission cap has the same cause and fix as item 2.
 6. `FAIL` on a gates check: the log has no gates line (save it from the runner's start), a gate is missing (the runner predates this release), or a value fell back from a typo; fix the value in `.env` or the `rounds-gates` ConfigMap and restart.
+7. `FAIL` on every `--url` check with a 403 page from Cloudflare (error 1010): its browser integrity check refused the client before nginx saw the request. Name a `--user-agent` your zone accepts, or check the frontend directly, as in item 2 (on the host, `--url http://127.0.0.1:<its published port>`).
 
 Quotas and idempotency across replicas, a candidate's environment and uid, and the full disable and re-enable cycle need accounts and restarts, so they run only in the harness, not against your deployment.
 
@@ -398,7 +404,7 @@ A share link answers only its owner, and the public share read answers only the 
 
 To turn every public share answer off, the public share read and the resolver below, set `ROUNDS_GATE_PUBLIC_SHARES=disabled` on the runner and restart it (Compose passes it through; in Kubernetes set it in the `rounds-gates` ConfigMap, which the runner reads). Its older alias, `ROUNDS_DISABLE_PUBLIC_SHARES=true`, still works while the gate is empty, and it fails closed: any value other than empty, `false`, `0`, `no`, or `off` turns them off. A set gate wins over the alias. Owners keep their links. Turn answers back on with `ROUNDS_GATE_PUBLIC_SHARES=enabled`, or an empty gate and the alias `false`.
 
-**Share capabilities.** `1700008200_share_capabilities.js` adds `share_capabilities`, the store for Share Capabilities, the share links #12 starts creating. Every rule is `null`, so no client lists, views, or writes a row; PocketBase's hooks and the runner's owner routes are the only way in. A row names one of its account's Legacy Artifact Snapshots and holds a keyed digest of its bearer, never the bearer. Nothing creates a row yet.
+**Share capabilities.** `1700008200_share_capabilities.js` adds `share_capabilities`, the store for Share Capabilities. Every rule is `null`, so no client lists, views, or writes a row; PocketBase's hooks and the runner's owner routes are the only way in. A row names one of its account's Legacy Artifact Snapshots and holds a keyed digest of its bearer, never the bearer. CreateShare makes rows while resolution is on (below).
 
 - An owner lists their capabilities with `GET /api/share/capabilities` and revokes one with `POST /api/share/capabilities/{id}/revoke`. A revoke takes effect at once and can't be undone, and revoking again answers the same. Another account's capability answers like a missing one.
 - A capability lasts 90 days unless its creator picks less, and never more than 365. Its expiry can only move earlier.
@@ -411,9 +417,27 @@ To turn every public share answer off, the public share read and the resolver be
 | Gate | Default | Effect |
 | --- | --- | --- |
 | `ROUNDS_GATE_PUBLIC_SHARES` | `enabled` | `disabled` answers every public share request with the uniform not-found before any lookup |
-| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | `disabled` | `enabled` lets the resolver look a capability up. Leave it `disabled`: until #12 ships the lookup, an open gate still resolves nothing |
+| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | `disabled` | `enabled` lets the resolver look a capability up and turns on CreateShare and rotation below. Leave it `disabled` until the steps under One-time links are done |
 
-The resolver answers `{"projection_version": 1, "markup"}`, or the public share read's 404 bytes and headers for every failure: a gate, a body that isn't a JSON object holding only `token`, a token in another format, a capability that's unknown, expired, revoked, another account's, or whose source is gone, and PocketBase being down. The `/r` page shows resolved markup in a sandboxed frame that can't run scripts, under the share page CSP.
+The resolver answers `{"projection_version": 1, "markup"}`, or the public share read's 404 bytes and headers for every failure: a gate, a body that isn't a JSON object holding a `token` and at most a `password`, a token in another format, a capability that's unknown, expired, revoked, another account's, or whose source is gone, a missing or wrong password, and PocketBase being down. A throttled client gets 429 with `Retry-After` instead, whatever its token. The `/r` page shows resolved markup in a sandboxed frame that can't run scripts, under the share page CSP.
+
+**One-time links.** While resolution is on, `POST /api/share` is CreateShare and the share dialog follows it (#12):
+
+- A link is `/r#<secret>`; the secret rides the fragment, which no request carries. Rounds shows it once, in the response that makes it, and keeps only a keyed digest under `AI_KEY_SECRET`. A retry under the same `Idempotency-Key` answers `already-issued` with the same link and no secret. An owner who lost a link rotates it, `POST /api/share/capabilities/{id}/rotate` with the version from the list: one transaction swaps the digest, and the old link stops at once. A stale version is 409 `capability_version_conflict`; a revoked or expired link is 409 `capability_revoked` or `capability_expired`.
+- A link may have a password, 8 to 128 characters, set when it's made and stored as an Argon2id verifier (profile `pw1`). Each submitted password costs one verify, at most two at once per runner, and an unknown link costs the same.
+- The resolver counts before it looks: 60 resolves a minute per client, 10 password tries on one link from one client in 15 minutes, and 100 resolves a day per link. Counters live in `share_throttle` as keys only the runner can make, so a row names neither an address nor a link, and each lookup removes up to 100 that are over a day old. nginx adds a backstop of 2 resolves a second per client on each frontend replica, with a burst of 20.
+- The runner resolves as `share-resolver`, a record in `share_resolvers` whose password follows `ROUNDS_SHARE_RESOLVER_PASSWORD`. It reaches only its lookup route; PocketBase refuses it everywhere else, and nginx and the Vite proxy answer `/api/collections/share_resolvers/` with 404.
+- Share pages and resolves leave no access-log line in nginx or the runner, and nginx keeps only critical error lines on its share locations, since its error lines name the client. The runner logs `share.resolve` with `throttled`, `password_required`, or `password_wrong` besides the codes above, and one `share.create` or `share.rotate` line per command with the account's pseudonym, the capability id once there is one, and `issued`, `already_issued`, `ineligible`, or the refusal's code. None holds a secret, a password, or an address.
+
+Before you set the gate to `enabled`:
+
+1. Set `ROUNDS_SHARE_RESOLVER_PASSWORD` on PocketBase and every runner, then restart PocketBase, then the runners.
+2. Turn on Legacy Artifact Snapshot creation with its signed scan and the materializer ([Legacy Artifact Snapshots](#legacy-artifact-snapshots)), and set `ROUNDS_ADMISSION_SECRET`: every link is made over a snapshot.
+3. Back up `AI_KEY_SECRET` ([Backups](#backups)).
+4. If anything sits in front of the frontend, a front proxy, a tunnel, or the k8s ingress controller, set `ROUNDS_FRONTEND_REAL_IP_FROM` on the frontend to the addresses it connects from, and have it send each client's address in `X-Forwarded-For`, the header the frontend reads. This holds for compose too: when nginx's port is published only to a local proxy, nginx sees that proxy for every client, and without the setting every client shares one count, so one client can throttle every link. `ROUNDS_TRUSTED_PROXY_CIDRS` is the runner's list of nginx addresses; its default covers nginx in the compose files and on k8s, so leave it unless nginx reaches the runner from elsewhere.
+5. Set the gate for the runner and the frontend together, so the dialog matches the create the runner serves.
+
+Check a deployment with the gate on, signed in, from the public URL: make a link and open it; rotate it and check that the old link answers not-found and the new one opens; and resolve one unknown token 61 times within a minute, which answers 429 with `Retry-After` from the 61st on. Right after, resolve once from a second client on another network: it answers 404. A 429 there means every client shares one count; set `ROUNDS_FRONTEND_REAL_IP_FROM` (step 4).
 
 Check the pages and the resolver from the public URL:
 
@@ -425,7 +449,7 @@ curl -s -i -X POST https://your-domain/api/share/resolve -H 'Content-Type: appli
 
 Both pages answer `Cache-Control: no-store` with the share page CSP and `X-Frame-Options: DENY`, and the resolver answers 404 `{"detail":"Not found."}` with the same headers as the public share read.
 
-[Deployment verification](#deployment-verification) checks these from the public URL: `deployment.proxy.share-page.headers` for the share pages, `deployment.proxy.share-read.uniform` for the public share read, `deployment.proxy.share-resolve.uniform` for the resolver, and `deployment.proxy.share-hooks.denied` for the hook routes, which nginx answers itself.
+[Deployment verification](#deployment-verification) checks these from the public URL: `deployment.proxy.share-page.headers` for the share pages, `deployment.proxy.share-read.uniform` for the public share read, `deployment.proxy.share-resolve.uniform` for the resolver, `deployment.proxy.share-hooks.denied` for the hook routes, and `deployment.proxy.share-resolvers.denied` for the share resolver record's routes, which nginx answers itself.
 
 ## Smoke Test Checklist
 
