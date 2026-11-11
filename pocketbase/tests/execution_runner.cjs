@@ -111,13 +111,13 @@ function handle(step) {
   const env = Object.assign({ ROUNDS_GATE_EXECUTION_STORE: "on" }, step.env || {});
   globalThis.$os = { getenv: (key) => (key in env ? env[key] : "") };
   let reached = false;
+  const reach = () => {
+    reached = true;
+    throw new Error("reached the store");
+  };
   globalThis.$app = {
-    dao: () => ({
-      runInTransaction: () => {
-        reached = true;
-        throw new Error("reached the transaction");
-      },
-    }),
+    // status reads outside a transaction, so a read counts too (PR 2).
+    dao: () => ({ runInTransaction: reach, findRecordsByFilter: reach, findCollectionByNameOrId: reach }),
   };
   const who = step.principal || null;
   const authRecord = who === null ? null : {
@@ -139,13 +139,46 @@ function handle(step) {
 }
 
 const maxBudget = (kind) => admission.OPERATIONS[execution.KINDS[kind].operation][1];
-const store = memoryStore();
+// The job's admission charge moves with the job, as in one PocketBase
+// transaction (PR 2).
+const store = memoryStore({ admission });
 const results = program.steps.map((step) => {
   switch (step.call) {
     case "seedCommand":
       return store.seedCommand(step.row);
+    // What admission's same-key retry does to the account's command: it's
+    // in flight again (PR 2's jobEnded ends it with its job).
+    case "rearmCommand": {
+      const row = store.admission().findCommand(step.account.id, step.command_id);
+      row.state = "in_flight";
+      store.admission().saveCommand(row);
+      return null;
+    }
+    // Admission's own decisions on the same rows, as handle() runs them.
+    case "admit": {
+      const input = admission.checkAdmit(step.input);
+      return input === null ? { invalid: true } : admission.admit(store.admission(), step.account, input, step.now);
+    }
+    case "settle": {
+      const input = admission.checkSettle(step.input);
+      return input === null ? { invalid: true } : admission.settle(store.admission(), step.account, input, step.now);
+    }
+    case "finish": {
+      const input = admission.checkFinish(step.input);
+      return input === null ? { invalid: true } : admission.finish(store.admission(), step.account, input, step.now);
+    }
+    case "sweep":
+      return admission.sweep(store.admission(), step.now);
+    case "status": {
+      const input = execution.checkStatus(step.input);
+      if (input === null) return { status: 400, body: { error: "invalid_request" } };
+      return execution.status(store, step.account, input);
+    }
+    case "purge":
+      return execution.purge(store, step.now);
     case "checkEnqueue":
     case "checkCancel":
+    case "checkStatus":
     case "checkClaim":
     case "checkHeartbeat":
     case "checkComplete":

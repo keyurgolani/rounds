@@ -1261,3 +1261,39 @@ html {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: 0.55; transform: scale(0.85); }
 }
+
+/* ============================================================
+   A running execution job's progress line (RunnerJobStatus): a
+   short segment travels the notice's bottom edge while the job
+   runs. With reduced motion it holds still as a fainter full line.
+   ============================================================ */
+@keyframes rounds-job-progress {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(360%); }
+}
+.runner-job-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.runner-job-progress::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 28%;
+  background: var(--ochre);
+  animation: rounds-job-progress 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .runner-job-progress::before {
+    width: 100%;
+    opacity: 0.45;
+    animation: none;
+  }
+}

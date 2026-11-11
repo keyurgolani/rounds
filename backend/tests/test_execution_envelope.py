@@ -263,3 +263,57 @@ def test_validate_and_the_stores_check_agree_on_every_fixture():
     for (name, env), accepted in zip(cases, store_accepts, strict=True):
         assert _python_accepts(env) is accepted, name
         assert accepted is name.startswith("valid"), name
+
+
+# ---- what a scratch job shows (PR 2) ----------------------------------------
+
+
+def test_a_body_that_fits_comes_back_as_it_was():
+    body = {"stdout": "ok", "stderr": "", "return_value": [0, 1], "truncated": False}
+    assert envelope.fit_output(body) == body
+
+
+def test_the_longest_text_is_cut_first_and_the_body_says_so():
+    body = {"stdout": "x" * 300_000, "stderr": "warning\n", "return_value": [0, 1], "truncated": False}
+    out = envelope.fit_output(body)
+    assert envelope._size(out) <= envelope.OUTPUT_MAX_CHARS and out["truncated"] is True
+    assert out["stdout"] == "x" * len(out["stdout"]) and 64 <= len(out["stdout"]) < 300_000
+    assert (out["stderr"], out["return_value"]) == ("warning\n", [0, 1])
+
+
+def test_a_returned_value_too_big_to_show_goes_whole_never_part_of_it():
+    body = {"stdout": "", "return_value": {"rows": ["y" * 1000] * 400}, "truncated": False}
+    out = envelope.fit_output(body)
+    assert out["return_value"] is None and out["truncated"] is True and out["stdout"] == ""
+
+
+def test_texts_in_a_list_are_cut_and_the_result_always_fits():
+    body = {"results": [{"id": f"c{i:03d}", "error": "e" * 5000, "output": "o" * 5000} for i in range(64)]}
+    out = envelope.fit_output(body, limit=50_000)
+    assert envelope._size(out) <= 50_000 and out["truncated"] is True
+    assert [r["id"] for r in out["results"]] == [f"c{i:03d}" for i in range(64)]
+
+
+def test_past_its_cuts_whole_fields_go_largest_first():
+    body = {f"k{i}": [1] * 50 for i in range(200)}
+    out = envelope.fit_output(body, limit=2_000)
+    assert envelope._size(out) <= 2_000 and out["truncated"] is True
+
+
+def _score(results, malformed=False):
+    from app.harness_results import Result, Score
+
+    return Score(tuple(Result(rid, outcome, reason) for rid, outcome, reason in results), 0, False, 0.0, malformed)
+
+
+def test_a_graded_runs_parts_read_its_channel():
+    score = _score([("a", "passed", "ok"), ("b", "failed", "assertion"), ("c", "not-run", "no-result")])
+    assert envelope.harness_parts(score, timed_out=False) == [
+        Part("a", "passed"), Part("b", "candidate-failure"), Part("c", "infrastructure-degraded")]
+    assert envelope.harness_parts(score, timed_out=True)[2] == Part("c", "resource-limit", "wall_time")
+
+
+def test_a_malformed_channel_is_the_definitions_fault_for_every_part():
+    score = _score([("a", "not-run", "bad-result"), ("b", "not-run", "bad-result")], malformed=True)
+    assert envelope.harness_parts(score, timed_out=True) == [
+        Part("a", "definition-invalid"), Part("b", "definition-invalid")]

@@ -171,6 +171,19 @@ _GATE_VALUE = _matches(r"[a-z_]{1,16}", 16)
 _GATE_SOURCE = _one_of("default", "env", "alias", "invalid")
 
 
+# The gate settings a key can need (execution/keys.py), and nothing else.
+GATE_REQUIREMENTS = frozenset({"EXECUTION_STORE=on", "EXECUTION_DEFINITIONS=enforce"})
+
+
+def _gate_requirements(value: Any) -> bool:
+    """A short list of the settings in GATE_REQUIREMENTS."""
+    return (
+        isinstance(value, list)
+        and 0 < len(value) <= len(GATE_REQUIREMENTS)
+        and all(isinstance(v, str) and v in GATE_REQUIREMENTS for v in value)
+    )
+
+
 def _gate_table(value: Any) -> bool:
     if not isinstance(value, dict) or len(value) > 128:
         return False
@@ -191,9 +204,12 @@ def _gate_table(value: Any) -> bool:
 # the capability id, and revoked, unchanged, or not_found. share.create and
 # share.rotate lines (ROUNDS-00B-L04) carry the same three: issued,
 # already_issued, ineligible, or the refusal's error code.
+# execution.scratch (ROUNDS-00A-L03 PR 2) is the startup line that says
+# ROUNDS_GATE_EXECUTION_SCRATCH is on but acts as off, and names the gate
+# values it needs.
 EVENTS = frozenset({
     "decision", "gates", "definitions.loaded", "definition.resolved", "definition.rejected", "execution.job",
-    "execution.worker", "share.resolve", "share.revoke", "share.create", "share.rotate",
+    "execution.worker", "execution.scratch", "share.resolve", "share.revoke", "share.create", "share.rotate",
 })
 # The job metrics' names (ROUNDS-00A-L03). #54, #22, #154, and #174 reuse
 # the shape.
@@ -219,8 +235,10 @@ FIELDS: dict[str, Callable[[Any], bool]] = {
     "status": _int_between(100, 599),
     "code": _matches(r"[a-z][a-z0-9_]{0,63}", 64),
     "quota": _one_of("charged", "exceeded", "demo_limit", "refunded", "unavailable", "skipped"),
+    # job and retry_job: a key whose command enqueued a job (ROUNDS-00A-L03).
     "idempotency": _one_of(
-        "new", "retry", "replay", "mismatch", "in_flight", "none", "missing", "unavailable", "skipped"
+        "new", "retry", "replay", "mismatch", "in_flight", "none", "missing", "unavailable", "skipped", "job",
+        "retry_job",
     ),
     # The code an observe-mode gate would have answered with.
     "would_deny": _matches(r"[a-z][a-z0-9_]{0,63}", 64),
@@ -250,6 +268,8 @@ FIELDS: dict[str, Callable[[Any], bool]] = {
     # A PocketBase record id, such as the share link or capability a
     # share.resolve or share.revoke line names.
     "record": _matches(r"[a-z0-9]{15}", 15),
+    # The gate values a key needs, such as EXECUTION_STORE=on.
+    "needs": _gate_requirements,
 }
 # The fields an event may carry, where that's fewer than FIELDS: a job
 # metric never carries an account or a correlation id.
@@ -257,6 +277,7 @@ EVENT_FIELDS: dict[str, frozenset[str]] = {
     "execution.job": frozenset({"metric", "value", "kind", "purpose", "state", "outcome_class", "executor_kind",
                                 "service"}),
     "execution.worker": frozenset({"code", "service"}),
+    "execution.scratch": frozenset({"code", "needs", "service"}),
     "share.resolve": frozenset({"correlation_id", "record", "code"}),
     "share.revoke": frozenset({"correlation_id", "account", "record", "code"}),
     "share.create": frozenset({"correlation_id", "account", "record", "code"}),

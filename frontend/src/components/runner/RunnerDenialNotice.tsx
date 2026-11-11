@@ -12,6 +12,10 @@
 // took it, focus goes back to the control that started the action.
 // Every state has an icon and a written title, so color is never the
 // only signal.
+//
+// A page whose runs are durable jobs (ROUNDS-00A-L03) passes `job`, and
+// the same region shows the job's state while there's no denial
+// (RunnerJobStatus), so the page keeps one polite region.
 
 import { useEffect, type CSSProperties } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -32,6 +36,7 @@ import {
 } from 'lucide-react';
 import { formatWait, type RunnerDenial, type RunnerDenialKind } from '../../lib/runnerDenial';
 import { reloadPage } from '../../lib/definitions';
+import { RunnerJobStatus, type RunnerJobView } from './RunnerJobStatus';
 
 export type RunnerAction = 'run' | 'tests' | 'grade' | 'pdf';
 
@@ -167,6 +172,8 @@ interface RunnerDenialNoticeProps {
   className?: string;
   /** Extra style for the notice itself, such as its top margin. */
   contentStyle?: CSSProperties;
+  /** The action's durable job, shown while there's no denial. */
+  job?: RunnerJobView | null;
 }
 
 export function RunnerDenialNotice({
@@ -177,6 +184,7 @@ export function RunnerDenialNotice({
   signInHref = '/login',
   className,
   contentStyle,
+  job = null,
 }: RunnerDenialNoticeProps) {
   const location = useLocation();
   useEffect(() => {
@@ -204,6 +212,7 @@ export function RunnerDenialNotice({
       data-testid="runner-denial"
       className={className}
     >
+      {!denial && job && <RunnerJobStatus view={job} contentStyle={contentStyle} actionStyle={actionStyle} />}
       {denial && content && Icon && (
         <div
           data-denial={denial.kind}

@@ -211,7 +211,7 @@ describe('vocabulary: coverage set (schema)', () => {
   });
 
   it('covers every router prefix, /health, and /ready', () => {
-    assert.deepEqual(cov.apiRoutes.map((r) => r.name).sort(), ['/api', '/api/ai', '/api/ai-coding', '/api/pdf', '/api/sd-practice', '/api/share', '/api/share', '/api/take-home', '/health', '/ready']);
+    assert.deepEqual(cov.apiRoutes.map((r) => r.name).sort(), ['/api', '/api/ai', '/api/ai-coding', '/api/execution', '/api/pdf', '/api/sd-practice', '/api/share', '/api/share', '/api/take-home', '/health', '/ready']);
     const main = fs.readFileSync(path.join(REPO_ROOT, 'backend/main.py'), 'utf8');
     assert.equal(cov.apiRoutes.filter((r) => r.mountedAt).length, (main.match(/app\.include_router\(/g) || []).length);
   });

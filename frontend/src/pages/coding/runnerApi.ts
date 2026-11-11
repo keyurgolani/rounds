@@ -19,6 +19,7 @@
 // PocketBase refuses a client write to either (#1 stage 3).
 
 import { caseIdFor, definitionRef, definitionsEnforced } from '../../lib/definitions';
+import type { JobAnswer, RunnerCallInit } from '../../lib/executionJobs';
 import { runnerJSON } from '../../lib/runnerFetch';
 import type { CodeEvaluateResult, CodeRunResult, EvaluateFilter } from './types';
 
@@ -65,18 +66,24 @@ export function evaluateBody(payload: EvaluatePayload): Record<string, unknown> 
   return body;
 }
 
-export async function runCode(payload: RunPayload): Promise<CodeRunResult> {
-  return runnerJSON<CodeRunResult>('/api/run', {
+/** The run's result, or its job while ROUNDS_GATE_EXECUTION_SCRATCH is
+ *  on (ROUNDS-00A-L03). */
+export async function runCode(payload: RunPayload, init: RunnerCallInit = {}): Promise<CodeRunResult | JobAnswer> {
+  return runnerJSON<CodeRunResult | JobAnswer>('/api/run', {
     method: 'POST',
     body: runBody(payload),
+    idempotencyKey: init.idempotencyKey,
   });
 }
 
+/** The evaluate's results, or its job while the scratch key is on. */
 export async function evaluateCode(
   payload: EvaluatePayload,
-): Promise<CodeEvaluateResult> {
-  return runnerJSON<CodeEvaluateResult>('/api/evaluate', {
+  init: RunnerCallInit = {},
+): Promise<CodeEvaluateResult | JobAnswer> {
+  return runnerJSON<CodeEvaluateResult | JobAnswer>('/api/evaluate', {
     method: 'POST',
     body: evaluateBody(payload),
+    idempotencyKey: init.idempotencyKey,
   });
 }

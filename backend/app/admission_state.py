@@ -16,7 +16,10 @@ count.
    ``replay``, ``mismatch``, ``in_flight``, or ``none`` without a key), the
    quota verdict (``ok``, ``exceeded``, ``demo_limit``, or ``skipped``), a
    Retry-After, and whether it leased the request. A lease ends by itself
-   once the most the request was admitted for has passed.
+   once the most the request was admitted for has passed. A key whose
+   command enqueued an execution job (ROUNDS-00A-L03) answers ``job`` with
+   the job's id, never charged, or ``retry_job`` when a same-key retry
+   would run the job again.
 2. ``settle`` sets evaluate's and grade's exact charge once step 8 has
    loaded the definitions: once per lease, no more than was admitted, and
    a raise has to fit the hour, or the store answers the quota verdict.
@@ -63,7 +66,8 @@ _LEASE_CHARS = 43
 # pb_hooks/admission.js keeps up to as many characters of JSON.
 RESULT_MAX_BYTES = 256 * 1024
 
-IDEMPOTENCY_VERDICTS = frozenset({"new", "retry", "replay", "mismatch", "in_flight", "none"})
+IDEMPOTENCY_VERDICTS = frozenset({"new", "retry", "replay", "mismatch", "in_flight", "none", "job", "retry_job"})
+RECORD_ID = re.compile(r"[a-z0-9]{15}")
 QUOTA_VERDICTS = frozenset({"ok", "exceeded", "demo_limit", "skipped"})
 QUOTA_MODES = frozenset({"enforce", "observe", "off"})
 OUTCOMES = frozenset({"completed", "denied", "infrastructure", "error"})
@@ -97,6 +101,8 @@ class Decision:
     leased: bool
     # {"status", "body"} of a completed command, for a replay.
     result: dict[str, Any] | None
+    # The job a "job" verdict's command enqueued.
+    job: str | None = None
 
 
 @dataclass(frozen=True)
@@ -220,7 +226,10 @@ async def admit(
         isinstance(result, dict) and _int(result.get("status")) and 200 <= result["status"] < 300 and "body" in result
     ):
         raise Unavailable
-    return Decision(idempotency, verdict, retry_after, leased, result)
+    job = body.get("job")
+    if (idempotency == "job") != (isinstance(job, str) and RECORD_ID.fullmatch(job) is not None):
+        raise Unavailable
+    return Decision(idempotency, verdict, retry_after, leased, result, job if idempotency == "job" else None)
 
 
 async def settle(token: str, lease: str, wall_seconds: int) -> Settled:

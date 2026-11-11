@@ -204,11 +204,29 @@ store that:
   job back.
 
 Then both replicas start with the store on (`execution-runners`): each is
-ready, and with no handler for any kind yet, each claims jobs and ends every
-one `denied`, `definition-invalid`, once. PocketBase restarts with another
-secret and neither replica stays ready (`execution-unready`); the replicas
-restart with it, both are ready again, and only the new secret logs in
-(`execution-ready-again`). The signup restart runs PocketBase with no worker
+ready, and each claims jobs and ends every one once, a scratch kind
+`canceled` before it starts, since the scratch key isn't on, and a grading
+kind, which has no handler until PR 3, `denied`, `definition-invalid`.
+PocketBase restarts with another secret and neither replica stays ready
+(`execution-unready`); the replicas restart with it, both are ready again,
+and only the new secret logs in (`execution-ready-again`).
+
+PR 2's scratch jobs (`execution-scratch`, [`probes/scratch_check.py`](probes/scratch_check.py))
+restart both replicas and nginx with `ROUNDS_GATE_EXECUTION_SCRATCH=on` and
+`ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`, and check through nginx that each
+replica's gates line holds the three values; a run answers 202 with its job,
+which ends with its envelope; a duplicate answers the same job and charges
+nothing more, and the same key for other work is a mismatch; another
+account's read and cancel of a job get the unknown id's 404 and leave it as
+it was, which the case table's two `runner:execution-jobs` rows take as
+evidence; a cancel stops a running test run; and a run that reaches its time
+limit names it, keeps its charge, and shows no output. Then a long project
+run starts on `runner` alone (`execution-scratch-start`), the launcher kills
+that replica and starts both again, and once both answer ready (a replica
+that refuses the connection while it starts reads as not ready yet, until
+a deadline) the job ends `worker-lost` once its lease runs out, and a
+same-key retry through nginx runs it to the end
+(`execution-scratch-retry`). The signup restart runs PocketBase with no worker
 secret, and the last one no longer logs in (`execution-disabled`). The deploy
 phase's verifier checks that nginx answers `/api/rounds/execution/` and the
 worker's login and records with 404, those in other cases too.

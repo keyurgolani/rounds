@@ -146,6 +146,14 @@ class FakeAdmissionStore:
     def called(self, name: str) -> list[dict]:
         return [args for call, args in self.calls if call == name]
 
+    def link_job(self, token: str, key: str, job_id: str, retryable: bool = False) -> None:
+        """The command under ``key`` enqueued ``job_id``, as the hook's
+        enqueue records it; ``retryable`` is a job that ended
+        ``worker-lost`` or ``infrastructure-degraded`` with a retry left."""
+        command = self.commands[(token, key)]
+        command["job"] = job_id
+        command["state"] = "failed_infrastructure" if retryable else "in_flight"
+
     def new_lease(self) -> str:
         self._leases += 1
         return f"lease{self._leases:038d}"
@@ -161,6 +169,13 @@ class FakeAdmissionStore:
                 verdict = "new"
             elif existing["fingerprint"] != fingerprint or existing["operation"] != operation:
                 verdict = "mismatch"
+            elif existing.get("job"):
+                # A command that enqueued a job (ROUNDS-00A-L03 PR 2): its
+                # duplicate answers the job, uncharged, unless the job ended
+                # with a retry left.
+                if existing["state"] != "failed_infrastructure":
+                    return self._decision("job", "skipped", 0, False, None, existing["job"])
+                verdict = "retry_job"
             elif existing["state"] == "completed":
                 verdict = "replay"
             elif existing["state"] == "in_flight":
@@ -179,8 +194,10 @@ class FakeAdmissionStore:
                 return self._decision(verdict, self.quota, self.retry_after, False, None)
             counted, answer, wait = False, self.quota, self.retry_after
         if key is not None and not refused:
+            job = existing.get("job") if existing is not None else None
             self.commands[(token, key)] = {"fingerprint": fingerprint, "operation": operation,
-                                           "state": "in_flight", "result": None, "wall_seconds": wall_seconds}
+                                           "state": "in_flight", "result": None, "wall_seconds": wall_seconds,
+                                           "job": job}
         self.leases[lease] = {"token": token, "key": None if refused else key, "wall_seconds": wall_seconds,
                               "max_wall_seconds": max_wall_seconds, "counted": counted, "settled": False}
         if self.lost_answers > 0:

@@ -162,3 +162,38 @@ def test_a_result_path_swapped_for_a_symlink_is_not_read(tmp_path):
     assert outcome.return_value is None
     assert outcome.error == "The program ended without returning a result."
     assert "symlinked-sentinel" not in outcome.stdout + outcome.stderr
+
+
+# ---- a job's run (ROUNDS-00A-L03 PR 2) -------------------------------------------
+
+
+def test_a_run_its_job_stops_says_stopped_and_leaves_no_scratch_or_group():
+    import os
+    import threading
+    import time
+
+    from app import sandbox
+
+    control = sandbox.Control()
+    threading.Timer(0.3, control.stop.set).start()
+    started = time.monotonic()
+    outcome = run_one("import time\ndef solve():\n    time.sleep(30)", "python",
+                      {"kind": "function", "name": "solve"}, {}, timeout_s=30, control=control)
+    assert time.monotonic() - started < 10
+    assert outcome.stopped is True and outcome.timed_out is False and outcome.return_value is None
+    assert control.pid is not None and sandbox.group_gone(control.pid, wait_s=5)
+    assert control.cwd is not None and not os.path.exists(control.cwd)
+
+
+def test_a_run_out_of_time_says_timed_out_never_stopped():
+    from app import sandbox
+
+    control = sandbox.Control()
+    outcome = run_one("def solve():\n    while True:\n        pass", "python", {"kind": "function", "name": "solve"},
+                      {}, timeout_s=1, control=control)
+    assert outcome.timed_out is True and outcome.stopped is False and outcome.error is not None
+
+
+def test_a_run_without_a_control_is_as_it_was():
+    outcome = run_one("def solve():\n    return 3", "python", {"kind": "function", "name": "solve"}, {})
+    assert (outcome.return_value, outcome.error, outcome.timed_out, outcome.stopped) == (3, None, False, False)

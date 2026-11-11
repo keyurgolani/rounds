@@ -23,8 +23,11 @@ answer outside the contract is ``Unavailable``; a 4xx the store answered
 in the contract's shape is ``Refused``; the store gate off is
 ``StoreOff``.
 
-TODO(ROUNDS-00A-L03): PR 2's job-backed routes add the caller's enqueue
-and cancel, with the caller's bearer and the runner key.
+``Caller`` (PR 2) is a job-backed route's session for one account: it
+calls ``enqueue``, ``cancel``, and ``status`` with the caller's bearer,
+which names the account, and the runner key (``ROUNDS_ADMISSION_SECRET``),
+as admission's routes take them. Another account's job is the same
+not-found as an unknown one.
 """
 from __future__ import annotations
 
@@ -38,7 +41,9 @@ from typing import Any
 
 import httpx
 
+from app import admission_state
 from app.pb_auth import POCKETBASE_URL
+from execution import kinds
 
 VERSION = "execution/v1"
 BASE_PATH = "/api/rounds/execution"
@@ -291,3 +296,142 @@ class ServiceClient:
         if status != 200 or not self._ours(body):
             raise Unavailable
         return _counts(body)
+
+
+# ---------------------------------------------------------------------------
+# The caller's routes (PR 2)
+# ---------------------------------------------------------------------------
+
+
+class Mismatch(Refused):
+    """The key was admitted for another request, or enqueued another job."""
+
+
+class NotAdmitted(Refused):
+    """No admitted command in flight under the key."""
+
+
+@dataclass(frozen=True)
+class JobView:
+    """A job as its account sees it."""
+
+    id: str
+    kind: str
+    state: str
+    outcome_class: str | None
+    attempts: int
+    attempts_started: int
+    cancel_requested: bool
+    cleanup: str | None
+    queued_at: int
+    finished_at: int | None
+
+
+@dataclass(frozen=True)
+class JobStatus:
+    job: JobView
+    # Whether a same-key retry would run the job again.
+    retryable: bool
+    # The user view of the envelope it ended with, when it has one.
+    envelope: dict[str, Any] | None
+
+
+def _view(raw: Any) -> JobView:
+    if not isinstance(raw, dict) or not _record_id(raw.get("id")):
+        raise Unavailable
+    kind, state = raw.get("kind"), raw.get("state")
+    outcome_class, cleanup = raw.get("outcome_class"), raw.get("cleanup")
+    if kind not in kinds.KINDS or state not in kinds.STATES:
+        raise Unavailable
+    if outcome_class is not None and outcome_class not in kinds.OUTCOME_CLASSES:
+        raise Unavailable
+    if cleanup is not None and cleanup not in kinds.CLEANUP:
+        raise Unavailable
+    counts = (raw.get("attempts"), raw.get("attempts_started"), raw.get("queued_at"))
+    if not all(_int(v) and v >= 0 for v in counts) or not isinstance(raw.get("cancel_requested"), bool):
+        raise Unavailable
+    finished = raw.get("finished_at")
+    if finished is not None and not (_int(finished) and finished >= 0):
+        raise Unavailable
+    return JobView(raw["id"], kind, state, outcome_class, raw["attempts"], raw["attempts_started"],
+                   raw["cancel_requested"], cleanup, raw["queued_at"], finished)
+
+
+class Caller:
+    """One account's calls to the store's caller routes: the caller's
+    bearer and the runner key, over one connection for the whole request
+    (a long-poll asks many times)."""
+
+    def __init__(self, token: str, base_url: str | None = None, timeout: float = TIMEOUT_S,
+                 transport: httpx.AsyncBaseTransport | None = None) -> None:
+        self._token = token
+        self._http = httpx.AsyncClient(base_url=base_url or POCKETBASE_URL, timeout=timeout, transport=transport)
+
+    async def __aenter__(self) -> "Caller":
+        return self
+
+    async def __aexit__(self, *_exc: Any) -> None:
+        await self._http.aclose()
+
+    async def _post(self, action: str, payload: dict[str, Any]) -> tuple[int, Any]:
+        try:
+            key = admission_state.runner_key()
+        except admission_state.Unconfigured:
+            raise Refused from None
+        try:
+            resp = await self._http.post(
+                f"{BASE_PATH}/{action}", json=payload,
+                headers={"Authorization": f"Bearer {self._token}", admission_state.RUNNER_KEY_HEADER: key},
+            )
+        except httpx.HTTPError:
+            raise Unavailable from None
+        try:
+            body = resp.json()
+        except ValueError:
+            body = None
+        if resp.status_code == 503 and isinstance(body, dict) and body.get("error") == "store_off":
+            raise StoreOff
+        if resp.status_code in (401, 403):
+            raise Refused
+        if not ServiceClient._ours(body):
+            raise Unavailable
+        return resp.status_code, body
+
+    async def enqueue(self, payload: dict[str, Any]) -> tuple[JobView, bool, bool]:
+        """The job for an admitted command, with whether it was there
+        already and whether this re-queued it."""
+        status, body = await self._post("enqueue", payload)
+        if status == 200:
+            duplicate, requeued = body.get("duplicate"), body.get("requeued")
+            if not isinstance(duplicate, bool) or not isinstance(requeued, bool):
+                raise Unavailable
+            return _view(body.get("job")), duplicate, requeued
+        if status == 409 and body.get("error") == "mismatch":
+            raise Mismatch
+        if status in (404, 409) and body.get("error") == "not_admitted":
+            raise NotAdmitted
+        raise Refused if 400 <= status < 500 else Unavailable
+
+    async def status(self, job_id: str) -> JobStatus | None:
+        """The account's job, or None for another account's or an unknown
+        one."""
+        status, body = await self._post("status", {"job_id": job_id})
+        if status == 404 and body.get("error") == "not_found":
+            return None
+        if status != 200 or not isinstance(body.get("retryable"), bool):
+            raise Refused if 400 <= status < 500 else Unavailable
+        envelope = body.get("envelope")
+        if envelope is not None and not isinstance(envelope, dict):
+            raise Unavailable
+        return JobStatus(_view(body.get("job")), body["retryable"], envelope)
+
+    async def cancel(self, job_id: str) -> JobView | None:
+        """Asks the account's job to stop: a queued one ends at once, a
+        running one at its next heartbeat. None for another account's or an
+        unknown one."""
+        status, body = await self._post("cancel", {"job_id": job_id})
+        if status == 404 and body.get("error") == "not_found":
+            return None
+        if status != 200:
+            raise Refused if 400 <= status < 500 else Unavailable
+        return _view(body.get("job"))

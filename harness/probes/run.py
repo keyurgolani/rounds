@@ -59,6 +59,11 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
             ROUNDS_GATE_EXECUTION_STORE on, then both replicas' workers and
             readiness through a secret rotation (ROUNDS-00A-L03); see
             execution_check.py.
+  execution-scratch, execution-scratch-start, execution-scratch-retry
+            run, evaluate, and run-project as durable jobs through nginx,
+            with the scratch key on and definitions enforced, then a job
+            whose replica is killed mid-run retried under its key
+            (ROUNDS-00A-L03 PR 2); see scratch_check.py.
   execution-migration
             apply and reverse the execution job store's migration with the
             pinned binary; see execution_migration_check.py.
@@ -587,6 +592,7 @@ def main() -> int:
         print("usage: run.py {main|hook|deploy|degraded|deploy-db|verdict|scan|admission|admission-migration|"
               "admission-deploy|emergency-disable|emergency-enable|relation-quarantine|snapshot-store|"
               "execution-store|execution-runners|execution-unready|execution-ready-again|execution-disabled|"
+              "execution-scratch|execution-scratch-start|execution-scratch-retry|"
               "execution-migration|json-limits|demo-on|demo-off|demo-contain-migration|snapshot-create|"
               "snapshot-create-down|snapshot-create-retry|snapshot-scan|snapshot-create-off|snapshot-create-again|"
               "share-capabilities|share-secrets|share-secrets-down|share-secrets-scan}",
@@ -632,6 +638,13 @@ def main() -> int:
         import json_limits_check
 
         return json_limits_check.main()
+    if phase.startswith("execution-scratch"):
+        import scratch_check
+
+        if phase not in scratch_check.PHASES:
+            print(f"unknown phase {phase!r}", file=sys.stderr)
+            return 2
+        return scratch_check.main(phase, new_writer(os.environ.get("RECEIPTS_PATH", "/out/receipts.jsonl"), phase))
     if phase.startswith("execution-"):
         import execution_check
 
