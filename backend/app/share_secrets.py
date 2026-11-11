@@ -56,9 +56,9 @@ THROTTLE_INFO = b"rounds/share-throttle/v1"
 # Reserved for ROUNDS-00B-L06's receipts; nothing here derives it.
 LEGACY_RECEIPT_INFO = b"rounds/legacy-share-receipt/v1"
 
-# The throttle's scopes, in the order the resolver counts them: resolves a
-# minute per client, password tries per 15 minutes per client and bearer,
-# and resolves a day per bearer.
+# The throttle's scopes, in the order the resolver counts them: a client's
+# resolves in a minute, its password tries on one bearer in 15 minutes, and a
+# bearer's resolves in a day.
 IP_MINUTE = "ip_minute"
 PASSWORD_15M = "pw_15m"
 DIGEST_DAY = "digest_day"

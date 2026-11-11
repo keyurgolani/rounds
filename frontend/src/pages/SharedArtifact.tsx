@@ -9,7 +9,7 @@
 // ROUNDS-00B-L04: a link with a password answers that same not-found until
 // the password comes with it, so the not-found page carries a password
 // field (SharePasswordForm). A throttled resolve says only how long to
-// wait: "Too many attempts. Try again in N minutes."
+// wait, in minutes (throttledText).
 
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';

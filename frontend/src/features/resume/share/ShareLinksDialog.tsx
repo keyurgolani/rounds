@@ -49,11 +49,11 @@ const DEFAULT_EXPIRY_DAYS = 90;
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128;
 
-export const SHOW_ONCE_TEXT = 'Rounds can’t show this link again. Copy it now.';
+export const SHOW_ONCE_TEXT = 'This is the only time Rounds shows this link. Copy it now.';
 export const SAVED_LABEL = 'I saved this link';
-export const ALREADY_ISSUED_TEXT = 'This link was created, but Rounds can’t show it again.';
-export const ROTATE_CONFIRM_TEXT = 'Anyone using the current link loses access.';
-export const REVOKE_CONFIRM_TEXT = 'Anyone using this link loses access. You can’t undo this.';
+export const ALREADY_ISSUED_TEXT = 'You already made this link, and Rounds shows each link only once. Rotate it to get a new one.';
+export const ROTATE_CONFIRM_TEXT = 'The current link stops working, and Rounds makes a new one.';
+export const REVOKE_CONFIRM_TEXT = 'This link stops working for good. You can’t undo this.';
 export const COPY_FAILED_TEXT = 'Couldn’t copy. Select the link and copy it.';
 
 const INELIGIBLE: Record<string, string> = {
@@ -299,7 +299,7 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
       setRowAction(null);
       setNotice(null);
       if (outcome.kind === 'issued') showSecret(outcome.token, true, passwordSet);
-      else setRowError({ id, text: 'This link was already replaced, and Rounds can’t show it again. Rotate it again.' });
+      else setRowError({ id, text: 'This link was already replaced, and its new one was shown once. Rotate it again.' });
     } catch (err) {
       setRowError({ id, text: rowErrorText(err, 'rotate') });
       if (!transient(err)) setRowAction(null);

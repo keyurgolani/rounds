@@ -11,8 +11,8 @@ well-formed bearer. In order:
      (app/share_resolver_client.py). The route counts first and reads the
      capability only when no counter is over its limit, so a 429 never
      depends on whether the bearer is live.
-  4. The password step. Each submitted password gets exactly one verify
-     (app/share_password.py): against the capability's verifier when it
+  4. The password step. A submitted password costs one verify, never more
+     or fewer (app/share_password.py): against the capability's verifier when it
      has a current one, and against the dummy otherwise, so an unknown
      bearer, an unprotected capability, and a wrong password cost the same.
      No password, no verify.

@@ -13,9 +13,9 @@ export const SHARE_NOT_FOUND_MESSAGE =
   'It may have been turned off, or the address may be incomplete. Ask the person who shared it for a new link.';
 export const SHARE_THROTTLED_HEADING = 'Too many attempts';
 
-/** "Too many attempts. Try again in N minutes." */
+/** "Too many attempts right now. Wait N minutes and try again." */
 export function throttledText(minutes: number): string {
-  return `Too many attempts. Try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
+  return `Too many attempts right now. Wait ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} and try again.`;
 }
 
 export function ShareNotFound({ children }: { children?: ReactNode }) {

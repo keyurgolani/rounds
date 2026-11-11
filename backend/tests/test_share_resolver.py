@@ -6,9 +6,9 @@ The guarantees checked here:
   * a throttled client gets 429 with Retry-After and the resolver headers,
     the same for a live bearer and an unknown one, and no password is
     verified for it;
-  * each submitted password gets exactly one verify: an unknown bearer, an
-    unprotected capability, another profile, and a wrong password each run
-    one, and no password runs none;
+  * a submitted password costs one verify, never more or fewer: an unknown
+    bearer, an unprotected capability, another profile, and a wrong password
+    each run one, and no password runs none;
   * a missing or wrong password, a revoked or expired answer, another key
     id, and an unset key all answer the bytes an unknown bearer gets;
   * PocketBase gets the bearer's digest and the throttle's keys, never the
@@ -154,7 +154,7 @@ CASES = {
 
 
 @pytest.mark.parametrize("case", list(CASES))
-def test_each_submitted_password_gets_exactly_one_verify_and_none_gets_none(client, resolver, verifies, case):
+def test_every_password_sent_costs_one_verify_and_no_password_costs_none(client, resolver, verifies, case):
     found, password, status, count = CASES[case]
     if found is not None:
         resolver.share(TOKEN, found)

@@ -1,6 +1,6 @@
 """Share link passwords (ROUNDS-00B-L04, app/share_password.py): the pw1
-profile, the password bounds, exactly one verify per submitted password
-with a dummy when there's nothing to verify against, and at most two
+profile, the password bounds, one verify for every password sent, with a
+dummy when there's nothing to verify against, and at most two
 Argon2id runs at once in a process."""
 from __future__ import annotations
 
@@ -130,7 +130,7 @@ def counted(monkeypatch):
     "case",
     ["unknown-link", "unprotected-link", "other-profile", "protected-wrong-password", "protected-right-password"],
 )
-def test_each_submitted_password_gets_exactly_one_verify(counted, case):
+def test_every_password_sent_costs_one_verify(counted, case):
     real = _run(share_password.hash_password(PASSWORD))
     share_password._dummy_verifier()  # made before counting, as warm() does at start
     verifier = {

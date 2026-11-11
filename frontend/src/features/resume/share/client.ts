@@ -263,8 +263,8 @@ export type CapabilityState =
   | { kind: 'revoked'; at: Date | null }
   | { kind: 'source-deleted' };
 
-/** The row's state, from #11's status, revoked_reason, revoked_at, and
- *  expires_at. Only `expires` links still open. */
+/** The row's state, worked out from its expires_at, status, revoked_reason,
+ *  and revoked_at. Only `expires` links still open. */
 export function capabilityState(row: ShareCapability, now: number = Date.now()): CapabilityState {
   if (row.status === 'revoked') {
     return row.revoked_reason === 'source_deleted'

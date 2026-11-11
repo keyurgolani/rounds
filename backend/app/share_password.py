@@ -7,9 +7,9 @@ later profile applies to new shares and an existing share keeps its own. A
 verifier under any other profile never resolves.
 
 Hashing and verifying run in a worker thread, at most two at a time in each
-process, since every one holds its 19 MiB until it ends. Each submitted
-password gets exactly one verify: against the share's verifier when it has a
-current one, and otherwise against a dummy ``pw1`` verifier the process makes
+process, since every one holds its 19 MiB until it ends. A submitted
+password costs one verify, never more or fewer: the share's verifier when it
+has a current one, and otherwise a dummy ``pw1`` verifier the process makes
 once. So an unknown link, an unprotected one, and one under another profile
 cost what a wrong password costs. No password, no verify.
 """

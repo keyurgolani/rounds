@@ -1,6 +1,6 @@
 // The share links dialog (ROUNDS-00B-L04): a link's secret is shown once,
-// in the show-once panel, with nothing copied for you and "I saved this
-// link" as the only way out; a clipboard failure leaves the link
+// in the show-once panel, which copies nothing for you and closes only
+// through "I saved this link"; a clipboard failure leaves the link
 // selectable; the secret is gone once the panel closes; one key per create
 // form and per Rotate click; rows show their state, and only live rows
 // can be rotated or revoked; the panel is the dialog, traps focus, and
@@ -202,7 +202,7 @@ describe('the create form', () => {
     expect(create.key).toMatch(UUID_V7_PATTERN);
   });
 
-  it('retries the same form under the same key, and an edit mints a new one', async () => {
+  it('retries the same form under the same key, and takes a fresh key after an edit', async () => {
     const user = setupUser();
     runner.answers.push(() => typed(503, 'shares_unavailable'), () => typed(503, 'shares_unavailable'),
       () => typed(503, 'shares_unavailable'));
@@ -300,7 +300,7 @@ describe('the list', () => {
     return screen.getByText(name).closest('li') as HTMLElement;
   }
 
-  it('shows each row’s state, and Rotate and Revoke only on a live one', async () => {
+  it('shows each row’s state, and offers Rotate and Revoke for live rows alone', async () => {
     runner.list = rows();
     openDialog();
     await screen.findByText('Live link');

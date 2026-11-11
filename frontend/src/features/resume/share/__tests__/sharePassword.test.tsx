@@ -93,7 +93,7 @@ describe('the password field', () => {
     open(`/r#${TOKEN}`);
     await user.type(await screen.findByLabelText('Password'), PASSWORD);
     await user.click(screen.getByRole('button', { name: 'Open' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Too many attempts. Try again in 1 minute.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Too many attempts right now. Wait 1 minute and try again.');
   });
 
   it('has no field without a token', async () => {
@@ -106,9 +106,9 @@ describe('the password field', () => {
 
 describe('a throttled resolve', () => {
   it.each([
-    ['120', 'Too many attempts. Try again in 2 minutes.'],
-    ['61', 'Too many attempts. Try again in 2 minutes.'],
-    [null, 'Too many attempts. Try again in 1 minute.'],
+    ['120', 'Too many attempts right now. Wait 2 minutes and try again.'],
+    ['61', 'Too many attempts right now. Wait 2 minutes and try again.'],
+    [null, 'Too many attempts right now. Wait 1 minute and try again.'],
   ])('with Retry-After %s says only how long to wait', async (wait, text) => {
     fetchMock.mockResolvedValue(
       answer(429, { detail: 'Server text that is never shown' }, wait === null ? {} : { 'Retry-After': wait }),
@@ -123,7 +123,7 @@ describe('a throttled resolve', () => {
   });
 
   it('reads "minute" for one and "minutes" for more', () => {
-    expect(throttledText(1)).toBe('Too many attempts. Try again in 1 minute.');
-    expect(throttledText(15)).toBe('Too many attempts. Try again in 15 minutes.');
+    expect(throttledText(1)).toBe('Too many attempts right now. Wait 1 minute and try again.');
+    expect(throttledText(15)).toBe('Too many attempts right now. Wait 15 minutes and try again.');
   });
 });

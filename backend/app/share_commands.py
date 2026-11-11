@@ -26,13 +26,13 @@ never repeats the request.
 
 CreateShare, in order: the caller's bearer (401), the key, the body, the
 digest key (503), then the command's row: a completed one answers
-already-issued before anything else runs. Then the source's ``updated``,
-read with the owner's bearer (404 for a missing or another account's), and
-#4's snapshot command under the key the row keeps for it, admitted as
+already-issued before anything else runs. Then it fetches the source's
+``updated`` as the caller (a missing source and another account's both get
+404), and #4's snapshot command under the key the row keeps for it, admitted as
 snapshot_create, so a retry gets the same snapshot. #4's ineligible answers
 as it is, and a source edited since the first attempt is 409
-snapshot_conflict; neither writes a capability. Then the verifier, and the
-capability in one PocketBase transaction.
+snapshot_conflict; neither writes a capability. Then the verifier, and a
+single PocketBase transaction makes the capability.
 
 RotateShareBearer takes ``{expected_capability_version}``. One transaction
 swaps the digest and raises the version, so the old bearer resolves nothing
@@ -301,8 +301,8 @@ def expiry(day: str | None, now: datetime) -> str | None:
 
 
 async def _source_updated(token: str, kind_field: str, source_id: str) -> str:
-    """The owner's source's ``updated``, read with the owner's bearer; 404
-    for a missing one and another account's alike."""
+    """The source's ``updated``, fetched with the caller's own bearer. A
+    missing source and another account's both answer 404."""
     collection = SOURCES[kind_field][1]
     record = await admission.lookup(pb_get, token, f"/api/collections/{collection}/records/{source_id}",
                                     {"fields": "id,updated"})
