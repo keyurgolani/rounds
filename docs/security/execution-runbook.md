@@ -82,16 +82,17 @@ Typed errors answer `{"detail", "code", "correlation_id"}`. `detail` is a fixed 
 | `payload_too_large` | 413 | 1 | The body is over the route's cap, at nginx, the Ingress, or the runner | The app shows too large; trim the input |
 | `route_disabled` | 503 | 2 | The route's gate is off | Turn it back on when it's safe |
 | `definitions_disabled` | 503 | 2 | `ROUNDS_GATE_EXECUTION_DEFINITIONS` is `disabled`, so the six execution routes are off | Set it to `legacy` (or leave it unset) and restart; drafts are kept |
+| `execution_disabled` | 503 | 2 | `ROUNDS_GATE_EXECUTION_SCRATCH` is `off`, or `on` without the store on and definitions enforced, so run, evaluate, run-project, and take-home run are off | Set what the start's `execution.scratch` line names, or set the key to `legacy`, and restart; drafts are kept (Scratch Jobs) |
 | `unauthenticated` | 401 | 3 | No usable bearer, or PocketBase refused it | The app asks the person to sign in again |
 | `auth_unavailable` | 503 | 3, 8 | PocketBase is down or answered 5xx while checking the account or reading a record | Check PocketBase from the runner (Dependency Checks) |
 | `not_permitted` | 403 | 4 | The account's tier can't use this operation | Every tier and operation is permitted; the demo tier's limits are its quota |
 | `limit_exceeded` | 413 | 5 | A field is over its limit (Limits) | The app shows too large |
 | `invalid_request` | 422 | 5, 8 | An unknown or malformed field, a body nested more than 64 arrays and objects deep, a definition request at `legacy` (a tab from an `enforce` deployment), a submitted file whose path or contents UTF-8 can't hold, or a stored definition this runner can't run, such as a `custom` entry | Reload the page; for a stored definition, fix the record |
 | `legacy_request_rejected` | 422 | 5 | At `EXECUTION_DEFINITIONS=enforce`, a field from an older request shape or one that would choose what runs; `detail` names the field. At `/api/pdf/render`, a body in the shape from before snapshots, whatever the gates say | The app asks for a reload and saves the draft first |
-| `idempotency_key_required` | 400 | 6 | No `Idempotency-Key`, or one that isn't a UUIDv7, while `ENFORCE_IDEMPOTENCY` enforces | The app shows unavailable; reload the page, since the app sends one key per action |
+| `idempotency_key_required` | 400 | 6 | No `Idempotency-Key`, or one that isn't a UUIDv7, while `ENFORCE_IDEMPOTENCY` enforces, or on a scratch job route whatever it says | The app shows unavailable; reload the page, since the app sends one key per action |
 | `already_completed` | 409 | 6 | The command already completed and no response was kept: a PDF render, or a result over 256 KiB | The app shows unavailable; the next try gets a new key |
 | `idempotency_mismatch` | 409 | 6 | The key was used for a different request or route | The app shows unavailable; the next try gets a new key |
-| `already_in_flight` | 409 | 6 | The same command is still running, or its end isn't recorded yet | `Retry-After`, up to 10 seconds, says when to look again; the app shows unavailable, and the next try gets a new key |
+| `already_in_flight` | 409 | 6 | The same command is still running, its end isn't recorded yet, or a same-key retry of its job is already on its way | `Retry-After`, up to 10 seconds, says when to look again; the app shows unavailable, and the next try gets a new key |
 | `quota_exceeded` | 429 | 7 | An account or deployment limit is reached for this hour, or the account's in-flight limit, at admission or when evaluate or grade settle | The app shows limit reached and the wait from `Retry-After` |
 | `demo_limit_reached` | 429 | 7 | The shared demo limit is reached | The app shows limit reached and the wait from `Retry-After` |
 | `quota_unavailable` | 503 | 7 | The admission store didn't answer while a gate enforces, or the runner has no usable `ROUNDS_ADMISSION_SECRET` | Check PocketBase, the admission routes, and the runner key (Dependency Checks) |
@@ -109,6 +110,27 @@ Typed errors answer `{"detail", "code", "correlation_id"}`. `detail` is a fixed 
 | `destination_denied` | 403 | provider calls | An AI provider base URL points at a refused address | Use a public provider URL, or the LAN address with `ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK` |
 
 The app retries `auth_unavailable`, `quota_unavailable`, and `worker_unavailable` twice with the same key, after 1 and 3 seconds or a `Retry-After` of up to 10 seconds, before it shows unavailable. A retry that finds its command still running gets `already_in_flight`, which the app shows as unavailable without trying again.
+
+## Scratch Jobs
+
+`ROUNDS_GATE_EXECUTION_SCRATCH` (`ROUNDS-00A-L03` PR 2) runs run, evaluate, run-project, and take-home run as durable jobs on the execution job store. It is `legacy` by default, which runs them in their request.
+
+- `on` needs `ROUNDS_GATE_EXECUTION_STORE=on` and `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce` on the runner. Set both values, `EXECUTION_DEFINITIONS=enforce` on the frontend too, then `EXECUTION_SCRATCH=on`, and restart every runner replica. A route answers 202 with its job, and the app shows it as queued, running, or how it ended, with Cancel while it waits or runs and Retry after an end the server caused. `on` without either setting acts as `off`, and the runner's start logs `{"event":"execution.scratch","code":"acting_off","needs":[...]}` naming each one missing.
+- `off`: the four routes answer 503 `execution_disabled` before the account, for every caller, and every draft is kept. A queued job a worker claims ends `canceled` before it starts; one already running finishes. To confirm it, name each of the four with that code:
+
+  ```sh
+  python3 harness/verify_deployment.py --url https://your-domain --admission \
+    --expect-disabled /api/run=execution_disabled \
+    --expect-disabled /api/evaluate=execution_disabled \
+    --expect-disabled /api/ai-coding/run-project=execution_disabled \
+    --expect-disabled /api/take-home/run=execution_disabled \
+    --gates-log runner.log --expect-gate EXECUTION_SCRATCH=off
+  ```
+
+- To confirm `on`, run `--gates-log runner.log --expect-gate EXECUTION_SCRATCH=on`. It fails a gates line where the key is `on` without the store on or definitions enforced, and says which.
+- Rollback is `off`, then `legacy` once no page waits on a job. `GET /api/execution/jobs/{id}` and its cancel keep answering whatever the key says, so a page sees its job through.
+
+A job-backed request always needs its `Idempotency-Key`, the job's command id. A duplicate answers the job as it is, its envelope once it ended, and isn't charged; the same key for other work is 409 `idempotency_mismatch`. A same-key retry after `worker-lost` or `infrastructure-degraded` runs the job again, charged its wall seconds and no request, until 3 of its attempts have started. A second retry that arrives before the first one has queued the job again gets 409 `already_in_flight` and pays nothing. A charge comes back only when the candidate never started. A replica whose worker isn't ready answers 503 `worker_unavailable` before it charges or enqueues anything. Reading or canceling another account's job, an unknown id, and a malformed one all answer the same 404 `not_found`. A read waits at most 20 s (`?wait=20`); more is 422 `invalid_request`. Only an end the run earned, `passed` or `candidate-failure`, carries the run's output in its envelope; a limit, a cancel, and an end the definition or the infrastructure caused carry none.
 
 ## Idempotency and Quotas
 

@@ -53,6 +53,15 @@ def runner_definition_routes() -> set[str]:
             if route.operation in admission.DEFINITION_OPERATIONS}
 
 
+def runner_scratch_routes() -> set[str]:
+    """The routes ROUNDS_GATE_EXECUTION_SCRATCH off stops, from the
+    runner's own table (ROUNDS-00A-L03 PR 2)."""
+    from app import admission
+    from execution import keys
+
+    return {path for (_m, path), route in admission.ROUTES.items() if route.operation in keys.SCRATCH_OPERATIONS}
+
+
 def ingress_body_cap() -> int:
     """proxy-body-size on the repository's Kubernetes ingress."""
     text = (ROOT / "k8s" / "ingress.yaml").read_text()
@@ -68,6 +77,8 @@ class Admission:
         self.disabled: set[str] = set()
         # ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled.
         self.definitions_off = False
+        # ROUNDS_GATE_EXECUTION_SCRATCH off, or on without what it needs.
+        self.scratch_off = False
         self.overrides: dict[str, tuple[int, object, dict]] = {}
         self.caps = {path: edge for _m, path, _g, _r, edge in vd.ADMITTED_ROUTES}
         self.buffering = False
@@ -85,6 +96,8 @@ class Admission:
             return 503, envelope("route_disabled"), {"X-Correlation-Id": CID}
         if self.definitions_off and path in runner_definition_routes():
             return 503, envelope("definitions_disabled"), {"X-Correlation-Id": CID}
+        if self.scratch_off and path in runner_scratch_routes():
+            return 503, envelope("execution_disabled"), {"X-Correlation-Id": CID}
         return 401, envelope("unauthenticated"), {"X-Correlation-Id": CID}
 
 
@@ -427,6 +440,21 @@ def test_a_route_gate_named_as_the_definitions_stop_fails():
     assert not result.passed and "code='route_disabled'" in result.detail
 
 
+def test_the_scratch_stop_passes_when_each_scratch_route_is_named_with_it():
+    dep = Admission()
+    dep.scratch_off = True
+    named = [f"{path}=execution_disabled" for path in sorted(runner_scratch_routes())]
+    with fake(dep) as url:
+        results = vd.check_admitted_routes(url, disabled=named) + vd.check_disabled_routes(url, named)
+        unnamed = vd.check_admitted_routes(url)
+    assert failed(results) == []
+    bad = [r for r in unnamed if not r.passed]
+    assert {r.target for r in bad} == runner_scratch_routes()
+    run = next(r for r in bad if r.target == "/api/run")
+    assert "--expect-disabled /api/run=execution_disabled" in run.detail
+    assert "ROUNDS_GATE_EXECUTION_SCRATCH" in run.detail
+
+
 def test_expected_stops_parse_to_a_code_per_route():
     assert vd.parse_expected_disabled(["/api/run"]) == {"/api/run": "route_disabled"}
     assert vd.parse_expected_disabled(["/api/run=Definitions_Disabled", "/api/pdf/render=route_disabled"]) == {
@@ -435,9 +463,10 @@ def test_expected_stops_parse_to_a_code_per_route():
 
 @pytest.mark.parametrize(
     "items",
-    [["/api/pdf/render=definitions_disabled"], ["/api/run=unauthenticated"], ["/api/run="],
-     ["/api/run", "/api/run=definitions_disabled"], ["/api/not-admitted=route_disabled"]],
-    ids=["not-a-definition-route", "not-a-stop", "empty-code", "two-codes", "not-admitted"],
+    [["/api/pdf/render=definitions_disabled"], ["/api/ai-coding/grade=execution_disabled"],
+     ["/api/run=unauthenticated"], ["/api/run="], ["/api/run", "/api/run=definitions_disabled"],
+     ["/api/not-admitted=route_disabled"]],
+    ids=["not-a-definition-route", "not-a-scratch-route", "not-a-stop", "empty-code", "two-codes", "not-admitted"],
 )
 def test_an_expected_stop_that_cant_happen_is_a_usage_error(items):
     with pytest.raises(vd.ConfigError):
@@ -486,6 +515,48 @@ def test_the_last_gates_line_wins():
 def test_a_wrong_gates_line_fails(overrides, check):
     results = {r.check_id: r for r in vd.check_gates_log(gates_line(**overrides))}
     assert not results[check].passed
+
+
+@pytest.mark.parametrize(
+    "overrides, needs",
+    [
+        ({"EXECUTION_STORE": {"value": "off", "source": "default"}}, "EXECUTION_STORE=on"),
+        ({"EXECUTION_DEFINITIONS": {"value": "legacy", "source": "default"}}, "EXECUTION_DEFINITIONS=enforce"),
+        ({"EXECUTION_STORE": None}, "EXECUTION_STORE=on"),
+    ],
+    ids=["store-off", "definitions-legacy", "store-not-logged"],
+)
+def test_scratch_on_without_what_it_needs_is_reported_as_acting_off(overrides, needs):
+    on = {"EXECUTION_SCRATCH": {"value": "on", "source": "env"}, "EXECUTION_STORE": {"value": "on", "source": "env"},
+          "EXECUTION_DEFINITIONS": {"value": "enforce", "source": "env"}}
+    text = gates_line(**{**on, **overrides})
+    results = {r.check_id: r for r in vd.check_gates_log(text, {"EXECUTION_SCRATCH": "on"})}
+    for check in ("deployment.gates.valid", "deployment.gates.expected"):
+        assert not results[check].passed
+        assert "acts as if it were off" in results[check].detail and needs in results[check].detail
+    assert results["deployment.gates.logged"].passed
+    clean = {r.check_id: r for r in vd.check_gates_log(gates_line(**on), {"EXECUTION_SCRATCH": "on"})}
+    assert all(r.passed for r in clean.values()), [r.detail for r in clean.values()]
+
+
+@pytest.mark.parametrize("name, value", [("EXECUTION_SCRATCH", "yes"), ("EXECUTION_STORE", "enabled"),
+                                         ("EXECUTION_DEFINITIONS", "on")])
+def test_an_execution_key_outside_its_values_fails_the_valid_check(name, value):
+    results = {r.check_id: r for r in vd.check_gates_log(gates_line(**{name: {"value": value, "source": "env"}}))}
+    assert not results["deployment.gates.valid"].passed and name in results["deployment.gates.valid"].detail
+
+
+def test_the_runners_own_scratch_line_passes_only_with_what_it_needs(capsys, monkeypatch):
+    from app import gates
+
+    for env, ok in (({"ROUNDS_GATE_EXECUTION_SCRATCH": "on", "ROUNDS_GATE_EXECUTION_STORE": "on",
+                      "ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce"}, True),
+                    ({"ROUNDS_GATE_EXECUTION_SCRATCH": "on", "ROUNDS_GATE_EXECUTION_STORE": "on"}, False)):
+        monkeypatch.setattr(gates, "_snapshot", None)
+        gates.init(env)
+        results = vd.check_gates_log(capsys.readouterr().out, {"EXECUTION_SCRATCH": "on"})
+        assert all(r.passed for r in results) is ok, [r.detail for r in results]
+    monkeypatch.setattr(gates, "_snapshot", None)
 
 
 def test_an_unexpected_value_fails_the_expected_check():
@@ -594,11 +665,28 @@ def _in_process(client):
 
 
 def test_the_stop_codes_and_definition_routes_match_the_runner():
-    from app import errors
+    from app import errors, gates
+    from execution import keys
 
     assert vd.DEFINITION_ROUTES == runner_definition_routes()
+    assert vd.SCRATCH_ROUTES == runner_scratch_routes()
     assert set(vd.STOPPED_BY) == set(vd.STOP_CODES)
     assert all(errors.CODES[code] == 503 for code in vd.STOP_CODES)
+    assert vd.SCRATCH_NEEDS == keys.SCRATCH_NEEDS
+    for name, values in vd.EXECUTION_GATES.items():
+        assert tuple(gates.BY_NAME[name].values) == values
+
+
+def test_the_runners_scratch_stop_is_the_one_the_verifier_expects(client, monkeypatch):
+    from app import gates
+
+    for env in ({"ROUNDS_GATE_EXECUTION_SCRATCH": "off"}, {"ROUNDS_GATE_EXECUTION_SCRATCH": "on"}):
+        monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
+        req = _in_process(client)
+        named = [f"{path}=execution_disabled" for path in sorted(vd.SCRATCH_ROUTES)]
+        results = vd.check_admitted_routes("http://runner", req, disabled=named)
+        results += vd.check_disabled_routes("http://runner", named, req)
+        assert failed(results) == []
 
 
 def test_the_runners_definitions_stop_is_the_one_the_verifier_expects(client, monkeypatch):

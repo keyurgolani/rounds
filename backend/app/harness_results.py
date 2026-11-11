@@ -20,7 +20,8 @@ the channel, and the server computes ``passed`` and ``score`` itself:
 
 At ``ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`` the grade and take-home
 routes score every checkpoint through this (``app.execution.grade``).
-TODO(ROUNDS-00A-L03): #3 classes ``not-run`` results.
+``execution.envelope.harness_parts`` gives each result its outcome class
+in a job's envelope (ROUNDS-00A-L03), ``not-run`` results included.
 """
 from __future__ import annotations
 

@@ -235,20 +235,32 @@ def layout_problem(path: str, harness_paths: frozenset[str], folders: set[str]) 
     return None
 
 
+def files_problem(files: Mapping[str, str], resolved: definitions.Resolved) -> str | None:
+    """Why a submission's files can't run with ``resolved``: ``encoding``
+    for a path or contents text UTF-8 can't hold, a ``PATH_DETAILS`` key
+    for the first file it can't carry, or None."""
+    if not all(_encodes(path) and _encodes(contents) for path, contents in files.items()):
+        return "encoding"
+    harness = frozenset(item["path"] for item in resolved.document.get("files") or [])
+    folders = _folders([*files, *harness])
+    for path in sorted(files):
+        problem = path_problem(path, harness) or layout_problem(path, harness, folders)
+        if problem is not None:
+            return problem
+    return None
+
+
 def check_paths(request: Request, files: Mapping[str, str], resolved: definitions.Resolved) -> None:
     """422 ``path_not_allowed`` for the first file a submission can't
     carry or the runner can't write beside the others, and 422
     ``invalid_request`` for a path or contents that aren't text UTF-8 can
     hold (a lone surrogate). Everything here runs before a slot does, so
     a refusal refunds its charge."""
-    if not all(_encodes(path) and _encodes(contents) for path, contents in files.items()):
+    problem = files_problem(files, resolved)
+    if problem == "encoding":
         raise rejected(request, resolved, "invalid_request")
-    harness = frozenset(item["path"] for item in resolved.document.get("files") or [])
-    folders = _folders([*files, *harness])
-    for path in sorted(files):
-        problem = path_problem(path, harness) or layout_problem(path, harness, folders)
-        if problem is not None:
-            raise rejected(request, resolved, "path_not_allowed", PATH_DETAILS[problem])
+    if problem is not None:
+        raise rejected(request, resolved, "path_not_allowed", PATH_DETAILS[problem])
 
 
 # ---------------------------------------------------------------------------
@@ -310,12 +322,14 @@ class StepRun:
     stderr: str
     timed_out: bool
     duration_ms: int
+    # A scratch job's cancel stopped it (ROUNDS-00A-L03).
+    stopped: bool = False
 
 
 def run_step(step: dict[str, Any], files: Mapping[str, str], slot: sandbox.Sandbox,
-             extra_env: Mapping[str, str] | None = None) -> StepRun:
+             extra_env: Mapping[str, str] | None = None, control: sandbox.Control | None = None) -> StepRun:
     """A visible run: the candidate's files only, the step's argv, and
-    its wall time."""
+    its wall time. ``control`` lets a scratch job stop it."""
     start = time.monotonic()
     with sandbox.scratch(slot) as workdir:
         _lay_files(workdir, files)
@@ -323,9 +337,12 @@ def run_step(step: dict[str, Any], files: Mapping[str, str], slot: sandbox.Sandb
         env = sandbox.candidate_env(workdir, {"PYTHONPATH": workdir, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
                                               **(extra_env or {})})
         try:
-            proc = sandbox.run(argv(step["argv"]), cwd=workdir, env=env, timeout_s=step["wall_s"], sandbox=slot)
+            proc = sandbox.run(argv(step["argv"]), cwd=workdir, env=env, timeout_s=step["wall_s"], sandbox=slot,
+                               control=control)
         except subprocess.TimeoutExpired:
             return StepRun(None, "", "", True, int((time.monotonic() - start) * 1000))
+        except sandbox.Stopped:
+            return StepRun(None, "", "", False, int((time.monotonic() - start) * 1000), stopped=True)
     return StepRun(proc.returncode, proc.stdout, proc.stderr, False, int((time.monotonic() - start) * 1000))
 
 
@@ -337,11 +354,12 @@ class Graded:
 
 
 def grade(checkpoint: dict[str, Any], harness_files: list[dict[str, Any]], files: Mapping[str, str],
-          slot: sandbox.Sandbox, wall_s: int | None = None) -> Graded:
+          slot: sandbox.Sandbox, wall_s: int | None = None, control: sandbox.Control | None = None) -> Graded:
     """One checkpoint's grade: the candidate's files and the harness
     files in a fresh scratch, the grade argv with the result channel at
     fd 3, and the server's score of what came back on it. Nothing the
-    driver or its children print is kept."""
+    driver or its children print is kept. ``control`` lets a job stop it;
+    a stopped grade reads as timed out, and its caller checks the stop."""
     step = checkpoint["grade"]
     timeout = min(step["wall_s"], wall_s) if wall_s is not None else step["wall_s"]
     start = time.monotonic()
@@ -356,6 +374,7 @@ def grade(checkpoint: dict[str, Any], harness_files: list[dict[str, Any]], files
             timeout_s=timeout,
             sandbox=slot,
             channel_max=harness_results.CHANNEL_MAX_BYTES,
+            control=control,
         )
     scored = harness_results.score(channel, checkpoint["results"], checkpoint["min_executed"],
                                    missing_reason="timeout" if timed_out else "no-result")

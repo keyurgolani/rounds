@@ -38,6 +38,9 @@ CODES: dict[str, int] = {
     "route_disabled": 503,
     # ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled, with the route gates.
     "definitions_disabled": 503,
+    # ROUNDS_GATE_EXECUTION_SCRATCH off, or on without what it needs
+    # (ROUNDS-00A-L03 PR 2).
+    "execution_disabled": 503,
     "unauthenticated": 401,
     "auth_unavailable": 503,
     "not_permitted": 403,
@@ -86,6 +89,7 @@ DETAILS: dict[str, str] = {
     "payload_too_large": "The request is larger than this route accepts.",
     "route_disabled": "This is turned off on this server.",
     "definitions_disabled": "Running and grading practice code is turned off on this server.",
+    "execution_disabled": "Running practice code is turned off on this server.",
     "unauthenticated": "Sign in to continue.",
     "auth_unavailable": "Sign-in can't be checked right now. Try again shortly.",
     "not_permitted": "This isn't available for this account.",

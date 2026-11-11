@@ -7,7 +7,9 @@ files, and the timeout come from the server: from the round's row at
 ``ROUNDS_GATE_EXECUTION_DEFINITIONS=legacy``, and from the compiled
 harness revision the request names at ``enforce`` (``app.execution``),
 where grade answers per-result outcomes and server totals, never the
-harness's output."""
+harness's output. With ``ROUNDS_GATE_EXECUTION_SCRATCH`` on
+(ROUNDS-00A-L03), run-project admits and enqueues a job and answers 202
+(``execution.jobs``)."""
 from __future__ import annotations
 
 import json
@@ -33,6 +35,7 @@ from app import admission, definitions, destinations, execution, limits
 from app.errors import TypedError
 from app.limits import StrictModel
 from app.pb_auth import current_user, pb_get
+from execution import jobs, keys
 from routers.ai import (
     _active_text_config,
     _call_complete,
@@ -155,6 +158,8 @@ def _submitted_language(round_row: dict[str, Any], files: Dict[str, str]) -> str
 @router.post("/run-project", response_model=RunProjectResponse)
 async def run_project_route(request: Request) -> RunProjectResponse:
     req = await execution.parse(request, RunProjectRequest, DefinitionRunProjectRequest)
+    if keys.scratch() == "on" and isinstance(req, DefinitionRunProjectRequest):
+        return await _run_project_job(request, req)
     if isinstance(req, DefinitionRunProjectRequest):
         return await _run_project_definition(request, req)
     await admission.begin(request, req, wall_seconds=RUN_PROJECT_TIMEOUT_S)
@@ -547,13 +552,24 @@ async def _run_project_definition(request: Request, req: DefinitionRunProjectReq
     if step is None:
         raise TypedError("invalid_request", "This checkpoint can't run here.")
     execution.check_paths(request, req.files, resolved)
-    bounded = {**step, "wall_s": min(step["wall_s"], RUN_PROJECT_TIMEOUT_S)}
+    bounded = bounded_run_step(step)
     async with admission.allocate() as slot:
         ran = await run_in_threadpool(execution.run_step, bounded, req.files, slot)
+    return run_project_answer(ran, bounded["wall_s"], resolved)
+
+
+def bounded_run_step(step: dict[str, Any]) -> dict[str, Any]:
+    """A checkpoint's visible run, held to run-project's wall time."""
+    return {**step, "wall_s": min(step["wall_s"], RUN_PROJECT_TIMEOUT_S)}
+
+
+def run_project_answer(ran: execution.StepRun, wall_s: int, resolved: definitions.Resolved) -> RunProjectResponse:
+    """What a visible run answers, in its request or as a scratch job's
+    output (ROUNDS-00A-L03)."""
     if ran.timed_out:
         return RunProjectResponse(
             passed=False, passed_count=0, failed_count=0, stdout="", stderr="",
-            error=f"Time limit exceeded ({bounded['wall_s']}s)", duration_ms=ran.duration_ms,
+            error=f"Time limit exceeded ({wall_s}s)", duration_ms=ran.duration_ms,
             definition=resolved.receipt(),
         )
     stdout = _cap(ran.stdout, DEFAULT_OUTPUT_CAP_BYTES)
@@ -571,6 +587,19 @@ async def _run_project_definition(request: Request, req: DefinitionRunProjectReq
         truncated=_over_cap(ran.stdout, DEFAULT_OUTPUT_CAP_BYTES) or _over_cap(ran.stderr, DEFAULT_OUTPUT_CAP_BYTES),
         definition=resolved.receipt(),
     )
+
+
+async def _run_project_job(request: Request, req: DefinitionRunProjectRequest):
+    """ROUNDS_GATE_EXECUTION_SCRATCH=on: the same run, as a job."""
+    submission = await jobs.begin(request, "run_project", req.definition, req.files, {"checkpoint": req.checkpoint},
+                                  wall_seconds=RUN_PROJECT_TIMEOUT_S)
+    if submission.answer is not None:
+        return submission.answer
+    resolved = execution.resolve(request, req.definition, "ai-coding")
+    if _definition_checkpoint(request, resolved, req.checkpoint)["run"] is None:
+        raise TypedError("invalid_request", "This checkpoint can't run here.")
+    execution.check_paths(request, req.files, resolved)
+    return await jobs.enqueue(request, submission, {"checkpoint": req.checkpoint, "files": req.files})
 
 
 def checkpoint_result(checkpoint: dict[str, Any], graded: execution.Graded) -> dict[str, Any]:

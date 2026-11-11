@@ -540,6 +540,34 @@
       ],
       "guarantee": "a demo caller can't create a share link, an AI provider, or AI settings, and no demo account signs in when the demo is off"
     },
+    "isolation.execution-jobs.read.foreign": {
+      "surface": "runner:execution-jobs",
+      "actor": "authenticated-other",
+      "variant": "foreign_owner",
+      "expected": "uniform_not_found",
+      "control": "the owner reads its own job",
+      "owner_leaf": "ROUNDS-00A-L03",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "isolation.execution-jobs.read.foreign"
+      ],
+      "guarantee": "reading another account's execution job answers the same 404 as an unknown job id"
+    },
+    "isolation.execution-jobs.cancel.foreign": {
+      "surface": "runner:execution-jobs",
+      "actor": "authenticated-other",
+      "variant": "foreign_owner",
+      "expected": "uniform_not_found",
+      "control": "the owner cancels its own job",
+      "owner_leaf": "ROUNDS-00A-L03",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "isolation.execution-jobs.cancel.foreign"
+      ],
+      "guarantee": "canceling another account's execution job answers the same 404 as an unknown job id and leaves the job as it was"
+    },
     "isolation.render.snapshot.uniform-not-found": {
       "surface": "runner:render",
       "actor": "authenticated-other",

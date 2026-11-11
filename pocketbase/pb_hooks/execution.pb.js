@@ -1,13 +1,13 @@
 /// <reference path="../pb_data/types.d.ts" />
 
-// The execution job store's routes and hooks (ROUNDS-00A-L03 PR 1). The
-// logic, and every write to execution_*, lives in execution.js.
+// The execution job store's routes and hooks (ROUNDS-00A-L03 PRs 1 and
+// 2). The logic, and every write to execution_*, lives in execution.js.
 //
 // The runner calls these at pocketbase:8090, and only while
 // ROUNDS_GATE_EXECUTION_STORE is on; off, each answers 503. nginx answers
 // /api/rounds/execution/ with 404, so a browser never reaches them.
 //
-//   enqueue, cancel                  the caller's bearer, plus the runner
+//   enqueue, cancel, status          the caller's bearer, plus the runner
 //                                    key (ROUNDS_ADMISSION_SECRET)
 //   claim, heartbeat, complete, reap the execution_service record
 //                                    (ROUNDS_EXECUTION_SECRET)
@@ -23,6 +23,14 @@ routerAdd(
   "POST",
   "/api/rounds/execution/cancel",
   (c) => require(`${__hooks}/execution.js`).handleCaller(c, "cancel"),
+  $apis.requireRecordAuth("users"),
+);
+
+// The account's own job, for the runner's job read and its long-poll.
+routerAdd(
+  "POST",
+  "/api/rounds/execution/status",
+  (c) => require(`${__hooks}/execution.js`).handleCaller(c, "status"),
   $apis.requireRecordAuth("users"),
 );
 
@@ -53,6 +61,14 @@ routerAdd(
   (c) => require(`${__hooks}/execution.js`).handleService(c, "reap"),
   $apis.requireRecordAuth("execution_service"),
 );
+
+// Every 5 minutes: scratch jobs that ended more than 7 days ago, and
+// those that never ended and were last queued that long ago unless a
+// worker still holds them, go with their attempts, envelopes, and
+// admission command (execution.js purge).
+cronAdd("rounds_execution_purge", "*/5 * * * *", () => {
+  require(`${__hooks}/execution.js`).purgeNow();
+});
 
 // On every start, and before every execution-worker login:
 // execution-worker has ROUNDS_EXECUTION_SECRET as its password, or, with

@@ -56,10 +56,22 @@ import {
 import {
   activeTrigger,
   classifyRunnerError,
+  runFailureText,
   type RunnerDenial,
 } from '../../lib/runnerDenial';
+import { useRunnerJob } from '../../hooks/useRunnerJob';
+import { earnedOutput, type JobAnswer } from '../../lib/executionJobs';
+import type { RunnerJobView } from '../../components/runner/RunnerJobStatus';
+import { RunErrorOutput } from '../../components/runner/RunErrorOutput';
 
 type SideTab = 'checkpoints' | 'rubric' | 'guidance';
+
+// A run job's output as the route's in-request body, when the run earned
+// its end (ROUNDS-00A-L03). Any other end shows only its own notice.
+function projectOutput(job: JobAnswer): RunProjectResult | null {
+  const out = earnedOutput(job);
+  return out && typeof out.passed === 'boolean' ? (out as unknown as RunProjectResult) : null;
+}
 
 const SIDE_TABS: ReadonlyArray<{ key: SideTab; label: string }> = [
   { key: 'checkpoints', label: 'Checkpoints' },
@@ -100,6 +112,8 @@ export default function AICodingDetail() {
   const [activePath, setActivePath] = useState<string>('');
   const [checkpointIdx, setCheckpointIdx] = useState(0);
   const [runResult, setRunResult] = useState<RunProjectResult | null>(null);
+  // A run that failed without a result: its error, never a fake verdict.
+  const [runError, setRunError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [passedByCheckpoint, setPassedByCheckpoint] = useState<boolean[]>([]);
   const [chatLog, setChatLog] = useState<AIChatLogEntry[]>([]);
@@ -144,6 +158,43 @@ export default function AICodingDetail() {
     definitionVersionRef.current = fresh.definition_version;
     return fresh.definition_version;
   }, [slug]);
+  // While ROUNDS_GATE_EXECUTION_SCRATCH is on, a run is a durable job
+  // (ROUNDS-00A-L03), one per checkpoint; its end shows the result.
+  const jobTriggerRef = useRef<HTMLElement | null>(null);
+  const runJob = useRunnerJob(
+    round ? `ai-coding:${round.slug}:${round.language}:${checkpointIdx}:run` : null,
+    {
+      onEnded: (job) => {
+        const out = projectOutput(job);
+        if (!out) return;
+        setRunResult(out);
+        setDockOpen(true);
+        if (out.passed) {
+          setPassedByCheckpoint((prev) => {
+            const next = [...prev];
+            next[checkpointIdx] = true;
+            return next;
+          });
+        }
+      },
+      onDenied: (err) => {
+        const denial = classifyRunnerError(err, jobTriggerRef.current);
+        if (denial) setRunDenial({ action: 'run', denial });
+      },
+    },
+  );
+  const busy = running || runJob.active;
+  const jobView: RunnerJobView = {
+    job: runJob.job,
+    gone: runJob.gone,
+    reconnecting: runJob.reconnecting,
+    runningSince: runJob.runningSince,
+    action: 'run',
+    onCancel: () => void runJob.cancel(),
+    // None while a retry is on its way, so one press sends one.
+    onRetry: busy ? undefined : () => void handleRun(true),
+    trigger: jobTriggerRef.current,
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -152,6 +203,7 @@ export default function AICodingDetail() {
     setError(null);
     setCheckpointIdx(0);
     setRunResult(null);
+    setRunError(null);
     setChatLog([]);
     setReport(null);
     setReportOpen(false);
@@ -270,30 +322,40 @@ export default function AICodingDetail() {
     if (first) setActivePath(first);
   }, [hydrated, files, activePath]);
 
-  async function handleRun() {
+  async function handleRun(retry = false) {
     if (!round) return;
     const cp = round.checkpoints[checkpointIdx];
     if (!cp) return;
     const trigger = activeTrigger();
+    jobTriggerRef.current = trigger;
     const reqId = ++runReqIdRef.current;
     setRunning(true);
     setRunResult(null);
+    setRunError(null);
     setRunDenial(null);
     setDockOpen(true);
     try {
-      const r = await retrySuperseded(
+      const answer = await retrySuperseded(
         definitionVersionRef.current,
-        (version) =>
-          runProject({
+        (version) => {
+          const input = {
             round_slug: round.slug,
             language: round.language,
             checkpoint_index: checkpointIdx,
             files,
             definition_version: version,
-          }),
+          };
+          return runProject(input, { idempotencyKey: runJob.begin(input, retry) });
+        },
         rereadDefinitionVersion,
       );
       if (reqId !== runReqIdRef.current) return;
+      // A job: the notice follows it, and its end shows the result.
+      if (runJob.follow(answer)) {
+        setDockOpen(false);
+        return;
+      }
+      const r = answer as RunProjectResult;
       setRunResult(r);
       if (r.passed) {
         setPassedByCheckpoint((prev) => {
@@ -311,16 +373,9 @@ export default function AICodingDetail() {
         setDockOpen(false);
         return;
       }
-      setRunResult({
-        passed: false,
-        passed_count: 0,
-        failed_count: 0,
-        stdout: '',
-        stderr: '',
-        error: e instanceof Error ? e.message : String(e),
-        duration_ms: 0,
-        truncated: false,
-      });
+      // Nothing came back to score, so no verdict shows: only the error,
+      // as a fixed sentence, never the server's own text.
+      setRunError(runFailureText(e));
     } finally {
       if (reqId === runReqIdRef.current) {
         setRunning(false);
@@ -391,6 +446,7 @@ export default function AICodingDetail() {
     runReqIdRef.current++;
     setCheckpointIdx(i);
     setRunResult(null);
+    setRunError(null);
     setRunDenial(null);
     setRunning(false);
   }
@@ -470,6 +526,7 @@ export default function AICodingDetail() {
                   }
                   setCheckpointIdx(0);
                   setRunResult(null);
+                  setRunError(null);
                   if (rawRound) {
                     const cps = Array.isArray(rawRound.checkpoints)
                       ? rawRound.checkpoints
@@ -652,10 +709,10 @@ export default function AICodingDetail() {
                     }
                     bottomActions={
                       <EditorActions
-                        onRun={handleRun}
+                        onRun={() => void handleRun()}
                         onSubmit={handleSubmit}
                         onOpenLast={() => setReportOpen(true)}
-                        running={running}
+                        running={busy}
                         submitting={submitting}
                         hasReport={Boolean(report)}
                         hideRunResult={runResult ? false : true}
@@ -672,12 +729,13 @@ export default function AICodingDetail() {
                 onReload={reloadKeepingDrafts}
                 className="flex-shrink-0"
                 contentStyle={{ margin: '8px 12px' }}
+                job={jobView}
               />
 
               <RunDock
                 open={dockOpen}
                 onOpenChange={setDockOpen}
-                hasOutput={Boolean(runResult)}
+                hasOutput={Boolean(runResult) || runError !== null}
                 rightActions={
                   runResult ? (
                     <span
@@ -691,10 +749,21 @@ export default function AICodingDetail() {
                       {runResult.passed ? 'PASS' : 'FAIL'} ·{' '}
                       {runResult.duration_ms}MS
                     </span>
+                  ) : runError !== null ? (
+                    <span
+                      className="mono"
+                      style={{ fontSize: 10.5, color: 'var(--plum)', letterSpacing: '0.08em' }}
+                    >
+                      RUN ERROR
+                    </span>
                   ) : null
                 }
               >
-                {runResult && <RunOutput result={runResult} />}
+                {runResult ? (
+                  <RunOutput result={runResult} />
+                ) : runError !== null ? (
+                  <RunErrorOutput message={runError} />
+                ) : null}
               </RunDock>
             </div>
 

@@ -9,7 +9,13 @@
 //
 // It prints {"port": N} once it listens. Beside the hook routes and the
 // execution_service login, /__test/ routes seed admission commands and
-// user tokens, move the clock, switch the store off, and dump the store.
+// user tokens, move the clock, switch the store off, purge, and dump the
+// store.
+//
+// For the scratch job routes (PR 2) it also serves admission's routes on
+// the same rows, as admission.pb.js does, and the users auth-refresh the
+// runner checks a bearer with, so a test runs a route, its admission, its
+// job, and the worker against the hooks' own decisions.
 
 const http = require("http");
 const path = require("path");
@@ -21,7 +27,7 @@ installGlobals(hooksDir);
 const execution = require(path.join(hooksDir, "execution.js"));
 const admission = require(path.join(hooksDir, "admission.js"));
 
-const store = memoryStore();
+const store = memoryStore({ admission });
 const serviceTokens = new Set();
 const userTokens = new Map();
 let offset = 0;
@@ -51,10 +57,37 @@ const SERVICE = {
 const CALLER = {
   enqueue: [execution.checkEnqueue, (account, input) => execution.enqueue(store, account, input, now())],
   cancel: [execution.checkCancel, (account, input) => execution.cancel(store, account, input, now())],
+  status: [execution.checkStatus, (account, input) => execution.status(store, account, input)],
+};
+const ADMISSION = {
+  admit: [admission.checkAdmit, (account, input) => {
+    const body = admission.admit(store.admission(), account, input, now());
+    return body.invalid ? { status: 400, body: { v: admission.VERSION, error: "invalid_request" } } : { status: 200, body };
+  }],
+  settle: [admission.checkSettle, (account, input) => admission.settle(store.admission(), account, input, now())],
+  finish: [admission.checkFinish, (account, input) => admission.finish(store.admission(), account, input, now())],
 };
 
 function route(req, data, res) {
   const url = req.url.split("?")[0];
+  // The runner's bearer check (admission.authenticate, pb_auth.current_user).
+  if (url === "/api/collections/users/auth-refresh") {
+    const token = bearer(req);
+    if (!userTokens.has(token)) return send(res, 401, { code: 401, message: "", data: {} });
+    return send(res, 200, { token, record: { id: userTokens.get(token), is_demo: false } });
+  }
+  const admitted = url.match(/^\/api\/rounds\/admission\/(\w+)$/);
+  if (admitted && ADMISSION[admitted[1]]) {
+    const token = bearer(req);
+    if (!userTokens.has(token)) return send(res, 401, { code: 401, message: "", data: {} });
+    const refused = admission.runnerKeyError({ x_rounds_admission_key: req.headers["x-rounds-admission-key"] }, runnerKey);
+    if (refused !== null) return send(res, refused.status, refused.body);
+    const [check, decide] = ADMISSION[admitted[1]];
+    const input = check(data);
+    if (input === null) return send(res, 400, { v: admission.VERSION, error: "invalid_request" });
+    const out = decide({ id: userTokens.get(token), demo: false }, input);
+    return send(res, out.status, out.body);
+  }
   if (url === "/api/collections/execution_service/auth-with-password") {
     logins += 1;
     if (data && data.identity === execution.WORKER_USERNAME && data.password === workerSecret) {
@@ -109,6 +142,7 @@ function route(req, data, res) {
     serviceTokens.clear();
     return send(res, 200, {});
   }
+  if (url === "/__test/purge") return send(res, 200, execution.purge(store, now()));
   if (url === "/__test/dump") return send(res, 200, Object.assign({ now: now(), logins }, store.dump()));
   return send(res, 404, { code: 404, message: "", data: {} });
 }

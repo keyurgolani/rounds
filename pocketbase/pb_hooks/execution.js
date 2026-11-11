@@ -13,13 +13,18 @@
 //
 // Two kinds of caller:
 //
-// - enqueue and cancel act for an account: the caller's bearer names it,
-//   and, as with admission's writes, the runner key
+// - enqueue, cancel, and status act for an account: the caller's bearer
+//   names it, and, as with admission's writes, the runner key
 //   (ROUNDS_ADMISSION_SECRET) has to come too. enqueue needs the account's
 //   in-flight admission command for the same key and fingerprint, and
-//   records the job on it.
+//   records the job on it. status reads the account's own job (PR 2).
 // - claim, heartbeat, complete, and reap are the execution_service
 //   record's, which only the runner can log in as (ROUNDS_EXECUTION_SECRET).
+//
+// A job's admission charge follows the job (PR 2): when its candidate
+// starts, the charge is final; when the job ends before that, its wall
+// seconds come back (admission.js jobStarted and jobEnded, in the same
+// transaction). Scratch jobs purge SCRATCH_RETENTION_S after they end.
 //
 // A claim makes an attempt with a lease of LEASE_S seconds on
 // PocketBase's clock, under the SHA-256 of a fencing token the claiming
@@ -60,6 +65,14 @@ const SECRET_ENV = "ROUNDS_EXECUTION_SECRET";
 // The worker password is bcrypt-hashed, which reads at most 72 bytes.
 const SECRET_MIN_CHARS = 32;
 const SECRET_MAX_CHARS = 72;
+// A scratch job, its attempts, its envelopes, and its admission command
+// go this long after the job ends, or this long after it was last queued
+// if it never ended, since the job row holds the candidate's source.
+// Each purge takes at most PURGE_BATCH jobs.
+// TODO(ROUNDS-14-L01): #72's retention policy sets the number; 7 days
+// until then.
+const SCRATCH_RETENTION_S = 7 * 24 * 3600;
+const PURGE_BATCH = 200;
 
 // Each kind, its purpose, and the admission operation it's admitted
 // under. backend/execution/kinds.py declares the same six.
@@ -176,6 +189,9 @@ function checkCancel(data) {
   if (!only(data, ["job_id"]) || typeof data.job_id !== "string" || !RECORD_ID.test(data.job_id)) return null;
   return { job_id: data.job_id };
 }
+
+// status takes the same one field as cancel.
+const checkStatus = checkCancel;
 
 function checkClaim(data) {
   if (!only(data, ["worker", "token_hash"])) return null;
@@ -454,13 +470,17 @@ function endAttempt(store, attempt, state, outcomeClass, cleanup, now, operatorV
   return store.saveAttempt(attempt);
 }
 
+// Every way a job ends goes through here, so its admission charge ends
+// with it, in the same transaction (admission.js jobEnded).
 function endJob(store, job, state, outcomeClass, cleanup, now) {
   job.state = state;
   job.outcome_class = outcomeClass;
   job.cleanup = cleanup;
   job.finished_at = now;
   job.cancel_requested = false;
-  return store.saveJob(job);
+  const saved = store.saveJob(job);
+  store.jobEnded(saved, outcomeClass);
+  return saved;
 }
 
 // cancel: owner-only and idempotent. A queued job ends canceled at once;
@@ -477,6 +497,50 @@ function cancel(store, account, input, now) {
     store.saveJob(job);
   }
   return { status: 200, body: { v: VERSION, job: jobView(store.getJob(job.id)) } };
+}
+
+// status: the account's own job, whether a same-key retry would run it
+// again, and, once it has ended, the user view of the envelope its last
+// attempt ended with. A job can end with no envelope of its own (canceled
+// while queued, or out of attempts), and an envelope reap wrote can say
+// less than how the job ended, so only an envelope that matches the job's
+// terminal state and class is shown. Another account's job is the same
+// 404 as an unknown one. It reads and writes nothing else.
+function status(store, account, input) {
+  const job = store.getJob(input.job_id);
+  if (job === null || job.account !== account.id) return { status: 404, body: { v: VERSION, error: "not_found" } };
+  let envelope = null;
+  if (isTerminal(job.state)) {
+    const last = store.currentEnvelope(job);
+    if (last !== null && last.state === job.state && last.outcome_class === job.outcome_class) envelope = last.user_view;
+  }
+  return { status: 200, body: { v: VERSION, job: jobView(job), retryable: retryable(job), envelope } };
+}
+
+// The purge: scratch jobs that ended more than SCRATCH_RETENTION_S ago,
+// and those that never ended and were last queued that long ago (with
+// the store off, nothing claims or reaps a job, so a queue the store left
+// would stay), each with its envelopes, its attempts (they cascade from
+// the job), and the admission command it was enqueued under (its leases
+// cascade). A grading job stays, and so does a job a worker still holds:
+// its current attempt's lease is live, so it may be running now. With the
+// store off, no lease stays live.
+function purge(store, now) {
+  const jobs = store.purgeable(now - SCRATCH_RETENTION_S, PURGE_BATCH).filter((job) => !heldByAWorker(store, job, now));
+  jobs.forEach((job) => {
+    store.deleteEnvelopes(job.id);
+    store.deleteCommandOf(job);
+    store.deleteJob(job);
+  });
+  return { purged: jobs.length };
+}
+
+// Whether a worker still holds the job: it's leased or started, and its
+// current attempt's lease hasn't run out.
+function heldByAWorker(store, job, now) {
+  if (ACTIVE.indexOf(job.state) < 0) return false;
+  const attempt = store.currentAttempt(job);
+  return attempt !== null && ACTIVE.indexOf(attempt.state) >= 0 && attempt.lease_expires_at > now;
 }
 
 // reap: the three ways an attempt ends without its runner.
@@ -633,6 +697,8 @@ function heartbeat(store, input, now, maxBudget) {
     job.state = "started";
     job.attempts_started += 1;
     store.saveJob(job);
+    // The candidate starts now, so the job's admission charge is final.
+    store.jobStarted(job);
   }
   attempt.heartbeat_at = now;
   attempt.lease_expires_at = now + LEASE_S;
@@ -853,6 +919,55 @@ function pbStore(dao) {
     overBudgetAttempts: (cutoff, limit) =>
       dao.findRecordsByFilter(ATTEMPTS, "state = 'started' && deadline_at < {:cutoff}", "deadline_at", limit, 0, { cutoff }).map(attempt),
     saveEnvelope: (row) => save(ENVELOPES, row, ENVELOPE_FIELDS),
+    // The job's last attempt, by (job, attempt_number), or null.
+    currentAttempt: (job) => attempt(first(ATTEMPTS, "job = {:job} && attempt_number = {:n}", { job: job.id, n: job.attempts })),
+    // The envelope the job's last attempt ended with, or null: the
+    // attempt by (job, attempt_number), then its one envelope.
+    currentEnvelope: (job) => {
+      const last = first(ATTEMPTS, "job = {:job} && attempt_number = {:n}", { job: job.id, n: job.attempts });
+      if (last === null) return null;
+      const record = first(ENVELOPES, "attempt = {:attempt}", { attempt: last.id });
+      if (record === null) return null;
+      return {
+        state: record.getString("state"),
+        outcome_class: record.getString("outcome_class"),
+        user_view: json(record, "user_view"),
+      };
+    },
+    // The job's admission charge (admission.js), in this transaction.
+    jobStarted: (row) => {
+      const admission = require(`${__hooks}/admission.js`);
+      admission.jobStarted(admission.pbStore(dao), row.account, row.command_id, row.id);
+    },
+    jobEnded: (row, outcomeClass) => {
+      const admission = require(`${__hooks}/admission.js`);
+      admission.jobEnded(admission.pbStore(dao), row.account, row.command_id, row.id, outcomeClass);
+    },
+    // Scratch jobs that ended at or before `cutoff`, and those that never
+    // ended and were last queued at or before it, at most `limit`.
+    purgeable: (cutoff, limit) =>
+      dao
+        .findRecordsByFilter(
+          JOBS,
+          "purpose = 'scratch' && ((finished_at > 0 && finished_at <= {:cutoff} && " +
+            "(state = 'completed' || state = 'timed-out' || state = 'denied' || state = 'canceled' || state = 'failed')) || " +
+            "((state = 'queued' || state = 'leased' || state = 'started') && queued_at <= {:cutoff}))",
+          "finished_at,queued_at",
+          limit,
+          0,
+          { cutoff },
+        )
+        .map(job),
+    deleteEnvelopes: (jobId) => {
+      dao.findRecordsByFilter(ENVELOPES, "job = {:job}", "", 0, 0, { job: jobId }).forEach((r) => dao.deleteRecord(r));
+    },
+    // The admission command the job was enqueued under, when it still
+    // names this job; its leases go with it.
+    deleteCommandOf: (row) => {
+      const found = first(COMMANDS, "account = {:account} && command_id = {:id}", { account: row.account, id: row.command_id });
+      if (found !== null && found.getString("job") === row.id) dao.deleteRecord(found);
+    },
+    deleteJob: (row) => dao.deleteRecord(row._record),
   };
 }
 
@@ -874,7 +989,7 @@ function maxBudget(kind) {
   return admission.OPERATIONS[KINDS[kind].operation][1];
 }
 
-const CALLER_CHECKS = { enqueue: checkEnqueue, cancel: checkCancel };
+const CALLER_CHECKS = { enqueue: checkEnqueue, cancel: checkCancel, status: checkStatus };
 const SERVICE_CHECKS = { claim: checkClaim, heartbeat: checkHeartbeat, complete: checkComplete, reap: checkReap };
 
 function inTransaction(fn) {
@@ -885,8 +1000,9 @@ function inTransaction(fn) {
   return out;
 }
 
-// enqueue and cancel: the account comes from the bearer, never the body,
-// and the runner key has to come too.
+// enqueue, cancel, and status: the account comes from the bearer, never
+// the body, and the runner key has to come too. status only reads, so it
+// runs outside a transaction and never waits on the write connection.
 function handleCaller(c, action) {
   if (!storeOn()) return c.json(503, { v: VERSION, error: "store_off" });
   const info = $apis.requestInfo(c);
@@ -898,6 +1014,10 @@ function handleCaller(c, action) {
   const input = CALLER_CHECKS[action](info.data);
   if (input === null) return c.json(400, { v: VERSION, error: "invalid_request" });
   const account = { id: record.id };
+  if (action === "status") {
+    const read = status(pbStore($app.dao()), account, input);
+    return c.json(read.status, read.body);
+  }
   const now = nowSeconds();
   const out = inTransaction((store) => (action === "enqueue" ? enqueue(store, account, input, now) : cancel(store, account, input, now)));
   return c.json(out.status, out.body);
@@ -985,6 +1105,24 @@ function bootstrapWorker() {
   return did;
 }
 
+// The purge, from the cron in execution.pb.js. It runs whether the store's
+// gate is on or off, since it only removes jobs that ended or have waited
+// longer than any run lasts, and logs a count, never a row, when it
+// removed any.
+function purgeNow() {
+  const dao = $app.dao();
+  try {
+    dao.findCollectionByNameOrId(JOBS);
+  } catch (_) {
+    return { purged: 0 };
+  }
+  const out = inTransaction((store) => purge(store, nowSeconds()));
+  if (out.purged > 0) {
+    console.log(JSON.stringify({ v: "obs/v1", event: "execution_purge", service: "pocketbase", purged: out.purged }));
+  }
+  return out;
+}
+
 // Whether a login request named the service collection exactly. A login
 // under any other spelling of it, or under its id, gets the 404 an
 // unknown collection gets, whatever the proxy in front let through.
@@ -1052,24 +1190,32 @@ module.exports = {
   SECRET_MIN_CHARS,
   SECRET_MAX_CHARS,
   WORKER_USERNAME,
+  SCRATCH_RETENTION_S,
+  PURGE_BATCH,
+  ACTIVE,
   checkEnqueue,
   checkCancel,
+  checkStatus,
   checkClaim,
   checkHeartbeat,
   checkComplete,
   checkResult,
   checkReap,
+  retryable,
   enqueue,
   cancel,
+  status,
   claim,
   heartbeat,
   complete,
   reap,
+  purge,
   ensureWorker,
   usableSecret,
   pbStore,
   handleCaller,
   handleService,
+  purgeNow,
   bootstrapWorker,
   syncWorkerForLogin,
   guardEnvelopeCreate,

@@ -65,6 +65,19 @@ class Server:
                               headers={"Authorization": f"Bearer {self.token(account)}",
                                        "X-Rounds-Admission-Key": RUNNER_KEY})
 
+    def readmit(self, account: str, key: str, kind: str = "run") -> dict:
+        """Admits the same key again, as a route does before it retries a
+        job (ROUNDS-00A-L03 PR 2): a retryable job's command ends with
+        it, and admission's retry verdict puts it back in flight."""
+        wall = {"run": 3, "evaluate": 3, "run_project": 10, "take_home_run": 60}[kind]
+        body = {"operation": kind, "command_id": key, "fingerprint": "a" * 64, "wall_seconds": wall,
+                "lease_hash": "b" * 64}
+        res = self.http.post("/api/rounds/admission/admit", json=body,
+                             headers={"Authorization": f"Bearer {self.token(account)}",
+                                      "X-Rounds-Admission-Key": RUNNER_KEY})
+        assert res.status_code == 200, res.text
+        return res.json()
+
     def cancel(self, account: str, job_id: str) -> httpx.Response:
         return self.http.post("/api/rounds/execution/cancel", json={"job_id": job_id},
                               headers={"Authorization": f"Bearer {self.token(account)}",
@@ -245,6 +258,44 @@ def test_a_run_past_its_wall_budget_is_a_resource_limit_with_no_score(server):
     assert env["user_view"]["score"] is None
 
 
+class Answering(PythonHandler):
+    """Runs one snippet, then answers ``parts`` with ``output``, the body
+    a scratch handler answers its route with."""
+
+    def __init__(self, parts: list[Part], output: dict) -> None:
+        super().__init__({"p": "print('ran')"})
+        self.parts, self.output = parts, output
+
+    def run(self, job, executor, slot, stop):
+        ran = super().run(job, executor, slot, stop)
+        return Result(parts=list(self.parts), output=dict(self.output), observation=ran.observation)
+
+
+# The take-home handler's body when nothing came back from its channel:
+# every criterion failed and a score of 0, which nothing earned.
+UNSCORED = {"score": 0.0, "passed": False, "stdout": "", "stderr": "", "error": None, "duration_ms": 40,
+            "truncated": False, "criteria": [{"id": "adds_small", "passed": False, "weight": 1, "logs": "no-result"}]}
+
+
+@pytest.mark.parametrize(
+    "parts, ended, kept",
+    [([Part("p", "passed")], ("completed", "passed"), True),
+     ([Part("p", "candidate-failure")], ("completed", "candidate-failure"), True),
+     ([Part("p", "resource-limit", "wall_time")], ("timed-out", "resource-limit"), False),
+     ([Part("p", "resource-limit", "memory")], ("completed", "resource-limit"), False),
+     ([Part("p", "infrastructure-degraded")], ("failed", "infrastructure-degraded"), False),
+     ([Part("p", "definition-invalid")], ("denied", "definition-invalid"), False)],
+    ids=["passed", "candidate-failure", "time-limit", "memory-limit", "infrastructure", "definition"],
+)
+def test_only_an_end_the_run_earned_keeps_the_handlers_output(server, parts, ended, kept):
+    job_id = server.job(kind="run")
+    state, _ = asyncio.run(_run(server, {"run": Answering(parts, UNSCORED)}, _ended(job_id)))
+    job = _job(state, job_id)
+    assert (job["state"], job["outcome_class"]) == ended
+    (env,) = state["envelopes"]
+    assert env["user_view"]["output"] == (UNSCORED if kept else None)
+
+
 def test_a_handler_that_raises_is_the_infrastructures_failure_and_retryable(server):
     key = "0190f000-0000-7000-8000-900000000001"
     job_id = server.job(key=key)
@@ -252,6 +303,7 @@ def test_a_handler_that_raises_is_the_infrastructures_failure_and_retryable(serv
     job = _job(state, job_id)
     assert (job["state"], job["outcome_class"]) == ("failed", "infrastructure-degraded")
     assert state["envelopes"][0]["authoritative"] is False
+    assert server.readmit(A, key)["idempotency"] == "retry_job"
     assert server.enqueue(A, key).json()["requeued"] is True
 
 
@@ -264,6 +316,36 @@ def test_a_job_that_gets_no_slot_in_time_ends_starved_and_never_started(server, 
     state, _ = asyncio.run(_run(server, {"run": PythonHandler({"case-1": "print(1)"})}, _ended(job_id)))
     job = _job(state, job_id)
     assert (job["state"], job["outcome_class"], job["attempts_started"]) == ("timed-out", "infrastructure-degraded", 0)
+
+
+class Refusing(PythonHandler):
+    """A handler whose check before a slot refuses the job (PR 2)."""
+
+    def __init__(self, refusal: Exception) -> None:
+        super().__init__({"case-1": "print(1)"})
+        self.refusal = refusal
+
+    def prepare(self, job):
+        raise self.refusal
+
+
+@pytest.mark.parametrize(
+    "refusal, ended",
+    [
+        (worker_mod.Withdrawn(), ("canceled", "canceled")),
+        (worker_mod.InvalidJob(), ("denied", "definition-invalid")),
+        (RuntimeError("the check broke"), ("failed", "infrastructure-degraded")),
+    ],
+)
+def test_a_job_its_handler_refuses_before_a_slot_ends_without_a_start(server, refusal, ended):
+    job_id = server.job()
+    handler = Refusing(refusal)
+    state, _ = asyncio.run(_run(server, {"run": handler}, _ended(job_id)))
+    job = _job(state, job_id)
+    assert (job["state"], job["outcome_class"]) == ended
+    assert job["attempts_started"] == 0 and handler.ran == []
+    (env,) = state["envelopes"]
+    assert env["user_view"]["started_at"] is None and env["user_view"]["parts"] == []
 
 
 # ---- cancel, lost leases, and races -----------------------------------------------
@@ -325,6 +407,30 @@ def test_a_lost_lease_stops_the_run_and_its_late_result_is_rejected(server, caps
     assert any(line.get("metric") == "rounds_job_late_result_rejected_total" for line in lines)
 
 
+def test_a_stop_just_after_a_run_ended_returns():
+    """A run that ended a moment before the stop is done, but its own
+    callback hasn't dropped it from the worker's set yet. The stop still
+    returns. It runs on a thread so a stop that spins can't hold the suite."""
+    returned = threading.Event()
+
+    async def scenario():
+        worker = Worker(None, None, {}, name="runner-x")
+
+        async def ended():
+            return None
+
+        task = asyncio.create_task(ended())
+        worker._tasks.add(task)
+        task.add_done_callback(worker._tasks.discard)
+        await asyncio.sleep(0)
+        assert task.done() and task in worker._tasks
+        await worker.stop()
+        returned.set()
+
+    threading.Thread(target=lambda: asyncio.run(scenario()), daemon=True).start()
+    assert returned.wait(5)
+
+
 def test_a_run_the_replica_stops_mid_way_ends_worker_lost_never_from_the_parts_that_ran(server):
     key = "0190f000-0000-7000-8000-900000000002"
     job_id = server.job(key=key)
@@ -350,6 +456,7 @@ def test_a_run_the_replica_stops_mid_way_ends_worker_lost_never_from_the_parts_t
     # Nothing from the parts that ran reaches the account: no parts, no output.
     assert env["user_view"]["parts"] == [] and env["user_view"]["output"] is None
     # worker-lost is retryable: the same key runs attempt two.
+    assert server.readmit(A, key)["idempotency"] == "retry_job"
     assert server.enqueue(A, key).json()["requeued"] is True
 
 

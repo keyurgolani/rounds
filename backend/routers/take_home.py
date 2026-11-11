@@ -9,7 +9,9 @@ harness files at ``ROUNDS_GATE_EXECUTION_DEFINITIONS=legacy``, and at
 ``enforce`` the compiled take-home harness revision the request names
 (``app.execution``), whose grade answers per-result outcomes and the
 server's score, never the harness's output. Every seeded assignment is
-retired, so at enforce they answer 410 ``definition_retired``."""
+retired, so at enforce they answer 410 ``definition_retired``. With
+``ROUNDS_GATE_EXECUTION_SCRATCH`` on (ROUNDS-00A-L03), run admits and
+enqueues a job and answers 202 (``execution.jobs``)."""
 from __future__ import annotations
 
 import json
@@ -34,6 +36,7 @@ from app import admission, definitions, execution, limits
 from app.errors import TypedError
 from app.limits import StrictModel
 from app.pb_auth import current_user, pb_get, pb_post
+from execution import jobs, keys
 from routers.ai import _active_text_config, _call_complete, _call_stream, _friendly_error, _request_id
 from routers.ai_coding import _resolve_text_cfg
 
@@ -143,6 +146,8 @@ async def run_route(
     user: dict = Depends(_auth_user),
 ) -> TakeHomeRunResponse:
     body = await execution.parse(request, TakeHomeRunRequest, DefinitionTakeHomeRunRequest)
+    if keys.scratch() == "on" and isinstance(body, DefinitionTakeHomeRunRequest):
+        return await _run_job(request, body)
     if isinstance(body, DefinitionTakeHomeRunRequest):
         return await _run_definition(request, body)
     await admission.begin(request, body, wall_seconds=RUN_TIMEOUT_S)
@@ -358,6 +363,18 @@ async def _run_definition(request: Request, body: DefinitionTakeHomeRunRequest) 
             execution.grade, checkpoint, resolved.document["files"], body.files, slot, RUN_TIMEOUT_S
         )
     return TakeHomeRunResponse(**harness_output(checkpoint, graded, resolved))
+
+
+async def _run_job(request: Request, body: DefinitionTakeHomeRunRequest):
+    """ROUNDS_GATE_EXECUTION_SCRATCH=on: the same graded run, as a job."""
+    submission = await jobs.begin(request, "take_home_run", body.definition, body.files, {},
+                                  wall_seconds=RUN_TIMEOUT_S)
+    if submission.answer is not None:
+        return submission.answer
+    resolved = execution.resolve(request, body.definition, "take-home")
+    _graded_checkpoint(request, resolved)
+    execution.check_paths(request, body.files, resolved)
+    return await jobs.enqueue(request, submission, {"files": body.files})
 
 
 async def _presentation_row(user: dict, slug: str) -> dict[str, Any] | None:

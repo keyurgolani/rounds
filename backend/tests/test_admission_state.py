@@ -323,6 +323,34 @@ def test_observe_mode_runs_a_refused_duplicate_and_logs_the_would_be_409(
     assert line["idempotency"] == verdict and line["would_deny"] == code
 
 
+@pytest.mark.parametrize("verdict, leased", [("job", False), ("retry_job", True)], ids=["job", "retry-job"])
+@pytest.mark.parametrize("enforce", [True, False], ids=["enforce", "observe"])
+def test_a_job_verdict_never_runs_a_request_in_place(
+    client, signed_in, seeded, succeeding, admission_store, monkeypatch, gate_env, verdict, leased, enforce
+):
+    """ROUNDS-00A-L03 PR 2: only a job-backed route takes the job
+    verdicts. A request that runs in place refuses them in either mode,
+    and the lease a retry took ends with the request."""
+    if enforce:
+        gate_env(ENFORCE)
+    job = "job000000000001" if verdict == "job" else None
+
+    async def answered(*_args, **_kwargs):
+        return admission_state.Decision(verdict, "ok" if leased else "skipped", 0, leased, None, job)
+
+    finished: list[str] = []
+
+    async def finish(_token, _lease, outcome, _result=None, timeout=None):
+        finished.append(outcome)
+        return True
+
+    monkeypatch.setattr(admission_store, "admit", answered)
+    monkeypatch.setattr(admission_store, "finish", finish)
+    _assert_typed(_send(client, "run", keyed(signed_in)), 409, "idempotency_mismatch")
+    assert succeeding["run_one"] == 0
+    assert finished == (["denied"] if leased else [])
+
+
 # ---- step 7: quota ------------------------------------------------------------------
 
 
@@ -925,6 +953,30 @@ def test_any_other_store_answer_is_unavailable(monkeypatch, runner_key, respond)
     _with_store(monkeypatch, respond)
     with pytest.raises(admission_state.Unavailable):
         asyncio.run(admission_state.admit("t", "run", 3, None, None, "observe", lease=LEASE))
+
+
+def test_a_duplicate_of_a_job_answers_its_job_and_only_then(monkeypatch, runner_key):
+    """ROUNDS-00A-L03 PR 2: the job verdict carries the job's id, and no
+    other verdict carries one."""
+    job = {**DECISION, "idempotency": "job", "quota": "skipped", "leased": False, "job": "job000000000001"}
+    retry = {**DECISION, "idempotency": "retry_job", "job": None}
+    answers = [
+        httpx.Response(200, json=job),
+        httpx.Response(200, json=retry),
+        httpx.Response(200, json={**job, "job": None}),
+        httpx.Response(200, json={**job, "job": "JOB-1"}),
+        httpx.Response(200, json={**DECISION, "job": "job000000000001"}),
+    ]
+    _with_store(monkeypatch, lambda r: answers.pop(0))
+
+    def admit():
+        return asyncio.run(admission_state.admit("t", "run", 3, KEY, "f" * 64, "enforce", lease=LEASE))
+
+    assert admit() == admission_state.Decision("job", "skipped", 0, False, None, "job000000000001")
+    assert admit() == admission_state.Decision("retry_job", "ok", 0, True, None)
+    for _ in range(3):
+        with pytest.raises(admission_state.Unavailable):
+            admit()
 
 
 def test_settle_answers_the_quota_verdict_of_a_raise_the_hour_cant_fit(monkeypatch, runner_key):
