@@ -51,18 +51,18 @@ def test_the_lint_finds_only_the_reviewed_deletes(src):
     assert blocking == [] and {f.rule for f in allowed} == {"rewrites-rows"}
 
 
-def test_the_lint_entry_is_pinned_to_this_file_and_waits_on_the_owner(src):
+def test_the_lint_entry_is_pinned_to_this_file_and_carries_the_owners_review(src):
     (entry,) = [e for e in json.loads(ALLOWLIST.read_text())["entries"] if e["path"].endswith(f"{NAME}.js")]
     assert entry["sha256"] == lm.sha256(src)
     assert entry["rules"] == ["rewrites-rows"] and entry["issue"] == "#177"
-    assert entry["reviewed_by"] == "pending owner review"
+    assert entry["reviewed_by"] == "keyurgolani, 2026-11-11"
     assert (ROOT / entry["manifest"]) == MANIFEST
 
 
 def test_the_manifest_names_the_migrations_deletes_and_nothing_else():
     manifest = json.loads(MANIFEST.read_text())
     assert manifest["manifest"] == "demo-contain-v1" and manifest["issue"] == "#177"
-    assert manifest["owner_approval"] == "pending owner review"
+    assert manifest["owner_approval"] == "keyurgolani, 2026-11-11"
     (stage,) = [m for m in manifest["migrations"] if m["migration"] == NAME]
     assert [d["collection"] for d in stage["deletes"]] == ["resume_share_links", "ai_settings", "ai_providers"]
     assert all(d["disposition"] == "drop" and d["owner_field"] == "user" for d in stage["deletes"])
