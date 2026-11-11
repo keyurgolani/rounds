@@ -1690,6 +1690,7 @@ function ReportPanel({
         </div>
         <ReviewStatusNote
           status={reviewStatus}
+          skipped={Boolean(review?.skipped)}
           retryAfterSeconds={retryAfterSeconds}
           onRetry={onRetryReview}
           onRequest={onRequestReview}

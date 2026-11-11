@@ -121,7 +121,7 @@ describe('GradeReport review states', () => {
     expect(screen.getByTestId('review-status')).toHaveTextContent('Reviewed. The rubric review is ready.');
   });
 
-  it("keeps a skipped review's fixed sentence, once", () => {
+  it("keeps a skipped review's fixed sentence, once, and says skipped to screen readers", () => {
     renderReport({
       rubricReview: {
         items: [],
@@ -129,9 +129,12 @@ describe('GradeReport review states', () => {
         skipped: true,
         reason: "The review didn't finish, so this submission has no review.",
       },
+      review: { status: 'reviewed' },
     });
     expect(
       screen.getByText("Rubric review skipped: The review didn't finish, so this submission has no review."),
     ).toBeInTheDocument();
+    expect(screen.getByTestId('review-status')).toHaveTextContent('Rubric review skipped.');
+    expect(screen.getByTestId('review-status')).not.toHaveTextContent('ready');
   });
 });

@@ -97,19 +97,32 @@ export function reviewCopy(status: ReviewStatus, retryAfterSeconds: number | nul
 
 interface ReviewStatusNoteProps {
   status: ReviewStatus | null;
+  /** The finished review was skipped, so the report shows why instead. */
+  skipped?: boolean;
   retryAfterSeconds?: number | null;
   onRetry?: () => void;
   onRequest?: () => void;
   style?: CSSProperties;
 }
 
-export function ReviewStatusNote({ status, retryAfterSeconds = null, onRetry, onRequest, style }: ReviewStatusNoteProps) {
+export function ReviewStatusNote({
+  status,
+  skipped = false,
+  retryAfterSeconds = null,
+  onRetry,
+  onRequest,
+  style,
+}: ReviewStatusNoteProps) {
   const copy = status === null ? null : reviewCopy(status, retryAfterSeconds);
   const action = copy?.again === 'request' ? onRequest : copy?.again === 'retry' ? onRetry : undefined;
   const Icon = copy?.icon;
   return (
     <div role="status" aria-live="polite" aria-atomic="true" data-testid="review-status" data-review={status ?? ''}>
-      {status === 'reviewed' && <span className="sr-only">Reviewed. The rubric review is ready.</span>}
+      {status === 'reviewed' && (
+        <span className="sr-only">
+          {skipped ? 'Rubric review skipped.' : 'Reviewed. The rubric review is ready.'}
+        </span>
+      )}
       {copy && Icon && (
         <div
           style={{

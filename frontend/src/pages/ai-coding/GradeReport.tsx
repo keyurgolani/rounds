@@ -104,6 +104,7 @@ export default function GradeReport({
         {review && (
           <ReviewStatusNote
             status={review.status}
+            skipped={Boolean(rubricReview?.skipped)}
             retryAfterSeconds={review.retryAfterSeconds ?? null}
             onRetry={review.onRetry}
             onRequest={review.onRequest}
