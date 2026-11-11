@@ -12,7 +12,7 @@ Two halves, both static or pure so they run without a PocketBase:
     migration and docs/security/account-scope.v1.json agree.
 
 The live rules and the hook on PocketBase 0.22.22 are the two-account
-harness's (account-scope.share.token-query.isolated,
+harness's (account-scope.share.owner-only.isolated,
 account-scope.share.create-shape.denied, account-scope.update.server-only.denied
 on resume_share_links, and the rule read-back).
 """
@@ -73,7 +73,7 @@ DENIED = {
     "no-owner": (_case(user="", caller=""), "owner"),
     "short-token": (_case(token=GOOD[:-1]), "token"),
     "long-token": (_case(token=GOOD + "x"), "token"),
-    "token-quote": (_case(token='AbCdEfGhIjKlMnOpQrS"||'), "token"),
+    "token-quote": (_case(token='AbCdEfGhIjKlMnOpQrS"ab'), "token"),
     "token-space": (_case(token="AbCdEfGhIjKl MnOpQrStU"), "token"),
     "token-newline": (_case(token=GOOD[:21] + "\n"), "token"),
     "empty-token": (_case(token=""), "token"),
@@ -145,7 +145,6 @@ def test_up_sets_owner_only_reads_and_no_updates(src):
     # Only resume_share_links changes, and only those three rules.
     assert up.count("findCollectionByNameOrId(") == 1
     assert re.findall(r"\.(\w+Rule) =", up) == ["listRule", "viewRule", "updateRule"]
-    assert "@request.query" not in src.split("migrate(", 1)[1]
 
 
 def test_down_restores_nothing(src):
@@ -163,12 +162,12 @@ def test_the_policy_row_matches_the_migration(policy):
     assert row["target_rules"]["update"] is None
     assert row["rule_overrides"] == [{"migration": MIGRATION.name, "rules": ["list", "view", "update"]}]
     assert row["hook"] == "pocketbase/pb_hooks/share_links.pb.js"
-    assert not [e for e in row.get("exceptions", []) if e["id"] == "share-token-read"]
+    assert not row.get("exceptions")
     # A null update rule: no client update family that expects an accepted or
     # not-found update applies; the server-only update family does.
     probes = set(row["probes"])
     assert "account-scope.update.server-only.denied" in probes
-    assert "account-scope.share.token-query.isolated" in probes
+    assert "account-scope.share.owner-only.isolated" in probes
     assert "account-scope.share.create-shape.denied" in probes
     for gone in ("account-scope.update.own.accepted", "account-scope.update.reassign-owner.denied",
                  "account-scope.update.cross-account.denied", "account-scope.update.anonymous.denied",

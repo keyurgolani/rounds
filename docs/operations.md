@@ -326,12 +326,12 @@ On k8s run the same through `kubectl -n rounds exec deploy/runner -- python -c "
 
 ### Public shares
 
-A share link (`/r/<token>`) answers only its owner and only the resume's projection:
+A share link answers only its owner, and a public read answers only the resume's projection:
 
 - `1700008100_share_link_owner_rules.js` makes `resume_share_links` list and view rules `user = @request.auth.id` and its update rule `null`, so a link reads for its owner only and nobody can change a link's token or target. `pocketbase/pb_hooks/share_links.pb.js` rejects a link create without exactly one target, the caller as owner, and a 22-character URL-safe token, with the same body as a foreign or missing target. Its down step keeps the rules.
-- `GET /api/share/by-token/<token>` answers `{data, template_id, design}` with hidden sections emptied, or one 404 `{"detail":"Not found."}` for every failure, PocketBase being down included. Both carry `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow, noarchive`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. Nothing is written, so view counts are gone; existing `resume_share_views` rows stay until ROUNDS-00B-L06.
+- The public read (`/api/share/by-token/`) answers `{data, template_id, design}` with hidden sections emptied, or one 404 `{"detail":"Not found."}` for every failure, PocketBase being down included. Both carry `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow, noarchive`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. Nothing is written, so view counts are gone; existing `resume_share_views` rows stay until ROUNDS-00B-L06.
 - nginx serves `/r` and `/r/*` with the same headers and the share page CSP.
-- The runner logs one `share.resolve` line per read with the link's record id and an outcome in `code`: `available`, `not_found`, `kill_switch`, or `degraded`. A run of `degraded` means PocketBase or the runner's admin login is failing.
+- The runner logs one `share.resolve` line per read with the link's record id and an outcome in `code`: `available`, `not_found`, `kill_switch`, or `degraded`. A run of `degraded` means the runner can't read PocketBase.
 
 To turn every public read off, set `ROUNDS_DISABLE_PUBLIC_SHARES=true` on the runner and restart it (Compose passes it through; in Kubernetes add it to the `rounds-gates` ConfigMap, which the runner reads). Owners keep their links. Turn it back on by setting it to `false`.
 

@@ -15,8 +15,8 @@ are emptied and every key the templates don't read is dropped, so it never
 carries the owner's resume name, the link's kind, a record id, or the owner.
 Every failure (kill switch, malformed token, unknown link, missing target,
 PocketBase down) is the same 404 with the same body and headers, and the read
-writes nothing. It still reads through the cached superuser token until
-ROUNDS-00B-L06 replaces legacy links.
+writes nothing.
+TODO(ROUNDS-00B-L06): legacy links move to share capabilities.
 """
 from __future__ import annotations
 
@@ -202,7 +202,7 @@ async def public_read(token: str) -> JSONResponse:
     except _NotFound as nf:
         _log_read(nf.outcome, nf.record)
         return _public_response(404, NOT_FOUND_BODY)
-    except Exception:  # noqa: BLE001 - PocketBase or the admin login failed
+    except Exception:  # noqa: BLE001 - the store couldn't be read
         _log_read("degraded", None)
         return _public_response(404, NOT_FOUND_BODY)
     _log_read("available", record)
@@ -210,8 +210,7 @@ async def public_read(token: str) -> JSONResponse:
 
 
 async def _resolve(token: str) -> tuple[dict[str, Any], str]:
-    # The token matched PUBLIC_TOKEN_RE, so it holds no quote and the filter
-    # can't be widened.
+    # Only a value that matched PUBLIC_TOKEN_RE gets here.
     body = await pb_admin_get(
         "/api/collections/resume_share_links/records",
         params={"filter": f'token = "{token}"', "perPage": 1},

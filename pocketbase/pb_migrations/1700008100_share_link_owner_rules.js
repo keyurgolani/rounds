@@ -10,11 +10,11 @@
 // Create and delete rules are unchanged (1700006000_account_scope_rules.js),
 // and so is every other collection. No data changes.
 //
-// The public viewer reads a link by its token through the runner
-// (backend/routers/share.py), which answers only the resume's projection.
+// Public reads go through the runner (backend/routers/share.py), which
+// answers only the resume's projection.
 //
 // down() deliberately keeps these rules: account isolation is never rolled
-// back, and no down step restores a token-based read. A rule that turns out
+// back, and no down step loosens them. A rule that turns out
 // too tight is repaired with a forward-fix migration (docs/operations.md,
 // "Account-scope rules"). The rule table these values come from is
 // docs/security/account-scope.v1.json.

@@ -858,10 +858,10 @@ def test_open_exceptions_name_their_closing_leaf():
 class _SharePB:
     """Answers the share families' reads and creates like PocketBase would
     under the owner-only rules and the link create hook, unless told to
-    answer like a token-based read rule or a create without the hook."""
+    answer like a looser read rule or a create without the hook."""
 
-    def __init__(self, token_rule: bool = False, accept_shapes: bool = False, owner_rows: int = 1):
-        self.token_rule = token_rule
+    def __init__(self, loose_read: bool = False, accept_shapes: bool = False, owner_rows: int = 1):
+        self.loose_read = loose_read
         self.accept_shapes = accept_shapes
         self.owner_rows = owner_rows
         self.calls: list[tuple] = []
@@ -870,12 +870,12 @@ class _SharePB:
         self.calls.append(("list", collection, token, dict(params or {})))
         if params and "filter" in params:  # the superuser's owner count
             return Response(200, {"items": [], "totalItems": self.owner_rows}, 1)
-        rows = [{"id": "a-resume_share_links-id"}] if self.token_rule and (params or {}).get("token") else []
+        rows = [{"id": "a-resume_share_links-id"}] if self.loose_read else []
         return Response(200, {"items": rows, "totalItems": len(rows)}, 1)
 
     def get(self, path, token=None):
         self.calls.append(("get", path, token))
-        return Response(200 if self.token_rule and "?token=" in path else 404, {}, 1)
+        return Response(200 if self.loose_read else 404, {}, 1)
 
     def view(self, collection, record_id, token=None):
         return Response(200 if token == "a-token" else 404, {"id": record_id}, 1)
@@ -894,24 +894,24 @@ SHARE_CONTENT = {"round": "round-id", "assignment": "assignment-id"}
 def _share_accounts():
     a, b = _acct("a"), _acct("b")
     a.token, b.token = "a-token", "b-token"
-    a.share_token = "AbCdEfGhIjKlMnOpQrStUv"
+    a.share_fields = {"resume": "a-resumes-id", "token": "AbCdEfGhIjKlMnOpQrStUv"}
     return a, b
 
 
-def test_share_token_query_passes_when_only_the_owner_reads_the_link():
+def test_share_owner_only_passes_when_only_the_owner_reads_the_link():
     a, b = _share_accounts()
     pb = _SharePB()
-    r = families.share_token_query_isolated(pb, "resume_share_links", a, b, 200)
+    r = families.share_owner_only_isolated(pb, "resume_share_links", a, b, 200)
     assert r.passed, r.detail
-    # Both B and an anonymous caller passed A's token in the query.
+    # B and an anonymous caller both tried, each carrying A's link values.
     lists = [c for c in pb.calls if c[0] == "list"]
     assert [c[2] for c in lists] == ["b-token", None]
-    assert all(c[3]["token"] == a.share_token for c in lists)
+    assert all(c[3] == {**a.share_fields} for c in lists)
 
 
-def test_share_token_query_fails_when_a_token_reads_the_link():
+def test_share_owner_only_fails_when_another_caller_reads_the_link():
     a, b = _share_accounts()
-    r = families.share_token_query_isolated(_SharePB(token_rule=True), "resume_share_links", a, b, 200)
+    r = families.share_owner_only_isolated(_SharePB(loose_read=True), "resume_share_links", a, b, 200)
     assert not r.passed and "other list status=200 rows=1" in r.detail and "anonymous view status=200" in r.detail
 
 

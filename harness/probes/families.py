@@ -283,26 +283,30 @@ def create_superuser_accepted(pb, collection, admin_token, payload, expected) ->
 # --------------------------------------------------------------------------
 
 
-def share_token_query_isolated(pb, collection, a, b, expected) -> Receipt:
-    # A's own share link token, passed as a query parameter by account B and
-    # by an anonymous caller, reads no link row: the list comes back empty and
-    # a view of A's link is the ordinary not-found. Only the owner reads it.
+def share_owner_only_isolated(pb, collection, a, b, expected) -> Receipt:
+    # Another account and an anonymous caller list and view A's share link,
+    # with every value A's link holds on the request too, and read nothing:
+    # the list is empty and the view is the ordinary not-found. Only the
+    # owner reads it.
+    import urllib.parse
+
     problems: list[str] = []
     first = None
+    extra = dict(a.share_fields)
     for actor, token in (("other", b.token), ("anonymous", None)):
-        listing = pb.listing(collection, token=token, params={"token": a.share_token})
+        listing = pb.listing(collection, token=token, params=extra)
         first = first or listing
         items = listing.body.get("items") if isinstance(listing.body, dict) else None
         if listing.status != expected or items != []:
             problems.append(f"{actor} list status={listing.status} rows={None if items is None else len(items)}")
-        view = pb.get(f"/api/collections/{collection}/records/{a.ids[collection]}?token={a.share_token}",
+        view = pb.get(f"/api/collections/{collection}/records/{a.ids[collection]}?{urllib.parse.urlencode(extra)}",
                       token=token)
         if view.status != 404:
             problems.append(f"{actor} view status={view.status}")
     own = pb.view(collection, a.ids[collection], token=a.token)
     if own.status != 200:
         problems.append(f"owner view status={own.status}")
-    return Receipt("account-scope.share.token-query.isolated", collection, "list", "anonymous",
+    return Receipt("account-scope.share.owner-only.isolated", collection, "list", "anonymous",
                    expected, first.status, not problems, first.elapsed_ms, "; ".join(problems))
 
 
@@ -638,7 +642,7 @@ MAIN_FAMILIES: dict[str, Callable] = {
     "account-scope.view.foreign-or-missing.indistinguishable": view_foreign_or_missing,
     "account-scope.update.foreign-or-missing.indistinguishable": update_foreign_or_missing,
     "account-scope.delete.foreign-or-missing.indistinguishable": delete_foreign_or_missing,
-    "account-scope.share.token-query.isolated": share_token_query_isolated,
+    "account-scope.share.owner-only.isolated": share_owner_only_isolated,
 }
 # ROUNDS-00B-L03 stage 1: dispatched by run.py with the caller, the content
 # fixtures, and the superuser token.

@@ -7,12 +7,12 @@ The guarantees checked here:
     link kind, record id, or owner appears anywhere in the body;
   * every failure is one 404 with byte-identical bodies and the same headers
     as a found read: kill switch, malformed token, unknown token, a link that
-    leads nowhere, and PocketBase or the admin login failing;
+    leads nowhere, and the store failing;
   * the kill switch and the token format are decided before any lookup;
   * the read writes nothing and logs only the link's record id and a coarse
     outcome;
-  * the owner list carries no view counts and reads nothing with the
-    superuser token;
+  * the owner list carries no view counts and reads only with the
+    caller's own token;
   * a create naming a target the caller doesn't own and one naming a target
     that doesn't exist get the same answer, with no PocketBase text.
 """
@@ -29,19 +29,19 @@ from routers import share
 
 TOKEN = "AbCdEfGhIjKlMnOpQrStUv"
 LINK = {"id": "lnk000000000001", "user": "owner000000000a", "resume": "res000000000001", "variant": "",
-        "token": TOKEN, "password_hash": "x", "expires_at": ""}
+        "token": TOKEN, "expires_at": ""}
 RESUME = {
     "id": "res000000000001",
     "user": "owner000000000a",
-    "name": "Owner's private resume name",
+    "name": "Resume name A",
     "template_id": "langstaff",
     "design": {"layout": "two-column", "colors": {"primary": "#123456", "secret": "x"}, "extra": {"a": 1},
                "typography": {"heading": {"family": "Inter", "weight": 600, "bogus": True}}},
     "data": {
         "personalInfo": {"fullName": "Ada", "email": "ada@example.test", "website": "https://example.test",
-                         "internalNote": "not for the public"},
+                         "extraNote": "x"},
         "experience": [{"id": "e1", "company": "Acme", "position": "Eng", "highlights": ["a", 3],
-                        "privateField": "drop me"}],
+                        "extraField": "x"}],
         "education": [{"id": "ed1", "institution": "Hidden U"}],
         "skills": [{"id": "s1", "category": "Lang", "items": ["Python"]}],
         "projects": [],
@@ -49,15 +49,15 @@ RESUME = {
         "profiles": [],
         "sectionOrder": ["personal", "experience", "education", "skills", "projects", "publications", "profiles"],
         "hiddenSections": ["education", "publications"],
-        "draftNotes": "never public",
+        "extraNotes": "x",
     },
 }
 VARIANT = {"id": "var000000000001", "user": "owner000000000a", "resume": "res000000000001",
            "name": "Variant for Acme", "data": {"personalInfo": {"fullName": "Ada V"}, "experience": []}}
 
 
-class FakeAdmin:
-    """The superuser reads public_read makes, from a fixed set of records."""
+class FakeStore:
+    """The store reads public_read makes, from a fixed set of records."""
 
     def __init__(self, link=None, records=None, fail=None):
         self.link = link
@@ -75,15 +75,15 @@ class FakeAdmin:
         return self.records.get(rid)
 
 
-def _read(client, token=TOKEN, admin=None, env=None, monkeypatch=None):
-    admin = admin or FakeAdmin(LINK, {RESUME["id"]: RESUME})
+def _read(client, token=TOKEN, store=None, env=None, monkeypatch=None):
+    store = store or FakeStore(LINK, {RESUME["id"]: RESUME})
     if monkeypatch is not None:
         monkeypatch.delenv(share.KILL_SWITCH_ENV, raising=False)
         for k, v in (env or {}).items():
             monkeypatch.setenv(k, v)
-    with patch("routers.share.pb_admin_get", admin.get):
+    with patch("routers.share.pb_admin_get", store.get):
         res = client.get(f"/api/share/by-token/{token}")
-    return res, admin
+    return res, store
 
 
 def _headers(res):
@@ -135,27 +135,27 @@ def test_hidden_sections_are_empty_and_not_named(client, monkeypatch):
 
 def test_a_hidden_personal_section_is_empty_too(client, monkeypatch):
     resume = {**RESUME, "data": {**RESUME["data"], "hiddenSections": ["personal"]}}
-    res, _ = _read(client, admin=FakeAdmin(LINK, {RESUME["id"]: resume}), monkeypatch=monkeypatch)
+    res, _ = _read(client, store=FakeStore(LINK, {RESUME["id"]: resume}), monkeypatch=monkeypatch)
     assert res.json()["data"]["personalInfo"] == {"fullName": ""}
 
 
 def test_no_owner_metadata_appears_anywhere(client, monkeypatch):
-    for admin in (
-        FakeAdmin(LINK, {RESUME["id"]: RESUME}),
-        FakeAdmin({**LINK, "resume": "", "variant": VARIANT["id"]}, {VARIANT["id"]: VARIANT, RESUME["id"]: RESUME}),
+    for store in (
+        FakeStore(LINK, {RESUME["id"]: RESUME}),
+        FakeStore({**LINK, "resume": "", "variant": VARIANT["id"]}, {VARIANT["id"]: VARIANT, RESUME["id"]: RESUME}),
     ):
-        res, _ = _read(client, admin=admin, monkeypatch=monkeypatch)
+        res, _ = _read(client, store=store, monkeypatch=monkeypatch)
         assert res.status_code == 200
         seen = set(_walk(res.json()))
-        for leaked in ("name", "kind", "user", "token", "resume", "variant", "password_hash", "draftNotes",
-                       "internalNote", "privateField", "extra", "secret",
+        for leaked in ("name", "kind", "user", "token", "resume", "variant", "extraNotes",
+                       "extraNote", "extraField", "extra", "secret",
                        RESUME["name"], VARIANT["name"], RESUME["id"], VARIANT["id"], LINK["id"], LINK["user"], TOKEN):
             assert leaked not in seen, leaked
 
 
 def test_a_variant_link_reads_the_variant_data_and_the_parent_look(client, monkeypatch):
-    admin = FakeAdmin({**LINK, "resume": "", "variant": VARIANT["id"]}, {VARIANT["id"]: VARIANT, RESUME["id"]: RESUME})
-    res, _ = _read(client, admin=admin, monkeypatch=monkeypatch)
+    store = FakeStore({**LINK, "resume": "", "variant": VARIANT["id"]}, {VARIANT["id"]: VARIANT, RESUME["id"]: RESUME})
+    res, _ = _read(client, store=store, monkeypatch=monkeypatch)
     body = res.json()
     assert body["data"]["personalInfo"] == {"fullName": "Ada V"}
     assert body["template_id"] == "langstaff"
@@ -186,7 +186,7 @@ def test_odd_data_shapes_project_to_empty_sections():
 
 @pytest.fixture
 def missing(client, monkeypatch):
-    res, _ = _read(client, admin=FakeAdmin(None), monkeypatch=monkeypatch)
+    res, _ = _read(client, store=FakeStore(None), monkeypatch=monkeypatch)
     assert res.status_code == 404
     return res
 
@@ -196,16 +196,16 @@ FAILURES = {
     "kill-switch-yes": dict(env={share.KILL_SWITCH_ENV: "YES"}),
     "malformed-short": dict(token="short"),
     "malformed-long": dict(token="a" * 65),
-    "malformed-chars": dict(token="AbCdEfGhIjKlMnOp%22Qr"),
-    "malformed-quote": dict(token='AbCdEfGhIjKlMnOp"||"x'),
-    "no-target": dict(admin=FakeAdmin({**LINK, "resume": "", "variant": ""})),
-    "resume-gone": dict(admin=FakeAdmin(LINK, {})),
-    "variant-gone": dict(admin=FakeAdmin({**LINK, "resume": "", "variant": VARIANT["id"]}, {})),
-    "variant-parent-gone": dict(admin=FakeAdmin({**LINK, "resume": "", "variant": VARIANT["id"]},
+    "malformed-chars": dict(token="AbCdEfGhIjKlMnOp.Qr!"),
+    "malformed-quote": dict(token='AbCdEfGhIjKlMnOp"abc"x'),
+    "no-target": dict(store=FakeStore({**LINK, "resume": "", "variant": ""})),
+    "resume-gone": dict(store=FakeStore(LINK, {})),
+    "variant-gone": dict(store=FakeStore({**LINK, "resume": "", "variant": VARIANT["id"]}, {})),
+    "variant-parent-gone": dict(store=FakeStore({**LINK, "resume": "", "variant": VARIANT["id"]},
                                                 {VARIANT["id"]: VARIANT})),
-    "pocketbase-error": dict(admin=FakeAdmin(LINK, fail=HTTPException(status_code=500, detail="PocketBase error: x"))),
-    "admin-login-failed": dict(admin=FakeAdmin(LINK, fail=HTTPException(status_code=502, detail="admin"))),
-    "pocketbase-down": dict(admin=FakeAdmin(LINK, fail=ConnectionError("refused"))),
+    "pocketbase-error": dict(store=FakeStore(LINK, fail=HTTPException(status_code=500, detail="PocketBase error: x"))),
+    "store-refused": dict(store=FakeStore(LINK, fail=HTTPException(status_code=502, detail="refused"))),
+    "pocketbase-down": dict(store=FakeStore(LINK, fail=ConnectionError("refused"))),
 }
 
 
@@ -239,9 +239,9 @@ def test_the_headers_and_body_match_what_the_deployment_verifier_checks(client, 
 
 @pytest.mark.parametrize("env, token", [({share.KILL_SWITCH_ENV: "1"}, TOKEN), ({}, "x"), ({}, "ab cd" * 4)])
 def test_the_kill_switch_and_token_format_come_before_any_lookup(client, monkeypatch, env, token):
-    res, admin = _read(client, token=token, env=env, monkeypatch=monkeypatch)
+    res, store = _read(client, token=token, env=env, monkeypatch=monkeypatch)
     assert res.status_code == 404
-    assert admin.calls == []
+    assert store.calls == []
 
 
 @pytest.mark.parametrize("value", ["false", "0", "", "no"])
@@ -292,9 +292,9 @@ def test_the_share_module_names_no_view_writes():
 def test_reads_log_only_a_record_id_and_a_coarse_outcome(client, monkeypatch, capsys, case, outcome):
     kwargs = {
         "found": {},
-        "missing": dict(admin=FakeAdmin(None)),
+        "missing": dict(store=FakeStore(None)),
         "kill": dict(env={share.KILL_SWITCH_ENV: "true"}),
-        "down": dict(admin=FakeAdmin(LINK, fail=ConnectionError("refused"))),
+        "down": dict(store=FakeStore(LINK, fail=ConnectionError("refused"))),
     }[case]
     capsys.readouterr()
     _read(client, monkeypatch=monkeypatch, **kwargs)
@@ -320,7 +320,7 @@ async def _caller(_request):
     return CALLER
 
 
-def test_the_owner_list_has_no_view_counts_and_no_superuser_read(client):
+def test_the_owner_list_has_no_view_counts_and_uses_the_owner_token(client):
     calls = []
 
     async def fake_get(token, path, params=None):
@@ -328,11 +328,11 @@ def test_the_owner_list_has_no_view_counts_and_no_superuser_read(client):
         return {"items": [{"id": "lnk000000000001", "token": TOKEN, "resume": "res000000000001", "variant": "",
                            "created": "2026-11-10 00:00:00.000Z"}]}
 
-    async def no_admin(*a, **k):
-        raise AssertionError("the owner list must not use the superuser token")
+    async def not_the_owner(*a, **k):
+        raise AssertionError("the owner list uses the caller token only")
 
     with patch("routers.share.current_user", _caller), patch("routers.share.pb_get", fake_get), \
-         patch("app.pb_auth.admin_token", no_admin):
+         patch("app.pb_auth.admin_token", not_the_owner):
         res = client.get("/api/share")
     assert res.status_code == 200
     assert res.json() == [{"id": "lnk000000000001", "token": TOKEN, "resume_id": "res000000000001",

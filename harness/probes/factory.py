@@ -41,8 +41,9 @@ class Account:
     user_id: str = ""
     token: str = ""
     ids: dict[str, str] = field(default_factory=dict)
-    # The seeded share link's token, for account-scope.share.token-query.isolated.
-    share_token: str = ""
+    # The seeded share link's own field values, for
+    # account-scope.share.owner-only.isolated.
+    share_fields: dict[str, str] = field(default_factory=dict)
 
 
 def _gen_password() -> str:
@@ -186,8 +187,8 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
     resume = mk("resumes", {"name": f"{tag} resume", "slug": f"{tag}-resume"})
     variant = mk("resume_variants", {"resume": resume, "name": "variant"})
     mk("resume_versions", {"resume": resume, "data": {}})
-    acct.share_token = secrets.token_urlsafe(16)
-    mk("resume_share_links", {"resume": resume, "token": acct.share_token})
+    acct.share_fields = {"resume": resume, "token": secrets.token_urlsafe(16)}
+    mk("resume_share_links", dict(acct.share_fields))
     mk_admin("resume_share_views", {"link": ids["resume_share_links"]})
     # Only a PocketBase hook writes snapshots (ROUNDS-00A-L04), so the
     # fixture row, with its markup file, goes in with the admin token.

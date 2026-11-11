@@ -153,7 +153,7 @@
       "guarantee": "at least one admin exists, so first-admin setup is closed"
     },
     "deployment.proxy.share-page.headers": {
-      "guarantee": "/r and /r/<token> answer the app page with no-store, noindex, no-referrer, nosniff, DENY framing, and the share page CSP"
+      "guarantee": "/r and /r/* answer the app page with no-store, noindex, no-referrer, nosniff, DENY framing, and the share page CSP"
     },
     "deployment.proxy.share-read.uniform": {
       "guarantee": "a public share read of a malformed or unknown token answers one byte-identical 404 with no-store, noindex, no-referrer, nosniff, DENY framing, and the resolver CSP"
@@ -162,7 +162,7 @@
   "server_derivation": {
     "pocketbase": "@request.auth.id",
     "runner": "backend/app/pb_auth.py:current_user",
-    "superuser_bypass": "superuser requests and $app.dao() writes bypass collection rules; hook routes and the legacy public share read (backend/routers/share.py, until ROUNDS-00B-L06) rely on this"
+    "superuser_bypass": "superuser requests and $app.dao() writes bypass collection rules; hook routes rely on this"
   },
   "probe_families": {
     "account-scope.list.cross-account.isolated": {
@@ -392,12 +392,12 @@
       "deny_key": "relation_update",
       "guarantee": "a foreign and a missing relation target are denied alike on update, so neither reveals the target exists"
     },
-    "account-scope.share.token-query.isolated": {
+    "account-scope.share.owner-only.isolated": {
       "operation": "list",
       "actor": "anonymous",
       "status": "enforced",
       "deny_key": "list",
-      "guarantee": "a share link's token in a list or view query reads no link row for anyone but its owner, signed in or not",
+      "guarantee": "a share link answers only its owner: another account and an anonymous caller read no link row",
       "resource": "resume_share_links"
     },
     "account-scope.share.create-shape.denied": {
@@ -1082,7 +1082,7 @@
         "account-scope.create.relation-foreign-or-missing.indistinguishable",
         "account-scope.create.relation-superuser.denied",
         "account-scope.update.server-only.denied",
-        "account-scope.share.token-query.isolated",
+        "account-scope.share.owner-only.isolated",
         "account-scope.share.create-shape.denied"
       ]
     },
