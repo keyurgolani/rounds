@@ -97,6 +97,20 @@ def test_only_a_current_bearer_is_digested(value):
         share_secrets.digest(value)
 
 
+def test_a_lookup_digests_any_well_formed_bearer_the_same_way():
+    # A current bearer's lookup digest is its stored digest; one under
+    # another key id gets the same HMAC over its own text, which no stored
+    # digest can match, so the resolver counts it like an unknown bearer.
+    token = share_secrets.new_token()
+    assert share_secrets.lookup_digest(token) == share_secrets.digest(token)
+    other = "sd7" + token[3:]
+    expected = hmac.new(_hkdf(b"rounds/share-digest/v1"), other.encode(), hashlib.sha256).hexdigest()
+    assert share_secrets.lookup_digest(other) == expected != share_secrets.digest(token)
+    for value in ("sd1_" + "A" * 21, "", None):
+        with pytest.raises(ValueError):
+            share_secrets.lookup_digest(value)
+
+
 def test_the_digest_never_contains_the_bearer():
     token = share_secrets.new_token()
     assert token[4:] not in share_secrets.digest(token)

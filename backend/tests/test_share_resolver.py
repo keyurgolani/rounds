@@ -178,12 +178,25 @@ def test_a_revoked_or_expired_answer_is_the_same_not_found(client, resolver, ove
     assert (res.status_code, res.content, _headers(res)) == (404, NOT_FOUND, WANT_HEADERS)
 
 
-def test_another_key_id_resolves_nothing_and_asks_nothing(client, resolver, verifies):
-    res = _post(client, "sd2_AbCdEfGhIjKlMnOpQrStUv", password=WRONG)
-    assert (res.status_code, res.content) == (404, NOT_FOUND)
-    assert resolver.calls == []
-    # Its password still costs one verify.
-    assert len(verifies) == 1
+@pytest.mark.parametrize("token", ["sd2_AbCdEfGhIjKlMnOpQrStUv", "sd999_AbCdEfGhIjKlMnOpQrStUv"])
+def test_another_key_id_is_counted_and_answered_like_an_unknown_bearer(client, resolver, verifies, token):
+    other = _post(client, token, password=WRONG)
+    unknown = _post(client, UNKNOWN, password=WRONG)
+    assert (other.status_code, other.content, _headers(other)) == (404, NOT_FOUND, WANT_HEADERS)
+    assert (unknown.status_code, unknown.content) == (other.status_code, other.content)
+    # Both are counted before anything else, password tries included, each
+    # by its own digest, and each password costs one verify.
+    (digest, keys), (unknown_digest, unknown_keys) = resolver.calls
+    assert digest == share_secrets.lookup_digest(token) != unknown_digest
+    assert [scope for scope, _ in keys] == [scope for scope, _ in unknown_keys] == ["ip_minute", "pw_15m", "digest_day"]
+    assert len(verifies) == 2
+
+
+def test_a_throttled_client_gets_429_under_any_key_id_and_no_verify(client, resolver, verifies):
+    resolver.throttled = True
+    res = _post(client, "sd7_AbCdEfGhIjKlMnOpQrStUv", password=WRONG)
+    assert (res.status_code, res.headers["retry-after"]) == (429, "120")
+    assert verifies == []
 
 
 def test_an_unset_digest_key_is_the_same_not_found(client, resolver, monkeypatch):

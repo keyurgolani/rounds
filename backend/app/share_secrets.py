@@ -47,7 +47,7 @@ KEY_ID = "sd1"
 DIGEST_KEY_VERSION = 1
 TOKEN_BYTES = 16
 # Any key id the format allows. Only KEY_ID resolves; a bearer under another
-# key id answers as an unknown one.
+# key id is counted and looked up as an unknown one (lookup_digest).
 WELL_FORMED = re.compile(r"sd[0-9]{1,3}_[A-Za-z0-9_-]{22}")
 DIGEST = re.compile(r"[0-9a-f]{64}")
 
@@ -124,6 +124,16 @@ def digest(token: str) -> str:
     """The stored digest of a current bearer: 64 hex characters."""
     if not current(token):
         raise ValueError("not a current share bearer")
+    return hmac.new(_derive(DIGEST_INFO), token.encode("ascii"), hashlib.sha256).hexdigest()
+
+
+def lookup_digest(token: str) -> str:
+    """The digest a resolve counts by and looks up: the same HMAC over any
+    well-formed bearer. A current one's is its stored digest; one under
+    another key id matches nothing, so it costs and answers what an unknown
+    current bearer does."""
+    if not well_formed(token):
+        raise ValueError("not a well-formed share bearer")
     return hmac.new(_derive(DIGEST_INFO), token.encode("ascii"), hashlib.sha256).hexdigest()
 
 

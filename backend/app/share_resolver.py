@@ -4,14 +4,15 @@
 the gate, and the request's shape, then calls ``lookup`` once for each
 well-formed bearer. In order:
 
-  1. A bearer under another key id resolves nothing.
-  2. Its digest, and the throttle's keys from the client's address
-     pseudonym and that digest (app/share_secrets.py).
-  3. One call to PocketBase's lookup route as share-resolver
+  1. Its digest, and the throttle's keys from the client's address
+     pseudonym and that digest (app/share_secrets.py). A bearer under
+     another key id gets a digest too, which matches nothing, so it's
+     counted and answered exactly like an unknown current one.
+  2. One call to PocketBase's lookup route as share-resolver
      (app/share_resolver_client.py). The route counts first and reads the
      capability only when no counter is over its limit, so a 429 never
      depends on whether the bearer is live.
-  4. The password step. A submitted password costs one verify, never more
+  3. The password step. A submitted password costs one verify, never more
      or fewer (app/share_password.py): against the capability's verifier when it
      has a current one, and against the dummy otherwise, so an unknown
      bearer, an unprotected capability, and a wrong password cost the same.
@@ -78,12 +79,11 @@ def _live(capability: dict | None) -> bool:
 
 async def lookup(token: str, password: str | None, address: str | None) -> Found | None:
     """One resolve's lookup and password step."""
-    if not share_secrets.current(token):
-        if password is not None:
-            await share_password.verify(password, None)
+    if not share_secrets.well_formed(token):
+        # #11's resolver passes only well-formed bearers.
         return None
     try:
-        bearer = share_secrets.digest(token)
+        bearer = share_secrets.lookup_digest(token)
         keys = share_secrets.throttle_keys(share_secrets.ip_pseudonym(address), bearer, password is not None)
     except share_secrets.Unavailable:
         raise LookupUnavailable("no digest key") from None

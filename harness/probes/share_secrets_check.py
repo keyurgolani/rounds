@@ -17,8 +17,8 @@ nginx:
     answer exactly as an unknown bearer does (receipt
     isolation.share-resolver.password.uniform);
   - password tries are limited per client and bearer; 1,000 random
-    well-formed bearers from one client get the uniform not-found until the
-    client's limit, then 429; once throttled, a live bearer and an unknown
+    well-formed bearers from one client, under three key ids, get the
+    uniform not-found until the client's limit, then 429; once throttled, a live bearer and an unknown
     one get the same 429 (receipt isolation.share-resolver.throttle.independent);
   - a client can't spread its count with its own X-Real-IP through nginx,
     and nginx's backstop answers a burst with 429.
@@ -119,8 +119,14 @@ def shape(answer: tuple[int, bytes, dict[str, str]]) -> tuple[int, bytes, tuple]
     return status, body, tuple(headers.get(h) for h in RESOLVER_HEADERS)
 
 
-def random_bearer() -> str:
-    return "sd1_" + base64.urlsafe_b64encode(secrets.token_bytes(16)).rstrip(b"=").decode("ascii")
+def random_bearer(key: str = "sd1") -> str:
+    """A well-formed bearer no capability has, under ``key``."""
+    return key + "_" + base64.urlsafe_b64encode(secrets.token_bytes(16)).rstrip(b"=").decode("ascii")
+
+
+# The key ids the flood mixes: the current one, and two the format allows
+# that resolve nothing but count the same.
+KEY_IDS = ("sd1", "sd7", "sd999")
 
 
 _clients = itertools.count(1)
@@ -318,6 +324,7 @@ def run_password_uniform(c: Checks, pb: PBClient, a: factory.Account, s: Secrets
         "a wrong password": shape(resolve(FRONTEND_URL, token, "not-the-password-" + secrets.token_hex(4))),
         "a password that could never match": shape(resolve(FRONTEND_URL, token, "x" * 200)),
         "an unknown bearer with a password": shape(resolve(FRONTEND_URL, random_bearer(), password)),
+        "a bearer under another key id": shape(resolve(FRONTEND_URL, random_bearer("sd7"), password)),
     }
     right = resolve(FRONTEND_URL, token, password)
     differ = [name for name, got in tries.items() if got != unknown]
@@ -342,11 +349,12 @@ def run_limits(c: Checks, pb: PBClient, a: factory.Account, protected: dict, liv
     c.check("share.resolve.password-tries-are-limited-per-client-and-bearer",
             wrong == [404] * PASSWORD_LIMIT and eleventh[0] == 429, f"wrong={sorted(set(wrong))} next={eleventh[0]}")
 
-    # 1,000 random well-formed bearers from one client.
+    # 1,000 random well-formed bearers from one client, under three key ids:
+    # every one counts.
     flood = REPLICAS[-1]
     client = named_client()
     baseline = shape(resolve(flood, random_bearer(), client=named_client()))
-    answers = [shape(resolve(flood, random_bearer(), client=client)) for _ in range(1000)]
+    answers = [shape(resolve(flood, random_bearer(KEY_IDS[i % len(KEY_IDS)]), client=client)) for i in range(1000)]
     head = answers[:IP_LIMIT]
     first_429 = next((i for i, got in enumerate(answers) if got[0] == 429), None)
     c.check("share.resolve.a-thousand-random-bearers-meet-the-limit",

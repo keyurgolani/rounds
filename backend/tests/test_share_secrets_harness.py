@@ -119,6 +119,17 @@ def test_the_scan_looks_for_every_form_a_bearer_or_password_could_take():
     assert urllib.parse.quote(spaced, safe="") != spaced and urllib.parse.quote(spaced, safe="") in values
 
 
+def test_the_flood_draws_bearers_under_key_ids_the_format_allows():
+    # The current key id and two others, so the limit check also shows that
+    # a bearer under another key id is counted.
+    from app import share_secrets
+
+    assert probe.KEY_IDS[0] == share_secrets.KEY_ID and len(set(probe.KEY_IDS)) == 3
+    for key in probe.KEY_IDS:
+        bearer = probe.random_bearer(key)
+        assert share_secrets.well_formed(bearer) and share_secrets.key_id(bearer) == key
+
+
 def test_the_scan_finds_bytes_inside_a_tarball(tmp_path):
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
