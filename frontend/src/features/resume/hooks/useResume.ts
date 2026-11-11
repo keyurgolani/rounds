@@ -27,6 +27,18 @@ const VERSION_COALESCE_MS = 60_000;
 const RETRY_FIRST_MS = 2_000;
 const RETRY_MAX_MS = 30_000;
 
+// A save PocketBase refused for a reason another try can't change: the
+// request itself (400, 413, 422), the session (401), the account's rights
+// (403), or a resume that's gone (404). Those aren't retried on their own;
+// the edits stay pending, and the next edit or export tries once more.
+// No answer, a timeout (408), a limit (429), or a server error is retried.
+const PERMANENT_STATUSES = new Set([400, 401, 403, 404, 413, 422]);
+
+function retriable(err: unknown): boolean {
+  const status = (err as { status?: unknown } | null)?.status;
+  return !(typeof status === 'number' && PERMANENT_STATUSES.has(status));
+}
+
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export type UseResumeResult = {
@@ -181,11 +193,12 @@ export function useResume(slug: string | undefined): UseResumeResult {
       setSaveState('error');
       setError((err as Error).message);
       // Try again on its own, waiting longer after each failure in a row,
-      // so the edits never sit unsaved until the next keystroke.
+      // so the edits never sit unsaved until the next keystroke; unless
+      // another try can't succeed (PERMANENT_STATUSES).
       failuresRef.current += 1;
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
-      if (!mountedRef.current) throw err;
+      if (!mountedRef.current || !retriable(err)) throw err;
       const wait = Math.min(RETRY_MAX_MS, RETRY_FIRST_MS * 2 ** (failuresRef.current - 1));
       retryTimerRef.current = setTimeout(() => {
         retryTimerRef.current = null;
@@ -343,13 +356,18 @@ export function useResume(slug: string | undefined): UseResumeResult {
   // Set up once: it reads the latest save through saveRef, so a new
   // `resume` (every save makes one) doesn't tear it down mid-edit.
   useEffect(() => {
-    // Starts a save of anything not yet saved, waiting or not.
+    // Starts a save of anything not yet saved, waiting or not. A save in
+    // flight has already taken its edits, so one is queued behind it too:
+    // it finds nothing to do once that save lands, and tries those edits
+    // once more if it fails.
     const saveWhatIsLeft = () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
-      if (Object.keys(pendingRef.current).length > 0) saveRef.current?.().catch(() => undefined);
+      if (Object.keys(pendingRef.current).length > 0 || savingRef.current) {
+        saveRef.current?.().catch(() => undefined);
+      }
     };
     // Best-effort; modern browsers don't wait for async work during
     // unload, so this only dispatches the save.

@@ -40,7 +40,8 @@ function resumeAt(updated: string): Resume {
 interface Save {
   patch: Record<string, unknown>;
   resolve: (updated: string) => void;
-  reject: () => void;
+  // No status is a save that got no answer; a status is PocketBase's.
+  reject: (status?: number) => void;
 }
 
 let saves: Save[];
@@ -58,7 +59,8 @@ beforeEach(() => {
           saves.push({
             patch: patch as Record<string, unknown>,
             resolve: (updated) => resolve(resumeAt(updated)),
-            reject: () => reject(new Error('offline')),
+            reject: (status) =>
+              reject(status === undefined ? new Error('offline') : Object.assign(new Error('refused'), { status })),
           });
         }),
     );
@@ -254,6 +256,72 @@ describe('useResume keeps every edit', () => {
     await act(async () => saves[1].reject());
     // Unmounted, it doesn't keep trying.
     await advance(60_000);
+    expect(saves).toHaveLength(2);
+  });
+
+  it('tries once more when the save in flight as the Studio unmounts then fails', async () => {
+    const hook = await loaded();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    edit(hook, 'Saving as I left');
+    await advance(700);
+    expect(saves).toHaveLength(1);
+    hook.unmount();
+    await act(async () => saves[0].reject());
+    await advance(0);
+    expect(saves).toHaveLength(2);
+    expect(saves[1].patch).toEqual({ data: { personalInfo: { fullName: 'Saving as I left' } } });
+    await act(async () => saves[1].reject());
+    await advance(60_000);
+    expect(saves).toHaveLength(2);
+  });
+
+  it('saves nothing more when the save in flight as the Studio unmounts lands', async () => {
+    const hook = await loaded();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    edit(hook, 'Saved as I left');
+    await advance(700);
+    hook.unmount();
+    await act(async () => saves[0].resolve('2026-11-11 08:00:02.000Z'));
+    await advance(60_000);
+    expect(saves).toHaveLength(1);
+  });
+
+  it.each([400, 401, 403, 404, 413, 422])(
+    'leaves a save PocketBase refused with %i for the next edit or export, without retrying',
+    async (status) => {
+      const hook = await loaded();
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      edit(hook, 'Refused');
+      await advance(700);
+      await act(async () => saves[0].reject(status));
+      await advance(60_000);
+      expect(saves).toHaveLength(1);
+      expect(hook.result.current.saveState).toBe('error');
+
+      // The edits stay pending: the next edit's save carries them.
+      edit(hook, 'Refused, then edited');
+      await advance(700);
+      expect(saves).toHaveLength(2);
+      expect(saves[1].patch).toEqual({ data: { personalInfo: { fullName: 'Refused, then edited' } } });
+      // And an export still waits on them and fails with them.
+      await act(async () => saves[1].reject(status));
+      let flushed: Promise<unknown> | undefined;
+      act(() => {
+        flushed = hook.result.current.flush().catch((e: unknown) => e);
+      });
+      await advance(0);
+      await act(async () => saves[2].reject(status));
+      expect(await flushed).toMatchObject({ message: 'refused', status });
+    },
+  );
+
+  it.each([408, 429, 500, 503])('still retries a save that failed with %i', async (status) => {
+    const hook = await loaded();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    edit(hook, 'Try again');
+    await advance(700);
+    await act(async () => saves[0].reject(status));
+    await advance(2_000);
     expect(saves).toHaveLength(2);
   });
 });
