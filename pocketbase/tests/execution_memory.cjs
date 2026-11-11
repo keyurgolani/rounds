@@ -1,12 +1,19 @@
 // An in-memory store with the PocketBase store's contract for
-// pb_hooks/execution.js (ROUNDS-00A-L03 PR 1): one job per
+// pb_hooks/execution.js (ROUNDS-00A-L03): one job per
 // (account, command_id), one attempt per (job, attempt_number) and per
 // token hash, one envelope per attempt, and admission command rows as
 // admission.js keeps them. execution_runner.cjs and execution_server.cjs
 // run the decisions on it; the PocketBase store itself runs against a
 // real PocketBase in the harness.
+//
+// It shares its maps with admission_memory.cjs's store (`admission()`), so
+// the job's admission charge (admission.js jobStarted and jobEnded, PR 2)
+// moves with the job, as one PocketBase transaction moves both. Given
+// `admission`, the loaded admission.js, it runs those two decisions;
+// either way it records each call in `admission_calls`.
 
 const crypto = require("crypto");
+const { newMaps, admissionMemoryStore } = require("./admission_memory.cjs");
 
 function unique(rows, row, fields, name) {
   if (rows.some((r) => r.id !== row.id && fields.every((f) => r[f] === row[f]))) {
@@ -15,20 +22,22 @@ function unique(rows, row, fields, name) {
 }
 
 const ACTIVE = ["leased", "started"];
+const TERMINAL = ["completed", "timed-out", "denied", "canceled", "failed"];
 
 // Oldest first; jobs queued in the same second, in the order they came.
 function byQueue(a, b) {
   return a.queued_at - b.queued_at || (a.id < b.id ? -1 : 1);
 }
 
-function memoryStore() {
+function memoryStore(options) {
+  const admissionRules = options && options.admission ? options.admission : null;
   const reads = { jobs: 0 };
-  const commands = new Map();
-  const jobs = new Map();
+  const maps = newMaps();
+  const { commands, jobs, leases, nextId } = maps;
+  const admissionView = admissionMemoryStore(maps);
   const attempts = new Map();
   const envelopes = new Map();
-  let ids = 0;
-  const nextId = () => `id${String(++ids).padStart(13, "0")}`;
+  const admissionCalls = [];
   const clone = (row) => (row === null || row === undefined ? null : JSON.parse(JSON.stringify(row)));
   function saver(map, uniques, name) {
     return (row) => {
@@ -45,7 +54,12 @@ function memoryStore() {
       jobs: [...jobs.values()].map(clone),
       attempts: [...attempts.values()].map(clone),
       envelopes: [...envelopes.values()].map(clone),
+      leases: [...leases.values()].map(clone),
+      counters: admissionView.dump().counters,
+      admission_calls: admissionCalls.map(clone),
     }),
+    // The admission side, over the same rows.
+    admission: () => admissionView,
     seedCommand: (row) => {
       const saved = Object.assign({ id: nextId(), job: "" }, row);
       commands.set(saved.id, saved);
@@ -102,6 +116,40 @@ function memoryStore() {
         .slice(0, limit)
         .map(clone),
     saveEnvelope: saver(envelopes, [["attempt"]], "execution_envelopes"),
+    currentEnvelope: (job) => {
+      const last = [...attempts.values()].find((a) => a.job === job.id && a.attempt_number === job.attempts);
+      if (!last) return null;
+      const found = [...envelopes.values()].find((e) => e.attempt === last.id);
+      return found ? clone({ state: found.state, outcome_class: found.outcome_class, user_view: found.user_view }) : null;
+    },
+    jobStarted: (row) => {
+      admissionCalls.push({ call: "jobStarted", job: row.id });
+      if (admissionRules) admissionRules.jobStarted(admissionView, row.account, row.command_id, row.id);
+    },
+    jobEnded: (row, outcomeClass) => {
+      admissionCalls.push({ call: "jobEnded", job: row.id, outcome_class: outcomeClass });
+      if (admissionRules) admissionRules.jobEnded(admissionView, row.account, row.command_id, row.id, outcomeClass);
+    },
+    purgeable: (cutoff, limit) =>
+      [...jobs.values()]
+        .filter((j) => j.purpose === "scratch" && j.finished_at > 0 && j.finished_at <= cutoff && TERMINAL.includes(j.state))
+        .sort((a, b) => a.finished_at - b.finished_at)
+        .slice(0, limit)
+        .map(clone),
+    deleteEnvelopes: (jobId) => {
+      for (const [id, e] of envelopes) if (e.job === jobId) envelopes.delete(id);
+    },
+    deleteCommandOf: (row) => {
+      const found = [...commands.values()].find((c) => c.account === row.account && c.command_id === row.command_id);
+      if (!found || found.job !== row.id) return;
+      commands.delete(found.id);
+      for (const [id, lease] of leases) if (lease.command === found.id) leases.delete(id);
+    },
+    // Its attempts cascade, as the relation's cascadeDelete does.
+    deleteJob: (row) => {
+      jobs.delete(row.id);
+      for (const [id, a] of attempts) if (a.job === row.id) attempts.delete(id);
+    },
   };
 }
 

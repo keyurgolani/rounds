@@ -20,6 +20,15 @@
 // set when it's admitted and a settle can only shorten it, and a lease
 // settles its charge once, within what was admitted.
 //
+// A command that enqueued an execution job (ROUNDS-00A-L03 PR 2; the
+// `job` link execution.js sets) answers from its job instead of from its
+// own state: a duplicate gets the job, never a second charge, and a
+// same-key retry of a job lost to infrastructure charges wall seconds and
+// a lease, never a request. Its lease stays after its request as the
+// job's charge: jobStarted makes it final when the candidate starts, and
+// jobEnded gives the wall seconds back when the job ends first. It lives
+// as long as its job, which the execution purge removes it with.
+//
 // A handler requires this file itself, as with gates.js:
 //
 //   const admission = require(`${__hooks}/admission.js`);
@@ -187,14 +196,16 @@ function bucketsFor(account) {
   return buckets;
 }
 
-// Step 7: whether one more request charging `wall` fits every bucket.
-function quotaFor(store, account, wall, now) {
+// Step 7: whether one more request charging `wall` fits every bucket. A
+// job's same-key retry counts no request (`requests` 0).
+function quotaFor(store, account, wall, now, requests) {
+  const counts = requests === undefined ? 1 : requests;
   const hour = hourOf(now);
   const over = [];
   bucketsFor(account).forEach((b) => {
     const limit = LIMITS[b.bucket];
     const used = store.counter(b.bucket, b.account, hour) || { requests: 0, wall_seconds: 0 };
-    if (limit.requests !== null && used.requests + 1 > limit.requests) {
+    if (limit.requests !== null && used.requests + counts > limit.requests) {
       over.push({ bucket: b.bucket, retry_after: untilNextHour(now) });
     }
     if (limit.wall_seconds !== null && used.wall_seconds + wall > limit.wall_seconds) {
@@ -224,9 +235,27 @@ function leaseBuckets(lease) {
   return bucketsFor({ id: lease.account, demo: lease.demo });
 }
 
-// Step 6 for a key the account already used.
+// The execution job store's rules (execution.js), read when a command
+// links a job.
+function jobRules() {
+  return require(`${__hooks}/execution.js`);
+}
+
+function jobHasEnded(job) {
+  return Object.prototype.hasOwnProperty.call(jobRules().TERMINAL, job.state);
+}
+
+// Step 6 for a key the account already used. A command that enqueued a
+// job answers from the job: "job" while it waits or runs and once it has
+// ended, "retry_job" when a same-key retry would run it again, and
+// "retry" when the job is gone.
 function verdictFor(store, existing, input, now) {
   if (existing.fingerprint !== input.fingerprint || existing.operation !== input.operation) return "mismatch";
+  if (existing.job) {
+    const job = store.jobOf(existing.job);
+    if (job === null) return "retry";
+    return jobRules().retryable(job) ? "retry_job" : "job";
+  }
   if (existing.state === "completed") return "replay";
   if (existing.state === "in_flight" && store.liveLeaseForCommand(existing.id, now)) return "in_flight";
   // Retryable, failed_infrastructure, or in flight with its lease gone.
@@ -256,33 +285,40 @@ function windowEnd(operation, wall, now) {
 // runs the request with a lease that doesn't count and no charge, so the
 // hook never counts past a limit. Off counts nothing.
 function admit(store, account, input, now) {
-  const out = { v: VERSION, idempotency: "none", quota: "ok", retry_after: 0, leased: false, result: null };
+  const out = { v: VERSION, idempotency: "none", quota: "ok", retry_after: 0, leased: false, result: null, job: null };
   let existing = null;
   if (input.command_id !== null) {
     existing = store.findCommand(account.id, input.command_id);
-    if (existing !== null && existing.expires_at <= now) {
+    // A command that enqueued a job lives as long as the job.
+    if (existing !== null && existing.expires_at <= now && !existing.job) {
       store.deleteCommand(existing);
       existing = null;
     }
     out.idempotency = existing === null ? "new" : verdictFor(store, existing, input, now);
   }
-  const refused = out.idempotency === "replay" || out.idempotency === "mismatch" || out.idempotency === "in_flight";
-  if (refused && input.idempotency === "enforce") {
+  const refused = out.idempotency === "replay" || out.idempotency === "mismatch" || out.idempotency === "in_flight" ||
+    out.idempotency === "job";
+  // A duplicate of a job runs nothing new, so it's never charged or
+  // leased, whatever the mode.
+  if (refused && (input.idempotency === "enforce" || out.idempotency === "job")) {
     out.quota = "skipped";
     if (out.idempotency === "replay") out.result = existing.result;
     if (out.idempotency === "in_flight") out.retry_after = inFlightWait(store, existing, now);
+    if (out.idempotency === "job") out.job = existing.job;
     return out;
   }
   if (store.findLease(input.lease_hash) !== null) {
     return { invalid: true };
   }
 
+  // A job's same-key retry charges wall seconds and a lease, no request.
+  const requests = out.idempotency === "retry_job" ? 0 : 1;
   let counted = true;
   if (input.quota === "off") {
     out.quota = "skipped";
     counted = false;
   } else {
-    const verdict = quotaFor(store, account, input.wall_seconds, now);
+    const verdict = quotaFor(store, account, input.wall_seconds, now, requests);
     out.quota = verdict.quota;
     out.retry_after = verdict.retry_after;
     if (verdict.quota !== "ok") {
@@ -305,7 +341,7 @@ function admit(store, account, input, now) {
     // A stale lease of an earlier attempt stops counting now.
     store.deleteLeasesForCommand(command.id);
   }
-  if (counted) charge(store, bucketsFor(account), hour, 1, input.wall_seconds);
+  if (counted) charge(store, bucketsFor(account), hour, requests, input.wall_seconds);
   store.saveLease({
     id: "",
     account: account.id,
@@ -391,6 +427,8 @@ function storable(result) {
 function finish(store, account, input, now) {
   const lease = leaseOf(store, account, input.lease);
   if (lease === null) return { status: 404, body: { v: VERSION, error: "not_found" } };
+  const linked = lease.command ? store.getCommand(lease.command) : null;
+  if (linked !== null && linked.job) return finishJobRequest(store, linked);
   const refundable = input.outcome === "denied" || input.outcome === "infrastructure";
   const refund = lease.counted && refundable ? lease.wall_seconds : 0;
   if (refund > 0) charge(store, leaseBuckets(lease), lease.hour, 0, -refund);
@@ -410,6 +448,61 @@ function finish(store, account, input, now) {
   }
   store.deleteLease(lease);
   return { status: 200, body: { v: VERSION, refunded_wall_seconds: refund } };
+}
+
+// The end of a request whose command enqueued a job. While the job waits
+// or runs, the lease stays as the job's charge. Once the job has ended,
+// this request ran nothing new, so its wall seconds come back. The
+// store's own rows decide, never what the runner saw: a lost enqueue
+// answer neither refunds a job that runs nor keeps a charge for one that
+// doesn't.
+function finishJobRequest(store, command) {
+  const job = store.jobOf(command.job);
+  if (job !== null && !jobHasEnded(job)) return { status: 200, body: { v: VERSION, refunded_wall_seconds: 0 } };
+  const refund = endJobCharge(store, command, job === null ? "retryable" : commandStateFor(job.outcome_class));
+  return { status: 200, body: { v: VERSION, refunded_wall_seconds: refund } };
+}
+
+// How a job-backed command ends: failed_infrastructure when its job was
+// lost to infrastructure, completed otherwise.
+function commandStateFor(outcomeClass) {
+  return jobRules().RETRYABLE.indexOf(outcomeClass) >= 0 ? "failed_infrastructure" : "completed";
+}
+
+// Gives back the wall seconds of every charge still waiting on the
+// command's job, and ends the command in `state`. Answers the seconds.
+function endJobCharge(store, command, state) {
+  let refund = 0;
+  store.leasesForCommand(command.id).forEach((lease) => {
+    if (lease.counted && lease.wall_seconds > 0) {
+      charge(store, leaseBuckets(lease), lease.hour, 0, -lease.wall_seconds);
+      refund += lease.wall_seconds;
+    }
+    store.deleteLease(lease);
+  });
+  command.state = state;
+  command.result = null;
+  command.wall_seconds = Math.max(0, command.wall_seconds - refund);
+  store.saveCommand(command);
+  return refund;
+}
+
+// execution.js's heartbeat, as the job's candidate starts: the charge
+// waiting on the job is final, so its lease goes. Nothing for a job its
+// command doesn't name.
+function jobStarted(store, accountId, commandId, jobId) {
+  const command = store.findCommand(accountId, commandId);
+  if (command === null || command.job !== jobId) return;
+  store.deleteLeasesForCommand(command.id);
+}
+
+// execution.js's endJob, as the job ends: a charge still waiting on it
+// never reached a started candidate, so its wall seconds come back, and
+// the command ends the way the job did.
+function jobEnded(store, accountId, commandId, jobId, outcomeClass) {
+  const command = store.findCommand(accountId, commandId);
+  if (command === null || command.job !== jobId) return 0;
+  return endJobCharge(store, command, commandStateFor(outcomeClass));
 }
 
 // For a leaf whose own hook finishes its command in the same transaction
@@ -461,7 +554,8 @@ function usage(store, account, now) {
 
 // Forgets commands past their 24 hours, marks in-flight commands whose
 // lease is gone failed_infrastructure, and drops expired leases and
-// counters from before the last 24 hours. Nothing is refunded.
+// counters from before the last 24 hours. Nothing is refunded. A command
+// that enqueued a job, and its job's charge, are left to the job.
 function sweep(store, now) {
   const repaired = store.repairInFlight(now, SWEEP_BATCH);
   store.deleteExpired(now, hourOf(now) - 24, SWEEP_BATCH);
@@ -502,6 +596,8 @@ function pbStore(dao) {
       wall_seconds: record.getInt("wall_seconds"),
       result: json(record, "result"),
       expires_at: record.getInt("expires_at"),
+      // The execution job it enqueued (ROUNDS-00A-L03), or "".
+      job: record.getString("job"),
       _record: record,
     };
   }
@@ -562,6 +658,20 @@ function pbStore(dao) {
     deleteLeasesForCommand: (commandId) => {
       dao.findRecordsByFilter(LEASES, "command = {:id}", "", 0, 0, { id: commandId }).forEach((r) => dao.deleteRecord(r));
     },
+    leasesForCommand: (commandId) =>
+      dao.findRecordsByFilter(LEASES, "command = {:id}", "", 0, 0, { id: commandId }).map(lease),
+    // The job a command enqueued, as step 6 and finish read it, or null.
+    jobOf: (jobId) => {
+      const record = first("execution_jobs", "id = {:id}", { id: jobId });
+      if (record === null) return null;
+      return {
+        id: record.id,
+        state: record.getString("state"),
+        outcome_class: record.getString("outcome_class"),
+        attempts: record.getInt("attempts"),
+        attempts_started: record.getInt("attempts_started"),
+      };
+    },
     liveLeaseForCommand: (commandId, now) =>
       first(LEASES, "command = {:id} && expires_at > {:now}", { id: commandId, now }) !== null,
     liveLeaseExpiry: (commandId, now) => {
@@ -593,9 +703,10 @@ function pbStore(dao) {
       record.set("wall_seconds", Math.max(0, record.getInt("wall_seconds") + wall));
       dao.saveRecord(record);
     },
+    // A command that enqueued a job ends with the job, never here.
     repairInFlight: (now, limit) => {
       let repaired = 0;
-      dao.findRecordsByFilter(COMMANDS, "state = 'in_flight'", "", limit, 0).forEach((record) => {
+      dao.findRecordsByFilter(COMMANDS, "state = 'in_flight' && job = ''", "", limit, 0).forEach((record) => {
         if (first(LEASES, "command = {:id} && expires_at > {:now}", { id: record.id, now }) !== null) return;
         record.set("state", "failed_infrastructure");
         record.set("result", null);
@@ -605,10 +716,24 @@ function pbStore(dao) {
       return repaired;
     },
     deleteExpired: (now, oldestHour, limit) => {
-      // Leases first: a command outlives every lease it ever had.
+      // Leases first: a command outlives every lease it ever had. A
+      // command that enqueued a job, and the lease that is its job's
+      // charge, stay until the job ends or the execution purge removes
+      // them (ROUNDS-00A-L03).
+      const expired = arrayOf(new DynamicModel({ id: "" }));
+      dao.db()
+        .select("l.id")
+        .from(LEASES + " l")
+        .where($dbx.exp(
+          "l.expires_at <= {:now} AND NOT EXISTS (SELECT 1 FROM " + COMMANDS +
+            " c WHERE c.id = l.command AND COALESCE(c.job, '') != '')",
+          { now },
+        ))
+        .limit(limit)
+        .all(expired);
+      expired.forEach((row) => dao.deleteRecord(dao.findRecordById(LEASES, row.id)));
       [
-        [LEASES, "expires_at <= {:now}"],
-        [COMMANDS, "expires_at <= {:now}"],
+        [COMMANDS, "expires_at <= {:now} && job = ''"],
         [COUNTERS, "hour < {:hour}"],
       ].forEach((entry) => {
         dao.findRecordsByFilter(entry[0], entry[1], "", limit, 0, { now, hour: oldestHour }).forEach((r) => dao.deleteRecord(r));
@@ -736,6 +861,8 @@ module.exports = {
   admit,
   settle,
   finish,
+  jobStarted,
+  jobEnded,
   completedResult,
   completeCommand,
   usage,

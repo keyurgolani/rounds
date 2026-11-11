@@ -106,6 +106,12 @@ def reap(now) -> dict:
     return {"call": "reap", "now": now}
 
 
+def rearm(key, account=A) -> dict:
+    """The account's command in flight again, as admission's same-key
+    retry leaves it: from PR 2 a job's end also ends its command."""
+    return {"call": "rearmCommand", "account": account, "command_id": key}
+
+
 def started_job(key=None, account=A, kind="run", budget=3, now=T0):
     """Steps that leave one job started under a known token."""
     key = key or new_key()
@@ -543,7 +549,7 @@ def test_a_retry_after_worker_loss_runs_attempt_two_and_attempt_ones_late_result
     key = new_key()
     steps, job, attempt, token = started_job(key=key)
     second = new_token()
-    out = run(*steps, reap(T0 + 30), enqueue(key, now=T0 + 31), claim(second, now=T0 + 32),
+    out = run(*steps, reap(T0 + 30), rearm(key), enqueue(key, now=T0 + 31), claim(second, now=T0 + 32),
               complete(attempt["id"], token, result(job["id"]), now=T0 + 33))
     assert out["results"][-3]["body"]["requeued"] is True
     assert out["results"][-2]["body"]["attempt"]["attempt_number"] == 2
@@ -566,7 +572,7 @@ def test_only_an_infrastructure_loss_is_retried_with_the_same_key(ended, requeue
     state, outcome = ended
     limit = "wall_time" if outcome == "resource-limit" else None
     out = run(*steps, complete(attempt["id"], token, result(job["id"], state=state, outcome=outcome, limit=limit)),
-              enqueue(key, now=T0 + 5))
+              rearm(key), enqueue(key, now=T0 + 5))
     assert out["results"][-1]["body"]["requeued"] is requeues
     assert out["store"]["jobs"][0]["state"] == ("queued" if requeues else state)
 
@@ -580,7 +586,7 @@ def test_three_started_attempts_leave_no_retry():
         out = run(*steps)
         attempt = out["results"][-1]["body"]["attempt"]
         steps += [heartbeat(attempt["id"], token, now=T0 + 100 * i, budget=3), reap(T0 + 100 * i + 30),
-                  enqueue(key, now=T0 + 100 * i + 31)]
+                  rearm(key), enqueue(key, now=T0 + 100 * i + 31)]
     out = run(*steps)
     assert out["results"][-1]["body"]["requeued"] is False
     job = out["store"]["jobs"][0]
@@ -658,6 +664,8 @@ def test_the_routes_need_the_right_principal():
     assert sorted(routes) == sorted([
         ("enqueue", "handleCaller", "enqueue", "users"),
         ("cancel", "handleCaller", "cancel", "users"),
+        # PR 2: the account's own job, for the runner's job read.
+        ("status", "handleCaller", "status", "users"),
         ("claim", "handleService", "claim", "execution_service"),
         ("heartbeat", "handleService", "heartbeat", "execution_service"),
         ("complete", "handleService", "complete", "execution_service"),
