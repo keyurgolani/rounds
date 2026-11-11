@@ -92,7 +92,7 @@ PocketBase refuses the `share-resolver` record on every route but its lookup.
 
 #14's stage 1 adds `legacy_share_migration` in `pocketbase/pb_migrations/1700008400_legacy_share_migration.js`, every rule `null`, and leaves `resume_share_links` and `resume_share_views` readable only by their owner, with every client write `null`. Two writers, neither with the superuser:
 
-1. The migration, at the first start of its release, under manifest `legacy-shares-v1`: one journal row per older link, each link's outcome fields, its view rows' details down to the day, and older links' entries in `relation_quarantine`. Its down step writes no row.
+1. The migration, at the first start of its release, under manifest `legacy-shares-v1`: one journal row per older link, each link's outcome fields, its view rows, and older links' entries in `relation_quarantine`. Its down step writes no row.
 2. Get a new link, #12's create with `legacy_link_id` in `pocketbase/pb_hooks/share_secrets.js`, which sets the older link's `replaced_by` once, in the transaction that makes the new capability. `pocketbase/pb_hooks/share_links.pb.js` refuses every other change to an older link through the app's Dao.
 
 The operator's `pocketbase legacy-share-receipt` writes nothing to the database.
@@ -119,7 +119,7 @@ Each row restates the leaf's current body. The leaf confirms or corrects its row
 | #12 | Caller | `POST /api/rounds/share/commands`, then `POST /api/rounds/share/capabilities` to create or `POST /api/rounds/share/capabilities/:id/rotate` to rotate, in `pb_hooks/share_secrets.pb.js`, through `pb_hooks/admission.js` and #11's `create_capability` and `rotate_bearer` | `share_capabilities`, and its `admission_commands` rows | caller's bearer and `ROUNDS_ADMISSION_SECRET` |
 | #12 | Service | `share_resolvers`, one record (`share-resolver`): `POST /api/rounds/share/lookup` | `share_throttle` | `ROUNDS_SHARE_RESOLVER_PASSWORD` |
 | #12 | System hook | `onAfterBootstrap` and the `share_resolvers` password-login hook in `pb_hooks/share_secrets.pb.js`, which create `share-resolver` or set its password from the secret, or to a random one without it | `share_resolvers` | `ROUNDS_SHARE_RESOLVER_PASSWORD` |
-| #14 S1 | Migration | `1700008400_legacy_share_migration.js` at start, under manifest `legacy-shares-v1` | `legacy_share_migration`; each `resume_share_links` row's outcome fields, `resume_share_views` details, and older links' entries in `relation_quarantine`; drops the link fields only older links used | none |
+| #14 S1 | Migration | `1700008400_legacy_share_migration.js` at start, under manifest `legacy-shares-v1` | `legacy_share_migration`; each `resume_share_links` row's outcome fields, `resume_share_views` rows, and older links' entries in `relation_quarantine`; drops the link fields only older links used | none |
 | #14 S1 | Caller | Get a new link: #12's `POST /api/rounds/share/capabilities` with `legacy_link_id`, in `pb_hooks/share_secrets.js` | `share_capabilities` through #11's `create_capability`, and the older link's `replaced_by` in the same transaction | caller's bearer and `ROUNDS_ADMISSION_SECRET` |
 | #22 | Library | `pb_hooks/lib/outbox.js`, which #21's transaction writer calls before commit | `domain_outbox` | rides on #21's write |
 | #22 | Service | `dispatcher_service`: routes under `/api/outbox/` | `outbox_cursors`, `outbox_watermarks`, `outbox_parked`, and the relay lease in `platform_leases` | `ROUNDS_DISPATCHER_SECRET` |

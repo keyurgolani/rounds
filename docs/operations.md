@@ -400,7 +400,7 @@ Every share link made before `1700008400_legacy_share_migration.js` stops workin
 A share link is a Share Capability, `/r#<secret>`, and only its owner manages it:
 
 - `1700008100_share_link_owner_rules.js` and `1700008400_legacy_share_migration.js` leave `resume_share_links`, the older links, readable only by their owner, and no client creates, changes, or deletes one. Nobody sees one that pointed at another account's resume. `pocketbase/pb_hooks/share_links.pb.js` refuses every change to an older link except the one Get a new link makes.
-- An older link's address, `/r/<anything>`, opens one fixed page, "This link no longer works", decided in the browser with no request. nginx answers `/api/share/by-token`, in any letter case, with the resolver's 404 and headers below and keeps no log line, and the runner has no route there.
+- An older link's address, `/r/<anything>`, opens one fixed page, "This link no longer works", decided in the browser with no request. nginx answers the older read path itself, in any letter case, with the resolver's 404 and headers below, and the runner has no route there.
 - nginx serves the share pages, in any letter case, with the share headers and the share page CSP.
 - The runner logs one `share.resolve` line per resolve with an outcome in `code`: `available`, `not_found`, `kill_switch`, `gate_closed`, or `degraded`. A run of `degraded` means the runner can't read PocketBase.
 
@@ -450,10 +450,9 @@ Check the pages and the resolver from the public URL:
 curl -sI https://your-domain/r | grep -i -e '^cache-control' -e '^content-security-policy'
 curl -sI https://your-domain/r/x | grep -i -e '^cache-control' -e '^x-frame-options'
 curl -s -i -X POST https://your-domain/api/share/resolve -H 'Content-Type: application/json' -d '{"token":"x"}'
-curl -s -i https://your-domain/api/share/by-token/x
 ```
 
-Both pages answer `Cache-Control: no-store` with the share page CSP and `X-Frame-Options: DENY`. The resolver and the older read path answer 404 `{"detail":"Not found."}` with the resolver's headers.
+Both pages answer `Cache-Control: no-store` with the share page CSP and `X-Frame-Options: DENY`, and the resolver answers 404 `{"detail":"Not found."}` with its headers.
 
 [Deployment verification](#deployment-verification) checks these from the public URL: `deployment.proxy.share-page.headers` for the share pages, `deployment.proxy.share-read.uniform` for the older read path, `deployment.proxy.share-resolve.uniform` for the resolver, `deployment.proxy.share-hooks.denied` for the hook routes, and `deployment.proxy.share-resolvers.denied` for the share resolver record's routes, which nginx answers itself.
 
@@ -462,7 +461,7 @@ Both pages answer `Cache-Control: no-store` with the share page CSP and `X-Frame
 `1700008400_legacy_share_migration.js` turns off every share link made before it, at the first start of the release that adds it. It runs in one transaction, so a start that stops partway changes nothing and the next start runs it again. Its manifest is `pocketbase/migration-manifests/legacy-shares-v1.json`.
 
 - Each link gets one outcome, with a reason, in `legacy_share_migration`, one row per link, which no client reads: `migrated` (its owner can get a new link), `revoked_demo` (a demo account's), `revoked_unverified` (Rounds couldn't verify it: no owner, no target, a target that's gone, or a setting a new link doesn't carry), or `revoked_ownership` (it pointed at another account's resume, so nobody sees it). A `revoked_ownership` link that had views counts as an incident.
-- The journal keeps each link's view count and the first and last day it was viewed. View rows keep only the day.
+- The journal keeps each link's view count and the first and last day it was viewed.
 - It drops the link fields only older links used, and does the same for older links in `relation_quarantine`.
 - Its `migrate down` keeps every link off. The journal, the rules, each link's status, and its new link stay; it removes the fields it added and adds the dropped ones back empty.
 
@@ -483,7 +482,7 @@ docker compose -f docker-compose.prod.yml run --rm -T runner python -m app.legac
 docker volume rm rounds_pb_data_copy
 ```
 
-The receipt holds counts by outcome and by reason, incidents, how many links got a new one, what's left of older links' fields and views' details (all zero), a checksum of the journal without its dates, and its own checksum. It holds no id. Read `reconciled`: `true` means every older link is in the journal once, with the status the journal gives it, and nothing is left. `--scan`, with the materializer up, adds how many targets #4's checks can't snapshot, by reason; their owners will see "Can't create a new link" with that reason. The runner signs it as it signs the snapshot scan, under the HKDF label `rounds/legacy-share-receipt/v1`.
+The receipt holds counts by outcome and by reason, incidents, how many links got a new one, what's left of what the migration removes (all zero), a checksum of the journal without its dates, and its own checksum. It holds no id. Read `reconciled`: `true` means every older link is in the journal once, with the status the journal gives it, and nothing is left. `--scan`, with the materializer up, adds how many targets #4's checks can't snapshot, by reason; their owners will see "Can't create a new link" with that reason. The runner signs it as it signs the snapshot scan, under the HKDF label `rounds/legacy-share-receipt/v1`.
 
 **The deploy.** Deploy as in [Upgrades](#upgrades), after the setup in [Public shares](#public-shares). PocketBase logs one `legacy_share_batch` line per 500 links and one `legacy_share_migrated` line with the counts, or `legacy_share_failed` with the step that failed, and starts only once it has run. Then run `legacy-share-receipt` again, with `docker compose ... exec pocketbase`, and sign it. Links made between the dry run and the deploy add to the counts.
 

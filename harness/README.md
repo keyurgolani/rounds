@@ -453,8 +453,8 @@ and the materializer on, and the probe checks, in three phases:
   resolve has one shape; the quarantined link shows to nobody; and the
   recorder shows public share requests reaching PocketBase only as the share
   resolver's own login and identity.
-- `legacy-shares-scan`: no fixture value, viewer hash, or user agent is in any
-  service's log or in that pb_data.
+- `legacy-shares-scan`: no fixture value is in any service's log or in that
+  pb_data.
 
 PocketBase then goes back to the main volume. The recorder publishes no port,
 and its log stays on its own volume, never the receipts.
