@@ -31,6 +31,17 @@
 #                     each job claimed and ended once
 #  3g. execution readiness - PocketBase restarted with another secret: both
 #                     replicas go unready; restarted with it, ready again
+#  3h. legacy snapshots - PocketBase, both replicas, and nginx with
+#                     ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE on and the
+#                     materializer up: each RD-02 input's declared outcome,
+#                     owner-only snapshots, replay, reuse, conflict, and the
+#                     operator's scan, signed by the runner (ROUNDS-00A-L04,
+#                     harness/probes/legacy_snapshot_check.py)
+#  3i. the materializer stopped: creation is typed and writes nothing; back
+#                     up, a same-key retry makes one snapshot
+#  3j. the gate off: creation is refused, snapshots still read back, the
+#                     rescan matches; the gate on again: every snapshot is
+#                     reused, and no resume, variant, or version row changed
 #   4. recreate PocketBase with signups disabled; the named pb_data volume
 #      keeps the accounts and rows from phase 2 across the restart
 #   5. hook phase   - signup-disabled probe
@@ -139,6 +150,10 @@ fi
 
 RUN_ID="${RUN_ID:-$(date +%s)-$$}"
 GIT_COMMIT="${GIT_COMMIT:-$(git -C "${ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+# The runners' AI_KEY_SECRET for this run, which signs the snapshot scan;
+# a test placeholder unique to the run, not the dev compose default, which
+# signs nothing.
+SCAN_SECRET_V="harness-scan-key-not-a-secret-${RUN_ID}-0123456789"
 
 # --env-file must be an absolute path and must come after -p/-f (nerdctl rejects
 # it before them); both finch and docker compose accept it here. --profile
@@ -170,9 +185,47 @@ trap cleanup EXIT
 # PocketBase runs with the demo on (DEMO_V) until the signup restart, so
 # the admission phase's demo accounts sign in; it's off from then on.
 DEMO_V=true
+# SNAPSHOT_GATE sets ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE for PocketBase and
+# both runners, for the snapshot phases.
+SNAPSHOT_GATE=""
 set_signups() {
-  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\n' \
-    "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${DEMO_V}" > "${ENV_FILE}"
+  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\nROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=%s\nAI_KEY_SECRET=%s\n' \
+    "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${DEMO_V}" \
+    "${SNAPSHOT_GATE}" "${SCAN_SECRET_V}" > "${ENV_FILE}"
+}
+
+# Waits until PocketBase reaches the materializer over its network.
+wait_materializer() {
+  for _ in $(seq 1 60); do
+    compose exec -T pocketbase wget -q -T 3 -O /dev/null http://materializer:4100/health >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  return 1
+}
+
+# The operator's scan and signing, as docs/operations.md gives them: the
+# report goes to the receipts as NAME.json, and for NAME=scan-1 the
+# runner signs it (NAME.signed.json) and verifies the signed copy. One
+# PASS or FAIL line each; the report holds counts only.
+scan_report() {
+  local name="$1" fails=0
+  if compose exec -T pocketbase /pb/pocketbase legacy-snapshot-scan --dir=/pb/pb_data --hooksDir=/pb/pb_hooks \
+       --migrationsDir=/pb/pb_migrations --out "/tmp/${name}.json" --commit "${GIT_COMMIT}" >/dev/null \
+     && compose exec -T pocketbase cat "/tmp/${name}.json" > "${RECEIPTS_DIR}/${name}.json"; then
+    echo "PASS snapshot.scan.${name}.written"
+  else
+    echo "FAIL snapshot.scan.${name}.written"; fails=1
+  fi
+  if [ "${name}" = "scan-1" ]; then
+    if compose exec -T runner python -m app.legacy_receipt sign - < "${RECEIPTS_DIR}/${name}.json" \
+         > "${RECEIPTS_DIR}/${name}.signed.json" \
+       && compose exec -T runner python -m app.legacy_receipt verify - < "${RECEIPTS_DIR}/${name}.signed.json"; then
+      echo "PASS snapshot.scan.signed-and-verified"
+    else
+      echo "FAIL snapshot.scan.signed-and-verified"; fails=1
+    fi
+  fi
+  [ "${fails}" -eq 0 ]
 }
 
 # A runner replica's startup gates line (only gate names and values,
@@ -278,8 +331,10 @@ probe() {
     -e ROUNDS_ADMISSION_SECRET="${ADMISSION_SECRET_V}" \
     -e ROUNDS_EXECUTION_SECRET="${EXECUTION_SECRET_V}" \
     -e ROUNDS_EXECUTION_SECRET_ROTATED="${EXECUTION_ROTATED_V}" \
+    -e RD02_DIR="/rd02" \
     -v "${ROOT}/docs/security:/policy:ro" \
     -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+    -v "${ROOT}/tests/conformance/rd_02:/rd02:ro" \
     -v "${RECEIPTS_DIR}:/out" \
     -v "${STATE_DIR}:/state" \
     "${PROBE_IMAGE}" "${phase}"
@@ -392,6 +447,44 @@ rc_step=$?
 set -e
 compose stop runner runner-b
 compose rm -f runner runner-b >/dev/null 2>&1 || true
+
+# Snapshot creation runs while signups are still on, so it can make its
+# accounts; PocketBase is recreated for each gate value, then the runners
+# and nginx after it (ROUNDS-00A-L04).
+echo "--- phase 3h: legacy snapshots (gate on, the materializer up, both replicas and nginx) ---"
+legacy_rc=0
+snapshots_with_gate() {
+  SNAPSHOT_GATE="$1"
+  set_signups false
+  compose up -d --force-recreate pocketbase
+  restart_runners
+}
+set +e
+compose up -d materializer
+snapshots_with_gate enabled
+wait_materializer || legacy_rc=1
+probe snapshot-create || legacy_rc=1
+scan_report scan-1 || legacy_rc=1
+
+echo "--- phase 3i: legacy snapshots with the materializer stopped, then a same-key retry ---"
+compose stop materializer
+probe snapshot-create-down || legacy_rc=1
+compose start materializer
+wait_materializer || legacy_rc=1
+probe snapshot-create-retry || legacy_rc=1
+
+echo "--- phase 3j: legacy snapshots with the gate off, a rescan, then the gate on again ---"
+snapshots_with_gate ""
+probe snapshot-create-off || legacy_rc=1
+scan_report scan-2 || legacy_rc=1
+probe snapshot-scan || legacy_rc=1
+snapshots_with_gate enabled
+probe snapshot-create-again || legacy_rc=1
+SNAPSHOT_GATE=""
+set_signups false
+compose stop runner runner-b frontend materializer
+compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
+set -e
 
 echo "--- phase 4: recreate PocketBase (signups disabled, the demo at its default) ---"
 DEMO_V=false
@@ -531,7 +624,7 @@ set -e
 
 if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ] || [ "${admission_rc}" -ne 0 ] || [ "${migration_rc}" -ne 0 ] \
    || [ "${execution_rc}" -ne 0 ] || [ "${quarantine_rc}" -ne 0 ] || [ "${reach_rc}" -ne 0 ] \
-   || [ "${snapshot_rc}" -ne 0 ] || [ "${demo_rc}" -ne 0 ]; then
+   || [ "${snapshot_rc}" -ne 0 ] || [ "${demo_rc}" -ne 0 ] || [ "${legacy_rc}" -ne 0 ]; then
   exit 1
 fi
 exit 0

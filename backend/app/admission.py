@@ -85,7 +85,9 @@ FINISH_BACKOFF_S = (0.25, 0.5)
 # request's: they give the wall seconds back, and the app retries them.
 # Any other failure once a slot ran the request, a render that ran out of
 # time on its content included, keeps its charge and isn't retried.
-INFRASTRUCTURE_CODES = frozenset({"auth_unavailable", "quota_unavailable", "worker_unavailable"})
+INFRASTRUCTURE_CODES = frozenset(
+    {"auth_unavailable", "quota_unavailable", "worker_unavailable", "materializer_unavailable"}
+)
 
 
 @dataclass(frozen=True)
@@ -107,6 +109,10 @@ ROUTES: dict[tuple[str, str], Route] = {
     ("POST", "/api/pdf/render"): Route("PDF_RENDER", "pdf_render", 2 * MIB),
     ("GET", "/api/pdf/health"): Route("PDF_HEALTH", "pdf_health", 0, allocates=False),
     ("POST", "/api/ai/ats-rule"): Route("ATS_RULE", "ats_rule", 1 * MIB, allocates=False),
+    # ROUNDS-00A-L04: idempotency and quota apply; it takes no in-flight
+    # slot, since the runner only forwards to PocketBase's hook and runs
+    # nothing itself.
+    ("POST", "/api/pdf/snapshots"): Route("LEGACY_SNAPSHOT_CREATE", "snapshot_create", 4 * KIB),
 }
 
 # The routes that run a definition's code and tests (ROUNDS-00A-L02).

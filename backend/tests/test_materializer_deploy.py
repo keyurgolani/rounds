@@ -18,6 +18,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 MATERIALIZER = ROOT / "backend" / "materializer"
+# The opt-in k8s overlay that adds the materializer to the base.
+OVERLAY = ROOT / "k8s" / "overlays" / "materializer"
+OVERLAY_MANIFEST = OVERLAY / "materializer.yaml"
 COMPOSE_FILES = ["docker-compose.yml", "docker-compose.prod.yml", "harness/compose.yml"]
 # The frontend sources the bundle needs, and the package file whose module
 # type esbuild reads; nothing else.
@@ -105,7 +108,7 @@ def test_the_dockerfile_copies_nothing_the_ignore_file_keeps_out():
 
 
 def test_k8s_admits_only_pocketbase_pods_and_allows_no_egress():
-    docs = [d for d in yaml.safe_load_all((ROOT / "k8s" / "materializer.yaml").read_text()) if d]
+    docs = [d for d in yaml.safe_load_all(OVERLAY_MANIFEST.read_text()) if d]
     by_kind = {d["kind"]: d for d in docs}
     assert sorted(by_kind) == ["Deployment", "NetworkPolicy", "Service"]
     policy = by_kind["NetworkPolicy"]["spec"]
@@ -139,12 +142,34 @@ def test_pocketbase_pods_carry_the_label_the_policy_admits():
 
 
 def test_the_materializer_is_opt_in_in_k8s():
-    # Nothing calls the materializer yet, so it is not a default resource: a
-    # plain apply does not run a caller-less pod whose image a release may
-    # not carry. The manifest is still in the repo for the opt-in apply.
-    kustomization = _yaml("k8s/kustomization.yaml")
-    assert "materializer.yaml" not in kustomization["resources"]
-    assert (ROOT / "k8s" / "materializer.yaml").exists()
+    # PocketBase calls the materializer only while the snapshot gate is on,
+    # so the base doesn't run it: a plain apply needs no materializer image.
+    # The overlay is the base plus the materializer, with its image pinned.
+    base = _yaml("k8s/kustomization.yaml")
+    assert not any("materializer" in r for r in base["resources"])
+    overlay = yaml.safe_load((OVERLAY / "kustomization.yaml").read_text())
+    assert overlay["resources"] == ["../..", "materializer.yaml"]
+    assert overlay["namespace"] == "rounds"
+    assert overlay["images"] == [{"name": "ghcr.io/your-org/rounds-materializer", "newTag": "1.0.0"}]
+    assert OVERLAY_MANIFEST.exists()
+    # The overlay pins the same tag the base pins for the other images.
+    assert {e["newTag"] for e in base["images"]} == {"1.0.0"}
+
+
+def test_the_snapshot_gate_is_off_unless_set():
+    # Gate off by default everywhere: empty in the ConfigMap and in both
+    # compose files, which resolves to disabled.
+    configmap = _yaml("k8s/gates.yaml")
+    assert configmap["data"]["ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE"] == ""
+    for compose_file in ("docker-compose.yml", "docker-compose.prod.yml"):
+        services = _yaml(compose_file)["services"]
+        for service in ("pocketbase", "runner"):
+            env = services[service]["environment"]
+            assert "ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}" in env, (compose_file, service)
+        # PocketBase starts without the materializer: no dependency on it,
+        # and the materializer only starts with its profile.
+        assert "materializer" not in (services["pocketbase"].get("depends_on") or [])
+        assert "MATERIALIZER_URL=${MATERIALIZER_URL:-http://materializer:4100}" in services["pocketbase"]["environment"]
 
 
 @pytest.mark.parametrize("compose_file", COMPOSE_FILES)

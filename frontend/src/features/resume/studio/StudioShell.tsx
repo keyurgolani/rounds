@@ -336,7 +336,7 @@ type ActiveContentProps = {
   setDesign: (next: TemplateConfig | ((prev: TemplateConfig) => TemplateConfig)) => void;
   resume: Resume | null;
   onRestore: (data: ResumeData, nextLinks?: ResumeLinks) => void;
-  flush: () => Promise<void>;
+  flush: () => Promise<string>;
 };
 
 function ActiveContent(props: ActiveContentProps) {

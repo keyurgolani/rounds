@@ -16,7 +16,7 @@ Production compose runs four containers on a private network by default:
 - `runner`: FastAPI code execution service.
 - `pdf-renderer`: the headless-Chromium sidecar the runner sends PDF renders to.
 
-A fifth container, `materializer`, renders Legacy Artifact Snapshots for PocketBase. It joins only the internal `materialize` network, which PocketBase also joins, so only PocketBase reaches it and it has no route out. Nothing calls it yet (a later release wires PocketBase to it), so it sits behind the `materializer` compose profile and does not start on a plain `up`. That keeps the stack starting after an upgrade before a `vX.Y.Z` tag publishes `rounds-materializer:latest`, and on a rollback to an older tag that has no materializer image. Start it alongside the rest with `docker compose -f docker-compose.prod.yml --profile materializer up -d` once a release carries its image.
+A fifth container, `materializer`, renders Legacy Artifact Snapshots for PocketBase. It joins only the internal `materialize` network, which PocketBase also joins, so only PocketBase reaches it and it has no route out. PocketBase calls it only while `ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE` is enabled or an operator runs the snapshot scan, so it sits behind the `materializer` compose profile and does not start on a plain `up`. That keeps the stack starting after an upgrade before a `vX.Y.Z` tag publishes `rounds-materializer:latest`, and on a rollback to an older tag that has no materializer image. Start it alongside the rest with `docker compose -f docker-compose.prod.yml --profile materializer up -d` before you scan or turn the gate on ([operations.md](operations.md#legacy-artifact-snapshots)).
 
 Only `HTTP_PORT` is exposed on the host.
 
@@ -128,7 +128,7 @@ kubectl apply -k k8s/
 
 PocketBase should remain single-replica with a `Recreate` strategy when using SQLite. Frontend and runner can scale horizontally.
 
-`k8s/materializer.yaml` runs the snapshot materializer with a `NetworkPolicy` that admits only pods labeled `rounds.io/net: pocketbase` and allows no egress. It needs a CNI that enforces `NetworkPolicy`; without one the policy applies but does nothing. It is opt-in and not in the default `kustomization.yaml` resources, because nothing calls it yet: a plain `kubectl apply -k k8s/` leaves it out. Enable it once a release carries its image with `kubectl apply -k k8s/ && kubectl apply -f k8s/materializer.yaml` (set its image to your registry and tag). A later release folds it back into the kustomization.
+`k8s/overlays/materializer/materializer.yaml` runs the snapshot materializer with a `NetworkPolicy` that admits only pods labeled `rounds.io/net: pocketbase` and allows no egress. It needs a CNI that enforces `NetworkPolicy`; without one the policy applies but does nothing. It is opt-in: the base `kustomization.yaml` leaves it out, so a plain `kubectl apply -k k8s/` runs no materializer, which a cluster with `ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE` off doesn't need. Apply `kubectl apply -k k8s/overlays/materializer` instead of the base (it includes the base) before you scan or turn the gate on, with its image pinned to your registry and tag.
 
 ## Verification
 

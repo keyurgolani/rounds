@@ -82,6 +82,7 @@ def test_boot_logs_every_pocketbase_gate_in_one_line():
         "service": "pocketbase",
         "gates": {
             "EXECUTION_STORE": {"value": "off", "source": "default"},
+            "LEGACY_SNAPSHOT_CREATE": {"value": "disabled", "source": "default"},
             "SIGNUPS": {"value": "disabled", "source": "alias"},
             "DEMO": {"value": "disabled", "source": "default"},
         },

@@ -41,6 +41,10 @@ services:
       # one before the other.
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
       - ROUNDS_EXECUTION_SECRET=${PB_EXECUTION_SECRET:-}
+      # Legacy Artifact Snapshot creation (ROUNDS-00A-L04): the snapshot
+      # phases turn it on and off, here and on both runners.
+      - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
+      - MATERIALIZER_URL=http://materializer:4100
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/api/health >/dev/null 2>&1 || exit 1"]
       interval: 3s
@@ -99,6 +103,7 @@ services:
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
       - ROUNDS_EXECUTION_SECRET=${RUNNER_EXECUTION_SECRET:-}
+      - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
     depends_on:
       pocketbase:
         condition: service_healthy

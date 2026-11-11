@@ -23,6 +23,9 @@ const DEBOUNCE_MS = 700;
 // Keep a short-lived save in flight from kicking another version row
 // per keystroke — coalesce auto-versions to one per minute of activity.
 const VERSION_COALESCE_MS = 60_000;
+// After a failed save: the first retry's wait, doubling to this cap.
+const RETRY_FIRST_MS = 2_000;
+const RETRY_MAX_MS = 30_000;
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -44,7 +47,12 @@ export type UseResumeResult = {
   // generated value didn't change). Caller should navigate to
   // /resumes/<newSlug> if it differs from the URL.
   rename: (name: string) => Promise<string | null>;
-  flush: () => Promise<void>;
+  // Saves every pending edit now (ROUNDS-00A-L04). Waits for a save
+  // already in flight, rejects when a save fails, and resolves with the
+  // resume's saved `updated`, which server PDF sends as
+  // `expected_updated`. A failed save keeps its edits pending, so the
+  // next save carries them.
+  flush: () => Promise<string>;
 };
 
 // PocketBase column names are snake_case; the patch we send to
@@ -74,6 +82,19 @@ export function useResume(slug: string | undefined): UseResumeResult {
   // Pending patch coalesces calls between debounce ticks.
   const pendingRef = useRef<Pending>({});
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The save in flight; saves run one at a time, each after the last.
+  const savingRef = useRef<Promise<void> | null>(null);
+  // The resume's `updated` as the server last answered it.
+  const savedAtRef = useRef<string | null>(null);
+  // After a failed save, the timer that tries again, and how many tries
+  // have failed in a row (the wait doubles each time, up to a cap).
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const failuresRef = useRef(0);
+  // The latest save, for the retry timer and the unmount save, which
+  // outlive the render that set them up.
+  const saveRef = useRef<(() => Promise<void>) | null>(null);
+  // Cleared on unmount: the save made then is the last, with no retry.
+  const mountedRef = useRef(true);
   const lastVersionAtRef = useRef<number>(0);
   const dataRef = useRef<ResumeData>(emptyData());
   const linksRef = useRef<ResumeLinks>(emptyLinks());
@@ -105,6 +126,7 @@ export function useResume(slug: string | undefined): UseResumeResult {
         setLocalTemplateId(r.template_id || 'modern');
         setLocalDesign(r.design || {});
         setLastSavedAt(r.updated_at);
+        savedAtRef.current = r.updated_at;
         loadedSlugRef.current = r.slug;
         if (resolved.changed) scheduleRef.current?.({ data: resolved.data, links: resolved.links });
       })
@@ -116,6 +138,8 @@ export function useResume(slug: string | undefined): UseResumeResult {
   }, [slug]);
 
   // --- Save mechanics --------------------------------------------------
+  // Rejects when the save fails, with its patch put back under anything
+  // typed since.
   const performSave = useCallback(async () => {
     const r = resume;
     const patch = pendingRef.current;
@@ -127,6 +151,8 @@ export function useResume(slug: string | undefined): UseResumeResult {
       const updated = await updateResume(r.id, patch);
       setResume(updated);
       setLastSavedAt(updated.updated_at);
+      savedAtRef.current = updated.updated_at;
+      failuresRef.current = 0;
       setSaveState('saved');
 
       // Stamp an auto version, but coalesce so we don't write one per
@@ -151,10 +177,46 @@ export function useResume(slug: string | undefined): UseResumeResult {
         setSaveState((s) => (s === 'saved' ? 'idle' : s));
       }, 1200);
     } catch (err) {
+      pendingRef.current = { ...patch, ...pendingRef.current };
       setSaveState('error');
       setError((err as Error).message);
+      // Try again on its own, waiting longer after each failure in a row,
+      // so the edits never sit unsaved until the next keystroke.
+      failuresRef.current += 1;
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+      if (!mountedRef.current) throw err;
+      const wait = Math.min(RETRY_MAX_MS, RETRY_FIRST_MS * 2 ** (failuresRef.current - 1));
+      retryTimerRef.current = setTimeout(() => {
+        retryTimerRef.current = null;
+        saveRef.current?.().catch(() => undefined);
+      }, wait);
+      throw err;
     }
   }, [resume]);
+
+  // Starts a save once the one in flight ends, and returns it. A save
+  // started for any reason replaces a retry still waiting.
+  const save = useCallback((): Promise<void> => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+    const before = savingRef.current;
+    const next = (before ? before.catch(() => undefined) : Promise.resolve()).then(performSave);
+    savingRef.current = next;
+    const clear = () => {
+      if (savingRef.current === next) savingRef.current = null;
+    };
+    next.then(clear, clear);
+    return next;
+  }, [performSave]);
+  saveRef.current = save;
+
+  // A save nothing waits on: its failure already shows as the save state.
+  const saveInBackground = useCallback(() => {
+    save().catch(() => undefined);
+  }, [save]);
 
   const schedule = useCallback(
     (patch: Pending) => {
@@ -162,10 +224,10 @@ export function useResume(slug: string | undefined): UseResumeResult {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
-        void performSave();
+        saveInBackground();
       }, DEBOUNCE_MS);
     },
-    [performSave],
+    [saveInBackground],
   );
   // Keep the ref current so the initial-load effect can reach schedule
   // without a dependency cycle.
@@ -221,12 +283,13 @@ export function useResume(slug: string | undefined): UseResumeResult {
 
       // Flush any in-flight edits before we re-slug. Otherwise a
       // pending PATCH from a recent keystroke could land after our
-      // rename and clobber the new slug.
+      // rename and clobber the new slug. A failed save keeps its edits
+      // pending and the rename still goes ahead.
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
-        await performSave();
       }
+      await save().catch(() => undefined);
 
       let newSlug = current.slug;
       try {
@@ -251,6 +314,7 @@ export function useResume(slug: string | undefined): UseResumeResult {
         setResume(saved);
         setSaveState('saved');
         setLastSavedAt(saved.updated_at);
+        savedAtRef.current = saved.updated_at;
         // Mark the saved slug as already loaded so the slug-keyed
         // loader effect short-circuits when ResumeStudio navigates.
         loadedSlugRef.current = saved.slug;
@@ -260,37 +324,50 @@ export function useResume(slug: string | undefined): UseResumeResult {
         return current.slug;
       }
     },
-    [resume, performSave],
+    [resume, save],
   );
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (): Promise<string> => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    await performSave();
-  }, [performSave]);
+    // Queued behind the save in flight, so a failure of either rejects.
+    if (savingRef.current) await savingRef.current;
+    await save();
+    if (savedAtRef.current === null) throw new Error('This resume has not loaded yet.');
+    return savedAtRef.current;
+  }, [save]);
 
   // --- Lifecycle: flush on unmount/blur to avoid losing edits ----------
+  // Set up once: it reads the latest save through saveRef, so a new
+  // `resume` (every save makes one) doesn't tear it down mid-edit.
   useEffect(() => {
-    const onBeforeUnload = () => {
-      // Best-effort sync flush; modern browsers ignore async during
-      // unload, so we just clear the timer and rely on saves already
-      // dispatched in the background.
+    // Starts a save of anything not yet saved, waiting or not.
+    const saveWhatIsLeft = () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
-        void performSave();
       }
+      if (Object.keys(pendingRef.current).length > 0) saveRef.current?.().catch(() => undefined);
     };
+    // Best-effort; modern browsers don't wait for async work during
+    // unload, so this only dispatches the save.
+    const onBeforeUnload = () => saveWhatIsLeft();
+    mountedRef.current = true;
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => {
+      mountedRef.current = false;
       window.removeEventListener('beforeunload', onBeforeUnload);
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
+      // Leaving the Studio (in-app navigation) saves pending edits,
+      // a failed save's included, instead of dropping them.
+      saveWhatIsLeft();
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
       }
     };
-  }, [performSave]);
+  }, []);
 
   return {
     resume,

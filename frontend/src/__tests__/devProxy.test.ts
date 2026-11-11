@@ -98,6 +98,12 @@ const NEVER_PROXIED = [
   '/api/collections/execution_servicé/records',
   '/api/collections/no-such-name/records',
   '/api/collections/users%2E/records',
+  '/api/rounds/legacy-snapshots',
+  '/api/rounds/legacy-snapshots/',
+  '/api/rounds/legacy-snapshots?x=1',
+  '/api/rounds/Legacy-Snapshots',
+  '/api/rounds/LEGACY-SNAPSHOTS/x',
+  '/api/rounds/legacy%2Dsnapshots',
   '/api/admins',
   '/api/admins/auth-with-password',
   '/api/settings',
@@ -113,6 +119,8 @@ const NEVER_PROXIED = [
   '/api/Collections',
   '/api/COLLECTIONS/users',
   '/api/collections/Users/',
+  '/api/collections/USERS',
+  '/api/collections/Users/?fields=schema',
 ];
 
 const PROXIED = [
@@ -132,6 +140,8 @@ const PROXIED = [
   '/api/collections/users/auth-with-password',
   '/api/collections/Users/records',
   '/api/collections/execution_jobs/records',
+  '/api/collections/legacy_artifact_snapshots/records',
+  '/api/pdf/snapshots',
 ];
 
 describe('the dev proxy and production nginx', () => {
@@ -155,6 +165,7 @@ describe('the dev proxy and production nginx', () => {
     '/api/collections/execution_service/auth-with-password',
     '/api/collections/Execution_Service/auth-with-password',
     '/api/collections/execution_servic%C3%A9/auth-with-password',
+    '/api/rounds/legacy-snapshots',
   ])('refuses a WebSocket upgrade on %s too', (url) => {
     const { entry, socket, forwarded } = upgrade(url);
     expect(entry.ws).toBe(true);
@@ -174,6 +185,7 @@ describe('the dev proxy and production nginx', () => {
     for (const url of [
       '/api/collections/Execution_Service/auth-with-password',
       '/api/collections/execution_servic%C3%A9/auth-with-password',
+      '/api/rounds/Legacy-Snapshots',
     ]) {
       expect(entry.bypass?.({ url } as never, {} as never, entry)).toBe(false);
     }
@@ -188,6 +200,24 @@ describe('the dev proxy and production nginx', () => {
       expect(nginxDenies(url)).toBe(false);
       expect(viteDenies(url)).toBe(false);
     }
+  });
+
+  it('denies each denied collection URL with its name in other cases too', () => {
+    for (const url of NEVER_PROXIED.filter((u) => /^\/api\/collections\/[^/?]+/.test(u))) {
+      const [path, query] = url.split('?');
+      const parts = path.split('/');
+      const name = parts[3];
+      for (const other of [name.toUpperCase(), name[0].toUpperCase() + name.slice(1)]) {
+        const changed = [...parts.slice(0, 3), other, ...parts.slice(4)].join('/') + (query ? `?${query}` : '');
+        expect(nginxDenies(changed), changed).toBe(true);
+        expect(viteDenies(changed), changed).toBe(true);
+      }
+    }
+  });
+
+  it('sends the snapshot route to the runner and keeps its hook from PocketBase', () => {
+    expect(viteEntry('/api/pdf/snapshots')?.target).toBe(viteEntry('/api/run')?.target);
+    expect(viteDenies('/api/rounds/legacy-snapshots')).toBe(true);
   });
 
   it('sends the runner routes to the runner and the rest of /api to PocketBase', () => {

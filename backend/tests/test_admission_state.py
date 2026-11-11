@@ -1048,6 +1048,7 @@ def _hook_table() -> dict:
 
 
 def test_each_operations_charge_matches_the_runners_timeouts():
+    from app import legacy_snapshots
     from routers import ai_coding, pdf, runner, take_home
 
     hook = _hook_table()
@@ -1059,6 +1060,7 @@ def test_each_operations_charge_matches_the_runners_timeouts():
         "take_home_run": [take_home.RUN_TIMEOUT_S] * 2,
         "take_home_submit": [take_home.SUBMIT_TIMEOUT_S] * 2,
         "pdf_render": [pdf.RENDER_TIMEOUT_S] * 2,
+        "snapshot_create": [legacy_snapshots.MATERIALIZE_TIMEOUT_S] * 2,
     }
     assert set(hook["operations"]) == {r.operation for r in admission.ROUTES.values() if r.allocates}
     # What each route charges at admission is inside the hook's range;
