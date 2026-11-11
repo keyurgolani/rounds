@@ -153,7 +153,6 @@ import {
 } from '../experience/experienceApi';
 import {
   createResume,
-  createShareLink,
   createVariant,
   createVersion,
   updateResume,
@@ -611,13 +610,6 @@ const WRITE_PATHS: Record<string, Branch[]> = {
       writes: [['ai_settings', 'update', 'caller']],
     },
   ],
-  'features/resume/api.ts#createShareLink': [
-    {
-      when: 'creates a share link',
-      run: () => createShareLink({ variantId: 'resume_variants-1', token: 'share-token' }),
-      writes: [['resume_share_links', 'create', 'caller']],
-    },
-  ],
 
   'pages/ai-coding/aiCodingApi.ts#upsertDraft': [
     {
@@ -963,7 +955,6 @@ describe('coverage guard', () => {
     'resumes',
     'resume_variants',
     'resume_versions',
-    'resume_share_links',
     'ai_settings',
     'ai_coding_drafts',
     'ai_coding_attempts',
@@ -998,5 +989,14 @@ describe('coverage guard', () => {
       CASES.flatMap(({ site, writes }) => writes.map(([collection, op]) => [site, `${op} ${collection}`] as const)),
     );
     expect(exercised).toEqual(inSource);
+  });
+
+  // Since ROUNDS-00B-L06 no client writes an older share link or its views:
+  // a new link is the runner's CreateShare (features/resume/share/client.ts).
+  it('names no older share link collection anywhere in the SPA', () => {
+    const naming = sourceFiles(SRC)
+      .filter((path) => /resume_share_(links|views)/.test(readFileSync(path, 'utf8')))
+      .map((path) => relative(SRC, path).split(sep).join('/'));
+    expect(naming).toEqual([]);
   });
 });

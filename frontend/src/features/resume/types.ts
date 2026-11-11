@@ -223,17 +223,6 @@ export type AISettings = {
   updated_at: string;
 };
 
-export type ShareLink = {
-  id: string;
-  user_id: string;
-  variant_id: string;
-  token: string;
-  is_password: boolean;
-  password_hash?: string;
-  expires_at?: string;
-  created_at: string;
-};
-
 // Empty resume factory — used when creating a new blank resume.
 export function emptyResumeData(): ResumeData {
   return {

@@ -1,83 +1,16 @@
-// Thin wrapper around /api/share. Authed endpoints carry a Bearer
-// PocketBase token; the by-token public read is anonymous.
+// Thin wrapper around /api/share. Owner calls carry a Bearer PocketBase
+// token; the Share Capability resolver is anonymous.
 //
-// Share capabilities (ROUNDS-00B-L04), while the resolution gate is open:
-// CreateShare and RotateShareBearer answer a link's secret once, in the
-// response that issues it, and a retry under the same Idempotency-Key
-// answers `already-issued` without it. Links are `/r#<token>`, so the
-// secret stays out of every request line.
+// Share capabilities (ROUNDS-00B-L04): CreateShare and RotateShareBearer
+// answer a link's secret once, in the response that issues it, and a retry
+// under the same Idempotency-Key answers `already-issued` without it. Links
+// are `/r#<token>`, so the secret stays out of every request line.
+//
+// Older links (ROUNDS-00B-L06): every link made before then is turned off
+// for good. The owner's list says what each one shared and why it's off,
+// and "Get a new link" is CreateShare naming one of them.
 
 import { isRunnerError, runnerFetch, runnerJSON } from '../../../lib/runnerFetch';
-import type { ResumeData, TemplateConfig } from '../types';
-
-export type ShareLink = {
-  id: string;
-  token: string;
-  resume_id: string | null;
-  variant_id: string | null;
-  created: string;
-};
-
-// The only shape a public read answers (backend/routers/share.py,
-// project()): no owner name, link kind, ids, or view counts.
-export type PublicResumePayload = {
-  data: ResumeData;
-  template_id: string;
-  design: TemplateConfig;
-};
-
-export function listShareLinks(): Promise<ShareLink[]> {
-  return runnerJSON<ShareLink[]>('/api/share', {
-    method: 'GET',
-    errorPrefix: 'Share',
-  });
-}
-
-// A share capability's bearer: what CreateShare answers while the runner
-// reads the resolution gate as open.
-const CAPABILITY_BEARER = /^sd[0-9]{1,3}_[A-Za-z0-9_-]{22}$/;
-
-/** Only the earlier create's own answer: during a gate flip, a runner that
- *  reads the gate as open answers with a share capability, which this
- *  dialog can't show or copy, so it refuses that answer whole. */
-export function earlierLink(answer: unknown): ShareLink | null {
-  if (!answer || typeof answer !== 'object' || Array.isArray(answer)) return null;
-  const v = answer as Record<string, unknown>;
-  if ('secret_delivery' in v || typeof v.id !== 'string' || typeof v.token !== 'string') return null;
-  if (CAPABILITY_BEARER.test(v.token)) return null;
-  return answer as ShareLink;
-}
-
-export async function createShareLink(input: {
-  resume_id?: string;
-  variant_id?: string;
-}): Promise<ShareLink> {
-  const answer = await runnerJSON<unknown>('/api/share', {
-    method: 'POST',
-    body: {
-      resume_id: input.resume_id ?? null,
-      variant_id: input.variant_id ?? null,
-    },
-    errorPrefix: 'Share',
-  });
-  const link = earlierLink(answer);
-  if (link === null) throw new Error('Share: links can’t be made here right now. Reload the page, then try again.');
-  return link;
-}
-
-export function deleteShareLink(id: string): Promise<{ ok: boolean }> {
-  return runnerJSON(`/api/share/${id}`, {
-    method: 'DELETE',
-    errorPrefix: 'Share',
-  });
-}
-
-export function fetchPublicResume(token: string): Promise<PublicResumePayload> {
-  return runnerJSON<PublicResumePayload>(
-    `/api/share/by-token/${encodeURIComponent(token)}`,
-    { method: 'GET', auth: 'none', errorPrefix: 'Share' },
-  );
-}
 
 // What the Share Capability resolver answers for a capability that
 // resolves (backend/app/share_capabilities.py): its snapshot's markup and
@@ -131,10 +64,6 @@ export class ShareThrottled extends Error {
     const seconds = retryAfterSeconds !== null && retryAfterSeconds > 0 ? retryAfterSeconds : 60;
     this.minutes = Math.max(1, Math.ceil(seconds / 60));
   }
-}
-
-export function buildShareUrl(token: string): string {
-  return `${window.location.origin}/r/${token}`;
 }
 
 // ---- share capabilities (ROUNDS-00B-L04) ------------------------------------
@@ -232,6 +161,22 @@ export async function createCapability(
   return outcome;
 }
 
+/** "Get a new link" for one of the caller's older links, under `key`, one
+ *  per press. The server decides what the new link shares: the same resume
+ *  or variant the older one did. A link that already has its new one
+ *  answers `already-issued` under any key. */
+export async function replaceOlderLink(id: string, key: string): Promise<CreateOutcome> {
+  const res = await runnerFetch('/api/share', {
+    method: 'POST',
+    body: { legacy_link_id: id },
+    idempotencyKey: key,
+    errorPrefix: 'Share',
+  });
+  const outcome = delivered(await res.json().catch(() => null));
+  if (outcome === null) throw new Error('Share: unexpected answer');
+  return outcome;
+}
+
 /** RotateShareBearer under `key`, one per Rotate click. */
 export async function rotateCapability(id: string, expectedVersion: number, key: string): Promise<RotateOutcome> {
   const res = await runnerFetch(`/api/share/capabilities/${encodeURIComponent(id)}/rotate`, {
@@ -294,3 +239,61 @@ export function capabilityState(row: ShareCapability, now: number = Date.now()):
   return { kind: 'expires', at };
 }
 
+// ---- older links (ROUNDS-00B-L06) -------------------------------------------
+
+export type OlderLinkStatus = 'migrated' | 'revoked_demo' | 'revoked_unverified';
+
+/** One of the caller's older links as the runner lists it (backend/routers/
+ *  share.py): what it shared and when it was turned off, never a secret. */
+export type OlderLink = {
+  id: string;
+  status: OlderLinkStatus;
+  reason: string;
+  created: string;
+  turned_off_at: string;
+  replaced_by: string;
+  replaced_at: string;
+  target: 'resume' | 'variant';
+  resume_id: string;
+  variant_id: string;
+  root_resume_id: string;
+  variant_name: string;
+};
+
+const OLDER_STATUSES: readonly string[] = ['migrated', 'revoked_demo', 'revoked_unverified'];
+const OLDER_TEXT = ['id', 'reason', 'created', 'turned_off_at', 'replaced_by', 'replaced_at', 'resume_id', 'variant_id',
+  'root_resume_id', 'variant_name'] as const;
+
+function isOlderLink(value: unknown): value is OlderLink {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return (
+    OLDER_TEXT.every((k) => typeof v[k] === 'string') &&
+    RECORD_ID.test(v.id as string) &&
+    OLDER_STATUSES.includes(v.status as string) &&
+    (v.target === 'resume' || v.target === 'variant')
+  );
+}
+
+/** The caller's older links, newest first. */
+export async function listOlderLinks(): Promise<OlderLink[]> {
+  const answer = await runnerJSON<unknown>('/api/share', { method: 'GET', errorPrefix: 'Share' });
+  const items = answer && typeof answer === 'object' ? (answer as { legacy?: unknown }).legacy : undefined;
+  if (!Array.isArray(items) || !items.every(isOlderLink)) throw new Error('Share: unexpected answer');
+  return items;
+}
+
+export type OlderLinkState =
+  | { kind: 'turned-off'; at: Date | null }
+  | { kind: 'demo' }
+  | { kind: 'unverified' }
+  | { kind: 'replaced'; at: Date | null };
+
+/** Why an older link is off, and whether it already has its new link.
+ *  Only `turned-off` links can get one. */
+export function olderLinkState(link: OlderLink): OlderLinkState {
+  if (link.replaced_by) return { kind: 'replaced', at: parseShareDate(link.replaced_at) };
+  if (link.status === 'revoked_demo') return { kind: 'demo' };
+  if (link.status === 'revoked_unverified') return { kind: 'unverified' };
+  return { kind: 'turned-off', at: parseShareDate(link.turned_off_at) };
+}

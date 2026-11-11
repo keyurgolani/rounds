@@ -85,7 +85,7 @@ const NEVER_PROXIED = [
   '/_/images/logo.svg',
   // The older share read's path, which nginx answers itself (ROUNDS-00B-L06).
   '/api/share/by-token/AbCdEfGhIjKlMnOpQrStUv',
-  '/API/Share/By-Token/AbCdEfGhIjKlMnOpQrStUv',
+  '/api/Share/By-Token/AbCdEfGhIjKlMnOpQrStUv',
   '/api/share/by-token',
   '/api/rounds/admission/admit',
   '/api/rounds/admission/usage?x=1',
