@@ -249,6 +249,12 @@ def test_the_scratch_line_carries_only_the_settings_a_key_can_need():
         assert "needs" not in line and line["dropped"] == ["needs"]
 
 
+@pytest.mark.parametrize("verdict", ["job", "retry_job"])
+def test_a_decision_line_keeps_a_jobs_idempotency_verdict(verdict):
+    line = obs.build("decision", idempotency=verdict, quota="skipped")
+    assert line["idempotency"] == verdict and "dropped" not in line
+
+
 def test_the_four_scratch_kinds_agree_everywhere():
     assert set(handlers.SCRATCH_HANDLERS) == keys.SCRATCH_OPERATIONS == set(jobs.ROUTES)
     for kind, path in jobs.ROUTES.items():
