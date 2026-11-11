@@ -285,6 +285,13 @@ def test_a_demo_caller_changes_nothing_but_its_profile(data):
     assert run({"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO, "data": data}) == [NOT_PERMITTED]
 
 
+def test_a_demo_caller_changing_its_demo_flag_gets_the_admission_answer_whichever_hook_runs_first():
+    # The record carries the change, as PocketBase's update request does.
+    assert run({"call": "guardAccountUpdate", "fields": STANDARD, "original": DEMO, "data": {"is_demo": False}}) == [
+        {"status": 400, "message": "These account fields can't be changed.", "data": None}
+    ]
+
+
 def test_a_demo_caller_updates_its_name_bio_target_and_avatar():
     assert run(
         {"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO,

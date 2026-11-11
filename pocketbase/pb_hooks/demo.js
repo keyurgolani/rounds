@@ -129,6 +129,9 @@ function guardSession(c, env) {
 // fields. A superuser isn't held to it.
 function guardAccountUpdate(e) {
   if (isSuperuser(e.httpContext) || !isDemo(e.record.originalCopy())) return;
+  // A change to the demo flags gets admission.js's answer whichever of the
+  // two users-update hooks PocketBase runs first, so it's always the same.
+  require(`${__hooks}/admission.js`).guardDemoUpdate(e);
   const data = $apis.requestInfo(e.httpContext).data || {};
   const keys = Object.keys(data).concat(Object.keys(e.uploadedFiles || {}));
   if (keys.some((key) => PROFILE_FIELDS.indexOf(key.replace(/[+-]$/, "")) < 0)) throw notPermitted("update", "users");
