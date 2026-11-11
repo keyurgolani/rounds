@@ -774,16 +774,20 @@ function reportTargetProblem(out, listDir) {
 // 0600), checks once more that nothing took `out` meanwhile, and renames
 // it into place. A rename replaces a directory entry and never writes
 // through one, so the report never lands through a link or into a FIFO,
-// and never changes another file's bytes. The temporary file goes on any
-// failure. `fsops` is { listDir, writeFile, rename, remove, random }.
+// and never changes another file's bytes. The name it renames onto is the
+// cleaned path it checked, so the report lands exactly where the check
+// looked. The temporary file goes on any failure, a failed write's
+// included. `fsops` is { listDir, writeFile, rename, remove, random }.
 function writeReportFile(out, text, fsops) {
   const { dir, name } = splitPath(out);
-  const temp = (dir === "/" ? "" : dir) + "/." + name + "." + fsops.random() + ".tmp";
-  fsops.writeFile(temp, text, 0o600);
+  const base = dir === "/" ? "" : dir;
+  const target = base + "/" + name;
+  const temp = base + "/." + name + "." + fsops.random() + ".tmp";
   try {
-    const taken = reportTargetProblem(out, fsops.listDir);
+    fsops.writeFile(temp, text, 0o600);
+    const taken = reportTargetProblem(target, fsops.listDir);
     if (taken !== null) throw new Error("legacy-snapshot-scan: " + taken);
-    fsops.rename(temp, out);
+    fsops.rename(temp, target);
   } catch (err) {
     try {
       fsops.remove(temp);

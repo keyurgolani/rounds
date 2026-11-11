@@ -520,6 +520,16 @@ def test_the_report_is_written_beside_its_name_and_renamed_into_place():
     ]
 
 
+def test_the_report_lands_on_the_cleaned_name_it_checked():
+    got = _write({"out": "/srv/reports/sub/../scan.json", "listings": {"/srv/reports": []}})
+    assert got["error"] is None
+    assert got["calls"] == [
+        ["writeFile", "/srv/reports/.scan.json.r4nd0m.tmp", 0o600],
+        ["listDir", "/srv/reports"],
+        ["rename", "/srv/reports/.scan.json.r4nd0m.tmp", "/srv/reports/scan.json"],
+    ]
+
+
 def test_a_name_taken_while_the_scan_ran_is_refused_and_the_temporary_file_removed():
     got = _write({"out": "/srv/reports/scan.json", "listings": {"/srv/reports": []},
                   "appear": ["/srv/reports", "scan.json"]})
@@ -530,7 +540,8 @@ def test_a_name_taken_while_the_scan_ran_is_refused_and_the_temporary_file_remov
 
 @pytest.mark.parametrize("fail,expected", [
     ("rename", ["writeFile", "listDir", "rename", "remove"]),
-    ("writeFile", ["writeFile"]),
+    # A write that fails partway (a full disk) can leave part of the file.
+    ("writeFile", ["writeFile", "remove"]),
 ])
 def test_a_failed_write_leaves_neither_the_report_nor_its_temporary_file(fail, expected):
     got = _write({"out": "/srv/reports/scan.json", "listings": {"/srv/reports": []}, "fail": fail})
