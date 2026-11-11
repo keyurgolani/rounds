@@ -12,6 +12,7 @@ import hmac
 import io
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -161,6 +162,44 @@ def test_anything_but_a_scan_report_is_refused(tmp_path, raw):
 def test_no_secret_or_the_development_placeholder_signs_nothing(tmp_path, secret):
     code, out, err = run(["sign", write(tmp_path, "r.json", scan_report())], secret=secret)
     assert code == 2 and out == "" and legacy_receipt.SECRET_ENV in err
+
+
+# Every default a checked-in compose file gives AI_KEY_SECRET.
+COMPOSE_DEFAULT = re.compile(r"AI_KEY_SECRET=\$\{AI_KEY_SECRET:-([^}]*)\}")
+
+
+def compose_defaults() -> set[str]:
+    found: set[str] = set()
+    for path in [*ROOT.glob("docker-compose*.yml"), *ROOT.glob("*/compose.yml"), *ROOT.glob("*/*/compose.yml")]:
+        found.update(m.group(1) for m in COMPOSE_DEFAULT.finditer(path.read_text()))
+    return found
+
+
+def test_the_compose_files_defaults_were_found():
+    assert legacy_receipt.DEV_SECRET in compose_defaults()
+
+
+@pytest.mark.parametrize("secret", sorted(compose_defaults()))
+def test_no_compose_default_signs_or_verifies(tmp_path, secret):
+    signed = _signed()
+    assert run(["sign", write(tmp_path, "r.json", scan_report())], secret=secret)[0] == 2
+    code, out, err = run(["verify", write(tmp_path, "s.json", signed)], secret=secret)
+    assert code == 2 and out == ""
+    assert secret == "" or secret not in err
+
+
+@pytest.mark.parametrize("secret", [
+    " ", "\t\n", "short-but-real-secret", "x" * 31,
+    "prod-" + "a" * 40 + "-Do-Not-Use-In-Prod",
+])
+def test_the_key_refuses_anything_but_an_operator_secret_with_a_typed_error(secret):
+    with pytest.raises(legacy_receipt.UnsafeSecretError):
+        legacy_receipt.key_for("rounds/legacy-snapshot-scan/v1", secret)
+    assert issubclass(legacy_receipt.UnsafeSecretError, legacy_receipt.ConfigError)
+
+
+def test_an_operator_secret_of_32_bytes_signs():
+    assert len(legacy_receipt.key_for("rounds/legacy-snapshot-scan/v1", "f" * 32)) == 32
 
 
 def test_usage_errors_are_exit_2(tmp_path):

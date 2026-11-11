@@ -41,9 +41,14 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from app import canonical
 
 SECRET_ENV = "AI_KEY_SECRET"
-# The development compose file's placeholder (app.crypto): a signature
-# under it proves nothing, so it signs nothing.
+# The development compose files' placeholder (app.crypto). A signature
+# under any development value proves nothing, so none of them signs or
+# verifies: there is no fallback key, here or in production.
 DEV_SECRET = "rounds-dev-key-DO-NOT-USE-IN-PROD"
+DEV_MARKER = "do-not-use-in-prod"
+# An operator's secret is `openssl rand -hex 32` (docs/operations.md); a
+# shorter one is no key to sign an inventory with.
+MIN_SECRET_BYTES = 32
 ALGORITHM = "HMAC-SHA256"
 # Report schema -> the HKDF label its key derives with.
 LABELS: dict[str, str] = {"legacy-snapshot-scan/v1": "rounds/legacy-snapshot-scan/v1"}
@@ -58,12 +63,24 @@ class ReportError(Exception):
     """The report isn't one this signs, or it doesn't verify."""
 
 
+class UnsafeSecretError(ConfigError):
+    """No operator secret: it is unset, a development value, or too short.
+    Signing and verifying refuse rather than fall back to any other key."""
+
+
 def key_for(label: str, secret: str) -> bytes:
-    """The signing key: HKDF-SHA256 over the secret with the label."""
-    if not secret:
-        raise ConfigError(f"{SECRET_ENV} is not set; sign on the runner that holds it")
-    if secret == DEV_SECRET:
-        raise ConfigError(f"{SECRET_ENV} is the development placeholder, so a signature under it proves nothing")
+    """The signing key: HKDF-SHA256 over the operator's secret with the
+    label. Raises UnsafeSecretError for anything but an operator's secret."""
+    if not secret or not secret.strip():
+        raise UnsafeSecretError(f"{SECRET_ENV} is not set; sign on the runner that holds it")
+    if secret == DEV_SECRET or DEV_MARKER in secret.lower():
+        raise UnsafeSecretError(
+            f"{SECRET_ENV} is a development placeholder, so a signature under it proves nothing"
+        )
+    if len(secret.encode("utf-8")) < MIN_SECRET_BYTES:
+        raise UnsafeSecretError(
+            f"{SECRET_ENV} is shorter than {MIN_SECRET_BYTES} bytes; set the deployment's own secret"
+        )
     return HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=label.encode("ascii")).derive(
         secret.encode("utf-8")
     )

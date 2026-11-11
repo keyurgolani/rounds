@@ -12,17 +12,20 @@ vi.mock('../../../export/pdf', () => ({
   exportPdfServer: vi.fn(),
   exportPdfPrint: vi.fn(),
 }));
+vi.mock('../../../export/docx', () => ({ exportDocx: vi.fn() }));
+vi.mock('../../../export/markdown', () => ({ exportMarkdown: vi.fn() }));
 
 import ExportTab from '../ExportTab';
 import { exportPdfPrint, exportPdfServer } from '../../../export/pdf';
+import { exportDocx } from '../../../export/docx';
+import { exportMarkdown } from '../../../export/markdown';
 import { RunnerError } from '../../../../../lib/runnerFetch';
 import type { Resume, ResumeData } from '../../../types';
 
 const resume = { id: 'r1', slug: 'jane-doe', name: 'Jane Doe' } as unknown as Resume;
 const data = { personalInfo: { fullName: 'Jane Doe' } } as unknown as ResumeData;
 
-function renderTab() {
-  const onBeforeExport = vi.fn().mockResolvedValue(undefined);
+function renderTab(onBeforeExport = vi.fn().mockResolvedValue('2026-11-11 08:00:00.000Z')) {
   render(
     <MemoryRouter>
       <ExportTab resume={resume} data={data} onBeforeExport={onBeforeExport} />
@@ -38,6 +41,8 @@ function pdfDownload() {
 beforeEach(() => {
   vi.mocked(exportPdfServer).mockReset();
   vi.mocked(exportPdfPrint).mockReset();
+  vi.mocked(exportDocx).mockReset();
+  vi.mocked(exportMarkdown).mockReset();
 });
 
 describe('ExportTab server PDF', () => {
@@ -107,5 +112,49 @@ describe('ExportTab server PDF', () => {
     expect(await screen.findByText('Turned off')).toBeInTheDocument();
     await user.click(pdfDownload());
     await waitFor(() => expect(screen.getByRole('status')).toBeEmptyDOMElement());
+  });
+});
+
+// ROUNDS-00A-L04: a failed save stops only server PDF; the client formats
+// export what is on screen.
+describe('ExportTab after a failed save', () => {
+  const failing = () => vi.fn().mockRejectedValue(new Error('offline'));
+
+  it('pauses server PDF with the reason and keeps focus on its button', async () => {
+    const user = userEvent.setup();
+    renderTab(failing());
+    const download = pdfDownload();
+    download.focus();
+    await user.keyboard('{Enter}');
+    expect(
+      await screen.findByText("Your latest edits didn't save, so server PDF is paused."),
+    ).toBeInTheDocument();
+    expect(exportPdfServer).not.toHaveBeenCalled();
+    expect(screen.queryByText('offline')).not.toBeInTheDocument();
+    await waitFor(() => expect(download).toHaveFocus());
+  });
+
+  it('still exports Word and Markdown from what is on screen', async () => {
+    const user = userEvent.setup();
+    const onBeforeExport = failing();
+    renderTab(onBeforeExport);
+    const [, docx, , markdown] = screen.getAllByRole('button', { name: /download/i });
+    await user.click(docx);
+    await waitFor(() => expect(exportDocx).toHaveBeenCalledWith(data, 'jane-doe'));
+    await user.click(markdown);
+    await waitFor(() => expect(exportMarkdown).toHaveBeenCalledWith(data, 'jane-doe'));
+    expect(onBeforeExport).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/didn't save/)).not.toBeInTheDocument();
+  });
+
+  it('waits for the save before server PDF renders', async () => {
+    let finish: (updated: string) => void = () => undefined;
+    const onBeforeExport = vi.fn(() => new Promise<string>((resolve) => (finish = resolve)));
+    const user = userEvent.setup();
+    renderTab(onBeforeExport);
+    await user.click(pdfDownload());
+    expect(exportPdfServer).not.toHaveBeenCalled();
+    finish('2026-11-11 08:00:01.000Z');
+    await waitFor(() => expect(exportPdfServer).toHaveBeenCalledTimes(1));
   });
 });

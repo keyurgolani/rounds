@@ -144,6 +144,7 @@ describe('useResume flush', () => {
     act(() => {
       flushed = hook.result.current.flush();
     });
+    flushed!.catch(() => undefined);
     await tick();
     await act(async () => saves[0].reject());
     await expect(flushed!).rejects.toThrow('offline');
@@ -173,6 +174,7 @@ describe('useResume flush', () => {
     act(() => {
       second = hook.result.current.flush();
     });
+    second!.catch(() => undefined);
     await act(async () => saves[0].reject());
     await expect(second!).rejects.toThrow('offline');
     await expect(first!).rejects.toThrow('offline');

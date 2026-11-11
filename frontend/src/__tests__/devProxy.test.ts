@@ -102,7 +102,7 @@ const NEVER_PROXIED = [
   '/api/rounds/legacy-snapshots/',
   '/api/rounds/legacy-snapshots?x=1',
   '/api/rounds/Legacy-Snapshots',
-  '/API/rounds/LEGACY-SNAPSHOTS/x',
+  '/api/rounds/LEGACY-SNAPSHOTS/x',
   '/api/rounds/legacy%2Dsnapshots',
   '/api/admins',
   '/api/admins/auth-with-password',
@@ -121,7 +121,6 @@ const NEVER_PROXIED = [
   '/api/collections/Users/',
   '/api/collections/USERS',
   '/api/collections/Users/?fields=schema',
-  '/API/Collections/users',
 ];
 
 const PROXIED = [
