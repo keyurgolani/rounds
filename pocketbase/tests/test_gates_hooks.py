@@ -80,7 +80,10 @@ def test_boot_logs_every_pocketbase_gate_in_one_line():
         "v": "obs/v1",
         "event": "gates",
         "service": "pocketbase",
-        "gates": {"SIGNUPS": {"value": "disabled", "source": "alias"}},
+        "gates": {
+            "EXECUTION_STORE": {"value": "off", "source": "default"},
+            "SIGNUPS": {"value": "disabled", "source": "alias"},
+        },
     }
     assert result["errors"] == []
 

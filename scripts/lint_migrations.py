@@ -10,7 +10,12 @@ it again. So a change may only add migrations:
 - a new migration's up step may not drop a collection or a field, or
   rewrite or delete existing rows, or load code the lint can't read;
 - any other file in that directory fails too, so nothing slips in under a
-  name the lint doesn't read.
+  name the lint doesn't read;
+- a JSON field maxSize that a new migration sets must be registered, at the
+  size the migrations end on, in a ``NNNN_json_limits*.js`` migration. Those
+  sort after PocketBase's own migration that resets every JSON limit to
+  2,000,000 bytes, and set the declared limits back (decision D10, see
+  docs/development.md#json-field-limits).
 
 The scan covers the whole file except the down step, so a helper defined
 outside ``migrate(...)`` counts. It matches destructive and row-writing
@@ -58,6 +63,11 @@ RULES: dict[str, str] = {
     "loads-code": "loads code with require() that the lint can't read",
     "unparsed-migration": "has no migrate(up, down) call the lint can read",
     "unknown-file": f"is in {MIGRATIONS_DIR} but isn't a top-level .js or .ts migration",
+    "unregistered-json-limit": "sets a JSON field's maxSize that no json_limits migration registers at that size",
+    "unreadable-json-limit": "declares a JSON field or sets a maxSize the lint can't tie to one collection, field, "
+                             "and size",
+    "json-limits-registry": "is a json_limits migration that doesn't sort after PocketBase's JSON reset, or whose "
+                            "LIMITS isn't a literal list of [collection, field, bytes]",
 }
 
 # Checked against the scanned code, outside strings and comments, by method
@@ -342,6 +352,718 @@ def scan(source: str) -> list[tuple[str, int | None]]:
     return sorted(hits, key=lambda h: (h[1] or 0, h[0]))
 
 
+# ---- JSON field limits (D10) ---------------------------------------------------------
+
+# PocketBase 0.22's own migration that sets every JSON field's maxSize to its
+# 2,000,000-byte default. It sorts after every 1700xxxxxx migration, so on a
+# fresh database it overwrites what they declare. Each json_limits migration
+# sorts after it and sets the declared limits back from its LIMITS registry,
+# a later file's entry winning over an earlier one's.
+JSON_RESET = "1702134272_set_default_json_max_size.go"
+JSON_DEFAULT_BYTES = 2_000_000
+REGISTRY_FILE = re.compile(r"\A\d+_json_limits(?:_[a-z0-9]+)*\.js\Z")
+JSON_RULES = ("unregistered-json-limit", "unreadable-json-limit", "json-limits-registry")
+
+_IDENT = r"[A-Za-z_$][\w$]*"
+_DECL = re.compile(rf"\b(?:const|let|var)\s+({_IDENT})\s*=(?![=>])\s*")
+_FOR_OF = re.compile(rf"\bfor\s*\(\s*(?:const|let|var)\s+({_IDENT})\s+of\b\s*")
+_JSON_TYPE = re.compile(r"\btype\s*:\s*([\"'])json\1")
+_MAX_SIZE = re.compile(r"\bmaxSize\b")
+_SET_MAX_SIZE = re.compile(r"\.\s*options\s*\.\s*maxSize\s*=(?!=)\s*")
+_CHANGE_MAX_SIZE = re.compile(r"\bmaxSize\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|\?\?|&&|\|\|)=")
+_LIMITS = re.compile(r"\bconst\s+LIMITS\s*=\s*(?=\[)")
+_REGISTRY_ENTRY = re.compile(r'\A\[\s*"([a-z][a-z0-9_]*)"\s*,\s*"([A-Za-z_][A-Za-z0-9_]*)"\s*,\s*([1-9][0-9]*)\s*\]\Z')
+_NUMBER_TOKEN = re.compile(rf"\s*(\d[\d_]*|{_IDENT}|[*+\-()]|\S)")
+# Past this many look-ups a name is unreadable, so a loop can't hang the lint.
+_MAX_DEPTH = 12
+
+
+@dataclass(frozen=True)
+class JsonEvent:
+    """One change a migration's up step makes to the JSON field limits: it
+    sets a field's maxSize (``set``), drops a collection (``drop``), or
+    removes a field (``remove``)."""
+
+    kind: str
+    collection: str
+    field: str | None
+    size: int | None
+    line: int
+
+
+@dataclass(frozen=True)
+class _Decl:
+    name: str
+    offset: int
+    scope: tuple[int, int]
+    init: tuple[int, int] | None  # None for a for-of loop variable
+    values: tuple[str, ...] | None = None  # a loop variable's strings
+
+
+# A call argument the name of a helper's parameter stands for: its span and
+# the offset its own names resolve from.
+_Env = dict[str, tuple[int, int, int]]
+
+
+class _Reader:
+    """Finds the JSON limits in one migration's code, comments removed and
+    the down step blanked. It reads the shapes the repository's migrations
+    use: field objects in a ``new Collection`` schema, in
+    ``X.schema.addField(new SchemaField(...))``, or in a local helper's
+    schema array (``ensureCollection("name", [...])``); arrow-function field
+    helpers such as ``json("tags")``; ``X.schema.getFieldByName("f")
+    .options.maxSize = ...``; constants and for-of loops over literal
+    arrays. Anything else that sets a maxSize, or a JSON field without
+    one, is unreadable."""
+
+    def __init__(self, code: str, mask: list[bool]) -> None:
+        self.code, self.mask, self.n = code, mask, len(code)
+        self.close: dict[int, int] = {}
+        self.open_of: dict[int, int] = {}
+        self.opens: list[int] = []
+        stack: list[int] = []
+        for i, ch in enumerate(code):
+            if not mask[i]:
+                continue
+            if ch in "([{":
+                stack.append(i)
+                self.opens.append(i)
+            elif ch in ")]}" and stack:
+                opened = stack.pop()
+                self.close[opened] = i
+                self.open_of[i] = opened
+        for opened in stack:
+            self.close[opened] = self.n
+        self.decls: list[_Decl] = []
+        for m in _DECL.finditer(code):
+            if mask[m.start()]:
+                self.decls.append(_Decl(m.group(1), m.start(1), self._scope(m.start()),
+                                        (m.end(), self._expression_end(m.end()))))
+        for m in _FOR_OF.finditer(code):
+            if mask[m.start()]:
+                paren = code.index("(", m.start())
+                values = self._string_list(m.end(), self.close.get(paren, self.n), m.start())
+                self.decls.append(_Decl(m.group(1), m.start(1), self._loop_scope(paren), None, values))
+        self.found: list[tuple[int, JsonEvent]] = []
+        self.unreadable: list[tuple[int, str]] = []
+        self.options_read: set[int] = set()  # the options objects of JSON fields read
+        self.sizes_set: set[int] = set()  # the maxSize of each assignment read
+
+    # ---- positions
+
+    def line(self, offset: int) -> int:
+        return _line(self.code, offset)
+
+    def enclosing(self, offset: int) -> int | None:
+        """The innermost bracket that opens before ``offset`` and closes
+        after it."""
+        best = None
+        for opened in self.opens:
+            if opened >= offset:
+                break
+            if self.close[opened] > offset:
+                best = opened
+        return best
+
+    def before(self, offset: int, pattern: str) -> re.Match[str] | None:
+        """``pattern`` matched right before ``offset``."""
+        start = max(0, offset - 400)
+        return re.search(f"(?:{pattern})\\s*\\Z", self.code[start:offset])
+
+    def _next_code(self, offset: int) -> int:
+        while offset < self.n and self.code[offset].isspace():
+            offset += 1
+        return offset
+
+    def _last_code(self, offset: int) -> int:
+        """The offset of the last non-space character before ``offset``."""
+        offset -= 1
+        while offset >= 0 and self.code[offset].isspace():
+            offset -= 1
+        return offset
+
+    def _scope(self, offset: int) -> tuple[int, int]:
+        opened = self.enclosing(offset)
+        return (0, self.n) if opened is None else (opened, self.close[opened])
+
+    def _loop_scope(self, paren: int) -> tuple[int, int]:
+        body = self._next_code(self.close.get(paren, self.n) + 1)
+        if body < self.n and self.code[body] == "{" and self.mask[body]:
+            return (paren, self.close.get(body, self.n))
+        return (paren, self._expression_end(body))
+
+    def _expression_end(self, start: int) -> int:
+        depth = 0
+        for i in range(start, self.n):
+            if not self.mask[i]:
+                continue
+            ch = self.code[i]
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                if depth == 0:
+                    return i
+                depth -= 1
+            elif depth == 0 and ch in ";,\n":
+                return i
+        return self.n
+
+    def _trim(self, start: int, end: int) -> tuple[int, int]:
+        start = self._next_code(start)
+        while end > start and self.code[end - 1].isspace():
+            end -= 1
+        return start, end
+
+    def lookup(self, name: str, at: int) -> _Decl | None:
+        """The declaration of ``name`` in scope at ``at``: the last one
+        before it whose block holds it."""
+        best = None
+        for decl in self.decls:
+            if decl.name == name and decl.offset < at and decl.scope[0] <= at <= decl.scope[1]:
+                if best is None or decl.offset > best.offset:
+                    best = decl
+        return best
+
+    # ---- values
+
+    def string_at(self, start: int, end: int) -> str | None:
+        start, end = self._trim(start, end)
+        text = self.code[start:end]
+        if len(text) >= 2 and text[0] in "'\"" and text[-1] == text[0] and text[0] not in text[1:-1] \
+                and "\\" not in text and not self.mask[start]:
+            return text[1:-1]
+        return None
+
+    def strings(self, start: int, end: int, at: int, env: _Env | None = None,
+                depth: int = 0) -> tuple[str, ...] | None:
+        """The strings an expression can be: a literal, a constant, a
+        helper's parameter, or each value of a for-of loop variable."""
+        if depth > _MAX_DEPTH:
+            return None
+        literal = self.string_at(start, end)
+        if literal is not None:
+            return (literal,)
+        start, end = self._trim(start, end)
+        name = self.code[start:end]
+        if not re.fullmatch(_IDENT, name):
+            return None
+        if env and name in env:
+            arg_start, arg_end, arg_at = env[name]
+            return self.strings(arg_start, arg_end, arg_at, None, depth + 1)
+        decl = self.lookup(name, at)
+        if decl is None:
+            return None
+        if decl.init is None:
+            return decl.values
+        return self.strings(decl.init[0], decl.init[1], decl.offset, None, depth + 1)
+
+    def _string_list(self, start: int, end: int, at: int, depth: int = 0) -> tuple[str, ...] | None:
+        """The strings of a literal array, or of a constant holding one."""
+        if depth > _MAX_DEPTH:
+            return None
+        start, end = self._trim(start, end)
+        if start < end and self.code[start] == "[" and self.close.get(start) == end - 1:
+            out: list[str] = []
+            for arg_start, arg_end in call_arguments(self.code, self.mask, start) or []:
+                literal = self.string_at(arg_start, arg_end)
+                if literal is None:
+                    return None
+                out.append(literal)
+            return tuple(out)
+        name = self.code[start:end]
+        if re.fullmatch(_IDENT, name):
+            decl = self.lookup(name, at)
+            if decl is not None and decl.init is not None:
+                return self._string_list(decl.init[0], decl.init[1], decl.offset, depth + 1)
+        return None
+
+    def number(self, start: int, end: int, at: int, env: _Env | None = None, depth: int = 0) -> int | None:
+        """An integer expression of literals, constants, and a helper's
+        parameters with ``+``, ``-``, ``*``, and parentheses."""
+        if depth > _MAX_DEPTH:
+            return None
+        tokens = [m.group(1) for m in _NUMBER_TOKEN.finditer(self.code[start:end])]
+        pos = 0
+
+        def factor() -> int | None:
+            nonlocal pos
+            if pos >= len(tokens):
+                return None
+            token = tokens[pos]
+            pos += 1
+            if token == "(":
+                value = expression()
+                if value is None or pos >= len(tokens) or tokens[pos] != ")":
+                    return None
+                pos += 1
+                return value
+            if token[0].isdigit():
+                return int(token.replace("_", ""))
+            if re.fullmatch(_IDENT, token):
+                if env and token in env:
+                    arg_start, arg_end, arg_at = env[token]
+                    return self.number(arg_start, arg_end, arg_at, None, depth + 1)
+                decl = self.lookup(token, at)
+                if decl is None or decl.init is None:
+                    return None
+                return self.number(decl.init[0], decl.init[1], decl.offset, None, depth + 1)
+            return None
+
+        def term() -> int | None:
+            nonlocal pos
+            value = factor()
+            while value is not None and pos < len(tokens) and tokens[pos] == "*":
+                pos += 1
+                right = factor()
+                value = None if right is None else value * right
+            return value
+
+        def expression() -> int | None:
+            nonlocal pos
+            value = term()
+            while value is not None and pos < len(tokens) and tokens[pos] in ("+", "-"):
+                op = tokens[pos]
+                pos += 1
+                right = term()
+                value = None if right is None else (value + right if op == "+" else value - right)
+            return value
+
+        value = expression()
+        return value if value is not None and pos == len(tokens) else None
+
+    def properties(self, brace: int) -> dict[str, tuple[int, int]] | None:
+        """An object literal's properties and their value spans, or None
+        when one is a spread, a method, or a computed or quoted key."""
+        args = call_arguments(self.code, self.mask, brace)
+        if args is None:
+            return None
+        props: dict[str, tuple[int, int]] = {}
+        for start, end in args:
+            text = self.code[start:end]
+            keyed = re.match(rf"\s*({_IDENT})\s*:(?!:)\s*", text)
+            if keyed:
+                props[keyed.group(1)] = (start + keyed.end(), end)
+                continue
+            short = re.fullmatch(rf"\s*({_IDENT})\s*", text)
+            if short:
+                props[short.group(1)] = (start + short.start(1), start + short.end(1))
+                continue
+            return None
+        return props
+
+    def _object(self, start: int, end: int) -> int | None:
+        """The opening brace when the span is exactly one object literal."""
+        start, end = self._trim(start, end)
+        if start < end and self.code[start] == "{" and self.mask[start] and self.close.get(start) == end - 1:
+            return start
+        return None
+
+    def _call(self, start: int, end: int) -> tuple[str, int] | None:
+        """(callee text, opening parenthesis) when the span is exactly one
+        call."""
+        start, end = self._trim(start, end)
+        if start >= end or self.code[end - 1] != ")" or not self.mask[end - 1]:
+            return None
+        paren = self.open_of.get(end - 1)
+        if paren is None or paren <= start:
+            return None
+        return self.code[start:paren].strip(), paren
+
+    # ---- collections
+
+    def collections(self, start: int, end: int, at: int, depth: int = 0) -> tuple[str, ...] | None:
+        """The collections an expression names: a binding, a lookup by
+        name, a ``new Collection``, or a local helper called with the
+        collection's name first."""
+        if depth > _MAX_DEPTH:
+            return None
+        start, end = self._trim(start, end)
+        name = self.code[start:end]
+        if re.fullmatch(_IDENT, name):
+            decl = self.lookup(name, at)
+            if decl is None:
+                return None
+            if decl.init is None:
+                return decl.values
+            return self.collections(decl.init[0], decl.init[1], decl.offset, depth + 1)
+        call = self._call(start, end)
+        if call is None:
+            return None
+        callee, paren = call
+        args = call_arguments(self.code, self.mask, paren) or []
+        if not args:
+            return None
+        if re.search(r"\.\s*findCollectionByNameOrId\Z", callee):
+            return self.strings(*args[0], at)
+        if re.fullmatch(r"new\s+Collection", callee):
+            brace = self._object(*args[0])
+            props = self.properties(brace) if brace is not None else None
+            return self.strings(*props["name"], brace) if props and "name" in props else None
+        if re.fullmatch(_IDENT, callee) and self.lookup(callee, start) is not None:
+            return self.strings(*args[0], at)
+        return None
+
+    def _receiver(self, dot: int, at: int) -> tuple[str, ...] | None:
+        """The collections the expression ending just before ``dot`` names."""
+        last = self._last_code(dot)
+        if last < 0:
+            return None
+        if self.code[last] == ")" and self.mask[last]:
+            paren = self.open_of.get(last)
+            if paren is None:
+                return None
+            head = re.search(rf"({_IDENT}(?:\s*\.\s*{_IDENT})*)\s*\Z", self.code[max(0, paren - 400):paren])
+            if head is None:
+                return None
+            return self.collections(paren - len(head.group(0)), last + 1, at)
+        name = re.search(rf"({_IDENT})\Z", self.code[max(0, last - 200):last + 1])
+        if name is None:
+            return None
+        return self.collections(last + 1 - len(name.group(1)), last + 1, at)
+
+    def _schema_collections(self, start: int, end: int) -> tuple[str, ...] | None:
+        """The collection whose ``new Collection`` schema is the value at
+        [start, end)."""
+        obj = self.enclosing(start)
+        if obj is None or self.code[obj] != "{":
+            return None
+        paren = self.enclosing(obj)
+        if paren is None or self.code[paren] != "(" or not self.before(paren, r"\bnew\s+Collection"):
+            return None
+        props = self.properties(obj)
+        if not props or "name" not in props or "schema" not in props or self._trim(*props["schema"]) != (start, end):
+            return None
+        return self.strings(*props["name"], obj)
+
+    def _calls(self, decl: _Decl):
+        """(start, opening parenthesis, end) of each call of a helper."""
+        for call in re.finditer(rf"(?<![\w$.]){re.escape(decl.name)}\s*\(", self.code):
+            if self.mask[call.start()] and call.start() != decl.offset and self.lookup(decl.name, call.start()) is decl:
+                paren = call.end() - 1
+                yield call.start(), paren, self.close[paren] + 1
+
+    def _site_collections(self, start: int, end: int) -> tuple[str, ...] | None:
+        """The collections a field written at [start, end) lands in."""
+        opened = self.enclosing(start)
+        if opened is None:
+            return None
+        if self.code[opened] == "[":
+            array_end = self.close[opened] + 1
+            if self.before(opened, r"\bschema\s*:"):
+                return self._schema_collections(opened, array_end)
+            helper = self._helper(opened, array_end)
+            if helper:
+                # A helper that returns a schema, such as guideSchema().
+                out: list[str] = []
+                for call_start, _paren, call_end in self._calls(helper[0]):
+                    found = self._schema_collections(call_start, call_end)
+                    if not found:
+                        return None
+                    out.extend(found)
+                return tuple(out) or None
+            paren = self.enclosing(opened)
+            if paren is None or self.code[paren] != "(" or not self.before(paren, rf"(?<![\w$.]){_IDENT}"):
+                return None
+            args = call_arguments(self.code, self.mask, paren) or []
+            if len(args) >= 2 and self._trim(*args[1]) == (opened, self.close[opened] + 1):
+                return self.strings(*args[0], paren)
+            return None
+        if self.code[opened] == "(":
+            args = call_arguments(self.code, self.mask, opened) or []
+            if len(args) != 1 or self._trim(*args[0]) != (start, end):
+                return None
+            add = self.before(opened, r"\.\s*schema\s*\.\s*addField")
+            if add is None:
+                return None
+            return self._receiver(opened - len(add.group(0)), start)
+        return None
+
+    def _field_target(self, dot: int) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
+        """(collections, fields) for ``<field>.options.maxSize = ...`` with
+        the ``.`` before ``options`` at ``dot``."""
+        last = self._last_code(dot)
+        if last < 0:
+            return None
+        start, end = None, last + 1
+        if self.code[last] == ")" and self.mask[last]:
+            paren = self.open_of.get(last)
+            if paren is not None:
+                head = re.search(rf"({_IDENT}(?:\s*\.\s*{_IDENT})*)\s*\Z", self.code[max(0, paren - 400):paren])
+                start = paren - len(head.group(0)) if head else None
+        else:
+            name = re.search(rf"({_IDENT})\Z", self.code[max(0, last - 200):last + 1])
+            if name:
+                decl = self.lookup(name.group(1), dot)
+                if decl is not None and decl.init is not None:
+                    start, end = decl.init
+        if start is None:
+            return None
+        call = self._call(start, end)
+        if call is None:
+            return None
+        callee, paren = call
+        lookup = re.search(r"\.\s*schema\s*\.\s*getFieldByName\Z", callee)
+        args = call_arguments(self.code, self.mask, paren) or []
+        if lookup is None or len(args) != 1:
+            return None
+        receiver_end = self._trim(start, end)[0] + lookup.start()
+        found = self._receiver(receiver_end, start)
+        fields = self.strings(*args[0], start)
+        return (found, fields) if found and fields else None
+
+    # ---- reading
+
+    def _add(self, offset: int, kind: str, collections: tuple[str, ...], fields: tuple[str | None, ...],
+             size: int | None) -> None:
+        for collection in collections:
+            for field in fields:
+                self.found.append((offset, JsonEvent(kind, collection, field, size, self.line(offset))))
+
+    def _helper(self, node: int, node_end: int) -> tuple[_Decl, list[str]] | None | bool:
+        """The arrow-function helper whose body is the expression at
+        [node, node_end), and its parameters; None when it isn't one, False
+        when it's an arrow function the lint can't name."""
+        start = node
+        opened = self.enclosing(node)
+        if opened is not None and self.code[opened] == "(" and self._trim(opened + 1, self.close[opened]) == (node, node_end):
+            start = opened
+        arrow = self.before(start, rf"(\(([^()]*)\)|({_IDENT}))\s*=>")
+        if arrow is None:
+            return None
+        params_text = arrow.group(2) if arrow.group(2) is not None else arrow.group(3)
+        params = [p.strip() for p in params_text.split(",")] if params_text.strip() else []
+        params_start = start - len(arrow.group(0))
+        decl = next((d for d in self.decls if d.init is not None and d.init[0] == params_start), None)
+        if decl is None or any(not re.fullmatch(_IDENT, p) for p in params):
+            return False
+        return decl, params
+
+    def _json_field(self, match: re.Match[str]) -> None:
+        offset = match.start()
+        brace = self.enclosing(offset)
+        props = self.properties(brace) if brace is not None and self.code[brace] == "{" else None
+        if props is None or "type" not in props:
+            self.unreadable.append((self.line(offset), "a JSON field the lint can't read"))
+            return
+        size_span = None
+        options = self._object(*props["options"]) if "options" in props else None
+        if options is not None:
+            option_props = self.properties(options)
+            if option_props and "maxSize" in option_props:
+                size_span = option_props["maxSize"]
+                self.options_read.add(options)
+        if size_span is None:
+            self.unreadable.append((self.line(brace), "a JSON field without a maxSize"))
+            return
+        node, node_end = brace, self.close[brace] + 1
+        wrapper = self.enclosing(brace)
+        if wrapper is not None and self.code[wrapper] == "(" and self.before(wrapper, r"\bnew\s+SchemaField") \
+                and self._trim(wrapper + 1, self.close[wrapper]) == (brace, node_end):
+            node = wrapper - len(self.before(wrapper, r"\bnew\s+SchemaField").group(0))
+            node_end = self.close[wrapper] + 1
+        helper = self._helper(node, node_end)
+        if helper is False:
+            self.unreadable.append((self.line(brace), "a JSON field in a helper the lint can't name"))
+            return
+        sites: list[tuple[int, int, _Env | None]] = []
+        if helper is None:
+            sites.append((node, node_end, None))
+        else:
+            decl, params = helper
+            for call_start, paren, call_end in self._calls(decl):
+                args = call_arguments(self.code, self.mask, paren) or []
+                env = {p: (args[i][0], args[i][1], call_start) for i, p in enumerate(params) if i < len(args)}
+                sites.append((call_start, call_end, env))
+        for start, end, env in sites:
+            fields = self.strings(*props["name"], brace, env) if "name" in props else None
+            size = self.number(*size_span, brace, env)
+            collections = self._site_collections(start, end)
+            if not fields or size is None or not collections:
+                self.unreadable.append((self.line(start), "a JSON field the lint can't tie to a collection, a name, "
+                                                          "and a size"))
+                continue
+            self._add(start, "set", collections, fields, size)
+
+    def read(self) -> None:
+        for match in _JSON_TYPE.finditer(self.code):
+            if self.mask[match.start()]:
+                self._json_field(match)
+        for match in _SET_MAX_SIZE.finditer(self.code):
+            if not self.mask[match.start()]:
+                continue
+            self.sizes_set.add(match.start() + match.group(0).index("maxSize"))
+            size = self.number(match.end(), self._expression_end(match.end()), match.start())
+            target = self._field_target(match.start())
+            if size is None or target is None:
+                self.unreadable.append((self.line(match.start()), "a maxSize assignment the lint can't read"))
+                continue
+            self._add(match.start(), "set", target[0], target[1], size)
+        for match in _MAX_SIZE.finditer(self.code):
+            offset = match.start()
+            if not self.mask[offset] or offset in self.sizes_set:
+                continue
+            after = self.code[match.end():match.end() + 40]
+            if _CHANGE_MAX_SIZE.match(self.code, offset) or re.match(r"\s*=(?!=)", after):
+                self.unreadable.append((self.line(offset), "a maxSize assignment the lint can't read"))
+                continue
+            if not re.match(r"\s*:(?!:)", after):
+                continue  # reads a limit
+            options = self.enclosing(offset)
+            if options in self.options_read:
+                continue
+            field = self.enclosing(options) if options is not None else None
+            props = self.properties(field) if field is not None and self.code[field] == "{" else None
+            kind = self.strings(*props["type"], field) if props and "type" in props else None
+            if kind and kind[0] != "json":
+                continue  # a file field's or another type's limit
+            self.unreadable.append((self.line(offset), "a maxSize the lint can't tie to a JSON field"))
+        for match in re.finditer(r"\bdeleteCollection\s*\(", self.code):
+            if not self.mask[match.start()]:
+                continue
+            args = call_arguments(self.code, self.mask, match.end() - 1) or []
+            dropped = self.collections(*args[0], match.start()) if args else None
+            if dropped:
+                self._add(match.start(), "drop", dropped, (None,), None)
+        for match in re.finditer(r"\bremoveField\s*\(", self.code):
+            if not self.mask[match.start()]:
+                continue
+            removed = self._removal(match)
+            if removed:
+                self._add(match.start(), "remove", removed[0], removed[1], None)
+
+    def _removal(self, match: re.Match[str]) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
+        """(collections, fields) for ``X.schema.removeField(F.id)``."""
+        call = self.before(match.start(), r"\.\s*schema\s*\.\s*")
+        if call is None:
+            return None
+        found = self._receiver(match.start() - len(call.group(0)), match.start())
+        args = call_arguments(self.code, self.mask, match.end() - 1) or []
+        if not found or len(args) != 1:
+            return None
+        start, end = self._trim(*args[0])
+        literal = self.string_at(start, end)
+        if literal is not None:
+            return found, (literal,)
+        text = self.code[start:end]
+        by_id = re.fullmatch(rf"(.+?)\s*\.\s*id", text, re.S)
+        if by_id is None:
+            return None
+        target_end = start + len(by_id.group(1))
+        target = self._field_target_of(start, target_end)
+        return (found, target) if target else None
+
+    def _field_target_of(self, start: int, end: int) -> tuple[str, ...] | None:
+        """The field names an expression for a field object holds: a
+        ``getFieldByName`` call, or a binding of one."""
+        text = self.code[start:end]
+        if re.fullmatch(_IDENT, text):
+            decl = self.lookup(text, start)
+            if decl is None or decl.init is None:
+                return None
+            start, end = decl.init
+        call = self._call(start, end)
+        if call is None or not re.search(r"\.\s*getFieldByName\Z", call[0]):
+            return None
+        args = call_arguments(self.code, self.mask, call[1]) or []
+        return self.strings(*args[0], start) if len(args) == 1 else None
+
+    def events(self) -> list[JsonEvent]:
+        return [event for _offset, event in sorted(self.found, key=lambda pair: pair[0])]
+
+
+def read_json_limits(source: str) -> tuple[list[JsonEvent], list[tuple[int | None, str]]]:
+    """What a migration's up step does to JSON field limits, in source
+    order, and the places the lint can't read."""
+    region = scanned_region(source)
+    if region is None:
+        return [], [(None, "no migrate(up, down) call the lint can read")]
+    reader = _Reader(*region)
+    reader.read()
+    return reader.events(), sorted(set(reader.unreadable), key=lambda u: (u[0] or 0, u[1]))
+
+
+def registry_entries(source: str) -> list[tuple[str, str, int]] | None:
+    """A json_limits migration's LIMITS as (collection, field, bytes), or
+    None unless it's one literal list of unique [collection, field, bytes]
+    entries."""
+    code = blank_comments(source)
+    mask = _code_mask(code)
+    found = [m for m in _LIMITS.finditer(code) if mask[m.start()]]
+    if len(found) != 1:
+        return None
+    args = call_arguments(code, mask, found[0].end())
+    if args is None:
+        return None
+    entries: list[tuple[str, str, int]] = []
+    for start, end in args:
+        entry = _REGISTRY_ENTRY.match(code[start:end].strip())
+        if entry is None:
+            return None
+        entries.append((entry.group(1), entry.group(2), int(entry.group(3))))
+    if len({(c, f) for c, f, _size in entries}) != len(entries):
+        return None
+    return entries
+
+
+def _file_name(path: str) -> str:
+    return path.rsplit("/", 1)[-1]
+
+
+def registry_limits(migrations: dict[str, str]) -> dict[tuple[str, str], int]:
+    """Every json_limits migration's entries, in the order PocketBase
+    applies them, a later file's entry for a field winning."""
+    out: dict[tuple[str, str], int] = {}
+    for path in sorted(migrations, key=_file_name):
+        if REGISTRY_FILE.match(_file_name(path)):
+            for collection, field, size in registry_entries(migrations[path]) or []:
+                out[(collection, field)] = size
+    return out
+
+
+def declared_limits(migrations: dict[str, str]) -> tuple[dict[tuple[str, str], int], list[tuple[str, int | None, str]]]:
+    """The maxSize each JSON field ends on after every migration but the
+    json_limits ones, applied in PocketBase's order, which is what a
+    database whose own reset ran first holds; and each place the lint
+    can't read."""
+    state: dict[tuple[str, str], int] = {}
+    unreadable: list[tuple[str, int | None, str]] = []
+    for path in sorted(migrations, key=_file_name):
+        if REGISTRY_FILE.match(_file_name(path)):
+            continue
+        events, problems = read_json_limits(migrations[path])
+        for event in events:
+            if event.kind == "set" and event.field is not None and event.size is not None:
+                state[(event.collection, event.field)] = event.size
+            elif event.kind == "drop":
+                for key in [k for k in state if k[0] == event.collection]:
+                    del state[key]
+            elif event.field is not None:
+                state.pop((event.collection, event.field), None)
+        unreadable.extend((path, line, why) for line, why in problems)
+    return state, unreadable
+
+
+def json_limit_findings(path: str, content: str, declared: dict[tuple[str, str], int],
+                        registry: dict[tuple[str, str], int]) -> list[tuple[str, int | None]]:
+    """(rule, line) for a new migration's JSON limits: each must be
+    registered at the size the migrations end on; a json_limits migration
+    must sort after PocketBase's reset and hold a literal LIMITS."""
+    name = _file_name(path)
+    if REGISTRY_FILE.match(name):
+        if name <= JSON_RESET or registry_entries(content) is None:
+            return [("json-limits-registry", None)]
+        return []
+    if scanned_region(content) is None:
+        return []  # unparsed-migration already covers it
+    events, unreadable = read_json_limits(content)
+    hits = {("unreadable-json-limit", line) for line, _why in unreadable}
+    for event in events:
+        key = (event.collection, event.field or "")
+        if event.kind == "set" and key in declared and registry.get(key) != declared[key]:
+            hits.add(("unregistered-json-limit", event.line))
+    return sorted(hits, key=lambda h: (h[1] or 0, h[0]))
+
+
 # ---- the lint ----------------------------------------------------------------------
 
 
@@ -410,10 +1132,18 @@ def _normalize(change: Change) -> list[Change]:
     return [change] if in_migrations_dir(change.path) else []
 
 
-def lint(changes: list[Change], allowlist: list[dict]) -> tuple[list[Finding], list[Finding]]:
+def lint(changes: list[Change], allowlist: list[dict],
+         head: dict[str, str] | None = None) -> tuple[list[Finding], list[Finding]]:
     """(blocking, allowed): the findings for ``changes``, split by whether
-    an allowlist entry covers them."""
+    an allowlist entry covers them. With ``head``, every migration at the
+    revision under review by path, a new migration's JSON limits are also
+    checked against the json_limits registry."""
     findings: list[Finding] = []
+    declared: dict[tuple[str, str], int] = {}
+    registry: dict[tuple[str, str], int] = {}
+    if head is not None:
+        declared, _unreadable = declared_limits(head)
+        registry = registry_limits(head)
     for change in (part for c in changes for part in _normalize(c)):
         if not is_migration(change.path):
             # Something PocketBase wouldn't load, or that the lint doesn't read.
@@ -431,6 +1161,9 @@ def lint(changes: list[Change], allowlist: list[dict]) -> tuple[list[Finding], l
         if change.status == "R":
             findings.append(Finding(change.path, "renamed-migration", None, digest))
         findings.extend(Finding(change.path, rule, line, digest) for rule, line in scan(content))
+        if head is not None:
+            findings.extend(Finding(change.path, rule, line, digest)
+                            for rule, line in json_limit_findings(change.path, content, declared, registry))
     blocking = [f for f in findings if _entry_for(f, allowlist) is None]
     allowed = [f for f in findings if _entry_for(f, allowlist) is not None]
     return blocking, allowed
@@ -481,6 +1214,18 @@ def changes_from_git(repo: Path, base: str, head: str) -> list[Change]:
     return changes
 
 
+def migrations_at(repo: Path, rev: str) -> dict[str, str]:
+    """Every migration at ``rev``, by path."""
+    listing = _git(repo, "ls-tree", "-r", "-z", "--name-only", rev, "--", MIGRATIONS_DIR)
+    out: dict[str, str] = {}
+    for path in (p for p in listing.split("\0") if p):
+        if CONTROL.search(path):
+            raise LintError(f"a path under {MIGRATIONS_DIR} contains a control character")
+        if is_migration(path):
+            out[path] = _git(repo, "show", f"{rev}:{path}")
+    return out
+
+
 def _property(value: str) -> str:
     return value.replace("%", "%25").replace(":", "%3A").replace(",", "%2C")
 
@@ -506,6 +1251,10 @@ def _report(blocking: list[Finding], allowed: list[Finding], allowlist: list[dic
     if not blocking:
         return
     print()
+    if any(f.rule in JSON_RULES for f in blocking):
+        print("Register each JSON field's maxSize, at the size the migrations end on, in a new")
+        print("NNNN_json_limits_<name>.js copied from 1702134273_json_limits.js, and keep its")
+        print("LIMITS a literal list (docs/development.md#json-field-limits).")
     print("Add a new migration instead of editing, deleting, or renaming one, and keep")
     print("drops and row rewrites out of a new migration's up step. If the change is")
     print(f"intended, get it reviewed and add this to the entries in {allowlist_path}:")
@@ -530,10 +1279,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         allowlist = load_allowlist(repo / args.allowlist)
         changes = changes_from_git(repo, args.base, args.head)
+        head = migrations_at(repo, args.head)
     except LintError as err:
         print(f"lint_migrations: {err}", file=sys.stderr)
         return 2
-    blocking, allowed = lint(changes, allowlist)
+    blocking, allowed = lint(changes, allowlist, head)
     _report(blocking, allowed, allowlist, args.allowlist)
     if blocking:
         return 1

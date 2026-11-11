@@ -80,6 +80,9 @@ def test_written_defaults_keep_routes_on_and_outbound_reach_off():
         elif name == "EXECUTION_DEFINITIONS":
             # #2 step 1 keeps stage 2's server-loaded path.
             expected = "legacy"
+        elif name == "EXECUTION_STORE":
+            # #3 PR 1 ships the job store off.
+            expected = "off"
         else:
             expected = "enabled"
         assert r.value == expected, name
@@ -220,7 +223,7 @@ def test_the_pocketbase_module_carries_the_pocketbase_gates():
     assert data["prefix"] == gates.PREFIX
     assert data["truthy"] == list(gates.TRUTHY)
     assert data["gates"] == _expected_for(gates.POCKETBASE)
-    assert data["keys"] == ["ROUNDS_GATE_SIGNUPS", "ROUNDS_DISABLE_SIGNUPS"]
+    assert data["keys"] == ["ROUNDS_GATE_EXECUTION_STORE", "ROUNDS_GATE_SIGNUPS", "ROUNDS_DISABLE_SIGNUPS"]
 
 
 ENV_CASES = [

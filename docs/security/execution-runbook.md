@@ -162,6 +162,8 @@ nginx caps every other path at 1 MiB and the Ingress at 6 MiB. nginx waits up to
 
 Each run gets a minimal environment with none of the runner's settings or secrets, a private scratch directory that is its working directory, `HOME`, and `TMPDIR`, and its input in a file. In the image the runner is root and each in-flight slot runs as its own user (uids 10001 to 10004, group 10000). `/app` stays root-owned, so candidate code can't write it. When a run ends, anything still running as that slot's user is killed and what it left in `/tmp`, `/var/tmp`, and `/dev/shm` is removed; that cleanup runs off the event loop, before the slot is free again. The runner keeps the first 4 MiB of each output stream. A `/api/run` or `/api/evaluate` result comes back in its own file in the scratch directory, read only if it's a regular file the slot's user owns and no larger than 4 MiB, so output size can't break a result. On k8s no pod mounts a service-account token. [#5](https://github.com/keyurgolani/rounds/issues/5) replaces this with ephemeral workers that have no secrets and no network; until then candidate code shares the runner's network.
 
+#3's job store runs through the same in-process runners, as its `legacy-in-process` executor, and enforces no isolation profile. The isolation-profile gate belongs to #5 and #6, and the isolation probes, the worker-image check, and real enforcement to #5 and #7, since all of them need workers.
+
 ## Alerts
 
 Proposed thresholds, from the `decision` lines:
@@ -176,6 +178,7 @@ Proposed thresholds, from the `decision` lines:
 2. The renderer's health: a signed-in `GET /api/pdf/health` answers `{"status": "ok"}`, or 503 `{"status": "unavailable"}` when the runner can't reach the sidecar.
 3. The admission store reads its counters for each replica: from inside each runner container, `GET http://pocketbase:8090/api/rounds/admission/usage` (or the replica's `POCKETBASE_URL`) with a signed-in test account's bearer answers that account's requests, wall seconds, and in-flight count for this hour. A failure shows as `quota_unavailable`, or as `"quota":"unavailable"` in observe mode.
 4. The runner key: when `usage` answers but every `decision` line shows `"quota":"unavailable"`, `ROUNDS_ADMISSION_SECRET` is missing, shorter than 32 characters, or different on PocketBase and the runners.
+5. The execution job store, while `ROUNDS_GATE_EXECUTION_STORE` is `on`: each runner's `/ready` answers 200. A 503 there means the worker isn't logged in or the store hasn't answered for 30 seconds; [operations](../operations.md#execution-job-store) has the checks and the forced reap.
 
 ## Repair
 

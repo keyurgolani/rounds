@@ -19,6 +19,14 @@
 #                     caller on each, nothing charged, other routes still admit
 #  3d. re-enable    - the gate cleared and both replicas restarted: runs
 #                     admitted on each
+#  3e. execution store - PocketBase restarted with ROUNDS_GATE_EXECUTION_STORE
+#                     on and a worker secret: the job store's routes, rules,
+#                     fencing, and reaper on the real store
+#                     (harness/probes/execution_check.py)
+#  3f. execution workers - both replicas up with the store on: ready, and
+#                     each job claimed and ended once
+#  3g. execution readiness - PocketBase restarted with another secret: both
+#                     replicas go unready; restarted with it, ready again
 #   4. recreate PocketBase with signups disabled; the named pb_data volume
 #      keeps the accounts and rows from phase 2 across the restart
 #   5. hook phase   - signup-disabled probe
@@ -41,6 +49,13 @@
 #  12. admission migration - apply and reverse the admission migration with
 #                     the pinned binary on a 62d4eae-shaped pb_data, with no
 #                     network (harness/probes/admission_migration_check.py)
+#  12b. execution migration - the same for the execution job store's
+#                     migration, on a pb_data with every earlier migration
+#                     (harness/probes/execution_migration_check.py)
+#  12c. JSON limits - every JSON field's declared maxSize on a fresh pb_data
+#                     and an upgraded one, the registry migration changing
+#                     nothing where they already hold, and its down step
+#                     (harness/probes/json_limits_check.py)
 #  13. relation quarantine - with the pinned binary and no network: dry-run
 #                     and apply the relation quarantine on a legacy pb_data
 #                     holding cross-owner rows, then delete through the API on
@@ -89,6 +104,10 @@ PB_ADMIN_PASSWORD_V="${PB_ADMIN_PASSWORD:-harness-admin-pw-123}"
 # The runner key PocketBase, both runners, and the admission probe share; a
 # test placeholder, as in compose.yml.
 ADMISSION_SECRET_V="${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}"
+# The execution-worker secrets the job store phases use and rotate between;
+# test placeholders too.
+EXECUTION_SECRET_V="${ROUNDS_EXECUTION_SECRET:-harness-execution-key-not-a-secret-0123}"
+EXECUTION_ROTATED_V="harness-execution-key-rotated-not-a-secret-4567"
 
 # The verified PocketBase binary digest comes from the Dockerfile's ARGs, the
 # one source of truth, rather than a copy kept in sync here. Prod/CI build
@@ -127,10 +146,12 @@ cleanup() {
 trap cleanup EXIT
 
 # The runners enforce idempotency and quotas for the admission phase. The
-# optional second argument sets ROUNDS_GATE_RUN for the emergency phases.
+# optional second argument sets ROUNDS_GATE_RUN for the emergency phases;
+# the third, fourth, and fifth set ROUNDS_GATE_EXECUTION_STORE and the
+# worker secret PocketBase and the runners get, for the execution phases.
 set_signups() {
-  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\n' \
-    "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" > "${ENV_FILE}"
+  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\n' \
+    "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" "${3:-}" "${4:-}" "${5:-}" > "${ENV_FILE}"
 }
 
 # A runner replica's startup gates line (only gate names and values,
@@ -234,6 +255,8 @@ probe() {
     -e PB_BINARY_ARCH="${PB_BINARY_ARCH}" \
     -e RUNNER_URLS="${RUNNER_URLS}" \
     -e ROUNDS_ADMISSION_SECRET="${ADMISSION_SECRET_V}" \
+    -e ROUNDS_EXECUTION_SECRET="${EXECUTION_SECRET_V}" \
+    -e ROUNDS_EXECUTION_SECRET_ROTATED="${EXECUTION_ROTATED_V}" \
     -v "${ROOT}/docs/security:/policy:ro" \
     -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
     -v "${RECEIPTS_DIR}:/out" \
@@ -308,12 +331,51 @@ probe emergency-enable
 compose stop runner runner-b frontend
 compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
 
+echo "--- phase 3e: execution store (PocketBase with the store on and a worker secret) ---"
+set_signups false "" on "${EXECUTION_SECRET_V}" "${EXECUTION_SECRET_V}"
+compose up -d --force-recreate pocketbase
+set +e
+probe execution-store
+execution_rc=$?
+set -e
+
+echo "--- phase 3f: execution workers (both replicas with the store on) ---"
+compose up -d runner runner-b
+set +e
+probe execution-runners
+rc_step=$?
+[ "${rc_step}" -eq 0 ] || execution_rc=1
+
+echo "--- phase 3g: execution readiness (PocketBase rotated to another secret, then the replicas) ---"
+set_signups false "" on "${EXECUTION_ROTATED_V}" "${EXECUTION_SECRET_V}"
+# Only PocketBase restarts; the replicas keep the old secret.
+compose up -d --force-recreate pocketbase
+probe execution-unready
+rc_step=$?
+[ "${rc_step}" -eq 0 ] || execution_rc=1
+set_signups false "" on "${EXECUTION_ROTATED_V}" "${EXECUTION_ROTATED_V}"
+compose stop runner runner-b >/dev/null 2>&1
+compose rm -f runner runner-b >/dev/null 2>&1
+compose up -d runner runner-b
+probe execution-ready-again
+rc_step=$?
+[ "${rc_step}" -eq 0 ] || execution_rc=1
+set -e
+compose stop runner runner-b
+compose rm -f runner runner-b >/dev/null 2>&1 || true
+
 echo "--- phase 4: recreate PocketBase (signups disabled) ---"
 set_signups true
 compose up -d --force-recreate pocketbase
 
 echo "--- phase 5: hook (signup-disabled probe) ---"
 probe hook
+# PocketBase came back with no worker secret, so no old one logs in.
+set +e
+probe execution-disabled
+rc_step=$?
+[ "${rc_step}" -eq 0 ] || execution_rc=1
+set -e
 
 echo "--- phase 6: runner and nginx frontend up ---"
 compose up -d runner frontend
@@ -369,6 +431,26 @@ ${CONTAINER_BIN} run --rm --network none \
   -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
   "${PROBE_IMAGE}" admission-migration
 migration_rc=$?
+
+echo "--- phase 12b: execution migration applied and reversed ---"
+${CONTAINER_BIN} run --rm --network none \
+  -e PB_BIN="/pbbin/pocketbase" \
+  -e PB_MIGRATIONS_DIR="/pb_migrations" \
+  -v "${PBBIN_VOLUME}:/pbbin:ro" \
+  -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+  -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
+  "${PROBE_IMAGE}" execution-migration
+[ $? -eq 0 ] || migration_rc=1
+
+echo "--- phase 12c: JSON limits on fresh and upgraded pb_data ---"
+${CONTAINER_BIN} run --rm --network none \
+  -e PB_BIN="/pbbin/pocketbase" \
+  -e PB_MIGRATIONS_DIR="/pb_migrations" \
+  -v "${PBBIN_VOLUME}:/pbbin:ro" \
+  -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+  -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
+  "${PROBE_IMAGE}" json-limits
+[ $? -eq 0 ] || migration_rc=1
 set -e
 
 echo "--- phase 13: relation quarantine on a legacy pb_data, then deletes on a served copy ---"
@@ -400,7 +482,8 @@ snapshot_rc=$?
 set -e
 
 if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ] || [ "${admission_rc}" -ne 0 ] || [ "${migration_rc}" -ne 0 ] \
-   || [ "${quarantine_rc}" -ne 0 ] || [ "${reach_rc}" -ne 0 ] || [ "${snapshot_rc}" -ne 0 ]; then
+   || [ "${execution_rc}" -ne 0 ] || [ "${quarantine_rc}" -ne 0 ] || [ "${reach_rc}" -ne 0 ] \
+   || [ "${snapshot_rc}" -ne 0 ]; then
   exit 1
 fi
 exit 0

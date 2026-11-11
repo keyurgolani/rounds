@@ -35,6 +35,11 @@
 #                          the runner (`openssl rand -hex 32`). The runner
 #                          sends it with each admission store write; set
 #                          it before ROUNDS_GATE_ENFORCE_* is `enforce`.
+#   ROUNDS_EXECUTION_SECRET - 32 to 72 characters, the same on PocketBase
+#                          and the runner (`openssl rand -hex 32`): the
+#                          password the runner logs in with as
+#                          execution-worker. Set it before
+#                          ROUNDS_GATE_EXECUTION_STORE is `on`.
 #
 # If admin creds are unset, no admin is bootstrapped and you must run:
 #
@@ -55,6 +60,10 @@ services:
       - ROUNDS_DISABLE_SIGNUPS=${ROUNDS_DISABLE_SIGNUPS:-false}
       # Blank, the admission store's write routes answer 503.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-}
+      # The execution job store (ROUNDS-00A-L03). Blank, PocketBase makes
+      # no execution-worker record, so nothing can log in as it.
+      - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
+      - ROUNDS_EXECUTION_SECRET=${ROUNDS_EXECUTION_SECRET:-}
     # The private app network, plus the internal one only it shares with
     # the materializer.
     networks:
@@ -109,6 +118,9 @@ services:
       # Same value as PocketBase's. Blank, admission logs
       # quota_unavailable in observe mode and denies with it in enforce.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-}
+      # Same value as PocketBase's. Blank, the execution worker doesn't
+      # start. Candidate processes never get either secret.
+      - ROUNDS_EXECUTION_SECRET=${ROUNDS_EXECUTION_SECRET:-}
       # Gates (docs/configuration.md#gates). Empty keeps each written
       # default, and the runner logs every value at startup.
       - ROUNDS_GATE_RUN=${ROUNDS_GATE_RUN:-}
@@ -125,6 +137,7 @@ services:
       - ROUNDS_GATE_ENFORCE_IDEMPOTENCY=${ROUNDS_GATE_ENFORCE_IDEMPOTENCY:-}
       - ROUNDS_GATE_ENFORCE_QUOTA=${ROUNDS_GATE_ENFORCE_QUOTA:-}
       - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
+      - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
     depends_on:
       - pocketbase
       - pdf-renderer
