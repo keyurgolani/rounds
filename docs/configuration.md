@@ -107,7 +107,7 @@ Every install creates the demo account (`1700000600_demo_user.js`), and it stays
 ROUNDS_ENABLE_DEMO=true
 ```
 
-Off, PocketBase refuses a demo account's sign-in with the answer a wrong password gets, and at each start gives every demo account a new random password and token key, so a session from before the restart ends. On or off, a demo account can change only its own name, bio, target, and avatar, can't delete itself or change its email, and can't own a share link, an AI provider, or AI settings: those writes get 403 `demo_not_permitted`, whoever makes them. Restart PocketBase after changing either variable.
+Off, PocketBase refuses a demo account's sign-in with the answer a wrong password gets, and at each start gives every demo account a new random password and token key, so a session from before the restart ends, and any request a demo account's token authenticates gets 401. On or off, a demo account can change only its own name, bio, target, and avatar, can't delete itself or change its email, and can't own a share link, an AI provider, or AI settings: those writes get 403 `demo_not_permitted`, from a client or a server hook. Restart PocketBase after changing either variable.
 
 ## Gates
 
