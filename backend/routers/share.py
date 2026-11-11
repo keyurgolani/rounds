@@ -4,7 +4,7 @@ Endpoints:
   POST   /api/share                          create a link (authed)
   GET    /api/share                          list my links (authed)
   DELETE /api/share/{id}                     delete a link (authed)
-  GET    /api/share/by-token/{token}         public read of the link's projection
+  the public share read                      the link's projection, anonymous
 
 The owner routes go through PocketBase with the caller's own token, so the
 collection rules decide (``resume_share_links`` reads only its owner's rows

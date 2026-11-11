@@ -153,7 +153,7 @@
       "guarantee": "at least one admin exists, so first-admin setup is closed"
     },
     "deployment.proxy.share-page.headers": {
-      "guarantee": "/r and /r/* answer the app page with no-store, noindex, no-referrer, nosniff, DENY framing, and the share page CSP"
+      "guarantee": "every path that renders the share page answers the app page with no-store, noindex, no-referrer, nosniff, DENY framing, and the share page CSP"
     },
     "deployment.proxy.share-read.uniform": {
       "guarantee": "a public share read of a malformed or unknown token answers one byte-identical 404 with no-store, noindex, no-referrer, nosniff, DENY framing, and the resolver CSP"
