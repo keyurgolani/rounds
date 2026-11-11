@@ -317,7 +317,7 @@ On Kubernetes, apply `k8s/overlays/materializer` instead of the base, then run t
 **Rollback.** Set the gate back to `disabled` (or turn off the render route's own gate) and restart PocketBase and the runners. Creation stops at once with 503 `route_disabled`; rows already written stay, still readable only by their owners. No resume, variant, or version row is ever written by creation, so there's nothing to reverse. Keep the `admission_commands` rows and runner logs as the request and denial record. Before turning it back on, scan again and compare the counts with the signed report.
 ## Execution Job Store
 
-`ROUNDS_GATE_EXECUTION_STORE` turns on the durable job store from [#3](https://github.com/keyurgolani/rounds/issues/3) (`ROUNDS-00A-L03`). It starts `off`. Nothing runs through it yet; #3's later PRs move the execution routes onto it. PocketBase keeps jobs, attempts, and result envelopes in `execution_jobs`, `execution_attempts`, and `execution_envelopes`, and only its hooks write them. An account reads its own envelopes and nothing else in the store ([server-writes.md](security/server-writes.md#execution-job-store)).
+`ROUNDS_GATE_EXECUTION_STORE` turns on the durable job store from [#3](https://github.com/keyurgolani/rounds/issues/3) (`ROUNDS-00A-L03`). It starts `off`. While `ROUNDS_GATE_EXECUTION_SCRATCH` is `on`, run, evaluate, run-project, and take-home run go through it ([Scratch jobs](#scratch-jobs)); grading follows in #3's later PRs. PocketBase keeps jobs, attempts, and result envelopes in `execution_jobs`, `execution_attempts`, and `execution_envelopes`, and only its hooks write them. An account reads its own envelopes and nothing else in the store ([server-writes.md](security/server-writes.md#execution-job-store)).
 
 Each runner replica runs a worker that logs in as the `execution_service` record `execution-worker`, claims a queued job while it has a free slot (the same 4 as the admitted routes), and holds the job's lease for 30 seconds on PocketBase's clock, renewing it every 10. An account has at most 2 jobs leased or started at once. Accounts below that cap take turns by their oldest queued job, so one account's backlog never holds another's jobs back. A lease that runs out before its run starts puts the job back in the queue. Otherwise a job runs again only on a retry with the same key after a `worker-lost` or `infrastructure-degraded` attempt, and only while fewer than 3 attempts have started.
 
@@ -366,6 +366,26 @@ On k8s run the same through `kubectl -n rounds exec deploy/runner -- python -c "
 4. `execution.worker` with `code` `login_rejected`, or a runner's `/ready` answering 503 while the gate is `on`.
 
 `rounds_job_late_result_rejected_total` counts writes refused because their attempt was superseded. A few after a restart are expected.
+
+### Scratch jobs
+
+`ROUNDS_GATE_EXECUTION_SCRATCH` (`ROUNDS-00A-L03` PR 2) decides how run, evaluate, run-project, and take-home run execute. It starts `legacy`, which runs them in their request as before.
+
+- `on`: each request is a durable job. The route admits it on the job's fingerprint (the route, the definition, and digests of the code or files and the typed inputs), checks the definition as it does in the request, enqueues the job, and answers 202 with `{job_id, state, outcome_class, retryable, cancel_requested, envelope}`. The page follows it on `GET /api/execution/jobs/{id}?wait=20` and can stop it with `POST /api/execution/jobs/{id}/cancel`; another account's job and an unknown one answer the same 404. The worker resolves the definition again from the image and runs it in a slot it claimed.
+- `off`: the four routes answer 503 `execution_disabled` before the account check, and every draft stays on the page. A queued scratch job a worker claims while the key isn't `on` ends `canceled` before it starts.
+
+Every job-backed request needs an `Idempotency-Key`, whatever `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` says: the key is the job's command id. A duplicate answers its job and is never charged. A same-key retry after `worker-lost` or `infrastructure-degraded` runs the job again and is charged its wall seconds, never a request. A job's charge comes back only when its candidate never started. A replica whose worker isn't ready answers 503 `worker_unavailable` before it charges anything.
+
+**Turning it on.**
+
+1. Turn the store on first, with its secret on PocketBase and every runner ([Turning it on](#execution-job-store) above).
+2. Load-check PocketBase: a scratch run is about four SQLite writes on its one write connection, beside the admission writes.
+3. Set both `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce` and `ROUNDS_GATE_EXECUTION_SCRATCH=on` on every runner replica, `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce` on the frontend too, and restart them. `on` without either acts as `off`: the four routes answer 503 `execution_disabled`, and the runner's start logs one `execution.scratch` line with `code` `acting_off` and `needs` naming each missing setting, such as `EXECUTION_DEFINITIONS=enforce`.
+4. Confirm. Each runner's gates line shows `EXECUTION_SCRATCH` `on`, `EXECUTION_STORE` `on`, and `EXECUTION_DEFINITIONS` `enforce`, with no `execution.scratch` line after it. `harness/verify_deployment.py --gates-log runner.log --expect-gate EXECUTION_SCRATCH=on` passes; it fails a gates line where the key is `on` without what it needs, and says which setting is missing.
+
+**Turning it off, and rollback.** Set it `off` and restart the runners: new runs answer 503 `execution_disabled`, a queued job ends `canceled` when a worker claims it, and a running one finishes. The job reads keep answering, so a page still sees its job through. Then set it back to `legacy` once nothing waits on a job. A runner image from before this leaf runs the four routes in their request again, and a scratch job still queued then ends `denied`, `definition-invalid`.
+
+**Purge.** PocketBase deletes a scratch job 7 days after it ended, with its attempts, envelopes, and admission command, 200 jobs each 5 minutes, and logs `execution_purge` with the count. Grading jobs stay. The window is the owner's to ratify with [#72](https://github.com/keyurgolani/rounds/issues/72).
 
 ### Public shares
 

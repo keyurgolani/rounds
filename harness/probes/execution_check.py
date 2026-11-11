@@ -22,8 +22,10 @@ Phases, in the order harness/run.sh runs them:
   retry runs attempt two. One account's backlog of queued jobs holds
   no other account's job back.
 - ``execution-runners``, both runner replicas up with the store on and
-  the secret: each is ready, and each claims jobs and, with no handler
-  for any kind yet, ends them ``denied``, ``definition-invalid``, once.
+  the secret: each is ready, and each claims jobs and ends each once: a
+  scratch kind ``canceled`` before it starts, since
+  ``ROUNDS_GATE_EXECUTION_SCRATCH`` isn't on, and a grading kind, which
+  has no handler until PR 3, ``denied``, ``definition-invalid``.
 - ``execution-unready``, after PocketBase restarts with another secret:
   neither replica stays ready.
 - ``execution-ready-again``, after the replicas restart with that secret:
@@ -69,6 +71,8 @@ LEASE_S = 30
 CLAIM_SCAN = 50
 # The least wall seconds admission admits each operation for.
 WALL = {"run": 3, "evaluate": 3, "run_project": 10, "grade": 45, "take_home_run": 60, "take_home_submit": 120}
+# The kinds with a handler since PR 2 (backend/execution/handlers.py).
+SCRATCH_KINDS = frozenset({"run", "evaluate", "run_project", "take_home_run"})
 
 
 def token43() -> str:
@@ -442,8 +446,8 @@ def run_runners(c: Checks) -> None:
     a, b = factory.make_account("exe-r-a"), factory.make_account("exe-r-b")
     factory.register(pb, a)
     factory.register(pb, b)
-    jobs = [new_job(acct.token, kind)[2] for acct, kind in ((a, "run"), (a, "grade"), (b, "evaluate"), (b, "run"),
-                                                            (a, "take_home_submit"))]
+    kinds = ((a, "run"), (a, "grade"), (b, "evaluate"), (b, "run"), (a, "take_home_submit"))
+    jobs = [new_job(acct.token, kind)[2] for acct, kind in kinds]
     deadline = time.monotonic() + 60
     ended: list[dict] = []
     while time.monotonic() < deadline:
@@ -451,8 +455,13 @@ def run_runners(c: Checks) -> None:
         if len(ended) == len(jobs) and all(e.get("finished_at") for e in ended):
             break
         time.sleep(1)
+    # PR 2: a scratch kind's handler ends a job claimed while
+    # ROUNDS_GATE_EXECUTION_SCRATCH isn't on canceled, before it starts;
+    # the grading kinds have no handler until PR 3.
+    want = [("canceled", "canceled") if kind in SCRATCH_KINDS else ("denied", "definition-invalid")
+            for _acct, kind in kinds]
     c.check("execution.runners.claim-and-end-every-job",
-            len(ended) == 5 and all((e.get("state"), e.get("outcome_class")) == ("denied", "definition-invalid") for e in ended),
+            len(ended) == 5 and [(e.get("state"), e.get("outcome_class")) for e in ended] == want,
             repr([(e.get("state"), e.get("outcome_class")) for e in ended]))
     workers = set()
     once = True
