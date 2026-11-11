@@ -29,8 +29,8 @@ At `62d4eae` the runner itself uses the superuser token. All of it retires:
 | --- | --- | --- |
 | Mints and caches the token from `PB_ADMIN_EMAIL` and `PB_ADMIN_PASSWORD`, or development defaults when those are absent | [`backend/app/pb_auth.py:121-162`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/app/pb_auth.py#L121-L162) | #14 S3 |
 | Finds a share link by token and reads its resume, or its variant and the parent resume | [`backend/routers/share.py:155-196`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L155-L196) | #11 S1 hardens it, #14 S1 removes the route |
-| Writes a `resume_share_views` row on every public view | [`backend/routers/share.py:198-216`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L198-L216) | #11 S1 |
-| Counts each link's views for the owner's list | [`backend/routers/share.py:240-258`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L240-L258) | #11 S1 |
+| Writes a `resume_share_views` row on every public view | [`backend/routers/share.py:198-216`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L198-L216) | #11 S1 (done) |
+| Counts each link's views for the owner's list | [`backend/routers/share.py:240-258`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L240-L258) | #11 S1 (done) |
 
 The harness superuser in #13 and #172 seeds and reads fixtures inside the test stack only. It isn't a deployment writer.
 

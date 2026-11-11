@@ -145,6 +145,9 @@ services:
       - ROUNDS_GATE_ENFORCE_QUOTA=${ROUNDS_GATE_ENFORCE_QUOTA:-}
       - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
+      # true turns every public share read into the uniform not-found
+      # (docs/operations.md, "Public shares").
+      - ROUNDS_DISABLE_PUBLIC_SHARES=${ROUNDS_DISABLE_PUBLIC_SHARES:-false}
     depends_on:
       - pocketbase
       - pdf-renderer
