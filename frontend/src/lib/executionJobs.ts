@@ -12,6 +12,8 @@
 // `output` is the body the route answers in its request. Until PR 4 a
 // route may answer either way, so a caller takes both: `isJobAnswer`
 // tells them apart.
+// TODO(ROUNDS-00A-L03): PR 4 retires the in-request answer, and with it
+// the pages' handling of a 200.
 //
 // One command id per user action lives in sessionStorage, with the job
 // id once the 202 arrives and a hash of the work it sent. A reload picks
