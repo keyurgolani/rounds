@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../pocketbase', () => ({ pb: { authStore: { token: '' } } }));
 
 import { RunnerError } from '../runnerFetch';
-import { activeTrigger, classifyRunnerError, formatWait } from '../runnerDenial';
+import { activeTrigger, classifyRunnerError, formatWait, runFailureText } from '../runnerDenial';
 
 function err(status: number, code: string | null = null, extra: Partial<{ retryAfterSeconds: number; correlationId: string }> = {}) {
   return new RunnerError({ message: `Request ${status}: x`, status, code, ...extra });
@@ -133,5 +133,27 @@ describe('formatWait', () => {
     [Number.NaN, 'later'],
   ])('formats %s as %s', (seconds, text) => {
     expect(formatWait(seconds as number | null)).toBe(text);
+  });
+});
+
+describe('runFailureText (ROUNDS-00A-L03)', () => {
+  it.each([
+    [err(422, 'invalid_request'), "The runner couldn't read this run. Reload the page and run it again."],
+    [err(422), "The runner couldn't read this run. Reload the page and run it again."],
+    [err(400), "The runner couldn't read this run. Reload the page and run it again."],
+    [err(404, 'not_found'), "The runner couldn't find this practice item. Reload the page and run it again."],
+    [err(409), 'The run failed with status 409. Run it again.'],
+    [new TypeError('x is undefined'), "The run didn't finish. Your code is still here; run it again."],
+  ])('gives %s a fixed sentence', (error, text) => {
+    expect(runFailureText(error)).toBe(text);
+  });
+
+  it("never repeats the server's text", () => {
+    const leaked = new RunnerError({
+      message: 'run 422: field files.solution.py: <html>upstream</html>',
+      status: 422,
+      detail: 'field files.solution.py: <html>upstream</html>',
+    });
+    expect(runFailureText(leaked)).not.toMatch(/files|upstream|html/);
   });
 });

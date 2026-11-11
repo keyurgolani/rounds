@@ -1,8 +1,8 @@
 // Coding runs as durable jobs (ROUNDS-00A-L03): a run or test run the
-// runner answers with a job shows Queued with Cancel while it waits, its
-// end shows through the page's own result views, a limit is named, and
-// Retry after an end the server caused sends the same command id. A 200
-// still shows as it did.
+// runner answers with a job shows Queued with Cancel while it waits, an
+// end the run earned shows through the page's own result views, a limit
+// is named with no output, and Retry after an end the server caused sends
+// the same command id. A 200 still shows as it did.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
@@ -33,6 +33,7 @@ vi.mock('../../../components/editor/MultiFileEditor', () => ({
 import CodingDetail from '../../CodingDetail';
 import { getCodingQuestion } from '../../../content/api';
 import { evaluateCode, runCode } from '../runnerApi';
+import { RunnerError } from '../../../lib/runnerFetch';
 import type { JobAnswer, JobEnvelope, JobLimit, OutcomeClass } from '../../../lib/executionJobs';
 
 const QUESTION = {
@@ -178,24 +179,48 @@ describe('CodingDetail jobs', () => {
     await waitFor(() => expect(screen.getByText('2 / 2 passed')).toBeInTheDocument());
   });
 
-  it('names the time limit a run reached and shows what it printed', async () => {
+  it('names the time limit a run reached and shows none of its output', async () => {
     vi.mocked(runCode).mockResolvedValue(job('started'));
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('tab', { name: 'Run' }));
     await user.click(await screen.findByRole('button', { name: 'Run' }));
     await waitFor(() => expect(dockRegion()).toHaveTextContent('Running'));
+    // The run body a limit ends with, if an envelope carried one: only an
+    // end the run earned shows its output.
     push(
       ended(
         'timed-out',
         'resource-limit',
-        { stdout: 'partial output', stderr: '', return_value: null, error: 'Timed out after 3s', duration_ms: 3000, truncated: false },
+        { stdout: 'partial output', stderr: '', return_value: null, error: 'Time limit exceeded (3s)', duration_ms: 3000, truncated: false },
         {},
         'wall_time',
       ),
     );
     await waitFor(() => expect(dockRegion()).toHaveTextContent('Time limit reached'));
-    expect(screen.getAllByText(/Timed out after 3s/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/partial output|Time limit exceeded/)).not.toBeInTheDocument();
+  });
+
+  it('names the time limit a test run reached and marks no case failed', async () => {
+    vi.mocked(evaluateCode).mockResolvedValue(job('started'));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Run all (2)' }));
+    await waitFor(() => expect(dockRegion()).toHaveTextContent('Running'));
+    // The evaluate body for a case that ran out of time marks that case
+    // failed; the limit, not the code, ended the run.
+    const timedOut = {
+      passed: 1,
+      failed: 1,
+      results: [
+        { ...EVALUATED.results[0] },
+        { ...EVALUATED.results[1], passed: false, output: null, error: 'Time limit exceeded (3s)', duration_ms: 3000 },
+      ],
+    };
+    push(ended('timed-out', 'resource-limit', timedOut, {}, 'wall_time'));
+    await waitFor(() => expect(dockRegion()).toHaveTextContent('Time limit reached'));
+    expect(screen.queryByText(/1 \/ 2 passed|Time limit exceeded/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Run all (2)' })).toBeEnabled();
   });
 
   it('cancels a queued run', async () => {
@@ -215,6 +240,16 @@ describe('CodingDetail jobs', () => {
     await waitFor(() => expect(dockRegion()).toHaveTextContent('Canceled'));
     const cancel = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/cancel'));
     expect(cancel?.[1]?.method).toBe('POST');
+  });
+
+  it("shows a run that failed without a result as a fixed sentence, never the server's text", async () => {
+    vi.mocked(runCode).mockRejectedValue(new RunnerError({ message: 'run 422: Field required: input.nums', status: 422 }));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('tab', { name: 'Run' }));
+    await user.click(await screen.findByRole('button', { name: 'Run' }));
+    expect((await screen.findAllByText(/The runner couldn't read this run\./)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Field required|input\.nums/)).not.toBeInTheDocument();
   });
 
   it('still shows a result the runner answered in its request', async () => {

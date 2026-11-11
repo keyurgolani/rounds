@@ -220,10 +220,12 @@ nothing more, and the same key for other work is a mismatch; another
 account's read and cancel of a job get the unknown id's 404 and leave it as
 it was, which the case table's two `runner:execution-jobs` rows take as
 evidence; a cancel stops a running test run; and a run that reaches its time
-limit names it and keeps its charge. Then a long project run starts on
-`runner` alone (`execution-scratch-start`), the launcher kills that replica
-and starts both again, and the job ends `worker-lost` once its lease runs
-out, and a same-key retry through nginx runs it to the end
+limit names it, keeps its charge, and shows no output. Then a long project
+run starts on `runner` alone (`execution-scratch-start`), the launcher kills
+that replica and starts both again, and once both answer ready (a replica
+that refuses the connection while it starts reads as not ready yet, until
+a deadline) the job ends `worker-lost` once its lease runs out, and a
+same-key retry through nginx runs it to the end
 (`execution-scratch-retry`). The signup restart runs PocketBase with no worker
 secret, and the last one no longer logs in (`execution-disabled`). The deploy
 phase's verifier checks that nginx answers `/api/rounds/execution/` and the

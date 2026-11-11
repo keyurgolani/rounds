@@ -46,19 +46,20 @@ import {
 import {
   activeTrigger,
   classifyRunnerError,
+  runFailureText,
   type RunnerDenial,
 } from '../../lib/runnerDenial';
 import { useRunnerJob } from '../../hooks/useRunnerJob';
-import type { JobAnswer } from '../../lib/executionJobs';
+import { earnedOutput, type JobAnswer } from '../../lib/executionJobs';
 import type { RunnerJobView } from '../../components/runner/RunnerJobStatus';
 import { RunErrorOutput } from '../../components/runner/RunErrorOutput';
 
 type SideTab = 'rubric' | 'notes' | 'guidance';
 
-// A run job's output as the route's in-request body, when it has one
-// (ROUNDS-00A-L03).
+// A run job's output as the route's in-request body, when the run earned
+// its end (ROUNDS-00A-L03). Any other end shows only its own notice.
 function runOutput(job: JobAnswer): RunResult | null {
-  const out = job.envelope?.output;
+  const out = earnedOutput(job);
   return out && typeof out.score === 'number' && Array.isArray(out.criteria)
     ? (out as unknown as RunResult)
     : null;
@@ -246,7 +247,8 @@ export default function TakeHomeDetail() {
     runningSince: runJob.runningSince,
     action: 'run',
     onCancel: () => void runJob.cancel(),
-    onRetry: () => void handleRun(true),
+    // None while a retry is on its way, so one press sends one.
+    onRetry: busy ? undefined : () => void handleRun(true),
     trigger: jobTriggerRef.current,
   };
 
@@ -317,8 +319,9 @@ export default function TakeHomeDetail() {
         setDockOpen(false);
         return;
       }
-      // Nothing came back to score, so no score shows: only the error.
-      setRunError(e instanceof Error ? e.message : String(e));
+      // Nothing came back to score, so no score shows: only the error, as
+      // a fixed sentence, never the server's own text.
+      setRunError(runFailureText(e));
     } finally {
       if (reqId === runReqIdRef.current) setRunning(false);
     }

@@ -62,7 +62,8 @@ routerAdd(
   $apis.requireRecordAuth("execution_service"),
 );
 
-// Every 5 minutes: scratch jobs that ended more than 7 days ago go, with
+// Every 5 minutes: scratch jobs that ended more than 7 days ago, and
+// those that never ended and were last queued that long ago, go with
 // their attempts, envelopes, and admission command (execution.js purge).
 cronAdd("rounds_execution_purge", "*/5 * * * *", () => {
   require(`${__hooks}/execution.js`).purgeNow();

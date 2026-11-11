@@ -179,6 +179,11 @@ class Worker:
                 attempt.interrupted = True
                 attempt.stop.set()
             await asyncio.gather(*self._tasks, return_exceptions=True)
+            # gather answers at once for a task already done, before that
+            # task's own callback drops it from the set, and the await then
+            # never yields. Dropping the done ones here keeps this loop from
+            # spinning on them.
+            self._tasks.difference_update([task for task in self._tasks if task.done()])
 
     async def _pause(self, seconds: float) -> None:
         try:
@@ -380,6 +385,10 @@ class Worker:
 
     async def _finish(self, attempt: _Attempt, outcome: Outcome, cleanup: str, result: Result | None = None) -> None:
         job, claim = attempt.claim.job, attempt.claim
+        # Only an end the candidate's code earned keeps a score and the
+        # handler's output. On a limit, a cancel, or an end the definition
+        # or the infrastructure caused, the body holds a score and verdicts
+        # nothing earned, so the envelope carries neither.
         scored = result is not None and outcome.outcome_class in ("passed", "candidate-failure")
         observation = result.observation if result else None
         kind = kinds.KINDS.get(job.kind)
@@ -403,7 +412,7 @@ class Worker:
                 score=result.score if scored else None,
                 definition=result.definition if result else None,
                 rubric=result.rubric if result else None,
-                output=result.output if result else None,
+                output=result.output if scored else None,
                 executor_kind=self._executor.kind,
                 output_sha256=observation.output_sha256 if observation else None,
                 output_bytes=observation.output_bytes if observation else None,

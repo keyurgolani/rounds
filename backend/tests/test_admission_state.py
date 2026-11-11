@@ -323,6 +323,34 @@ def test_observe_mode_runs_a_refused_duplicate_and_logs_the_would_be_409(
     assert line["idempotency"] == verdict and line["would_deny"] == code
 
 
+@pytest.mark.parametrize("verdict, leased", [("job", False), ("retry_job", True)], ids=["job", "retry-job"])
+@pytest.mark.parametrize("enforce", [True, False], ids=["enforce", "observe"])
+def test_a_job_verdict_never_runs_a_request_in_place(
+    client, signed_in, seeded, succeeding, admission_store, monkeypatch, gate_env, verdict, leased, enforce
+):
+    """ROUNDS-00A-L03 PR 2: only a job-backed route takes the job
+    verdicts. A request that runs in place refuses them in either mode,
+    and the lease a retry took ends with the request."""
+    if enforce:
+        gate_env(ENFORCE)
+    job = "job000000000001" if verdict == "job" else None
+
+    async def answered(*_args, **_kwargs):
+        return admission_state.Decision(verdict, "ok" if leased else "skipped", 0, leased, None, job)
+
+    finished: list[str] = []
+
+    async def finish(_token, _lease, outcome, _result=None, timeout=None):
+        finished.append(outcome)
+        return True
+
+    monkeypatch.setattr(admission_store, "admit", answered)
+    monkeypatch.setattr(admission_store, "finish", finish)
+    _assert_typed(_send(client, "run", keyed(signed_in)), 409, "idempotency_mismatch")
+    assert succeeding["run_one"] == 0
+    assert finished == (["denied"] if leased else [])
+
+
 # ---- step 7: quota ------------------------------------------------------------------
 
 

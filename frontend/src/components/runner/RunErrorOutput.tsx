@@ -1,6 +1,6 @@
-// A run that failed without a result, in the run dock: the error as the
-// runner gave it, never a score or a pass or fail it didn't earn
-// (ROUNDS-00A-L03).
+// A run that failed without a result, in the run dock: the fixed sentence
+// `runFailureText` gives the failure, never the server's own text, and
+// never a score or a pass or fail the run didn't earn (ROUNDS-00A-L03).
 
 export function RunErrorOutput({ message }: { message: string }) {
   return (

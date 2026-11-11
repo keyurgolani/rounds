@@ -373,6 +373,9 @@ store = admission_state
 
 # Step 6 verdicts that refuse the request, and the code each answers.
 _REFUSALS = {"mismatch": "idempotency_mismatch", "in_flight": "already_in_flight"}
+# The verdicts for a key whose command enqueued a job (ROUNDS-00A-L03 PR 2),
+# which only begin_job takes.
+_JOB_VERDICTS = frozenset({"job", "retry_job"})
 
 
 def _quota_code(verdict: str) -> str:
@@ -450,6 +453,11 @@ async def begin(
     # Step 6.
     if key is not None:
         admitted.idempotency = decision.idempotency
+    # A job's key never runs a request in place, whatever the mode. The
+    # fingerprints differ, so this can't match; if it did, nothing runs,
+    # and a retry's lease ends with the request.
+    if decision.idempotency in _JOB_VERDICTS:
+        raise TypedError("idempotency_mismatch")
     if decision.idempotency == "replay" and idempotency == "enforce":
         if decision.result is None:
             raise TypedError("already_completed")

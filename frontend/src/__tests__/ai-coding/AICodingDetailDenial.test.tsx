@@ -153,14 +153,18 @@ describe('AICodingDetail denial states', () => {
     expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
   });
 
-  it('keeps showing a non-denial run failure in the console as before', async () => {
+  it('keeps showing a non-denial run failure in the console, as a fixed sentence (ROUNDS-00A-L03)', async () => {
     vi.mocked(runProject).mockRejectedValue(
       new RunnerError({ message: 'run-project 422: Field required', status: 422 }),
     );
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run' }));
-    expect(await screen.findByText('run-project 422: Field required')).toBeInTheDocument();
+    expect(
+      await screen.findByText("The runner couldn't read this run. Reload the page and run it again."),
+    ).toBeInTheDocument();
+    // The server's own text never reaches the page.
+    expect(screen.queryByText(/Field required/)).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
 });

@@ -130,10 +130,13 @@ function memoryStore(options) {
       admissionCalls.push({ call: "jobEnded", job: row.id, outcome_class: outcomeClass });
       if (admissionRules) admissionRules.jobEnded(admissionView, row.account, row.command_id, row.id, outcomeClass);
     },
+    // The same filter and order as execution.js's.
     purgeable: (cutoff, limit) =>
       [...jobs.values()]
-        .filter((j) => j.purpose === "scratch" && j.finished_at > 0 && j.finished_at <= cutoff && TERMINAL.includes(j.state))
-        .sort((a, b) => a.finished_at - b.finished_at)
+        .filter((j) => j.purpose === "scratch" && (
+          (j.finished_at > 0 && j.finished_at <= cutoff && TERMINAL.includes(j.state)) ||
+          ((j.state === "queued" || ACTIVE.includes(j.state)) && j.queued_at <= cutoff)))
+        .sort((a, b) => a.finished_at - b.finished_at || a.queued_at - b.queued_at)
         .slice(0, limit)
         .map(clone),
     deleteEnvelopes: (jobId) => {

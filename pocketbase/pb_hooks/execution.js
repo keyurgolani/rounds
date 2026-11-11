@@ -66,8 +66,9 @@ const SECRET_ENV = "ROUNDS_EXECUTION_SECRET";
 const SECRET_MIN_CHARS = 32;
 const SECRET_MAX_CHARS = 72;
 // A scratch job, its attempts, its envelopes, and its admission command
-// go this long after the job ends, since the job row holds the
-// candidate's source. Each purge takes at most PURGE_BATCH jobs.
+// go this long after the job ends, or this long after it was last queued
+// if it never ended, since the job row holds the candidate's source.
+// Each purge takes at most PURGE_BATCH jobs.
 // TODO(ROUNDS-14-L01): #72's retention policy sets the number; 7 days
 // until then.
 const SCRATCH_RETENTION_S = 7 * 24 * 3600;
@@ -517,9 +518,11 @@ function status(store, account, input) {
 }
 
 // The purge: scratch jobs that ended more than SCRATCH_RETENTION_S ago,
-// each with its envelopes, its attempts (they cascade from the job), and
-// the admission command it was enqueued under (its leases cascade). A
-// grading job stays.
+// and those that never ended and were last queued that long ago (with
+// the store off, nothing claims or reaps a job, so a queue the store left
+// would stay), each with its envelopes, its attempts (they cascade from
+// the job), and the admission command it was enqueued under (its leases
+// cascade). A grading job stays.
 function purge(store, now) {
   const jobs = store.purgeable(now - SCRATCH_RETENTION_S, PURGE_BATCH);
   jobs.forEach((job) => {
@@ -928,14 +931,16 @@ function pbStore(dao) {
       const admission = require(`${__hooks}/admission.js`);
       admission.jobEnded(admission.pbStore(dao), row.account, row.command_id, row.id, outcomeClass);
     },
-    // Scratch jobs that ended at or before `cutoff`, at most `limit`.
+    // Scratch jobs that ended at or before `cutoff`, and those that never
+    // ended and were last queued at or before it, at most `limit`.
     purgeable: (cutoff, limit) =>
       dao
         .findRecordsByFilter(
           JOBS,
-          "purpose = 'scratch' && finished_at > 0 && finished_at <= {:cutoff} && " +
-            "(state = 'completed' || state = 'timed-out' || state = 'denied' || state = 'canceled' || state = 'failed')",
-          "finished_at",
+          "purpose = 'scratch' && ((finished_at > 0 && finished_at <= {:cutoff} && " +
+            "(state = 'completed' || state = 'timed-out' || state = 'denied' || state = 'canceled' || state = 'failed')) || " +
+            "((state = 'queued' || state = 'leased' || state = 'started') && queued_at <= {:cutoff}))",
+          "finished_at,queued_at",
           limit,
           0,
           { cutoff },
@@ -1089,8 +1094,9 @@ function bootstrapWorker() {
 }
 
 // The purge, from the cron in execution.pb.js. It runs whether the store's
-// gate is on or off, since it only removes jobs that ended, and logs a
-// count, never a row, when it removed any.
+// gate is on or off, since it only removes jobs that ended or have waited
+// longer than any run lasts, and logs a count, never a row, when it
+// removed any.
 function purgeNow() {
   const dao = $app.dao();
   try {

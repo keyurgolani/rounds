@@ -26,7 +26,8 @@ The account reads its own envelopes (D9), so the user view carries no
 hidden material: a part is its id, class, and limit, ``definition`` is
 #2's receipt, ``rubric`` is the review's state, and ``output`` is the
 visible output a handler chose to show, at most 256 KiB, and always null
-for a kind with hidden material (grading). The operator view adds the
+for a kind with hidden material (grading). The worker keeps it, like the
+score, only on a ``passed`` or ``candidate-failure`` end. The operator view adds the
 digests, measurements, and the executor's kind; the store keeps it on the
 attempt, which only the service reads.
 """

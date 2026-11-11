@@ -36,11 +36,12 @@ import {
 import {
   activeTrigger,
   classifyRunnerError,
+  runFailureText,
   type RunnerDenial,
 } from '../lib/runnerDenial';
 import { reloadPage, retrySuperseded } from '../lib/definitions';
 import { useRunnerJob } from '../hooks/useRunnerJob';
-import type { JobAnswer } from '../lib/executionJobs';
+import { earnedOutput, type JobAnswer } from '../lib/executionJobs';
 import type { RunnerJobAction, RunnerJobView } from '../components/runner/RunnerJobStatus';
 import type { RunnerError } from '../lib/runnerFetch';
 
@@ -138,15 +139,15 @@ function mergeEvaluate(prev: CodeEvaluateResult | undefined, res: CodeEvaluateRe
   return { passed, failed, results: merged };
 }
 
-// A job's output as the route's in-request body, when it has one
-// (ROUNDS-00A-L03).
+// A job's output as the route's in-request body, when the run earned its
+// end (ROUNDS-00A-L03). Any other end shows only its own notice.
 function runOutput(job: JobAnswer): CodeRunResult | null {
-  const out = job.envelope?.output;
+  const out = earnedOutput(job);
   return out && typeof out.stdout === 'string' ? (out as unknown as CodeRunResult) : null;
 }
 
 function evaluateOutput(job: JobAnswer): CodeEvaluateResult | null {
-  const out = job.envelope?.output;
+  const out = earnedOutput(job);
   return out && Array.isArray(out.results) ? (out as unknown as CodeEvaluateResult) : null;
 }
 
@@ -450,11 +451,12 @@ export default function CodingDetail() {
         if (denial) {
           setRunDenial({ action: 'run', denial });
         } else {
+          // A fixed sentence, never the server's own text.
           setRunResult({
             stdout: '',
             stderr: '',
             return_value: null,
-            error: String(e),
+            error: runFailureText(e),
             duration_ms: 0,
             truncated: false,
           });
@@ -520,9 +522,11 @@ export default function CodingDetail() {
     runningSince: shownJob.runningSince,
     action: shownAction,
     onCancel: () => void shownJob.cancel(),
-    // A run's Retry needs its input, which a reload doesn't keep.
-    onRetry:
-      shownAction === 'tests'
+    // A run's Retry needs its input, which a reload doesn't keep, and none
+    // shows while a retry is on its way, so one press sends one.
+    onRetry: busy
+      ? undefined
+      : shownAction === 'tests'
         ? () => void handleEvaluate(lastFilterRef.current, true)
         : lastRunInput !== undefined
           ? () => void handleRun(lastRunInput as Record<string, unknown>, true)

@@ -1,7 +1,8 @@
 // Take-home runs as durable jobs (ROUNDS-00A-L03): a job shows in the
-// notice above the console until it ends, the harness result it ended
-// with shows as before, a limit is named with no score, and a run that
-// failed without a result shows its error and no score.
+// notice above the console until it ends, the harness result of an end
+// the run earned shows as before, a limit or an end the harness or the
+// infrastructure caused shows its notice with no score, and a run that
+// failed without a result shows a fixed sentence and no score.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -136,13 +137,34 @@ describe('TakeHomeDetail jobs', () => {
     expect(screen.queryByText(/\/ 100|\/100/)).not.toBeInTheDocument();
   });
 
-  it('shows a run that failed without a result as its error, with no score', async () => {
+  // The take-home body for a channel that came back empty or malformed:
+  // a score of 0 with every criterion failed, which no run earned.
+  const UNSCORED = {
+    ...GRADED,
+    score: 0,
+    criteria: GRADED.criteria.map((c) => ({ ...c, passed: false, logs: 'no-result' })),
+  };
+
+  it.each([
+    ['failed', 'infrastructure-degraded', "Couldn't finish"],
+    ['denied', 'definition-invalid', "Can't run here"],
+  ] as const)('shows a %s %s end as its notice, with no score', async (state, outcome, notice) => {
+    vi.mocked(runProject).mockResolvedValue(job('started'));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Run' }));
+    answers.push(ended(state, outcome, UNSCORED));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(notice));
+    expect(screen.queryByText(/\/ 100|\/100|gets|sets/)).not.toBeInTheDocument();
+  });
+
+  it("shows a run that failed without a result as a fixed sentence, never the server's text, with no score", async () => {
     vi.mocked(runProject).mockRejectedValue(new RunnerError({ message: 'take-home run 422: Field required', status: 422 }));
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run' }));
-    expect(await screen.findByText('take-home run 422: Field required')).toBeInTheDocument();
+    expect(await screen.findByText("The runner couldn't read this run. Reload the page and run it again.")).toBeInTheDocument();
     expect(screen.getByText('HARNESS ERROR')).toBeInTheDocument();
-    expect(screen.queryByText(/\/ 100|\/100|criteria/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Field required|\/ 100|\/100|criteria/)).not.toBeInTheDocument();
   });
 });

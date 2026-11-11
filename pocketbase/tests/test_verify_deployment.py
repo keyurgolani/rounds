@@ -280,6 +280,17 @@ def test_a_share_hook_route_that_reaches_pocketbase_fails(method, path):
     assert not r.passed and f"{method} {path} status=401 answered_by=pocketbase" in r.detail
 
 
+@pytest.mark.parametrize("method, path", [("POST", "/api/rounds/execution/"),
+                                          ("POST", "/api/rounds/Execution/status")])
+def test_an_execution_hook_route_that_reaches_pocketbase_in_any_case_fails(method, path):
+    dep = Deployment()
+    dep.overrides[(method, path)] = (401, PB_401)
+    with deployment(dep) as (_, url):
+        results = by_id(vd.check_denied_routes(url))
+    (r,) = results["deployment.proxy.execution-hooks.denied"]
+    assert not r.passed and f"{method} {path} status=401 answered_by=pocketbase" in r.detail
+
+
 def test_a_share_page_case_variant_without_the_headers_fails():
     dep = Deployment()
     dep.overrides[("GET", "/R/verify0deployment0000")] = (200, b"<!doctype html><div id=root></div>")

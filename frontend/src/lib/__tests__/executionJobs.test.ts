@@ -12,6 +12,7 @@ import {
   beginAction,
   cancelJob,
   clearAction,
+  earnedOutput,
   isEnded,
   isJobAnswer,
   loadAction,
@@ -19,6 +20,8 @@ import {
   saveAction,
   workHash,
   type JobAnswer,
+  type JobEnvelope,
+  type OutcomeClass,
 } from '../executionJobs';
 import { UUID_V7_PATTERN } from '../idempotency';
 import { isRunnerError } from '../runnerFetch';
@@ -71,6 +74,44 @@ describe('isJobAnswer', () => {
   it('knows which states have ended', () => {
     expect(['queued', 'leased', 'started'].map((s) => isEnded(s as never))).toEqual([false, false, false]);
     expect(['completed', 'timed-out', 'denied', 'canceled', 'failed'].every((s) => isEnded(s as never))).toBe(true);
+  });
+});
+
+describe('earnedOutput', () => {
+  // A take-home body for a channel that came back empty: a score of 0 and
+  // every criterion failed, which no run earned.
+  const UNSCORED = { score: 0, passed: false, criteria: [{ id: 'gets', passed: false, weight: 1, logs: 'no-result' }] };
+
+  function ended(state: JobAnswer['state'], outcome: OutcomeClass, output: Record<string, unknown> | null): JobAnswer {
+    const envelope: JobEnvelope = {
+      version: 'rounds.execution-envelope/v1', job_id: QUEUED.job_id, state, outcome_class: outcome,
+      authoritative: true, limit: null, parts: [], score: null, definition: null, queued_at: 1, started_at: 2,
+      finished_at: 3, cleanup: 'confirmed', rubric: null, output,
+    };
+    return { ...QUEUED, state, outcome_class: outcome, envelope };
+  }
+
+  it('shows the output of an end the run earned', () => {
+    expect(earnedOutput(ended('completed', 'passed', UNSCORED))).toEqual(UNSCORED);
+    expect(earnedOutput(ended('completed', 'candidate-failure', UNSCORED))).toEqual(UNSCORED);
+  });
+
+  it.each([
+    ['timed-out', 'resource-limit'],
+    ['completed', 'resource-limit'],
+    ['canceled', 'canceled'],
+    ['failed', 'worker-lost'],
+    ['failed', 'infrastructure-degraded'],
+    ['denied', 'definition-invalid'],
+    ['denied', 'policy-violation'],
+  ] as const)('shows nothing for a %s %s end, whatever its envelope holds', (state, outcome) => {
+    expect(earnedOutput(ended(state, outcome, UNSCORED))).toBeNull();
+  });
+
+  it('shows nothing without an envelope, or when the job and its envelope disagree', () => {
+    expect(earnedOutput(QUEUED)).toBeNull();
+    expect(earnedOutput({ ...ended('completed', 'passed', UNSCORED), outcome_class: 'worker-lost' })).toBeNull();
+    expect(earnedOutput(ended('completed', 'passed', null))).toBeNull();
   });
 });
 

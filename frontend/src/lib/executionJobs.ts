@@ -9,9 +9,9 @@
 // and the page follows it with GET /api/execution/jobs/{job_id}?wait=20,
 // which answers the same shape once the job changed or ended. The
 // envelope is the user view of rounds.execution-envelope/v1, and its
-// `output` is the body the route answers in its request. Until PR 4 a
-// route may answer either way, so a caller takes both: `isJobAnswer`
-// tells them apart.
+// `output` is the body the route answers in its request, shown only on
+// an end the run earned (`earnedOutput`). Until PR 4 a route may answer
+// either way, so a caller takes both: `isJobAnswer` tells them apart.
 // TODO(ROUNDS-00A-L03): PR 4 retires the in-request answer, and with it
 // the pages' handling of a 200.
 //
@@ -99,6 +99,21 @@ const ENDED: ReadonlySet<JobState> = new Set(['completed', 'timed-out', 'denied'
 
 export function isEnded(state: JobState): boolean {
   return ENDED.has(state);
+}
+
+// The ends the candidate's code earned. Every other end (a limit, a
+// cancel, an end the definition or the infrastructure caused) shows its
+// own notice and no output, since a body from such an end holds a score
+// or a failure nothing earned.
+const EARNED: ReadonlySet<OutcomeClass> = new Set(['passed', 'candidate-failure']);
+
+/** The output an ended job shows: the envelope's, only when the run
+ *  earned its end; null on every other end. */
+export function earnedOutput(job: JobAnswer): Record<string, unknown> | null {
+  const envelope = job.envelope;
+  if (envelope === null || envelope.output === null || typeof envelope.output !== 'object') return null;
+  if (!EARNED.has(envelope.outcome_class) || job.outcome_class !== envelope.outcome_class) return null;
+  return envelope.output;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

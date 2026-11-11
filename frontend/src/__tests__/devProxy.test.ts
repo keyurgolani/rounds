@@ -90,6 +90,9 @@ const NEVER_PROXIED = [
   '/api/rounds/execution/reap?x=1',
   '/api/rounds/execution/status',
   '/api/rounds/execution/cancel',
+  // The execution hooks in any case, as nginx's ~* location matches them.
+  '/api/rounds/Execution/status',
+  '/api/rounds/EXECUTION/claim',
   '/api/collections/execution_service/auth-with-password',
   '/api/collections/execution_service/records',
   '/api/collections/Execution_Service/auth-with-password',
@@ -251,6 +254,7 @@ describe('the dev proxy and production nginx', () => {
     const runnerGroup = LOCATIONS.find((l) => l.modifier === '~' && l.pattern.includes('take-home'));
     expect(runnerGroup && new RegExp(runnerGroup.pattern).test('/api/execution/jobs/jobaaaaaaaaaaa1')).toBe(true);
     expect(viteDenies('/api/rounds/execution/status')).toBe(true);
+    expect(viteDenies('/api/rounds/Execution/status')).toBe(true);
   });
 
   it('sends the runner routes to the runner and the rest of /api to PocketBase', () => {

@@ -374,7 +374,7 @@ On k8s run the same through `kubectl -n rounds exec deploy/runner -- python -c "
 - `on`: each request is a durable job. The route admits it on the job's fingerprint (the route, the definition, and digests of the code or files and the typed inputs), checks the definition as it does in the request, enqueues the job, and answers 202 with `{job_id, state, outcome_class, retryable, cancel_requested, envelope}`. The page follows it on `GET /api/execution/jobs/{job_id}?wait=20` and can stop it with `POST /api/execution/jobs/{job_id}/cancel`; another account's job and an unknown one answer the same 404. The worker resolves the definition again from the image and runs it in a slot it claimed.
 - `off`: the four routes answer 503 `execution_disabled` before the account check, and every draft stays on the page. A queued scratch job a worker claims while the key isn't `on` ends `canceled` before it starts.
 
-Every job-backed request needs an `Idempotency-Key`, whatever `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` says: the key is the job's command id. A duplicate answers its job and is never charged. A same-key retry after `worker-lost` or `infrastructure-degraded` runs the job again and is charged its wall seconds, never a request. A job's charge comes back only when its candidate never started. A replica whose worker isn't ready answers 503 `worker_unavailable` before it charges anything.
+Every job-backed request needs an `Idempotency-Key`, whatever `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` says: the key is the job's command id. A duplicate answers its job and is never charged. A same-key retry after `worker-lost` or `infrastructure-degraded` runs the job again and is charged its wall seconds, never a request; a second retry before the first has queued the job again gets 409 `already_in_flight` and pays nothing. A job's charge comes back only when its candidate never started. A replica whose worker isn't ready answers 503 `worker_unavailable` before it charges anything.
 
 **Turning it on.**
 
@@ -385,7 +385,7 @@ Every job-backed request needs an `Idempotency-Key`, whatever `ROUNDS_GATE_ENFOR
 
 **Turning it off, and rollback.** Set it `off` and restart the runners: new runs answer 503 `execution_disabled`, a queued job ends `canceled` when a worker claims it, and a running one finishes. The job reads keep answering, so a page still sees its job through. Then set it back to `legacy` once nothing waits on a job. A runner image from before this leaf runs the four routes in their request again, and a scratch job still queued then ends `denied`, `definition-invalid`.
 
-**Purge.** PocketBase deletes a scratch job 7 days after it ended, with its attempts, envelopes, and admission command, 200 jobs each 5 minutes, and logs `execution_purge` with the count. Grading jobs stay. The window is the owner's to ratify with [#72](https://github.com/keyurgolani/rounds/issues/72).
+**Purge.** PocketBase deletes a scratch job 7 days after it ended, with its attempts, envelopes, and admission command, 200 jobs each 5 minutes, and logs `execution_purge` with the count. A scratch job that never ended goes 7 days after it was last queued: with the store off nothing claims or reaps a job, so a queue the store left goes this way, whatever the store's gate says. Grading jobs stay. The window is the owner's to ratify with [#72](https://github.com/keyurgolani/rounds/issues/72).
 
 ### Public shares
 

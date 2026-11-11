@@ -6,8 +6,9 @@ admission and its worker, and pocketbase/tests/execution_server.cjs
 serving pb_hooks/admission.js and pb_hooks/execution.js on one in-memory
 store, with the users auth-refresh the runner checks a bearer with. The
 harness runs the same routes through nginx on a real PocketBase with two
-replicas. The scratch key's values, the job fingerprint, and the
-handlers' own checks are tested without a server.
+replicas. The scratch key's values, the job fingerprint, the handlers'
+own checks, and the harness retry phase's readiness check are tested
+without that server.
 """
 from __future__ import annotations
 
@@ -16,8 +17,12 @@ import itertools
 import json
 import os
 import shutil
+import socket
 import subprocess
+import sys
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import httpx
@@ -645,7 +650,43 @@ def test_a_run_out_of_time_ends_timed_out_and_keeps_its_charge(runner, node):
     assert (done["state"], done["outcome_class"], done["retryable"]) == ("timed-out", "resource-limit", False)
     assert done["envelope"]["limit"] == "wall_time"
     assert done["envelope"]["parts"] == [{"id": "run", "outcome_class": "resource-limit", "limit": "wall_time"}]
+    # What it printed before the limit isn't a result: no output.
+    assert done["envelope"]["output"] is None
     assert node.charged() == (1, 3)
+
+
+def test_a_test_run_out_of_time_shows_no_case_result(runner, node):
+    client = runner()
+    body = {"definition": TWO_SUM_REF, "code": SPINNER, "case_ids": ["c000"]}
+    job_id = submitted(client.post("/api/evaluate", json=body, headers=headers(node, key=new_key())))["job_id"]
+    done = settled(client, node, job_id)
+    assert (done["state"], done["outcome_class"]) == ("timed-out", "resource-limit")
+    assert done["envelope"]["parts"] == [{"id": "c000", "outcome_class": "resource-limit", "limit": "wall_time"}]
+    # The evaluate body would mark the case failed; the envelope keeps none of it.
+    assert done["envelope"]["output"] is None and done["envelope"]["score"] is None
+    assert node.charged() == (1, 3)
+
+
+@pytest.mark.parametrize(
+    "grade, ended",
+    [("import sys\nsys.exit(0)\n", ("failed", "infrastructure-degraded")),
+     ("import os\nos.write(3, b'not a result\\n')\n", ("denied", "definition-invalid"))],
+    ids=["nothing-came-back", "malformed"],
+)
+def test_a_take_home_run_its_harness_didnt_score_shows_no_score(runner, node, tmp_path, monkeypatch, grade, ended):
+    # The take-home body for such a channel scores 0 with every criterion
+    # failed; nothing the candidate wrote earned that, so it isn't kept.
+    client = runner()
+    document = _take_home_document()
+    document["files"] = [dict(f, contents=grade) if f["path"] == "harness/grade.py" else f for f in document["files"]]
+    entry = {"kind": "harness-revision", "track": "take-home", "slug": "add-numbers-py", "variant": "python",
+             "content_version": 1}
+    monkeypatch.setattr(definitions, "_store", _store(tmp_path, [(entry, document, "active")]))
+    body ={"definition": TAKE_HOME_REF, "files": {"solution.py": "def add(a, b):\n    return a + b\n"}}
+    job_id = submitted(client.post("/api/take-home/run", json=body, headers=headers(node, key=new_key())))["job_id"]
+    done = settled(client, node, job_id)
+    assert (done["state"], done["outcome_class"]) == ended
+    assert done["envelope"]["output"] is None and done["envelope"]["score"] is None
 
 
 def test_a_retry_after_the_infrastructure_failed_runs_the_same_job_charged_no_request(runner, node, monkeypatch):
@@ -728,3 +769,50 @@ def test_nothing_the_candidate_wrote_or_printed_reaches_a_log(runner, node, caps
     logged = capsys.readouterr()
     for marker in ("marker-in-source-5e1f", "marker-in-output-9a3c"):
         assert marker not in logged.out and marker not in logged.err
+
+
+# ---- the harness's retry phase ------------------------------------------------------
+
+
+def _scratch_probe():
+    for extra in (ROOT / "harness", ROOT / "harness" / "probes"):
+        if str(extra) not in sys.path:
+            sys.path.insert(0, str(extra))
+    import scratch_check
+
+    return scratch_check
+
+
+def test_a_replica_that_isnt_listening_yet_reads_as_not_ready_until_the_deadline():
+    probe = _scratch_probe()
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    # Nothing listens on the port now, so the connection is refused.
+    assert probe.ready(f"http://127.0.0.1:{port}") is False
+    started = time.monotonic()
+    assert probe.wait_ready(f"http://127.0.0.1:{port}", timeout_s=1.5) is False
+    assert time.monotonic() - started >= 1.5
+
+
+def test_a_replica_that_answers_ready_is_ready():
+    probe = _scratch_probe()
+
+    class Ready(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802 - the stdlib's name
+            self.send_response(200 if self.path == "/ready" else 404)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Ready)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        assert probe.wait_ready(f"http://127.0.0.1:{server.server_address[1]}", timeout_s=5) is True
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(5)

@@ -964,11 +964,28 @@ def test_the_purge_removes_a_scratch_job_seven_days_after_it_ended_with_everythi
         assert out["store"][rows] == [], rows
 
 
-def test_the_purge_keeps_grading_jobs_and_jobs_that_havent_ended():
+def test_the_purge_keeps_grading_jobs_and_unended_scratch_jobs_inside_the_window():
     grading_steps, grading, g_attempt, g_token = started_job(kind="grade")
-    out = run(*grading_steps, complete(g_attempt["id"], g_token, result(grading["id"])),
-              *queued_job()[0], {"call": "purge", "now": T0 + 30 * DAY})
+    graded = [*grading_steps, complete(g_attempt["id"], g_token, result(grading["id"]))]
+    out = run(*graded, *queued_job()[0], {"call": "purge", "now": T0 + 7 * DAY - 1})
     assert out["results"][-1] == {"purged": 0} and len(out["store"]["jobs"]) == 2
+    out = run(*graded, {"call": "purge", "now": T0 + 30 * DAY})
+    assert out["results"][-1] == {"purged": 0} and len(out["store"]["jobs"]) == 1
+
+
+def test_the_purge_takes_a_scratch_job_that_never_ended_once_it_was_queued_past_the_window():
+    # With the store off, nothing claims or reaps a job, so a queue the
+    # store left keeps the candidates' source until this takes it.
+    queued_steps, _job_id = queued_job()
+    started_steps, _job, _attempt, _token = started_job()
+    grading = queued_job(kind="grade")[0]
+    out = run(*queued_steps, *started_steps, *grading, {"call": "purge", "now": T0 + 7 * DAY})
+    assert out["results"][-1] == {"purged": 2}
+    (left,) = out["store"]["jobs"]
+    assert left["purpose"] == "grading" and left["state"] == "queued"
+    assert out["store"]["attempts"] == []
+    assert all(c["job"] == left["id"] for c in out["store"]["commands"])
+    assert {lease["command"] for lease in out["store"]["leases"]} <= {c["id"] for c in out["store"]["commands"]}
 
 
 def test_the_purge_takes_one_batch_at_a_time():

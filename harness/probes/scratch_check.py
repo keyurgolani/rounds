@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import urllib.error
 from pathlib import Path
 from typing import Any
 
@@ -109,6 +110,25 @@ def settle(token: str, job_id: str, timeout_s: float = 120, until=None) -> dict:
 
 def started(job: dict) -> bool:
     return job.get("state") == "started" or job.get("state") in ENDED
+
+
+def ready(runner: str) -> bool:
+    """Whether the replica answers its readiness check. One that was just
+    started again may refuse the connection until it listens, which reads
+    as not ready yet."""
+    try:
+        return call(runner, "GET", "/ready", timeout=3)[0] == 200
+    except (urllib.error.URLError, OSError):
+        return False
+
+
+def wait_ready(runner: str, timeout_s: float = 90) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if ready(runner):
+            return True
+        time.sleep(1)
+    return False
 
 
 def sans_id(body: Any) -> Any:
@@ -196,13 +216,15 @@ def run_scratch(c: Checks, writer: ReceiptWriter) -> None:
             (stopped.get("state"), stopped.get("outcome_class")) == ("canceled", "canceled"),
             f"submit={status} cancel={asked} ended={stopped.get('state')}")
 
-    # The time limit ends a run, names itself, and keeps the charge.
+    # The time limit ends a run, names itself, keeps the charge, and shows
+    # no output: only an end the run earned does.
     before = usage(a.token)["wall_seconds"]
     status, spin = submit(a.token, "/api/run", uuid7(), run_body(SPINNER))
     spun = settle(a.token, (spin or {}).get("job_id", ""), 60) if status == 202 else {}
     c.check("execution.scratch.limit.named-and-charged",
             (spun.get("state"), spun.get("outcome_class")) == ("timed-out", "resource-limit")
             and (spun.get("envelope") or {}).get("limit") == "wall_time"
+            and (spun.get("envelope") or {}).get("output") is None
             and usage(a.token)["wall_seconds"] >= before + 3,
             f"{spun.get('state')}/{spun.get('outcome_class')}")
 
@@ -232,10 +254,9 @@ def run_retry(c: Checks, writer: ReceiptWriter) -> None:
         return
     writer.register_secret(saved["token"], "token:scr-kill")
     token, job_id = saved["token"], saved["job_id"]
-    for runner in RUNNERS:
-        deadline = time.monotonic() + 90
-        while time.monotonic() < deadline and call(runner, "GET", "/ready", timeout=3)[0] != 200:
-            time.sleep(1)
+    back = [runner for runner in RUNNERS if wait_ready(runner)]
+    c.check("execution.scratch.killed-replica.replicas-ready", len(back) == len(RUNNERS) > 0,
+            f"{len(back)} of {len(RUNNERS)} ready")
     lost = settle(token, job_id, 150)
     c.check("execution.scratch.killed-replica.worker-lost",
             (lost.get("state"), lost.get("outcome_class"), lost.get("retryable")) == ("failed", "worker-lost", True),

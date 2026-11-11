@@ -250,13 +250,18 @@ function jobHasEnded(job) {
 // Step 6 for a key the account already used. A command that enqueued a
 // job answers from the job: "job" while it waits or runs and once it has
 // ended, "retry_job" when a same-key retry would run it again, and
-// "retry" when the job is gone.
+// "retry" when the job is gone. A retry already admitted holds the
+// command in flight with a live lease until its enqueue queues the job
+// again, so a second retry in that window is "in_flight" and pays
+// nothing.
 function verdictFor(store, existing, input, now) {
   if (existing.fingerprint !== input.fingerprint || existing.operation !== input.operation) return "mismatch";
   if (existing.job) {
     const job = store.jobOf(existing.job);
     if (job === null) return "retry";
-    return jobRules().retryable(job) ? "retry_job" : "job";
+    if (!jobRules().retryable(job)) return "job";
+    if (existing.state === "in_flight" && store.liveLeaseForCommand(existing.id, now)) return "in_flight";
+    return "retry_job";
   }
   if (existing.state === "completed") return "replay";
   if (existing.state === "in_flight" && store.liveLeaseForCommand(existing.id, now)) return "in_flight";

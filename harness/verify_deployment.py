@@ -106,7 +106,8 @@ OAUTH_FAILURE_LOCATION = "../_/#/auth/oauth2-redirect-failure"
 
 # (check id, path, methods). nginx answers these itself (frontend/nginx.conf,
 # "Never proxied"); none may reach PocketBase or the runner. nginx denies the
-# collection routes in any case, so they are tried in other cases too.
+# collection routes and the execution, legacy snapshot, and share hooks in any
+# case, so they are tried in other cases too.
 DENIED_ROUTES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("deployment.proxy.admin-ui.denied", "/_/", ("GET",)),
     ("deployment.proxy.admin-api.denied", "/api/admins", ("GET", "POST")),
@@ -119,6 +120,7 @@ DENIED_ROUTES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("deployment.proxy.collection-metadata.denied", "/api/collections/Users", ("GET",)),
     ("deployment.proxy.admission-hooks.denied", "/api/rounds/admission/", ("GET", "POST")),
     ("deployment.proxy.execution-hooks.denied", "/api/rounds/execution/", ("GET", "POST")),
+    ("deployment.proxy.execution-hooks.denied", "/api/rounds/Execution/status", ("POST",)),
     ("deployment.proxy.execution-service.denied", "/api/collections/execution_service/auth-with-password", ("POST",)),
     ("deployment.proxy.execution-service.denied", "/api/collections/execution_service/records", ("GET",)),
     ("deployment.proxy.execution-service.denied", "/api/collections/Execution_Service/auth-with-password", ("POST",)),

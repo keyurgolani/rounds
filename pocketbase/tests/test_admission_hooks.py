@@ -867,6 +867,29 @@ def test_a_same_key_retry_of_a_job_lost_to_infrastructure_charges_wall_seconds_a
     assert lease["command"] == command["id"] and lease["expires_at"] == T0 + 5 + 3 + GRACE
 
 
+def test_two_racing_retries_of_a_job_pay_its_wall_seconds_once():
+    # The second arrives before the first one's enqueue queues the job
+    # again, so the job still reads as ended with a retry left.
+    steps = enqueued("failed", "worker-lost", attempts=1, started=1)
+    out = run(*steps, job_started(), job_ended("worker-lost"), admit(key=K1, now=T0 + 5), admit(key=K1, now=T0 + 6))
+    first, second = out["results"][-2:]
+    assert first["idempotency"] == "retry_job" and first["leased"] is True
+    assert second["idempotency"] == "in_flight" and second["leased"] is False and second["quota"] == "skipped"
+    assert second["retry_after"] > 0
+    # The first request's seconds and the one retry's, no more.
+    assert counters(out["store"]) == {("account", A["id"]): (1, 6), ("deployment", ""): (1, 6)}
+    assert len(out["store"]["leases"]) == 1
+
+
+def test_a_retry_whose_runner_never_enqueued_lets_the_next_one_through_once_its_lease_ends():
+    steps = enqueued("failed", "worker-lost", attempts=1, started=1)
+    first = admit(key=K1, now=T0 + 5)
+    out = run(*steps, job_started(), job_ended("worker-lost"), first, admit(key=K1, now=T0 + 5 + 3 + GRACE + 1))
+    assert out["results"][-1]["idempotency"] == "retry_job" and out["results"][-1]["leased"] is True
+    (lease,) = out["store"]["leases"]
+    assert lease["token_hash"] != first["input"]["lease_hash"]
+
+
 def test_a_retry_over_the_request_limit_still_fits_but_not_over_the_wall_seconds():
     steps = enqueued("failed", "worker-lost", attempts=1, started=1)
     out = run(*steps, job_started(), job_ended("worker-lost"), seed("account", A["id"], requests=500),

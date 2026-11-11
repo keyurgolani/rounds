@@ -101,6 +101,21 @@ export function classifyRunnerError(
   };
 }
 
+/** A run's failure that isn't a denial, as a fixed sentence for its code
+ *  or status. The server's own text never reaches the page: it can carry
+ *  a field name or a raw body. */
+export function runFailureText(err: unknown): string {
+  if (!isRunnerError(err)) return "The run didn't finish. Your code is still here; run it again.";
+  const { status, code } = err;
+  if (code === 'invalid_request' || status === 400 || status === 422) {
+    return "The runner couldn't read this run. Reload the page and run it again.";
+  }
+  if (code === 'not_found' || status === 404) {
+    return "The runner couldn't find this practice item. Reload the page and run it again.";
+  }
+  return `The run failed with status ${status}. Run it again.`;
+}
+
 /** The element that has focus now, so a denial can hand it back. */
 export function activeTrigger(): HTMLElement | null {
   if (typeof document === 'undefined') return null;

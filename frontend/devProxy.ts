@@ -27,13 +27,14 @@ const POCKETBASE_TARGET = process.env.VITE_POCKETBASE_PROXY_TARGET || 'http://po
 // execution service record's routes, the legacy snapshot hook and the
 // share capability hooks, which only the runner calls, the admin APIs,
 // and collection metadata (nginx.conf, "Never proxied"). The collection
-// paths and the two hooks match in any case, as their nginx locations do
-// (~*), and a collection segment outside the name alphabet, which no
-// collection name or id uses, is refused too.
+// paths and the execution, legacy snapshot, and share hooks match in any
+// case, as their nginx locations do (~*), and a collection segment
+// outside the name alphabet, which no collection name or id uses, is
+// refused too.
 const NEVER_PROXIED: RegExp[] = [
   /^\/_\//,
   /^\/api\/rounds\/admission\//,
-  /^\/api\/rounds\/execution\//,
+  /^\/api\/rounds\/execution\//i,
   /^\/api\/rounds\/legacy-snapshots/i,
   /^\/api\/rounds\/share/i,
   /^\/api\/collections\/execution_service\//i,
