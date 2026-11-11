@@ -424,8 +424,8 @@ def run_secrets(writer: ReceiptWriter) -> int:
 
     # The share page, and one request outside the share routes for the
     # address scan's control.
-    page = raw(FRONTEND_URL, "GET", "/r")
-    home = raw(FRONTEND_URL, "GET", "/")
+    page = raw(FRONTEND_URL, "GET", "/r", headers={"Accept": "text/html"})
+    home = raw(FRONTEND_URL, "GET", "/", headers={"Accept": "text/html"})
     c.check("share.page.served", page[0] == 200 and home[0] == 200, f"page={page[0]} home={home[0]}")
 
     STATE.parent.mkdir(parents=True, exist_ok=True)
