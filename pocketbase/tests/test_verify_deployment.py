@@ -306,12 +306,18 @@ def _nginx_block(conf: str, loc: str) -> str:
 
 
 def test_share_requests_leave_no_nginx_access_line():
-    # The share pages, the resolver, and the public share read
-    # (ROUNDS-00B-L04); the runner's side is backend/tests/test_access_log.py.
+    # The share pages, the resolver and the two answers it hands off to, and
+    # the public share read (ROUNDS-00B-L04); the runner's side is
+    # backend/tests/test_access_log.py.
     conf = (ROOT / "frontend" / "nginx.conf").read_text()
     for loc in ("location = /r {", "location ^~ /r/ {", "location ~* ^/r(/|$) {",
-                "location = /api/share/resolve {", "location ~* ^/api/share/by-token(/|$) {"):
+                "location = /api/share/resolve {", "location @share_throttled {", "location @share_too_large {",
+                "location ~* ^/api/share/by-token(/|$) {"):
         assert "access_log off;" in _nginx_block(conf, loc), loc
+    # A request's error lines name its client: the resolver keeps only
+    # critical ones, wherever its answer comes from.
+    for loc in ("location = /api/share/resolve {", "location @share_throttled {", "location @share_too_large {"):
+        assert "error_log /var/log/nginx/error.log crit;" in _nginx_block(conf, loc), loc
 
 
 def test_the_resolver_location_has_its_backstop():
@@ -319,7 +325,8 @@ def test_the_resolver_location_has_its_backstop():
     assert "limit_req_zone $binary_remote_addr zone=share_resolve:10m rate=2r/s;" in conf
     block = _nginx_block(conf, "location = /api/share/resolve {")
     for line in ("limit_req zone=share_resolve burst=20 nodelay;", "limit_req_status 429;",
-                 "error_page 429 = @share_throttled;", "proxy_pass         http://runner:8000;"):
+                 "error_page 413 = @share_too_large;", "error_page 429 = @share_throttled;",
+                 "proxy_pass         http://runner:8000;"):
         assert line in block, line
     throttled = _nginx_block(conf, "location @share_throttled {")
     assert "return 429" in throttled and 'add_header Retry-After "1" always;' in throttled
