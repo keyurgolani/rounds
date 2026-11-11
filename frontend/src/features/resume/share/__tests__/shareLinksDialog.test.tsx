@@ -414,6 +414,33 @@ describe('the dialog', () => {
   });
 });
 
+describe('a gate flip', () => {
+  it('the earlier dialog refuses a share capability and shows or copies none of it', async () => {
+    // The SPA reads the gate as closed, and the runner as open.
+    gate.value = 'disabled';
+    const user = setupUser();
+    runner.fetch.mockImplementation(async (_url: string, init: RequestInit = {}) =>
+      (init.method ?? 'GET') === 'GET' ? json(200, []) : json(201, issued('capaaaaaaaaaaa1', TOKEN)),
+    );
+    render(<ShareDialog open onClose={vi.fn()} resumeId={RESUME} />);
+    await user.click(await screen.findByRole('button', { name: /Create share link/ }));
+    expect(await screen.findByText(/links can’t be made here right now/)).toBeInTheDocument();
+    expect(writeText).not.toHaveBeenCalled();
+    expect(document.body.innerHTML).not.toContain(TOKEN.slice(4));
+  });
+
+  it('a runner that reads the gate as closed refuses the share links dialog, which shows its own text', async () => {
+    const user = setupUser();
+    runner.answers.push(() => typed(400, 'invalid_request'));
+    openDialog();
+    await user.click(await screen.findByRole('button', { name: 'Create link' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('This link can’t be made as set. Reload the page, then try again.');
+    expect(screen.queryByLabelText('Share link')).toBeNull();
+    expect(document.body.textContent).not.toContain('Server detail');
+    expect(writeText).not.toHaveBeenCalled();
+  });
+});
+
 describe('the helpers', () => {
   it('puts the secret in the fragment', () => {
     expect(buildCapabilityUrl(TOKEN)).toBe(`${window.location.origin}/r#${TOKEN}`);

@@ -33,11 +33,26 @@ export function listShareLinks(): Promise<ShareLink[]> {
   });
 }
 
-export function createShareLink(input: {
+// A share capability's bearer: what CreateShare answers while the runner
+// reads the resolution gate as open.
+const CAPABILITY_BEARER = /^sd[0-9]{1,3}_[A-Za-z0-9_-]{22}$/;
+
+/** Only the earlier create's own answer: during a gate flip, a runner that
+ *  reads the gate as open answers with a share capability, which this
+ *  dialog can't show or copy, so it refuses that answer whole. */
+export function earlierLink(answer: unknown): ShareLink | null {
+  if (!answer || typeof answer !== 'object' || Array.isArray(answer)) return null;
+  const v = answer as Record<string, unknown>;
+  if ('secret_delivery' in v || typeof v.id !== 'string' || typeof v.token !== 'string') return null;
+  if (CAPABILITY_BEARER.test(v.token)) return null;
+  return answer as ShareLink;
+}
+
+export async function createShareLink(input: {
   resume_id?: string;
   variant_id?: string;
 }): Promise<ShareLink> {
-  return runnerJSON<ShareLink>('/api/share', {
+  const answer = await runnerJSON<unknown>('/api/share', {
     method: 'POST',
     body: {
       resume_id: input.resume_id ?? null,
@@ -45,6 +60,9 @@ export function createShareLink(input: {
     },
     errorPrefix: 'Share',
   });
+  const link = earlierLink(answer);
+  if (link === null) throw new Error('Share: links can’t be made here right now. Reload the page, then try again.');
+  return link;
 }
 
 export function deleteShareLink(id: string): Promise<{ ok: boolean }> {

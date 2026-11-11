@@ -88,7 +88,9 @@ function createErrorText(err: unknown): string {
     case 'not_found':
       return 'This resume can’t be shared. Reload the page, then try again.';
     case 'invalid_request':
-      return 'Check the expiry and the password, then try again.';
+      // Also what a runner that reads the gate as closed answers this
+      // dialog during a flip.
+      return 'This link can’t be made as set. Reload the page, then try again.';
     case 'snapshot_conflict':
       return 'This resume changed while the link was being made. Create it again.';
     case 'already_in_flight':
