@@ -126,6 +126,9 @@ def _server(dep: Deployment):
             self.wfile.write(raw)
 
         def _handle(self):
+            seen = getattr(dep, "seen_user_agents", None)
+            if seen is not None:
+                seen.append(self.headers.get("User-Agent"))
             length = int(self.headers.get("Content-Length") or 0)
             if self.command == "POST" and self.path == "/api/collections/campaigns/records" and length > vd.NGINX_BODY_CAP:
                 if dep.buffering_proxy:
@@ -755,3 +758,25 @@ def test_a_full_run_prints_no_credential_and_writes_receipts(tmp_path, capsys):
     assert code == 1
     assert {r["probe_id"] for r in rows if r["passed"]} >= {
         "deployment.credentials.defaults.rejected", "deployment.credentials.admin-passwords.rejected"}
+
+
+def test_every_request_names_the_tool_by_default():
+    dep = Deployment()
+    dep.seen_user_agents = []
+    with deployment(dep) as (_, url):
+        vd.main(["--url", url], env={})
+    assert dep.seen_user_agents and set(dep.seen_user_agents) == {vd.DEFAULT_USER_AGENT}
+
+
+def test_user_agent_replaces_it_on_every_request(monkeypatch):
+    monkeypatch.setattr(vd, "_user_agent", vd.DEFAULT_USER_AGENT)
+    dep = Deployment()
+    dep.seen_user_agents = []
+    with deployment(dep) as (_, url):
+        vd.main(["--url", url, "--user-agent", "ops-check/2"], env={})
+    assert dep.seen_user_agents and set(dep.seen_user_agents) == {"ops-check/2"}
+
+
+def test_a_user_agent_with_a_line_break_is_refused(capsys):
+    assert vd.main(["--url", "http://127.0.0.1:9", "--user-agent", "a\r\nb"], env={}) == 2
+    assert "--user-agent" in capsys.readouterr().err

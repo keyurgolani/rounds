@@ -269,6 +269,13 @@ class Response:
             return None
 
 
+# Every request names this tool. Some front proxies refuse a library's
+# default User-Agent (Cloudflare's browser integrity check answers
+# Python-urllib with error 1010), and --user-agent replaces it for one run.
+DEFAULT_USER_AGENT = "rounds-verify-deployment/1"
+_user_agent = DEFAULT_USER_AGENT
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):  # noqa: D401 - urllib hook
         return None
@@ -284,7 +291,7 @@ def _opener() -> urllib.request.OpenerDirector:
 def request(method: str, url: str, *, body: Any = None, token: str = "", timeout: float = 10.0) -> Response:
     """One request, redirects not followed, errors returned as status 0."""
     data = None
-    headers = {"Accept": "application/json"}
+    headers = {"Accept": "application/json", "User-Agent": _user_agent}
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -423,7 +430,7 @@ def check_open_routes(base_url: str, req: Callable[..., Response] = request,
 
 def read_first_sse_event(url: str, timeout: float = 8.0) -> tuple[int, str, str]:
     """Status, content type, and the first SSE event name; the stream is closed."""
-    req = urllib.request.Request(url, headers={"Accept": "text/event-stream"})
+    req = urllib.request.Request(url, headers={"Accept": "text/event-stream", "User-Agent": _user_agent})
     try:
         resp = _opener().open(req, timeout=timeout)
     except urllib.error.HTTPError as err:
@@ -475,6 +482,7 @@ def declare_oversize(base_url: str, path: str, declared: int, method: str = "POS
         conn = conn_cls(parts.netloc, **kwargs)
         try:
             conn.putrequest(method, (parts.path.rstrip("/") or "") + path)
+            conn.putheader("User-Agent", _user_agent)
             conn.putheader("Content-Type", "application/json")
             conn.putheader("Content-Length", str(declared))
             conn.endheaders()
@@ -1209,6 +1217,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="a saved runner log from its start: check the gates line it writes")
     p.add_argument("--expect-gate", action="append", metavar="NAME=VALUE",
                    help="with --gates-log: this gate should hold this value (repeatable), e.g. RUN=disabled")
+    p.add_argument("--user-agent", default=DEFAULT_USER_AGENT,
+                   help=f"the User-Agent every request sends (default {DEFAULT_USER_AGENT}), for a front proxy that refuses it")
     p.add_argument("--receipts", help="append one JSON line per check (harness receipt schema) to this file")
     return p.parse_args(argv)
 
@@ -1219,8 +1229,13 @@ def _line(r: Result) -> str:
 
 
 def main(argv: list[str] | None = None, env: dict[str, str] | None = None) -> int:
+    global _user_agent
     args = parse_args(sys.argv[1:] if argv is None else argv)
     env = dict(os.environ) if env is None else env
+    if not args.user_agent or not all(" " <= ch <= "~" for ch in args.user_agent):
+        print("verify_deployment: --user-agent must be printable ASCII on one line", file=sys.stderr)
+        return 2
+    _user_agent = args.user_agent
     results: list[Result] = []
     error = ""
     try:
