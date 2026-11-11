@@ -1,4 +1,5 @@
-"""Legacy Artifact Snapshot creation at the runner (ROUNDS-00A-L04, PR 2).
+"""Legacy Artifact Snapshots at the runner (ROUNDS-00A-L04): creation
+(PR 2) and the reads a render makes (PR 3).
 
 ``POST /api/pdf/snapshots`` (routers/pdf.py) is an admitted route: its gate
 ``ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE`` ships ``disabled``, the body cap is
@@ -30,11 +31,27 @@ The hook's answers, and the runner's:
   anything else, or no answer in time       503 materializer_unavailable
 
 Every refusal is #1's typed envelope and never repeats PocketBase's text.
+
+``POST /api/pdf/render`` takes ``render-request/v1`` (``RenderRequestV1``):
+one snapshot id, its checksum, and fixed output options, never markup.
+``markup_for_render`` reads, with the caller's bearer and nothing else:
+
+1. the snapshot, which only its owner can view, so a missing one and
+   another account's both answer 404 ``not_found``;
+2. its checksum, which must be the one the request expects, or 409
+   ``checksum_mismatch``;
+3. its source resume or variant, which must still exist, or the same
+   404 (a variant goes when its parent does);
+4. its markup file, through a file token, which must hash to the
+   checksum. A file that doesn't is ``StoredMarkupUnusable``, which the
+   route answers as a failed render and logs for the operator.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
+import urllib.parse
 from typing import Any, Literal
 
 import anyio
@@ -45,7 +62,7 @@ from pydantic import Field
 from app import admission, admission_state
 from app.errors import TypedError
 from app.limits import StrictModel
-from app.pb_auth import POCKETBASE_URL
+from app.pb_auth import POCKETBASE_URL, pb_get
 
 _log = logging.getLogger(__name__)
 
@@ -159,3 +176,111 @@ async def create(token: str, req: SnapshotRequest, command_id: str | None) -> tu
     except ValueError:
         body = None
     return read_answer(resp.status_code, body)
+
+
+# ---- render (PR 3) ------------------------------------------------------------
+
+SNAPSHOTS = "legacy_artifact_snapshots"
+SOURCE_COLLECTIONS = {"resume": "resumes", "variant": "resume_variants"}
+# A snapshot's markup is at most this many bytes, as the collection's file
+# field allows (1700008000_legacy_artifact_snapshots.js).
+MAX_MARKUP_BYTES = 2 * 1024 * 1024
+FILE_TOKEN_PATH = "/api/files/token"
+READ_TIMEOUT_S = 8
+CHECKSUM = r"^sha256:[0-9a-f]{64}$"
+# A UUIDv7, as render-request/v1 and the admission store take it.
+COMMAND_ID = r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+# A stored file's name, as PocketBase writes it.
+_FILE_NAME = re.compile(r"[A-Za-z0-9_.-]{1,255}")
+
+
+class RenderRequestV1(StrictModel):
+    """render-request/v1 (contracts/definitions/render-request.v1.schema.json,
+    ROUNDS-00A-L02). The runner image doesn't carry contracts/, so this model
+    mirrors the schema and tests/test_render_request.py runs one set of
+    bodies through both."""
+
+    snapshot_id: str = Field(pattern=RECORD_ID)
+    expected_checksum: str = Field(pattern=CHECKSUM)
+    format: Literal["pdf"]
+    page_size: Literal["A4"]
+    margin_mm: float = Field(ge=0, le=30, strict=True)
+    locale: Literal["en"]
+    idempotency_id: str = Field(pattern=COMMAND_ID)
+
+
+class StoredMarkupUnusable(Exception):
+    """The snapshot's stored file is missing, too large, or doesn't hold
+    what its checksum says. Nothing a retry or a new snapshot fixes."""
+
+
+def sha256(raw: bytes) -> str:
+    return "sha256:" + hashlib.sha256(raw).hexdigest()
+
+
+async def _read(token: str, collection: str, record_id: str) -> dict[str, Any]:
+    record = await admission.lookup(pb_get, token, f"/api/collections/{collection}/records/{record_id}")
+    if not isinstance(record, dict) or record.get("id") != record_id:
+        raise TypedError("not_found")
+    return record
+
+
+async def read_markup(token: str, snapshot_id: str, name: Any) -> bytes:
+    """The snapshot's protected markup file, through a file token issued to
+    the caller. PocketBase checks the snapshot's view rule for it again."""
+    if not isinstance(name, str) or _FILE_NAME.fullmatch(name) is None:
+        raise StoredMarkupUnusable("name")
+    path = f"/api/files/{SNAPSHOTS}/{snapshot_id}/{urllib.parse.quote(name)}"
+    chunks: list[bytes] = []
+    size = 0
+    try:
+        async with httpx.AsyncClient(base_url=POCKETBASE_URL, timeout=READ_TIMEOUT_S) as client:
+            grant = await client.post(FILE_TOKEN_PATH, headers={"Authorization": f"Bearer {token}"})
+            if grant.status_code == 401:
+                raise TypedError("unauthenticated")
+            try:
+                file_token = grant.json().get("token") if grant.status_code == 200 else None
+            except (ValueError, AttributeError):
+                file_token = None
+            if not isinstance(file_token, str) or not file_token:
+                raise TypedError("auth_unavailable")
+            async with client.stream("GET", path, params={"token": file_token}) as resp:
+                if resp.status_code in (400, 403, 404):
+                    raise StoredMarkupUnusable("missing")
+                if resp.status_code != 200:
+                    raise TypedError("auth_unavailable")
+                async for chunk in resp.aiter_bytes():
+                    size += len(chunk)
+                    if size > MAX_MARKUP_BYTES:
+                        raise StoredMarkupUnusable("size")
+                    chunks.append(chunk)
+    except httpx.HTTPError:
+        raise TypedError("auth_unavailable") from None
+    return b"".join(chunks)
+
+
+async def markup_for_render(token: str, account_id: str, req: RenderRequestV1) -> str:
+    """Step 8 for ``POST /api/pdf/render``: the markup of the caller's own
+    snapshot that ``req`` names, once its checksum and source check out.
+    The record's owner is compared with the account as well as by the view
+    rule."""
+    record = await _read(token, SNAPSHOTS, req.snapshot_id)
+    if record.get("user") != account_id:
+        raise TypedError("not_found")
+    checksum = record.get("content_checksum")
+    if checksum != req.expected_checksum:
+        raise TypedError("checksum_mismatch")
+    collection = SOURCE_COLLECTIONS.get(record.get("source_kind"))
+    source_id = record.get("source_id")
+    if collection is None or not isinstance(source_id, str) or _RECORD_ID.fullmatch(source_id) is None:
+        raise TypedError("not_found")
+    source = await _read(token, collection, source_id)
+    if source.get("user") != account_id:
+        raise TypedError("not_found")
+    raw = await read_markup(token, req.snapshot_id, record.get("markup"))
+    if sha256(raw) != checksum:
+        raise StoredMarkupUnusable("checksum")
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise StoredMarkupUnusable("encoding") from None

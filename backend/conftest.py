@@ -225,11 +225,13 @@ def admission_store(monkeypatch):
 
 @pytest.fixture
 def pocketbase(monkeypatch):
-    """One fake PocketBase behind every admitted router's ``pb_get``."""
+    """One fake PocketBase behind every admitted router's ``pb_get``, the
+    render's snapshot reads included."""
+    from app import legacy_snapshots
     from routers import ai_coding, runner, take_home
 
     fake = FakePocketBase()
-    for module in (runner, ai_coding, take_home):
+    for module in (runner, ai_coding, take_home, legacy_snapshots):
         monkeypatch.setattr(module, "pb_get", fake.pb_get)
     return fake
 
