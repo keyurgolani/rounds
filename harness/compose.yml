@@ -107,8 +107,10 @@ services:
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
       - ROUNDS_EXECUTION_SECRET=${RUNNER_EXECUTION_SECRET:-}
       # The scratch jobs phase runs the four scratch routes as jobs on
-      # server-owned definitions (ROUNDS-00A-L03 PR 2).
+      # server-owned definitions (ROUNDS-00A-L03 PR 2), and the grading
+      # phase grade and take-home submit (PR 3).
       - ROUNDS_GATE_EXECUTION_SCRATCH=${ROUNDS_GATE_EXECUTION_SCRATCH:-}
+      - ROUNDS_GATE_EXECUTION_GRADING=${ROUNDS_GATE_EXECUTION_GRADING:-}
       - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
       # The share secrets phases open share capability resolution

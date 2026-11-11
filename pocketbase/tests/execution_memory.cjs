@@ -159,6 +159,8 @@ function memoryStore(options) {
     },
     itemRow: (collection, slug) => (items[collection] && items[collection].get(slug)) || null,
     ownsCampaign: (account, campaignId) => campaigns.get(campaignId) === account,
+    // For the test server's record reads.
+    campaignOwner: (campaignId) => campaigns.get(campaignId) || null,
     saveGradedRow: (collection, row) => {
       const saved = Object.assign(clone(row), { id: nextId() });
       graded[collection].set(saved.id, saved);

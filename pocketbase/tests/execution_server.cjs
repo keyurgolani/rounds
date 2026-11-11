@@ -73,8 +73,29 @@ const ADMISSION = {
   finish: [admission.checkFinish, (account, input) => admission.finish(store.admission(), account, input, now())],
 };
 
+// PR 3: the record reads a grading route runs with the caller's token at
+// step 8, the practice item's row by its slug and the campaign by its id,
+// over the rows the tests seeded.
+function recordRead(req, url, res) {
+  if (!userTokens.has(bearer(req))) return send(res, 401, { code: 401, message: "", data: {} });
+  const listed = url.match(/^\/api\/collections\/(ai_coding_rounds|take_home_assignments)\/records$/);
+  if (listed) {
+    const filter = new URL(req.url, "http://127.0.0.1").searchParams.get("filter") || "";
+    const slug = (filter.match(/^slug='([a-z0-9-]+)'$/) || [])[1];
+    const id = slug ? store.itemRow(listed[1], slug) : null;
+    return send(res, 200, { page: 1, perPage: 1, totalItems: id ? 1 : 0, items: id ? [{ id, slug }] : [] });
+  }
+  const campaign = url.match(/^\/api\/collections\/campaigns\/records\/([a-z0-9]+)$/);
+  const owner = campaign ? store.campaignOwner(campaign[1]) : null;
+  if (owner) return send(res, 200, { id: campaign[1], user: owner });
+  return send(res, 404, { code: 404, message: "", data: {} });
+}
+
 function route(req, data, res) {
   const url = req.url.split("?")[0];
+  if (req.method === "GET" && url.startsWith("/api/collections/") && !url.startsWith("/api/collections/users/")) {
+    return recordRead(req, url, res);
+  }
   // The runner's bearer check (admission.authenticate, pb_auth.current_user).
   if (url === "/api/collections/users/auth-refresh") {
     const token = bearer(req);
