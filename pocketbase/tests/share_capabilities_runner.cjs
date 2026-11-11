@@ -120,6 +120,10 @@ function storeOver(state, calls, options) {
     update: (id, fields) => {
       call("update");
       if (opts.failUpdate) throw new Error("database busy");
+      if (typeof fields.bearer_digest === "string" &&
+          rows().some((row) => row.id !== id && row.bearer_digest === fields.bearer_digest)) {
+        throw new Error("UNIQUE constraint failed: share_capabilities.bearer_digest");
+      }
       Object.assign(state.capabilities[id], clone(fields));
     },
     remove: (id) => {
@@ -205,6 +209,10 @@ for (const step of program.steps) {
       break;
     case "revoke":
       out = attempt(() => caps.revoke({ transaction, now: step.now || now }, step.caller, step.id));
+      break;
+    case "rotate":
+      // As #12's rotate calls it: inside its transaction.
+      out = attempt(() => transaction((tx) => caps.rotate({ store: tx, now: step.now || now }, step.input)));
       break;
     case "revokeForSource":
       out = attempt(() => caps.revokeForSource({ transaction, now: step.now || now }, step.kind, step.id, step.owner));

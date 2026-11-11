@@ -6,7 +6,8 @@ contract (share_capabilities_runner.cjs): create_capability's argument checks
 before any read and its one answer for a missing, another account's, or
 ineligible snapshot; lookup_capability's one answer for every state that
 doesn't resolve; what a row may hold and how it may change, for any writer;
-the owner's list and revoke; a source delete revokes and keeps the snapshots
+the owner's list and revoke, and #12's rotate (ROUNDS-00B-L04, with its
+pinned verifier format); a source delete revokes and keeps the snapshots
 and never fails; an account delete removes the account's capabilities first.
 Then share_capabilities.pb.js's registrations. The PocketBase store itself
 runs natively and in #9's harness.
@@ -40,8 +41,21 @@ MARKUP_V = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resume</titl
 MARKUP_B = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resume</title></head><body><p>Bea</p></body></html>'
 MARKUP_D = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resume</title></head><body><p>Demo</p></body></html>'
 
-OWNER_FIELDS = ["id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at"]
+OWNER_FIELDS = ["id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at",
+                "capability_version", "password_set"]
 LOOKUP_FIELDS = ["id", "status", "expires_at", "capability_version", "snapshot", "password_policy_ref", "markup"]
+
+# A verifier in #12's pinned format (backend/app/share_password.py): only its
+# shape matters here.
+PW1 = "pw1$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$" + "A" * 43
+
+
+def owner_view(row: dict) -> dict:
+    """What the owner sees of a stored row: never its digest or verifier."""
+    view = {k: row[k] for k in OWNER_FIELDS[:7]}
+    view["capability_version"] = row["capability_version"]
+    view["password_set"] = row["password_policy_ref"] != ""
+    return view
 
 
 def fmt(ms: int) -> str:
@@ -193,7 +207,8 @@ def test_a_capability_takes_the_defaults_and_answers_only_the_owner_fields():
         "capability_version": 1, "status": "active", "revoked_at": "", "revoked_reason": "",
         "projection_version": 1, "bearer_digest": D1, "digest_key_version": 1,
     }
-    assert view == {k: stored[k] for k in OWNER_FIELDS}
+    assert view == owner_view(stored)
+    assert (view["capability_version"], view["password_set"]) == (1, False)
 
 
 def test_a_variant_snapshot_defaults_to_the_variant_name():
@@ -203,11 +218,14 @@ def test_a_variant_snapshot_defaults_to_the_variant_name():
 
 def test_create_keeps_a_purpose_expiry_and_verifier_given_to_it():
     out = run([{"call": "create", "input": create_input(
-        purpose="  Acme application ", expires_at=fmt(NOW + 365 * DAY), password_policy_ref="pw1$placeholder$verifier",
+        purpose="  Acme application ", expires_at=fmt(NOW + 365 * DAY), password_policy_ref=PW1,
         digest_key_version=2)}])
     (stored,) = out["state"]["capabilities"].values()
     assert (stored["purpose"], stored["expires_at"], stored["password_policy_ref"], stored["digest_key_version"]) == (
-        "Acme application", fmt(NOW + 365 * DAY), "pw1$placeholder$verifier", 2)
+        "Acme application", fmt(NOW + 365 * DAY), PW1, 2)
+    view = out["results"][0]["value"]["capability"]
+    assert view["password_set"] is True
+    assert PW1 not in json.dumps(view)
 
 
 @pytest.mark.parametrize("over", [
@@ -215,7 +233,8 @@ def test_create_keeps_a_purpose_expiry_and_verifier_given_to_it():
     {"expires_at": fmt(NOW + 365 * DAY)},
     {"purpose": "x" * 80},
     {"purpose": "😀" * 80},
-    {"password_policy_ref": "!" * 512},
+    {"password_policy_ref": PW1},
+    {"password_policy_ref": ""},
     {"digest_key_version": 999},
 ])
 def test_the_bounds_themselves_are_accepted(over):
@@ -244,6 +263,13 @@ BAD_ARGUMENTS = [
     ("password_policy_ref", {"password_policy_ref": "has space"}),
     ("password_policy_ref", {"password_policy_ref": "x" * 513}),
     ("password_policy_ref", {"password_policy_ref": 5}),
+    # Only the pinned profile: no other value, parameters, or profile.
+    ("password_policy_ref", {"password_policy_ref": "!" * 512}),
+    ("password_policy_ref", {"password_policy_ref": PW1.replace("m=19456", "m=65536")}),
+    ("password_policy_ref", {"password_policy_ref": PW1.replace("$argon2id$", "$argon2i$")}),
+    ("password_policy_ref", {"password_policy_ref": "pw2" + PW1[3:]}),
+    ("password_policy_ref", {"password_policy_ref": PW1 + "A"}),
+    ("password_policy_ref", {"password_policy_ref": PW1 + "\n"}),
     ("bearer_digest", {"bearer_digest": "A" * 64}),
     ("bearer_digest", {"bearer_digest": "1" * 63}),
     ("bearer_digest", {"bearer_digest": None}),
@@ -398,8 +424,9 @@ def _row(**over) -> dict:
 SNAP_A = {"id": "snapresumeaaaa1", "user": A, "content_checksum": checksum(MARKUP_A)}
 
 
-def test_a_well_formed_row_may_be_stored():
-    (res,) = run([{"call": "screenCreate", "row": _row(), "snapshot": SNAP_A}])["results"]
+@pytest.mark.parametrize("verifier", ["", PW1])
+def test_a_well_formed_row_may_be_stored(verifier):
+    (res,) = run([{"call": "screenCreate", "row": _row(password_policy_ref=verifier), "snapshot": SNAP_A}])["results"]
     assert res["value"] is None
 
 
@@ -416,6 +443,7 @@ def test_a_well_formed_row_may_be_stored():
     ({"expires_at": fmt(NOW)}, SNAP_A, "expires_at"),
     ({"expires_at": fmt(NOW + 365 * DAY + 1)}, SNAP_A, "expires_at"),
     ({"password_policy_ref": "has space"}, SNAP_A, "password_policy_ref"),
+    ({"password_policy_ref": "pw1$other"}, SNAP_A, "password_policy_ref"),
     ({"view_policy": "counted"}, SNAP_A, "view_policy"),
     ({"capability_version": 2}, SNAP_A, "capability_version"),
     ({"status": "revoked"}, SNAP_A, "status"),
@@ -507,7 +535,7 @@ def _owned_state() -> dict:
     caps = state["capabilities"]
     caps["capaaaaaaaaaaa1"] = cap_row("capaaaaaaaaaaa1", A, "snapresumeaaaa1", D1, state, created=fmt(NOW - 3 * DAY))
     caps["capaaaaaaaaaaa2"] = cap_row("capaaaaaaaaaaa2", A, "snapvariantaaa1", D2, state, created=fmt(NOW - DAY),
-                                      password_policy_ref="pw1$placeholder$verifier")
+                                      password_policy_ref=PW1, capability_version=3)
     caps["capbbbbbbbbbbb1"] = cap_row("capbbbbbbbbbbb1", B, "snapresumebbbb1", D3, state, created=fmt(NOW))
     return state
 
@@ -518,8 +546,10 @@ def test_the_owner_list_has_only_the_callers_rows_newest_first_and_only_the_owne
     items = res["value"]["body"]["items"]
     assert [i["id"] for i in items] == ["capaaaaaaaaaaa2", "capaaaaaaaaaaa1"]
     assert all(list(i) == OWNER_FIELDS for i in items)
+    # The version Rotate expects, and whether a password protects the link.
+    assert [(i["capability_version"], i["password_set"]) for i in items] == [(3, True), (1, False)]
     text = json.dumps(res["value"])
-    for secret in (D1, D2, D3, "pw1$placeholder$verifier", "snapresumeaaaa1", A, B):
+    for secret in (D1, D2, D3, PW1, "argon2id", "snapresumeaaaa1", A, B):
         assert secret not in text
 
 
@@ -565,6 +595,108 @@ def test_another_accounts_capability_answers_like_a_missing_one_and_stays(caller
     assert res["value"] == {"status": 404, "body": {"v": "share-capability/v1", "error": "not_found"}}
     assert "update" not in res["calls"]
     assert out["state"] == state
+
+
+# ---- rotate (ROUNDS-00B-L04) ------------------------------------------------------------------------------
+
+
+def rotate_input(**over) -> dict:
+    data = {"owner": A, "id": "capaaaaaaaaaaa1", "expected_version": 1, "bearer_digest": D9, "digest_key_version": 1}
+    data.update(over)
+    return data
+
+
+def test_rotate_swaps_the_digest_raises_the_version_and_keeps_the_rest():
+    state = shared_state(password_policy_ref=PW1)
+    out = run([
+        {"call": "rotate", "input": rotate_input()},
+        {"call": "lookup", "digest": D1},
+        {"call": "lookup", "digest": D9},
+    ], state)
+    rotated, old, new = out["results"]
+    assert rotated["value"]["status"] == "rotated"
+    view = rotated["value"]["capability"]
+    assert list(view) == OWNER_FIELDS
+    row = out["state"]["capabilities"]["capaaaaaaaaaaa1"]
+    assert (row["bearer_digest"], row["capability_version"]) == (D9, 2)
+    assert view == owner_view(row)
+    # Its target, password, expiry, and purpose stay.
+    before = state["capabilities"]["capaaaaaaaaaaa1"]
+    assert {k: v for k, v in row.items() if k not in ("bearer_digest", "capability_version")} == {
+        k: v for k, v in before.items() if k not in ("bearer_digest", "capability_version")}
+    # The old digest resolves nothing; the new one resolves the same capability.
+    assert old["value"] == {"capability": None, "reason": "unknown"}
+    assert new["value"]["capability"]["id"] == "capaaaaaaaaaaa1"
+    assert new["value"]["capability"]["capability_version"] == 2
+
+
+def test_of_two_rotations_at_one_version_only_the_first_swaps():
+    out = run([
+        {"call": "rotate", "input": rotate_input(bearer_digest=D2)},
+        {"call": "rotate", "input": rotate_input(bearer_digest=D3)},
+    ], shared_state())
+    first, second = out["results"]
+    assert first["value"]["status"] == "rotated"
+    assert second["value"] == {"status": "conflict"}
+    row = out["state"]["capabilities"]["capaaaaaaaaaaa1"]
+    assert (row["bearer_digest"], row["capability_version"]) == (D2, 2)
+
+
+@pytest.mark.parametrize("over, input_over, answer", [
+    ({"status": "revoked", "revoked_at": fmt(NOW - DAY), "revoked_reason": "owner", "capability_version": 2}, {},
+     "revoked"),
+    ({"expires_at": fmt(NOW)}, {}, "expired"),
+    ({"expires_at": fmt(NOW - DAY)}, {}, "expired"),
+    ({"capability_version": 2}, {}, "conflict"),
+    ({}, {"expected_version": 2}, "conflict"),
+    ({}, {"owner": B}, "not_found"),
+    ({}, {"id": "capmissingaaaa1"}, "not_found"),
+    ({}, {"id": "CAPAAAAAAAAAAA1"}, "not_found"),
+    ({}, {"owner": "acct1"}, "not_found"),
+])
+def test_a_rotation_that_cannot_happen_answers_and_writes_nothing(over, input_over, answer):
+    state = shared_state(**over)
+    out = run([{"call": "rotate", "input": rotate_input(**input_over)}], state)
+    (res,) = out["results"]
+    assert res["value"] == {"status": answer}
+    assert "update" not in res["calls"]
+    assert out["state"] == state
+
+
+@pytest.mark.parametrize("field, input_over", [
+    ("arguments", {"user": A}),
+    ("expected_version", {"expected_version": 0}),
+    ("expected_version", {"expected_version": 1.5}),
+    ("expected_version", {"expected_version": "1"}),
+    ("bearer_digest", {"bearer_digest": "A" * 64}),
+    ("bearer_digest", {"bearer_digest": None}),
+    ("digest_key_version", {"digest_key_version": 0}),
+    ("digest_key_version", {"digest_key_version": 1000}),
+    # The key version stays what the capability was made with.
+    ("digest_key_version", {"digest_key_version": 2}),
+])
+def test_a_bad_rotate_argument_is_refused_and_writes_nothing(field, input_over):
+    state = shared_state()
+    out = run([{"call": "rotate", "input": rotate_input(**input_over)}], state)
+    (res,) = out["results"]
+    assert res["value"] == {"status": "invalid", "field": field}
+    assert "update" not in res["calls"]
+    assert out["state"] == state
+
+
+def test_a_digest_another_capability_holds_fails_the_rotation_and_keeps_the_store():
+    state = _owned_state()
+    out = run([{"call": "rotate", "input": rotate_input(bearer_digest=D2)}], state)
+    (res,) = out["results"]
+    assert "UNIQUE" in res["threw"]
+    assert out["state"] == state
+
+
+def test_the_rotated_row_passes_the_update_screen():
+    before = shared_state()["capabilities"]["capaaaaaaaaaaa1"]
+    (res,) = run([{"call": "screenUpdate", "before": before,
+                   "after": dict(before, bearer_digest=D9, capability_version=2)}])["results"]
+    assert res["value"] is None
 
 
 # ---- deletes: the source, then the account ---------------------------------------------------------------

@@ -185,12 +185,15 @@ def _gate_table(value: Any) -> bool:
 # definition.* lines name a definition by its identity, never its content.
 # share.resolve lines carry the record id of the share link or capability
 # that resolved and a coarse outcome in `code` (available, not_found,
-# gate_closed, kill_switch, degraded), never the token. share.revoke lines
-# (ROUNDS-00B-L03 stage 2) carry the owner's pseudonym, the capability id,
-# and revoked, unchanged, or not_found.
+# gate_closed, kill_switch, degraded; throttled, password_required, and
+# password_wrong from ROUNDS-00B-L04), never the token or a password.
+# share.revoke lines (ROUNDS-00B-L03 stage 2) carry the owner's pseudonym,
+# the capability id, and revoked, unchanged, or not_found. share.create and
+# share.rotate lines (ROUNDS-00B-L04) carry the same three: issued,
+# already_issued, ineligible, or the refusal's error code.
 EVENTS = frozenset({
     "decision", "gates", "definitions.loaded", "definition.resolved", "definition.rejected", "execution.job",
-    "execution.worker", "share.resolve", "share.revoke",
+    "execution.worker", "share.resolve", "share.revoke", "share.create", "share.rotate",
 })
 # The job metrics' names (ROUNDS-00A-L03). #54, #22, #154, and #174 reuse
 # the shape.
@@ -256,6 +259,8 @@ EVENT_FIELDS: dict[str, frozenset[str]] = {
     "execution.worker": frozenset({"code", "service"}),
     "share.resolve": frozenset({"correlation_id", "record", "code"}),
     "share.revoke": frozenset({"correlation_id", "account", "record", "code"}),
+    "share.create": frozenset({"correlation_id", "account", "record", "code"}),
+    "share.rotate": frozenset({"correlation_id", "account", "record", "code"}),
 }
 
 

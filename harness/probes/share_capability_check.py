@@ -42,7 +42,8 @@ POCKETBASE_URL = os.environ.get("POCKETBASE_URL", "http://pocketbase:8090")
 RUNNER_URL = os.environ.get("RUNNER_URL", "http://runner:8000")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://frontend").rstrip("/")
 ROUTE = "/api/share/capabilities"
-OWNER_FIELDS = {"id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at"}
+OWNER_FIELDS = {"id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at",
+                "capability_version", "password_set"}
 NOT_FOUND = {"detail": "Not found.", "code": "not_found"}
 CAPS = "share_capabilities"
 SNAPSHOTS = "legacy_artifact_snapshots"

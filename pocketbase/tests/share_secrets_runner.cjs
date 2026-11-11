@@ -3,8 +3,13 @@
 //
 //   node share_secrets_runner.cjs <hooks dir> < program.json
 //
-// A program is {"steps": [...]}; each step names a call and its
-// arguments, and the output is {"results": [...], "counters": [...]}.
+// A program is {"steps": [...], "world": {...}}; each step names a call and
+// its arguments, and the output is {"results": [...], "counters": [...],
+// "world": {...}}. The world is the share commands' state: admission
+// commands by (account, command_id) through admission.js, capabilities by
+// id with #11's rotate (share_capabilities.js), and snapshots by id. A
+// command transaction runs on a copy and keeps it only when it returns, as
+// runInTransaction does.
 
 const fs = require("fs");
 const path = require("path");
@@ -15,13 +20,146 @@ const program = JSON.parse(fs.readFileSync(0, "utf8"));
 class BadRequestError extends Error {}
 class ForbiddenError extends Error {}
 class NotFoundError extends Error {}
+class UnauthorizedError extends Error {}
 globalThis.BadRequestError = BadRequestError;
 globalThis.ForbiddenError = ForbiddenError;
 globalThis.NotFoundError = NotFoundError;
+globalThis.UnauthorizedError = UnauthorizedError;
 globalThis.$apis = { requestInfo: (ctx) => ctx.info };
 globalThis.__hooks = hooksDir;
 
 const secrets = require(path.join(hooksDir, "share_secrets.js"));
+const admission = require(path.join(hooksDir, "admission.js"));
+const capabilities = require(path.join(hooksDir, "share_capabilities.js"));
+
+const clone = (value) => JSON.parse(JSON.stringify(value));
+
+// ---- the share commands' world -------------------------------------------------------
+
+const world = Object.assign({ commands: [], capabilities: {}, snapshots: {}, failCreate: false }, program.world || {});
+let commandIds = world.commands.length;
+let capabilityIds = Object.keys(world.capabilities).length;
+
+// One transaction's view of `state`, as commandTx gives it over a DAO.
+function commandTxOver(state, calls) {
+  const commands = {
+    findCommand: (account, commandId) =>
+      clone(state.commands.find((c) => c.account === account && c.command_id === commandId) || null),
+    saveCommand: (row) => {
+      const saved = clone(row);
+      if (!saved.id) {
+        commandIds += 1;
+        saved.id = "cmd" + String(commandIds).padStart(12, "0");
+        state.commands.push(saved);
+      } else {
+        // A record keeps the fields another caller set on it.
+        Object.assign(state.commands.find((c) => c.id === saved.id), saved);
+      }
+      return clone(saved);
+    },
+    deleteCommand: (row) => {
+      state.commands = state.commands.filter((c) => c.id !== row.id);
+    },
+  };
+  const byId = (id) => (state.capabilities[id] ? Object.assign({ id }, clone(state.capabilities[id])) : null);
+  return {
+    commands,
+    snapshotOf: (command) => (state.commands.find((c) => c.id === command.id) || {})[secrets.SNAPSHOT_FIELD] || "",
+    setSnapshot: (command, key) => {
+      calls.push("setSnapshot");
+      state.commands.find((c) => c.id === command.id)[secrets.SNAPSHOT_FIELD] = key;
+    },
+    // #11's create_capability, reduced to what these routes depend on: its
+    // answers, and a digest unique across capabilities.
+    createCapability: (a) => {
+      calls.push("createCapability");
+      if (world.failCreate) throw new Error("database is locked");
+      const snapshot = state.snapshots[a.snapshot_id];
+      if (!snapshot || snapshot.user !== a.owner) return { status: "share-unavailable" };
+      if (a.password_policy_ref !== "" && a.password_policy_ref.indexOf("pw1$") !== 0) {
+        return { status: "invalid", field: "password_policy_ref" };
+      }
+      if (Object.keys(state.capabilities).some((id) => state.capabilities[id].bearer_digest === a.bearer_digest)) {
+        throw new Error("UNIQUE constraint failed: share_capabilities.bearer_digest");
+      }
+      capabilityIds += 1;
+      const id = "capnew" + String(capabilityIds).padStart(9, "0");
+      const row = {
+        user: a.owner, snapshot: a.snapshot_id, status: "active", expires_at: a.expires_at || "2027-02-09 12:00:00.000Z",
+        capability_version: 1, bearer_digest: a.bearer_digest, digest_key_version: a.digest_key_version,
+        password_policy_ref: a.password_policy_ref, purpose: a.purpose || "Shared resume", revoked_reason: "",
+        revoked_at: "", created: "2026-11-11 12:00:00.000Z",
+      };
+      state.capabilities[id] = row;
+      return { status: "created", capability: capabilities.ownerView(Object.assign({ id }, row)) };
+    },
+    snapshotSource: (id) => {
+      calls.push("snapshotSource");
+      const snapshot = state.snapshots[id];
+      return snapshot ? { kind: snapshot.source_kind, id: snapshot.source_id } : null;
+    },
+    // #11's rotate itself, over the same rows.
+    rotateBearer: (a) => {
+      calls.push("rotateBearer");
+      return capabilities.rotate({
+        now: Date.parse("2026-11-11T12:00:00Z"),
+        store: {
+          byId,
+          update: (id, fields) => Object.assign(state.capabilities[id], clone(fields)),
+        },
+      }, a);
+    },
+  };
+}
+
+function commandDeps(step, calls) {
+  return {
+    admission,
+    now: step.now || 1_800_000_000,
+    transaction: (fn) => {
+      const copy = clone({ commands: world.commands, capabilities: world.capabilities, snapshots: world.snapshots });
+      const out = fn(commandTxOver(copy, calls));
+      world.commands = copy.commands;
+      world.capabilities = copy.capabilities;
+      world.snapshots = copy.snapshots;
+      return out;
+    },
+  };
+}
+
+function attempt(fn) {
+  try {
+    return { value: fn() };
+  } catch (err) {
+    return { threw: String(err && err.message ? err.message : err) };
+  }
+}
+
+// A route handler's context: who called, its body and headers, its path
+// parameters, and c.json.
+function routeContext(step) {
+  const who = step.principal || null;
+  const authRecord = who === null ? null : {
+    id: who.id || "acct00000000001",
+    collection: () => ({ name: who.collection }),
+    username: () => who.username || "",
+  };
+  return {
+    info: { authRecord, data: step.data, headers: step.headers || {} },
+    pathParam: (name) => (step.params || {})[name] || "",
+    json: (status, body) => ({ status, body }),
+  };
+}
+
+function handle(step) {
+  globalThis.$os = { getenv: (key) => (key === "ROUNDS_ADMISSION_SECRET" ? step.runnerKey || "" : "") };
+  const c = routeContext(step);
+  try {
+    return { answer: secrets[step.handler](c) };
+  } catch (err) {
+    return { threw: err.constructor.name, message: err.message };
+  }
+}
 
 // The throttle store's contract, in memory: one row per key.
 function memoryThrottle() {
@@ -253,9 +391,43 @@ const results = program.steps.map((step) => {
       if (step.identity === secrets.RESOLVER_USERNAME) did = lines.length ? lines[0].resolver : "unchanged";
       return { did, record: e.record ? app.view(e.record._row) : null, records: app.records.map(app.view) };
     }
+    case "checkLookup":
+      return secrets.checkLookup(step.input);
+    case "checkBegin":
+      return secrets.checkBegin(step.input, admission.COMMAND_ID);
+    case "checkCreate":
+      return secrets.checkCreate(step.input, admission.COMMAND_ID);
+    case "checkRotate":
+      return secrets.checkRotate(step.input, admission.COMMAND_ID);
+    case "lookup": {
+      // The lookup route's decision over the in-memory throttle.
+      const asked = [];
+      const out = secrets.lookup({
+        transaction: (fn) => fn(store),
+        now: step.now,
+        lookup: (digest) => {
+          asked.push(digest);
+          return (step.capabilities || {})[digest] || null;
+        },
+      }, step.input);
+      return { out, asked };
+    }
+    case "begin":
+    case "createShare":
+    case "rotateShare": {
+      const calls = [];
+      const deps = commandDeps(step, calls);
+      const account = { id: step.account || "acct00000000001" };
+      const out = attempt(() => (step.call === "rotateShare"
+        ? secrets.rotateShare(deps, account, step.id, step.input)
+        : secrets[step.call](deps, account, step.input)));
+      return Object.assign({ calls }, out);
+    }
+    case "handle":
+      return handle(step);
     default:
       throw new Error(`unknown call ${step.call}`);
   }
 });
 
-process.stdout.write(JSON.stringify({ results, counters: store.dump() }));
+process.stdout.write(JSON.stringify({ results, counters: store.dump(), world }));

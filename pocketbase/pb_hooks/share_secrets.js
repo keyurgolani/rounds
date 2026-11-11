@@ -49,7 +49,7 @@ const SECRET_ENV = "ROUNDS_SHARE_RESOLVER_PASSWORD";
 const SECRET_MIN_CHARS = 32;
 const SECRET_MAX_CHARS = 72;
 // The routes the share-resolver record may call, by method and route
-// pattern. The lookup route lands with the resolver.
+// pattern: its lookup, and nothing else.
 const RESOLVER_ROUTES = [{ method: "POST", path: "/api/rounds/share/lookup" }];
 const REFUSED = "This isn't available.";
 

@@ -182,7 +182,7 @@
     },
     {
       "kind": "collection",
-      "source": {"path": "pocketbase/pb_migrations/1700008300_share_secrets.js", "lines": "40"},
+      "source": {"path": "pocketbase/pb_migrations/1700008300_share_secrets.js", "lines": "44"},
       "legacyName": "share_resolvers",
       "decidedBy": "ROUNDS-00B-L04",
       "targetLabel": null,
@@ -191,7 +191,7 @@
     },
     {
       "kind": "collection",
-      "source": {"path": "pocketbase/pb_migrations/1700008300_share_secrets.js", "lines": "63"},
+      "source": {"path": "pocketbase/pb_migrations/1700008300_share_secrets.js", "lines": "67"},
       "legacyName": "share_throttle",
       "decidedBy": "ROUNDS-00B-L04",
       "targetLabel": null,

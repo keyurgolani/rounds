@@ -132,7 +132,8 @@ globalThis.__hooks = hooksDir;
 const secrets = require(require("path").join(hooksDir, "share_secrets.js"));
 process.stdout.write(JSON.stringify({
   up: afterUp, saves, down: afterDown, deleted: db.deleted, secondDown,
-  hooks: { order: secrets.ORDER, minChars: secrets.SECRET_MIN_CHARS, collection: secrets.COLLECTION, throttle: secrets.THROTTLE },
+  hooks: { order: secrets.ORDER, minChars: secrets.SECRET_MIN_CHARS, collection: secrets.COLLECTION, throttle: secrets.THROTTLE,
+    snapshotField: secrets.SNAPSHOT_FIELD },
 }));
 """
 
@@ -201,6 +202,17 @@ def test_up_lists_the_three_operations_once(run, tmp_path_factory):
     # A database that already lists one of them gets each once.
     again = _run(tmp_path_factory, BEFORE + ["snapshot_create"])
     assert _field(again["up"]["admission_commands"], "operation")["options"]["values"] == BEFORE + ADDED
+
+
+def test_up_adds_the_snapshot_key_a_share_create_row_keeps_once(run, tmp_path_factory):
+    commands = run["up"]["admission_commands"]
+    field = _field(commands, "share_snapshot_command")
+    assert run["hooks"]["snapshotField"] == "share_snapshot_command"
+    assert (field["type"], field["required"], field["options"]["max"]) == ("text", False, 36)
+    assert re.fullmatch(field["options"]["pattern"], "0190f000-0000-7000-8000-000000000001")
+    assert not re.fullmatch(field["options"]["pattern"], "0190f000-0000-4000-8000-000000000001")
+    again = _run(tmp_path_factory, BEFORE + ["snapshot_create"])
+    assert [f["name"] for f in again["up"]["admission_commands"]["fields"]].count("share_snapshot_command") == 1
 
 
 def test_down_drops_only_what_up_added(run):

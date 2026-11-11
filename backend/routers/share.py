@@ -1,7 +1,11 @@
 """Public share links for resumes and variants.
 
 Endpoints:
-  POST   /api/share                          create a link (authed)
+  POST   /api/share                          create a link (authed); while
+                                             ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION
+                                             is enabled, CreateShare
+                                             (app/share_commands.py,
+                                             ROUNDS-00B-L04)
   GET    /api/share                          list my links (authed)
   DELETE /api/share/{id}                     delete a link (authed)
   the public share read                      the link's projection, anonymous
@@ -25,10 +29,11 @@ import secrets
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from fastapi.routing import APIRoute
 from pydantic import BaseModel
 
-from app import obs, share_capabilities
+from app import obs, share_capabilities, share_commands, share_secrets
 from app.errors import TypedError
 from app.pb_auth import (
     current_user,
@@ -94,7 +99,21 @@ def _link_out(record: dict[str, Any]) -> ShareLinkOut:
 # ---------------------------------------------------------------------------
 
 
-@router.post("", response_model=ShareLinkOut)
+class _CreateShareRoute(APIRoute):
+    """POST /api/share: CreateShare while the resolution gate is open, read
+    on each request, and the create below, as it was, while it's closed."""
+
+    def get_route_handler(self):
+        closed = super().get_route_handler()
+
+        async def handler(request: Request) -> Response:
+            if share_capabilities.resolution_open():
+                return await share_commands.create(request)
+            return await closed(request)
+
+        return handler
+
+
 async def create_link(request: Request, body: CreateShareRequest) -> ShareLinkOut:
     user = await current_user(request)
     if bool(body.resume_id) == bool(body.variant_id):
@@ -126,6 +145,10 @@ async def create_link(request: Request, body: CreateShareRequest) -> ShareLinkOu
             raise TypedError("not_found") from None
         raise
     return _link_out(record)
+
+
+router.add_api_route("", create_link, methods=["POST"], response_model=ShareLinkOut,
+                     route_class_override=_CreateShareRoute)
 
 
 @router.get("")
@@ -192,6 +215,10 @@ async def public_read(token: str) -> JSONResponse:
         if public_shares_disabled():
             raise _NotFound("kill_switch")
         if PUBLIC_TOKEN_RE.fullmatch(token) is None:
+            raise _NotFound("not_found")
+        # A share capability's bearer resolves only through
+        # POST /api/share/resolve (ROUNDS-00B-L04).
+        if share_secrets.WELL_FORMED.fullmatch(token) is not None:
             raise _NotFound("not_found")
         out, record = await _resolve(token)
     except _NotFound as nf:

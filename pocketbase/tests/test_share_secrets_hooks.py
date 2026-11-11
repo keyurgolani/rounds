@@ -5,7 +5,11 @@ The decisions under node, on an in-memory store with the PocketBase
 store's contract (share_secrets_runner.cjs): the three throttle counters
 with their limits, windows, and order, the prune, the share-resolver record
 following its secret, its exact-name login, and the guard that refuses the
-record on every route but its own. A real PocketBase runs the store in the
+record on every route but its own. Then the lookup route, which counts
+before it reads, and CreateShare's and RotateShareBearer's routes: one
+transaction each that keeps nothing when it refuses, a kept result with no
+digest or verifier, a retry that replays it, and one winner of any number
+of rotations at a version. A real PocketBase runs the store in the
 harness."""
 from __future__ import annotations
 
@@ -367,19 +371,29 @@ globalThis.__hooks = hooksDir;
 for (const name of ["onAfterBootstrap", "routerUse", "onRecordBeforeAuthWithPasswordRequest"]) {
   globalThis[name] = (fn, ...tags) => seen.push({ name, tags });
 }
+globalThis.$apis = { requireRecordAuth: (...collections) => ({ auth: collections }) };
+globalThis.routerAdd = (method, route, fn, ...middlewares) => seen.push({ name: "routerAdd", method, route, middlewares });
 require(path.join(hooksDir, "share_secrets.pb.js"));
 process.stdout.write(JSON.stringify(seen));
 """
 
 
-def test_share_secrets_pb_js_registers_its_three_hooks():
+def test_share_secrets_pb_js_registers_its_hooks_and_routes():
     node = shutil.which("node")
     assert node
     res = subprocess.run([node, "-e", REGISTRATION, str(HOOKS)], capture_output=True, text=True, timeout=60,
                          check=True)
+    as_resolver = [{"auth": ["share_resolvers"]}]
+    as_account = [{"auth": ["users"]}]
     assert json.loads(res.stdout) == [
         {"name": "onAfterBootstrap", "tags": []},
         {"name": "onRecordBeforeAuthWithPasswordRequest", "tags": ["share_resolvers"]},
+        # The lookup takes only share-resolver; the commands only an account.
+        {"name": "routerAdd", "method": "POST", "route": "/api/rounds/share/lookup", "middlewares": as_resolver},
+        {"name": "routerAdd", "method": "POST", "route": "/api/rounds/share/commands", "middlewares": as_account},
+        {"name": "routerAdd", "method": "POST", "route": "/api/rounds/share/capabilities", "middlewares": as_account},
+        {"name": "routerAdd", "method": "POST", "route": "/api/rounds/share/capabilities/:id/rotate",
+         "middlewares": as_account},
         {"name": "routerUse", "tags": []},
     ]
 
@@ -389,10 +403,357 @@ def test_each_handler_requires_the_module_itself():
     # value read elsewhere.
     source = (HOOKS / "share_secrets.pb.js").read_text()
     assert "function " not in source
-    assert len(re.findall(r"require\(`\$\{__hooks\}/share_secrets\.js`\)", source)) == 3
+    assert len(re.findall(r"require\(`\$\{__hooks\}/share_secrets\.js`\)", source)) == 7
 
 
 def test_the_module_is_not_auto_loaded_as_a_hook_file():
     # PocketBase loads only *.pb.js files, so share_secrets.js stays a
     # require target.
     assert (HOOKS / "share_secrets.js").exists() and not (HOOKS / "share_secrets.js").name.endswith(".pb.js")
+
+
+# ---- the share commands and the lookup route (ROUNDS-00B-L04 part 2) ---------------------------------
+
+V = "share-secrets/v1"
+LOOKUP_V = "share-lookup/v1"
+ACCOUNT, OTHER = "acct00000000001", "acct00000000002"
+KEY, SNAP_KEY, SNAP_KEY_2, KEY_2 = (f"0190f000-0000-7000-8000-00000000000{n}" for n in (1, 2, 3, 4))
+FP, FP_2 = "a" * 64, "b" * 64
+D1, D2, D3, D9 = "1" * 64, "2" * 64, "3" * 64, "9" * 64
+PW1 = "pw1$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$" + "A" * 43
+CAP = "capaaaaaaaaaaa1"
+
+
+def run_with(state: dict | None, *steps: dict) -> dict:
+    node = shutil.which("node")
+    assert node, "node is required for the PocketBase hook checks; CI installs it"
+    program = {"steps": list(steps), "world": state or {}}
+    res = subprocess.run([node, str(RUNNER), str(HOOKS)], input=json.dumps(program), capture_output=True,
+                         text=True, timeout=60)
+    assert res.returncode == 0, res.stderr
+    return json.loads(res.stdout)
+
+
+def shared() -> dict:
+    return {"snapshots": {
+        "snapresumeaaaa1": {"user": ACCOUNT, "source_kind": "resume", "source_id": "resumeaaaaaaaa1"},
+        "snapvariantaaa1": {"user": ACCOUNT, "source_kind": "variant", "source_id": "variantaaaaaaa1"},
+        "snapotheraccnt1": {"user": OTHER, "source_kind": "resume", "source_id": "resumebbbbbbbb1"},
+    }}
+
+
+def with_capability(**over) -> dict:
+    state = shared()
+    row = {"user": ACCOUNT, "snapshot": "snapresumeaaaa1", "status": "active", "expires_at": "2027-02-09 12:00:00.000Z",
+           "capability_version": 1, "bearer_digest": D1, "digest_key_version": 1, "password_policy_ref": PW1,
+           "purpose": "For recruiters", "revoked_reason": "", "revoked_at": "", "created": "2026-11-10 12:00:00.000Z"}
+    row.update(over)
+    state["capabilities"] = {CAP: row}
+    return state
+
+
+def begin(**over) -> dict:
+    data = {"command_id": KEY, "operation": "share_create", "fingerprint": FP, "snapshot": SNAP_KEY}
+    data.update(over)
+    return {"call": "begin", "input": data}
+
+
+def create(**over) -> dict:
+    data = {"command_id": KEY, "fingerprint": FP, "snapshot_id": "snapresumeaaaa1", "purpose": None,
+            "expires_at": None, "password_policy_ref": "", "bearer_digest": D1, "digest_key_version": 1}
+    data.update(over)
+    return {"call": "createShare", "input": data}
+
+
+def rotate(account: str = ACCOUNT, cid: str = CAP, **over) -> dict:
+    data = {"command_id": KEY, "fingerprint": FP, "expected_capability_version": 1, "bearer_digest": D9,
+            "digest_key_version": 1}
+    data.update(over)
+    return {"call": "rotateShare", "account": account, "id": cid, "input": data}
+
+
+def test_begin_records_the_command_and_keeps_its_first_snapshot_key():
+    out = run_with(shared(), begin(), begin(snapshot=SNAP_KEY_2))
+    first, again = (r["value"] for r in out["results"])
+    assert first == {"status": 200, "body": {"v": V, "verdict": "new", "snapshot_command_id": SNAP_KEY}}
+    # A retry gets the key its first attempt kept, so its snapshot replays.
+    assert again == {"status": 200, "body": {"v": V, "verdict": "retry", "snapshot_command_id": SNAP_KEY}}
+    (row,) = out["world"]["commands"]
+    assert (row["account"], row["operation"], row["state"]) == (ACCOUNT, "share_create", "in_flight")
+    assert row["share_snapshot_command"] == SNAP_KEY
+
+
+def test_a_completed_command_answers_its_kept_result_before_anything_runs():
+    out = run_with(shared(), begin(), create(), begin())
+    made, replay = out["results"][1]["value"], out["results"][2]["value"]
+    assert replay == {"status": 200, "body": {"v": V, "verdict": "replay", "result": made["body"]["result"]}}
+    assert "setSnapshot" not in out["results"][2]["calls"]
+
+
+@pytest.mark.parametrize("change", [{"fingerprint": FP_2}, {"operation": "share_rotate", "snapshot": None}])
+def test_a_key_used_for_another_request_is_a_mismatch(change):
+    out = run_with(shared(), begin(), begin(**change))
+    assert out["results"][1]["value"] == {"status": 409, "body": {"v": V, "error": "idempotency_mismatch"}}
+
+
+def test_create_makes_one_capability_and_keeps_a_result_with_no_secret():
+    out = run_with(shared(), begin(), create(password_policy_ref=PW1))
+    made = out["results"][1]["value"]
+    assert (made["status"], made["body"]["delivery"]) == (201, "issued")
+    result = made["body"]["result"]
+    assert result["status"] == 201
+    assert list(result["body"]) == ["capability_id", "scope", "state", "expires_at", "capability_version"]
+    assert result["body"]["scope"] == {"target_kind": "legacy_artifact_snapshot", "resume_id": "resumeaaaaaaaa1",
+                                       "projection_version": 1}
+    assert (result["body"]["state"], result["body"]["capability_version"]) == ("active", 1)
+    (row,) = out["world"]["commands"]
+    assert (row["state"], row["result"]) == ("completed", result)
+    (cap,) = out["world"]["capabilities"].values()
+    assert (cap["bearer_digest"], cap["password_policy_ref"]) == (D1, PW1)
+    kept = json.dumps(out["world"]["commands"])
+    assert D1 not in kept and PW1 not in kept
+
+
+def test_a_variant_share_names_its_variant():
+    out = run_with(shared(), begin(), create(snapshot_id="snapvariantaaa1"))
+    scope = out["results"][1]["value"]["body"]["result"]["body"]["scope"]
+    assert scope == {"target_kind": "legacy_artifact_snapshot", "variant_id": "variantaaaaaaa1", "projection_version": 1}
+
+
+def test_a_retry_of_a_completed_create_is_already_issued_and_makes_nothing():
+    out = run_with(shared(), begin(), create(), create(bearer_digest=D2))
+    first, again = out["results"][1]["value"], out["results"][2]
+    assert again["value"] == {"status": 200, "body": {"v": V, "delivery": "already_issued",
+                                                      "result": first["body"]["result"]}}
+    assert "createCapability" not in again["calls"]
+    assert len(out["world"]["capabilities"]) == 1
+
+
+@pytest.mark.parametrize("over, status, code", [
+    ({"snapshot_id": "snapotheraccnt1"}, 404, "not_found"),
+    ({"snapshot_id": "snapmissingaaa1"}, 404, "not_found"),
+    ({"password_policy_ref": "plain-text"}, 400, "invalid_request"),
+])
+def test_a_create_that_makes_nothing_keeps_nothing(over, status, code):
+    out = run_with(shared(), create(**over))
+    assert out["results"][0]["value"] == {"status": status, "body": {"v": V, "error": code}}
+    assert out["world"]["commands"] == [] and out["world"]["capabilities"] == {}
+
+
+def test_a_create_under_a_key_begun_for_another_request_is_refused():
+    out = run_with(shared(), begin(), create(fingerprint=FP_2))
+    assert out["results"][1]["value"] == {"status": 409, "body": {"v": V, "error": "idempotency_mismatch"}}
+    assert out["world"]["capabilities"] == {}
+
+
+def test_a_write_that_fails_keeps_nothing_and_throws_for_the_route_to_answer():
+    state = dict(shared(), failCreate=True)
+    out = run_with(state, create())
+    assert "database is locked" in out["results"][0]["threw"]
+    assert out["world"]["commands"] == [] and out["world"]["capabilities"] == {}
+
+
+def test_a_digest_another_capability_holds_fails_the_write_and_keeps_nothing():
+    out = run_with(with_capability(), create(command_id=KEY_2))
+    assert "UNIQUE" in out["results"][0]["threw"]
+    assert out["world"]["commands"] == [] and list(out["world"]["capabilities"]) == [CAP]
+
+
+def test_rotate_swaps_the_digest_raises_the_version_and_keeps_a_result_with_no_secret():
+    out = run_with(with_capability(), rotate())
+    res = out["results"][0]["value"]
+    assert (res["status"], res["body"]["delivery"]) == (200, "issued")
+    assert res["body"]["result"] == {"status": 200, "body": {
+        "capability_id": CAP, "state": "active", "expires_at": "2027-02-09 12:00:00.000Z", "capability_version": 2}}
+    cap = out["world"]["capabilities"][CAP]
+    assert (cap["bearer_digest"], cap["capability_version"], cap["password_policy_ref"]) == (D9, 2, PW1)
+    kept = json.dumps(out["world"]["commands"])
+    assert D9 not in kept and D1 not in kept and PW1 not in kept
+
+
+def test_of_two_rotations_at_one_version_one_swaps_and_the_other_conflicts():
+    out = run_with(with_capability(), rotate(bearer_digest=D2), rotate(command_id=KEY_2, bearer_digest=D3))
+    first, second = (r["value"] for r in out["results"])
+    assert first["status"] == 200
+    assert second == {"status": 409, "body": {"v": V, "error": "capability_version_conflict"}}
+    assert out["world"]["capabilities"][CAP]["bearer_digest"] == D2
+    assert [c["command_id"] for c in out["world"]["commands"]] == [KEY]
+
+
+def test_a_retried_rotation_is_already_issued_and_swaps_nothing_again():
+    out = run_with(with_capability(), rotate(bearer_digest=D2), rotate(bearer_digest=D3))
+    first, again = out["results"][0]["value"], out["results"][1]
+    assert again["value"] == {"status": 200, "body": {"v": V, "delivery": "already_issued",
+                                                      "result": first["body"]["result"]}}
+    assert "rotateBearer" not in again["calls"]
+    cap = out["world"]["capabilities"][CAP]
+    assert (cap["bearer_digest"], cap["capability_version"]) == (D2, 2)
+
+
+@pytest.mark.parametrize("over, account, status, code", [
+    ({"status": "revoked", "revoked_reason": "owner", "revoked_at": "2026-11-11 00:00:00.000Z",
+      "capability_version": 2}, ACCOUNT, 409, "capability_revoked"),
+    ({"expires_at": "2026-11-01 00:00:00.000Z"}, ACCOUNT, 409, "capability_expired"),
+    ({}, OTHER, 404, "not_found"),
+])
+def test_a_rotation_that_cannot_happen_keeps_nothing(over, account, status, code):
+    state = with_capability(**over)
+    out = run_with(state, rotate(account=account))
+    assert out["results"][0]["value"] == {"status": status, "body": {"v": V, "error": code}}
+    assert out["world"]["commands"] == []
+    assert out["world"]["capabilities"] == state["capabilities"]
+
+
+def test_a_rotation_under_another_key_version_is_invalid():
+    out = run_with(with_capability(), rotate(digest_key_version=2))
+    assert out["results"][0]["value"] == {"status": 400, "body": {"v": V, "error": "invalid_request"}}
+
+
+def _lookup(now: int, digest: str = D1, capabilities: dict | None = None, pw: bool = False) -> dict:
+    throttle = [{"scope": "ip_minute", "key": "c" * 64}]
+    if pw:
+        throttle.append({"scope": "pw_15m", "key": "d" * 64})
+    throttle.append({"scope": "digest_day", "key": "e" * 64})
+    return {"call": "lookup", "now": now, "capabilities": capabilities or {},
+            "input": {"digest": digest, "throttle": throttle}}
+
+
+FIELDS = {"id": CAP, "status": "active", "expires_at": "2027-02-09 12:00:00.000Z", "capability_version": 1,
+          "snapshot": "snapresumeaaaa1", "password_policy_ref": "", "markup": "<p>x</p>"}
+
+
+def test_the_lookup_answers_the_lookup_fields_or_null():
+    out = run(_lookup(T0, D1, {D1: FIELDS}), _lookup(T0 + 1, D2, {D1: FIELDS}))
+    found, missing = out["results"]
+    assert found == {"out": {"status": 200, "body": {"v": LOOKUP_V, "throttled": False, "capability": FIELDS}},
+                     "asked": [D1]}
+    assert missing["out"]["body"] == {"v": LOOKUP_V, "throttled": False, "capability": None}
+
+
+def test_a_throttled_lookup_reads_no_capability():
+    seeded = {"call": "seedCounter", "row": {"key": "c" * 64, "scope": "ip_minute", "window_start": T0, "count": 60}}
+    out = run(seeded, _lookup(T0 + 10, D1, {D1: FIELDS}))
+    res = out["results"][1]
+    assert res == {"out": {"status": 200, "body": {"v": LOOKUP_V, "throttled": True, "retry_after": 50}},
+                   "asked": []}
+
+
+def test_each_lookup_prunes_old_counters():
+    old = {"call": "seedCounter", "row": {"key": "f" * 64, "scope": "digest_day", "window_start": T0, "count": 3}}
+    out = run(old, _lookup(T0 + 2 * 24 * 3600))
+    assert "f" * 64 not in [row["key"] for row in out["counters"]]
+
+
+@pytest.mark.parametrize("data", [
+    {"digest": D1},
+    {"digest": "x", "throttle": [{"scope": "ip_minute", "key": "c" * 64}, {"scope": "digest_day", "key": "e" * 64}]},
+    {"digest": D1, "throttle": [{"scope": "digest_day", "key": "e" * 64}]},
+    {"digest": D1, "throttle": [{"scope": "ip_minute", "key": "c" * 64}, {"scope": "digest_day", "key": "e" * 64}],
+     "token": "sd1_x"},
+    None, [], "digest",
+])
+def test_the_lookup_takes_only_a_digest_and_its_counters(data):
+    (res,) = run({"call": "checkLookup", "input": data})["results"]
+    assert res is None
+
+
+@pytest.mark.parametrize("data, ok", [
+    ({"command_id": KEY, "operation": "share_create", "fingerprint": FP, "snapshot_command_id": SNAP_KEY}, True),
+    ({"command_id": KEY, "operation": "share_rotate", "fingerprint": FP}, True),
+    ({"command_id": KEY, "operation": "share_create", "fingerprint": FP}, False),
+    ({"command_id": KEY, "operation": "share_create", "fingerprint": FP, "snapshot_command_id": KEY}, False),
+    ({"command_id": KEY, "operation": "share_rotate", "fingerprint": FP, "snapshot_command_id": SNAP_KEY}, False),
+    ({"command_id": KEY, "operation": "snapshot_create", "fingerprint": FP}, False),
+    ({"command_id": "not-a-uuid", "operation": "share_rotate", "fingerprint": FP}, False),
+    ({"command_id": KEY, "operation": "share_rotate", "fingerprint": "F" * 64}, False),
+    ({"command_id": KEY, "operation": "share_rotate", "fingerprint": FP, "token": "sd1_x"}, False),
+])
+def test_begin_takes_only_its_own_fields(data, ok):
+    (res,) = run({"call": "checkBegin", "input": data})["results"]
+    assert (res is not None) is ok
+
+
+CREATE_BODY = {"command_id": KEY, "fingerprint": FP, "snapshot_id": "snapresumeaaaa1", "purpose": None,
+               "expires_at": None, "password_policy_ref": "", "bearer_digest": D1, "digest_key_version": 1}
+
+
+@pytest.mark.parametrize("over", [
+    {"token": "sd1_AbCdEfGhIjKlMnOpQrStUv"}, {"password": "correct horse"}, {"bearer_digest": "sd1_x"},
+    {"snapshot_id": "SNAP"}, {"digest_key_version": 0}, {"digest_key_version": "1"}, {"password_policy_ref": 5},
+    {"password_policy_ref": "x" * 513}, {"purpose": "x" * 401}, {"command_id": "x"},
+])
+def test_create_takes_only_its_own_fields_and_never_a_bearer_or_password(over):
+    (res,) = run({"call": "checkCreate", "input": dict(CREATE_BODY, **over)})["results"]
+    assert res is None
+
+
+def test_a_well_formed_create_is_taken():
+    (res,) = run({"call": "checkCreate", "input": CREATE_BODY})["results"]
+    assert res == CREATE_BODY
+
+
+ROTATE_BODY = {"command_id": KEY, "fingerprint": FP, "expected_capability_version": 1, "bearer_digest": D9,
+               "digest_key_version": 1}
+
+
+@pytest.mark.parametrize("over", [
+    {"token": "sd1_AbCdEfGhIjKlMnOpQrStUv"}, {"expected_capability_version": 0},
+    {"expected_capability_version": 1.5}, {"expected_capability_version": "1"}, {"bearer_digest": "x"},
+])
+def test_rotate_takes_only_its_own_fields(over):
+    (res,) = run({"call": "checkRotate", "input": dict(ROTATE_BODY, **over)})["results"]
+    assert res is None
+
+
+RESOLVER = {"collection": "share_resolvers", "username": "share-resolver"}
+ACCOUNT_RECORD = {"collection": "users", "username": "ada", "id": ACCOUNT}
+RUNNER_KEY = "test-runner-key-placeholder-0123456789"
+LOOKUP_BODY = {"digest": D1, "throttle": [{"scope": "ip_minute", "key": "c" * 64},
+                                          {"scope": "digest_day", "key": "e" * 64}]}
+
+
+@pytest.mark.parametrize("principal", [None, ACCOUNT_RECORD, {"collection": "share_resolvers", "username": "other"},
+                                       {"collection": "Share_Resolvers", "username": "share-resolver"}])
+def test_the_lookup_route_answers_only_share_resolver(principal):
+    (res,) = run({"call": "handle", "handler": "handleLookup", "principal": principal, "data": LOOKUP_BODY})["results"]
+    assert res["threw"] == "ForbiddenError"
+
+
+def test_the_lookup_route_refuses_a_malformed_body():
+    (res,) = run({"call": "handle", "handler": "handleLookup", "principal": RESOLVER,
+                  "data": {"digest": D1}})["results"]
+    assert res["answer"] == {"status": 400, "body": {"v": LOOKUP_V, "error": "invalid_request"}}
+
+
+@pytest.mark.parametrize("handler", ["handleBegin", "handleCreate", "handleRotate"])
+def test_the_command_routes_need_a_signed_in_account(handler):
+    (res,) = run({"call": "handle", "handler": handler, "principal": None, "data": {}})["results"]
+    assert res["threw"] == "UnauthorizedError"
+
+
+@pytest.mark.parametrize("handler", ["handleBegin", "handleCreate", "handleRotate"])
+@pytest.mark.parametrize("runner_key, sent, status, code", [
+    ("", RUNNER_KEY, 503, "unconfigured"),
+    (RUNNER_KEY, None, 403, "forbidden"),
+    (RUNNER_KEY, "another-runner-key-placeholder-0123456789", 403, "forbidden"),
+])
+def test_the_command_routes_need_the_runner_key(handler, runner_key, sent, status, code):
+    headers = {} if sent is None else {"x_rounds_admission_key": sent}
+    (res,) = run({"call": "handle", "handler": handler, "principal": ACCOUNT_RECORD, "data": {},
+                  "runnerKey": runner_key, "headers": headers, "params": {"id": CAP}})["results"]
+    assert res["answer"] == {"status": status, "body": {"v": V, "error": code}}
+
+
+@pytest.mark.parametrize("handler", ["handleBegin", "handleCreate", "handleRotate"])
+def test_the_command_routes_refuse_a_malformed_body_before_any_write(handler):
+    (res,) = run({"call": "handle", "handler": handler, "principal": ACCOUNT_RECORD, "data": {"token": "sd1_x"},
+                  "runnerKey": RUNNER_KEY, "headers": {"x_rounds_admission_key": RUNNER_KEY},
+                  "params": {"id": CAP}})["results"]
+    assert res["answer"] == {"status": 400, "body": {"v": V, "error": "invalid_request"}}
+
+
+def test_rotate_with_a_malformed_id_is_not_found_before_any_write():
+    (res,) = run({"call": "handle", "handler": "handleRotate", "principal": ACCOUNT_RECORD, "data": ROTATE_BODY,
+                  "runnerKey": RUNNER_KEY, "headers": {"x_rounds_admission_key": RUNNER_KEY},
+                  "params": {"id": "CAPAAAAAAAAAAA1"}})["results"]
+    assert res["answer"] == {"status": 404, "body": {"v": V, "error": "not_found"}}
