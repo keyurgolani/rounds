@@ -23,11 +23,12 @@
 // A command that enqueued an execution job (ROUNDS-00A-L03 PR 2; the
 // `job` link execution.js sets) answers from its job instead of from its
 // own state: a duplicate gets the job, never a second charge, and a
-// same-key retry of a job lost to infrastructure charges wall seconds and
-// a lease, never a request. Its lease stays after its request as the
-// job's charge: jobStarted makes it final when the candidate starts, and
-// jobEnded gives the wall seconds back when the job ends first. It lives
-// as long as its job, which the execution purge removes it with.
+// same-key retry of a job lost to infrastructure pays its wall seconds
+// and holds a lease but counts no request. Its lease stays after its
+// request as the job's charge: jobStarted makes it final when the
+// candidate starts, and jobEnded gives the wall seconds back when the job
+// ends first. It lives as long as its job, which the execution purge
+// removes it with.
 //
 // A handler requires this file itself, as with gates.js:
 //

@@ -72,7 +72,7 @@ CLAIM_SCAN = 50
 # The least wall seconds admission admits each operation for.
 WALL = {"run": 3, "evaluate": 3, "run_project": 10, "grade": 45, "take_home_run": 60, "take_home_submit": 120}
 # The kinds with a handler since PR 2 (backend/execution/handlers.py).
-SCRATCH_KINDS = frozenset({"run", "evaluate", "run_project", "take_home_run"})
+SCRATCH_KINDS = frozenset({"evaluate", "run", "take_home_run", "run_project"})
 
 
 def token43() -> str:

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from app import gates, obs
 
-SCRATCH_OPERATIONS = frozenset({"run", "evaluate", "run_project", "take_home_run"})
+SCRATCH_OPERATIONS = frozenset({"evaluate", "run", "take_home_run", "run_project"})
 # What ``on`` needs, as NAME=value.
 SCRATCH_NEEDS = (("EXECUTION_STORE", "on"), ("EXECUTION_DEFINITIONS", "enforce"))
 

@@ -645,7 +645,7 @@ DEFINITION_ROUTES = frozenset({
     "/api/run", "/api/evaluate", "/api/ai-coding/run-project", "/api/ai-coding/grade",
     "/api/take-home/run", "/api/take-home/submit",
 })
-SCRATCH_ROUTES = frozenset({"/api/run", "/api/evaluate", "/api/ai-coding/run-project", "/api/take-home/run"})
+SCRATCH_ROUTES = frozenset({"/api/evaluate", "/api/run", "/api/take-home/run", "/api/ai-coding/run-project"})
 # Each stop's routes; a route gate stops any admitted route.
 STOP_ROUTES = {"definitions_disabled": DEFINITION_ROUTES, "execution_disabled": SCRATCH_ROUTES}
 ENFORCEMENT_GATES: dict[str, tuple[str, ...]] = {

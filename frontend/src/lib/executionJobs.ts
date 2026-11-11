@@ -1,12 +1,12 @@
 // Durable execution jobs on the runner's scratch routes (ROUNDS-00A-L03).
 //
-// While ROUNDS_GATE_EXECUTION_SCRATCH is on, /api/run, /api/evaluate,
-// /api/ai-coding/run-project, and /api/take-home/run don't run in their
-// request. They answer 202 with a job:
+// While ROUNDS_GATE_EXECUTION_SCRATCH is on, the four scratch routes (a
+// coding run and test run, a project run, and a take-home run) don't run
+// in their request. They answer 202 with a job:
 //
 //   { job_id, state, outcome_class, retryable, cancel_requested, envelope }
 //
-// and the page follows it with GET /api/execution/jobs/{id}?wait=20,
+// and the page follows it with GET /api/execution/jobs/{job_id}?wait=20,
 // which answers the same shape once the job changed or ended. The
 // envelope is the user view of rounds.execution-envelope/v1, and its
 // `output` is the body the route answers in its request. Until PR 4 a

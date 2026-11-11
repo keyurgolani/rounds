@@ -483,8 +483,8 @@ async def begin_job(
     ``ENFORCE_IDEMPOTENCY`` says, a different request under a used key is
     409 ``idempotency_mismatch``, and a duplicate of a job answers that
     job's id, which this returns for the route to answer, uncharged. A
-    same-key retry the store would run again (``retry_job``) is charged
-    wall seconds and a lease, never a request. Step 7 follows
+    same-key retry the store would run again (``retry_job``) pays its wall
+    seconds and holds a lease but counts no request. Step 7 follows
     ``ENFORCE_QUOTA`` as ``begin`` does. Returns None when the route goes
     on to enqueue."""
     admitted = state(request)
