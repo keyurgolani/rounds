@@ -4,12 +4,17 @@ The relation quarantine moves a share link whose resume or variant belongs to
 another account, so its token then matches no link. A legacy link with neither
 target, or one whose variant or resume is gone, must answer exactly like that
 missing token (the same status and body, never a 500), and record no view.
+
+Since ROUNDS-00B-L03 stage 1 no public read records a view at all, and a
+resolved link answers only its projection (backend/tests/test_share_public_read.py).
 """
 from unittest.mock import patch
 
 import pytest
 
 LINK_OWNER = "owner-of-the-link"
+# A well-formed token, so each read reaches the link lookup.
+TOKEN = "AbCdEfGhIjKlMnOpQrStUv"
 
 
 def _comparable(res):
@@ -36,8 +41,8 @@ def _read(client, link, records):
         return {"id": "v1"}
 
     with patch("routers.share.pb_admin_get", fake_admin_get), \
-         patch("routers.share.pb_admin_post", fake_admin_post):
-        res = client.get("/api/share/by-token/sometoken")
+         patch("app.pb_auth.pb_admin_post", fake_admin_post):
+        res = client.get(f"/api/share/by-token/{TOKEN}")
     return res, views
 
 
@@ -53,11 +58,11 @@ def missing_token(client):
     "link, records",
     [
         # A link with no target at all.
-        ({"id": "l1", "user": LINK_OWNER, "resume": "", "variant": "", "token": "tok"}, {}),
+        ({"id": "l1", "user": LINK_OWNER, "resume": "", "variant": "", "token": TOKEN}, {}),
         # A link whose variant is gone.
-        ({"id": "l1", "user": LINK_OWNER, "resume": "", "variant": "v1", "token": "tok"}, {"resume_variants": None}),
+        ({"id": "l1", "user": LINK_OWNER, "resume": "", "variant": "v1", "token": TOKEN}, {"resume_variants": None}),
         # A link whose resume is gone.
-        ({"id": "l1", "user": LINK_OWNER, "resume": "r1", "variant": "", "token": "tok"}, {"resumes": None}),
+        ({"id": "l1", "user": LINK_OWNER, "resume": "r1", "variant": "", "token": TOKEN}, {"resumes": None}),
     ],
     ids=["no-target", "variant-gone", "resume-gone"],
 )
@@ -68,9 +73,9 @@ def test_a_link_that_leads_nowhere_answers_like_a_missing_token(client, missing_
 
 
 def test_a_link_with_a_target_still_resolves(client):
-    link = {"id": "l1", "user": LINK_OWNER, "resume": "r1", "variant": "", "token": "tok"}
-    record = {"id": "r1", "data": {}, "template_id": "modern", "design": {}, "name": "R"}
+    link = {"id": "l1", "user": LINK_OWNER, "resume": "r1", "variant": "", "token": TOKEN}
+    record = {"id": "r1", "user": LINK_OWNER, "data": {}, "template_id": "modern", "design": {}, "name": "R"}
     res, views = _read(client, link, {"resumes": record})
     assert res.status_code == 200
-    assert res.json()["kind"] == "resume"
-    assert views, "a resolved link records a view"
+    assert set(res.json()) == {"data", "template_id", "design"}
+    assert not views, "a public read records no view"

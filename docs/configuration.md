@@ -78,6 +78,12 @@ The Vite dev proxy (`frontend/devProxy.ts`) answers 404 for the paths production
 
 These flags only control whether buttons render. The corresponding providers must also be configured in the PocketBase admin UI.
 
+## Public Shares
+
+| Variable | Default | Layer | Purpose |
+| --- | --- | --- | --- |
+| `ROUNDS_DISABLE_PUBLIC_SHARES` | `false` | runner | Any value other than empty, `false`, `0`, `no`, or `off` answers every public share read with the uniform not-found, before any lookup. Read on each request. See [Public shares](operations.md#public-shares). |
+
 ## Signup Policy
 
 | Variable | Default | Layer | Purpose |

@@ -137,9 +137,9 @@ Each route row cites these IDs. "Interim" is the #1 stage that contains the gap 
 | `POST` | `/api/sd-practice/chat` | [`backend/routers/sd_practice.py:699-755`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/sd_practice.py#L699-L755) | bearer (dependency) | 1 provider stream with tool calls | not admitted | #179 | `A2` `N2` `X1` |
 | `POST` | `/api/take-home/chat` | [`backend/routers/take_home.py:208-246`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/take_home.py#L208-L246) | bearer (dependency) | 1 provider stream | not admitted | #179 | `A2` `N2` `X1` |
 | `POST` | `/api/share` | [`backend/routers/share.py:66-95`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L66-L95) | bearer (handler) | PocketBase create | not admitted | #11 | `O1` `X1` |
-| `GET` | `/api/share` | [`backend/routers/share.py:98-126`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L98-L126) | bearer (handler) | PocketBase list; a superuser count per link | not admitted | #11 | `O2` `X1` |
+| `GET` | `/api/share` | [`backend/routers/share.py:98-126`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L98-L126) | bearer (handler) | PocketBase list | not admitted | #11 | `O2` `X1` |
 | `DELETE` | `/api/share/{link_id}` | [`backend/routers/share.py:129-139`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L129-L139) | bearer (handler) | PocketBase delete | not admitted | #11 | `X1` |
-| `GET` | `/api/share/by-token/{token}` | [`backend/routers/share.py:147-218`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L147-L218) | none, by design | superuser reads; 1 superuser create | not admitted | #11 | `A2` `O2` `X1` |
+| `GET` | the public share read | `backend/routers/share.py` | none, by design | server reads of the projection | not admitted | #11 | `A2` `O2` `X1` |
 | `GET` | `/health` | [`backend/main.py:37-39`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/main.py#L37-L39) | none | none | not admitted | #1 | none |
 | `GET` | `/ready` | `backend/main.py`, added by #3 PR 1 (Changes 7) | none | none; with the store on, reads the worker's state | not admitted | #3 | none |
 | `GET`, `HEAD` | `/openapi.json` | FastAPI default ([`backend/main.py:8`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/main.py#L8)) | none | none | not admitted; no proxy forwards it | #1 | none |
@@ -270,10 +270,10 @@ These load the account's active text model with the caller's token and decrypt i
 
 #11 owns these, then #12 and #14.
 
-- `POST /api/share`: caller sends `resume_id` or `variant_id`. The server stamps `user` from the bearer, mints a 22-character token ([`backend/routers/share.py:55-58`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L55-L58)), creates the `resume_share_links` row with the caller's token, and returns the token. Nothing checks who owns the target (`O1`).
-- `GET /api/share`: lists the caller's links with the caller's token, then counts each link's views with the superuser token ([`backend/routers/share.py:240-258`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L240-L258)). Returns every token again, which #12 stops.
+- `POST /api/share`: caller sends `resume_id` or `variant_id`. The server stamps `user` from the bearer, mints a 22-character token ([`backend/routers/share.py:55-58`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L55-L58)), creates the `resume_share_links` row with the caller's token, and returns the token. #10's relation check and #11 S1's create hook keep the target the caller's own (`O1`).
+- `GET /api/share`: lists the caller's links with the caller's token. #12 changes what it returns.
 - `DELETE /api/share/{link_id}`: deletes with the caller's token and answers `{"ok": true}` for a missing id. Other PocketBase errors pass through. #14 S1 removes the route.
-- `GET /api/share/by-token/{token}`: anonymous by design. With the superuser token it finds the link and reads its resume, or its variant and the parent resume ([`backend/routers/share.py:155-196`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L155-L196)), then creates a `resume_share_views` row holding a truncated IP hash and the user agent ([`backend/routers/share.py:198-216`](https://github.com/keyurgolani/rounds/blob/62d4eaeaecf601da836afa1981adc0b1ae2db16a/backend/routers/share.py#L198-L216)). Returns the record's `data`, `template_id`, `design`, `name`, and `kind`. #11 S1 adds the kill switch, the token-format check, the uniform 404, and no view writes; #14 S1 removes the route.
+- The public share read: anonymous by design. Since #11 S1 it answers only the resume's projection, and only when the link's owner owns its target, or one uniform 404, with the share response headers and a kill switch, and it writes nothing. #14 S1 removes the route.
 
 ### Health and Framework Routes
 
@@ -360,7 +360,7 @@ What each leaf's current body adds. The leaf updates this table when it lands.
 | #1 S2 | Landed; see Changes 2. |
 | #3 | PR 1 landed the 404s for `/api/rounds/execution/` and `/api/collections/execution_service/`; see Changes 7. `execution` in the nginx and Vite runner groups comes with the job-backed routes. |
 | #4 | A 404 for `/api/rounds/legacy-snapshots` |
-| #11 S1 | `/r` and `/r/` locations that add the share response headers |
+| #11 S1 | The share page locations, in any letter case, that add the share response headers |
 | #11 S2 | A 404 for `/api/rounds/share/`, which also covers #12's lookup route |
 | #12 | `limit_req` on `/api/share/resolve`, and real client IP settings for k8s |
 | #22 | A 404 for `/api/outbox/` |

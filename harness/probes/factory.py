@@ -41,6 +41,9 @@ class Account:
     user_id: str = ""
     token: str = ""
     ids: dict[str, str] = field(default_factory=dict)
+    # The seeded share link's own field values, for
+    # account-scope.share.owner-only.isolated.
+    share_fields: dict[str, str] = field(default_factory=dict)
 
 
 def _gen_password() -> str:
@@ -184,7 +187,8 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
     resume = mk("resumes", {"name": f"{tag} resume", "slug": f"{tag}-resume"})
     variant = mk("resume_variants", {"resume": resume, "name": "variant"})
     mk("resume_versions", {"resume": resume, "data": {}})
-    mk("resume_share_links", {"resume": resume, "token": secrets.token_urlsafe(16)})
+    acct.share_fields = {"resume": resume, "token": secrets.token_urlsafe(16)}
+    mk("resume_share_links", dict(acct.share_fields))
     mk_admin("resume_share_views", {"link": ids["resume_share_links"]})
     # Only a PocketBase hook writes snapshots (ROUNDS-00A-L04), so the
     # fixture row, with its markup file, goes in with the admin token.
@@ -287,7 +291,9 @@ def fresh_payload(
         "resumes": {"name": "probe", "slug": f"probe-{s}"},
         "resume_variants": {"resume": a.ids["resumes"], "name": "variant"},
         "resume_versions": {"resume": a.ids["resumes"]},
-        "resume_share_links": {"resume": a.ids["resumes"], "token": f"probe-{s}"},
+        # 22 URL-safe characters, the format the link create hook requires
+        # (pocketbase/pb_hooks/share_links.js).
+        "resume_share_links": {"resume": a.ids["resumes"], "token": f"probe_tok-{s}"[:22].ljust(22, "0")},
         "resume_share_views": {"link": a.ids["resume_share_links"]},
         # No markup file: only the create probe uses it, and the null create
         # rule refuses the request before any field is read.

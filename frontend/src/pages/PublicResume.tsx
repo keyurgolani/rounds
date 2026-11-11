@@ -1,11 +1,13 @@
-// Public read-only renderer for /r/:token. Fetches via the FastAPI
-// share endpoint (which uses an admin-cached token to bypass PB
-// owner rules), then renders the resume inside the same `ZoomablePage`
-// component the studio PreviewDialog uses — so what the recipient
-// sees matches what the user designs, with the same zoom + fit + page-
-// break markers and a "read-only" header bar.
+// Public read-only renderer for /r/:token. Fetches the link's projection
+// (only the resume data, template, and design) from the runner, then
+// renders it inside the same `ZoomablePage` component the studio
+// PreviewDialog uses, so what the recipient sees matches what the user
+// designs, with a read-only header bar.
+//
+// Every failure shows the same fixed page: the server answers one
+// not-found for every reason, and nothing from a response is shown.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Eye } from 'lucide-react';
 import {
@@ -14,51 +16,46 @@ import {
 } from '../features/resume/share/client';
 import ZoomablePage from '../features/resume/ZoomablePage';
 
+export const SHARE_NOT_FOUND_HEADING = 'This link isn’t available';
+export const SHARE_NOT_FOUND_MESSAGE =
+  'It may have been turned off, or the address may be incomplete. Ask the person who shared it for a new link.';
+export const SHARE_TOOLBAR_LABEL = 'Shared resume, read-only';
+
 export default function PublicResume() {
   const { token } = useParams<{ token: string }>();
   const [payload, setPayload] = useState<PublicResumePayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setFailed(true);
+      setLoading(false);
+      return;
+    }
+    let live = true;
     setLoading(true);
+    setFailed(false);
     fetchPublicResume(token)
-      .then(setPayload)
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
+      .then((p) => live && setPayload(p))
+      .catch(() => live && setFailed(true))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
+    };
   }, [token]);
 
   if (loading) {
     return (
       <Center>
-        <div style={{ color: 'var(--text-3)', fontSize: 13 }}>Loading…</div>
-      </Center>
-    );
-  }
-  if (error || !payload) {
-    return (
-      <Center>
-        <div className="card" style={{ padding: 24, maxWidth: 480, textAlign: 'center' }}>
-          <div className="eyebrow" style={{ fontSize: 9.5, marginBottom: 8 }}>
-            Public resume
-          </div>
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 500,
-              marginBottom: 6,
-              color: 'var(--plum)',
-            }}
-          >
-            Couldn't load this share
-          </div>
-          <p style={{ margin: 0, fontSize: 12, color: 'var(--text-3)', lineHeight: 1.55 }}>
-            {error || 'This link may have been deleted or never existed.'}
-          </p>
+        <div role="status" style={{ color: 'var(--text-3)', fontSize: 13 }}>
+          Loading…
         </div>
       </Center>
     );
+  }
+  if (failed || !payload) {
+    return <ShareNotFound />;
   }
 
   // Full-viewport column: the ZoomablePage owns its toolbar + scroll
@@ -77,7 +74,7 @@ export default function PublicResume() {
         data={payload.data}
         templateId={payload.template_id}
         design={payload.design}
-        toolbarLabel={`Shared ${payload.kind === 'variant' ? 'variant' : 'resume'} · read-only`}
+        toolbarLabel={SHARE_TOOLBAR_LABEL}
         toolbarActions={
           <span
             className="inline-flex items-center gap-1.5"
@@ -92,12 +89,67 @@ export default function PublicResume() {
               fontWeight: 500,
             }}
           >
-            <Eye size={12} strokeWidth={1.8} />
+            <Eye size={12} strokeWidth={1.8} aria-hidden="true" />
             Read-only
           </span>
         }
       />
     </div>
+  );
+}
+
+// The one page every unavailable link gets. Focus lands on the heading so
+// a screen reader announces it right away.
+export function ShareNotFound() {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    heading.current?.focus();
+  }, []);
+  return (
+    <main
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg)',
+        padding: '48px 24px',
+        boxSizing: 'border-box',
+      }}
+    >
+      <div style={{ width: '100%', maxWidth: 440 }}>
+        <h1
+          ref={heading}
+          tabIndex={-1}
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-display)',
+            fontWeight: 400,
+            fontSize: 'clamp(28px, 6vw, 36px)',
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+            color: 'var(--text)',
+            textWrap: 'balance',
+            outline: 'none',
+          }}
+        >
+          {SHARE_NOT_FOUND_HEADING}
+        </h1>
+        <p
+          style={{
+            margin: '14px 0 0',
+            paddingTop: 14,
+            borderTop: '1px solid var(--border)',
+            fontSize: 14,
+            lineHeight: 1.6,
+            color: 'var(--text-2)',
+            textWrap: 'pretty',
+          }}
+        >
+          {SHARE_NOT_FOUND_MESSAGE}
+        </p>
+      </div>
+    </main>
   );
 }
 

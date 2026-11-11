@@ -209,7 +209,7 @@ Pointing `--migrationsDir` at a folder holding only the lever runs just the leve
 
 ### Account-scope rules
 
-`1700006000_account_scope_rules.js` sets server-derived ownership on every user-owned collection: a create must name the signed-in account (`@request.data.user = @request.auth.id`) and an update cannot reassign `user`. `resume_share_views` becomes superuser-only, so only the share viewer's admin-token insert writes it. List, view, and delete rules are unchanged, and so are the `users` rules. The policy table is [`docs/security/account-scope.v1.json`](security/account-scope.v1.json).
+`1700006000_account_scope_rules.js` sets server-derived ownership on every user-owned collection: a create must name the signed-in account (`@request.data.user = @request.auth.id`) and an update cannot reassign `user`. `resume_share_views` becomes superuser-only, and nothing writes it any more (see [Public shares](#public-shares)). List, view, and delete rules are unchanged, and so are the `users` rules. The policy table is [`docs/security/account-scope.v1.json`](security/account-scope.v1.json).
 
 Deploying the release that carries it:
 
@@ -323,6 +323,19 @@ On k8s run the same through `kubectl -n rounds exec deploy/runner -- python -c "
 4. `execution.worker` with `code` `login_rejected`, or a runner's `/ready` answering 503 while the gate is `on`.
 
 `rounds_job_late_result_rejected_total` counts writes refused because their attempt was superseded. A few after a restart are expected.
+
+### Public shares
+
+A share link answers only its owner, and the public share read answers only the resume's projection:
+
+- `1700008100_share_link_owner_rules.js` makes `resume_share_links` readable by its owner only and takes no client updates, so nobody can change a link once it exists. `pocketbase/pb_hooks/share_links.pb.js` rejects a link create without exactly one target, the caller as owner, and a 22-character URL-safe token, with the same body as a foreign or missing target. Its down step keeps the rules.
+- The public share read answers `{data, template_id, design}` with hidden sections emptied, only when the link's owner owns what it points at, or one 404 `{"detail":"Not found."}` for every failure, PocketBase being down included. Both carry `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow, noarchive`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. Nothing is written, so the share dialog no longer shows view counts.
+- nginx serves the share pages, in any letter case, with the same headers and the share page CSP.
+- The runner logs one `share.resolve` line per read with an outcome in `code`: `available`, `not_found`, `kill_switch`, or `degraded`. A run of `degraded` means the runner can't read PocketBase.
+
+To turn every public share read off, set `ROUNDS_DISABLE_PUBLIC_SHARES=true` on the runner and restart it (Compose passes it through; in Kubernetes add it to the `rounds-gates` ConfigMap, which the runner reads). It fails closed: any value other than empty, `false`, `0`, `no`, or `off` turns reads off. Owners keep their links. Turn reads back on with `false`.
+
+[Deployment verification](#deployment-verification) checks both from the public URL: `deployment.proxy.share-page.headers` for the share pages and `deployment.proxy.share-read.uniform` for the public share read.
 
 ## Smoke Test Checklist
 

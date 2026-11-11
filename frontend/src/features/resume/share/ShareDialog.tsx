@@ -1,10 +1,10 @@
 // Manage public share links for the active resume. Each link is a
 // random token; the URL `/r/<token>` is publicly readable. The dialog
-// lists existing links with their view counts, lets the user copy or
-// delete them, and creates a new one with one click.
+// lists existing links, lets the user copy or delete them, and creates
+// a new one with one click.
 
 import { useEffect, useState } from 'react';
-import { Copy, ExternalLink, Eye, Plus, Trash2, X } from 'lucide-react';
+import { Copy, ExternalLink, Plus, Trash2, X } from 'lucide-react';
 import {
   buildShareUrl,
   createShareLink,
@@ -143,8 +143,7 @@ export default function ShareDialog({ open, onClose, resumeId }: Props) {
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <p style={{ margin: 0, fontSize: 12, color: 'var(--text-3)', lineHeight: 1.55 }}>
             Each link is a random URL anyone with the token can open. They render the resume
-            read-only — no editor chrome, no auth required. View counts update as recipients
-            open it.
+            read-only — no editor chrome, no auth required.
           </p>
 
           <div className="flex items-center gap-2">
@@ -208,30 +207,17 @@ export default function ShareDialog({ open, onClose, resumeId }: Props) {
                       gap: 6,
                     }}
                   >
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className="mono"
-                        style={{
-                          flex: 1,
-                          minWidth: 0,
-                          fontSize: 11,
-                          color: 'var(--text-2)',
-                          wordBreak: 'break-all',
-                        }}
-                      >
-                        {url}
-                      </span>
-                      <span
-                        className="mono inline-flex items-center gap-1"
-                        style={{
-                          fontSize: 10,
-                          color: 'var(--text-3)',
-                          flexShrink: 0,
-                        }}
-                      >
-                        <Eye size={10} strokeWidth={1.7} /> {l.view_count}
-                      </span>
-                    </div>
+                    <span
+                      className="mono"
+                      style={{
+                        minWidth: 0,
+                        fontSize: 11,
+                        color: 'var(--text-2)',
+                        wordBreak: 'break-all',
+                      }}
+                    >
+                      {url}
+                    </span>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <button
                         type="button"
