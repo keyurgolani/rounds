@@ -170,6 +170,17 @@ def test_the_render_audit_fails_when_a_render_ran_without_an_owners_snapshot(mon
     assert _audit(monkeypatch, tmp_path, lines).failed > 0
 
 
+def test_the_gate_off_row_count_includes_snapshots_kept_after_their_source_went(monkeypatch, tmp_path):
+    probe = _probe(monkeypatch, tmp_path)
+    assert probe.recorded_rows({"snapshots": {"s1": {}, "s2": {}}}) == 2
+    assert probe.recorded_rows({"snapshots": {"s1": {}}, "kept_without_source": ["s9"]}) == 2
+    source = (HARNESS / "probes" / "legacy_snapshot_check.py").read_text()
+    # The render phase records the snapshot it keeps, and the gate-off
+    # count reads the same total.
+    assert 'state.setdefault("kept_without_source", []).append(body["snapshot_id"])' in source
+    assert "== recorded_rows(state)" in source
+
+
 def test_the_harness_scan_secret_is_one_the_signer_accepts():
     run_sh = (HARNESS / "run.sh").read_text()
     (template,) = re.findall(r'^SCAN_SECRET_V="([^"]+)"', run_sh, re.M)

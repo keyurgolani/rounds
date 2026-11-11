@@ -237,6 +237,12 @@ def snapshots_of(pb: PBClient, admin: str, user: str, source_id: str | None = No
     return rows(pb, admin, SNAPSHOTS, flt)
 
 
+def recorded_rows(state: dict) -> int:
+    """Every snapshot row the run made for account a: the ones it reads back
+    and renders, and the ones kept after their source was deleted."""
+    return len(state["snapshots"]) + len(state.get("kept_without_source", []))
+
+
 def file_bytes(record: dict, token: str | None) -> tuple[int, bytes]:
     """The snapshot's markup file, read with a file token for `token`'s account."""
     query = ""
@@ -570,6 +576,9 @@ def run_render(c: Checks) -> None:
                        "render-gone", {"template_id": "modern", "design": {}, "data": content})
     status, body = create(a, "resume", gone["id"], gone["updated"])
     if status == 201 and isinstance(body, dict):
+        # Its row stays after the source goes, as the spec keeps such rows,
+        # so the later row counts include it.
+        state.setdefault("kept_without_source", []).append(body["snapshot_id"])
         deleted = pb.delete("resumes", gone["id"], a)
         after = render(a, body["snapshot_id"], body["content_checksum"])
         record_render(state, "source-gone", after, 404, "not_found")
@@ -735,7 +744,7 @@ def run_off(c: Checks) -> None:
             fingerprint(pb, tokens["a"]) == state["fingerprints"]["a"]
             and fingerprint(pb, tokens["b"]) == state["fingerprints"]["b"], "a source row changed")
     c.check("snapshot.gate-off.nothing-written",
-            len(snapshots_of(pb, admin, state["ids"]["a"])) == len(state["snapshots"]), "row count changed")
+            len(snapshots_of(pb, admin, state["ids"]["a"])) == recorded_rows(state), "row count changed")
 
 
 def run_again(c: Checks) -> None:
