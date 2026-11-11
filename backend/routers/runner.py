@@ -14,6 +14,11 @@ the server, never the request:
 
 Validators run in the validator process (``app.validators``), never in
 this one.
+
+With ``ROUNDS_GATE_EXECUTION_SCRATCH`` on (ROUNDS-00A-L03), both routes
+run nothing themselves: they admit and enqueue a job and answer 202
+(``execution.jobs``), and a worker runs the same definition
+(``execution.handlers``).
 """
 from __future__ import annotations
 
@@ -27,6 +32,7 @@ from app import admission, definitions, execution
 from app.errors import TypedError
 from app.limits import EVALUATE_MAX_CASES
 from app.pb_auth import pb_get
+from execution import jobs, keys
 from matchers import match, validator_batch
 from runner import run_one
 from schemas import (
@@ -70,6 +76,8 @@ async def _load_question(request: Request, slug: str) -> tuple[dict, list[dict]]
 @router.post("/run", response_model=CodeRunResult)
 async def run_code(request: Request):
     req = await execution.parse(request, CodeRunRequest, DefinitionRunRequest)
+    if keys.scratch() == "on" and isinstance(req, DefinitionRunRequest):
+        return await _run_job(request, req)
     if isinstance(req, DefinitionRunRequest):
         return await _run_definition(request, req)
     await admission.begin(request, req, wall_seconds=DEFAULT_TIMEOUT_S)
@@ -163,6 +171,8 @@ def _evaluate(code, language, entry_dict, selected, slot) -> CodeEvaluateResult:
 @router.post("/evaluate", response_model=CodeEvaluateResult)
 async def evaluate_code(request: Request):
     req = await execution.parse(request, CodeEvaluateRequest, DefinitionEvaluateRequest)
+    if keys.scratch() == "on" and isinstance(req, DefinitionEvaluateRequest):
+        return await _evaluate_job(request, req)
     if isinstance(req, DefinitionEvaluateRequest):
         return await _evaluate_definition(request, req)
     # Admitted on one case's time, up to every case it may select; the
@@ -259,6 +269,13 @@ def _evaluate_definition_cases(code, variant, entry, selected, predicates, slot)
         run_one(code, variant, entry, case["input"], timeout_s=TIME_CLASS_S[case["time_class"]], sandbox=slot)
         for _i, case in selected
     ]
+    return score_definition_cases(selected, outcomes, predicates)
+
+
+def score_definition_cases(selected, outcomes, predicates) -> CodeEvaluateResult:
+    """The selected cases' results from their runs' outcomes, in order:
+    matched on the server, hidden cases showing only whether they passed.
+    A scratch job scores its runs through this too (ROUNDS-00A-L03)."""
     matchers = [_matcher(case["expected"], predicates) for _i, case in selected]
     returned = [
         (matcher, outcome.return_value, case["input"])
@@ -292,6 +309,38 @@ def _evaluate_definition_cases(code, variant, entry, selected, predicates, slot)
         else:
             failed += 1
     return CodeEvaluateResult(passed=passed, failed=failed, results=results)
+
+
+# ---------------------------------------------------------------------------
+# ROUNDS_GATE_EXECUTION_SCRATCH=on: the same definitions, as jobs
+# ---------------------------------------------------------------------------
+
+
+async def _run_job(request: Request, req: DefinitionRunRequest):
+    submission = await jobs.begin(request, "run", req.definition, req.code, {"input": req.input},
+                                  wall_seconds=DEFAULT_TIMEOUT_S)
+    if submission.answer is not None:
+        return submission.answer
+    execution.resolve(request, req.definition, "coding")
+    return await jobs.enqueue(request, submission, {"code": req.code, "input": req.input})
+
+
+async def _evaluate_job(request: Request, req: DefinitionEvaluateRequest):
+    inputs = {"case_ids": req.case_ids, "tags": req.tags}
+    submission = await jobs.begin(request, "evaluate", req.definition, req.code, inputs,
+                                  wall_seconds=DEFAULT_TIMEOUT_S, max_wall_seconds=EVALUATE_MAX_WALL_S)
+    if submission.answer is not None:
+        return submission.answer
+    resolved = execution.resolve(request, req.definition, "coding")
+    selected = _select_definition_cases(request, resolved, req)
+    if len(selected) > EVALUATE_MAX_CASES:
+        raise TypedError("limit_exceeded")
+    if not selected:
+        # A job runs at least one case.
+        raise execution.rejected(request, resolved, "invalid_request", "No test case matches this request.")
+    _predicates(resolved)
+    await admission.settle(request, sum(TIME_CLASS_S[case["time_class"]] for _i, case in selected))
+    return await jobs.enqueue(request, submission, {"code": req.code, **inputs})
 
 
 async def _evaluate_definition(request: Request, req: DefinitionEvaluateRequest) -> CodeEvaluateResult:

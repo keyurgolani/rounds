@@ -6,7 +6,8 @@
 // against same-origin URLs works in both dev and prod:
 //   the paths nginx never proxies           → 404
 //   /api/run, /api/evaluate, /api/pdf, /api/share,
-//   /api/ai, /api/ai-coding, /api/take-home → runner
+//   /api/ai, /api/ai-coding, /api/take-home,
+//   /api/execution                          → runner
 //   /api/* (everything else)               → pocketbase
 // The admin UI is on PocketBase's own port in dev, as it is in prod.
 // Vite tries the entries in order and uses the first that matches. Every
@@ -26,17 +27,17 @@ const POCKETBASE_TARGET = process.env.VITE_POCKETBASE_PROXY_TARGET || 'http://po
 // execution service and share resolver records' routes, the legacy
 // snapshot hook and the share capability hooks, which only the runner
 // calls, the admin APIs, and collection metadata (nginx.conf, "Never
-// proxied"). The collection
-// paths and the two hooks match in any case, as their nginx locations do
-// (~*), and a collection segment outside the name alphabet, which no
-// collection name or id uses, is refused too. So is the older share read's
-// path, which nginx answers itself with the resolver's not-found
+// proxied"). The collection paths and the execution, legacy snapshot,
+// and share hooks match in any case, as their nginx locations do (~*),
+// and a collection segment outside the name alphabet, which no
+// collection name or id uses, is refused too. So is the older share
+// read's path, which nginx answers itself with the resolver's not-found
 // (ROUNDS-00B-L06).
 const NEVER_PROXIED: RegExp[] = [
   /^\/_\//,
   /^\/api\/share\/by-token(\/|$)/i,
   /^\/api\/rounds\/admission\//,
-  /^\/api\/rounds\/execution\//,
+  /^\/api\/rounds\/execution\//i,
   /^\/api\/rounds\/legacy-snapshots/i,
   /^\/api\/rounds\/share/i,
   /^\/api\/collections\/execution_service\//i,
@@ -102,5 +103,6 @@ export const devProxy: Record<string, ProxyOptions> = {
   '/api/ai': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
   '/api/share': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
   '/api/take-home': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
+  '/api/execution': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
   '/api': guarded({ target: POCKETBASE_TARGET, changeOrigin: true, ws: true }),
 };

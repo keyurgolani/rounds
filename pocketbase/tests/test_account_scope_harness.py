@@ -880,9 +880,8 @@ class _SharePB:
     under the owner-only rules and the link create hook, unless told to
     answer like a looser read rule or a create without the hook."""
 
-    def __init__(self, loose_read: bool = False, accept_shapes: bool = False, owner_rows: int = 1):
+    def __init__(self, loose_read: bool = False, owner_rows: int = 1):
         self.loose_read = loose_read
-        self.accept_shapes = accept_shapes
         self.owner_rows = owner_rows
         self.calls: list[tuple] = []
 
@@ -905,9 +904,6 @@ class _SharePB:
 
     def create(self, collection, token, payload):
         self.calls.append(("create", collection, token, dict(payload)))
-        if self.accept_shapes:
-            self.owner_rows += 1
-            return Response(200, {"id": "new", **payload}, 1)
         return Response(400, {"code": 400, "message": "Failed to create record.", "data": {}}, 1)
 
 
@@ -938,30 +934,13 @@ def test_share_owner_only_fails_when_another_caller_reads_the_link():
     assert not r.passed and "other list status=200 a_present=True" in r.detail and "anonymous view status=200" in r.detail
 
 
-def test_share_create_shape_passes_when_every_shape_is_denied_alike():
-    _a, b = _share_accounts()
-    pb = _SharePB()
-    r = families.share_create_shape_denied(pb, "resume_share_links", b, SHARE_CONTENT, "admin", 400)
-    assert r.passed, r.detail
-    creates = [c for c in pb.calls if c[0] == "create"]
-    shapes = [c[3] for c in creates]
-    assert len(shapes) == 4 and all(c[2] == "b-token" for c in creates)
-    assert any(not s["resume"] for s in shapes)
-    assert any(s.get("variant") == b.ids["resume_variants"] and s["resume"] for s in shapes)
-    assert any(not re.fullmatch(r"[A-Za-z0-9_-]{22}", s["token"]) for s in shapes)
-
-
-def test_share_create_shape_fails_when_a_shape_is_accepted():
-    _a, b = _share_accounts()
-    r = families.share_create_shape_denied(_SharePB(accept_shapes=True), "resume_share_links", b, SHARE_CONTENT, "admin", 400)
-    assert not r.passed and "status=200" in r.detail and "rows_before=1" in r.detail
-
-
-def test_the_share_link_fixture_token_has_the_hook_format():
+def test_the_share_link_fixture_names_its_owner_and_one_resume_and_nothing_else():
+    # ROUNDS-00B-L06: no client creates a link, so the payload only has to
+    # be one the server-only and superuser probes can send.
     a, b = _acct("a"), _acct("b")
     for suffix in ("0123456789ab", "x", "a" * 40):
         payload = factory.fresh_payload("resume_share_links", "owner-id", a, b, SHARE_CONTENT, suffix)
-        assert re.fullmatch(r"[A-Za-z0-9_-]{22}", payload["token"]), payload["token"]
+        assert payload == {"user": "owner-id", "resume": a.ids["resumes"]}
 
 
 # --------------------------------------------------------------------------

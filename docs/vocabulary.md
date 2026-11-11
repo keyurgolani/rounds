@@ -331,7 +331,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 
 ## Adapters
 
-173 entries: 58 collection, 3 field, 19 stored-value, 9 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
+174 entries: 58 collection, 3 field, 19 stored-value, 10 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
 
 ### collection
 
@@ -439,6 +439,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 | /api/sd-practice | `backend/routers/sd_practice.py:48` | `track-system-design` |  | #164 (ROUNDS-32-L10) |
 | /api/share | `backend/routers/share.py:36` | `share-capability` |  | #164 (ROUNDS-32-L10) |
 | /api/take-home | `backend/routers/take_home.py:26` | `track-take-home` |  | #164 (ROUNDS-32-L10) |
+| /api/execution | `backend/routers/execution.py:29` | `execution-attempt` |  | #164 (ROUNDS-32-L10) |
 | /health | `backend/main.py:37` | decided by #174 (ROUNDS-34-L05) |  | #174 (ROUNDS-34-L05) |
 | /ready | `backend/main.py:83` | decided by #174 (ROUNDS-34-L05) |  | #174 (ROUNDS-34-L05) |
 

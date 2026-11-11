@@ -32,6 +32,7 @@ import CodingDetail from '../../CodingDetail';
 import { getCodingQuestion } from '../../../content/api';
 import { evaluateCode } from '../runnerApi';
 import { RunnerError } from '../../../lib/runnerFetch';
+import { UUID_V7_PATTERN } from '../../../lib/idempotency';
 
 const QUESTION = {
   id: 7,
@@ -88,12 +89,16 @@ describe('CodingDetail runner calls', () => {
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run all (2)' }));
     await waitFor(() => expect(evaluateCode).toHaveBeenCalledTimes(1));
-    expect(evaluateCode).toHaveBeenCalledWith({
-      question_slug: 'two-sum',
-      language: 'python',
-      code: QUESTION.starter_code.python,
-      filter: undefined,
-    });
+    expect(evaluateCode).toHaveBeenCalledWith(
+      {
+        question_slug: 'two-sum',
+        language: 'python',
+        code: QUESTION.starter_code.python,
+        filter: undefined,
+      },
+      // One command id per action (ROUNDS-00A-L03).
+      { idempotencyKey: expect.stringMatching(UUID_V7_PATTERN) },
+    );
   });
 });
 

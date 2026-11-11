@@ -31,6 +31,12 @@
 #                     each job claimed and ended once
 #  3g. execution readiness - PocketBase restarted with another secret: both
 #                     replicas go unready; restarted with it, ready again
+#  3g2. execution scratch - both replicas and nginx with the scratch key on
+#                     and definitions enforced: runs as jobs through nginx,
+#                     duplicates, mismatches, another account's read and
+#                     cancel, a cancel mid-run, a time limit, and a replica
+#                     killed mid-run whose job a same-key retry finishes
+#                     (ROUNDS-00A-L03 PR 2, harness/probes/scratch_check.py)
 #  3h. legacy snapshots - PocketBase, both replicas, and nginx with
 #                     ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE on and the
 #                     materializer up: each RD-02 input's declared outcome,
@@ -209,10 +215,16 @@ DEMO_V=true
 # secrets phases.
 SNAPSHOT_GATE=""
 SHARE_GATE=""
+# SCRATCH_GATE and DEFINITIONS_GATE set ROUNDS_GATE_EXECUTION_SCRATCH and
+# ROUNDS_GATE_EXECUTION_DEFINITIONS for both runners, for the scratch job
+# phases (ROUNDS-00A-L03 PR 2).
+SCRATCH_GATE=""
+DEFINITIONS_GATE=""
 set_signups() {
-  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\nROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=%s\nAI_KEY_SECRET=%s\nROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=%s\nROUNDS_SHARE_RESOLVER_PASSWORD=%s\n' \
+  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\nROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=%s\nROUNDS_GATE_EXECUTION_SCRATCH=%s\nROUNDS_GATE_EXECUTION_DEFINITIONS=%s\nAI_KEY_SECRET=%s\nROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=%s\nROUNDS_SHARE_RESOLVER_PASSWORD=%s\n' \
     "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${DEMO_V}" \
-    "${SNAPSHOT_GATE}" "${SCAN_SECRET_V}" "${SHARE_GATE}" "${SHARE_RESOLVER_SECRET_V}" > "${ENV_FILE}"
+    "${SNAPSHOT_GATE}" "${SCRATCH_GATE}" "${DEFINITIONS_GATE}" "${SCAN_SECRET_V}" "${SHARE_GATE}" \
+    "${SHARE_RESOLVER_SECRET_V}" > "${ENV_FILE}"
 }
 
 # Waits until PocketBase answers its health route again.
@@ -474,9 +486,36 @@ compose up -d runner runner-b
 probe execution-ready-again
 rc_step=$?
 [ "${rc_step}" -eq 0 ] || execution_rc=1
+
+# PocketBase keeps the rotated secret; both replicas and nginx restart
+# with the scratch key on and definitions enforced (ROUNDS-00A-L03 PR 2).
+echo "--- phase 3g2: execution scratch (scratch on, definitions enforced, both replicas and nginx) ---"
+SCRATCH_GATE=on
+DEFINITIONS_GATE=enforce
+set_signups false "" on "${EXECUTION_ROTATED_V}" "${EXECUTION_ROTATED_V}"
+restart_runners
+capture_gates execution-scratch
+capture_gates execution-scratch runner-b
+probe execution-scratch
+rc_step=$?
+[ "${rc_step}" -eq 0 ] || execution_rc=1
+# A long run on runner alone, then that replica killed mid-run: the job
+# ends worker-lost once its lease runs out, and a same-key retry through
+# nginx runs it again on the replicas started fresh.
+compose stop runner-b >/dev/null 2>&1
+probe execution-scratch-start
+rc_step=$?
+[ "${rc_step}" -eq 0 ] || execution_rc=1
+compose kill runner >/dev/null 2>&1
+restart_runners
+probe execution-scratch-retry
+rc_step=$?
+[ "${rc_step}" -eq 0 ] || execution_rc=1
+SCRATCH_GATE=""
+DEFINITIONS_GATE=""
 set -e
-compose stop runner runner-b
-compose rm -f runner runner-b >/dev/null 2>&1 || true
+compose stop runner runner-b frontend
+compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
 
 # Snapshot creation runs while signups are still on, so it can make its
 # accounts; PocketBase is recreated for each gate value, then the runners

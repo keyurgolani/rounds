@@ -36,13 +36,17 @@ Read-only checks an operator runs against a Rounds deployment they operate:
   disabled     (--expect-disabled PATH[=CODE], with --url) After an emergency
                disable: that route answers 503 CODE, with no bearer and with
                a made-up one. CODE is route_disabled (the default) when the
-               route's own gate is off, or definitions_disabled when
+               route's own gate is off, definitions_disabled when
                ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled stops the six
-               execution routes.
+               execution routes, or execution_disabled when
+               ROUNDS_GATE_EXECUTION_SCRATCH stops the four scratch routes.
   gates        (--gates-log FILE) A saved runner log from its start: the
                gates line lists every admitted route's gate and both
                enforcement gates with valid values, none fell back from an
-               invalid setting, and each --expect-gate NAME=VALUE holds.
+               invalid setting, ROUNDS_GATE_EXECUTION_SCRATCH isn't on
+               without the store on and definitions enforced (the runner
+               then acts as if it were off), and each --expect-gate
+               NAME=VALUE holds.
 
 It never writes. Every request is a read, a login that is expected to fail, a
 request nginx refuses on its headers before PocketBase sees it, or a request to
@@ -102,7 +106,8 @@ OAUTH_FAILURE_LOCATION = "../_/#/auth/oauth2-redirect-failure"
 
 # (check id, path, methods). nginx answers these itself (frontend/nginx.conf,
 # "Never proxied"); none may reach PocketBase or the runner. nginx denies the
-# collection routes in any case, so they are tried in other cases too.
+# collection routes and the execution, legacy snapshot, and share hooks in any
+# case, so they are tried in other cases too.
 DENIED_ROUTES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("deployment.proxy.admin-ui.denied", "/_/", ("GET",)),
     ("deployment.proxy.admin-api.denied", "/api/admins", ("GET", "POST")),
@@ -115,6 +120,7 @@ DENIED_ROUTES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("deployment.proxy.collection-metadata.denied", "/api/collections/Users", ("GET",)),
     ("deployment.proxy.admission-hooks.denied", "/api/rounds/admission/", ("GET", "POST")),
     ("deployment.proxy.execution-hooks.denied", "/api/rounds/execution/", ("GET", "POST")),
+    ("deployment.proxy.execution-hooks.denied", "/api/rounds/Execution/status", ("POST",)),
     ("deployment.proxy.execution-service.denied", "/api/collections/execution_service/auth-with-password", ("POST",)),
     ("deployment.proxy.execution-service.denied", "/api/collections/execution_service/records", ("GET",)),
     ("deployment.proxy.execution-service.denied", "/api/collections/Execution_Service/auth-with-password", ("POST",)),
@@ -641,23 +647,38 @@ SHIPS_OFF = frozenset({"/api/pdf/snapshots"})
 ENVELOPE_KEYS = frozenset({"detail", "code", "correlation_id"})
 ROUTE_GATE_VALUES = ("enabled", "disabled")
 # The 503 an operator's stop answers, before the account
-# (backend/app/admission.py): a route's own gate, and
+# (backend/app/admission.py): a route's own gate,
 # ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled, which stops the six routes
-# that run a definition. Kept in step with the runner by
-# backend/tests/test_verify_deployment_admission.py.
-STOP_CODES = ("route_disabled", "definitions_disabled")
+# that run a definition, and ROUNDS_GATE_EXECUTION_SCRATCH off, which stops
+# the four scratch routes (ROUNDS-00A-L03 PR 2). Kept in step with the
+# runner by backend/tests/test_verify_deployment_admission.py.
+STOP_CODES = ("route_disabled", "definitions_disabled", "execution_disabled")
 STOPPED_BY = {
     "route_disabled": "its gate is off",
     "definitions_disabled": "ROUNDS_GATE_EXECUTION_DEFINITIONS is disabled",
+    "execution_disabled": "ROUNDS_GATE_EXECUTION_SCRATCH is off, or on without what it needs",
 }
 DEFINITION_ROUTES = frozenset({
     "/api/run", "/api/evaluate", "/api/ai-coding/run-project", "/api/ai-coding/grade",
     "/api/take-home/run", "/api/take-home/submit",
 })
+SCRATCH_ROUTES = frozenset({"/api/evaluate", "/api/run", "/api/take-home/run", "/api/ai-coding/run-project"})
+# Each stop's routes; a route gate stops any admitted route.
+STOP_ROUTES = {"definitions_disabled": DEFINITION_ROUTES, "execution_disabled": SCRATCH_ROUTES}
 ENFORCEMENT_GATES: dict[str, tuple[str, ...]] = {
     "ENFORCE_IDEMPOTENCY": ("off", "observe", "enforce"),
     "ENFORCE_QUOTA": ("off", "observe", "enforce"),
 }
+# The execution keys' values (backend/app/gates.py), checked when the
+# gates line lists them.
+EXECUTION_GATES: dict[str, tuple[str, ...]] = {
+    "EXECUTION_DEFINITIONS": ("legacy", "enforce", "disabled"),
+    "EXECUTION_STORE": ("off", "on"),
+    "EXECUTION_SCRATCH": ("legacy", "on", "off"),
+}
+# What ROUNDS_GATE_EXECUTION_SCRATCH=on needs (backend/execution/keys.py);
+# without either it acts as off.
+SCRATCH_NEEDS = (("EXECUTION_STORE", "on"), ("EXECUTION_DEFINITIONS", "enforce"))
 # A made-up bearer no deployment ever issued: a disabled route must refuse
 # it before it asks PocketBase who it is.
 BOGUS_BEARER = "verify-deployment-not-a-token"
@@ -676,9 +697,10 @@ ADMISSION_CHECKS: dict[str, str] = {
     "deployment.gates.logged":
         "the runner's startup log lists every admitted route's gate and both enforcement gates",
     "deployment.gates.valid":
-        "every logged gate holds one of its values, and none fell back from a value it doesn't know",
+        "every logged gate holds one of its values, none fell back from a value it doesn't know, and none is on "
+        "without the gates it needs",
     "deployment.gates.expected":
-        "each gate the operator named holds the value they expect",
+        "each gate the operator named holds the value they expect, and acts on it",
     "deployment.gates.disabled-route.denied":
         "a route the operator turned off answers 503 with their stop's code for every caller",
 }
@@ -724,8 +746,10 @@ def _code_of(raw: bytes) -> Any:
 def parse_expected_disabled(items: Iterable[str]) -> dict[str, str]:
     """``--expect-disabled PATH[=CODE]`` values as {path: code}. CODE is
     the 503 the stop answers: route_disabled (the default) for the route's
-    own gate, or definitions_disabled for one of the six execution routes
-    while ROUNDS_GATE_EXECUTION_DEFINITIONS is disabled."""
+    own gate, definitions_disabled for one of the six execution routes
+    while ROUNDS_GATE_EXECUTION_DEFINITIONS is disabled, or
+    execution_disabled for one of the four scratch routes while
+    ROUNDS_GATE_EXECUTION_SCRATCH is off or acts as off."""
     out: dict[str, str] = {}
     for item in items:
         path, sep, code = item.partition("=")
@@ -734,9 +758,11 @@ def parse_expected_disabled(items: Iterable[str]) -> dict[str, str]:
         if code not in STOP_CODES:
             raise ConfigError(f"--expect-disabled takes PATH or PATH=CODE, with CODE one of "
                               f"{', '.join(STOP_CODES)}, not {item!r}")
-        if code == "definitions_disabled" and path not in DEFINITION_ROUTES:
-            raise ConfigError(f"ROUNDS_GATE_EXECUTION_DEFINITIONS doesn't stop {path}; "
-                              f"it stops {', '.join(sorted(DEFINITION_ROUTES))}")
+        routes = STOP_ROUTES.get(code)
+        if routes is not None and path not in routes:
+            gate = "ROUNDS_GATE_EXECUTION_DEFINITIONS" if code == "definitions_disabled" else \
+                "ROUNDS_GATE_EXECUTION_SCRATCH"
+            raise ConfigError(f"{gate} doesn't stop {path}; it stops {', '.join(sorted(routes))}")
         if out.get(path, code) != code:
             raise ConfigError(f"--expect-disabled names {path} with two codes")
         out[path] = code
@@ -877,11 +903,26 @@ def parse_gates_log(text: str) -> dict[str, dict[str, str]] | None:
     return found
 
 
+def scratch_acting_off(gates: dict[str, Any]) -> list[str]:
+    """When the gates line has ROUNDS_GATE_EXECUTION_SCRATCH on without
+    what it needs, the missing settings as NAME=value; the runner then acts
+    as if it were off. Empty otherwise."""
+    def value(name: str) -> Any:
+        entry = gates.get(name)
+        return entry.get("value") if isinstance(entry, dict) else None
+
+    if value("EXECUTION_SCRATCH") != "on":
+        return []
+    return [f"{name}={want}" for name, want in SCRATCH_NEEDS if value(name) != want]
+
+
 def check_gates_log(text: str, expected: dict[str, str] | None = None, source: str = "runner log") -> list[Result]:
     """The runner's startup gates line: it lists every admitted route's gate
     and both enforcement gates, each value is one of its gate's values, none
-    came from an invalid setting, and the gates the operator named hold the
-    values they expect. Gate values aren't secret; the log is only read."""
+    came from an invalid setting, ROUNDS_GATE_EXECUTION_SCRATCH isn't on
+    without what it needs, and the gates the operator named hold the values
+    they expect and act on them. Gate values aren't secret; the log is only
+    read."""
     gates = parse_gates_log(text)
     if gates is None:
         missing = Result("deployment.gates.logged", source, "gates", "operator", 200, 0, False, 0,
@@ -905,14 +946,25 @@ def check_gates_log(text: str, expected: dict[str, str] | None = None, source: s
         value, how = entry.get("value"), entry.get("source")
         if how == "invalid":
             problems.append(f"{name} fell back to {value!r} from a value it doesn't know")
-        allowed = ROUTE_GATE_VALUES if name in route_gates else ENFORCEMENT_GATES.get(name)
+        allowed = ROUTE_GATE_VALUES if name in route_gates else (ENFORCEMENT_GATES.get(name)
+                                                                 or EXECUTION_GATES.get(name))
         if allowed is not None and value not in allowed:
             problems.append(f"{name}={value!r} isn't one of {', '.join(allowed)}")
+    needs = scratch_acting_off(gates)
+    acting_off = (f"EXECUTION_SCRATCH is on but the runner acts as if it were off: it also needs "
+                  f"{' and '.join(needs)}") if needs else ""
+    if acting_off:
+        problems.append(acting_off)
     out.append(Result("deployment.gates.valid", source, "gates", "operator", 200, 200, not problems, 0,
                       "; ".join(problems)))
     if expected:
-        wrong = [f"{name}={(gates.get(name) or {}).get('value')!r}, expected {want!r}"
-                 for name, want in sorted(expected.items()) if (gates.get(name) or {}).get("value") != want]
+        wrong = []
+        for name, want in sorted(expected.items()):
+            got = (gates.get(name) or {}).get("value")
+            if got != want:
+                wrong.append(f"{name}={got!r}, expected {want!r}")
+            elif name == "EXECUTION_SCRATCH" and acting_off:
+                wrong.append(acting_off)
         out.append(Result("deployment.gates.expected", source, "gates", "operator", 200, 200, not wrong, 0,
                           "; ".join(wrong)))
     return out
@@ -1211,9 +1263,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         "(headers only; nothing is charged or run)")
     p.add_argument("--expect-disabled", action="append", metavar="PATH[=CODE]",
                    help="with --url: this admitted route is off, so it answers 503 CODE for every caller: "
-                        "route_disabled (the default) when its own gate is off, or definitions_disabled for the six "
-                        "execution routes when ROUNDS_GATE_EXECUTION_DEFINITIONS is disabled (repeatable; for "
-                        "confirming an emergency disable)")
+                        "route_disabled (the default) when its own gate is off, definitions_disabled for the six "
+                        "execution routes when ROUNDS_GATE_EXECUTION_DEFINITIONS is disabled, or "
+                        "execution_disabled for the four scratch routes when ROUNDS_GATE_EXECUTION_SCRATCH is off "
+                        "(repeatable; for confirming an emergency disable)")
     p.add_argument("--gates-log", metavar="FILE",
                    help="a saved runner log from its start: check the gates line it writes")
     p.add_argument("--expect-gate", action="append", metavar="NAME=VALUE",

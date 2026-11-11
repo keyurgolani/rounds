@@ -39,7 +39,8 @@ from routers import share
 ROOT = Path(__file__).resolve().parents[2]
 NGINX = ROOT / "frontend" / "nginx.conf"
 OLDER_LOCATION = "location ~* ^/api/share/by-token(/|$) {"
-RUNNER_GROUP = "location ~ ^/api/(share|pdf|ai|ai-coding|sd-practice|take-home)(/|$) {"
+# The runner's API groups, /api/share among them.
+RUNNER_GROUP = "location ~ ^/api/(share|"
 
 OWNER = "owner000000000a"
 BEARER = "owner-bearer-placeholder"

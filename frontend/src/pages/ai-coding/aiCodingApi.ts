@@ -1,4 +1,5 @@
 import { definitionRef, definitionsEnforced } from '../../lib/definitions';
+import type { JobAnswer, RunnerCallInit } from '../../lib/executionJobs';
 import { pb } from '../../lib/pocketbase';
 import { runnerJSON } from '../../lib/runnerFetch';
 import type { DefinitionReceipt } from '../coding/types';
@@ -247,11 +248,15 @@ export function runProjectBody(input: RunProjectInput): Record<string, unknown> 
 
 /** The runner takes the checkpoint's test command and timeout from the
  * round itself; a call names the round, language, and checkpoint. */
-export async function runProject(input: RunProjectInput): Promise<RunProjectResult> {
-  return runnerJSON<RunProjectResult>('/api/ai-coding/run-project', {
+export async function runProject(
+  input: RunProjectInput,
+  init: RunnerCallInit = {},
+): Promise<RunProjectResult | JobAnswer> {
+  return runnerJSON<RunProjectResult | JobAnswer>('/api/ai-coding/run-project', {
     method: 'POST',
     body: runProjectBody(input),
     errorPrefix: 'run-project',
+    idempotencyKey: init.idempotencyKey,
   });
 }
 

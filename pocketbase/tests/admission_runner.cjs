@@ -12,9 +12,9 @@
 // is over Linux's limit for one argument; each step names a call and its
 // arguments, and the output is {"results": [...], "store": {...}}.
 
-const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { newMaps, admissionMemoryStore } = require("./admission_memory.cjs");
 
 const [hooksDir] = process.argv.slice(2);
 const program = JSON.parse(fs.readFileSync(0, "utf8"));
@@ -24,102 +24,11 @@ class UnauthorizedError extends Error {}
 globalThis.BadRequestError = BadRequestError;
 globalThis.UnauthorizedError = UnauthorizedError;
 globalThis.$apis = { requestInfo: (ctx) => ctx.info };
+// admission.js reads execution.js's job rules for a command that enqueued
+// a job (ROUNDS-00A-L03 PR 2).
+globalThis.__hooks = hooksDir;
 
 const admission = require(path.join(hooksDir, "admission.js"));
-
-function memoryStore() {
-  const commands = new Map();
-  const counters = new Map();
-  const leases = new Map();
-  let ids = 0;
-  const nextId = () => `id${String(++ids).padStart(13, "0")}`;
-  const clone = (row) => (row === null || row === undefined ? null : JSON.parse(JSON.stringify(row)));
-  const counterKey = (bucket, account, hour) => `${bucket}|${account}|${hour}`;
-  const live = (lease, now) => lease.expires_at > now;
-  const deleteLease = (id) => leases.delete(id);
-
-  return {
-    dump: () => ({
-      commands: [...commands.values()].map(clone),
-      counters: [...counters.values()].map(clone),
-      leases: [...leases.values()].map(clone),
-    }),
-    hash: (token) => crypto.createHash("sha256").update(token).digest("hex"),
-    findCommand: (account, commandId) =>
-      clone([...commands.values()].find((c) => c.account === account && c.command_id === commandId) || null),
-    getCommand: (id) => clone(commands.get(id) || null),
-    saveCommand: (row) => {
-      const saved = clone(row);
-      if (!saved.id) {
-        if ([...commands.values()].some((c) => c.account === saved.account && c.command_id === saved.command_id)) {
-          throw new Error("UNIQUE constraint failed: admission_commands.account, admission_commands.command_id");
-        }
-        saved.id = nextId();
-      }
-      commands.set(saved.id, saved);
-      return clone(saved);
-    },
-    deleteCommand: (row) => {
-      commands.delete(row.id);
-      for (const [id, lease] of leases) if (lease.command === row.id) deleteLease(id);
-    },
-    findLease: (tokenHash) => clone([...leases.values()].find((l) => l.token_hash === tokenHash) || null),
-    saveLease: (row) => {
-      const saved = clone(row);
-      if (!saved.id) {
-        if ([...leases.values()].some((l) => l.token_hash === saved.token_hash)) {
-          throw new Error("UNIQUE constraint failed: admission_leases.token_hash");
-        }
-        saved.id = nextId();
-      }
-      leases.set(saved.id, saved);
-      return clone(saved);
-    },
-    deleteLease: (row) => deleteLease(row.id),
-    deleteLeasesForCommand: (commandId) => {
-      for (const [id, lease] of leases) if (lease.command === commandId) deleteLease(id);
-    },
-    liveLeaseForCommand: (commandId, now) => [...leases.values()].some((l) => l.command === commandId && live(l, now)),
-    liveLeaseExpiry: (commandId, now) => {
-      const rows = [...leases.values()].filter((l) => l.command === commandId && live(l, now));
-      return rows.length > 0 ? Math.max(...rows.map((l) => l.expires_at)) : null;
-    },
-    liveLeases: (filter, now) => {
-      const rows = [...leases.values()]
-        .filter((l) => live(l, now) && l.counted === true)
-        .filter((l) => filter.account === undefined || l.account === filter.account)
-        .filter((l) => filter.demo === undefined || l.demo === true)
-        .sort((a, b) => a.expires_at - b.expires_at);
-      return { count: rows.length, soonest: rows.length > 0 ? rows[0].expires_at : null };
-    },
-    counter: (bucket, account, hour) => {
-      const row = counters.get(counterKey(bucket, account, hour));
-      return row ? { requests: row.requests, wall_seconds: row.wall_seconds } : null;
-    },
-    addToCounter: (bucket, account, hour, requests, wall) => {
-      const key = counterKey(bucket, account, hour);
-      const row = counters.get(key) || { bucket, account, hour, requests: 0, wall_seconds: 0 };
-      row.requests = Math.max(0, row.requests + requests);
-      row.wall_seconds = Math.max(0, row.wall_seconds + wall);
-      counters.set(key, row);
-    },
-    repairInFlight: (now, limit) => {
-      let repaired = 0;
-      for (const command of [...commands.values()].filter((c) => c.state === "in_flight").slice(0, limit)) {
-        if ([...leases.values()].some((l) => l.command === command.id && live(l, now))) continue;
-        command.state = "failed_infrastructure";
-        command.result = null;
-        repaired += 1;
-      }
-      return repaired;
-    },
-    deleteExpired: (now, oldestHour, limit) => {
-      [...leases.values()].filter((l) => l.expires_at <= now).slice(0, limit).forEach((l) => deleteLease(l.id));
-      [...commands.values()].filter((c) => c.expires_at <= now).slice(0, limit).forEach((c) => commands.delete(c.id));
-      [...counters.entries()].filter(([, c]) => c.hour < oldestHour).slice(0, limit).forEach(([k]) => counters.delete(k));
-    },
-  };
-}
 
 function record(fields) {
   return { getBool: (name) => fields[name] === true };
@@ -140,7 +49,8 @@ function guard(step) {
   }
 }
 
-const store = memoryStore();
+const maps = newMaps();
+const store = admissionMemoryStore(maps);
 const results = program.steps.map((step) => {
   switch (step.call) {
     case "checkAdmit":
@@ -176,6 +86,23 @@ const results = program.steps.map((step) => {
       return store.dump();
     case "sweep":
       return admission.sweep(store, step.now);
+    // An execution job as execution.js keeps it, and enqueue's link to it
+    // on the account's command (ROUNDS-00A-L03 PR 2).
+    case "seedJob":
+      maps.jobs.set(step.job.id, Object.assign({ outcome_class: "", attempts: 0, attempts_started: 0 }, step.job));
+      return null;
+    case "linkJob": {
+      const linked = [...maps.commands.values()].find(
+        (c) => c.account === step.account.id && c.command_id === step.command_id,
+      );
+      linked.job = step.job;
+      return null;
+    }
+    case "jobStarted":
+      admission.jobStarted(store, step.account.id, step.command_id, step.job);
+      return null;
+    case "jobEnded":
+      return admission.jobEnded(store, step.account.id, step.command_id, step.job, step.outcome_class);
     case "tierOf":
       return admission.tierOf(step.fields === null ? null : record(step.fields));
     case "constants":

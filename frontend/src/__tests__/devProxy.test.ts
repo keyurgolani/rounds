@@ -92,6 +92,11 @@ const NEVER_PROXIED = [
   '/api/rounds/execution/enqueue',
   '/api/rounds/execution/claim',
   '/api/rounds/execution/reap?x=1',
+  '/api/rounds/execution/status',
+  '/api/rounds/execution/cancel',
+  // The execution hooks in any case, as nginx's ~* location matches them.
+  '/api/rounds/Execution/status',
+  '/api/rounds/EXECUTION/claim',
   '/api/collections/execution_service/auth-with-password',
   '/api/collections/execution_service/records',
   '/api/collections/Execution_Service/auth-with-password',
@@ -167,6 +172,9 @@ const PROXIED = [
   '/api/share/capabilities/capaaaaaaaaaaa1/rotate',
   '/api/share/by-tokens',
   '/api/collections/share_throttle/records',
+  '/api/execution/jobs/jobaaaaaaaaaaa1',
+  '/api/execution/jobs/jobaaaaaaaaaaa1?wait=20',
+  '/api/execution/jobs/jobaaaaaaaaaaa1/cancel',
 ];
 
 describe('the dev proxy and production nginx', () => {
@@ -254,6 +262,16 @@ describe('the dev proxy and production nginx', () => {
       expect(viteEntry(url)?.target).toBe(viteEntry('/api/run')?.target);
     }
     expect(viteDenies('/api/rounds/share/capabilities')).toBe(true);
+  });
+
+  it('sends the job routes to the runner and keeps the store hooks from PocketBase', () => {
+    for (const url of ['/api/execution/jobs/jobaaaaaaaaaaa1?wait=20', '/api/execution/jobs/jobaaaaaaaaaaa1/cancel']) {
+      expect(viteEntry(url)?.target).toBe(viteEntry('/api/run')?.target);
+    }
+    const runnerGroup = LOCATIONS.find((l) => l.modifier === '~' && l.pattern.includes('take-home'));
+    expect(runnerGroup && new RegExp(runnerGroup.pattern).test('/api/execution/jobs/jobaaaaaaaaaaa1')).toBe(true);
+    expect(viteDenies('/api/rounds/execution/status')).toBe(true);
+    expect(viteDenies('/api/rounds/Execution/status')).toBe(true);
   });
 
   it('sends the runner routes to the runner and the rest of /api to PocketBase', () => {

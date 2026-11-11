@@ -48,6 +48,7 @@ import { listCodeDrafts, upsertCodeDraft } from '../../../lib/codeDraftsApi';
 import { localIsNewer, saveLocal } from '../../../lib/codeDraft';
 import { evaluateCode, runCode } from '../runnerApi';
 import { RunnerError } from '../../../lib/runnerFetch';
+import { UUID_V7_PATTERN } from '../../../lib/idempotency';
 
 const STARTER = 'def two_sum(nums, target):\n    return []\n';
 const QUESTION = {
@@ -126,14 +127,18 @@ describe('CodingDetail definition requests', () => {
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run all (2)' }));
     await waitFor(() => expect(evaluateCode).toHaveBeenCalledTimes(1));
-    expect(evaluateCode).toHaveBeenCalledWith({
-      question_slug: 'two-sum',
-      language: 'python',
-      code: STARTER,
-      filter: undefined,
-      definition_version: 1,
-      definition_case_ids: ['c000', 'c001'],
-    });
+    expect(evaluateCode).toHaveBeenCalledWith(
+      {
+        question_slug: 'two-sum',
+        language: 'python',
+        code: STARTER,
+        filter: undefined,
+        definition_version: 1,
+        definition_case_ids: ['c000', 'c001'],
+      },
+      // One command id per action (ROUNDS-00A-L03).
+      { idempotencyKey: expect.stringMatching(UUID_V7_PATTERN) },
+    );
   });
 
   it('rereads a replaced version and retries once with the current one', async () => {

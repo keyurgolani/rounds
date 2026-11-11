@@ -8,6 +8,11 @@ a minimal environment, and the slot's own uid in the image. Input
 goes in a file, not argv, so its size doesn't depend on the argv limit.
 The result comes back in its own file, not on stdout, so however much
 the program prints can't push the result out of the kept output.
+
+A ``Control`` (ROUNDS-00A-L03's scratch jobs) lets the caller stop the
+run in flight and records where it ran; ``timed_out`` and ``stopped`` say
+how a run ended without reading its error text. Without one, a run is
+what it always was.
 """
 from __future__ import annotations
 
@@ -31,6 +36,7 @@ RESULT_FILE = "result.json"
 RESULT_MAX_BYTES = sandboxes.STREAM_KEEP_BYTES
 NO_RESULT = "The program ended without returning a result."
 RESULT_TOO_LARGE = "The result is over 4 MiB."
+STOPPED = "The run was stopped."
 
 
 @dataclass
@@ -41,6 +47,9 @@ class ExecutionOutcome:
     error: str | None
     duration_ms: int
     truncated: bool
+    # The wall time ran out, or the caller's Control stopped the run.
+    timed_out: bool = False
+    stopped: bool = False
 
 
 def run_one(
@@ -51,6 +60,7 @@ def run_one(
     timeout_s: int = DEFAULT_TIMEOUT_S,
     output_cap_bytes: int = DEFAULT_OUTPUT_CAP_BYTES,
     sandbox: sandboxes.Sandbox | None = None,
+    control: sandboxes.Control | None = None,
 ) -> ExecutionOutcome:
     box = sandbox if sandbox is not None else sandboxes.sandbox_for(0)
     try:
@@ -70,9 +80,9 @@ def run_one(
 
     snippet = driver.wrapper_snippet(entry)
     if language == "python":
-        return _exec_python(code, snippet, input, timeout_s, output_cap_bytes, box)
+        return _exec_python(code, snippet, input, timeout_s, output_cap_bytes, box, control)
     if language == "javascript":
-        return _exec_javascript(code, snippet, input, timeout_s, output_cap_bytes, box)
+        return _exec_javascript(code, snippet, input, timeout_s, output_cap_bytes, box, control)
     return ExecutionOutcome(
         stdout="", stderr="", return_value=None,
         error=f"Unsupported language: {language}",
@@ -80,7 +90,7 @@ def run_one(
     )
 
 
-def _exec_python(code, snippet, inp, timeout_s, cap, box) -> ExecutionOutcome:
+def _exec_python(code, snippet, inp, timeout_s, cap, box, control=None) -> ExecutionOutcome:
     wrapper = f"""
 import json, sys, traceback
 
@@ -101,10 +111,10 @@ except Exception:
     _rounds_write_result("null")
     traceback.print_exc(file=sys.stderr)
 """
-    return _run_subprocess(wrapper, ".py", [sys.executable], json.dumps(inp), timeout_s, cap, box)
+    return _run_subprocess(wrapper, ".py", [sys.executable], json.dumps(inp), timeout_s, cap, box, control)
 
 
-def _exec_javascript(code, snippet, inp, timeout_s, cap, box) -> ExecutionOutcome:
+def _exec_javascript(code, snippet, inp, timeout_s, cap, box, control=None) -> ExecutionOutcome:
     wrapper = f"""
 {code}
 
@@ -123,10 +133,10 @@ def _exec_javascript(code, snippet, inp, timeout_s, cap, box) -> ExecutionOutcom
   }}
 }})();
 """
-    return _run_subprocess(wrapper, ".js", ["node"], json.dumps(inp), timeout_s, cap, box)
+    return _run_subprocess(wrapper, ".js", ["node"], json.dumps(inp), timeout_s, cap, box, control)
 
 
-def _run_subprocess(wrapper_src, suffix, cmd_prefix, input_json, timeout_s, cap, box) -> ExecutionOutcome:
+def _run_subprocess(wrapper_src, suffix, cmd_prefix, input_json, timeout_s, cap, box, control=None) -> ExecutionOutcome:
     with sandboxes.scratch(box) as workdir:
         path = os.path.join(workdir, "main" + suffix)
         input_path = os.path.join(workdir, "input.json")
@@ -135,10 +145,10 @@ def _run_subprocess(wrapper_src, suffix, cmd_prefix, input_json, timeout_s, cap,
         with open(input_path, "w", encoding="utf-8") as f:
             f.write(input_json)
         sandboxes.hand_over(workdir, box)
-        return _run_in(workdir, path, input_path, cmd_prefix, timeout_s, cap, box)
+        return _run_in(workdir, path, input_path, cmd_prefix, timeout_s, cap, box, control)
 
 
-def _run_in(workdir, path, input_path, cmd_prefix, timeout_s, cap, box) -> ExecutionOutcome:
+def _run_in(workdir, path, input_path, cmd_prefix, timeout_s, cap, box, control=None) -> ExecutionOutcome:
     start = time.monotonic()
     result_path = os.path.join(workdir, RESULT_FILE)
     try:
@@ -148,6 +158,7 @@ def _run_in(workdir, path, input_path, cmd_prefix, timeout_s, cap, box) -> Execu
             env=sandboxes.candidate_env(workdir),
             timeout_s=timeout_s,
             sandbox=box,
+            control=control,
         )
         duration_ms = int((time.monotonic() - start) * 1000)
         stdout = proc.stdout
@@ -184,7 +195,12 @@ def _run_in(workdir, path, input_path, cmd_prefix, timeout_s, cap, box) -> Execu
         return ExecutionOutcome(
             stdout="", stderr="", return_value=None,
             error=f"Time limit exceeded ({timeout_s}s)",
-            duration_ms=duration_ms, truncated=False,
+            duration_ms=duration_ms, truncated=False, timed_out=True,
+        )
+    except sandboxes.Stopped:
+        return ExecutionOutcome(
+            stdout="", stderr="", return_value=None, error=STOPPED,
+            duration_ms=int((time.monotonic() - start) * 1000), truncated=False, stopped=True,
         )
 
 

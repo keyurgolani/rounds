@@ -75,8 +75,11 @@ export function classifyRunnerError(
   if (!isRunnerError(err)) return null;
   const { status, code } = err;
   let kind: RunnerDenialKind | null = null;
-  // definitions_disabled is ROUNDS_GATE_EXECUTION_DEFINITIONS turned off.
-  if (code === 'route_disabled' || code === 'definitions_disabled') kind = 'turned_off';
+  // definitions_disabled is ROUNDS_GATE_EXECUTION_DEFINITIONS turned off,
+  // and execution_disabled ROUNDS_GATE_EXECUTION_SCRATCH (ROUNDS-00A-L03).
+  if (code === 'route_disabled' || code === 'definitions_disabled' || code === 'execution_disabled') {
+    kind = 'turned_off';
+  }
   else if (code !== null && RELOAD_CODES.has(code)) kind = 'reload';
   else if (code !== null && code in DEFINITION_KINDS) kind = DEFINITION_KINDS[code];
   else if (code === 'unauthenticated' || status === 401) kind = 'sign_in';
@@ -96,6 +99,21 @@ export function classifyRunnerError(
     detail: SHOWS_DETAIL.has(kind) && err.detail ? err.detail : null,
     trigger,
   };
+}
+
+/** A run's failure that isn't a denial, as a fixed sentence for its code
+ *  or status. The server's own text never reaches the page: it can carry
+ *  a field name or a raw body. */
+export function runFailureText(err: unknown): string {
+  if (!isRunnerError(err)) return "The run didn't finish. Your code is still here; run it again.";
+  const { status, code } = err;
+  if (code === 'invalid_request' || status === 400 || status === 422) {
+    return "The runner couldn't read this run. Reload the page and run it again.";
+  }
+  if (code === 'not_found' || status === 404) {
+    return "The runner couldn't find this practice item. Reload the page and run it again.";
+  }
+  return `The run failed with status ${status}. Run it again.`;
 }
 
 /** The element that has focus now, so a denial can hand it back. */
