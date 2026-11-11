@@ -133,7 +133,7 @@ Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads the
 | `ROUNDS_GATE_AI_CODING_GRADE` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/ai-coding/grade` |
 | `ROUNDS_GATE_TAKE_HOME_RUN` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/take-home/run` |
 | `ROUNDS_GATE_TAKE_HOME_SUBMIT` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/take-home/submit` |
-| `ROUNDS_GATE_PDF_RENDER` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/pdf/render`, and PDF export offers Print instead |
+| `ROUNDS_GATE_PDF_RENDER` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/pdf/render`, every snapshot's render, existing ones included, and PDF export offers Print instead |
 | `ROUNDS_GATE_PDF_HEALTH` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/pdf/health` |
 | `ROUNDS_GATE_ATS_RULE` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/ai/ats-rule` |
 | `ROUNDS_GATE_PAPER_FETCH` | `enabled`, `disabled` | `disabled` | runner | yes; the `paper_url` fetch in `/api/ai/improve` |
