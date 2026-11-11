@@ -51,11 +51,12 @@
 #                          as share-resolver to resolve share links. Set it
 #                          before ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION is
 #                          `enabled`.
-#   ROUNDS_TRUSTED_PROXY_CIDRS - the proxies whose X-Real-IP the share
-#                          throttle counts by, comma-separated CIDRs.
-#                          Unset keeps loopback and the private ranges,
-#                          where the bundled nginx sits; `none` trusts no
-#                          proxy.
+#   ROUNDS_TRUSTED_PROXY_CIDRS - the addresses nginx reaches the runner
+#                          from, whose X-Real-IP the share throttle counts
+#                          by, comma-separated CIDRs. Unset keeps loopback
+#                          and the private ranges, where the bundled nginx
+#                          sits; `none` trusts no proxy. A proxy in front of
+#                          nginx is ROUNDS_FRONTEND_REAL_IP_FROM's.
 #
 # If admin creds are unset, no admin is bootstrapped and you must run:
 #
@@ -199,8 +200,10 @@ services:
       # The share dialog and page follow the runner's resolution gate
       # (ROUNDS-00B-L04).
       - ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=${ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION:-}
-      # Behind a proxy that isn't the public port, its addresses, so nginx
-      # counts each client by its own address (frontend/docker-entrypoint.d).
+      # Behind a front proxy or tunnel, including one that reaches the port
+      # below, the addresses it connects from, with each client's address
+      # in X-Forwarded-For, so nginx counts each client by its own address
+      # (frontend/docker-entrypoint.d).
       - ROUNDS_FRONTEND_REAL_IP_FROM=${ROUNDS_FRONTEND_REAL_IP_FROM:-}
     ports:
       - "${HTTP_PORT:-80}:80"

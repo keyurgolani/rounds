@@ -1,15 +1,16 @@
 #!/bin/sh
 set -eu
 
-# The client address nginx counts and forwards (ROUNDS-00B-L04). Behind a
-# proxy that isn't the public port, as on k8s behind the ingress controller,
-# set ROUNDS_FRONTEND_REAL_IP_FROM to that proxy's addresses (comma-separated
-# CIDRs or addresses). nginx then takes each client's address from
-# X-Forwarded-For, past those proxies, for the share resolver's backstop and
-# the X-Real-IP it sends the runner. Unset or empty, nginx uses the peer's
-# address, which is right where its own port is the public one, as in the
-# compose files. An entry that isn't an address or a CIDR stops the
-# container, so a typo never trusts the wrong hop.
+# The client address nginx counts and forwards (ROUNDS-00B-L04). Behind
+# anything in front of nginx, a front proxy, a tunnel, or the k8s ingress
+# controller, compose included, set ROUNDS_FRONTEND_REAL_IP_FROM to the
+# addresses it connects from (comma-separated CIDRs or addresses), and have
+# it send each client's address in X-Forwarded-For. nginx then takes that
+# address, past those proxies, for the share resolver's backstop and the
+# X-Real-IP it sends the runner. Unset or empty, nginx uses the peer's
+# address, which is right only where its own port is the public one. An
+# entry that isn't an address or a CIDR stops the container, so a typo
+# never trusts the wrong hop.
 
 target="${ROUNDS_REAL_IP_CONF_PATH:-/etc/nginx/conf.d/00-real-ip.conf}"
 raw="${ROUNDS_FRONTEND_REAL_IP_FROM:-}"

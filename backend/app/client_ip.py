@@ -6,8 +6,9 @@ peer inside ``ROUNDS_TRUSTED_PROXY_CIDRS`` is a proxy, and the one address
 its ``X-Real-IP`` names is the client. Any other peer is the client itself,
 whatever headers it sends. Unset, the list is loopback and the RFC 1918
 ranges, where the bundled nginx sits in every launcher. An operator whose
-front proxy sits elsewhere sets the list (comma-separated CIDRs), or
-``none`` to trust no proxy. A list that can't be read trusts no proxy and
+nginx reaches the runner from elsewhere sets the list (comma-separated
+CIDRs), or ``none`` to trust no proxy. A proxy in front of nginx is
+nginx's to trust (ROUNDS_FRONTEND_REAL_IP_FROM), not the runner's. A list that can't be read trusts no proxy and
 logs one error, so a typo never lets a client name its own address.
 """
 from __future__ import annotations

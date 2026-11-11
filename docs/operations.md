@@ -410,10 +410,10 @@ Before you set the gate to `enabled`:
 1. Set `ROUNDS_SHARE_RESOLVER_PASSWORD` on PocketBase and every runner, then restart PocketBase, then the runners.
 2. Turn on Legacy Artifact Snapshot creation with its signed scan and the materializer ([Legacy Artifact Snapshots](#legacy-artifact-snapshots)), and set `ROUNDS_ADMISSION_SECRET`: every link is made over a snapshot.
 3. Back up `AI_KEY_SECRET` ([Backups](#backups)).
-4. If the runner's front proxy isn't on loopback or a private range, set `ROUNDS_TRUSTED_PROXY_CIDRS` to its address. On k8s, set `ROUNDS_FRONTEND_REAL_IP_FROM` on the frontend to the ingress controller's pod CIDR; without it every client shares one count.
+4. If anything sits in front of the frontend, a front proxy, a tunnel, or the k8s ingress controller, set `ROUNDS_FRONTEND_REAL_IP_FROM` on the frontend to the addresses it connects from, and have it send each client's address in `X-Forwarded-For`, the header the frontend reads. This holds for compose too: when nginx's port is published only to a local proxy, nginx sees that proxy for every client, and without the setting every client shares one count, so one client can throttle every link. `ROUNDS_TRUSTED_PROXY_CIDRS` is the runner's list of nginx addresses; its default covers nginx in the compose files and on k8s, so leave it unless nginx reaches the runner from elsewhere.
 5. Set the gate for the runner and the frontend together, so the dialog matches the create the runner serves.
 
-Check a deployment with the gate on, signed in, from the public URL: make a link and open it; rotate it and check that the old link answers not-found and the new one opens; and resolve one unknown token 61 times within a minute, which answers 429 with `Retry-After` from the 61st on.
+Check a deployment with the gate on, signed in, from the public URL: make a link and open it; rotate it and check that the old link answers not-found and the new one opens; and resolve one unknown token 61 times within a minute, which answers 429 with `Retry-After` from the 61st on. Right after, resolve once from a second client on another network: it answers 404. A 429 there means every client shares one count; set `ROUNDS_FRONTEND_REAL_IP_FROM` (step 4).
 
 Check the pages and the resolver from the public URL:
 
