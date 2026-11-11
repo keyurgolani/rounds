@@ -339,6 +339,140 @@ def test_cleanup_is_confirmed_only_once_the_directory_and_the_group_are_gone(tmp
     assert handlers.cleanup_of([gone]) == "confirmed"
 
 
+# ---- a route's job steps, on conftest's admission fake --------------------------------
+
+QUEUED = store.JobView("job000000000001", "run", "queued", None, 0, 0, False, None, 100, None)
+
+
+class FakeCaller:
+    """The store's caller routes for one request: enqueue answers
+    ``answer`` or raises ``failure``; status answers ``found``."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, object]] = []
+        self.answer = (QUEUED, False, False)
+        self.failure: Exception | None = None
+        self.found: store.JobStatus | None = store.JobStatus(QUEUED, False, None)
+
+    def __call__(self, _token):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_exc):
+        return None
+
+    async def enqueue(self, payload):
+        self.calls.append(("enqueue", payload))
+        if self.failure is not None:
+            raise self.failure
+        return self.answer
+
+    async def status(self, job_id):
+        self.calls.append(("status", job_id))
+        return self.found
+
+
+@pytest.fixture
+def jobs_on(monkeypatch, signed_in, admission_store):
+    """The scratch key on, this replica taking jobs, and the store's
+    caller routes faked. Answers (headers, the admission fake, the
+    caller fake)."""
+    monkeypatch.setattr(gates, "_snapshot", gates.load(ON, gates.RUNNER))
+    monkeypatch.setattr(definitions, "_store", definitions.Store().load())
+    monkeypatch.setattr(runtime, "accepting_jobs", lambda: True)
+    caller = FakeCaller()
+    monkeypatch.setattr(store, "Caller", caller)
+    return signed_in, admission_store, caller
+
+
+def test_a_new_job_is_admitted_charged_and_enqueued_with_its_digests(client, jobs_on):
+    signed_in, admission_store, caller = jobs_on
+    key = new_key()
+    out = submitted(client.post("/api/run", json=RUN, headers={**signed_in, "Idempotency-Key": key}))
+    assert out["job_id"] == QUEUED.id and out["state"] == "queued"
+    (admitted,) = admission_store.called("admit")
+    assert (admitted["operation"], admitted["wall_seconds"], admitted["mode"]) == ("run", 3, "enforce")
+    assert admitted["fingerprint"] == jobs.fingerprint("/api/run", TWO_SUM_REF, jobs.digest(TWO_SUM),
+                                                       jobs.digest({"input": RUN["input"]}))
+    ((call, payload),) = caller.calls
+    assert call == "enqueue"
+    assert payload["command_id"] == key and payload["fingerprint"] == admitted["fingerprint"]
+    assert payload["input"] == {"code": TWO_SUM, "input": RUN["input"]}
+    # The request's lease finished once the 202 was out.
+    (finished,) = admission_store.called("finish")
+    assert finished["outcome"] == "completed"
+
+
+def test_a_duplicate_answers_its_job_from_the_store_and_is_never_charged(client, jobs_on):
+    signed_in, admission_store, caller = jobs_on
+    key = new_key()
+    submitted(client.post("/api/run", json=RUN, headers={**signed_in, "Idempotency-Key": key}))
+    admission_store.link_job(signed_in["Authorization"].split()[1], key, QUEUED.id)
+    caller.calls.clear()
+    out = submitted(client.post("/api/run", json=RUN, headers={**signed_in, "Idempotency-Key": key}))
+    assert out["job_id"] == QUEUED.id
+    assert caller.calls == [("status", QUEUED.id)]
+    # One lease, the first request's: the duplicate made none.
+    assert len(admission_store.called("finish")) == 1
+
+
+def test_a_retry_of_a_job_the_infrastructure_lost_is_admitted_again_and_requeued(client, jobs_on):
+    signed_in, admission_store, caller = jobs_on
+    key = new_key()
+    submitted(client.post("/api/run", json=RUN, headers={**signed_in, "Idempotency-Key": key}))
+    admission_store.link_job(signed_in["Authorization"].split()[1], key, QUEUED.id, retryable=True)
+    caller.answer = (QUEUED, True, True)
+    caller.calls.clear()
+    out = submitted(client.post("/api/run", json=RUN, headers={**signed_in, "Idempotency-Key": key}))
+    assert out["state"] == "queued" and [c[0] for c in caller.calls] == ["enqueue"]
+    assert len(admission_store.called("admit")) == 2 and len(admission_store.called("finish")) == 2
+
+
+@pytest.mark.parametrize(
+    "failure, status, code, outcome",
+    [
+        (store.Mismatch(), 409, "idempotency_mismatch", "denied"),
+        (store.Unavailable(), 503, "worker_unavailable", "denied"),
+        (store.StoreOff(), 503, "worker_unavailable", "denied"),
+    ],
+)
+def test_an_enqueue_the_store_refuses_ends_the_request_and_its_charge(client, jobs_on, failure, status, code,
+                                                                       outcome):
+    signed_in, admission_store, caller = jobs_on
+    caller.failure = failure
+    typed(client.post("/api/run", json=RUN, headers={**signed_in, "Idempotency-Key": new_key()}), status, code)
+    (finished,) = admission_store.called("finish")
+    assert finished["outcome"] == outcome
+
+
+def test_over_quota_a_job_route_enqueues_nothing(client, jobs_on):
+    signed_in, admission_store, caller = jobs_on
+    admission_store.quota, admission_store.retry_after = "exceeded", 600
+    res = client.post("/api/run", json=RUN, headers={**signed_in, "Idempotency-Key": new_key()})
+    typed(res, 429, "quota_exceeded")
+    assert caller.calls == []
+
+
+def test_an_admission_store_that_doesnt_answer_enqueues_nothing(client, jobs_on):
+    signed_in, admission_store, caller = jobs_on
+    admission_store.down = True
+    typed(client.post("/api/run", json=RUN, headers={**signed_in, "Idempotency-Key": new_key()}), 503,
+          "quota_unavailable")
+    assert caller.calls == []
+
+
+def test_a_definition_refusal_comes_before_any_job(client, jobs_on):
+    signed_in, admission_store, caller = jobs_on
+    body = {**RUN, "definition": {**TWO_SUM_REF, "version": 99}}
+    res = client.post("/api/run", json=body, headers={**signed_in, "Idempotency-Key": new_key()})
+    assert res.status_code in (404, 409, 410), res.text
+    assert caller.calls == []
+    (finished,) = admission_store.called("finish")
+    assert finished["outcome"] == "denied"
+
+
 # ---- the routes, end to end ----------------------------------------------------------
 
 
