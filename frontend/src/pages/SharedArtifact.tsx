@@ -5,14 +5,24 @@
 // page makes one POST to the resolver with the token in its body, and
 // shows the snapshot it answers in SharedArtifactFrame, or the one fixed
 // not-found page for any other answer, with nothing from the response.
+//
+// ROUNDS-00B-L04: a link with a password answers that same not-found until
+// the password comes with it, so the not-found page carries a password
+// field (SharePasswordForm). A throttled resolve says only how long to
+// wait: "Too many attempts. Try again in N minutes."
 
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { resolveSharedArtifact } from '../features/resume/share/client';
+import { resolveSharedArtifact, ShareThrottled } from '../features/resume/share/client';
 import SharedArtifactFrame from '../features/resume/share/SharedArtifactFrame';
-import { ShareLoading, ShareNotFound } from '../features/resume/share/ShareNotFound';
+import SharePasswordForm from '../features/resume/share/SharePasswordForm';
+import { ShareLoading, ShareNotFound, ShareThrottled as ShareThrottledPage } from '../features/resume/share/ShareNotFound';
 
-type State = { kind: 'loading' } | { kind: 'missing' } | { kind: 'found'; markup: string };
+type State =
+  | { kind: 'loading' }
+  | { kind: 'missing' }
+  | { kind: 'throttled'; minutes: number }
+  | { kind: 'found'; markup: string };
 
 export default function SharedArtifact() {
   const { hash } = useLocation();
@@ -28,14 +38,24 @@ export default function SharedArtifact() {
     setState({ kind: 'loading' });
     resolveSharedArtifact(token)
       .then((artifact) => live && setState({ kind: 'found', markup: artifact.markup }))
-      .catch(() => live && setState({ kind: 'missing' }));
+      .catch((err) => {
+        if (!live) return;
+        setState(err instanceof ShareThrottled ? { kind: 'throttled', minutes: err.minutes } : { kind: 'missing' });
+      });
     return () => {
       live = false;
     };
   }, [token]);
 
   if (state.kind === 'loading') return <ShareLoading />;
-  if (state.kind === 'missing') return <ShareNotFound />;
+  if (state.kind === 'throttled') return <ShareThrottledPage minutes={state.minutes} />;
+  if (state.kind === 'missing') {
+    return (
+      <ShareNotFound>
+        {token && <SharePasswordForm token={token} onOpen={(markup) => setState({ kind: 'found', markup })} />}
+      </ShareNotFound>
+    );
+  }
   return (
     <main
       style={{

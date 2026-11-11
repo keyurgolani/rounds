@@ -51,12 +51,25 @@ describe('resolveGate', () => {
   });
 
   it('the registry the SPA ships has only gates it reads', () => {
-    expect(Object.keys(registry.gates)).toEqual(['EXECUTION_DEFINITIONS', 'SIGNUPS']);
+    expect(Object.keys(registry.gates)).toEqual(['EXECUTION_DEFINITIONS', 'SHARE_CAPABILITY_RESOLUTION', 'SIGNUPS']);
     expect(registry.prefix).toBe('ROUNDS_GATE_');
   });
 
   // The runner and the SPA read the same value, so their request shapes
   // switch together (ROUNDS-00A-L02).
+  // The share dialog follows the runner's resolution gate (ROUNDS-00B-L04):
+  // closed by default, and anything but enabled keeps it closed.
+  it('share capability resolution defaults to disabled and fails closed', () => {
+    expect(resolveGate('SHARE_CAPABILITY_RESOLUTION', {})).toEqual({ value: 'disabled', source: 'default' });
+    expect(
+      resolveGate('SHARE_CAPABILITY_RESOLUTION', { ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION: 'Enabled' }),
+    ).toEqual({ value: 'enabled', source: 'env' });
+    expect(resolveGate('SHARE_CAPABILITY_RESOLUTION', { ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION: 'true' })).toEqual({
+      value: 'disabled',
+      source: 'invalid',
+    });
+  });
+
   it('execution definitions default to legacy and take enforce', () => {
     expect(resolveGate('EXECUTION_DEFINITIONS', {})).toEqual({ value: 'legacy', source: 'default' });
     expect(resolveGate('EXECUTION_DEFINITIONS', { ROUNDS_GATE_EXECUTION_DEFINITIONS: 'Enforce' })).toEqual({
@@ -88,6 +101,7 @@ describe('readGateEnv', () => {
     (window as unknown as ConfigWindow).__ROUNDS_CONFIG__ = { ROUNDS_GATE_SIGNUPS: 'disabled', OTHER: 'x' };
     expect(Object.keys(readGateEnv()).sort()).toEqual([
       'ROUNDS_GATE_EXECUTION_DEFINITIONS',
+      'ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION',
       'ROUNDS_GATE_SIGNUPS',
       'VITE_DISABLE_SIGNUPS',
     ]);
