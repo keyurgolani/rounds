@@ -381,6 +381,19 @@
    "redirect": null
   },
   {
+   "collection": "share_capabilities",
+   "field": "snapshot",
+   "target": "legacy_artifact_snapshots",
+   "required": true,
+   "cascade": false,
+   "multiple": false,
+   "since": "v1",
+   "relationType": null,
+   "role": null,
+   "tombstone": null,
+   "redirect": null
+  },
+  {
    "collection": "take_home_attempts",
    "field": "campaign",
    "target": "campaigns",

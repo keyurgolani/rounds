@@ -6,7 +6,8 @@ typed relations never drift:
   * the canonical table ``pocketbase/pb_hooks/relation_endpoints.v1.json``;
   * the ``FIELDS`` array in
     ``pocketbase/pb_migrations/1700007000_relation_endpoint_authz.js`` that the
-    triggers and the quarantine scan iterate;
+    triggers and the quarantine scan iterate, and the ``FIELDS`` array of each
+    later migration that adds a typed relation with the same triggers;
   * the per-collection ``relation_endpoints`` in
     ``docs/security/account-scope.v1.json`` that the harness points its probes
     at; and
@@ -36,6 +37,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1].parent
 MIGRATION = ROOT / "pocketbase" / "pb_migrations" / "1700007000_relation_endpoint_authz.js"
+# Later migrations that add a typed relation, with its owner-equality
+# triggers, keep a FIELDS array in the same shape (ROUNDS-00B-L03 stage 2).
+LATER_MIGRATIONS = (ROOT / "pocketbase" / "pb_migrations" / "1700008200_share_capabilities.js",)
 TABLE = ROOT / "pocketbase" / "pb_hooks" / "relation_endpoints.v1.json"
 POLICY = ROOT / "docs" / "security" / "account-scope.v1.json"
 TOUCHED = ROOT / "pocketbase" / "migration-manifests" / "1700007000_relation_endpoint_authz.json"
@@ -105,10 +109,24 @@ def test_migration_file_is_present(src):
 
 
 def test_migration_fields_match_the_canonical_table(src, table):
-    assert sorted(_migration_fields(src)) == sorted(_table_triples(table))
     # 34 typed relations across the source collections, no duplicate row.
     triples = _migration_fields(src)
     assert len(triples) == 34 and len(set(triples)) == 34
+    # Each later migration adds its own, with the same triggers, and none
+    # repeats one: share_capabilities.snapshot (#11 stage 2).
+    later = [t for path in LATER_MIGRATIONS for t in _migration_fields(path.read_text())]
+    assert later == [("share_capabilities", "snapshot", "legacy_artifact_snapshots")]
+    assert not set(later) & set(triples)
+    assert sorted(triples + later) == sorted(_table_triples(table))
+
+
+@pytest.mark.parametrize("path", LATER_MIGRATIONS, ids=lambda p: p.name)
+def test_a_later_relation_gets_the_same_three_owner_triggers(path):
+    later = path.read_text()
+    for suffix, clause in (("_ins", '_ins" BEFORE INSERT'), ("_upd", '_upd" BEFORE UPDATE OF'),
+                           ("_tgt", '_tgt" BEFORE UPDATE OF')):
+        assert clause in later, suffix
+    assert "RAISE(ABORT, 'relation endpoint denied')" in later
 
 
 def test_policy_relation_endpoints_match_the_table(policy, table):
