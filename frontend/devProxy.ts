@@ -6,7 +6,8 @@
 // against same-origin URLs works in both dev and prod:
 //   the paths nginx never proxies           → 404
 //   /api/run, /api/evaluate, /api/pdf, /api/share,
-//   /api/ai, /api/ai-coding, /api/take-home → runner
+//   /api/ai, /api/ai-coding, /api/take-home,
+//   /api/execution                          → runner
 //   /api/* (everything else)               → pocketbase
 // The admin UI is on PocketBase's own port in dev, as it is in prod.
 // Vite tries the entries in order and uses the first that matches. Every
@@ -97,5 +98,6 @@ export const devProxy: Record<string, ProxyOptions> = {
   '/api/ai': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
   '/api/share': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
   '/api/take-home': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
+  '/api/execution': guarded({ target: RUNNER_TARGET, changeOrigin: true }),
   '/api': guarded({ target: POCKETBASE_TARGET, changeOrigin: true, ws: true }),
 };

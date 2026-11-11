@@ -39,6 +39,10 @@ import {
   type RunnerDenial,
 } from '../lib/runnerDenial';
 import { reloadPage, retrySuperseded } from '../lib/definitions';
+import { useRunnerJob } from '../hooks/useRunnerJob';
+import type { JobAnswer } from '../lib/executionJobs';
+import type { RunnerJobAction, RunnerJobView } from '../components/runner/RunnerJobStatus';
+import type { RunnerError } from '../lib/runnerFetch';
 
 interface CQ {
   id: number;
@@ -119,6 +123,33 @@ function useEditorFocus() {
   return { focus, toggle };
 }
 
+// A test run's results merged into the ones already shown, by case.
+function mergeEvaluate(prev: CodeEvaluateResult | undefined, res: CodeEvaluateResult): CodeEvaluateResult {
+  if (!prev) return res;
+  const merged = [...prev.results];
+  for (const r of res.results) {
+    const idx = merged.findIndex((m) => m.index === r.index);
+    if (idx >= 0) merged[idx] = r;
+    else merged.push(r);
+  }
+  merged.sort((a, b) => a.index - b.index);
+  const passed = merged.filter((r) => r.passed).length;
+  const failed = merged.filter((r) => !r.passed).length;
+  return { passed, failed, results: merged };
+}
+
+// A job's output as the route's in-request body, when it has one
+// (ROUNDS-00A-L03).
+function runOutput(job: JobAnswer): CodeRunResult | null {
+  const out = job.envelope?.output;
+  return out && typeof out.stdout === 'string' ? (out as unknown as CodeRunResult) : null;
+}
+
+function evaluateOutput(job: JobAnswer): CodeEvaluateResult | null {
+  const out = job.envelope?.output;
+  return out && Array.isArray(out.results) ? (out as unknown as CodeEvaluateResult) : null;
+}
+
 export default function CodingDetail() {
   const { slug } = useParams<{ slug: string }>();
   const { user } = useAuth();
@@ -142,6 +173,34 @@ export default function CodingDetail() {
     denial: RunnerDenial;
   } | null>(null);
   const { focus, toggle: toggleFocus } = useEditorFocus();
+  // While ROUNDS_GATE_EXECUTION_SCRATCH is on, a run and a test run are
+  // each a durable job (ROUNDS-00A-L03). The notice shows the last one
+  // started, and Retry sends its same work again.
+  const [jobAction, setJobAction] = useState<RunnerJobAction>('run');
+  const jobTriggerRef = useRef<HTMLElement | null>(null);
+  const lastFilterRef = useRef<EvaluateFilter | undefined>(undefined);
+  const deniedJob = useCallback((action: RunnerJobAction, err: RunnerError) => {
+    const denial = classifyRunnerError(err, jobTriggerRef.current);
+    if (denial) setRunDenial({ action, denial });
+  }, []);
+  const runJob = useRunnerJob(q ? `coding:${q.slug}:${lang}:run` : null, {
+    onEnded: (job) => {
+      const out = runOutput(job);
+      if (out) {
+        setRunResult(out);
+        setSideTab('run');
+      }
+    },
+    onDenied: (err) => deniedJob('run', err),
+  });
+  const testsJob = useRunnerJob(q ? `coding:${q.slug}:${lang}:tests` : null, {
+    onEnded: (job) => {
+      const out = evaluateOutput(job);
+      if (out) setEvalResults((prev) => mergeEvaluate(prev, out));
+    },
+    onDenied: (err) => deniedJob('tests', err),
+  });
+  const busy = running || runJob.active || testsJob.active;
 
   // Refs for the 10-second backend sync — avoids re-creating the interval on every keystroke.
   const codeRef = useRef(code);
@@ -352,9 +411,11 @@ export default function CodingDetail() {
   }, [hasConsoleOutput]);
 
   const handleRun = useCallback(
-    async (input: Record<string, unknown>) => {
+    async (input: Record<string, unknown>, retry = false) => {
       if (!q || !code.trim()) return;
       const trigger = activeTrigger();
+      jobTriggerRef.current = trigger;
+      setJobAction('run');
       setLastRunInput(input);
       setRunning(true);
       setRunResult(undefined);
@@ -368,17 +429,21 @@ export default function CodingDetail() {
       try {
         const res = await retrySuperseded(
           definitionVersionRef.current,
-          (version) =>
-            runCode({
+          (version) => {
+            const payload = {
               question_slug: q.slug,
               language: lang === 'javascript' ? 'javascript' : lang,
               code,
               input,
               definition_version: version,
-            }),
+            };
+            return runCode(payload, { idempotencyKey: runJob.begin(payload, retry) });
+          },
           rereadDefinitionVersion,
         );
-        setRunResult(res);
+        // A job: the notice follows it, and its end shows the result.
+        if (runJob.follow(res)) return;
+        setRunResult(res as CodeRunResult);
         setSideTab('run');
       } catch (e) {
         const denial = classifyRunnerError(e, trigger);
@@ -399,13 +464,16 @@ export default function CodingDetail() {
         setRunning(false);
       }
     },
-    [q, code, lang, focus, rereadDefinitionVersion]
+    [q, code, lang, focus, rereadDefinitionVersion, runJob.begin, runJob.follow]
   );
 
   const handleEvaluate = useCallback(
-    async (filter?: EvaluateFilter) => {
+    async (filter?: EvaluateFilter, retry = false) => {
       if (!q || !code.trim()) return;
       const trigger = activeTrigger();
+      jobTriggerRef.current = trigger;
+      lastFilterRef.current = filter;
+      setJobAction('tests');
       setSideTab('tests');
       setRunning(true);
       setRunDenial(null);
@@ -414,30 +482,21 @@ export default function CodingDetail() {
       try {
         const res = await retrySuperseded(
           definitionVersionRef.current,
-          (version) =>
-            evaluateCode({
+          (version) => {
+            const payload = {
               question_slug: q.slug,
               language: lang === 'javascript' ? 'javascript' : lang,
               code,
               filter,
               definition_version: version,
               definition_case_ids: q.definition_case_ids,
-            }),
+            };
+            return evaluateCode(payload, { idempotencyKey: testsJob.begin(payload, retry) });
+          },
           rereadDefinitionVersion,
         );
-        setEvalResults((prev) => {
-          if (!prev) return res;
-          const merged = [...prev.results];
-          for (const r of res.results) {
-            const idx = merged.findIndex((m) => m.index === r.index);
-            if (idx >= 0) merged[idx] = r;
-            else merged.push(r);
-          }
-          merged.sort((a, b) => a.index - b.index);
-          const passed = merged.filter((r) => r.passed).length;
-          const failed = merged.filter((r) => !r.passed).length;
-          return { passed, failed, results: merged };
-        });
+        if (testsJob.follow(res)) return;
+        setEvalResults((prev) => mergeEvaluate(prev, res as CodeEvaluateResult));
       } catch (e) {
         // Denials show in the dock; other failures propagate as before.
         const denial = classifyRunnerError(e, trigger);
@@ -447,8 +506,29 @@ export default function CodingDetail() {
         setRunning(false);
       }
     },
-    [q, code, lang, focus, rereadDefinitionVersion]
+    [q, code, lang, focus, rereadDefinitionVersion, testsJob.begin, testsJob.follow]
   );
+
+  // The job the notice shows: the one that has one, else the last started.
+  const shownAction: RunnerJobAction =
+    testsJob.job && !runJob.job ? 'tests' : runJob.job && !testsJob.job ? 'run' : jobAction;
+  const shownJob = shownAction === 'tests' ? testsJob : runJob;
+  const jobView: RunnerJobView = {
+    job: shownJob.job,
+    gone: shownJob.gone,
+    reconnecting: shownJob.reconnecting,
+    runningSince: shownJob.runningSince,
+    action: shownAction,
+    onCancel: () => void shownJob.cancel(),
+    // A run's Retry needs its input, which a reload doesn't keep.
+    onRetry:
+      shownAction === 'tests'
+        ? () => void handleEvaluate(lastFilterRef.current, true)
+        : lastRunInput !== undefined
+          ? () => void handleRun(lastRunInput as Record<string, unknown>, true)
+          : undefined,
+    trigger: jobTriggerRef.current,
+  };
 
   if (loading) {
     return (
@@ -622,6 +702,7 @@ export default function CodingDetail() {
               onReload={reloadKeepingDraft}
               className="flex-shrink-0"
               contentStyle={{ margin: '8px 12px' }}
+              job={jobView}
             />
           )}
 
@@ -668,7 +749,7 @@ export default function CodingDetail() {
                     <button
                       type="button"
                       onClick={() => handleEvaluate()}
-                      disabled={running || (q?.test_cases.length ?? 0) === 0}
+                      disabled={busy || (q?.test_cases.length ?? 0) === 0}
                       aria-label={
                         evalResults
                           ? `Run all tests. Last run: ${evalResults.passed} of ${evalResults.passed + evalResults.failed} passed.`
@@ -684,13 +765,13 @@ export default function CodingDetail() {
                         color: 'var(--paper)',
                         border: 0,
                         borderRadius: 999,
-                        cursor: running ? 'wait' : 'pointer',
-                        opacity: running ? 0.6 : 1,
+                        cursor: busy ? 'wait' : 'pointer',
+                        opacity: busy ? 0.6 : 1,
                         whiteSpace: 'nowrap',
                       }}
                     >
                       <Play size={10} strokeWidth={1.9} />
-                      {running
+                      {busy
                         ? 'Running…'
                         : evalResults
                           ? (
@@ -772,11 +853,12 @@ export default function CodingDetail() {
                   onReload={reloadKeepingDraft}
                   className="flex-shrink-0"
                   contentStyle={{ margin: '12px 12px 0' }}
+                  job={jobView}
                 />
               }
               entry={q.entry}
               testCases={q.test_cases}
-              running={running}
+              running={busy}
               onRun={(input) => handleRun(input as Record<string, unknown>)}
               onEvaluate={(filter) => handleEvaluate(filter)}
               runResult={runResult}

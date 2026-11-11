@@ -48,6 +48,7 @@ vi.mock('../../components/editor/MultiFileEditor', () => ({
 import TakeHomeDetail from '../../pages/take-home/TakeHomeDetail';
 import { getAssignment, runProject, submitAttempt } from '../../pages/take-home/takeHomeApi';
 import { RunnerError } from '../../lib/runnerFetch';
+import { UUID_V7_PATTERN } from '../../lib/idempotency';
 
 const ASSIGNMENT = {
   id: 'a1',
@@ -101,10 +102,13 @@ describe('TakeHomeDetail definition requests', () => {
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run' }));
     await waitFor(() => expect(runProject).toHaveBeenCalledTimes(1));
-    expect(runProject).toHaveBeenCalledWith('kv-store-py', drafts.files, {
-      language: 'python',
-      definition_version: 1,
-    });
+    expect(runProject).toHaveBeenCalledWith(
+      'kv-store-py',
+      drafts.files,
+      { language: 'python', definition_version: 1 },
+      // One command id per action (ROUNDS-00A-L03).
+      { idempotencyKey: expect.stringMatching(UUID_V7_PATTERN) },
+    );
   });
 
   it('retries a replaced version once on submit', async () => {

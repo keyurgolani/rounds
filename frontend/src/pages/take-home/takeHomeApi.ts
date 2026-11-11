@@ -1,4 +1,5 @@
 import { definitionRef, definitionsEnforced } from '../../lib/definitions';
+import type { JobAnswer, RunnerCallInit } from '../../lib/executionJobs';
 import { pb } from '../../lib/pocketbase';
 import { runnerJSON } from '../../lib/runnerFetch';
 import type { DefinitionReceipt } from '../coding/types';
@@ -134,12 +135,14 @@ export async function runProject(
   assignment_slug: string,
   files: Record<string, string>,
   definition?: TakeHomeDefinition,
-): Promise<RunResult> {
-  return runnerJSON<RunResult>('/api/take-home/run', {
+  init: RunnerCallInit = {},
+): Promise<RunResult | JobAnswer> {
+  return runnerJSON<RunResult | JobAnswer>('/api/take-home/run', {
     method: 'POST',
     auth: 'required',
     body: takeHomeRunBody(assignment_slug, files, definition),
     errorPrefix: 'take-home run',
+    idempotencyKey: init.idempotencyKey,
   });
 }
 

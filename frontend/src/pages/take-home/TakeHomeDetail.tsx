@@ -48,8 +48,21 @@ import {
   classifyRunnerError,
   type RunnerDenial,
 } from '../../lib/runnerDenial';
+import { useRunnerJob } from '../../hooks/useRunnerJob';
+import type { JobAnswer } from '../../lib/executionJobs';
+import type { RunnerJobView } from '../../components/runner/RunnerJobStatus';
+import { RunErrorOutput } from '../../components/runner/RunErrorOutput';
 
 type SideTab = 'rubric' | 'notes' | 'guidance';
+
+// A run job's output as the route's in-request body, when it has one
+// (ROUNDS-00A-L03).
+function runOutput(job: JobAnswer): RunResult | null {
+  const out = job.envelope?.output;
+  return out && typeof out.score === 'number' && Array.isArray(out.criteria)
+    ? (out as unknown as RunResult)
+    : null;
+}
 
 const SIDE_TABS: ReadonlyArray<{ key: SideTab; label: string }> = [
   { key: 'rubric', label: 'Rubric' },
@@ -85,6 +98,8 @@ export default function TakeHomeDetail() {
   const [error, setError] = useState<string | null>(null);
   const [activePath, setActivePath] = useState<string>('');
   const [runResult, setRunResult] = useState<RunResult | null>(null);
+  // A run that failed without a result: its error, never a fake score.
+  const [runError, setRunError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [report, setReport] = useState<SubmitResponse | null>(null);
@@ -126,6 +141,7 @@ export default function TakeHomeDetail() {
     setAssignment(null);
     setError(null);
     setRunResult(null);
+    setRunError(null);
     setReport(null);
     setReportOpen(false);
     setChatLog([]);
@@ -207,6 +223,33 @@ export default function TakeHomeDetail() {
     return fresh.definition_version;
   }, [slug]);
 
+  // While ROUNDS_GATE_EXECUTION_SCRATCH is on, a run is a durable job
+  // (ROUNDS-00A-L03); its end shows the result.
+  const jobTriggerRef = useRef<HTMLElement | null>(null);
+  const runJob = useRunnerJob(assignment ? `take-home:${assignment.slug}:${assignment.language}:run` : null, {
+    onEnded: (job) => {
+      const out = runOutput(job);
+      if (!out) return;
+      setRunResult(out);
+      setDockOpen(true);
+    },
+    onDenied: (err) => {
+      const denial = classifyRunnerError(err, jobTriggerRef.current);
+      if (denial) setRunDenial({ action: 'run', denial });
+    },
+  });
+  const busy = running || runJob.active;
+  const jobView: RunnerJobView = {
+    job: runJob.job,
+    gone: runJob.gone,
+    reconnecting: runJob.reconnecting,
+    runningSince: runJob.runningSince,
+    action: 'run',
+    onCancel: () => void runJob.cancel(),
+    onRetry: () => void handleRun(true),
+    trigger: jobTriggerRef.current,
+  };
+
   // A reload the denial asks for saves the files first. When a save
   // fails the page stays, so nothing is lost, and the notice says the
   // draft wasn't saved and keeps Reload for another try.
@@ -238,26 +281,33 @@ export default function TakeHomeDetail() {
     if (first) setActivePath(first);
   }, [hydrated, files, activePath]);
 
-  async function handleRun() {
+  async function handleRun(retry = false) {
     if (!assignment) return;
     const trigger = activeTrigger();
+    jobTriggerRef.current = trigger;
     const reqId = ++runReqIdRef.current;
     setRunning(true);
     setRunResult(null);
+    setRunError(null);
     setRunDenial(null);
     setDockOpen(true);
     try {
       const r = await retrySuperseded(
         definitionVersionRef.current,
-        (version) =>
-          runProject(assignment.slug, files, {
-            language: assignment.language,
-            definition_version: version,
-          }),
+        (version) => {
+          const definition = { language: assignment.language, definition_version: version };
+          const key = runJob.begin({ slug: assignment.slug, files, definition }, retry);
+          return runProject(assignment.slug, files, definition, { idempotencyKey: key });
+        },
         rereadDefinitionVersion,
       );
       if (reqId !== runReqIdRef.current) return;
-      setRunResult(r);
+      // A job: the notice follows it, and its end shows the result.
+      if (runJob.follow(r)) {
+        setDockOpen(false);
+        return;
+      }
+      setRunResult(r as RunResult);
     } catch (e) {
       if (reqId !== runReqIdRef.current) return;
       const denial = classifyRunnerError(e, trigger);
@@ -267,15 +317,8 @@ export default function TakeHomeDetail() {
         setDockOpen(false);
         return;
       }
-      setRunResult({
-        score: 0,
-        criteria: [],
-        stdout: '',
-        stderr: '',
-        error: e instanceof Error ? e.message : String(e),
-        duration_ms: 0,
-        truncated: false,
-      });
+      // Nothing came back to score, so no score shows: only the error.
+      setRunError(e instanceof Error ? e.message : String(e));
     } finally {
       if (reqId === runReqIdRef.current) setRunning(false);
     }
@@ -515,10 +558,10 @@ export default function TakeHomeDetail() {
                   }
                   bottomActions={
                     <EditorActions
-                      onRun={handleRun}
+                      onRun={() => void handleRun()}
                       onSubmit={handleSubmit}
                       onOpenLast={() => setReportOpen(true)}
-                      running={running}
+                      running={busy}
                       submitting={submitting}
                       hasReport={Boolean(report)}
                       runResult={runResult}
@@ -534,12 +577,13 @@ export default function TakeHomeDetail() {
               onReload={reloadKeepingDrafts}
               className="flex-shrink-0"
               contentStyle={{ margin: '8px 12px' }}
+              job={jobView}
             />
 
             <RunDock
               open={dockOpen}
               onOpenChange={setDockOpen}
-              hasOutput={Boolean(runResult)}
+              hasOutput={Boolean(runResult) || runError !== null}
               rightActions={
                 runResult && !runResult.error ? (
                   <span
@@ -553,7 +597,7 @@ export default function TakeHomeDetail() {
                     HARNESS · {Math.round(runResult.score * 100)}/100 ·{' '}
                     {runResult.duration_ms}MS
                   </span>
-                ) : runResult?.error ? (
+                ) : runResult?.error || runError !== null ? (
                   <span
                     className="mono"
                     style={{
@@ -567,7 +611,11 @@ export default function TakeHomeDetail() {
                 ) : null
               }
             >
-              {runResult && <RunOutput result={runResult} />}
+              {runResult ? (
+                <RunOutput result={runResult} />
+              ) : runError !== null ? (
+                <RunErrorOutput message={runError} />
+              ) : null}
             </RunDock>
           </div>
 

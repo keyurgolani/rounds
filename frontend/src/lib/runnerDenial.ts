@@ -75,8 +75,11 @@ export function classifyRunnerError(
   if (!isRunnerError(err)) return null;
   const { status, code } = err;
   let kind: RunnerDenialKind | null = null;
-  // definitions_disabled is ROUNDS_GATE_EXECUTION_DEFINITIONS turned off.
-  if (code === 'route_disabled' || code === 'definitions_disabled') kind = 'turned_off';
+  // definitions_disabled is ROUNDS_GATE_EXECUTION_DEFINITIONS turned off,
+  // and execution_disabled ROUNDS_GATE_EXECUTION_SCRATCH (ROUNDS-00A-L03).
+  if (code === 'route_disabled' || code === 'definitions_disabled' || code === 'execution_disabled') {
+    kind = 'turned_off';
+  }
   else if (code !== null && RELOAD_CODES.has(code)) kind = 'reload';
   else if (code !== null && code in DEFINITION_KINDS) kind = DEFINITION_KINDS[code];
   else if (code === 'unauthenticated' || status === 401) kind = 'sign_in';

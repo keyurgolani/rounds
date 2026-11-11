@@ -50,6 +50,7 @@ vi.mock('../../components/editor/MultiFileEditor', () => ({
 import AICodingDetail from '../../pages/ai-coding/AICodingDetail';
 import { getRound, gradeAttempt, persistAttempt, runProject } from '../../pages/ai-coding/aiCodingApi';
 import { RunnerError } from '../../lib/runnerFetch';
+import { UUID_V7_PATTERN } from '../../lib/idempotency';
 
 const ROUND = {
   id: 'r1',
@@ -105,13 +106,17 @@ describe('AICodingDetail definition requests', () => {
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run' }));
     await waitFor(() => expect(runProject).toHaveBeenCalledTimes(1));
-    expect(runProject).toHaveBeenCalledWith({
-      round_slug: 'hallucinated-http-client',
-      language: 'python',
-      checkpoint_index: 0,
-      files: drafts.files,
-      definition_version: 1,
-    });
+    expect(runProject).toHaveBeenCalledWith(
+      {
+        round_slug: 'hallucinated-http-client',
+        language: 'python',
+        checkpoint_index: 0,
+        files: drafts.files,
+        definition_version: 1,
+      },
+      // One command id per action (ROUNDS-00A-L03).
+      { idempotencyKey: expect.stringMatching(UUID_V7_PATTERN) },
+    );
   });
 
   it('names the language and version on a grade, and retries a replaced version once', async () => {
