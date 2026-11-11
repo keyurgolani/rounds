@@ -5,16 +5,31 @@
 // ROUNDS_GATE_DEMO wins when set, and ROUNDS_ENABLE_DEMO is its alias.
 
 // 1. At every start with the demo off, each demo account gets a random
-// password and a new token key. One log line with the counts.
+// password and a new token key. One log line with the counts, at error
+// level when the lock couldn't finish.
 onAfterBootstrap((e) => {
-  const out = require(`${__hooks}/demo.js`).lockAll($app.dao(), {
+  const demo = require(`${__hooks}/demo.js`);
+  const out = demo.lockAll($app.dao(), {
     ROUNDS_GATE_DEMO: $os.getenv("ROUNDS_GATE_DEMO"),
     ROUNDS_ENABLE_DEMO: $os.getenv("ROUNDS_ENABLE_DEMO"),
   });
-  console.log(JSON.stringify(Object.assign({ v: "obs/v1", event: "demo_lock", service: "pocketbase" }, out)));
+  const line = JSON.stringify(Object.assign({ v: "obs/v1", event: "demo_lock", service: "pocketbase" }, out));
+  if (demo.lockFailed(out)) console.error(line);
+  else console.log(line);
 });
 
-// 2. With the demo off, no demo account signs in.
+// 2. With the demo off, no demo account signs in or holds a working
+// session: any request its token authenticates gets 401.
+routerUse((next) => {
+  return (c) => {
+    require(`${__hooks}/demo.js`).guardSession(c, {
+      ROUNDS_GATE_DEMO: $os.getenv("ROUNDS_GATE_DEMO"),
+      ROUNDS_ENABLE_DEMO: $os.getenv("ROUNDS_ENABLE_DEMO"),
+    });
+    return next(c);
+  };
+});
+
 onRecordBeforeAuthWithPasswordRequest((e) => {
   require(`${__hooks}/demo.js`).guardSignIn(e, {
     ROUNDS_GATE_DEMO: $os.getenv("ROUNDS_GATE_DEMO"),
@@ -44,8 +59,8 @@ onRecordBeforeRequestEmailChangeRequest((e) => {
 }, "users");
 
 // 4. No demo account owns a share link or an AI provider, credential,
-// model, or settings row, through the API or any other writer. The tags
-// are demo.js's CONTAINED.
+// model, or settings row, through the API or any save through the app's
+// Dao. The tags are demo.js's CONTAINED.
 onRecordBeforeCreateRequest((e) => {
   require(`${__hooks}/demo.js`).guardContainedRequest(e);
 }, "resume_share_links", "share_capabilities", "ai_providers", "ai_credentials", "ai_provider_models", "ai_settings");

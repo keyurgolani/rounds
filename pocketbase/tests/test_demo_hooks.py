@@ -48,7 +48,8 @@ function record(fields, original) {
     getString: (name) => (typeof data[name] === "string" ? data[name] : ""),
     setPassword: (password) => { data.calls.push("setPassword:" + password.length); },
     refreshTokenKey: () => { data.calls.push("refreshTokenKey"); },
-    originalCopy: () => record(original || {}),
+    // PocketBase's original copy keeps the record's collection.
+    originalCopy: () => record(Object.assign({ table: data.table }, original || {})),
     data,
   };
 }
@@ -61,7 +62,7 @@ function db(step) {
   const saves = [];
   const dao = {
     findRecordsByFilter: (name, filter) => {
-      if (step.failQuery) throw new Error("no such table: _collections");
+      if (step.failQuery) throw new Error(step.failQuery === true ? "no such table: users" : step.failQuery);
       if (name !== "users" || filter !== "is_demo = true") throw new Error("unexpected query");
       return Object.values(users).filter((u) => u.getBool("is_demo"));
     },
@@ -91,7 +92,15 @@ function outcome(fn) {
   }
 }
 
-const ctx = (step) => ({ info: { admin: step.superuser ? { id: "admin" } : null, data: step.data || {} } });
+const ctx = (step) => ({
+  info: {
+    admin: step.superuser ? { id: "admin" } : null,
+    data: step.data || {},
+    authRecord: step.auth === undefined || step.auth === null ? null : record(step.auth),
+  },
+});
+// A contained row: its collection defaults to ai_settings.
+const row = (step, fields) => Object.assign({ table: step.table || "ai_settings" }, fields || {});
 
 function exec(step) {
   const store = db(step);
@@ -117,14 +126,20 @@ function exec(step) {
       return outcome(() => demo.guardEmailChange({ httpContext: ctx(step), record: record(step.record) }));
     case "guardContainedRequest":
       return outcome(() => demo.guardContainedRequest({
-        httpContext: ctx(step), record: record(step.fields, step.original),
+        httpContext: ctx(step), record: record(row(step, step.fields), step.original),
       }));
     case "guardContainedModel":
       // The model hook reads through the event's own dao, never $app's.
       globalThis.$app = { dao: () => { throw new Error("used $app.dao()"); } };
-      return outcome(() => demo.guardContainedModel({ dao: store.dao, model: record(step.fields) }));
+      return outcome(() => demo.guardContainedModel({ dao: store.dao, model: record(row(step, step.fields)) }));
+    case "guardSession":
+      return outcome(() => demo.guardSession(ctx(step), step.env));
+    case "lockFailed":
+      return demo.lockFailed(step.out);
     case "constants":
-      return { profile: demo.PROFILE_FIELDS, contained: demo.CONTAINED, chars: demo.PASSWORD_CHARS };
+      return {
+        profile: demo.PROFILE_FIELDS, contained: demo.CONTAINED, chars: demo.PASSWORD_CHARS, owners: demo.OWNERS,
+      };
     case "logged": {
       logs.length = 0;
       const result = exec(step.step);
@@ -195,6 +210,21 @@ def test_before_the_first_migration_the_boot_lock_reports_not_ready():
     assert result["out"] == {"demo": "disabled", "code": "not_ready"}
 
 
+def test_any_other_query_failure_is_query_failed_not_not_ready():
+    (result,) = run({"call": "lockAll", "env": OFF, "failQuery": "database is locked"})
+    assert result["out"] == {"demo": "disabled", "code": "query_failed"}
+
+
+def test_a_lock_that_couldnt_finish_is_logged_as_an_error():
+    assert run(
+        {"call": "lockFailed", "out": {"demo": "disabled", "code": "query_failed"}},
+        {"call": "lockFailed", "out": {"demo": "disabled", "locked": 1, "failed": 1}},
+        {"call": "lockFailed", "out": {"demo": "disabled", "locked": 2, "failed": 0}},
+        {"call": "lockFailed", "out": {"demo": "disabled", "code": "not_ready"}},
+        {"call": "lockFailed", "out": {"demo": "enabled"}},
+    ) == [True, True, False, False, False]
+
+
 def test_a_failed_save_is_counted_and_the_start_goes_on():
     (result,) = run({"call": "lockAll", "env": OFF, "failSave": True, "users": {"demo00000000001": DEMO}})
     assert result["out"] == {"demo": "disabled", "locked": 0, "failed": 1}
@@ -208,6 +238,27 @@ def test_with_the_demo_off_a_demo_sign_in_fails_as_a_wrong_password_does():
         {"call": "guardSignIn", "env": OFF, "record": DEMO},
         {"call": "guardSignIn", "env": {"ROUNDS_GATE_DEMO": "nonsense"}, "record": DEMO},
     ) == [SIGN_IN_FAILED, SIGN_IN_FAILED]
+
+
+NO_SESSION = {"status": 401, "message": "The request requires valid record authorization token to be set.",
+              "data": None}
+
+
+def test_with_the_demo_off_no_request_a_demo_token_authenticates_goes_through():
+    # A token from before the start, even if the boot lock never rotated it.
+    assert run(
+        {"call": "guardSession", "env": OFF, "auth": DEMO},
+        {"call": "guardSession", "env": {"ROUNDS_GATE_DEMO": "nonsense"}, "auth": DEMO},
+    ) == [NO_SESSION, NO_SESSION]
+
+
+def test_standard_sessions_anonymous_requests_and_the_demo_when_on_go_through():
+    assert run(
+        {"call": "guardSession", "env": OFF, "auth": STANDARD},
+        {"call": "guardSession", "env": OFF, "auth": None},
+        {"call": "guardSession", "env": OFF, "auth": None, "superuser": True},
+        {"call": "guardSession", "env": ON, "auth": DEMO},
+    ) == [{"allowed": True}] * 4
 
 
 def test_standard_accounts_and_the_demo_when_on_sign_in():
@@ -284,7 +335,7 @@ def test_no_client_writes_a_row_a_demo_account_would_own():
         {"call": "guardContainedRequest", "users": USERS, "fields": {"user": "user00000000001"},
          "original": {"user": "demo00000000001"}},
         # A row keyed by its provider, as #73's credentials and models are.
-        {"call": "guardContainedRequest", "users": USERS, "providers": PROVIDERS,
+        {"call": "guardContainedRequest", "users": USERS, "providers": PROVIDERS, "table": "ai_credentials",
          "fields": {"provider": "prov00000000001"}},
     ) == [NOT_PERMITTED] * 4
 
@@ -292,7 +343,7 @@ def test_no_client_writes_a_row_a_demo_account_would_own():
 def test_standard_accounts_write_their_rows():
     assert run(
         {"call": "guardContainedRequest", "users": USERS, "fields": {"user": "user00000000001"}},
-        {"call": "guardContainedRequest", "users": USERS, "providers": PROVIDERS,
+        {"call": "guardContainedRequest", "users": USERS, "providers": PROVIDERS, "table": "ai_provider_models",
          "fields": {"provider": "prov00000000002"}},
         # An owner that doesn't exist is the rules' and relations' to refuse.
         {"call": "guardContainedRequest", "users": USERS, "fields": {"user": "gone00000000001"}},
@@ -303,9 +354,17 @@ def test_standard_accounts_write_their_rows():
 def test_no_other_writer_saves_a_row_a_demo_account_would_own():
     assert run(
         {"call": "guardContainedModel", "users": USERS, "fields": {"user": "demo00000000001"}},
-        {"call": "guardContainedModel", "users": USERS, "providers": PROVIDERS, "fields": {"provider": "prov00000000001"}},
+        {"call": "guardContainedModel", "users": USERS, "providers": PROVIDERS, "table": "ai_credentials",
+         "fields": {"provider": "prov00000000001"}},
         {"call": "guardContainedModel", "users": USERS, "fields": {"user": "user00000000001"}},
     ) == [{"error": "demo_not_permitted"}, {"error": "demo_not_permitted"}, {"allowed": True}]
+
+
+def test_a_collection_with_no_owner_entry_is_refused_outright():
+    assert run(
+        {"call": "guardContainedRequest", "users": USERS, "table": "not_mapped", "fields": {"user": "user00000000001"}},
+        {"call": "guardContainedModel", "users": USERS, "table": "not_mapped", "fields": {"user": "user00000000001"}},
+    ) == [NOT_PERMITTED, {"error": "demo_not_permitted"}]
 
 
 def test_the_constants_are_the_bodys():
@@ -315,6 +374,14 @@ def test_the_constants_are_the_bodys():
         "contained": ["resume_share_links", "share_capabilities", "ai_providers", "ai_credentials",
                       "ai_provider_models", "ai_settings"],
         "chars": 48,
+        "owners": {
+            "resume_share_links": {"field": "user"},
+            "share_capabilities": {"field": "user"},
+            "ai_providers": {"field": "user"},
+            "ai_credentials": {"via": "provider"},
+            "ai_provider_models": {"via": "provider"},
+            "ai_settings": {"field": "user"},
+        },
     }
 
 
@@ -353,6 +420,35 @@ def test_an_allowed_write_logs_nothing():
     assert [r["logs"] for r in results] == [[], [], []]
 
 
+# Collections the OWNERS map names before their leaf adds them. The leaf
+# that adds one confirms its entry here and drops it from this set.
+NOT_YET = {"share_capabilities", "ai_credentials", "ai_provider_models"}
+
+
+def _collection_blocks() -> dict[str, str]:
+    """Each collection a migration defines, with the text of its latest definition."""
+    blocks: dict[str, str] = {}
+    for path in sorted((ROOT / "pocketbase" / "pb_migrations").glob("*.js")):
+        for part in path.read_text().split("new Collection(")[1:]:
+            named = re.match(r'\s*\{\s*name:\s*"([a-z0-9_]+)"', part)
+            if named:
+                blocks[named.group(1)] = part  # the latest definition wins
+    return blocks
+
+
+def test_every_contained_collection_names_its_owner_in_its_schema():
+    (constants,) = run({"call": "constants"})
+    blocks = _collection_blocks()
+    assert {"resume_share_links", "ai_providers", "ai_settings"} <= set(blocks)
+    for name, spec in constants["owners"].items():
+        if name not in blocks:
+            assert name in NOT_YET, f"{name} has an OWNERS entry but no migration defines it"
+            continue
+        assert name not in NOT_YET, f"{name} exists now: confirm its OWNERS entry and drop it from NOT_YET"
+        field = spec.get("field") or spec["via"]
+        assert re.search(r'name:\s*"' + field + r'",\s*type:\s*"relation"', blocks[name]), (name, field)
+
+
 # ---- registration --------------------------------------------------------------------------------------
 
 REGISTRATION = r"""
@@ -360,7 +456,7 @@ const path = require("path");
 const [hooksDir] = process.argv.slice(1);
 const seen = [];
 globalThis.__hooks = hooksDir;
-for (const name of ["onAfterBootstrap", "onRecordBeforeAuthWithPasswordRequest", "onRecordBeforeAuthWithOAuth2Request",
+for (const name of ["onAfterBootstrap", "routerUse", "onRecordBeforeAuthWithPasswordRequest", "onRecordBeforeAuthWithOAuth2Request",
                     "onRecordBeforeUpdateRequest", "onRecordBeforeDeleteRequest", "onRecordBeforeRequestEmailChangeRequest",
                     "onRecordBeforeCreateRequest", "onModelBeforeCreate", "onModelBeforeUpdate"]) {
   globalThis[name] = (fn, ...tags) => seen.push({ name, tags });
@@ -379,6 +475,7 @@ def test_demo_pb_js_registers_each_hook_on_its_collections():
     res = subprocess.run([node, "-e", REGISTRATION, str(HOOKS)], capture_output=True, text=True, timeout=60, check=True)
     assert json.loads(res.stdout) == [
         {"name": "onAfterBootstrap", "tags": []},
+        {"name": "routerUse", "tags": []},
         {"name": "onRecordBeforeAuthWithPasswordRequest", "tags": ["users"]},
         {"name": "onRecordBeforeAuthWithOAuth2Request", "tags": ["users"]},
         {"name": "onRecordBeforeUpdateRequest", "tags": ["users"]},
@@ -397,8 +494,8 @@ def test_each_handler_reads_the_demo_gate_itself():
     source = (HOOKS / "demo.pb.js").read_text()
     assert "function " not in source
     for name in ("ROUNDS_GATE_DEMO", "ROUNDS_ENABLE_DEMO"):
-        assert source.count(f'$os.getenv("{name}")') == 3, name
-    assert len(re.findall(r"require\(`\$\{__hooks\}/demo\.js`\)", source)) == 10
+        assert source.count(f'$os.getenv("{name}")') == 4, name
+    assert len(re.findall(r"require\(`\$\{__hooks\}/demo\.js`\)", source)) == 11
 
 
 def test_the_demo_module_is_not_auto_loaded_as_a_hook_file():
