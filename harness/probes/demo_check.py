@@ -12,8 +12,9 @@ Two phases on the real PocketBase:
   ``/state`` for the next phase.
 - ``demo-off``: after PocketBase restarts with the demo gate at its
   default, both demo accounts' sign-ins get the answer a wrong password
-  gets, the token from before the restart is refused, and a standard
-  account still signs in.
+  gets, the token from before the restart is refused, nothing answers
+  under ``/api/rounds/demo/`` but the 404 an unknown route gets, and a
+  standard account still signs in.
 
 Prints one PASS/FAIL line per check and exits non-zero on any failure.
 """
@@ -146,6 +147,20 @@ def run_off(c: Checks, pb: PBClient, admin: str) -> None:
                 f"status={right.status} same-as-wrong={(right.status, right.body) == (wrong.status, wrong.body)}")
     refreshed = call(POCKETBASE_URL, "POST", "/api/collections/users/auth-refresh", saved["token"])
     c.check("demo.off.a-token-from-before-the-start-is-refused", refreshed[0] == 401, f"status={refreshed[0]}")
+    # Each demo route answers as a route that doesn't exist does.
+    unknown = "/api/rounds/no-such-route-" + secrets.token_hex(4)
+    routes = {
+        "status": ("GET", "/api/rounds/demo", None, None),
+        "start": ("POST", "/api/rounds/demo/sessions", None, {}),
+        "end": ("POST", "/api/rounds/demo/sessions/end", saved["token"], {}),
+    }
+    answers = {name: (call(POCKETBASE_URL, method, path, token, body)[0],
+                      call(POCKETBASE_URL, method, unknown, token, body)[0])
+               for name, (method, path, token, body) in routes.items()}
+    c.check("demo.off.no-demo-route-answers",
+            all(got == control and got in (404, 405) for got, control in answers.values())
+            and answers["status"][0] == 404,
+            " ".join(f"{k}={got}/{control}" for k, (got, control) in answers.items()))
     s = _standard(pb, admin)
     signed = pb.auth_password(s.email, s.password)
     c.check("demo.off.a-standard-account-signs-in", signed.status == 200, f"status={signed.status}")
