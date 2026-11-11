@@ -297,18 +297,27 @@ runner up (`demo-on`) that:
   through PocketBase or the runner, while a standard account still can.
 
 The signup restart turns the demo off, and `demo-off` checks that both demo
-accounts' sign-ins get the answer a wrong password gets, that a token from
-before the restart is refused, and that a standard account still signs in.
+accounts' sign-ins get the answer a wrong password gets, as does a demo
+password a superuser sets after the restart, so the sign-in refusal holds on
+its own. A token from before the restart is refused, and so is a live token the
+boot lock never rotated, once a superuser makes its account a demo account: on
+refresh and on any other request. The demo routes answer as unknown routes do,
+and a standard account still signs in.
 
 After the admission migration check,
 [`probes/demo_contain_migration_check.py`](probes/demo_contain_migration_check.py)
-applies `1700006700_demo_contain.js` with the pinned binary to a `pb_data` whose
-legacy fixture has rows in every account-scoped collection for the seeded demo
-account, a second demo account, and a standard account. It checks that the
-migration deletes only the demo accounts' share links, the views on them, their
-AI providers, and their AI settings, that every other row is as it was, column
-by column, and that `migrate down 1` changes no row and applying it again
-deletes nothing more.
+applies `1700006700_demo_contain.js` with the pinned binary in upgrade order, to
+a `pb_data` built from every migration before it whose legacy fixture has rows
+in every account-scoped collection for the seeded demo account, a second demo
+account, and a standard account, plus a demo provider the standard account's
+AI settings point at. It checks that the migration deletes only the demo
+accounts' share links, the views on them, their AI settings, and their AI
+providers, keeps that one provider's row with its stored key cleared, that
+every other row is as it was, column by column, and that `migrate down 1`
+changes no row and applying it again changes nothing more. Then it serves a
+fresh `pb_data` with every migration and the hooks, the demo at its default:
+the first start logs `demo_lock` `not_ready`, the published password gets the
+wrong-password answer, and the next start locks the demo account.
 
 ## Receipts
 

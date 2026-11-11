@@ -135,8 +135,13 @@ def ensure_content_fixtures(pb: PBClient, admin_token: str) -> dict[str, str]:
     return out
 
 
-def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_token: str) -> None:
+def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_token: str,
+                 collections: set[str] | frozenset[str] | None = None) -> None:
     """Create one owned row in every account-scoped collection for `acct`.
+
+    ``collections``, when given, limits the rows to the collections a
+    database has, for a fixture built on an earlier set of migrations
+    (the demo containment check).
 
     Most rows are created with the account's own token, which also confirms
     the owner create path works under the create rule: a rejected owner create
@@ -150,12 +155,19 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
     tag = acct.tag
     ids = acct.ids
 
+    def has(collection: str) -> bool:
+        return collections is None or collection in collections
+
     def mk(collection: str, payload: dict[str, Any]) -> str:
+        if not has(collection):
+            return ""
         rec = _must(pb.create(collection, tok, {"user": uid, **payload}), f"seed {collection}/{tag}")
         ids[collection] = rec["id"]
         return rec["id"]
 
     def mk_admin(collection: str, payload: dict[str, Any]) -> str:
+        if not has(collection):
+            return ""
         rec = _must(pb.create(collection, admin_token, {"user": uid, **payload}), f"seed {collection}/{tag}")
         ids[collection] = rec["id"]
         return rec["id"]
@@ -176,19 +188,20 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
     mk_admin("resume_share_views", {"link": ids["resume_share_links"]})
     # Only a PocketBase hook writes snapshots (ROUNDS-00A-L04), so the
     # fixture row, with its markup file, goes in with the admin token.
-    rec = _must(
-        pb.create_with_file(
-            "legacy_artifact_snapshots",
-            admin_token,
-            {"user": uid, **snapshot_fields(resume)},
-            "markup",
-            "snapshot.html",
-            SNAPSHOT_MARKUP,
-            "text/html",
-        ),
-        f"seed legacy_artifact_snapshots/{tag}",
-    )
-    ids["legacy_artifact_snapshots"] = rec["id"]
+    if has("legacy_artifact_snapshots"):
+        rec = _must(
+            pb.create_with_file(
+                "legacy_artifact_snapshots",
+                admin_token,
+                {"user": uid, **snapshot_fields(resume)},
+                "markup",
+                "snapshot.html",
+                SNAPSHOT_MARKUP,
+                "text/html",
+            ),
+            f"seed legacy_artifact_snapshots/{tag}",
+        )
+        ids["legacy_artifact_snapshots"] = rec["id"]
 
     mk("ai_providers", {"kind": "openai", "label": "provider"})
     mk("ai_settings", {})
@@ -199,22 +212,24 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
     mk("take_home_drafts", {"assignment": content["assignment"], "file_path": "a.py", "contents": "x=1"})
     mk("take_home_attempts", {"assignment": content["assignment"], "status": "in-progress"})
 
-    store = {"account": uid}
-    job_row = _must(pb.create("execution_jobs", admin_token, {
-        **store, "command_id": f"0190f000-0000-7000-8000-{secrets.token_hex(6)}", "kind": "grade",
-        "purpose": "grading", "definition": {"track": "ai-coding", "slug": "harness", "variant": "python", "version": 1},
-        "fingerprint": secrets.token_hex(32), "source_checksum": "c" * 64, "input_digest": "d" * 64,
-        "input": {"files": {}}, "state": "completed", "outcome_class": "passed", "queued_at": _EPOCH,
-    }), f"seed execution_jobs/{tag}")
-    ids["execution_jobs"] = job_row["id"]
-    attempt_row = _must(pb.create("execution_attempts", admin_token, {
-        **store, "job": job_row["id"], "attempt_number": 1, "token_hash": secrets.token_hex(32), "worker": "harness",
-        "state": "completed", "outcome_class": "passed", "leased_at": _EPOCH, "lease_expires_at": _EPOCH + 30,
-    }), f"seed execution_attempts/{tag}")
-    ids["execution_attempts"] = attempt_row["id"]
-    mk_admin("execution_envelopes", {"job": job_row["id"], "attempt": attempt_row["id"], "version": _ENVELOPE,
-                                     "state": "completed", "outcome_class": "passed", "authoritative": True,
-                                     "user_view": _user_view(job_row["id"])})
+    if has("execution_jobs"):
+        store = {"account": uid}
+        job_row = _must(pb.create("execution_jobs", admin_token, {
+            **store, "command_id": f"0190f000-0000-7000-8000-{secrets.token_hex(6)}", "kind": "grade",
+            "purpose": "grading",
+            "definition": {"track": "ai-coding", "slug": "harness", "variant": "python", "version": 1},
+            "fingerprint": secrets.token_hex(32), "source_checksum": "c" * 64, "input_digest": "d" * 64,
+            "input": {"files": {}}, "state": "completed", "outcome_class": "passed", "queued_at": _EPOCH,
+        }), f"seed execution_jobs/{tag}")
+        ids["execution_jobs"] = job_row["id"]
+        attempt_row = _must(pb.create("execution_attempts", admin_token, {
+            **store, "job": job_row["id"], "attempt_number": 1, "token_hash": secrets.token_hex(32), "worker": "harness",
+            "state": "completed", "outcome_class": "passed", "leased_at": _EPOCH, "lease_expires_at": _EPOCH + 30,
+        }), f"seed execution_attempts/{tag}")
+        ids["execution_attempts"] = attempt_row["id"]
+        mk_admin("execution_envelopes", {"job": job_row["id"], "attempt": attempt_row["id"], "version": _ENVELOPE,
+                                         "state": "completed", "outcome_class": "passed", "authoritative": True,
+                                         "user_view": _user_view(job_row["id"])})
 
     mk("question_timers", {"question_type": "coding", "question_slug": "two-sum", "accumulated_ms": 0})
 

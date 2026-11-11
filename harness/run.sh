@@ -63,9 +63,11 @@
 #                     nothing where they already hold, and its down step
 #                     (harness/probes/json_limits_check.py)
 #  12d. demo containment migration - apply and reverse 1700006700 with the
-#                     pinned binary and no network, on a pb_data whose legacy
-#                     fixture has demo-owned rows in every account-scoped
-#                     collection (harness/probes/demo_contain_migration_check.py)
+#                     pinned binary and no network, in upgrade order, on a
+#                     pb_data whose legacy fixture has demo-owned rows in every
+#                     account-scoped collection; then a fresh pb_data served
+#                     with the hooks and the demo at its default
+#                     (harness/probes/demo_contain_migration_check.py)
 #  13. relation quarantine - with the pinned binary and no network: dry-run
 #                     and apply the relation quarantine on a legacy pb_data
 #                     holding cross-owner rows, then delete through the API on
@@ -486,12 +488,14 @@ ${CONTAINER_BIN} run --rm --network none \
   "${PROBE_IMAGE}" json-limits
 [ $? -eq 0 ] || migration_rc=1
 
-echo "--- phase 12d: demo containment migration applied and reversed on a legacy demo fixture ---"
+echo "--- phase 12d: demo containment migration on a legacy demo fixture, and a fresh install's demo ---"
 ${CONTAINER_BIN} run --rm --network none \
   -e PB_BIN="/pbbin/pocketbase" \
   -e PB_MIGRATIONS_DIR="/pb_migrations" \
+  -e PB_HOOKS_DIR="/pb_hooks" \
   -v "${PBBIN_VOLUME}:/pbbin:ro" \
   -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+  -v "${ROOT}/pocketbase/pb_hooks:/pb_hooks:ro" \
   -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
   "${PROBE_IMAGE}" demo-contain-migration
 [ $? -eq 0 ] || migration_rc=1

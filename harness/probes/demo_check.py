@@ -12,9 +12,12 @@ Two phases on the real PocketBase:
   ``/state`` for the next phase.
 - ``demo-off``: after PocketBase restarts with the demo gate at its
   default, both demo accounts' sign-ins get the answer a wrong password
-  gets, the token from before the restart is refused, nothing answers
-  under ``/api/rounds/demo/`` but the 404 an unknown route gets, and a
-  standard account still signs in.
+  gets, and so does a demo account whose password a superuser has just
+  set, so the sign-in refusal holds without the boot lock. The token from
+  before the restart is refused, and so is a token the boot lock never
+  rotated: a standard account's from the earlier phase, after a superuser
+  makes it a demo account. Nothing answers under ``/api/rounds/demo/`` but
+  what an unknown route gets, and a standard account still signs in.
 
 Prints one PASS/FAIL line per check and exits non-zero on any failure.
 """
@@ -120,15 +123,17 @@ def run_on(c: Checks, pb: PBClient, admin: str) -> None:
             resume.status == 200 and all(_not_permitted(r.status, r.body) for r in direct.values()),
             f"resume={resume.status} " + " ".join(f"{k}={r.status}" for k, r in direct.items()))
     through = {
-        "share": call(RUNNER_URL, "POST", "/api/share", d.token, {"resume_id": resume_id})[0],
+        "share": call(RUNNER_URL, "POST", "/api/share", d.token, {"resume_id": resume_id})[:2],
         "provider": call(RUNNER_URL, "POST", "/api/ai/providers", d.token,
-                         {"kind": "openai", "label": "demo", "key": "harness-key-not-a-secret"})[0],
-        "settings": call(RUNNER_URL, "PUT", "/api/ai/settings", d.token, {"text_model": "harness-model"})[0],
+                         {"kind": "openai", "label": "demo", "key": "harness-key-not-a-secret"})[:2],
+        "settings": call(RUNNER_URL, "PUT", "/api/ai/settings", d.token, {"text_model": "harness-model"})[:2],
     }
     left = {name: _count(pb, admin, name, d.user_id) for name in direct}
+    # The runner passes PocketBase's refusal on, code included.
     c.check("demo.on.no-share-link-provider-or-settings-row-through-the-runner",
-            all(status == 403 for status in through.values()) and all(n == 0 for n in left.values()),
-            " ".join(f"{k}={v}" for k, v in through.items()) + f" rows={left}")
+            all(status == 403 and NOT_PERMITTED["code"] in json.dumps(body) for status, body in through.values())
+            and all(n == 0 for n in left.values()),
+            " ".join(f"{k}={v[0]}" for k, v in through.items()) + f" rows={left}")
 
     # A standard account is held to none of it.
     s = _standard(pb, admin)
@@ -139,10 +144,16 @@ def run_on(c: Checks, pb: PBClient, admin: str) -> None:
     c.check("demo.on.a-standard-account-is-held-to-none-of-it", own.status == 200 and moved.status == 200,
             f"settings={own.status} password-change={moved.status}")
 
+    # A standard account and its token, which the next phase makes a demo
+    # account after the restart, so the boot lock never rotates it.
+    f = _standard(pb, admin)
+    f.token = (pb.auth_password(f.email, f.password).body or {}).get("token", "")
+
     # Signups are off in the next phase, so it signs in with these.
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps({"email": d.email, "password": d.password, "token": d.token, "id": d.user_id,
-                                 "standard": {"email": s.email, "password": new_password}}))
+                                 "standard": {"email": s.email, "password": new_password},
+                                 "flipped": {"id": f.user_id, "token": f.token}}))
 
 
 def run_off(c: Checks, pb: PBClient, admin: str) -> None:
@@ -154,8 +165,30 @@ def run_off(c: Checks, pb: PBClient, admin: str) -> None:
         c.check(f"demo.off.the-{name}-demo-account-fails-as-a-wrong-password",
                 right.status == 400 and (right.status, right.body) == (wrong.status, wrong.body),
                 f"status={right.status} same-as-wrong={(right.status, right.body) == (wrong.status, wrong.body)}")
+    # A password a superuser sets now, after the boot lock ran: only the
+    # sign-in refusal stands between it and a session.
+    known = factory.make_account("demo").password
+    reset = pb.update("users", saved["id"], {"password": known, "passwordConfirm": known}, admin)
+    right = pb.auth_password(saved["email"], known)
+    wrong = pb.auth_password(saved["email"], _wrong_password())
+    c.check("demo.off.a-just-set-demo-password-fails-as-a-wrong-password",
+            reset.status == 200 and right.status == 400 and (right.status, right.body) == (wrong.status, wrong.body),
+            f"reset={reset.status} status={right.status}"
+            f" same-as-wrong={(right.status, right.body) == (wrong.status, wrong.body)}")
     refreshed = call(POCKETBASE_URL, "POST", "/api/collections/users/auth-refresh", saved["token"])
     c.check("demo.off.a-token-from-before-the-start-is-refused", refreshed[0] == 401, f"status={refreshed[0]}")
+    # A live token the boot lock never rotated, once its account is a demo
+    # account: refused on refresh and on any other request.
+    flipped = saved["flipped"]
+    before = call(POCKETBASE_URL, "GET", "/api/collections/todos/records", flipped["token"])[0]
+    made_demo = pb.update("users", flipped["id"], {"is_demo": True}, admin)
+    after = {
+        "refresh": call(POCKETBASE_URL, "POST", "/api/collections/users/auth-refresh", flipped["token"])[0],
+        "list": call(POCKETBASE_URL, "GET", "/api/collections/todos/records", flipped["token"])[0],
+    }
+    c.check("demo.off.a-demo-token-the-lock-missed-holds-no-session",
+            before == 200 and made_demo.status == 200 and after["refresh"] == 401 and after["list"] == 401,
+            f"before={before} made-demo={made_demo.status} " + " ".join(f"{k}={v}" for k, v in after.items()))
     # Each demo route answers as a route that doesn't exist does.
     unknown = "/api/rounds/no-such-route-" + secrets.token_hex(4)
     routes = {
