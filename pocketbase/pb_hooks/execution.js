@@ -522,15 +522,25 @@ function status(store, account, input) {
 // the store off, nothing claims or reaps a job, so a queue the store left
 // would stay), each with its envelopes, its attempts (they cascade from
 // the job), and the admission command it was enqueued under (its leases
-// cascade). A grading job stays.
+// cascade). A grading job stays, and so does a job a worker still holds:
+// its current attempt's lease is live, so it may be running now. With the
+// store off, no lease stays live.
 function purge(store, now) {
-  const jobs = store.purgeable(now - SCRATCH_RETENTION_S, PURGE_BATCH);
+  const jobs = store.purgeable(now - SCRATCH_RETENTION_S, PURGE_BATCH).filter((job) => !heldByAWorker(store, job, now));
   jobs.forEach((job) => {
     store.deleteEnvelopes(job.id);
     store.deleteCommandOf(job);
     store.deleteJob(job);
   });
   return { purged: jobs.length };
+}
+
+// Whether a worker still holds the job: it's leased or started, and its
+// current attempt's lease hasn't run out.
+function heldByAWorker(store, job, now) {
+  if (ACTIVE.indexOf(job.state) < 0) return false;
+  const attempt = store.currentAttempt(job);
+  return attempt !== null && ACTIVE.indexOf(attempt.state) >= 0 && attempt.lease_expires_at > now;
 }
 
 // reap: the three ways an attempt ends without its runner.
@@ -909,6 +919,8 @@ function pbStore(dao) {
     overBudgetAttempts: (cutoff, limit) =>
       dao.findRecordsByFilter(ATTEMPTS, "state = 'started' && deadline_at < {:cutoff}", "deadline_at", limit, 0, { cutoff }).map(attempt),
     saveEnvelope: (row) => save(ENVELOPES, row, ENVELOPE_FIELDS),
+    // The job's last attempt, by (job, attempt_number), or null.
+    currentAttempt: (job) => attempt(first(ATTEMPTS, "job = {:job} && attempt_number = {:n}", { job: job.id, n: job.attempts })),
     // The envelope the job's last attempt ended with, or null: the
     // attempt by (job, attempt_number), then its one envelope.
     currentEnvelope: (job) => {

@@ -988,6 +988,23 @@ def test_the_purge_takes_a_scratch_job_that_never_ended_once_it_was_queued_past_
     assert {lease["command"] for lease in out["store"]["leases"]} <= {c["id"] for c in out["store"]["commands"]}
 
 
+def test_the_purge_leaves_a_job_a_worker_still_holds_until_its_lease_runs_out():
+    # Queued a week ago and claimed just before the mark, so it may be
+    # running now: it stays while its attempt's lease is live.
+    key, token = new_key(), new_token()
+    late = T0 + 7 * DAY - 5
+    steps = [command(key), enqueue(key, now=T0), claim(token, now=late)]
+    attempt = run(*steps)["results"][-1]["body"]["attempt"]
+    steps.append(heartbeat(attempt["id"], token, now=late, budget=3))
+    out = run(*steps, {"call": "purge", "now": T0 + 7 * DAY})
+    assert out["results"][-1] == {"purged": 0}
+    (job,) = out["store"]["jobs"]
+    assert job["state"] == "started" and len(out["store"]["attempts"]) == 1
+    out = run(*steps, {"call": "purge", "now": T0 + 7 * DAY + 60})
+    assert out["results"][-1] == {"purged": 1}
+    assert out["store"]["jobs"] == [] and out["store"]["attempts"] == []
+
+
 def test_the_purge_takes_one_batch_at_a_time():
     steps = []
     for _ in range(execution_constant("PURGE_BATCH") + 1):

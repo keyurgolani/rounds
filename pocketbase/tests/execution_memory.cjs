@@ -116,6 +116,8 @@ function memoryStore(options) {
         .slice(0, limit)
         .map(clone),
     saveEnvelope: saver(envelopes, [["attempt"]], "execution_envelopes"),
+    currentAttempt: (job) =>
+      clone([...attempts.values()].find((a) => a.job === job.id && a.attempt_number === job.attempts) || null),
     currentEnvelope: (job) => {
       const last = [...attempts.values()].find((a) => a.job === job.id && a.attempt_number === job.attempts);
       if (!last) return null;

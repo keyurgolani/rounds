@@ -385,7 +385,7 @@ Every job-backed request needs an `Idempotency-Key`, whatever `ROUNDS_GATE_ENFOR
 
 **Turning it off, and rollback.** Set it `off` and restart the runners: new runs answer 503 `execution_disabled`, a queued job ends `canceled` when a worker claims it, and a running one finishes. The job reads keep answering, so a page still sees its job through. Then set it back to `legacy` once nothing waits on a job. A runner image from before this leaf runs the four routes in their request again, and a scratch job still queued then ends `denied`, `definition-invalid`.
 
-**Purge.** PocketBase deletes a scratch job 7 days after it ended, with its attempts, envelopes, and admission command, 200 jobs each 5 minutes, and logs `execution_purge` with the count. A scratch job that never ended goes 7 days after it was last queued: with the store off nothing claims or reaps a job, so a queue the store left goes this way, whatever the store's gate says. Grading jobs stay. The window is the owner's to ratify with [#72](https://github.com/keyurgolani/rounds/issues/72).
+**Purge.** PocketBase deletes a scratch job 7 days after it ended, with its attempts, envelopes, and admission command, 200 jobs each 5 minutes, and logs `execution_purge` with the count. A scratch job that never ended goes 7 days after it was last queued: with the store off nothing claims or reaps a job, so a queue the store left goes this way, whatever the store's gate says. A job a worker still holds, whose attempt's lease is live, stays until the lease runs out. Grading jobs stay. The window is the owner's to ratify with [#72](https://github.com/keyurgolani/rounds/issues/72).
 
 ### Public shares
 
