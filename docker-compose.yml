@@ -1,8 +1,11 @@
 services:
   pocketbase:
     build: ./pocketbase
+    # Each host port is published on 127.0.0.1 only. The dev admin login
+    # is a placeholder, so nothing else on your network may reach these;
+    # from another machine, use an SSH tunnel (ssh -L).
     ports:
-      - "${POCKETBASE_PORT:-8090}:8090"
+      - "127.0.0.1:${POCKETBASE_PORT:-8090}:8090"
     volumes:
       - pb_data:/pb/pb_data
     environment:
@@ -66,7 +69,7 @@ services:
     # Override the image CMD for dev so we get hot reload on source edits.
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports:
-      - "${RUNNER_PORT:-3099}:8000"
+      - "127.0.0.1:${RUNNER_PORT:-3099}:8000"
     volumes:
       # Read-only, so candidate code can't write the runner's source
       # (backend/app/sandbox.py); --reload only reads.
@@ -103,8 +106,13 @@ services:
       - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
-      # true turns every public share read into the uniform not-found
-      # (docs/operations.md, "Public shares").
+      # Public shares (docs/operations.md, "Public shares"): PUBLIC_SHARES
+      # turns every public share read off, and capability resolution stays
+      # closed until #12 lands.
+      - ROUNDS_GATE_PUBLIC_SHARES=${ROUNDS_GATE_PUBLIC_SHARES:-}
+      - ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=${ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION:-}
+      # PUBLIC_SHARES's alias: anything but false, 0, no, off, or empty
+      # turns every public share read into the uniform not-found.
       - ROUNDS_DISABLE_PUBLIC_SHARES=${ROUNDS_DISABLE_PUBLIC_SHARES:-false}
     depends_on:
       - pdf-renderer
@@ -124,7 +132,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev
     ports:
-      - "${FRONTEND_PORT:-3001}:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-3001}:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules

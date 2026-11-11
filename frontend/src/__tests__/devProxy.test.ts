@@ -104,6 +104,13 @@ const NEVER_PROXIED = [
   '/api/rounds/Legacy-Snapshots',
   '/api/rounds/LEGACY-SNAPSHOTS/x',
   '/api/rounds/legacy%2Dsnapshots',
+  '/api/rounds/share/capabilities',
+  '/api/rounds/share/capabilities/capaaaaaaaaaaa1/revoke',
+  '/api/rounds/share',
+  '/api/rounds/share?x=1',
+  '/api/rounds/Share/capabilities',
+  '/api/rounds/SHARE/x',
+  '/api/rounds/%73hare/capabilities',
   '/api/admins',
   '/api/admins/auth-with-password',
   '/api/settings',
@@ -142,6 +149,9 @@ const PROXIED = [
   '/api/collections/execution_jobs/records',
   '/api/collections/legacy_artifact_snapshots/records',
   '/api/pdf/snapshots',
+  '/api/share/capabilities',
+  '/api/share/capabilities/capaaaaaaaaaaa1/revoke',
+  '/api/share/resolve',
 ];
 
 describe('the dev proxy and production nginx', () => {
@@ -166,6 +176,7 @@ describe('the dev proxy and production nginx', () => {
     '/api/collections/Execution_Service/auth-with-password',
     '/api/collections/execution_servic%C3%A9/auth-with-password',
     '/api/rounds/legacy-snapshots',
+    '/api/rounds/share/capabilities',
   ])('refuses a WebSocket upgrade on %s too', (url) => {
     const { entry, socket, forwarded } = upgrade(url);
     expect(entry.ws).toBe(true);
@@ -186,6 +197,7 @@ describe('the dev proxy and production nginx', () => {
       '/api/collections/Execution_Service/auth-with-password',
       '/api/collections/execution_servic%C3%A9/auth-with-password',
       '/api/rounds/Legacy-Snapshots',
+      '/api/rounds/Share/capabilities',
     ]) {
       expect(entry.bypass?.({ url } as never, {} as never, entry)).toBe(false);
     }
@@ -218,6 +230,13 @@ describe('the dev proxy and production nginx', () => {
   it('sends the snapshot route to the runner and keeps its hook from PocketBase', () => {
     expect(viteEntry('/api/pdf/snapshots')?.target).toBe(viteEntry('/api/run')?.target);
     expect(viteDenies('/api/rounds/legacy-snapshots')).toBe(true);
+  });
+
+  it('sends the share capability routes to the runner and keeps their hooks from PocketBase', () => {
+    for (const url of ['/api/share/capabilities', '/api/share/resolve']) {
+      expect(viteEntry(url)?.target).toBe(viteEntry('/api/run')?.target);
+    }
+    expect(viteDenies('/api/rounds/share/capabilities')).toBe(true);
   });
 
   it('sends the runner routes to the runner and the rest of /api to PocketBase', () => {

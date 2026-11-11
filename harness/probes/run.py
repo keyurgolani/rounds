@@ -66,6 +66,12 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
             every JSON field's declared limit on fresh and upgraded databases
             with the pinned binary, and the registry migration's down step
             (ROUNDS-00A-L03, D10); see json_limits_check.py.
+  share-capabilities
+            Share Capabilities (ROUNDS-00B-L03 stage 2) with both replicas and
+            nginx up: the owner list and revoke through nginx, resume and
+            variant deletes with active and revoked capabilities, the named
+            snapshot's delete refused, superuser changes refused, and an
+            account delete; see share_capability_check.py.
 
 Exit code is non-zero on any failure, any missing result, or any pending
 family that has started to behave like an implemented one.
@@ -191,6 +197,13 @@ def _readback(pb: PBClient, doc: dict, admin_token: str, writer: ReceiptWriter) 
         )
 
 
+def _readback_token(row: dict, admin_token: str) -> str | None:
+    """Who reads a row back around a refused write: its owner, or the
+    superuser for a store whose view rule is null, which nobody else reads
+    (share capabilities, ROUNDS-00B-L03 stage 2)."""
+    return admin_token if row.get("current_rules", {}).get("view", "") is None else None
+
+
 def _expected_status(doc: dict, pid: str) -> int:
     """The expected status for a family, read from the policy's deny_contract."""
     deny_key = doc["probe_families"][pid]["deny_key"]
@@ -259,9 +272,11 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
                 payload = factory.fresh_payload(name, c.user_id, a, b, content, secrets.token_hex(6))
                 writer.write(families.create_server_only_denied(pb, name, b.token, payload, admin_token, c.user_id, expected))
             elif pid == families.SERVER_ONLY_UPDATE_FAMILY:
-                writer.write(families.update_server_only_denied(pb, name, a.ids[name], a.token, expected))
+                writer.write(families.update_server_only_denied(pb, name, a.ids[name], a.token, expected,
+                                                                reader_token=_readback_token(row, admin_token)))
             elif pid == families.SERVER_ONLY_DELETE_FAMILY:
-                writer.write(families.delete_server_only_denied(pb, name, a.ids[name], a.token, expected))
+                writer.write(families.delete_server_only_denied(pb, name, a.ids[name], a.token, expected,
+                                                                reader_token=_readback_token(row, admin_token)))
             elif pid == families.SUPERUSER_CREATE_FAMILY:
                 # Owner a owns both the view row and the share link it points
                 # at, so the superuser insert is not a cross-owner relation.
@@ -573,7 +588,8 @@ def main() -> int:
               "admission-deploy|emergency-disable|emergency-enable|relation-quarantine|snapshot-store|"
               "execution-store|execution-runners|execution-unready|execution-ready-again|execution-disabled|"
               "execution-migration|json-limits|demo-on|demo-off|demo-contain-migration|snapshot-create|"
-              "snapshot-create-down|snapshot-create-retry|snapshot-scan|snapshot-create-off|snapshot-create-again}",
+              "snapshot-create-down|snapshot-create-retry|snapshot-scan|snapshot-create-off|snapshot-create-again|"
+              "share-capabilities}",
               file=sys.stderr)
         return 2
     phase = sys.argv[1]
@@ -592,6 +608,10 @@ def main() -> int:
             print(f"unknown phase {phase!r}", file=sys.stderr)
             return 2
         return legacy_snapshot_check.main(phase)
+    if phase == "share-capabilities":
+        import share_capability_check
+
+        return share_capability_check.main()
     if phase == "scan":
         import scan_check
 

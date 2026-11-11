@@ -351,6 +351,33 @@ version row changed through any of it, and deleting an account deletes its
 snapshots. The scan secret is a per-run test value. Between phases the probe
 keeps only emails and ids, under `harness/.state/`.
 
+## Share Capabilities
+
+`ROUNDS-00B-L03` stage 2 runs right after the snapshot phases, while signups
+are still on. Both runners and nginx restart, and
+[`probes/share_capability_check.py`](probes/share_capability_check.py)
+(`share-capabilities`) checks that:
+
+- an owner's list through nginx and the runner holds only their own
+  capabilities, with only the owner fields; a revoke answers the same the
+  second time, and another account's capability answers exactly like a
+  missing one and doesn't change;
+- deleting a resume or a variant that has been shared succeeds with an active
+  capability, which ends revoked as `source_deleted`, and with only a revoked
+  one, which stays as it was; a resume delete that reaches a shared variant
+  revokes that variant's capability, and every snapshot stays;
+- PocketBase refuses to delete a snapshot a capability names, and refuses the
+  superuser's changes to a capability's snapshot, account, checksum, or
+  expiry, or the reopening of a revoked one;
+- deleting an account with active and revoked capabilities succeeds and leaves
+  none of its capabilities or snapshots.
+
+The superuser seeds the snapshots and capabilities, through the model hooks
+and owner triggers every writer meets. The main phase's families cover the
+collection's null rules, and the deploy phase checks that nginx answers the
+hook routes itself and that the resolver gives the uniform not-found while its
+gate is closed.
+
 ## Two-account isolation suite
 
 `ROUNDS-00B-L05` grows this harness into the suite every later isolation

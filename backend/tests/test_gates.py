@@ -89,6 +89,9 @@ def test_written_defaults_keep_routes_on_and_outbound_reach_off():
         elif name == "EXECUTION_STORE":
             # #3 PR 1 ships the job store off.
             expected = "off"
+        elif name == "SHARE_CAPABILITY_RESOLUTION":
+            # #11 stage 2 ships capability resolution closed until #12.
+            expected = "disabled"
         else:
             expected = "enabled"
         assert r.value == expected, name
@@ -172,6 +175,53 @@ def test_only_pocketbase_reads_the_demo_gate():
     assert gates.BY_NAME["DEMO"].readers == frozenset({gates.POCKETBASE})
     assert "DEMO" not in gates.load({"ROUNDS_GATE_DEMO": "enabled"}, gates.RUNNER)
     assert "DEMO" not in gates.load({"ROUNDS_GATE_DEMO": "enabled"}, gates.FRONTEND)
+
+
+# ---- the public share gates (ROUNDS-00B-L03) -----------------------------
+
+
+@pytest.mark.parametrize("raw", ["1", "true", "TRUE", "yes", "on", "y", "disabled", "TRUE!", "off-ish"])
+def test_the_public_share_switch_alias_fails_closed(raw):
+    # Any value but an off word turns public reads off, a mistyped one too.
+    assert gates.load({"ROUNDS_DISABLE_PUBLIC_SHARES": raw})["PUBLIC_SHARES"] == gates.Resolved("disabled", "alias")
+
+
+@pytest.mark.parametrize("raw", ["", "   ", "false", "0", "no", "off", " OFF ", "False"])
+def test_an_off_word_leaves_public_shares_on(raw):
+    assert gates.load({"ROUNDS_DISABLE_PUBLIC_SHARES": raw})["PUBLIC_SHARES"] == gates.Resolved("enabled", "default")
+
+
+def test_a_set_public_shares_gate_wins_over_its_alias_and_a_bad_one_closes_it():
+    env = {"ROUNDS_GATE_PUBLIC_SHARES": "enabled", "ROUNDS_DISABLE_PUBLIC_SHARES": "true"}
+    assert gates.load(env)["PUBLIC_SHARES"] == gates.Resolved("enabled", "env")
+    assert gates.load({"ROUNDS_GATE_PUBLIC_SHARES": "disabled"})["PUBLIC_SHARES"] == gates.Resolved("disabled", "env")
+    assert gates.load({"ROUNDS_GATE_PUBLIC_SHARES": "nope"})["PUBLIC_SHARES"] == gates.Resolved("disabled", "invalid")
+
+
+@pytest.mark.parametrize("raw, want", [
+    ("", gates.Resolved("disabled", "default")),
+    ("enabled", gates.Resolved("enabled", "env")),
+    (" Enabled ", gates.Resolved("enabled", "env")),
+    ("disabled", gates.Resolved("disabled", "env")),
+    ("true", gates.Resolved("disabled", "invalid")),
+    ("on", gates.Resolved("disabled", "invalid")),
+    ("open", gates.Resolved("disabled", "invalid")),
+])
+def test_capability_resolution_opens_only_on_enabled(raw, want):
+    assert gates.load({"ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION": raw})["SHARE_CAPABILITY_RESOLUTION"] == want
+
+
+def test_only_the_runner_reads_the_share_gates_and_fail_closed_aliases():
+    for name in ("PUBLIC_SHARES", "SHARE_CAPABILITY_RESOLUTION"):
+        assert gates.BY_NAME[name].readers == frozenset({gates.RUNNER}), name
+        assert name not in gates.load({}, gates.POCKETBASE) and name not in gates.load({}, gates.FRONTEND)
+    # PocketBase and the SPA resolve every alias the truthy way (gates.js,
+    # gateRegistry.json), so a fail-closed alias stays on a runner-only gate.
+    for gate in gates.REGISTRY:
+        for alias in gate.aliases:
+            if alias.fail_closed:
+                assert alias.reader == gates.RUNNER and gate.readers == frozenset({gates.RUNNER}), gate.name
+    assert [a.env for a in gates.BY_NAME["PUBLIC_SHARES"].aliases if a.fail_closed] == ["ROUNDS_DISABLE_PUBLIC_SHARES"]
 
 
 # ---- startup log ---------------------------------------------------------

@@ -42,6 +42,12 @@
 #  3j. the gate off: creation is refused, snapshots still read back, the
 #                     rescan matches; the gate on again: every snapshot is
 #                     reused, and no resume, variant, or version row changed
+#  3k. share capabilities - both replicas and nginx: the owner list and
+#                     revoke through nginx, resume and variant deletes with
+#                     active and revoked capabilities keep their snapshots,
+#                     a named snapshot can't be deleted, superuser changes
+#                     are refused, and an account delete leaves nothing
+#                     (ROUNDS-00B-L03 stage 2, harness/probes/share_capability_check.py)
 #   4. recreate PocketBase with signups disabled; the named pb_data volume
 #      keeps the accounts and rows from phase 2 across the restart
 #   5. hook phase   - signup-disabled probe
@@ -486,6 +492,17 @@ compose stop runner runner-b frontend materializer
 compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
 set -e
 
+# Share capabilities run while signups are still on, so they can make
+# their accounts and delete one (ROUNDS-00B-L03 stage 2).
+echo "--- phase 3k: share capabilities (owner routes through nginx, source and account deletes) ---"
+set +e
+restart_runners
+probe share-capabilities
+share_rc=$?
+compose stop runner runner-b frontend
+compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
+set -e
+
 echo "--- phase 4: recreate PocketBase (signups disabled, the demo at its default) ---"
 DEMO_V=false
 set_signups true
@@ -624,7 +641,8 @@ set -e
 
 if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ] || [ "${admission_rc}" -ne 0 ] || [ "${migration_rc}" -ne 0 ] \
    || [ "${execution_rc}" -ne 0 ] || [ "${quarantine_rc}" -ne 0 ] || [ "${reach_rc}" -ne 0 ] \
-   || [ "${snapshot_rc}" -ne 0 ] || [ "${demo_rc}" -ne 0 ] || [ "${legacy_rc}" -ne 0 ]; then
+   || [ "${snapshot_rc}" -ne 0 ] || [ "${demo_rc}" -ne 0 ] || [ "${legacy_rc}" -ne 0 ] \
+   || [ "${share_rc}" -ne 0 ]; then
   exit 1
 fi
 exit 0

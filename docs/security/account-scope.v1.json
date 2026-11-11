@@ -43,7 +43,7 @@
     },
     "server_only": {
       "status": 403,
-      "guarantee": "a client create, update, or delete on a collection whose rule for it is null is forbidden"
+      "guarantee": "a client list, view, create, update, or delete on a collection whose rule for it is null is forbidden"
     },
     "update_own": {
       "status": 200,
@@ -162,6 +162,12 @@
     },
     "deployment.proxy.share-read.uniform": {
       "guarantee": "a public share read of a malformed or unknown token answers one byte-identical 404 with no-store, noindex, no-referrer, nosniff, DENY framing, and the resolver CSP"
+    },
+    "deployment.proxy.share-hooks.denied": {
+      "guarantee": "the share capability hook routes, which only the runner calls, are not reachable at the public URL"
+    },
+    "deployment.proxy.share-resolve.uniform": {
+      "guarantee": "a share capability resolve with a malformed or unknown token answers one byte-identical 404 with no-store, noindex, no-referrer, nosniff, DENY framing, and the resolver CSP"
     }
   },
   "server_derivation": {
@@ -277,7 +283,8 @@
       "guarantee": "a client create on a server-only collection is forbidden",
       "resource": [
         "resume_share_views",
-        "legacy_artifact_snapshots"
+        "legacy_artifact_snapshots",
+        "share_capabilities"
       ]
     },
     "account-scope.update.server-only.denied": {
@@ -289,7 +296,8 @@
       "resource": [
         "resume_share_links",
         "resume_share_views",
-        "legacy_artifact_snapshots"
+        "legacy_artifact_snapshots",
+        "share_capabilities"
       ]
     },
     "account-scope.delete.server-only.denied": {
@@ -300,7 +308,8 @@
       "guarantee": "a client delete on a collection only the server writes is forbidden, even the owner's",
       "resource": [
         "legacy_artifact_snapshots",
-        "execution_envelopes"
+        "execution_envelopes",
+        "share_capabilities"
       ]
     },
     "account-scope.create.superuser.accepted": {
@@ -412,6 +421,38 @@
       "deny_key": "relation_create",
       "guarantee": "a share link create without exactly one target or with a malformed token is rejected with the uniform create denial and writes nothing",
       "resource": "resume_share_links"
+    },
+    "account-scope.list.server-only.denied": {
+      "operation": "list",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "server_only",
+      "guarantee": "a client list on a collection whose list rule is null is forbidden, the owner's own included, and returns no row",
+      "resource": "share_capabilities"
+    },
+    "account-scope.view.server-only.denied": {
+      "operation": "view",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "server_only",
+      "guarantee": "a client read by id on a collection whose view rule is null is forbidden, the owner's own row included",
+      "resource": "share_capabilities"
+    },
+    "account-scope.share.capability-list.owner-only": {
+      "operation": "list",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "list",
+      "guarantee": "the owner's share capability list answers each account with its own capabilities and the owner's fields only, and refuses an anonymous caller",
+      "resource": "share_capabilities"
+    },
+    "account-scope.share.capability-revoke.foreign-or-missing.indistinguishable": {
+      "operation": "update",
+      "actor": "authenticated-other",
+      "status": "enforced",
+      "deny_key": "update",
+      "guarantee": "revoking another account's share capability answers exactly as revoking one that does not exist, and changes nothing",
+      "resource": "share_capabilities"
     }
   },
   "cases": {
@@ -2354,6 +2395,44 @@
         "account-scope.create.server-only.denied",
         "account-scope.update.server-only.denied",
         "account-scope.delete.server-only.denied"
+      ]
+    },
+    "share_capabilities": {
+      "migration": "1700008200_share_capabilities.js",
+      "fixture": "share_capabilities",
+      "owner_field": "user",
+      "current_rules": {
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "target_rules": {
+        "create": null,
+        "update": null
+      },
+      "target_rule_migration": "1700008200_share_capabilities.js",
+      "hook": "pocketbase/pb_hooks/share_capabilities.pb.js",
+      "relation_exceptions": [
+        "snapshot"
+      ],
+      "relation_endpoints": [
+        {
+          "field": "snapshot",
+          "target": "legacy_artifact_snapshots"
+        }
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.server-only.denied",
+        "account-scope.view.server-only.denied",
+        "account-scope.create.server-only.denied",
+        "account-scope.update.server-only.denied",
+        "account-scope.delete.server-only.denied",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.share.capability-list.owner-only",
+        "account-scope.share.capability-revoke.foreign-or-missing.indistinguishable"
       ]
     },
     "users": {

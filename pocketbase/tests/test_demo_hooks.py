@@ -429,7 +429,7 @@ def test_an_allowed_write_logs_nothing():
 
 # Collections the OWNERS map names before their leaf adds them. The leaf
 # that adds one confirms its entry here and drops it from this set.
-NOT_YET = {"share_capabilities", "ai_credentials", "ai_provider_models"}
+NOT_YET = {"ai_credentials", "ai_provider_models"}
 
 
 def _collection_blocks() -> dict[str, str]:

@@ -16,12 +16,12 @@ These variables control host-side ports.
 
 | Variable | Default | Used by | Purpose |
 | --- | --- | --- | --- |
-| `POCKETBASE_PORT` | `8090` | dev compose | Exposes PocketBase locally. |
-| `RUNNER_PORT` | `3099` | dev compose | Exposes FastAPI runner locally. |
-| `FRONTEND_PORT` | `3001` | dev compose | Exposes Vite dev server locally. |
+| `POCKETBASE_PORT` | `8090` | dev compose | Exposes PocketBase on `127.0.0.1`. |
+| `RUNNER_PORT` | `3099` | dev compose | Exposes FastAPI runner on `127.0.0.1`. |
+| `FRONTEND_PORT` | `3001` | dev compose | Exposes Vite dev server on `127.0.0.1`. |
 | `HTTP_PORT` | `80` | prod compose | Exposes the nginx-fronted frontend. |
 
-Production compose exposes only `HTTP_PORT`. PocketBase and runner stay on the private Docker network.
+Dev compose publishes its three ports on `127.0.0.1` only, since its admin login is a development placeholder; reach them from another machine through an SSH tunnel (`ssh -L 3001:127.0.0.1:3001 host`). Production compose exposes only `HTTP_PORT`. PocketBase and runner stay on the private Docker network.
 
 ## Production Images
 
@@ -82,7 +82,11 @@ These flags only control whether buttons render. The corresponding providers mus
 
 | Variable | Default | Layer | Purpose |
 | --- | --- | --- | --- |
-| `ROUNDS_DISABLE_PUBLIC_SHARES` | `false` | runner | Any value other than empty, `false`, `0`, `no`, or `off` answers every public share read with the uniform not-found, before any lookup. Read on each request. See [Public shares](operations.md#public-shares). |
+| `ROUNDS_GATE_PUBLIC_SHARES` | blank (`enabled`) | runner | `disabled` answers every public share request, the public share read and `POST /api/share/resolve`, with the uniform not-found, before any lookup. |
+| `ROUNDS_DISABLE_PUBLIC_SHARES` | `false` | runner | Alias read while the gate is blank. Any value other than empty, `false`, `0`, `no`, or `off` does the same as `disabled`. |
+| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | blank (`disabled`) | runner | `enabled` lets `POST /api/share/resolve` look a Share Capability up. Until #12 ships the lookup, it resolves nothing either way. |
+
+Restart the runner after changing any of the three. See [Public shares](operations.md#public-shares).
 
 ## Signup Policy
 
@@ -138,6 +142,8 @@ Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads the
 | `ROUNDS_GATE_ENFORCE_QUOTA` | `off`, `observe`, `enforce` | `observe` | runner | `enforce` only; account, deployment, and demo quotas on the admitted routes |
 | `ROUNDS_GATE_EXECUTION_DEFINITIONS` | `legacy`, `enforce`, `disabled` | `legacy` | runner, frontend | `legacy` loads run, evaluate, grade, run-project, and take-home from PocketBase as before; `enforce` takes only requests that name a compiled definition, which the app then sends, and runs only that definition; `disabled` answers 503 `definitions_disabled` on those six routes and keeps every draft. An unknown value closes to `disabled`. Restart the runner and the frontend together when it changes. |
 | `ROUNDS_GATE_EXECUTION_STORE` | `off`, `on` | `off` | runner, PocketBase | yes; `on` serves the execution job store's routes in PocketBase and runs each runner replica's worker and reaper, and `off` answers those routes 503 `store_off` and starts no worker. An unknown value closes to `off`. Set `ROUNDS_EXECUTION_SECRET` first, and restart PocketBase and every runner replica when it changes. Nothing runs through the store yet: #3's later PRs move the execution routes onto it. |
+| `ROUNDS_GATE_PUBLIC_SHARES` | `enabled`, `disabled` | `enabled` | runner | yes; disabled, every public share request answers the uniform not-found ([Public Shares](#public-shares)) |
+| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | `enabled`, `disabled` | `disabled` | runner | yes; disabled, `POST /api/share/resolve` answers the uniform not-found before any lookup. Leave it off until #12 lands |
 
 Each route gate is that route's off switch. Set it to `disabled` and restart the runner, and the route answers 503 `route_disabled` before it reads the request; nothing else changes. [The execution runbook](security/execution-runbook.md) covers flipping and confirming each gate and what each error code means.
 
@@ -151,10 +157,10 @@ Each reader resolves a gate the same way:
 
 1. A set gate with an allowed value wins. Values are trimmed and case-insensitive.
 2. A set gate with any other value takes its most restrictive value (`disabled` or `enforce`), and the reader logs an error that names the gate but not the value.
-3. A blank gate falls back to the reader's alias when the alias is `true`, `1`, or `yes`. `SIGNUPS` and `DEMO` have aliases: PocketBase reads `ROUNDS_DISABLE_SIGNUPS` and `ROUNDS_ENABLE_DEMO`, and the frontend reads `VITE_DISABLE_SIGNUPS`.
+3. A blank gate falls back to the reader's alias when the alias is `true`, `1`, or `yes`. `SIGNUPS` and `DEMO` have aliases: PocketBase reads `ROUNDS_DISABLE_SIGNUPS` and `ROUNDS_ENABLE_DEMO`, and the frontend reads `VITE_DISABLE_SIGNUPS`. The runner's `ROUNDS_DISABLE_PUBLIC_SHARES`, the alias of `PUBLIC_SHARES`, fails closed instead: any value but empty, `false`, `0`, `no`, or `off` applies it.
 4. Otherwise the default applies.
 
-A process reads its gates once at startup, so a change needs a restart. The runner and PocketBase each log one JSON line with every gate they read, its value, and where the value came from (`default`, `env`, `alias`, or `invalid`). The frontend container passes the SPA only the gates it reads, today `ROUNDS_GATE_SIGNUPS` and `ROUNDS_GATE_EXECUTION_DEFINITIONS`, and logs each value it passes. Runner and PocketBase gates never reach the browser. Gate values aren't secret, so never put a secret in one.
+A process reads its gates once at startup, so a change needs a restart. The runner reads the two share gates on each request as well, and they need a restart all the same. The runner and PocketBase each log one JSON line with every gate they read, its value, and where the value came from (`default`, `env`, `alias`, or `invalid`). The frontend container passes the SPA only the gates it reads, today `ROUNDS_GATE_SIGNUPS` and `ROUNDS_GATE_EXECUTION_DEFINITIONS`, and logs each value it passes. Runner and PocketBase gates never reach the browser. Gate values aren't secret, so never put a secret in one.
 
 ## PocketBase Admin Bootstrap
 

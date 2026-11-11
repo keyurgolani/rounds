@@ -6,7 +6,8 @@
 //
 // so both views share zoom + fit + pagination behaviour. Callers own
 // the outer chrome (modal backdrop, page header, etc.); this component
-// stops at the scroll edge.
+// stops at the scroll edge. share/SharedArtifactFrame uses its toolbar
+// and zoom steps around a frame instead of a rendered page.
 //
 // Zoom mechanics:
 //   • Buttons (−, %, +, Fit) and keyboard shortcuts (+/=, −, 0, F)
@@ -32,15 +33,15 @@ import { templateById } from './templates/registry';
 import { ResumePageStyles } from './templates/parts';
 import PaginatedFrame from './studio/PaginatedFrame';
 
-const MIN_ZOOM = 0.4;
-const MAX_ZOOM = 3;
-const ZOOM_STEP = 0.1;
+export const MIN_ZOOM = 0.4;
+export const MAX_ZOOM = 3;
+export const ZOOM_STEP = 0.1;
 
 // Natural rendered width of an A4 page at 96 CSS-DPI. Used by the Fit
 // calculation so we can pick a zoom that snugly fills the scroll area.
 const PAGE_WIDTH_PX = (210 * 96) / 25.4;
 
-const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+export const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
 
 type Props = {
   data: ResumeData;
@@ -235,7 +236,7 @@ export default function ZoomablePage({
   );
 }
 
-function Toolbar({
+export function Toolbar({
   label,
   zoom,
   onZoomIn,
@@ -258,10 +259,14 @@ function Toolbar({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        // On a narrow screen the controls move under the label rather
+        // than past the edge.
+        flexWrap: 'wrap',
         padding: '10px 14px',
         background: 'var(--bg-elev)',
         borderBottom: '1px solid var(--border)',
         gap: 10,
+        rowGap: 8,
       }}
     >
       <div className="eyebrow" style={{ fontSize: 9.5 }}>

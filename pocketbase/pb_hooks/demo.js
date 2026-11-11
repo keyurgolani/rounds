@@ -20,10 +20,10 @@
 // What a demo caller may change on its own users record.
 const PROFILE_FIELDS = ["name", "bio", "target", "avatar"];
 // What a demo account may not own, and how each row names its account:
-// its own field, or the provider it belongs to. share_capabilities (#11)
-// and ai_credentials and ai_provider_models (#73) don't exist yet; the
-// leaf that adds one confirms its entry (test_demo_hooks.py fails until it
-// does), and a collection with no entry is refused outright.
+// its own field, or the provider it belongs to. ai_credentials and
+// ai_provider_models (#73) don't exist yet; the leaf that adds one confirms
+// its entry (test_demo_hooks.py fails until it does), and a collection with
+// no entry is refused outright. #11 stage 2 confirmed share_capabilities.
 const OWNERS = {
   resume_share_links: { field: "user" },
   share_capabilities: { field: "user" },

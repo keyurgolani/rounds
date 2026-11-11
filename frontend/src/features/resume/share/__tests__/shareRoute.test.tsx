@@ -1,4 +1,4 @@
-// Only the lowercase share path renders the share page, the one nginx
+// Only the lowercase share paths render the share pages, the ones nginx
 // serves with the share headers (ROUNDS-00B-L03).
 
 import { render, screen } from '@testing-library/react';
@@ -7,16 +7,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../client')>();
-  return { ...actual, fetchPublicResume: vi.fn() };
+  return { ...actual, fetchPublicResume: vi.fn(), resolveSharedArtifact: vi.fn() };
 });
 
-import { fetchPublicResume } from '../client';
+import { fetchPublicResume, resolveSharedArtifact } from '../client';
 import App from '../../../../App';
 import { AuthProvider } from '../../../../auth/AuthProvider';
 import { ThemeProvider } from '../../../../theme/ThemeProvider';
 import { SHARE_NOT_FOUND_HEADING } from '../../../../pages/PublicResume';
 
 const fetchMock = fetchPublicResume as unknown as ReturnType<typeof vi.fn>;
+const resolveMock = resolveSharedArtifact as unknown as ReturnType<typeof vi.fn>;
+const CAPABILITY_TOKEN = 'sd1_AbCdEfGhIjKlMnOpQrStUv';
 
 function open(path: string) {
   return render(
@@ -34,6 +36,8 @@ describe('the share route', () => {
   beforeEach(() => {
     fetchMock.mockReset();
     fetchMock.mockRejectedValue(new Error('x'));
+    resolveMock.mockReset();
+    resolveMock.mockRejectedValue(new Error('x'));
   });
 
   it('renders the share page on the lowercase path', async () => {
@@ -48,5 +52,20 @@ describe('the share route', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(screen.queryByRole('heading', { name: SHARE_NOT_FOUND_HEADING })).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('renders the capability page on the lowercase path, with the token from the fragment', async () => {
+    open(`/r#${CAPABILITY_TOKEN}`);
+    expect(await screen.findByRole('heading', { name: SHARE_NOT_FOUND_HEADING })).toBeInTheDocument();
+    expect(resolveMock).toHaveBeenCalledTimes(1);
+    expect(resolveMock).toHaveBeenCalledWith(CAPABILITY_TOKEN);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([`/R#${CAPABILITY_TOKEN}`, '/R'])('does not render the capability page on %s', async (path) => {
+    open(path);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(screen.queryByRole('heading', { name: SHARE_NOT_FOUND_HEADING })).toBeNull();
+    expect(resolveMock).not.toHaveBeenCalled();
   });
 });

@@ -331,7 +331,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 
 ## Adapters
 
-169 entries: 54 collection, 3 field, 19 stored-value, 9 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
+170 entries: 55 collection, 3 field, 19 stored-value, 9 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
 
 ### collection
 
@@ -381,6 +381,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 | resume_variants | `pocketbase/pb_migrations/1700000700_resume_studio.js:79` | `artifact-edition` | Resume | #164 (ROUNDS-32-L10) |
 | resume_versions | `pocketbase/pb_migrations/1700000700_resume_studio.js:126` | `artifact-revision` | Version | #164 (ROUNDS-32-L10) |
 | resumes | `pocketbase/pb_migrations/1700000700_resume_studio.js:50` | `artifact-edition` | Resume | #164 (ROUNDS-32-L10) |
+| share_capabilities | `pocketbase/pb_migrations/1700008200_share_capabilities.js:71` | `share-capability` |  | #18 (ROUNDS-02-L01) |
 | system_design_guides | `pocketbase/pb_migrations/1700000000_init_collections.js:176` | decided by #39 (ROUNDS-07-L01) |  | #43 (ROUNDS-07-L05) |
 | system_design_questions | `pocketbase/pb_migrations/1700000000_init_collections.js:35` | `practice-item` | Practice Item | #43 (ROUNDS-07-L05) |
 | take_home_assignments | `pocketbase/pb_migrations/1700001300_take_home.js:37` | `practice-item` | Practice Item | #43 (ROUNDS-07-L05) |

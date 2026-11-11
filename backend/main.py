@@ -8,7 +8,7 @@ from starlette.types import ASGIApp
 
 from app import admission, definitions, errors, gates, obs
 from execution import runtime as execution_runtime
-from routers import ai, ai_coding, pdf, runner, sd_practice, share, take_home
+from routers import ai, ai_coding, pdf, runner, sd_practice, share, share_capabilities, take_home
 
 
 @asynccontextmanager
@@ -66,6 +66,7 @@ app.include_router(ai.router)
 app.include_router(ai_coding.router)
 app.include_router(sd_practice.router)
 app.include_router(share.router)
+app.include_router(share_capabilities.router)
 app.include_router(take_home.router)
 
 

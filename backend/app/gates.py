@@ -21,6 +21,9 @@ Resolution, the same in all three readers:
    ``SIGNUPS``: PocketBase reads ``ROUNDS_DISABLE_SIGNUPS`` and the
    SPA reads ``VITE_DISABLE_SIGNUPS``, as each does today.
    ``ROUNDS_ENABLE_DEMO`` is PocketBase's alias of ``DEMO``.
+   ``ROUNDS_DISABLE_PUBLIC_SHARES`` is the runner's alias of
+   ``PUBLIC_SHARES`` and fails closed: any value but an off word
+   (``false``, ``0``, ``no``, ``off``, or empty) applies it.
 4. Otherwise the written default applies.
 
 Admission (``app/admission.py``) enforces the route gates and
@@ -29,7 +32,9 @@ Admission (``app/admission.py``) enforces the route gates and
 ``PAPER_FETCH`` and ``PROVIDER_PRIVATE_NETWORK``, PocketBase and the
 SPA read ``SIGNUPS``, and PocketBase reads ``DEMO``. ``EXECUTION_STORE``
 turns on the execution job store (ROUNDS-00A-L03): PocketBase serves its
-hook routes and each runner replica runs its executor and reaper.
+hook routes and each runner replica runs its executor and reaper. The
+share routes read ``PUBLIC_SHARES`` and ``SHARE_CAPABILITY_RESOLUTION``
+on each request (ROUNDS-00B-L03); the startup log still lists both.
 
 The two enforcement gates start at ``observe``: admission records what
 it would deny and denies nothing. The next ``v*`` release sets them to
@@ -46,6 +51,8 @@ from app import obs
 
 PREFIX = "ROUNDS_GATE_"
 TRUTHY = ("true", "1", "yes")
+# The values that leave a fail-closed alias off; any other applies it.
+OFF_WORDS = ("", "false", "0", "no", "off")
 
 RUNNER = "runner"
 POCKETBASE = "pocketbase"
@@ -65,11 +72,17 @@ _log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Alias:
-    """A legacy variable one reader still honors when the gate is unset."""
+    """A legacy variable one reader still honors when the gate is unset.
+
+    An alias applies when it holds a truthy word. A fail-closed alias, an
+    emergency switch, applies when it holds anything but an off word
+    (OFF_WORDS), so a mistyped value still turns the thing off.
+    """
 
     env: str
     value: str
     reader: str
+    fail_closed: bool = False
 
 
 @dataclass(frozen=True)
@@ -193,6 +206,36 @@ REGISTRY: tuple[Gate, ...] = (
         route="/api/pdf/snapshots",
     ),
     Gate(
+        # ROUNDS-00B-L03: the emergency switch for every public share read,
+        # the share link read and the capability resolver. Both read it on
+        # each request. Its alias fails closed: any value but an off word
+        # turns public reads off.
+        name="PUBLIC_SHARES",
+        values=ROUTE_VALUES,
+        default="enabled",
+        closed="disabled",
+        readers=frozenset({RUNNER}),
+        description=(
+            "Public share reads, the share link read and the capability resolver; disabled answers each with "
+            "the uniform not-found before any lookup."
+        ),
+        aliases=(Alias(env="ROUNDS_DISABLE_PUBLIC_SHARES", value="disabled", reader=RUNNER, fail_closed=True),),
+    ),
+    Gate(
+        # ROUNDS-00B-L03 stage 2: capability resolution stays closed until
+        # #12 (ROUNDS-00B-L04) lands and #13's share cases pass. Read on each
+        # request, like the switch above.
+        name="SHARE_CAPABILITY_RESOLUTION",
+        values=ROUTE_VALUES,
+        default="disabled",
+        closed="disabled",
+        readers=frozenset({RUNNER}),
+        description=(
+            "Lets POST /api/share/resolve look a share capability up; disabled answers the uniform not-found "
+            "before any lookup."
+        ),
+    ),
+    Gate(
         name="SIGNUPS",
         values=ROUTE_VALUES,
         default="enabled",
@@ -229,7 +272,10 @@ def resolve(gate: Gate, environ: Mapping[str, str], reader: str) -> Resolved:
             return Resolved(raw, "env")
         return Resolved(gate.closed, "invalid")
     for alias in gate.aliases:
-        if alias.reader == reader and (environ.get(alias.env) or "").strip().lower() in TRUTHY:
+        if alias.reader != reader:
+            continue
+        word = (environ.get(alias.env) or "").strip().lower()
+        if (word not in OFF_WORDS) if alias.fail_closed else (word in TRUTHY):
             return Resolved(alias.value, "alias")
     return Resolved(gate.default, "default")
 
