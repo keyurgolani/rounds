@@ -281,7 +281,7 @@ export function RunnerJobStatus({ view, contentStyle, actionStyle }: RunnerJobSt
           <span
             aria-hidden="true"
             className="mono"
-            style={{ display: 'block', marginTop: 2, fontSize: 10.5, color: 'var(--text-3)' }}
+            style={{ display: 'block', marginTop: 2, fontSize: 10.5, color: 'var(--text-2)' }}
           >
             {formatElapsed(now - view.runningSince)}
           </span>
