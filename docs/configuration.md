@@ -16,12 +16,12 @@ These variables control host-side ports.
 
 | Variable | Default | Used by | Purpose |
 | --- | --- | --- | --- |
-| `POCKETBASE_PORT` | `8090` | dev compose | Exposes PocketBase locally. |
-| `RUNNER_PORT` | `3099` | dev compose | Exposes FastAPI runner locally. |
-| `FRONTEND_PORT` | `3001` | dev compose | Exposes Vite dev server locally. |
+| `POCKETBASE_PORT` | `8090` | dev compose | Exposes PocketBase on `127.0.0.1`. |
+| `RUNNER_PORT` | `3099` | dev compose | Exposes FastAPI runner on `127.0.0.1`. |
+| `FRONTEND_PORT` | `3001` | dev compose | Exposes Vite dev server on `127.0.0.1`. |
 | `HTTP_PORT` | `80` | prod compose | Exposes the nginx-fronted frontend. |
 
-Production compose exposes only `HTTP_PORT`. PocketBase and runner stay on the private Docker network.
+Dev compose publishes its three ports on `127.0.0.1` only, since its admin login is a development placeholder; reach them from another machine through an SSH tunnel (`ssh -L 3001:127.0.0.1:3001 host`). Production compose exposes only `HTTP_PORT`. PocketBase and runner stay on the private Docker network.
 
 ## Production Images
 
