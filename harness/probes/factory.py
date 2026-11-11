@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from pbclient import PBClient, Response
@@ -98,6 +99,27 @@ def snapshot_fields(source_id: str) -> dict[str, Any]:
         "sanitizer_version": "1.0.0",
         "font_families": ["inter"],
         "size_bytes": len(SNAPSHOT_MARKUP),
+    }
+
+
+def capability_fields(snapshot_id: str, days: int = 30) -> dict[str, Any]:
+    """A share capability over one of the harness's snapshots (their markup
+    is SNAPSHOT_MARKUP), expiring in ``days`` days, with a digest no other
+    row has."""
+    expires = datetime.now(timezone.utc) + timedelta(days=days)
+    return {
+        "target_kind": "legacy_artifact_snapshot",
+        "snapshot": snapshot_id,
+        "target_checksum": "sha256:" + hashlib.sha256(SNAPSHOT_MARKUP).hexdigest(),
+        "purpose": "harness share",
+        "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S.000Z"),
+        "password_policy_ref": "",
+        "view_policy": "disabled",
+        "capability_version": 1,
+        "status": "active",
+        "projection_version": 1,
+        "bearer_digest": secrets.token_hex(32),
+        "digest_key_version": 1,
     }
 
 
@@ -206,6 +228,11 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
             f"seed legacy_artifact_snapshots/{tag}",
         )
         ids["legacy_artifact_snapshots"] = rec["id"]
+        # Only a PocketBase hook writes capabilities (ROUNDS-00B-L03 stage 2),
+        # so the fixture over that snapshot goes in with the admin token,
+        # through the same model hooks and owner triggers every writer meets.
+        if has("share_capabilities"):
+            mk_admin("share_capabilities", capability_fields(rec["id"]))
 
     mk("ai_providers", {"kind": "openai", "label": "provider"})
     mk("ai_settings", {})
@@ -298,6 +325,10 @@ def fresh_payload(
         # No markup file: only the create probe uses it, and the null create
         # rule refuses the request before any field is read.
         "legacy_artifact_snapshots": snapshot_fields(a.ids["resumes"]),
+        # Over `a`'s seeded snapshot; the null create rule refuses a client
+        # before any field is read, and the superuser relation probe points
+        # it at another account's snapshot.
+        "share_capabilities": capability_fields(a.ids.get("legacy_artifact_snapshots", "")),
         "ai_providers": {"kind": "openai", "label": "provider"},
         "ai_settings": {},
         "ai_coding_drafts": {"round": content["round"], "file_path": f"probe-{s}.py", "contents": "x=1"},

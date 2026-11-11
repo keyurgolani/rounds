@@ -237,13 +237,16 @@ def create_server_only_denied(pb, collection, caller_token, payload, admin_token
                    expected, resp.status, ok, resp.elapsed_ms, detail)
 
 
-def update_server_only_denied(pb, collection, record_id, owner_token, expected) -> Receipt:
+def update_server_only_denied(pb, collection, record_id, owner_token, expected, reader_token=None) -> Receipt:
     # A server-only collection (update rule null) rejects even the owner's own
     # update; the owner reads the row before and after, proving the deny is the
-    # rule and not a missing record, and that the row is exactly as it was.
-    before = pb.view(collection, record_id, token=owner_token)
+    # rule and not a missing record, and that the row is exactly as it was. A
+    # collection the owner can't read either (share capabilities) is read with
+    # the superuser token instead.
+    reader = reader_token or owner_token
+    before = pb.view(collection, record_id, token=reader)
     resp = pb.update(collection, record_id, {}, token=owner_token)
-    still = pb.view(collection, record_id, token=owner_token)
+    still = pb.view(collection, record_id, token=reader)
     unchanged = before.status == 200 and still.status == 200 and before.body == still.body
     ok = resp.status == expected and unchanged
     detail = "" if ok else f"update={resp.status} owner_view={still.status} unchanged={unchanged}"
@@ -251,15 +254,18 @@ def update_server_only_denied(pb, collection, record_id, owner_token, expected) 
                    expected, resp.status, ok, resp.elapsed_ms, detail)
 
 
-def delete_server_only_denied(pb, collection, record_id, owner_token, expected) -> Receipt:
+def delete_server_only_denied(pb, collection, record_id, owner_token, expected, reader_token=None) -> Receipt:
     # A collection whose delete rule is null too, because only the server
     # writes it (the Legacy Artifact Snapshots, ROUNDS-00A-L04, and the
     # execution envelopes, ROUNDS-00A-L03), rejects even the owner's delete
     # of its own row, the hardest client to deny; the owner reads the row
-    # before and after, proving it is still there exactly as it was.
-    before = pb.view(collection, record_id, token=owner_token)
+    # before and after, proving it is still there exactly as it was. A
+    # collection the owner can't read either (share capabilities) is read with
+    # the superuser token instead.
+    reader = reader_token or owner_token
+    before = pb.view(collection, record_id, token=reader)
     resp = pb.delete(collection, record_id, token=owner_token)
-    still = pb.view(collection, record_id, token=owner_token)
+    still = pb.view(collection, record_id, token=reader)
     unchanged = before.status == 200 and still.status == 200 and before.body == still.body
     ok = resp.status == expected and unchanged
     detail = "" if ok else f"delete={resp.status} owner_view={still.status} unchanged={unchanged}"
@@ -345,6 +351,88 @@ def share_create_shape_denied(pb, collection, caller, content, admin_token, expe
         problems.append(f"rows_before={before} rows_after={after} listing_status={after_status or before_status}")
     return Receipt("account-scope.share.create-shape.denied", collection, "create", "authenticated-owner",
                    expected, first.status, not problems, first.elapsed_ms, "; ".join(problems))
+
+
+# --------------------------------------------------------------------------
+# share capabilities answer only their owner (ROUNDS-00B-L03 stage 2)
+# --------------------------------------------------------------------------
+
+# The owner's hook routes, which only the runner reaches; the harness calls
+# them at PocketBase inside the stack.
+CAPABILITY_ROUTE = "/api/rounds/share/capabilities"
+CAPABILITY_OWNER_FIELDS = frozenset({"id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at"})
+
+
+def list_server_only_denied(pb, collection, a, b, expected) -> Receipt:
+    # A store no client reads at all (its list rule is null too): the owner,
+    # another account, and an anonymous caller are each refused and get no
+    # row.
+    problems: list[str] = []
+    first = None
+    for actor, token in (("owner", a.token), ("other", b.token), ("anonymous", None)):
+        resp = pb.listing(collection, token=token)
+        first = first or resp
+        if resp.status != expected or _ids_in(resp.body):
+            problems.append(f"{actor} list status={resp.status} rows={len(_ids_in(resp.body))}")
+    return Receipt("account-scope.list.server-only.denied", collection, "list", "authenticated-owner",
+                   expected, first.status, not problems, first.elapsed_ms, "; ".join(problems))
+
+
+def view_server_only_denied(pb, collection, a, b, expected) -> Receipt:
+    # The same for a read by id, the owner's own row included.
+    problems: list[str] = []
+    first = None
+    for actor, token in (("owner", a.token), ("other", b.token), ("anonymous", None)):
+        resp = pb.view(collection, a.ids[collection], token=token)
+        first = first or resp
+        leaked = isinstance(resp.body, dict) and resp.body.get("id") == a.ids[collection]
+        if resp.status != expected or leaked:
+            problems.append(f"{actor} view status={resp.status} leaked={leaked}")
+    return Receipt("account-scope.view.server-only.denied", collection, "view", "authenticated-owner",
+                   expected, first.status, not problems, first.elapsed_ms, "; ".join(problems))
+
+
+def _capability_items(resp) -> list[dict] | None:
+    body = resp.body
+    if resp.status != 200 or not isinstance(body, dict) or not isinstance(body.get("items"), list):
+        return None
+    return [it for it in body["items"] if isinstance(it, dict)]
+
+
+def share_capability_list_owner_only(pb, collection, a, b, expected) -> Receipt:
+    # The owner's capability list answers each account with its own
+    # capabilities and the owner's fields only: another account never sees
+    # A's, and an anonymous caller is refused.
+    problems: list[str] = []
+    mine = _capability_items(pb.get(CAPABILITY_ROUTE, token=a.token))
+    if mine is None or a.ids[collection] not in {it.get("id") for it in mine}:
+        problems.append("the owner's list is missing its capability")
+    elif any(set(it) != CAPABILITY_OWNER_FIELDS for it in mine):
+        problems.append("the owner's list carries fields beyond the owner's")
+    other = pb.get(CAPABILITY_ROUTE, token=b.token)
+    theirs = _capability_items(other)
+    if theirs is None or a.ids[collection] in {it.get("id") for it in theirs}:
+        problems.append(f"another account's list status={other.status} carries a's capability")
+    anonymous = pb.get(CAPABILITY_ROUTE, token=None)
+    if anonymous.status != 401:
+        problems.append(f"anonymous list status={anonymous.status}")
+    return Receipt("account-scope.share.capability-list.owner-only", collection, "list", "authenticated-other",
+                   expected, other.status, not problems, other.elapsed_ms, "; ".join(problems))
+
+
+def share_capability_revoke_foreign_or_missing(pb, collection, a, b, expected) -> Receipt:
+    # Revoking another account's capability answers exactly like revoking one
+    # that doesn't exist, and A's capability reads back as it was.
+    before = _capability_items(pb.get(CAPABILITY_ROUTE, token=a.token))
+    foreign = pb.post(f"{CAPABILITY_ROUTE}/{a.ids[collection]}/revoke", {}, token=b.token)
+    missing = pb.post(f"{CAPABILITY_ROUTE}/{missing_record_id()}/revoke", {}, token=b.token)
+    after = _capability_items(pb.get(CAPABILITY_ROUTE, token=a.token))
+    same = foreign.status == missing.status and foreign.body == missing.body
+    unchanged = before is not None and before == after
+    ok = foreign.status == expected and same and unchanged
+    detail = "" if ok else f"foreign={foreign.status} missing={missing.status} same_body={same} unchanged={unchanged}"
+    return Receipt("account-scope.share.capability-revoke.foreign-or-missing.indistinguishable", collection, "update",
+                   "authenticated-other", expected, foreign.status, ok, foreign.elapsed_ms, detail)
 
 
 # --------------------------------------------------------------------------
@@ -643,6 +731,11 @@ MAIN_FAMILIES: dict[str, Callable] = {
     "account-scope.update.foreign-or-missing.indistinguishable": update_foreign_or_missing,
     "account-scope.delete.foreign-or-missing.indistinguishable": delete_foreign_or_missing,
     "account-scope.share.owner-only.isolated": share_owner_only_isolated,
+    # ROUNDS-00B-L03 stage 2: a store no client reads, and the owner's routes.
+    "account-scope.list.server-only.denied": list_server_only_denied,
+    "account-scope.view.server-only.denied": view_server_only_denied,
+    "account-scope.share.capability-list.owner-only": share_capability_list_owner_only,
+    "account-scope.share.capability-revoke.foreign-or-missing.indistinguishable": share_capability_revoke_foreign_or_missing,
 }
 # ROUNDS-00B-L03 stage 1: dispatched by run.py with the caller, the content
 # fixtures, and the superuser token.

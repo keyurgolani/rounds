@@ -124,6 +124,8 @@ DENIED_ROUTES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
      ("POST",)),
     ("deployment.proxy.legacy-snapshot-hook.denied", "/api/rounds/legacy-snapshots", ("GET", "POST")),
     ("deployment.proxy.legacy-snapshot-hook.denied", "/api/rounds/Legacy-Snapshots", ("POST",)),
+    ("deployment.proxy.share-hooks.denied", "/api/rounds/share/capabilities", ("GET", "POST")),
+    ("deployment.proxy.share-hooks.denied", "/api/rounds/Share/capabilities", ("GET",)),
 )
 
 # Every check id this tool can report, with the guarantee it states. The
@@ -150,6 +152,9 @@ CHECKS: dict[str, str] = {
     "deployment.proxy.oversized-body.rejected": "a body over the default 1 MiB cap gets the typed 413",
     "deployment.proxy.share-page.headers": "every path that renders the share page answers the app page with no-store, noindex, no-referrer, nosniff, DENY framing, and the share page CSP",
     "deployment.proxy.share-read.uniform": "a public share read of a malformed or unknown token answers one byte-identical 404 with no-store, noindex, no-referrer, nosniff, DENY framing, and the resolver CSP",
+    "deployment.proxy.share-hooks.denied":
+        "the share capability hook routes, which only the runner calls, are not reachable at the public URL",
+    "deployment.proxy.share-resolve.uniform": "a share capability resolve with a malformed or unknown token answers one byte-identical 404 with no-store, noindex, no-referrer, nosniff, DENY framing, and the resolver CSP",
     "deployment.credentials.defaults.rejected": "no shipped default login authenticates as an admin",
     "deployment.credentials.admin-passwords.rejected": "no admin account accepts a shipped default password",
     "deployment.rules.match": "the collection rules match the account-scope rule table",
@@ -563,10 +568,31 @@ def check_share_read_uniform(base_url: str, req: Callable[..., Response] = reque
                   last.status, not problems, last.elapsed_ms, "; ".join(problems))
 
 
+# The share capability resolver (ROUNDS-00B-L03 stage 2): a value that can't
+# be a token, and a well-formed one no capability has.
+SHARE_RESOLVE_PATH = "/api/share/resolve"
+SHARE_RESOLVE_BODIES = (("malformed", {"token": "x"}), ("unknown", {"token": "sd1_verify0deployment00000"}))
+
+
+def check_share_resolve_uniform(base_url: str, req: Callable[..., Response] = request) -> Result:
+    problems, last = [], None
+    for label, body in SHARE_RESOLVE_BODIES:
+        last = req("POST", base_url + SHARE_RESOLVE_PATH, body=body)
+        if last.status != 404 or last.body != SHARE_NOT_FOUND:
+            problems.append(f"{label} status={last.status} answered_by={answered_by(last)} "
+                            f"uniform_body={last.body == SHARE_NOT_FOUND}")
+        bad = _header_problems(last, SHARE_READ_CSP)
+        if bad:
+            problems.append(f"{label} headers differ: {','.join(bad)}")
+    return Result("deployment.proxy.share-resolve.uniform", SHARE_RESOLVE_PATH, "proxy", "anonymous", 404,
+                  last.status, not problems, last.elapsed_ms, "; ".join(problems))
+
+
 def check_proxy(base_url: str) -> list[Result]:
     base = base_url.rstrip("/")
     return (check_denied_routes(base) + [check_execute_gone(base)] + check_open_routes(base)
-            + [check_oversized_body(base), check_share_page_headers(base), check_share_read_uniform(base)])
+            + [check_oversized_body(base), check_share_page_headers(base), check_share_read_uniform(base),
+               check_share_resolve_uniform(base)])
 
 
 # --------------------------------------------------------------------------

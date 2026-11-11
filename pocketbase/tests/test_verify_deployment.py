@@ -33,7 +33,7 @@ NGINX_404 = b"<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<
 PB_404 = {"code": 404, "message": "The requested resource wasn't found.", "data": {}}
 PB_401 = {"code": 401, "message": "The request requires admin authorization token to be set.", "data": {}}
 DENIED_PREFIXES = ("/_/", "/api/admins", "/api/settings", "/api/backups", "/api/logs", "/api/rounds/admission/",
-                   "/api/rounds/legacy-snapshots")
+                   "/api/rounds/legacy-snapshots", "/api/rounds/share")
 SHARE_HEADERS = {
     "Cache-Control": "no-store",
     "X-Robots-Tag": "noindex, nofollow, noarchive",
@@ -92,11 +92,19 @@ class Deployment:
             headers.update(self.share_read_headers)
             body = self.share_read_bodies.get(bare, vd.SHARE_NOT_FOUND)
             return 404, body, {k: v for k, v in headers.items() if v is not None}
+        if bare == "/api/share/resolve" and method == "POST":
+            headers = dict(SHARE_HEADERS, **{"Content-Security-Policy": vd.SHARE_READ_CSP})
+            headers.update(self.share_resolve_headers)
+            token = (json.loads(body or b"{}") or {}).get("token", "")
+            return 404, self.share_resolve_bodies.get(token, vd.SHARE_NOT_FOUND), {
+                k: v for k, v in headers.items() if v is not None}
         return 404, NGINX_404
 
     share_page_headers: dict = {}
     share_read_headers: dict = {}
     share_read_bodies: dict = {}
+    share_resolve_headers: dict = {}
+    share_resolve_bodies: dict = {}
 
     pb_port = False
 
@@ -234,6 +242,42 @@ def test_a_share_read_without_its_headers_fails():
     with deployment(dep) as (_, url):
         r = vd.check_share_read_uniform(url)
     assert not r.passed and "cache-control" in r.detail and "content-security-policy" in r.detail
+
+
+def test_the_share_resolve_check_passes_on_the_real_shape():
+    with deployment() as (_, url):
+        r = vd.check_share_resolve_uniform(url)
+    assert r.passed, r.detail
+    assert (r.check_id, r.target, r.expected_status, r.observed_status) == (
+        "deployment.proxy.share-resolve.uniform", "/api/share/resolve", 404, 404)
+
+
+@pytest.mark.parametrize("label, body", vd.SHARE_RESOLVE_BODIES)
+def test_a_share_resolve_whose_not_found_differs_fails(label, body):
+    dep = Deployment()
+    dep.share_resolve_bodies = {body["token"]: b'{"detail":"Unknown share."}'}
+    with deployment(dep) as (_, url):
+        r = vd.check_share_resolve_uniform(url)
+    assert not r.passed and f"{label} status=404" in r.detail and "uniform_body=False" in r.detail
+
+
+def test_a_share_resolve_without_its_headers_fails():
+    dep = Deployment()
+    dep.share_resolve_headers = {"X-Robots-Tag": None, "Content-Security-Policy": vd.SHARE_PAGE_CSP}
+    with deployment(dep) as (_, url):
+        r = vd.check_share_resolve_uniform(url)
+    assert not r.passed and "x-robots-tag" in r.detail and "content-security-policy" in r.detail
+
+
+@pytest.mark.parametrize("method, path", [("GET", "/api/rounds/share/capabilities"),
+                                          ("GET", "/api/rounds/Share/capabilities")])
+def test_a_share_hook_route_that_reaches_pocketbase_fails(method, path):
+    dep = Deployment()
+    dep.overrides[(method, path)] = (401, PB_401)
+    with deployment(dep) as (_, url):
+        results = by_id(vd.check_denied_routes(url))
+    (r,) = results["deployment.proxy.share-hooks.denied"]
+    assert not r.passed and f"{method} {path} status=401 answered_by=pocketbase" in r.detail
 
 
 def test_a_share_page_case_variant_without_the_headers_fails():

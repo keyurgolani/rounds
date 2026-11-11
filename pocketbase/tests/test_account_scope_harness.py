@@ -277,6 +277,7 @@ STANDARD_COLLECTIONS = [
     "experience_anecdotes", "experience_bullets", "exp_job_projects",
     "exp_job_anecdotes", "exp_job_bullets", "exp_project_anecdotes",
     "exp_project_bullets", "exp_anecdote_bullets", "legacy_artifact_snapshots",
+    "share_capabilities",
 ]
 
 
@@ -820,8 +821,18 @@ def test_every_collection_covers_each_actor_operation_and_resource_state():
     }
     server_written = {"account-scope.create.server-only.denied", "account-scope.update.server-only.denied",
                       "account-scope.delete.server-only.denied"}
+    server_read = {"account-scope.list.server-only.denied", "account-scope.view.server-only.denied"}
     for name, row in doc["collections"].items():
         probes = set(row["probes"])
+        if all(row["current_rules"].get(op, "") is None for op in ("list", "view", "create", "update", "delete")):
+            # A store no client reads or writes (#11's share capabilities):
+            # every actor's list and read by id are refused too, the owner's
+            # included, so the owner-read families give way to their
+            # server-only forms.
+            assert server_read | server_written <= probes, (name, sorted((server_read | server_written) - probes))
+            assert not reads & probes, name
+            continue
+        assert not server_read & probes, name
         if all(row["current_rules"].get(op) is None for op in ("create", "update", "delete")):
             # A store only a hook writes (#4's snapshots): its owner reads it,
             # and every client write, the owner's own delete included, is
@@ -951,3 +962,152 @@ def test_the_share_link_fixture_token_has_the_hook_format():
     for suffix in ("0123456789ab", "x", "a" * 40):
         payload = factory.fresh_payload("resume_share_links", "owner-id", a, b, SHARE_CONTENT, suffix)
         assert re.fullmatch(r"[A-Za-z0-9_-]{22}", payload["token"]), payload["token"]
+
+
+# --------------------------------------------------------------------------
+# share capabilities answer only their owner (ROUNDS-00B-L03 stage 2)
+# --------------------------------------------------------------------------
+
+_REFUSED = {"code": 403, "message": "Only superusers can perform this action.", "data": {}}
+_CAP_NOT_FOUND = {"v": "share-capability/v1", "error": "not_found"}
+
+
+class _CapabilityPB:
+    """Answers like PocketBase with every share_capabilities rule null and
+    the owner's routes in place, unless told to answer like a looser rule, a
+    list that leaks, or a revoke that goes through."""
+
+    def __init__(self, *, loose_list=False, loose_view=False, leak_list=False, extra_field=False,
+                 foreign_revokes=False, odd_missing=False, anonymous_lists=False):
+        self.loose_list, self.loose_view, self.leak_list = loose_list, loose_view, leak_list
+        self.extra_field, self.foreign_revokes, self.odd_missing = extra_field, foreign_revokes, odd_missing
+        self.anonymous_lists = anonymous_lists
+        self.status = "active"
+        self.calls: list[tuple] = []
+
+    def listing(self, collection, token=None, params=None):
+        self.calls.append(("listing", collection, token))
+        if self.loose_list and token == "a-token":
+            return Response(200, {"items": [{"id": "a-share_capabilities-id"}], "totalItems": 1}, 1)
+        return Response(403, _REFUSED, 1)
+
+    def view(self, collection, record_id, token=None):
+        self.calls.append(("view", collection, record_id, token))
+        if self.loose_view and token == "a-token":
+            return Response(200, {"id": record_id}, 1)
+        return Response(403, _REFUSED, 1)
+
+    def _item(self, cid):
+        item = {"id": cid, "status": self.status if cid.startswith("a-") else "active", "revoked_reason": "",
+                "purpose": "p", "expires_at": "t", "created": "t", "revoked_at": ""}
+        if self.extra_field:
+            item["bearer_digest"] = "d" * 64
+        return item
+
+    def get(self, path, token=None):
+        self.calls.append(("get", path, token))
+        if token is None:
+            return Response(200 if self.anonymous_lists else 401, {"items": []} if self.anonymous_lists else {}, 1)
+        mine = {"a-token": ["a-share_capabilities-id"], "b-token": ["b-share_capabilities-id"]}[token]
+        if self.leak_list and token == "b-token":
+            mine = mine + ["a-share_capabilities-id"]
+        return Response(200, {"v": "share-capability/v1", "items": [self._item(c) for c in mine]}, 1)
+
+    def post(self, path, body, token=None):
+        self.calls.append(("post", path, token, body))
+        if "/a-share_capabilities-id/" in path and self.foreign_revokes:
+            self.status = "revoked"
+            return Response(200, {"v": "share-capability/v1", "capability": self._item("a-share_capabilities-id")}, 1)
+        if self.odd_missing and "/a-share_capabilities-id/" not in path:
+            return Response(404, {"message": "No such capability."}, 1)
+        return Response(404, _CAP_NOT_FOUND, 1)
+
+
+def _capability_accounts():
+    a, b = _acct("a"), _acct("b")
+    a.token, b.token = "a-token", "b-token"
+    return a, b
+
+
+def test_a_store_no_client_reads_refuses_every_list_and_view():
+    a, b = _capability_accounts()
+    pb = _CapabilityPB()
+    listed = families.list_server_only_denied(pb, "share_capabilities", a, b, 403)
+    viewed = families.view_server_only_denied(pb, "share_capabilities", a, b, 403)
+    assert listed.passed and viewed.passed, (listed.detail, viewed.detail)
+    # The owner, another account, and an anonymous caller, each.
+    assert [c[2] for c in pb.calls if c[0] == "listing"] == ["a-token", "b-token", None]
+    assert [c[3] for c in pb.calls if c[0] == "view"] == ["a-token", "b-token", None]
+
+
+def test_the_server_only_reads_fail_when_the_owner_reads_its_row():
+    a, b = _capability_accounts()
+    listed = families.list_server_only_denied(_CapabilityPB(loose_list=True), "share_capabilities", a, b, 403)
+    viewed = families.view_server_only_denied(_CapabilityPB(loose_view=True), "share_capabilities", a, b, 403)
+    assert not listed.passed and "owner list status=200 rows=1" in listed.detail
+    assert not viewed.passed and "owner view status=200 leaked=True" in viewed.detail
+
+
+def test_the_capability_list_passes_when_each_account_sees_only_its_own():
+    a, b = _capability_accounts()
+    r = families.share_capability_list_owner_only(_CapabilityPB(), "share_capabilities", a, b, 200)
+    assert r.passed, r.detail
+    assert (r.probe_id, r.actor, r.observed_status) == ("account-scope.share.capability-list.owner-only",
+                                                        "authenticated-other", 200)
+
+
+@pytest.mark.parametrize("fault, message", [
+    ({"leak_list": True}, "carries a's capability"),
+    ({"extra_field": True}, "fields beyond the owner's"),
+    ({"anonymous_lists": True}, "anonymous list status=200"),
+])
+def test_the_capability_list_fails_when_it_leaks(fault, message):
+    a, b = _capability_accounts()
+    r = families.share_capability_list_owner_only(_CapabilityPB(**fault), "share_capabilities", a, b, 200)
+    assert not r.passed and message in r.detail
+
+
+def test_a_foreign_revoke_passes_when_it_answers_like_a_missing_one_and_changes_nothing():
+    a, b = _capability_accounts()
+    pb = _CapabilityPB()
+    r = families.share_capability_revoke_foreign_or_missing(pb, "share_capabilities", a, b, 404)
+    assert r.passed, r.detail
+    posts = [c for c in pb.calls if c[0] == "post"]
+    assert [c[2] for c in posts] == ["b-token", "b-token"]
+    assert posts[0][1] == "/api/rounds/share/capabilities/a-share_capabilities-id/revoke"
+
+
+@pytest.mark.parametrize("fault, message", [
+    ({"foreign_revokes": True}, "unchanged=False"),
+    ({"odd_missing": True}, "same_body=False"),
+])
+def test_a_foreign_revoke_fails_when_it_goes_through_or_answers_apart(fault, message):
+    a, b = _capability_accounts()
+    r = families.share_capability_revoke_foreign_or_missing(_CapabilityPB(**fault), "share_capabilities", a, b, 404)
+    assert not r.passed and message in r.detail
+
+
+def test_a_refused_write_on_a_store_nobody_reads_is_read_back_by_the_superuser():
+    pb = _ProbePB(update=Response(403, {}, 1), view=Response(200, {"id": "x"}, 1), delete=Response(403, {}, 1))
+    updated = families.update_server_only_denied(pb, "share_capabilities", "rec", "a-token", 403, reader_token="admin")
+    deleted = families.delete_server_only_denied(pb, "share_capabilities", "rec", "a-token", 403, reader_token="admin")
+    assert updated.passed and deleted.passed
+    views = [c[3] for c in pb.calls if c[0] == "view"]
+    writes = [c[3] for c in pb.calls if c[0] in ("update", "delete")]
+    assert views == ["admin"] * 4 and writes == ["a-token", "a-token"]
+
+
+def test_only_a_store_with_a_null_view_rule_is_read_back_by_the_superuser():
+    assert run._readback_token({"current_rules": {"view": None}}, "admin") == "admin"
+    assert run._readback_token({"current_rules": {"view": "user = @request.auth.id"}}, "admin") is None
+    assert run._readback_token({"current_rules": {}}, "admin") is None
+
+
+def test_the_capability_fixture_is_one_the_model_hook_accepts():
+    fields = factory.capability_fields("a-legacy_artifact_snapshots-id")
+    assert fields["target_checksum"] == factory.snapshot_fields("x")["content_checksum"]
+    assert re.fullmatch(r"[0-9a-f]{64}", fields["bearer_digest"])
+    assert fields["bearer_digest"] != factory.capability_fields("a-legacy_artifact_snapshots-id")["bearer_digest"]
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.000Z", fields["expires_at"])
+    assert (fields["status"], fields["capability_version"], fields["projection_version"], fields["view_policy"]) == (
+        "active", 1, 1, "disabled")

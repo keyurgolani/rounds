@@ -191,6 +191,13 @@ def _readback(pb: PBClient, doc: dict, admin_token: str, writer: ReceiptWriter) 
         )
 
 
+def _readback_token(row: dict, admin_token: str) -> str | None:
+    """Who reads a row back around a refused write: its owner, or the
+    superuser for a store whose view rule is null, which nobody else reads
+    (share capabilities, ROUNDS-00B-L03 stage 2)."""
+    return admin_token if row.get("current_rules", {}).get("view", "") is None else None
+
+
 def _expected_status(doc: dict, pid: str) -> int:
     """The expected status for a family, read from the policy's deny_contract."""
     deny_key = doc["probe_families"][pid]["deny_key"]
@@ -259,9 +266,11 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
                 payload = factory.fresh_payload(name, c.user_id, a, b, content, secrets.token_hex(6))
                 writer.write(families.create_server_only_denied(pb, name, b.token, payload, admin_token, c.user_id, expected))
             elif pid == families.SERVER_ONLY_UPDATE_FAMILY:
-                writer.write(families.update_server_only_denied(pb, name, a.ids[name], a.token, expected))
+                writer.write(families.update_server_only_denied(pb, name, a.ids[name], a.token, expected,
+                                                                reader_token=_readback_token(row, admin_token)))
             elif pid == families.SERVER_ONLY_DELETE_FAMILY:
-                writer.write(families.delete_server_only_denied(pb, name, a.ids[name], a.token, expected))
+                writer.write(families.delete_server_only_denied(pb, name, a.ids[name], a.token, expected,
+                                                                reader_token=_readback_token(row, admin_token)))
             elif pid == families.SUPERUSER_CREATE_FAMILY:
                 # Owner a owns both the view row and the share link it points
                 # at, so the superuser insert is not a cross-owner relation.
