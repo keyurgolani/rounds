@@ -30,9 +30,22 @@ type Props = {
   data: ResumeData;
   // Push pending in-flight edits before any export so the rendered
   // copy reflects everything the user has typed. Provided by the
-  // host (ResumeStudio) which owns the resume hook.
-  onBeforeExport: () => Promise<void>;
+  // host (ResumeStudio) which owns the resume hook: it waits for a save
+  // in flight, rejects when a save fails, and resolves with the saved
+  // `updated` (useResume's flush, ROUNDS-00A-L04).
+  onBeforeExport: () => Promise<unknown>;
 };
+
+// A failed save stops only server PDF, which renders what the server
+// holds. The other formats export what is on screen, as they always have.
+const SAVE_FAILED_PDF = "Your latest edits didn't save, so server PDF is paused.";
+
+class SaveFailed extends Error {
+  constructor() {
+    super(SAVE_FAILED_PDF);
+    this.name = 'SaveFailed';
+  }
+}
 
 type Slot = {
   key: string;
@@ -123,7 +136,11 @@ export default function ExportTab({ resume, data, onBeforeExport }: Props) {
     if (slot.action === 'server-pdf') setPdfDenial(null);
     try {
       // Flush pending edits so the export reflects the latest text.
-      await onBeforeExport();
+      try {
+        await onBeforeExport();
+      } catch {
+        if (slot.action === 'server-pdf') throw new SaveFailed();
+      }
       switch (slot.action) {
         case 'server-pdf':
           await exportPdfServer(filenameBase, 0);
@@ -151,7 +168,9 @@ export default function ExportTab({ resume, data, onBeforeExport }: Props) {
       }
     } catch (err) {
       const denial =
-        slot.action === 'server-pdf' ? classifyRunnerError(err, trigger) : null;
+        slot.action === 'server-pdf' && !(err instanceof SaveFailed)
+          ? classifyRunnerError(err, trigger)
+          : null;
       if (denial) setPdfDenial(denial);
       else setErrors((e) => ({ ...e, [slot.key]: (err as Error).message }));
     } finally {
