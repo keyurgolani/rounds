@@ -164,14 +164,18 @@ def fingerprint(pb: PBClient, token: str) -> dict[str, str]:
 
 
 def wait_frontend() -> None:
+    """Until nginx answers, and the runner behind it: right after a restart,
+    nginx and PocketBase can be up a moment before the runner is, and nginx
+    answers the runner's routes 502 until then."""
     for _ in range(60):
         try:
-            if call(FRONTEND_URL, "GET", "/api/health", timeout=3)[0] == 200:
+            if call(FRONTEND_URL, "GET", "/api/health", timeout=3)[0] == 200 \
+                    and call(FRONTEND_URL, "GET", ROUTE, timeout=3)[0] not in (502, 504):
                 return
         except (urllib.error.URLError, OSError):
             pass
         time.sleep(1)
-    raise RuntimeError("the frontend never answered /api/health")
+    raise RuntimeError("the frontend never answered /api/health and the runner's route")
 
 
 def load_state() -> dict:
