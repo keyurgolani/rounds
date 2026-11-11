@@ -11,7 +11,7 @@ harness's output. With ``ROUNDS_GATE_EXECUTION_SCRATCH`` on
 (ROUNDS-00A-L03), run-project admits and enqueues a job and answers 202
 (``execution.jobs``), and with ``ROUNDS_GATE_EXECUTION_GRADING`` on so does
 grade, whose graded row the server writes with its result;
-``POST /api/ai-coding/grade/{job_id}/review`` then asks for its rubric
+``POST /api/ai-coding/grade/{job}/review`` then asks for its rubric
 review, once per result (``execution.review``). A grade's answer carries
 only visible output, and a round with a checkpoint that has nothing to run
 is refused before anything is charged or runs."""
@@ -768,8 +768,8 @@ class ReviewRequest(StrictModel):
         return dict(limits.check_files(v))
 
 
-@router.post("/grade/{job_id}/review")
-async def grade_review(request: Request, job_id: str, body: ReviewRequest):
+@router.post("/grade/{job}/review")
+async def grade_review(request: Request, job: str, body: ReviewRequest):
     """The rubric review of a grading job's result, once per result
     (``execution.review``)."""
-    return await reviews.review(request, job_id, body.files, "grade")
+    return await reviews.review(request, job, body.files, "grade")

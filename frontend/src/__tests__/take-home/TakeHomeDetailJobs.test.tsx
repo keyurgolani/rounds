@@ -250,7 +250,7 @@ describe('TakeHomeDetail submission jobs', () => {
     answers.push(ended('timed-out', 'resource-limit', null, 'wall_time'));
     const dialog = await screen.findByRole('dialog');
     expect(screen.getByTestId('runner-denial')).toHaveTextContent('The grader reached its time limit, so this submission has no score.');
-    expect(within(dialog).getByText('Harness stopped: time limit reached · Rubric —')).toBeInTheDocument();
+    expect(within(dialog).getByText('Harness stopped: time limit reached · Rubric not reviewed')).toBeInTheDocument();
     expect(within(dialog).getByText('TIME LIMIT REACHED')).toBeInTheDocument();
     expect(within(dialog).getByText('The grader ran out of time.')).toBeInTheDocument();
     const criteria = dialog.querySelectorAll('[data-criterion]');

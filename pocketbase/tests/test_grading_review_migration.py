@@ -20,9 +20,12 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / "pocketbase" / "pb_migrations" / "1700008400_grading_review.js"
 HOOKS = ROOT / "pocketbase" / "pb_hooks"
-COMMANDS_BEFORE = ["run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit", "pdf_render",
-                   "snapshot_create", "share_create", "share_rotate"]
-LEASES_BEFORE = ["run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit", "pdf_render"]
+# The operations each list holds before, in name order; the stub's order is
+# kept as it is.
+COMMANDS_BEFORE = sorted(["evaluate", "grade", "pdf_render", "run", "run_project", "share_create", "share_rotate",
+                          "snapshot_create", "take_home_run", "take_home_submit"])
+LEASES_BEFORE = sorted(["evaluate", "grade", "pdf_render", "run", "run_project", "take_home_run",
+                        "take_home_submit"])
 
 
 @pytest.fixture(scope="module")

@@ -136,7 +136,7 @@ def fake(dep: Admission):
                 self._send(*PROXY_413)
                 self.close_connection = True
                 return
-            # A review route's path fills its {job_id} segment.
+            # A review route's path fills its {job} segment.
             path = vd.template_of(self.path)
             cap = dep.caps.get(path)
             if cap is not None and length > cap:
@@ -739,7 +739,7 @@ def test_a_review_route_passes_off_or_on_until_it_is_named():
         results = vd.check_admitted_routes(url)
     bad = [r.target for r in results if not r.passed]
     # Grade and submit are left off unnamed; the review routes may be off.
-    assert sorted(bad) == ["/api/ai-coding/grade", "/api/take-home/submit"]
+    assert len(bad) == 2 and set(bad) == {"/api/take-home/submit", "/api/ai-coding/grade"}
     with fake(dep) as url:
         named = [f"{p}=execution_disabled" for p in sorted(vd.GRADING_ROUTES)]
         assert failed(vd.check_admitted_routes(url, disabled=named) + vd.check_disabled_routes(url, named)) == []

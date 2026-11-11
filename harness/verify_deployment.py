@@ -42,7 +42,7 @@ Read-only checks an operator runs against a Rounds deployment they operate:
                ROUNDS_GATE_EXECUTION_SCRATCH stops the four scratch routes
                or ROUNDS_GATE_EXECUTION_GRADING stops grade, take-home
                submit, and their two review routes. A review route's
-               {job_id} is sent as an id no job has.
+               {job} segment is sent as an id no job has.
   gates        (--gates-log FILE) A saved runner log from its start: the
                gates line lists every admitted route's gate and both
                enforcement gates with valid values, none fell back from an
@@ -641,25 +641,27 @@ ADMITTED_ROUTES: tuple[tuple[str, str, str, int, int], ...] = (
     ("POST", "/api/pdf/snapshots", "LEGACY_SNAPSHOT_CREATE", 4 * KIB, 6 * MIB),
     # ROUNDS-00A-L03 PR 3: a grading job's rubric review, one path segment
     # for the job's id, behind its grading route's own gate.
-    ("POST", "/api/ai-coding/grade/{job_id}/review", "AI_CODING_GRADE", 6 * MIB, 6 * MIB),
-    ("POST", "/api/take-home/submit/{job_id}/review", "TAKE_HOME_SUBMIT", 6 * MIB, 6 * MIB),
+    ("POST", "/api/ai-coding/grade/{job}/review", "AI_CODING_GRADE", 6 * MIB, 6 * MIB),
+    ("POST", "/api/take-home/submit/{job}/review", "TAKE_HOME_SUBMIT", 6 * MIB, 6 * MIB),
 )
-# What a request puts in a route's {job_id} segment: an id of the right
-# shape that no job has, so nothing is found even past the account check.
+# A template's one path segment for a job's id, and what a request puts
+# there: an id of the right shape that no job has, so nothing is found
+# even past the account check.
+JOB_SEGMENT = "{job}"
 JOB_ID_PLACEHOLDER = "000000000000000"
 
 
 def concrete(path: str) -> str:
     """The path a request to an admitted route uses."""
-    return path.replace("{job_id}", JOB_ID_PLACEHOLDER)
+    return path.replace(JOB_SEGMENT, JOB_ID_PLACEHOLDER)
 
 
 def template_of(path: str) -> str:
     """The admitted route a concrete path names: the path itself, or the
-    template whose {job_id} segment it fills with one segment."""
+    template whose job segment it fills with one segment."""
     for _method, route, *_rest in ADMITTED_ROUTES:
-        if "{job_id}" in route:
-            head, tail = route.split("{job_id}")
+        if JOB_SEGMENT in route:
+            head, tail = route.split(JOB_SEGMENT)
             middle = path[len(head):len(path) - len(tail)] if path.startswith(head) and path.endswith(tail) else ""
             if middle and "/" not in middle and len(path) >= len(head) + len(tail) + 1:
                 return route
@@ -670,7 +672,7 @@ def template_of(path: str) -> str:
 # until then each answers 503 execution_disabled before the account, so
 # either answer passes unless --expect-disabled names the route.
 SERVED_WHILE_GRADING = frozenset({
-    "/api/ai-coding/grade/{job_id}/review", "/api/take-home/submit/{job_id}/review",
+    "/api/ai-coding/grade/{job}/review", "/api/take-home/submit/{job}/review",
 })
 # The admitted routes whose gate ships off (backend/app/gates.py). Until the
 # owner turns one on it answers 503 route_disabled before the account, so
@@ -700,7 +702,7 @@ DEFINITION_ROUTES = frozenset({
     "/api/take-home/run", "/api/take-home/submit",
 })
 SCRATCH_ROUTES = frozenset({"/api/evaluate", "/api/run", "/api/take-home/run", "/api/ai-coding/run-project"})
-GRADING_ROUTES = frozenset({"/api/ai-coding/grade", "/api/take-home/submit"}) | SERVED_WHILE_GRADING
+GRADING_ROUTES = frozenset({"/api/take-home/submit", "/api/ai-coding/grade"}) | SERVED_WHILE_GRADING
 # Each stop's routes; a route gate stops any admitted route.
 STOP_ROUTES = {"definitions_disabled": DEFINITION_ROUTES, "execution_disabled": SCRATCH_ROUTES | GRADING_ROUTES}
 ENFORCEMENT_GATES: dict[str, tuple[str, ...]] = {

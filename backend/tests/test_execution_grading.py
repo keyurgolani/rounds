@@ -237,7 +237,7 @@ def test_a_checkpoint_folds_its_results_into_one_class():
 
 @pytest.mark.parametrize("path", ["/api/ai-coding/grade/{}/review", "/api/take-home/submit/{}/review"])
 def test_a_review_route_matches_one_job_id_segment_and_nothing_wider(path):
-    template = path.format("{job_id}")
+    template = path.format("{job}")
     for segment in ("abc123def456ghi", "x", "UPPER", "a.b", "%7Bjob%7D"):
         assert admission.route_for("POST", path.format(segment)) == (template, admission.ROUTES[("POST", template)])
     wider = [

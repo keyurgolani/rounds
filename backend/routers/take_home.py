@@ -13,7 +13,7 @@ retired, so at enforce they answer 410 ``definition_retired``. With
 ``ROUNDS_GATE_EXECUTION_SCRATCH`` on (ROUNDS-00A-L03), run admits and
 enqueues a job and answers 202 (``execution.jobs``), and with
 ``ROUNDS_GATE_EXECUTION_GRADING`` on so does submit, whose graded row the
-server writes with its result; ``POST /api/take-home/submit/{job_id}/review``
+server writes with its result; ``POST /api/take-home/submit/{job}/review``
 then asks for its rubric review, once per result (``execution.review``)."""
 from __future__ import annotations
 
@@ -433,11 +433,11 @@ async def _submit_job(request: Request, body: DefinitionTakeHomeSubmitRequest, u
     })
 
 
-@router.post("/submit/{job_id}/review")
-async def submit_review(request: Request, job_id: str, body: ReviewRequest):
+@router.post("/submit/{job}/review")
+async def submit_review(request: Request, job: str, body: ReviewRequest):
     """The rubric review of a submission job's result, once per result
     (``execution.review``)."""
-    return await reviews.review(request, job_id, body.files, "take_home_submit")
+    return await reviews.review(request, job, body.files, "take_home_submit")
 
 
 async def _presentation_row(user: dict, slug: str) -> dict[str, Any] | None:

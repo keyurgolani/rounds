@@ -49,14 +49,15 @@ always runs step 6, since its key is its job's identity: a duplicate gets
 its job and is never charged, and its request leaves its charge with the
 job in the store. Idempotency doesn't depend on the quota gate: with
 quota ``off`` nothing is counted or charged, and the command is still
-recorded. ``ats-rule`` and ``pdf/health`` skip steps 6, 7, and 9, and so
-do the two review routes (PR 3), whose steps 6 and 7 run in the store's
-own transaction, once per result (``execution.review``). Routes outside
-``ROUTES`` are untouched; the 23 routes already on ``current_user`` and
-the anonymous share read stay outside admission. A ``ROUTES`` path with a
-``{job_id}`` segment matches that one segment and nothing wider, the way
-the app's own router matches it, and the decision line names the
-template, never the id.
+recorded. ``ats-rule`` and ``pdf/health`` skip steps 6, 7, and 9. Routes
+outside ``ROUTES`` are untouched; the 23 routes already on
+``current_user`` and the anonymous share read stay outside admission.
+The two review routes (PR 3) skip steps 6, 7, and 9 as well: their
+charge is taken in the store's own transaction, once per result
+(``execution.review``). A ``ROUTES`` path with a ``{job}`` segment
+matches that one segment and nothing wider, the way the app's own
+router matches it, and the decision line names the template, never the
+id.
 """
 from __future__ import annotations
 
@@ -131,8 +132,8 @@ ROUTES: dict[tuple[str, str], Route] = {
     # submission, behind its grading route's own gate. Its charge and its
     # key are the store's (execution.js reviewStart), once per result, so
     # admission runs steps 1 to 4 here and nothing runs in a slot.
-    ("POST", "/api/ai-coding/grade/{job_id}/review"): Route("AI_CODING_GRADE", "review", 6 * MIB, allocates=False),
-    ("POST", "/api/take-home/submit/{job_id}/review"): Route("TAKE_HOME_SUBMIT", "review", 6 * MIB, allocates=False),
+    ("POST", "/api/ai-coding/grade/{job}/review"): Route("AI_CODING_GRADE", "review", 6 * MIB, allocates=False),
+    ("POST", "/api/take-home/submit/{job}/review"): Route("TAKE_HOME_SUBMIT", "review", 6 * MIB, allocates=False),
 }
 
 # A ROUTES path segment written {name} matches one path segment, as the

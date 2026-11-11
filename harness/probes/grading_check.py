@@ -130,7 +130,7 @@ def run_grading(c: Checks, writer: ReceiptWriter) -> None:
     missing = review(b.token, unknown, FILES)
     same = foreign[0] == 404 and sans_id(foreign[1]) == sans_id(missing[1]) \
         and (foreign[1] or {}).get("code") == "not_found" and charged(b.token) == b_before
-    writer.write(Receipt("isolation.execution-review.foreign", REVIEW.format("{job_id}"), "review",
+    writer.write(Receipt("isolation.execution-review.foreign", REVIEW.format("{job}"), "review",
                          "authenticated-other", 404, foreign[0], same, foreign[2],
                          "" if same else f"status={foreign[0]} unknown={missing[0]}"))
     c.check("isolation.execution-review.foreign", same, f"status={foreign[0]}")

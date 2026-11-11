@@ -1,9 +1,9 @@
 """A grading result's rubric review (ROUNDS-00A-L03 PR 3).
 
-``POST /api/ai-coding/grade/{job_id}/review`` and
-``POST /api/take-home/submit/{job_id}/review`` ask an AI provider to
-review a graded result against its definition's rubric, at most once per
-result. Admission runs steps 1 to 4 for both, behind the grading key
+Two routes ask an AI provider to review a graded result against its
+definition's rubric, at most once per result: the grade's,
+``POST /api/ai-coding/grade/{job}/review``, and the submission's,
+``POST /api/take-home/submit/{job}/review``. Admission runs steps 1 to 4 for both, behind the grading key
 (``on`` only); the review's own charge is the store's. In order:
 
 1. The account's own grading job of the route's kind, read with

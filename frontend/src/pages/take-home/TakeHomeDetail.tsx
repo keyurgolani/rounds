@@ -93,16 +93,17 @@ const REVIEW_TILE: Partial<Record<ReviewStatus, string>> = {
 };
 
 /** The report's subtitle: the harness score, or the limit that stopped it
- *  (no score), and the review's. */
+ *  (no score), and the review's score or where it stands. */
 function reportSubtitle(report: ReportView, review: RubricReview | null): string {
   const harness = report.harness;
   const harnessText =
     harness.score === null
       ? harness.outcome_class === 'resource-limit'
         ? `Harness stopped: ${limitTitle(harness.limit).toLowerCase()}`
-        : 'Harness —'
+        : 'Harness not scored'
       : `Harness ${Math.round(harness.score * 100)}/100`;
-  const reviewText = review && !review.skipped ? `${Math.round(review.total * 100)}/100` : '—';
+  const reviewText =
+    review === null ? 'not reviewed' : review.skipped ? 'skipped' : `${Math.round(review.total * 100)}/100`;
   return `${harnessText} · Rubric ${reviewText}`;
 }
 
@@ -1575,7 +1576,7 @@ function RunOutput({ result }: { result: RunResult }) {
 // A criterion's mark: passed, missed, or no verdict where a limit stopped
 // the grader before it could earn one.
 function criterionMark(passed: boolean | null): { mark: string; label: string; color: string } {
-  if (passed === null) return { mark: '–', label: 'not scored', color: 'var(--text-4)' };
+  if (passed === null) return { mark: '○', label: 'not scored', color: 'var(--text-4)' };
   return passed
     ? { mark: '✓', label: 'passed', color: 'var(--forest)' }
     : { mark: '✗', label: 'missed', color: 'var(--plum)' };
@@ -1640,49 +1641,46 @@ function ReportPanel({
           </pre>
         )}
         <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 6 }}>
-          {harness.criteria.map((c) => {
-            const mark = criterionMark(c.passed);
-            return (
-              <li
-                key={c.id}
-                data-criterion={mark.label}
+          {harness.criteria.map((c) => (
+            <li
+              key={c.id}
+              data-criterion={criterionMark(c.passed).label}
+              style={{
+                fontSize: 12.5,
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 8,
+              }}
+            >
+              <span
                 style={{
-                  fontSize: 12.5,
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  gap: 8,
+                  color: criterionMark(c.passed).color,
+                  fontWeight: 600,
+                  width: 12,
                 }}
               >
-                <span
-                  style={{
-                    color: mark.color,
-                    fontWeight: 600,
-                    width: 12,
-                  }}
-                >
-                  <span aria-hidden="true">{mark.mark}</span>
-                  <span className="sr-only">{mark.label}</span>
+                <span aria-hidden="true">{criterionMark(c.passed).mark}</span>
+                <span className="sr-only">{criterionMark(c.passed).label}</span>
+              </span>
+              <span style={{ color: 'var(--text)' }}>{c.id}</span>
+              {c.passed === false && c.logs && (
+                <span className="text-3" style={{ fontSize: 11.5 }}>
+                  — {c.logs.slice(0, 200)}
                 </span>
-                <span style={{ color: 'var(--text)' }}>{c.id}</span>
-                {c.passed === false && c.logs && (
-                  <span className="text-3" style={{ fontSize: 11.5 }}>
-                    — {c.logs.slice(0, 200)}
-                  </span>
-                )}
-                <span
-                  className="mono"
-                  style={{
-                    marginLeft: 'auto',
-                    fontSize: 10.5,
-                    color: 'var(--text-4)',
-                    letterSpacing: '0.04em',
-                  }}
-                >
-                  ×{c.weight}
-                </span>
-              </li>
-            );
-          })}
+              )}
+              <span
+                className="mono"
+                style={{
+                  marginLeft: 'auto',
+                  fontSize: 10.5,
+                  color: 'var(--text-4)',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                ×{c.weight}
+              </span>
+            </li>
+          ))}
         </ul>
       </div>
 
