@@ -41,8 +41,9 @@ function retriable(err: unknown): boolean {
 
 // 'error' is a failed save that tries again on its own; 'refused' is one
 // PocketBase refused (PERMANENT_STATUSES), which nothing retries until the
-// next edit or export.
-export type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'refused';
+// next edit or export; 'renameFailed' is a rename that didn't save, which
+// nothing retries, with the old name back.
+export type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'refused' | 'renameFailed';
 
 export type UseResumeResult = {
   resume: Resume | null;
@@ -312,8 +313,12 @@ export function useResume(slug: string | undefined): UseResumeResult {
   const schedule = useCallback(
     (patch: Pending) => {
       // Edits belong to the resume on screen; anything still pending for
-      // another one is kept for that one.
+      // another one is kept for that one. With none on screen (the next
+      // one is loading), an edit has no resume to belong to, such as one a
+      // late callback from a closed editor makes, so it's dropped rather
+      // than saved into whichever resume loads next.
       const id = shownIdRef.current;
+      if (id === null) return;
       if (pendingForRef.current && pendingForRef.current !== id) {
         keep(pendingForRef.current, pendingRef.current);
         pendingRef.current = {};
@@ -400,16 +405,17 @@ export function useResume(slug: string | undefined): UseResumeResult {
       }
 
       // Mirror locally first so the studio UI reflects the change
-      // immediately; the patch lands in the background.
-      setResume((r) =>
-        r ? { ...r, name: trimmed, slug: newSlug } : r,
-      );
+      // immediately; the patch lands in the background. Only this resume
+      // is touched, even if the Studio has moved on meanwhile.
+      const mine = (r: Resume | null) => r !== null && r.id === current.id;
+      setResume((r) => (mine(r) ? { ...r!, name: trimmed, slug: newSlug } : r));
 
       try {
         const saved = await updateResume(current.id, {
           name: trimmed,
           ...(newSlug !== current.slug ? { slug: newSlug } : {}),
         });
+        if (shownIdRef.current !== current.id) return saved.slug;
         setResume(saved);
         setSaveState('saved');
         setLastSavedAt(saved.updated_at);
@@ -419,7 +425,10 @@ export function useResume(slug: string | undefined): UseResumeResult {
         loadedSlugRef.current = saved.slug;
         return saved.slug;
       } catch {
-        setSaveState('error');
+        // Nothing retries a rename: the old name comes back, and the
+        // header says the rename failed.
+        setResume((r) => (mine(r) ? { ...r!, name: current.name, slug: current.slug } : r));
+        if (shownIdRef.current === current.id) setSaveState('renameFailed');
         return current.slug;
       }
     },

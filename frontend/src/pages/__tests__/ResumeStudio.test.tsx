@@ -73,6 +73,12 @@ describe('ResumeStudio', () => {
     expect(screen.queryByText(/retrying$/)).not.toBeInTheDocument();
   });
 
+  it('says when a rename failed and nothing retries it', () => {
+    vi.mocked(useResume).mockReturnValue(result({ resume: RESUME, saveState: 'renameFailed' }));
+    renderStudio();
+    expect(screen.getByText(/Rename failed, not retrying\. The old name is kept\./)).toBeInTheDocument();
+  });
+
   it('shows the error in place of the Studio when the resume did not load', () => {
     vi.mocked(useResume).mockReturnValue(result({ error: 'Not found.' }));
     renderStudio();

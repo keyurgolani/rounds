@@ -63,7 +63,7 @@ JSON_ROUTES = [name for name in ALLOCATING if name != "pdf_render"]
 WITH_LOOKUPS = ("run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit")
 # A render's step 8 reads the caller's snapshot (ROUNDS-00A-L04).
 WITH_LOOKUPS += ("pdf_render",)
-ENFORCE ={"ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "enforce", "ROUNDS_GATE_ENFORCE_QUOTA": "enforce"}
+ENFORCE = {"ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "enforce", "ROUNDS_GATE_ENFORCE_QUOTA": "enforce"}
 PDF = b"%PDF-1.4 rendered"
 # A test value, not a deployment's.
 RUNNER_KEY = "test-runner-key-" + "0" * 32

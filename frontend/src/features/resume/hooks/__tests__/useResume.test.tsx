@@ -18,7 +18,7 @@ vi.mock('../../links/resolve', () => ({
 }));
 
 import { useResume } from '../useResume';
-import { createVersion, getResumeBySlug, updateResume } from '../../api';
+import { createVersion, ensureUniqueSlug, getResumeBySlug, updateResume } from '../../api';
 import { loadLibrarySnapshot } from '../../links/library';
 import type { Resume, ResumeData } from '../../types';
 
@@ -420,6 +420,31 @@ describe('useResume across resumes', () => {
     ]);
   });
 
+  it('drops an edit made while no resume is on screen, so the next one never gets it', async () => {
+    const hook = await studio();
+    let finishLoad: (r: Resume) => void = () => undefined;
+    vi.mocked(getResumeBySlug).mockImplementation((slug: string) =>
+      slug === 'other'
+        ? new Promise<Resume>((resolve) => {
+            finishLoad = resolve;
+          })
+        : Promise.resolve(resumeAt(LOADED_AT, JANE)),
+    );
+    hook.rerender({ slug: 'other' });
+    await advance(0);
+    // A late callback from Jane Doe's closed editor, while Other loads.
+    typeName(hook, 'Late from Jane');
+    await act(async () => finishLoad(resumeAt(LOADED_AT, OTHER)));
+    await advance(0);
+    expect(hook.result.current.resume?.id).toBe(OTHER);
+    expect(hook.result.current.data.personalInfo.fullName).toBe('Other');
+    act(() => {
+      hook.result.current.setDesign({ colors: { primary: '#123456' } } as never);
+    });
+    await advance(700);
+    expect(saves.map((s) => [s.id, s.patch])).toEqual([[OTHER, { design: { colors: { primary: '#123456' } } }]]);
+  });
+
   it('shows a failed load for its own slug, never the resume shown before it', async () => {
     const hook = await studio();
     vi.useRealTimers();
@@ -429,5 +454,25 @@ describe('useResume across resumes', () => {
     hook.rerender({ slug: 'jane-doe' });
     await waitFor(() => expect(hook.result.current.resume?.id).toBe(JANE));
     expect(hook.result.current.error).toBeNull();
+  });
+});
+
+// Nothing retries a rename, so a failed one says so and keeps the old name.
+describe('useResume rename', () => {
+  it('brings the old name back when a rename fails, and says nothing retries it', async () => {
+    vi.mocked(ensureUniqueSlug).mockResolvedValueOnce('jane-q-doe');
+    const hook = await loaded();
+    let renamed: Promise<string | null>;
+    act(() => {
+      renamed = hook.result.current.rename('Jane Q. Doe');
+    });
+    await waitFor(() => expect(saves).toHaveLength(1));
+    expect(saves[0].patch).toEqual({ name: 'Jane Q. Doe', slug: 'jane-q-doe' });
+    expect(hook.result.current.resume?.name).toBe('Jane Q. Doe');
+    await act(async () => saves[0].reject());
+    await expect(renamed!).resolves.toBe('jane-doe');
+    expect(hook.result.current.resume?.name).toBe('Jane Doe');
+    expect(hook.result.current.resume?.slug).toBe('jane-doe');
+    expect(hook.result.current.saveState).toBe('renameFailed');
   });
 });

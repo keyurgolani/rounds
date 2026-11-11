@@ -322,6 +322,7 @@ function formatSaveState(r: ReturnType<typeof useResume>): string {
   if (r.saveState === 'refused') {
     return 'Save failed, not retrying. Keep this page open; your next edit or export tries again.';
   }
+  if (r.saveState === 'renameFailed') return 'Rename failed, not retrying. The old name is kept.';
   if (r.lastSavedAt) {
     const t = new Date(r.lastSavedAt);
     if (!Number.isNaN(t.getTime())) {
