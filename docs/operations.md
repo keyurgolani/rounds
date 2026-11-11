@@ -164,7 +164,8 @@ Dry-run it on a copy of each deployment first, so you see exactly what the apply
 
 ```sh
 mkdir -p ~/rounds-scan/reports
-docker run --rm --network none \
+docker run --rm --network none --user "$(id -u):$(id -g)" \
+  -e ROUNDS_ENABLE_DEMO="${ROUNDS_ENABLE_DEMO:-false}" \
   -e ROUNDS_RELATION_QUARANTINE=dry-run \
   -e ROUNDS_RELATION_QUARANTINE_REPORT=/reports/quarantine-$(date +%F).json \
   -v ~/rounds-scan/pb_data:/pb/pb_data \
@@ -173,10 +174,10 @@ docker run --rm --network none \
   /pb/pocketbase migrate up --dir=/pb/pb_data --migrationsDir=/pb/pb_migrations
 ```
 
-`~/rounds-scan/pb_data` is the stopped-PocketBase copy the cross-owner scan already uses; set `ROUNDS_IMAGE_TAG` to the release you are about to deploy so the copy runs the same migrations. The container's report path is `/reports/...`, which resolves outside `/pb/pb_data`. This runs the migration without serving, and `--network none` keeps it offline.
+`~/rounds-scan/pb_data` is the stopped-PocketBase copy the cross-owner scan already uses; set `ROUNDS_IMAGE_TAG` to the release you are about to deploy so the copy runs the same migrations, and `ROUNDS_ENABLE_DEMO` to the deployment's own value (`true` on a hosted demo), since every `pocketbase` command runs the demo lock at start ([Demo Account](#demo-account)). With the demo off, that lock gives the copy's demo account a new random password and token key, the only change it makes to the copy. `--user` runs it as you, so the copy you unpacked stays yours and you can read the `0600` report without `sudo`. The container's report path is `/reports/...`, which resolves outside `/pb/pb_data`. This runs the migration without serving, and `--network none` keeps it offline.
 
 - The report path must be set and must resolve outside `pb_data`; the migration refuses a path containing `pb_data` and refuses an unset path. Create its directory first (the migration writes the file, not the directory), and the file is written mode `0600`.
-- The dry run takes the apply's own path: it moves, clears, and journals inside the migration's transaction, writes the report, logs `relation_quarantine_dry_run`, and then throws, so PocketBase rolls everything back. Nothing in the copy changes. Because it runs the same code, it also hits any failure the apply would hit, from creating the triggers onward; then the report's `status` is `failed`, its `stage` names the step it reached, and its `error` names the cause, so fix that before you deploy.
+- The dry run takes the apply's own path: it moves, clears, and journals inside the migration's transaction, writes the report, logs `relation_quarantine_dry_run`, and then throws, so PocketBase rolls everything back. The migrations change nothing in the copy. Because it runs the same code, it also hits any failure the apply would hit, from creating the triggers onward; then the report's `status` is `failed`, its `stage` names the step it reached, and its `error` names the cause, so fix that before you deploy.
 - PocketBase 0.22 exits 0 even when a migration fails, so the exit code tells you nothing. Judge the run by the report's `status` (`ok` or `failed`) and the `relation_quarantine_dry_run` log line, which carries the same status, the counts, and the checksum (or, on a failure, the stage and reason).
 - The report's `summary` carries `owned_collections`, `relations_checked`, `rows_scanned`, `references_checked`, `cross_owner`, `missing_target`, `rows_moved`, `dependents_moved`, `references_cleared`, and `unique_fallbacks`. `findings` lists each cross-owner or missing-target reference, and `outcomes` lists each row the apply moves and each reference it clears, all with per-report account pseudonyms (`acct-01`, ...), never account ids. Keep the report and the scanned copy no longer than its `expires_at` (14 days), same as the cross-owner scan.
 
@@ -192,6 +193,7 @@ cp pocketbase/levers/replay_quarantine.template.js ~/rounds-replay/$(date +%s)_r
 # In the copy, replace "__ENTRY_ID__" with the entry ids, each quoted, comma-separated.
 docker compose -f docker-compose.prod.yml stop pocketbase
 docker run --rm --network none \
+  -e ROUNDS_ENABLE_DEMO="${ROUNDS_ENABLE_DEMO:-false}" \
   -v rounds_pb_data:/pb/pb_data \
   -v ~/rounds-replay:/replay:ro \
   keyurgolani/rounds-pocketbase:${ROUNDS_IMAGE_TAG} \
@@ -199,7 +201,7 @@ docker run --rm --network none \
 docker compose -f docker-compose.prod.yml start pocketbase
 ```
 
-Pointing `--migrationsDir` at a folder holding only the lever runs just the lever. It sets each replayed entry's `status` to `replayed`. If any listed entry isn't `quarantined` or can't be replayed, the run changes nothing and PocketBase logs why but still exits 0, so check the entries afterwards. To set aside an entry the owner decides not to restore, set its `status` to `dropped` through the admin API with the admin token; that update keeps the `payload`. The replay and the migration's own writes are recorded in [server-writes.md](security/server-writes.md).
+Set `ROUNDS_ENABLE_DEMO` in your shell to the deployment's own value first: this runs on the live data, and on a hosted demo a run without it locks the demo account. Pointing `--migrationsDir` at a folder holding only the lever runs just the lever. It sets each replayed entry's `status` to `replayed`. If any listed entry isn't `quarantined` or can't be replayed, the run changes nothing and PocketBase logs why but still exits 0, so check the entries afterwards. To set aside an entry the owner decides not to restore, set its `status` to `dropped` through the admin API with the admin token; that update keeps the `payload`. The replay and the migration's own writes are recorded in [server-writes.md](security/server-writes.md).
 
 **Alert.** Each denial logs one `relation_denied` line carrying `collection`, `field`, `operation`, and `actor` only (no ids or values). A low background rate is normal. Alert on a sustained rise in `relation_denied` per `collection`/`field` after a deploy, or on the first `relation_denied` for a `field` that never denied before: either points at a client that started sending a cross-owner or stale id, or at a predicate that is now too tight for a legitimate write.
 
