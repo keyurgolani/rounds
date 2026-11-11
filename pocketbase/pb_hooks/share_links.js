@@ -1,64 +1,55 @@
 /// <reference path="../pb_data/types.d.ts" />
 //
-// Share link create check (ROUNDS-00B-L03 stage 1).
+// Older share links (ROUNDS-00B-L06 stage 1).
 //
-// A new resume_share_links row must:
-//   * point at exactly one target, `resume` or `variant`;
-//   * be owned by the caller (`user` is the signed-in account; the create
-//     rule says the same, and this re-checks it on the resolved record);
-//   * carry a token of exactly 22 characters from [A-Za-z0-9_-], the format
-//     the runner mints (backend/routers/share.py).
-// That the target belongs to the same account is the relation endpoint
-// predicate's job (relation_endpoints.js, ROUNDS-00B-L02), which answers a
-// foreign target exactly like a missing one. Every denial here answers with
-// that same body, "Failed to create record.", so no shape of request tells a
-// foreign target from a missing one or a malformed token from either.
+// 1700008400_legacy_share_migration.js turned off every share link made
+// before it, and no client creates, changes, or deletes one: every write rule
+// on resume_share_links is null. This holds every writer the app's Dao runs to
+// the same, the admin UI and the hooks included: an older link's row changes
+// only when "Get a new link" sets its replaced_by, from empty to a share
+// capability, once (pb_hooks/share_secrets.js, in the same transaction as the
+// capability). Rows leave only with their resume, variant, account, or the
+// capability that replaced them. A migration writes with its own Dao and runs
+// no model hooks.
 //
-// screen() is pure, so the Node unit test require()s it without PocketBase.
-// No token, id, or owner is ever logged.
+// screenUpdate() is pure, so the Node unit test require()s it without
+// PocketBase. Nothing is logged but a refusal's reason.
 
-const TOKEN_RE = /^[A-Za-z0-9_-]{22}$/;
+const RECORD_ID = /^[a-z0-9]{15}$/;
+const REPLACED_BY = "replaced_by";
+// Never compared: PocketBase sets it on every save.
+const UPDATED = "updated";
 
-// The first reason the row may not be created, or null. fields holds the
-// resolved record's user, resume, variant, and token strings; caller is the
-// signed-in account id, "" for none, and admin is true for a superuser.
-function screen(fields, caller, admin) {
-  const resume = typeof fields.resume === "string" ? fields.resume : "";
-  const variant = typeof fields.variant === "string" ? fields.variant : "";
-  const token = typeof fields.token === "string" ? fields.token : "";
-  const user = typeof fields.user === "string" ? fields.user : "";
-  if ((resume === "") === (variant === "")) return "target";
-  if (!admin && (caller === "" || user !== caller)) return "owner";
-  if (!TOKEN_RE.test(token)) return "token";
+// Why an update to an older link may not happen, or null. before and after
+// map every field name to its value as text.
+function screenUpdate(before, after) {
+  const names = Object.keys(before).concat(Object.keys(after));
+  for (let i = 0; i < names.length; i += 1) {
+    const name = names[i];
+    if (name === REPLACED_BY || name === UPDATED) continue;
+    if ((before[name] || "") !== (after[name] || "")) return "field";
+  }
+  const was = before[REPLACED_BY] || "";
+  const now = after[REPLACED_BY] || "";
+  if (was === now) return null;
+  if (was !== "" || !RECORD_ID.test(now)) return "replaced_by";
   return null;
 }
 
-function checkCreate(e) {
-  const info = $apis.requestInfo(e.httpContext);
-  const admin = !!info.admin;
-  const caller = info.authRecord ? info.authRecord.id : "";
-  const r = e.record;
-  const reason = screen(
-    {
-      user: r.getString("user"),
-      resume: r.getString("resume"),
-      variant: r.getString("variant"),
-      token: r.getString("token"),
-    },
-    caller,
-    admin,
-  );
-  if (reason === null) return;
-  console.log(
-    JSON.stringify({
-      v: "obs/v1",
-      event: "share_link_denied",
-      service: "pocketbase",
-      reason: reason,
-      actor: admin ? "admin" : caller ? "user" : "anonymous",
-    }),
-  );
-  throw new BadRequestError("Failed to create record.");
+function valuesOf(record) {
+  const out = { created: record.getString("created") };
+  record.collection().schema.fields().forEach((field) => {
+    out[field.name] = record.getString(field.name);
+  });
+  return out;
 }
 
-module.exports = { TOKEN_RE: TOKEN_RE, screen: screen, checkCreate: checkCreate };
+function checkUpdate(e) {
+  const after = e.model;
+  const reason = screenUpdate(valuesOf(after.originalCopy()), valuesOf(after));
+  if (reason === null) return;
+  console.log(JSON.stringify({ v: "obs/v1", event: "share_link_refused", service: "pocketbase", reason }));
+  throw new BadRequestError("Older share links can't be changed.");
+}
+
+module.exports = { screenUpdate: screenUpdate, checkUpdate: checkUpdate };

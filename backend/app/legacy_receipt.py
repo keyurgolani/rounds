@@ -19,8 +19,11 @@ the signed report goes to stdout unless ``--out`` names a file, written
 Exit status: 0 done, 1 a report that isn't one this signs or doesn't
 verify, 2 a usage or configuration error.
 
-#14 (ROUNDS-00B-L06) signs its own report here under its own schema and
-label (``LABELS``).
+#14 (ROUNDS-00B-L06) signs its receipt here too: ``pocketbase
+legacy-share-receipt`` writes ``legacy-share-receipt/v1``, signed under the
+label ROUNDS-00B-L04 reserved for it (``share_secrets.LEGACY_RECEIPT_INFO``).
+Each schema has its own label (``LABELS``), so one signature never passes
+as the other's.
 
 TODO(ROUNDS-14-L02): #73's keyring derives this key; until then it is
 HKDF over AI_KEY_SECRET directly, as app.obs derives its pseudonym key.
@@ -39,6 +42,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from app import canonical
+from app.share_secrets import LEGACY_RECEIPT_INFO
 
 SECRET_ENV = "AI_KEY_SECRET"
 # The development compose files' placeholder (app.crypto). A signature
@@ -51,7 +55,10 @@ DEV_MARKER = "do-not-use-in-prod"
 MIN_SECRET_BYTES = 32
 ALGORITHM = "HMAC-SHA256"
 # Report schema -> the HKDF label its key derives with.
-LABELS: dict[str, str] = {"legacy-snapshot-scan/v1": "rounds/legacy-snapshot-scan/v1"}
+LABELS: dict[str, str] = {
+    "legacy-snapshot-scan/v1": "rounds/legacy-snapshot-scan/v1",
+    "legacy-share-receipt/v1": LEGACY_RECEIPT_INFO.decode("ascii"),
+}
 MAX_REPORT_BYTES = 32 * 1024 * 1024
 
 
@@ -135,9 +142,14 @@ def verify(report: Any, secret: str) -> dict[str, Any]:
 
 
 def summary(report: dict[str, Any]) -> str:
-    totals = report.get("totals") if isinstance(report.get("totals"), dict) else {}
-    parts = [f"{k}={v}" for k, v in sorted(totals.items()) if isinstance(v, int)]
-    return " ".join([report["schema"], report["checksum"], f"complete={str(report.get('complete')).lower()}", *parts])
+    if report["schema"] == "legacy-share-receipt/v1":
+        counts = report.get("outcomes") if isinstance(report.get("outcomes"), dict) else {}
+        state = f"reconciled={str(report.get('reconciled')).lower()}"
+    else:
+        counts = report.get("totals") if isinstance(report.get("totals"), dict) else {}
+        state = f"complete={str(report.get('complete')).lower()}"
+    parts = [f"{k}={v}" for k, v in sorted(counts.items()) if isinstance(v, int)]
+    return " ".join([report["schema"], report["checksum"], state, *parts])
 
 
 def _read(path: str, stdin: BinaryIO) -> Any:

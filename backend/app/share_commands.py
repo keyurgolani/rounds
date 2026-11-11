@@ -34,6 +34,15 @@ as it is, and a source edited since the first attempt is 409
 snapshot_conflict; neither writes a capability. Then the verifier, and a
 single PocketBase transaction makes the capability.
 
+"Get a new link" (ROUNDS-00B-L06) is CreateShare with ``legacy_link_id``,
+one of the caller's older links. PocketBase decides which: only a migrated
+link of the caller's own, and the source is that link's own target, its
+variant if it names one, else its resume. A body ``resume_id`` or
+``variant_id`` that names anything else, and any other link, get the one
+not-found. The transaction that makes the capability also sets the link's
+``replaced_by``, and a link that already has one answers that capability
+as already-issued, under its first key or a new one.
+
 RotateShareBearer takes ``{expected_capability_version}``. One transaction
 swaps the digest and raises the version, so the old bearer resolves nothing
 once it commits. A stale version is 409 capability_version_conflict, a
@@ -100,6 +109,8 @@ class CreateShareBody(StrictModel):
     expires_at: str | None = Field(None, pattern=DATE)
     purpose: str | None = Field(None, max_length=PURPOSE_MAX)
     password: str | None = None
+    # One of the caller's older links, for "Get a new link" (ROUNDS-00B-L06).
+    legacy_link_id: str | None = Field(None, pattern=RECORD_ID)
 
 
 class _CreateFingerprint(StrictModel):
@@ -108,6 +119,11 @@ class _CreateFingerprint(StrictModel):
     expires_at: str | None
     purpose: str | None
     password_set: bool
+
+
+# A re-issue's own fingerprint, so a create's stays what it was.
+class _ReissueFingerprint(_CreateFingerprint):
+    legacy_link_id: str
 
 
 class RotateBody(StrictModel):
@@ -300,6 +316,17 @@ def expiry(day: str | None, now: datetime) -> str | None:
     return end.strftime("%Y-%m-%d %H:%M:%S.") + f"{end.microsecond // 1000:03d}Z"
 
 
+def _legacy_target(target: Any) -> tuple[str, str]:
+    """The body field and id of the target PocketBase named for an older
+    link, or 503 for any other answer."""
+    kinds = {kind: field for field, (kind, _collection) in SOURCES.items()}
+    if not isinstance(target, dict) or set(target) != {"kind", "id"} or target.get("kind") not in kinds:
+        raise _refusal(503, None)
+    if not isinstance(target["id"], str) or _RECORD_ID.fullmatch(target["id"]) is None:
+        raise _refusal(503, None)
+    return kinds[target["kind"]], target["id"]
+
+
 async def _source_updated(token: str, kind_field: str, source_id: str) -> str:
     """The source's ``updated``, fetched with the caller's own bearer. A
     missing source and another account's both answer 404."""
@@ -371,20 +398,28 @@ async def create(request: Request) -> JSONResponse:
         key = _key(request)
         body: CreateShareBody = await _body(request, CreateShareBody)
         named = [field for field in SOURCES if getattr(body, field) is not None]
-        if len(named) != 1:
+        legacy = body.legacy_link_id
+        if len(named) > 1 or (legacy is None and len(named) != 1):
             raise _invalid()
         if body.password is not None and not share_password.valid_password(body.password):
             raise _invalid()
         expires_at = expiry(body.expires_at, datetime.now(timezone.utc))
         token, bearer = _bearer()
-        fingerprint = admission_state.fingerprint(CREATE_ROUTE, "share_create", _CreateFingerprint(
-            resume_id=body.resume_id, variant_id=body.variant_id, expires_at=body.expires_at, purpose=body.purpose,
-            password_set=body.password is not None))
+        asked: dict[str, Any] = dict(resume_id=body.resume_id, variant_id=body.variant_id, expires_at=body.expires_at,
+                                     purpose=body.purpose, password_set=body.password is not None)
+        fingerprint = admission_state.fingerprint(
+            CREATE_ROUTE, "share_create",
+            _CreateFingerprint(**asked) if legacy is None else _ReissueFingerprint(**asked, legacy_link_id=legacy))
 
-        status, begun = await _hook(BEGIN_PATH, account["token"], {
+        opening: dict[str, Any] = {
             "command_id": key, "operation": "share_create", "fingerprint": fingerprint,
             "snapshot_command_id": new_command_id(),
-        })
+        }
+        if legacy is not None:
+            opening["legacy_link_id"] = legacy
+            if named:
+                opening["target"] = {"kind": SOURCES[named[0]][0], "id": getattr(body, named[0])}
+        status, begun = await _hook(BEGIN_PATH, account["token"], opening)
         if status != 200 or not isinstance(begun, dict) or begun.get("v") != VERSION:
             raise _refusal(status, begun)
         if begun.get("verdict") == "replay":
@@ -399,8 +434,11 @@ async def create(request: Request) -> JSONResponse:
                 admission_state.COMMAND_ID.fullmatch(snapshot_key) is None:
             raise _refusal(503, None)
 
-        field = named[0]
-        source_id = getattr(body, field)
+        if legacy is None:
+            field = named[0]
+            source_id = getattr(body, field)
+        else:
+            field, source_id = _legacy_target(begun.get("legacy_target"))
         updated = await _source_updated(account["token"], field, source_id)
         snapshot = await _snapshot(account["token"], SOURCES[field][0], source_id, updated, snapshot_key)
         if snapshot["status"] == "ineligible":
@@ -409,11 +447,14 @@ async def create(request: Request) -> JSONResponse:
                                 headers=dict(NO_STORE))
 
         verifier = await share_password.hash_password(body.password) if body.password is not None else ""
-        status, made = await _hook(CAPABILITIES_PATH, account["token"], {
+        making: dict[str, Any] = {
             "command_id": key, "fingerprint": fingerprint, "snapshot_id": snapshot["snapshot_id"],
             "purpose": body.purpose, "expires_at": expires_at, "password_policy_ref": verifier,
             "bearer_digest": bearer, "digest_key_version": share_secrets.DIGEST_KEY_VERSION,
-        })
+        }
+        if legacy is not None:
+            making["legacy_link_id"] = legacy
+        status, made = await _hook(CAPABILITIES_PATH, account["token"], making)
         delivered = _delivered(status, made, 201, with_scope=True)
         if delivered is None:
             raise _refusal(status, made)

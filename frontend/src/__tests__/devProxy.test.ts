@@ -83,6 +83,10 @@ function upgrade(url: string) {
 const NEVER_PROXIED = [
   '/_/',
   '/_/images/logo.svg',
+  // The older share read's path, which nginx answers itself (ROUNDS-00B-L06).
+  '/api/share/by-token/AbCdEfGhIjKlMnOpQrStUv',
+  '/API/Share/By-Token/AbCdEfGhIjKlMnOpQrStUv',
+  '/api/share/by-token',
   '/api/rounds/admission/admit',
   '/api/rounds/admission/usage?x=1',
   '/api/rounds/execution/enqueue',
@@ -161,7 +165,7 @@ const PROXIED = [
   '/api/share/capabilities/capaaaaaaaaaaa1/revoke',
   '/api/share/resolve',
   '/api/share/capabilities/capaaaaaaaaaaa1/rotate',
-  '/api/share/by-token/AbCdEfGhIjKlMnOpQrStUv',
+  '/api/share/by-tokens',
   '/api/collections/share_throttle/records',
 ];
 

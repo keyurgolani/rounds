@@ -222,19 +222,19 @@ REGISTRY: tuple[Gate, ...] = (
         aliases=(Alias(env="ROUNDS_DISABLE_PUBLIC_SHARES", value="disabled", reader=RUNNER, fail_closed=True),),
     ),
     Gate(
-        # ROUNDS-00B-L03 stage 2: capability resolution stays closed until
-        # #13's share cases pass and docs/operations.md's steps are done.
-        # Read on each request, like the switch above. ROUNDS-00B-L04: it
-        # also turns POST /api/share into CreateShare and rotate on, and the
-        # SPA reads it, so the share dialog matches the runner.
+        # ROUNDS-00B-L03 stage 2 and ROUNDS-00B-L04: capability resolution,
+        # CreateShare, and rotation. Read on each request, like the switch
+        # above, and by the SPA, so the share dialog matches the runner.
+        # ROUNDS-00B-L06 stage 1 opens it by default: it is the only way to
+        # make a link, and closing it stops new links and every resolve.
         name="SHARE_CAPABILITY_RESOLUTION",
         values=ROUTE_VALUES,
-        default="disabled",
+        default="enabled",
         closed="disabled",
         readers=frozenset({RUNNER, FRONTEND}),
         description=(
             "Lets POST /api/share/resolve look a share capability up, and makes POST /api/share CreateShare with "
-            "rotation on; disabled answers the uniform not-found before any lookup and keeps the earlier create."
+            "rotation on; disabled answers the uniform not-found before any lookup and makes no link."
         ),
     ),
     Gate(

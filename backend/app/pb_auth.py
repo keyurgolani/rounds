@@ -110,13 +110,11 @@ async def pb_patch(token: str, path: str, body: dict[str, Any]) -> Any:
 #                                Admin auth
 # ---------------------------------------------------------------------------
 #
-# A handful of endpoints (currently just the public share viewer)
-# need to read PocketBase rows that don't belong to any logged-in
-# user. Rather than relax PB's owner rules, we keep them tight and
-# proxy through a short-lived admin token cached here.
-#
-# Credentials come from the same env vars the bootstrap migration
-# uses, so a fresh dev stack works out of the box.
+# Nothing in the runner calls these since ROUNDS-00B-L06 stage 1: every
+# share route reads with the caller's own bearer or the share resolver's
+# service identity, and tests/test_share_admin_helper_ban.py keeps it so.
+# TODO(ROUNDS-00B-L06): stage 3 removes them, with the runner's PB_ADMIN_*
+# settings and the development defaults below.
 
 _ADMIN_EMAIL = os.environ.get("PB_ADMIN_EMAIL", "admin@local.dev")
 _ADMIN_PASSWORD = os.environ.get("PB_ADMIN_PASSWORD", "changemenowplz")
