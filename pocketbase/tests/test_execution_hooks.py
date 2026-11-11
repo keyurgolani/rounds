@@ -765,3 +765,240 @@ def test_bootstrap_waits_for_the_collection_the_migration_makes():
     assert out == {"did": "absent", "records": []}
     (out,) = run({"call": "bootstrapWorker", "collection": True, "secret": SECRET})["results"]
     assert out == {"did": "created", "records": [{"username": "execution-worker", "password": SECRET}]}
+
+
+# ---- PR 2: the job read, the job's charge, and the purge ----------------------------
+#
+# These run admission.js's own decisions on the same in-memory rows, as one
+# PocketBase transaction runs both hooks.
+
+DAY = 86400
+WALL = {"run": 3, "evaluate": 3, "run_project": 10, "take_home_run": 60, "grade": 45, "take_home_submit": 120}
+
+
+def admitted(key, account=A, operation="run", now=T0) -> dict:
+    """The runner's admit for a job-backed request: its lease token rides
+    on the step."""
+    token = new_token()
+    body = {"operation": operation, "wall_seconds": WALL[operation], "idempotency": "enforce", "lease_hash": sha256(token),
+            "command_id": key, "fingerprint": FP}
+    return {"call": "admit", "account": dict(account, demo=False), "input": body, "now": now, "token": token}
+
+
+def finished(admit_step, outcome="completed", account=A, now=T0) -> dict:
+    return {"call": "finish", "account": dict(account, demo=False),
+            "input": {"lease": admit_step["token"], "outcome": outcome}, "now": now}
+
+
+def status(job_id, account=A) -> dict:
+    return {"call": "status", "account": account, "input": {"job_id": job_id}}
+
+
+def charges(store: dict) -> dict:
+    """Each bucket's (requests, wall seconds)."""
+    return {(c["bucket"], c["account"]): (c["requests"], c["wall_seconds"]) for c in store["counters"]}
+
+
+def queued_job(key=None, account=A, kind="run", now=T0) -> tuple[list, str]:
+    """The steps that admit, enqueue, and end the request of one job, and
+    the job's id."""
+    key = key or new_key()
+    steps = [admitted(key, account, kind, now), enqueue(key, account=account, kind=kind, now=now)]
+    steps.append(finished(steps[0], account=account, now=now))
+    out = run(*steps)
+    return steps, out["results"][1]["body"]["job"]["id"]
+
+
+def test_status_shows_the_owner_its_job_and_another_account_the_unknown_404():
+    steps, job_id = queued_job()
+    out = run(*steps, status(job_id), status(job_id, account=B), status("job000000000999"))
+    own, foreign, unknown = out["results"][-3:]
+    assert own["status"] == 200 and own["body"]["job"]["id"] == job_id and own["body"]["job"]["state"] == "queued"
+    assert own["body"]["envelope"] is None and own["body"]["retryable"] is False
+    assert foreign == unknown == {"status": 404, "body": {"v": "execution/v1", "error": "not_found"}}
+    (checked,) = run({"call": "checkStatus", "input": {"job_id": "../x"}})["results"]
+    assert checked is None
+
+
+def test_status_shows_the_envelope_the_job_ended_with():
+    key = new_key()
+    steps, job, attempt, token = started_job(key=key)
+    out = run(*steps, complete(attempt["id"], token, result(job["id"])), status(job["id"]))
+    body = out["results"][-1]["body"]
+    assert body["job"]["state"] == "completed" and body["envelope"]["outcome_class"] == "passed"
+    assert body["envelope"] == result(job["id"])["user_view"]
+
+
+def test_status_shows_no_envelope_for_a_job_that_ended_without_one():
+    steps, job_id = queued_job()
+    out = run(*steps, {"call": "cancel", "account": A, "input": {"job_id": job_id}, "now": T0 + 1}, status(job_id))
+    body = out["results"][-1]["body"]
+    assert (body["job"]["state"], body["job"]["outcome_class"], body["envelope"]) == ("canceled", "canceled", None)
+
+
+def test_status_hides_an_envelope_that_says_less_than_how_the_job_ended():
+    # A lease lost before the run started, with a cancel asked for: the
+    # reaper's envelope says worker-lost, and the job ended canceled.
+    steps, job_id = queued_job()
+    out = run(*steps, claim(new_token(), now=T0 + 1),
+              {"call": "cancel", "account": A, "input": {"job_id": job_id}, "now": T0 + 2}, reap(T0 + 40),
+              status(job_id))
+    body = out["results"][-1]["body"]
+    assert body["job"]["state"] == "canceled" and body["envelope"] is None
+
+
+def test_status_says_whether_a_same_key_retry_would_run_the_job_again():
+    key = new_key()
+    steps, job, attempt, token = started_job(key=key)
+    out = run(*steps, reap(T0 + 30), status(job["id"]))
+    assert out["results"][-1]["body"]["retryable"] is True
+    assert out["results"][-1]["body"]["envelope"]["outcome_class"] == "worker-lost"
+    out = run(*steps, complete(attempt["id"], token, result(job["id"], outcome="candidate-failure")), status(job["id"]))
+    assert out["results"][-1]["body"]["retryable"] is False
+
+
+def test_status_needs_the_bearer_and_the_runner_key_and_reads_only_the_store():
+    base = {"call": "handleCaller", "action": "status", "principal": USERS, "data": {"job_id": "job000000000001"},
+            "env": {"ROUNDS_ADMISSION_SECRET": RUNNER_KEY}, "headers": {"x_rounds_admission_key": RUNNER_KEY}}
+    assert run(base)["results"] == [{"reached": True}]
+    assert run(dict(base, headers={}))["results"] == [{"reached": False, "status": 403, "error": "forbidden"}]
+    assert run(dict(base, principal=None))["results"] == [{"reached": False, "thrown": "UnauthorizedError"}]
+    off = dict(base, env={"ROUNDS_ADMISSION_SECRET": RUNNER_KEY, "ROUNDS_GATE_EXECUTION_STORE": "off"})
+    assert run(off)["results"] == [{"reached": False, "status": 503, "error": "store_off"}]
+
+
+def test_the_charge_is_told_when_the_candidate_starts_and_when_the_job_ends():
+    key = new_key()
+    steps, job, attempt, token = started_job(key=key)
+    out = run(*steps, heartbeat(attempt["id"], token, now=T0 + 10), complete(attempt["id"], token, result(job["id"])))
+    assert out["store"]["admission_calls"] == [
+        {"call": "jobStarted", "job": job["id"]},
+        {"call": "jobEnded", "job": job["id"], "outcome_class": "passed"},
+    ]
+    # A lease lost before the start puts the job back, which ends nothing.
+    steps, job_id = queued_job()
+    out = run(*steps, claim(new_token(), now=T0 + 1), reap(T0 + 40))
+    assert out["store"]["admission_calls"] == [] and out["store"]["jobs"][0]["state"] == "queued"
+
+
+def test_a_job_whose_candidate_started_keeps_its_charge():
+    key = new_key()
+    first = admitted(key)
+    token = new_token()
+    steps = [first, enqueue(key), finished(first), claim(token, now=T0 + 1)]
+    attempt = run(*steps)["results"][-1]["body"]["attempt"]
+    job_id = run(*steps)["results"][1]["body"]["job"]["id"]
+    out = run(*steps, heartbeat(attempt["id"], token, now=T0 + 1, budget=3),
+              complete(attempt["id"], token, result(job_id), now=T0 + 2))
+    assert charges(out["store"])[("account", A["id"])] == (1, 3)
+    assert out["store"]["leases"] == []
+    (command,) = out["store"]["commands"]
+    assert (command["state"], command["job"]) == ("completed", job_id)
+
+
+def test_a_job_canceled_while_queued_gives_its_wall_seconds_back():
+    steps, job_id = queued_job()
+    out = run(*steps, {"call": "cancel", "account": A, "input": {"job_id": job_id}, "now": T0 + 1})
+    assert charges(out["store"])[("account", A["id"])] == (1, 0)
+    assert out["store"]["leases"] == [] and out["store"]["commands"][0]["state"] == "completed"
+
+
+def test_a_job_that_never_got_a_slot_gives_its_wall_seconds_back():
+    steps, job_id = queued_job()
+    token = new_token()
+    attempt = run(*steps, claim(token, now=T0 + 1))["results"][-1]["body"]["attempt"]
+    starved = result(job_id, state="timed-out", outcome="infrastructure-degraded", cleanup="confirmed")
+    out = run(*steps, claim(token, now=T0 + 1), complete(attempt["id"], token, starved, now=T0 + 7))
+    assert out["results"][-1]["status"] == 200
+    assert charges(out["store"])[("account", A["id"])] == (1, 0)
+    assert out["store"]["commands"][0]["state"] == "failed_infrastructure"
+
+
+def test_a_job_out_of_leases_before_any_start_gives_its_wall_seconds_back():
+    steps, job_id = queued_job()
+    for i in range(3):
+        steps += [claim(new_token(), now=T0 + 40 * i), reap(T0 + 40 * i + 30)]
+    out = run(*steps)
+    assert out["store"]["jobs"][0]["state"] == "failed"
+    assert charges(out["store"])[("account", A["id"])] == (1, 0)
+
+
+def test_a_same_key_retry_after_worker_loss_runs_again_on_new_wall_seconds_and_no_new_request():
+    key = new_key()
+    first = admitted(key)
+    token = new_token()
+    steps = [first, enqueue(key), finished(first), claim(token, now=T0 + 1)]
+    attempt = run(*steps)["results"][-1]["body"]["attempt"]
+    steps += [heartbeat(attempt["id"], token, now=T0 + 1, budget=3), reap(T0 + 31)]
+    retry = admitted(key, now=T0 + 40)
+    second = new_token()
+    steps += [retry, enqueue(key, now=T0 + 40), finished(retry, now=T0 + 40), claim(second, now=T0 + 41)]
+    out = run(*steps)
+    assert out["results"][-4]["idempotency"] == "retry_job"
+    assert out["results"][-3]["body"]["requeued"] is True
+    assert out["results"][-1]["body"]["attempt"]["attempt_number"] == 2
+    # The first run's wall seconds stay charged (its candidate started); the
+    # retry adds its own and no request.
+    assert charges(out["store"])[("account", A["id"])] == (1, 6)
+    assert len(out["store"]["leases"]) == 1
+
+
+def test_a_duplicate_of_a_running_job_gets_the_job_and_no_charge():
+    key = new_key()
+    steps, job_id = queued_job(key=key)
+    out = run(*steps, admitted(key, now=T0 + 2))
+    assert out["results"][-1]["idempotency"] == "job" and out["results"][-1]["job"] == job_id
+    assert charges(out["store"])[("account", A["id"])] == (1, 3) and len(out["store"]["jobs"]) == 1
+
+
+def test_the_purge_removes_a_scratch_job_seven_days_after_it_ended_with_everything_it_left():
+    key = new_key()
+    steps, job, attempt, token = started_job(key=key)
+    ended = T0 + 1
+    steps += [complete(attempt["id"], token, result(job["id"]), now=ended)]
+    out = run(*steps, {"call": "purge", "now": ended + 7 * DAY - 1})
+    assert out["results"][-1] == {"purged": 0} and len(out["store"]["jobs"]) == 1
+    out = run(*steps, {"call": "purge", "now": ended + 7 * DAY})
+    assert out["results"][-1] == {"purged": 1}
+    for rows in ("jobs", "attempts", "envelopes", "commands", "leases"):
+        assert out["store"][rows] == [], rows
+
+
+def test_the_purge_keeps_grading_jobs_and_jobs_that_havent_ended():
+    grading_steps, grading, g_attempt, g_token = started_job(kind="grade")
+    out = run(*grading_steps, complete(g_attempt["id"], g_token, result(grading["id"])),
+              *queued_job()[0], {"call": "purge", "now": T0 + 30 * DAY})
+    assert out["results"][-1] == {"purged": 0} and len(out["store"]["jobs"]) == 2
+
+
+def test_the_purge_takes_one_batch_at_a_time():
+    steps = []
+    for _ in range(execution_constant("PURGE_BATCH") + 1):
+        key = new_key()
+        steps += [command(key), enqueue(key)]
+    out = run(*steps)
+    for job in out["store"]["jobs"]:
+        steps.append({"call": "cancel", "account": A, "input": {"job_id": job["id"]}, "now": T0})
+    out = run(*steps, {"call": "purge", "now": T0 + 7 * DAY}, {"call": "purge", "now": T0 + 7 * DAY})
+    assert out["results"][-2:] == [{"purged": execution_constant("PURGE_BATCH")}, {"purged": 1}]
+
+
+def execution_constant(name: str) -> int:
+    """A whole-number constant in execution.js, written as a product such
+    as ``7 * 24 * 3600``."""
+    js = (HOOKS / "execution.js").read_text()
+    match = re.search(rf"^const {name} = ([0-9 *]+);$", js, re.M)
+    assert match, name
+    value = 1
+    for factor in match.group(1).split("*"):
+        value *= int(factor)
+    return value
+
+
+def test_the_purge_runs_every_five_minutes_and_keeps_scratch_jobs_seven_days():
+    pb = (HOOKS / "execution.pb.js").read_text()
+    assert re.search(r'cronAdd\("rounds_execution_purge", "\*/5 \* \* \* \*", \(\) => \{\s*require\([^)]+\)'
+                     r'\.purgeNow\(\);\s*\}\);', pb)
+    assert execution_constant("SCRATCH_RETENTION_S") == 7 * DAY
+    # The interim number names the leaf that sets it.
+    assert "TODO(ROUNDS-14-L01)" in (HOOKS / "execution.js").read_text()

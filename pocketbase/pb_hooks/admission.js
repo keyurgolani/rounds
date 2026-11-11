@@ -197,7 +197,8 @@ function bucketsFor(account) {
 }
 
 // Step 7: whether one more request charging `wall` fits every bucket. A
-// job's same-key retry counts no request (`requests` 0).
+// job's same-key retry counts no request (`requests` 0), so the request
+// limit doesn't gate it; its wall seconds and its lease still count.
 function quotaFor(store, account, wall, now, requests) {
   const counts = requests === undefined ? 1 : requests;
   const hour = hourOf(now);
@@ -205,7 +206,7 @@ function quotaFor(store, account, wall, now, requests) {
   bucketsFor(account).forEach((b) => {
     const limit = LIMITS[b.bucket];
     const used = store.counter(b.bucket, b.account, hour) || { requests: 0, wall_seconds: 0 };
-    if (limit.requests !== null && used.requests + counts > limit.requests) {
+    if (limit.requests !== null && counts > 0 && used.requests + counts > limit.requests) {
       over.push({ bucket: b.bucket, retry_after: untilNextHour(now) });
     }
     if (limit.wall_seconds !== null && used.wall_seconds + wall > limit.wall_seconds) {

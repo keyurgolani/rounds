@@ -805,3 +805,174 @@ def test_the_admission_module_is_not_auto_loaded_as_a_hook_file():
     # PocketBase loads only *.pb.js files, so admission.js stays a require target.
     assert (HOOKS / "admission.js").exists()
     assert "require(`${__hooks}/admission.js`)" in (HOOKS / "admission.pb.js").read_text()
+
+
+# ---- a command that enqueued a job (ROUNDS-00A-L03 PR 2) ----------------------------
+
+JOB = "job000000000001"
+
+
+def job_step(state="queued", outcome="", attempts=1, started=0) -> dict:
+    return {"call": "seedJob", "job": {"id": JOB, "state": state, "outcome_class": outcome, "attempts": attempts,
+                                       "attempts_started": started}}
+
+
+def link(key=K1, account=A) -> dict:
+    """enqueue's link from the account's command to its job."""
+    return {"call": "linkJob", "account": account, "command_id": key, "job": JOB}
+
+
+def job_ended(outcome, key=K1, account=A) -> dict:
+    return {"call": "jobEnded", "account": account, "command_id": key, "job": JOB, "outcome_class": outcome}
+
+
+def job_started(key=K1, account=A) -> dict:
+    return {"call": "jobStarted", "account": account, "command_id": key, "job": JOB}
+
+
+def enqueued(state="queued", outcome="", attempts=1, started=0, **admit_args) -> list:
+    """A new command, its job linked as enqueue leaves it, and the job in
+    ``state``. The first step is the admit, with its lease token."""
+    return [admit(key=K1, **admit_args), link(), job_step(state, outcome, attempts, started)]
+
+
+@pytest.mark.parametrize(
+    "state, outcome, attempts, started",
+    [("queued", "", 0, 0), ("leased", "", 1, 0), ("started", "", 1, 1), ("completed", "passed", 1, 1),
+     ("completed", "candidate-failure", 1, 1), ("timed-out", "resource-limit", 1, 1), ("canceled", "canceled", 1, 0),
+     ("denied", "definition-invalid", 1, 0), ("failed", "worker-lost", 3, 3)],
+    ids=["queued", "leased", "started", "passed", "failed", "time-limit", "canceled", "definition", "out-of-retries"],
+)
+def test_a_duplicate_of_a_job_answers_the_job_and_is_never_charged(state, outcome, attempts, started):
+    steps = enqueued(state, outcome, attempts, started)
+    out = run(*steps, admit(key=K1, now=T0 + 5), admit(key=K1, mode="observe", now=T0 + 6))
+    for decision in out["results"][-2:]:
+        assert decision["idempotency"] == "job" and decision["job"] == JOB
+        assert decision["leased"] is False and decision["quota"] == "skipped" and decision["result"] is None
+    # The first request's charge and lease only.
+    assert counters(out["store"]) == {("account", A["id"]): (1, 3), ("deployment", ""): (1, 3)}
+    assert len(out["store"]["leases"]) == 1
+
+
+@pytest.mark.parametrize("outcome", ["worker-lost", "infrastructure-degraded"])
+def test_a_same_key_retry_of_a_job_lost_to_infrastructure_charges_wall_seconds_and_a_lease_not_a_request(outcome):
+    steps = enqueued("failed", outcome, attempts=1, started=1)
+    out = run(*steps, job_started(), job_ended(outcome), admit(key=K1, now=T0 + 5))
+    decision = out["results"][-1]
+    assert decision["idempotency"] == "retry_job" and decision["leased"] is True and decision["job"] is None
+    assert counters(out["store"]) == {("account", A["id"]): (1, 6), ("deployment", ""): (1, 6)}
+    (command,) = out["store"]["commands"]
+    assert command["state"] == "in_flight" and command["job"] == JOB
+    (lease,) = out["store"]["leases"]
+    assert lease["command"] == command["id"] and lease["expires_at"] == T0 + 5 + 3 + GRACE
+
+
+def test_a_retry_over_the_request_limit_still_fits_but_not_over_the_wall_seconds():
+    steps = enqueued("failed", "worker-lost", attempts=1, started=1)
+    out = run(*steps, job_started(), job_ended("worker-lost"), seed("account", A["id"], requests=500),
+              admit(key=K1, now=T0 + 5))
+    # 500 requests this hour is over 120, yet the retry fits: it counts none.
+    assert out["results"][-1]["idempotency"] == "retry_job" and out["results"][-1]["quota"] == "ok"
+    out = run(*steps, job_started(), job_ended("worker-lost"), seed("account", A["id"], wall=1800 - 4),
+              admit(key=K1, now=T0 + 5))
+    assert out["results"][-1]["quota"] == "exceeded" and out["results"][-1]["leased"] is False
+
+
+def test_a_job_that_is_gone_lets_the_key_run_admission_again():
+    out = run(admit(key=K1), link(), admit(key=K1, now=T0 + 5))
+    assert out["results"][-1]["idempotency"] == "retry"
+
+
+def test_a_different_request_under_a_jobs_key_is_still_a_mismatch():
+    out = run(*enqueued(), admit(key=K1, fp=FP2, now=T0 + 5), admit(key=K1, op="evaluate", now=T0 + 6))
+    assert [d["idempotency"] for d in out["results"][-2:]] == ["mismatch", "mismatch"]
+
+
+def test_the_request_that_enqueued_leaves_its_charge_with_the_waiting_job():
+    steps = enqueued("queued")
+    out = run(*steps, finish(steps[0], "completed"))
+    assert out["results"][-1]["body"]["refunded_wall_seconds"] == 0
+    (command,) = out["store"]["commands"]
+    assert command["state"] == "in_flight" and command["result"] is None
+    assert len(out["store"]["leases"]) == 1
+    assert counters(out["store"])[("account", A["id"])] == (1, 3)
+
+
+@pytest.mark.parametrize("outcome", ["denied", "infrastructure", "error"])
+def test_what_the_runner_saw_doesnt_decide_a_queued_jobs_charge(outcome):
+    # The enqueue committed and the runner lost its answer: the job runs,
+    # so its charge stays, whatever the runner reported.
+    steps = enqueued("queued")
+    out = run(*steps, finish(steps[0], outcome))
+    assert out["results"][-1]["body"]["refunded_wall_seconds"] == 0
+    assert len(out["store"]["leases"]) == 1
+    assert counters(out["store"])[("account", A["id"])] == (1, 3)
+
+
+def test_the_candidates_start_makes_the_charge_final():
+    steps = enqueued("started", attempts=1, started=1)
+    out = run(*steps, finish(steps[0]), job_started(), job_ended("worker-lost"))
+    assert out["store"]["leases"] == []
+    assert out["results"][-1] == 0
+    assert counters(out["store"])[("account", A["id"])] == (1, 3)
+    (command,) = out["store"]["commands"]
+    assert command["state"] == "failed_infrastructure"
+
+
+@pytest.mark.parametrize(
+    "outcome, state",
+    [("canceled", "completed"), ("definition-invalid", "completed"), ("infrastructure-degraded", "failed_infrastructure"),
+     ("worker-lost", "failed_infrastructure")],
+)
+def test_a_job_that_ends_before_its_candidate_starts_gives_its_wall_seconds_back(outcome, state):
+    steps = enqueued("queued")
+    out = run(*steps, finish(steps[0]), job_ended(outcome))
+    assert out["results"][-1] == 3
+    assert out["store"]["leases"] == []
+    # The request stays counted; only its wall seconds come back.
+    assert counters(out["store"]) == {("account", A["id"]): (1, 0), ("deployment", ""): (1, 0)}
+    (command,) = out["store"]["commands"]
+    assert command["state"] == state and command["wall_seconds"] == 0
+
+
+def test_an_uncounted_charge_has_nothing_to_give_back():
+    steps = enqueued("queued", quota="off")
+    out = run(*steps, finish(steps[0]), job_ended("canceled"))
+    assert out["results"][-1] == 0 and out["store"]["leases"] == [] and counters(out["store"]) == {}
+
+
+def test_a_retry_that_ran_nothing_new_gives_its_wall_seconds_back():
+    # The retry was admitted, then refused before it enqueued: its job
+    # still shows the loss, so this request ran nothing.
+    steps = enqueued("failed", "worker-lost", attempts=1, started=1)
+    retry = admit(key=K1, now=T0 + 5)
+    out = run(*steps, job_started(), job_ended("worker-lost"), retry, finish(retry, "denied", now=T0 + 6))
+    assert out["results"][-1]["body"]["refunded_wall_seconds"] == 3
+    assert out["store"]["leases"] == []
+    assert counters(out["store"])[("account", A["id"])] == (1, 3)
+    (command,) = out["store"]["commands"]
+    assert command["state"] == "failed_infrastructure"
+
+
+def test_the_start_and_end_of_another_job_change_nothing():
+    steps = enqueued("queued")
+    other_job = "job000000000099"
+    out = run(*steps, finish(steps[0]),
+              {"call": "jobStarted", "account": A, "command_id": K1, "job": other_job},
+              {"call": "jobEnded", "account": A, "command_id": K1, "job": other_job, "outcome_class": "canceled"})
+    assert out["results"][-1] == 0 and len(out["store"]["leases"]) == 1
+    assert out["store"]["commands"][0]["state"] == "in_flight"
+
+
+def test_a_jobs_command_and_its_charge_outlive_the_sweep_and_the_24_hours():
+    steps = enqueued("queued")
+    later = T0 + 25 * HOUR
+    out = run(*steps, finish(steps[0]), {"call": "sweep", "now": later}, admit(key=K1, now=later))
+    (command,) = out["store"]["commands"]
+    assert command["state"] == "in_flight" and command["job"] == JOB
+    assert len(out["store"]["leases"]) == 1
+    assert out["results"][-1]["idempotency"] == "job"
+    # A command with no job still goes at its 24 hours.
+    plain = admit(key=K2)
+    out = run(plain, finish(plain), {"call": "sweep", "now": later})
+    assert out["store"]["commands"] == [] and out["store"]["leases"] == []

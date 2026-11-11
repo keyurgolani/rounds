@@ -111,13 +111,13 @@ function handle(step) {
   const env = Object.assign({ ROUNDS_GATE_EXECUTION_STORE: "on" }, step.env || {});
   globalThis.$os = { getenv: (key) => (key in env ? env[key] : "") };
   let reached = false;
+  const reach = () => {
+    reached = true;
+    throw new Error("reached the store");
+  };
   globalThis.$app = {
-    dao: () => ({
-      runInTransaction: () => {
-        reached = true;
-        throw new Error("reached the transaction");
-      },
-    }),
+    // status reads outside a transaction, so a read counts too (PR 2).
+    dao: () => ({ runInTransaction: reach, findRecordsByFilter: reach, findCollectionByNameOrId: reach }),
   };
   const who = step.principal || null;
   const authRecord = who === null ? null : {
