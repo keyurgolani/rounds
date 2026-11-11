@@ -351,13 +351,69 @@ version row changed through any of it, and deleting an account deletes its
 snapshots. The scan secret is a per-run test value. Between phases the probe
 keeps only emails and ids, under `harness/.state/`.
 
+## Two-account isolation suite
+
+`ROUNDS-00B-L05` grows this harness into the suite every later isolation
+check lands in, rather than adding a second one. Rows that are one family on
+one collection stay in `probe_families` and each collection's `probes`. Every
+other row is in the policy's `cases` table: runner routes, realtime,
+service logs, the share surfaces, and surfaces that have no server yet. A
+row records its surface, actor, request variant, expected outcome, positive
+control, owner leaf, status, and lane.
+
+- `pass`: the guarantee holds on this revision. `evidence` names the checks
+  that prove it: the row's own id, an existing family or deployment check
+  it maps to instead of repeating it, or `phase:<name>` for a phase whose
+  exit code is the evidence (the launcher fails the run when it fails).
+- `pending`: the leaf that closes it is named, and no probe is committed
+  until that leaf lands it with the fix and flips the row.
+- `slot`: the surface has no server yet. Its owner leaf fills the row when
+  it builds the surface.
+- `quarantined`: a row that flipped without a code change. It names an
+  owner and expires within 14 days. It still runs, and its failure is
+  reported as expected-fail. A pass fails the run until the row is flipped
+  back, so a quarantine never outlives the flake.
+
+The verdict fails on any unregistered failure, a `pending` or `slot` row
+with an implementation or a receipt, a quarantined row that passes, any row
+past its `expires` date, and a run that collected no receipts. Nothing is
+retried. A flake is quarantined with an owner and an expiry, never deleted.
+
+To add a row: write it in `cases` with its positive control, and land its
+probe in the same pull request (or name existing checks as `evidence`). A
+row for a guarantee that isn't enforced yet is `pending` with its closing
+leaf, and carries no probe.
+
+The suite's helpers:
+
+- [`probes/recorder.py`](probes/recorder.py) is a recording proxy the runner
+  can be pointed at instead of PocketBase. For every call it logs the
+  method, the path without its query, the auth class (`superuser`, `user`,
+  `service`, `none`, `malformed`, read from the token's payload only), the
+  status, the length, and keyed pseudonyms of the owners in the response.
+  It never logs a header, token, query, or body. It binds 127.0.0.1 unless
+  `RECORDER_HOST` says otherwise. In the harness it runs on the stack's
+  private network and publishes no port.
+- [`probes/compare.py`](probes/compare.py) decides whether two answers are
+  indistinguishable: status, headers, body, and length, and the upstream
+  call sequence with the probed ids templated. Only the `Date` header,
+  correlation ids, and quoted request ids are set aside. Differences are
+  reported by name, never by value.
+- [`probes/logscan.py`](probes/logscan.py) counts issued session tokens,
+  harness passwords, and registered literals in text logs and in a SQLite
+  log database opened read-only. It reports counts and sources only.
+
 ## Receipts
 
 Each probe appends one JSON line to `harness/.receipts/<project>/receipts.jsonl`
 (generated, git-ignored). A receipt records the run id, commit, verified
-PocketBase binary digest and architecture, migration list, probe id,
-collection, operation, actor, expected and observed status, pass/fail, and
-request time. Receipts carry no record contents and no secrets.
+PocketBase binary digest and architecture, migration list, the policy and
+migration-list checksums, probe id, collection, operation, actor, expected
+and observed status, pass/fail, and request time. Receipts carry no record
+contents and no secrets. The writer redacts every string before it writes a
+line: each account's password and session token and the superuser's become
+case-local labels, and anything shaped like a session token or a harness
+password becomes a fixed label, registered or not.
 
 ## PocketBase image
 

@@ -12,7 +12,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 
@@ -21,6 +21,10 @@ class Response:
     status: int
     body: Any
     elapsed_ms: int
+    # Lower-cased response headers and the raw body length, for comparing
+    # two denials whole (compare.py).
+    headers: dict[str, str] = field(default_factory=dict)
+    length: int = 0
 
 
 class PBClient:
@@ -56,9 +60,11 @@ class PBClient:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 raw = resp.read()
                 status = resp.status
+                resp_headers = {k.lower(): v for k, v in resp.headers.items()}
         except urllib.error.HTTPError as err:
             raw = err.read()
             status = err.code
+            resp_headers = {k.lower(): v for k, v in (err.headers or {}).items()}
         elapsed_ms = int((time.monotonic() - start) * 1000)
         parsed: Any = None
         if raw:
@@ -66,7 +72,7 @@ class PBClient:
                 parsed = json.loads(raw.decode("utf-8"))
             except (ValueError, UnicodeDecodeError):
                 parsed = None
-        return Response(status=status, body=parsed, elapsed_ms=elapsed_ms)
+        return Response(status=status, body=parsed, elapsed_ms=elapsed_ms, headers=resp_headers, length=len(raw))
 
     # -- auth -------------------------------------------------------------
     def wait_healthy(self, attempts: int = 60, delay: float = 1.0) -> None:

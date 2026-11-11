@@ -79,12 +79,14 @@
     },
     {
       "id": "owner-id-create-shape",
-      "closed_by": "ROUNDS-00B-L05",
+      "closed_by": "ROUNDS-00B-L02",
+      "case": "account-scope.create.owner-shape.uniform",
       "note": "a create naming a missing owner and one naming another account are both denied with the same status (account-scope.create.nonexistent-owner.denied); PocketBase checks that the named user exists before the create rule runs, so the error bodies are not compared here"
     },
     {
       "id": "client-chosen-record-id",
-      "closed_by": "ROUNDS-00B-L05",
+      "closed_by": "ROUNDS-00B-L02",
+      "case": "account-scope.create.client-id.uniform",
       "note": "a create may supply its own record id, and PocketBase validates that id before the create rule runs, so the response to a taken id differs from the response to a free one and can tell whether a record with that id exists in any account; the uniform relation denial covers the ids a row points at, not the new row's own id"
     }
   ],
@@ -410,6 +412,254 @@
       "deny_key": "relation_create",
       "guarantee": "a share link create without exactly one target or with a malformed token is rejected with the uniform create denial and writes nothing",
       "resource": "resume_share_links"
+    }
+  },
+  "cases": {
+    "isolation.share-views.client-write.denied": {
+      "surface": "pb:/api/collections/resume_share_views/records",
+      "actor": "authenticated-other",
+      "variant": "foreign_owner",
+      "expected": "uniform_reject",
+      "control": "none:resume_share_views create and update rules are null",
+      "owner_leaf": "ROUNDS-00B-L01",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "account-scope.create.server-only.denied",
+        "account-scope.update.server-only.denied"
+      ],
+      "guarantee": "no client writes a share view row, for its own link or another account's"
+    },
+    "isolation.share-link.owner-only.isolated": {
+      "surface": "pb:/api/collections/resume_share_links/records",
+      "actor": "authenticated-other",
+      "variant": "foreign_owner",
+      "expected": "uniform_not_found",
+      "control": "the owner reads its own link",
+      "owner_leaf": "ROUNDS-00B-L03",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "account-scope.share.owner-only.isolated",
+        "account-scope.update.server-only.denied",
+        "account-scope.create.relation-foreign-or-missing.indistinguishable"
+      ],
+      "guarantee": "a share link reads only for its owner, keeps its target once made, and points only at the owner's own resume or variant"
+    },
+    "isolation.deploy.exposure.denied": {
+      "surface": "nginx:/_/ /api/admins /api/settings /api/backups /api/logs",
+      "actor": "anonymous",
+      "variant": "valid",
+      "expected": "not_routed",
+      "control": "deployment.proxy.records.open",
+      "owner_leaf": "ROUNDS-00A-L01",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "deployment.proxy.admin-ui.denied",
+        "deployment.proxy.admin-api.denied",
+        "deployment.proxy.settings-api.denied",
+        "deployment.proxy.backups-api.denied",
+        "deployment.proxy.logs-api.denied",
+        "deployment.credentials.defaults.rejected",
+        "deployment.credentials.admin-passwords.rejected"
+      ],
+      "guarantee": "the PocketBase admin UI and admin API aren't served at the public URL, and no shipped default login opens an admin account"
+    },
+    "isolation.deploy.share-headers.present": {
+      "surface": "nginx:/r /api/share/by-token",
+      "actor": "anonymous",
+      "variant": "missing_id",
+      "expected": "uniform_not_found",
+      "control": "the share page renders the app page with the same headers",
+      "owner_leaf": "ROUNDS-00B-L03",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "deployment.proxy.share-page.headers",
+        "deployment.proxy.share-read.uniform"
+      ],
+      "guarantee": "every share page path carries the share headers, and a malformed and an unknown share read answer one byte-identical not-found"
+    },
+    "isolation.demo.no-share-or-provider": {
+      "surface": "pb:/api/collections/resume_share_links/records",
+      "actor": "demo",
+      "variant": "valid",
+      "expected": "uniform_reject",
+      "control": "a standard account creates a share link, a provider, and AI settings",
+      "owner_leaf": "ROUNDS-00B-L07",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "phase:demo-on",
+        "phase:demo-off"
+      ],
+      "guarantee": "a demo caller can't create a share link, an AI provider, or AI settings, and no demo account signs in when the demo is off"
+    },
+    "account-scope.create.owner-shape.uniform": {
+      "surface": "pb:/api/collections/{collection}/records",
+      "actor": "authenticated-other",
+      "variant": "foreign_owner",
+      "expected": "uniform_reject",
+      "control": "the caller's own create succeeds",
+      "owner_leaf": "ROUNDS-00B-L02",
+      "status": "pending",
+      "lane": "pr",
+      "guarantee": "a create naming a missing owner and one naming another account answer with the same status and body"
+    },
+    "account-scope.create.client-id.uniform": {
+      "surface": "pb:/api/collections/{collection}/records",
+      "actor": "authenticated-other",
+      "variant": "deleted_id",
+      "expected": "uniform_reject",
+      "control": "the caller's own create without an id succeeds",
+      "owner_leaf": "ROUNDS-00B-L02",
+      "status": "pending",
+      "lane": "pr",
+      "guarantee": "a create that brings its own record id answers alike whether that id is taken or free"
+    },
+    "isolation.share-resolver.not-found.uniform": {
+      "surface": "share:resolver",
+      "actor": "share_bearer",
+      "variant": "missing_id",
+      "expected": "uniform_not_found",
+      "control": "an available capability resolves",
+      "owner_leaf": "ROUNDS-00B-L03",
+      "status": "pending",
+      "lane": "pr",
+      "guarantee": "an unknown, malformed, expired, or revoked capability and the kill switch answer one not-found, with the share headers"
+    },
+    "isolation.share-resolver.password.uniform": {
+      "surface": "share:resolver",
+      "actor": "share_bearer",
+      "variant": "missing_id",
+      "expected": "uniform_not_found",
+      "control": "the right password resolves",
+      "owner_leaf": "ROUNDS-00B-L04",
+      "status": "pending",
+      "lane": "pr",
+      "guarantee": "a wrong or missing password answers like an unknown capability"
+    },
+    "isolation.share-resolver.throttle.independent": {
+      "surface": "share:resolver",
+      "actor": "share_bearer",
+      "variant": "missing_id",
+      "expected": "allow",
+      "control": "requests under the limit are answered",
+      "owner_leaf": "ROUNDS-00B-L04",
+      "status": "pending",
+      "lane": "pr",
+      "guarantee": "throttling answers the same whether or not the capability exists"
+    },
+    "isolation.share-chain.capability-revoked": {
+      "surface": "share:resolver",
+      "actor": "share_bearer",
+      "variant": "deleted_id",
+      "expected": "uniform_not_found",
+      "control": "the capability resolves before it is revoked",
+      "owner_leaf": "ROUNDS-00B-L03",
+      "status": "pending",
+      "lane": "pr",
+      "guarantee": "once the owner revokes a capability, every path that served it answers as an unknown one"
+    },
+    "isolation.share-legacy.replaced": {
+      "surface": "share:legacy",
+      "actor": "share_bearer",
+      "variant": "deleted_id",
+      "expected": "uniform_not_found",
+      "control": "the owner's new link resolves",
+      "owner_leaf": "ROUNDS-00B-L06",
+      "status": "pending",
+      "lane": "pr",
+      "guarantee": "once legacy share links are replaced, a legacy link answers as an unknown one on every path"
+    },
+    "isolation.demo.reset.zero-rows": {
+      "surface": "pb:/api/collections/{collection}/records",
+      "actor": "demo",
+      "variant": "valid",
+      "expected": "allow",
+      "control": "the demo session's rows exist before the reset",
+      "owner_leaf": "ROUNDS-00B-L07",
+      "status": "pending",
+      "lane": "pr",
+      "guarantee": "a demo session's reset leaves no row behind in any collection"
+    },
+    "isolation.slot.sources": {
+      "surface": "runner:sources",
+      "actor": "authenticated-other",
+      "variant": "foreign_owner",
+      "expected": "uniform_not_found",
+      "control": "the owner reads its own source",
+      "owner_leaf": "ROUNDS-10-L01",
+      "status": "slot",
+      "lane": "pr",
+      "guarantee": "another account's source documents and anchors read as missing ones"
+    },
+    "isolation.slot.processing-jobs": {
+      "surface": "runner:processing-jobs",
+      "actor": "authenticated-other",
+      "variant": "foreign_owner",
+      "expected": "uniform_not_found",
+      "control": "the owner reads its own job",
+      "owner_leaf": "ROUNDS-10-L02",
+      "status": "slot",
+      "lane": "pr",
+      "guarantee": "another account's processing jobs read as missing ones"
+    },
+    "isolation.slot.renderer-caches": {
+      "surface": "runner:render",
+      "actor": "authenticated-other",
+      "variant": "foreign_owner",
+      "expected": "uniform_not_found",
+      "control": "the owner's own render",
+      "owner_leaf": "ROUNDS-00A-L06",
+      "status": "slot",
+      "lane": "pr",
+      "guarantee": "no render reuses another account's cached output or state"
+    },
+    "isolation.slot.search": {
+      "surface": "runner:search",
+      "actor": "authenticated-other",
+      "variant": "filter_oracle",
+      "expected": "allow",
+      "control": "the owner finds its own record",
+      "owner_leaf": "ROUNDS-31-L08",
+      "status": "slot",
+      "lane": "pr",
+      "guarantee": "search returns, counts, and ranks only the caller's own records"
+    },
+    "isolation.slot.merges": {
+      "surface": "runner:merges",
+      "actor": "authenticated-other",
+      "variant": "foreign_relation",
+      "expected": "uniform_reject",
+      "control": "the owner merges two of its own records",
+      "owner_leaf": "ROUNDS-04-L03",
+      "status": "slot",
+      "lane": "pr",
+      "guarantee": "a merge, redirect, or tombstone never names another account's record"
+    },
+    "isolation.slot.account-export": {
+      "surface": "runner:export",
+      "actor": "authenticated-other",
+      "variant": "foreign_owner",
+      "expected": "uniform_not_found",
+      "control": "the owner exports its own account",
+      "owner_leaf": "ROUNDS-18-L03",
+      "status": "slot",
+      "lane": "pr",
+      "guarantee": "an account export holds only the caller's own records"
+    },
+    "isolation.slot.artifact-revision-shares": {
+      "surface": "share:artifact-revisions",
+      "actor": "share_bearer",
+      "variant": "foreign_owner",
+      "expected": "uniform_not_found",
+      "control": "the owner's own shared revision resolves",
+      "owner_leaf": "ROUNDS-18-L05",
+      "status": "slot",
+      "lane": "pr",
+      "guarantee": "a share exposes one immutable artifact revision and nothing else of the account"
     }
   },
   "collections": {
