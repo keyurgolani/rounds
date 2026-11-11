@@ -298,8 +298,7 @@ function syncResolverForLogin(e) {
 }
 
 // routerUse, on every request: a share_resolvers record gets 403 everywhere
-// but RESOLVER_ROUTES, so it reads and writes nothing else, whatever the
-// collection rules would let a signed-in record do.
+// but RESOLVER_ROUTES, so it reads and writes nothing else.
 function guardResolverRequest(c) {
   const record = $apis.requestInfo(c).authRecord;
   if (!record || record.collection().name !== COLLECTION) return;

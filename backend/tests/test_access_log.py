@@ -88,7 +88,7 @@ def _app() -> FastAPI:
     app = FastAPI()
 
     @app.get("/api/share/by-token/{token}")
-    def older_read(token: str):
+    def read(token: str):
         return {"ok": True}
 
     @app.post("/api/share/resolve")
