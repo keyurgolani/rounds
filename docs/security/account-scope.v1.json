@@ -527,7 +527,7 @@
       "owner_leaf": "ROUNDS-00B-L03",
       "status": "pending",
       "lane": "pr",
-      "guarantee": "an unknown, malformed, expired, or revoked capability and the kill switch answer one not-found, with the share headers"
+      "guarantee": "whatever stops a capability from resolving, the answer is one not-found carrying the share headers"
     },
     "isolation.share-resolver.password.uniform": {
       "surface": "share:resolver",
@@ -538,7 +538,7 @@
       "owner_leaf": "ROUNDS-00B-L04",
       "status": "pending",
       "lane": "pr",
-      "guarantee": "a wrong or missing password answers like an unknown capability"
+      "guarantee": "a password mismatch answers exactly as an unknown capability does"
     },
     "isolation.share-resolver.throttle.independent": {
       "surface": "share:resolver",
@@ -659,7 +659,7 @@
       "owner_leaf": "ROUNDS-18-L05",
       "status": "slot",
       "lane": "pr",
-      "guarantee": "a share exposes one immutable artifact revision and nothing else of the account"
+      "guarantee": "a shared revision reads on its own, with no other record of the account"
     }
   },
   "collections": {
