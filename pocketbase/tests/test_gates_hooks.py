@@ -83,9 +83,25 @@ def test_boot_logs_every_pocketbase_gate_in_one_line():
         "gates": {
             "EXECUTION_STORE": {"value": "off", "source": "default"},
             "SIGNUPS": {"value": "disabled", "source": "alias"},
+            "DEMO": {"value": "disabled", "source": "default"},
         },
     }
     assert result["errors"] == []
+
+
+@pytest.mark.parametrize(
+    "env, logged",
+    [
+        ({"ROUNDS_ENABLE_DEMO": "true"}, {"value": "enabled", "source": "alias"}),
+        ({"ROUNDS_GATE_DEMO": "enabled"}, {"value": "enabled", "source": "env"}),
+        ({"ROUNDS_GATE_DEMO": "disabled", "ROUNDS_ENABLE_DEMO": "true"}, {"value": "disabled", "source": "env"}),
+        ({"ROUNDS_GATE_DEMO": "on"}, {"value": "disabled", "source": "invalid"}),
+    ],
+)
+def test_boot_logs_the_demo_gate(env, logged):
+    # ROUNDS-00B-L07: off by default; ROUNDS_ENABLE_DEMO is its alias.
+    (line,) = _run("gates.pb.js", env)["logs"]
+    assert json.loads(line)["gates"]["DEMO"] == logged
 
 
 def test_boot_flags_an_invalid_gate_without_its_raw_value():
