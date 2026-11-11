@@ -23,9 +23,10 @@ const RUNNER_TARGET = process.env.VITE_API_PROXY_TARGET || 'http://runner:8000';
 const POCKETBASE_TARGET = process.env.VITE_POCKETBASE_PROXY_TARGET || 'http://pocketbase:8090';
 
 // PocketBase's admin UI, the admission and execution hook routes, the
-// execution service record's routes, the legacy snapshot hook and the
-// share capability hooks, which only the runner calls, the admin APIs,
-// and collection metadata (nginx.conf, "Never proxied"). The collection
+// execution service and share resolver records' routes, the legacy
+// snapshot hook and the share capability hooks, which only the runner
+// calls, the admin APIs, and collection metadata (nginx.conf, "Never
+// proxied"). The collection
 // paths and the two hooks match in any case, as their nginx locations do
 // (~*), and a collection segment outside the name alphabet, which no
 // collection name or id uses, is refused too.
@@ -36,6 +37,7 @@ const NEVER_PROXIED: RegExp[] = [
   /^\/api\/rounds\/legacy-snapshots/i,
   /^\/api\/rounds\/share/i,
   /^\/api\/collections\/execution_service\//i,
+  /^\/api\/collections\/share_resolvers\//i,
   /^\/api\/collections\/[^/]*[^A-Za-z0-9_/][^/]*(\/|$)/,
   /^\/api\/(admins|settings|backups|logs)(\/|$)/,
   /^\/api\/collections(\/[^/]+)?\/?$/i,

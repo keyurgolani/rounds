@@ -72,11 +72,21 @@ An account reads its own envelopes (orchestrator decision D9). An envelope's `us
 
 #11's stage 2 adds `share_capabilities` in `pocketbase/pb_migrations/1700008200_share_capabilities.js`. Every client rule is `null`, list and view included, so no client reads or writes a row through PocketBase's API. Only `pocketbase/pb_hooks/share_capabilities.js` writes it, and never with the superuser:
 
-1. `create_capability`, a library that #12's create and #14's re-issue call inside their own transaction (rule 2). It checks every argument before any read, and writes nothing for a missing snapshot, another account's, or one that isn't eligible. Nothing calls it until #12 lands.
+1. `create_capability`, a library that #12's create and #14's re-issue call inside their own transaction (rule 2). It checks every argument before any read, and writes nothing for a missing snapshot, another account's, or one that isn't eligible. #12's CreateShare calls it, and #12's rotate calls `rotate_bearer`, the same kind of library, which swaps the digest and raises the version.
 2. The owner's revoke, `POST /api/rounds/share/capabilities/:id/revoke`, a Caller route the runner reaches with the owner's bearer. Revoking a revoked capability writes nothing. `GET /api/rounds/share/capabilities` reads the caller's own rows. nginx and the Vite proxy answer `/api/rounds/share` in any letter case with 404, so a browser reaches neither.
 3. Model hooks that ride on another write. When a resume or a variant goes, the `onModelAfterDelete` hooks registered for `resumes` and `resume_variants` mark the active capabilities over its owner's snapshots of it as revoked, with reason `source_deleted`. PocketBase 0.22 runs them after the delete commits, and they never fail the delete. Before an account goes, the `users` collection's `onModelBeforeDelete` hook removes every capability the account holds, inside the same delete, so the cascade into the account's snapshots can finish. That hook is the only runtime code that hard-deletes a capability; a superuser deleting one in the admin UI is an operator action. A migration runs no model hooks, so one that deletes an account deletes its capabilities first.
 
 `onModelBeforeCreate` and `onModelBeforeUpdate` hold every writer, a superuser and a hook included, to the store's rules. A capability names a snapshot of its own account with the checksum it was made over. After create, only these change: the version rises; the digest changes along with a version raise; the expiry moves earlier; and an active capability becomes revoked, which is final. A snapshot a capability names can't be deleted, because the reference is required and doesn't cascade. A snapshot names its source as plain text, so deleting a shared resume or variant never reaches it: the delete finishes, and the snapshot stays until the account is deleted (#76 purges later). `lookup_capability`, which #12's lookup route calls, only reads.
+
+## Share Secrets
+
+#12 adds `share_resolvers` and `share_throttle` in `pocketbase/pb_migrations/1700008300_share_secrets.js`, every rule `null` on both, and a nullable `share_snapshot_command` on `admission_commands`. `pocketbase/pb_hooks/share_secrets.js` writes them, and #12's admission rows, never with the superuser:
+
+1. CreateShare's and RotateShareBearer's routes under `/api/rounds/share/`, Caller routes the runner reaches with the owner's bearer and `ROUNDS_ADMISSION_SECRET`. `POST commands` records the command's `admission_commands` row (`share_create` or `share_rotate`) through `admission.js`'s `beginCommand`, with the key a create's snapshot call runs under. `POST capabilities` and `POST capabilities/:id/rotate` each run one transaction that checks the row, calls `create_capability` or `rotate_bearer`, and completes the row with the result a retry replays: the capability's fields, never its secret, digest, or verifier. A refusal keeps nothing.
+2. The lookup, `POST /api/rounds/share/lookup`, which only `share-resolver` may call: one transaction counts the resolve in `share_throttle` and removes up to 100 counters over a day old, then `lookup_capability` reads.
+3. `onAfterBootstrap` and the `share_resolvers` password-login hook, which create `share-resolver` or set its password from `ROUNDS_SHARE_RESOLVER_PASSWORD`, or to a random one without it.
+
+PocketBase refuses the `share-resolver` record on every route but its lookup.
 
 ## Registry of Planned Writers
 
@@ -96,8 +106,9 @@ Each row restates the leaf's current body. The leaf confirms or corrects its row
 | #11 S2 | Library | `create_capability` in `pb_hooks/share_capabilities.js`, which #12's create and #14's re-issue call inside their own transaction | `share_capabilities` | rides on the caller's write |
 | #11 S2 | Caller | the owner's `POST /api/rounds/share/capabilities/:id/revoke` in `pb_hooks/share_capabilities.pb.js`, which only the runner reaches | `share_capabilities` | caller's bearer |
 | #11 S2 | Model hook | `onModelAfterDelete` on `resumes` and `resume_variants`, which revokes; `onModelBeforeDelete` on `users`, which deletes the account's capabilities in the same transaction | `share_capabilities` | rides on the delete |
-| #12 | Caller | `POST /api/rounds/share/capabilities` and `POST /api/rounds/share/capabilities/:id/rotate`, each through `pb_hooks/admission.js` | `share_capabilities`, the `share_secret_state` latch, admission rows | caller's bearer |
-| #12 | Service | `share_resolvers`, one record: `POST /api/rounds/share/lookup` | `share_throttle` | `ROUNDS_SHARE_RESOLVER_PASSWORD` |
+| #12 | Caller | `POST /api/rounds/share/commands`, then `POST /api/rounds/share/capabilities` to create or `POST /api/rounds/share/capabilities/:id/rotate` to rotate, in `pb_hooks/share_secrets.pb.js`, through `pb_hooks/admission.js` and #11's `create_capability` and `rotate_bearer` | `share_capabilities`, and its `admission_commands` rows | caller's bearer and `ROUNDS_ADMISSION_SECRET` |
+| #12 | Service | `share_resolvers`, one record (`share-resolver`): `POST /api/rounds/share/lookup` | `share_throttle` | `ROUNDS_SHARE_RESOLVER_PASSWORD` |
+| #12 | System hook | `onAfterBootstrap` and the `share_resolvers` password-login hook in `pb_hooks/share_secrets.pb.js`, which create `share-resolver` or set its password from the secret, or to a random one without it | `share_resolvers` | `ROUNDS_SHARE_RESOLVER_PASSWORD` |
 | #14 | Migration | M1 | `legacy_share_migration` | none |
 | #22 | Library | `pb_hooks/lib/outbox.js`, which #21's transaction writer calls before commit | `domain_outbox` | rides on #21's write |
 | #22 | Service | `dispatcher_service`: routes under `/api/outbox/` | `outbox_cursors`, `outbox_watermarks`, `outbox_parked`, and the relay lease in `platform_leases` | `ROUNDS_DISPATCHER_SECRET` |

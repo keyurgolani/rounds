@@ -65,6 +65,16 @@ spec:
                   name: rounds-runner-secrets
                   key: ROUNDS_EXECUTION_SECRET
                   optional: true
+            # The share-resolver password the runner logs in with
+            # (runner.yaml, step 5), and only that key of the runner's
+            # secret. Optional: without it nothing can log in as
+            # share-resolver, so no share link resolves.
+            - name: ROUNDS_SHARE_RESOLVER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rounds-runner-secrets
+                  key: ROUNDS_SHARE_RESOLVER_PASSWORD
+                  optional: true
           envFrom:
             # ROUNDS_ADMISSION_SECRET, shared with the runner (runner.yaml,
             # step 3). Optional: without it the admission store's write

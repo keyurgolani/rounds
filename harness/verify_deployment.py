@@ -122,6 +122,10 @@ DENIED_ROUTES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     # Outside the collection name alphabet, which the proxy refuses.
     ("deployment.proxy.execution-service.denied", "/api/collections/execution_servic%C3%A9/auth-with-password",
      ("POST",)),
+    ("deployment.proxy.share-resolvers.denied", "/api/collections/share_resolvers/auth-with-password", ("POST",)),
+    ("deployment.proxy.share-resolvers.denied", "/api/collections/share_resolvers/records", ("GET",)),
+    ("deployment.proxy.share-resolvers.denied", "/api/collections/Share_Resolvers/auth-with-password", ("POST",)),
+    ("deployment.proxy.share-resolvers.denied", "/api/collections/SHARE_RESOLVERS/records", ("GET",)),
     ("deployment.proxy.legacy-snapshot-hook.denied", "/api/rounds/legacy-snapshots", ("GET", "POST")),
     ("deployment.proxy.legacy-snapshot-hook.denied", "/api/rounds/Legacy-Snapshots", ("POST",)),
     ("deployment.proxy.share-hooks.denied", "/api/rounds/share/capabilities", ("GET", "POST")),
@@ -140,6 +144,8 @@ CHECKS: dict[str, str] = {
     "deployment.proxy.admission-hooks.denied": "the admission hook routes are not reachable at the public URL",
     "deployment.proxy.execution-hooks.denied": "the execution job store's hook routes are not reachable at the public URL",
     "deployment.proxy.execution-service.denied": "the execution service record, its login included, is not reachable at the public URL",
+    "deployment.proxy.share-resolvers.denied":
+        "the share resolver record, its login included, is not reachable at the public URL",
     "deployment.proxy.legacy-snapshot-hook.denied":
         "the legacy snapshot hook, which only the runner calls, is not reachable at the public URL",
     "deployment.proxy.execute.gone": "/api/execute no longer reaches a code runner",

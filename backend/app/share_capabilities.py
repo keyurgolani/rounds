@@ -16,16 +16,17 @@ a response.
 The resolver answers ``{"projection_version": 1, "markup"}`` or the uniform
 not-found, both with the resolver headers. Before any lookup, in order: the
 PUBLIC_SHARES switch, the SHARE_CAPABILITY_RESOLUTION gate (closed by
-default), and the request's shape, a JSON object holding exactly one
-string, ``token``, in the bearer format, within 1 KiB. Then one lookup.
-Every failure, the store being down included, gets the same bytes.
-The lookup has no implementation until #12 (ROUNDS-00B-L04) brings the
-digest and its service identity, so until then even an open gate resolves
-nothing.
+default), and the request's shape, a JSON object holding a string,
+``token``, in the bearer format, and at most a ``password`` string beside
+it, within 2 KiB. Then one lookup (app/share_resolver.py, ROUNDS-00B-L04):
+the throttle, the capability by the bearer's digest, and one verify for a
+submitted password. A throttled client gets 429 with Retry-After, whether
+or not its bearer is live. Every other failure, a missing or wrong password
+and the store being down included, gets the same bytes.
 
 A log line holds the capability id when one resolves and an outcome code.
-It holds no token, address, owner, or content; owner events name the
-account by its pseudonym.
+It holds no token, password, address, owner, or content; owner events name
+the account by its pseudonym.
 """
 from __future__ import annotations
 
@@ -40,7 +41,7 @@ import httpx
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from app import admission, gates, obs
+from app import admission, client_ip, gates, obs
 from app.errors import TypedError
 from app.pb_auth import POCKETBASE_URL
 
@@ -54,10 +55,15 @@ RESOLVE_ROUTE = "/api/share/resolve"
 # The bearer format #12 issues (ROUNDS-00B-L04): a key version, then 22
 # URL-safe characters.
 TOKEN_RE = re.compile(r"sd[0-9]{1,3}_[A-Za-z0-9_-]{22}")
-MAX_RESOLVE_BODY = 1024
+# Room for a 128-character password however its client escapes it.
+MAX_RESOLVE_BODY = 2048
 RECORD_ID = re.compile(r"[a-z0-9]{15}")
 # What an owner sees of a capability; nothing else leaves these routes.
-OWNER_FIELDS = ("id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at")
+# #12 (ROUNDS-00B-L04) adds the version Rotate expects and whether a
+# password protects the link, never the verifier.
+OWNER_FIELDS = ("id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at",
+                "capability_version", "password_set")
+_TEXT_FIELDS = OWNER_FIELDS[:7]
 STATUSES = ("active", "revoked")
 
 # The headers every public share read answers with, found or not: no
@@ -71,6 +77,8 @@ RESOLVER_HEADERS: dict[str, str] = {
     "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
 }
 NOT_FOUND_BODY = {"detail": "Not found."}
+# A throttled resolve, whatever the bearer: with Retry-After.
+THROTTLED_BODY = {"detail": "Too many attempts."}
 
 
 # ---------------------------------------------------------------------------
@@ -111,15 +119,33 @@ class LookupUnavailable(Exception):
     """The lookup couldn't run; the resolver answers it as degraded."""
 
 
-async def _no_lookup(token: str) -> Found | None:
-    # TODO(ROUNDS-00B-L04): #12 makes the bearer's digest, signs in as its
-    # service identity, and calls its lookup route under /api/rounds/share,
-    # which calls lookup_capability. Until then nothing resolves.
-    raise LookupUnavailable("capability lookup arrives with ROUNDS-00B-L04")
+class Refused(Exception):
+    """A live capability the request can't open: no password for one that
+    has one, or a wrong one. The same not-found, logged by its code."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
 
 
-# The one lookup the resolver makes for a well-formed request. Tests swap it.
-lookup: Callable[[str], Awaitable[Found | None]] = _no_lookup
+class Throttled(Exception):
+    """A counter is over its limit, checked before any lookup."""
+
+    def __init__(self, retry_after: int) -> None:
+        super().__init__(retry_after)
+        self.retry_after = retry_after
+
+
+async def _resolver_lookup(token: str, password: str | None, address: str | None) -> Found | None:
+    # app.share_resolver imports this module for the names above.
+    from app import share_resolver
+
+    return await share_resolver.lookup(token, password, address)
+
+
+# The one lookup the resolver makes for a well-formed request: the bearer,
+# any submitted password, and the client's address. Tests swap it.
+lookup: Callable[[str, str | None, str | None], Awaitable[Found | None]] = _resolver_lookup
 
 
 class _Miss(Exception):
@@ -132,8 +158,8 @@ def _log_resolve(code: str, record: str | None = None) -> None:
     obs.emit("share.resolve", correlation_id=obs.current_correlation_id(), record=record, code=code)
 
 
-async def _token_of(request: Request) -> str | None:
-    """The request's token, or None for anything else."""
+async def _ask_of(request: Request) -> tuple[str, str | None] | None:
+    """The request's token and any password, or None for anything else."""
     media = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     if media != "application/json":
         return None
@@ -146,12 +172,20 @@ async def _token_of(request: Request) -> str | None:
         doc = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
         return None
-    if not isinstance(doc, dict) or set(doc) != {"token"}:
+    if not isinstance(doc, dict) or "token" not in doc or not set(doc) <= {"token", "password"}:
         return None
-    token = doc["token"]
+    token, password = doc["token"], doc.get("password")
     if not isinstance(token, str) or TOKEN_RE.fullmatch(token) is None:
         return None
-    return token
+    if password is not None and not isinstance(password, str):
+        return None
+    return token, password
+
+
+def _address(request: Request) -> str | None:
+    """The client's address, as the throttle counts it (app/client_ip.py)."""
+    peer = request.client.host if request.client is not None else None
+    return client_ip.client_address(peer, request.scope.get("headers") or [])
 
 
 async def resolve(request: Request) -> JSONResponse:
@@ -161,17 +195,21 @@ async def resolve(request: Request) -> JSONResponse:
             raise _Miss("kill_switch")
         if not resolution_open():
             raise _Miss("gate_closed")
-        token = await _token_of(request)
-        if token is None:
+        ask = await _ask_of(request)
+        if ask is None:
             raise _Miss("not_found")
-        found = await lookup(token)
+        found = await lookup(ask[0], ask[1], _address(request))
         if found is None:
             raise _Miss("not_found")
         if not isinstance(found.markup, str) or not found.markup:
             raise LookupUnavailable("lookup answered without markup")
-    except _Miss as miss:
+    except (_Miss, Refused) as miss:
         _log_resolve(miss.code)
         return resolver_response(404, NOT_FOUND_BODY)
+    except Throttled as throttled:
+        _log_resolve("throttled")
+        wait = throttled.retry_after if isinstance(throttled.retry_after, int) and throttled.retry_after > 0 else 60
+        return JSONResponse(THROTTLED_BODY, status_code=429, headers={**RESOLVER_HEADERS, "Retry-After": str(wait)})
     except Exception:  # noqa: BLE001 - a store or lookup failure is the same not-found
         _log_resolve("degraded")
         return resolver_response(404, NOT_FOUND_BODY)
@@ -185,16 +223,20 @@ async def resolve(request: Request) -> JSONResponse:
 # ---------------------------------------------------------------------------
 
 
-def owner_view(item: Any) -> dict[str, str] | None:
+def owner_view(item: Any) -> dict[str, Any] | None:
     """The owner's fields of one capability, or None for any other shape."""
     if not isinstance(item, dict):
         return None
-    out: dict[str, str] = {}
-    for key in OWNER_FIELDS:
+    out: dict[str, Any] = {}
+    for key in _TEXT_FIELDS:
         value = item.get(key, "")
         if not isinstance(value, str):
             return None
         out[key] = value
+    version, password_set = item.get("capability_version"), item.get("password_set")
+    if not isinstance(version, int) or isinstance(version, bool) or version < 1 or not isinstance(password_set, bool):
+        return None
+    out["capability_version"], out["password_set"] = version, password_set
     if RECORD_ID.fullmatch(out["id"]) is None or out["status"] not in STATUSES:
         return None
     return out
@@ -233,7 +275,7 @@ def _unavailable(status: int) -> TypedError:
     return TypedError("shares_unavailable")
 
 
-async def list_own(request: Request) -> list[dict[str, str]]:
+async def list_own(request: Request) -> list[dict[str, Any]]:
     """The caller's capabilities, newest first, the owner's fields only."""
     account = await _authenticate(request)
     status, body = await _hook("GET", HOOK_PATH, account["token"])
@@ -247,7 +289,7 @@ async def list_own(request: Request) -> list[dict[str, str]]:
     return items  # type: ignore[return-value]
 
 
-async def revoke(request: Request, capability_id: str) -> dict[str, str]:
+async def revoke(request: Request, capability_id: str) -> dict[str, Any]:
     """Revoke one of the caller's capabilities; revoking it again answers the
     same. Another account's, a missing one, and a malformed id get one 404."""
     account = await _authenticate(request)

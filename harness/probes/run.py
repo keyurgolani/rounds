@@ -589,7 +589,7 @@ def main() -> int:
               "execution-store|execution-runners|execution-unready|execution-ready-again|execution-disabled|"
               "execution-migration|json-limits|demo-on|demo-off|demo-contain-migration|snapshot-create|"
               "snapshot-create-down|snapshot-create-retry|snapshot-scan|snapshot-create-off|snapshot-create-again|"
-              "share-capabilities}",
+              "share-capabilities|share-secrets|share-secrets-down|share-secrets-scan}",
               file=sys.stderr)
         return 2
     phase = sys.argv[1]
@@ -655,6 +655,14 @@ def main() -> int:
         return run_verdict(doc, receipts_path, admission_check_ids())
 
     writer = new_writer(receipts_path, phase)
+    if phase.startswith("share-secrets"):
+        # ROUNDS-00B-L04: its case rows' receipts, and an exit code for the rest.
+        import share_secrets_check
+
+        if phase not in share_secrets_check.PHASES:
+            print(f"unknown phase {phase!r}", file=sys.stderr)
+            return 2
+        return share_secrets_check.main(phase, writer)
     if phase == "main":
         run_main(doc, writer)
     elif phase == "hook":

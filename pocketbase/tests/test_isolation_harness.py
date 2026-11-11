@@ -173,6 +173,16 @@ def test_load_rejects_a_bad_pass_row(tmp_path, change, message):
         load(tmp_path, doc_with({"isolation.case.one": case(**change)}))
 
 
+def test_load_takes_absent_for_a_value_that_must_never_appear(tmp_path):
+    # ROUNDS-00B-L04's log rows: the row's value is absent where it looks.
+    doc = load(tmp_path, doc_with({"isolation.case.one": case(surface="logs:share-secrets", expected="absent")}))
+    assert doc["cases"]["isolation.case.one"]["expected"] == "absent"
+    assert verdict(tmp_path, doc, baseline() + [rcpt("isolation.case.one", collection="logs:share")]) == 0
+    assert verdict(tmp_path, doc, baseline() + [rcpt("isolation.case.one", False, "logs:share")]) == 1
+    with pytest.raises(policy.PolicyError, match="unknown expected outcome"):
+        load(tmp_path, doc_with({"isolation.case.one": case(expected="absent_or_not")}))
+
+
 def test_load_rejects_a_pending_row_with_evidence_or_without_another_leaf(tmp_path):
     with pytest.raises(policy.PolicyError, match="must carry no evidence"):
         load(tmp_path, doc_with({"isolation.case.one": case("pending", evidence=["x"])}))

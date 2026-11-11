@@ -443,6 +443,54 @@ function completeCommand(store, account, commandId, operation, result) {
   return true;
 }
 
+// For a leaf whose hooks record its command before the work and complete it
+// in the same transaction as its write, with no lease: the write's
+// transaction is the guard (ROUNDS-00B-L04's share commands). The
+// account's command under this key, recorded as in flight when there's none
+// or only an expired one:
+//   { verdict: "new", command }     recorded now
+//   { verdict: "retry", command }   in flight, retryable, or failed; the work runs again
+//   { verdict: "replay", result }   completed for the same operation and request
+//   { verdict: "mismatch" }         the key belongs to another operation or request
+// Any field of the caller's own on the row (command._record) is the caller's
+// to set, as execution.js sets `job`.
+function beginCommand(store, account, commandId, operation, fingerprint, now) {
+  let existing = store.findCommand(account.id, commandId);
+  if (existing !== null && existing.expires_at <= now) {
+    store.deleteCommand(existing);
+    existing = null;
+  }
+  if (existing === null) {
+    const command = store.saveCommand({
+      id: "",
+      account: account.id,
+      command_id: commandId,
+      operation,
+      fingerprint,
+      state: "in_flight",
+      wall_seconds: 0,
+      result: null,
+      expires_at: now + COMMAND_TTL_S,
+    });
+    return { verdict: "new", command };
+  }
+  if (existing.operation !== operation || existing.fingerprint !== fingerprint) return { verdict: "mismatch" };
+  if (existing.state === "completed") return { verdict: "replay", result: existing.result };
+  return { verdict: "retry", command: existing };
+}
+
+// Completes a command beginCommand returned, inside the caller's
+// transaction, with the result a replay answers. False, and nothing
+// written, for a result that can't be kept.
+function completeBegunCommand(store, command, result) {
+  const kept = storable(result);
+  if (kept === null) return false;
+  command.state = "completed";
+  command.result = kept;
+  store.saveCommand(command);
+  return true;
+}
+
 // The account's use this hour, for the dependency check.
 function usage(store, account, now) {
   const hour = hourOf(now);
@@ -738,6 +786,8 @@ module.exports = {
   finish,
   completedResult,
   completeCommand,
+  beginCommand,
+  completeBegunCommand,
   usage,
   sweep,
   pbStore,

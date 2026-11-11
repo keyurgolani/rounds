@@ -62,7 +62,9 @@ def load(path: str) -> dict[str, Any]:
 # in `evidence` instead of repeating it.
 CASE_STATUSES = ("pass", "pending", "quarantined", "slot")
 CASE_SURFACES = ("pb:", "realtime:", "runner:", "share:", "nginx:", "logs:")
-CASE_EXPECTED = ("allow", "uniform_not_found", "uniform_reject", "unauthenticated", "not_routed")
+# `absent`: the row's value never appears where the row looks, such as a
+# share secret in a service log (ROUNDS-00B-L04).
+CASE_EXPECTED = ("allow", "uniform_not_found", "uniform_reject", "unauthenticated", "not_routed", "absent")
 CASE_LANES = ("pr",)
 CASE_LEAF = "ROUNDS-00B-L05"
 # A phase whose own exit code is the evidence (the launcher fails the run when
