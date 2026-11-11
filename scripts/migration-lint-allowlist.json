@@ -8,7 +8,7 @@
       "sha256": "3d216da6bf583e9d34f0abc0c8978fca202e5627b61985feed6a83dad7e8234a",
       "issue": "#2",
       "reason": "Annotates each presentation row with its definition version and records a definition_migration_journal row; it adds columns and a journal and deletes no row. Touched rows and dispositions are in the manifest.",
-      "reviewed_by": "pending owner review",
+      "reviewed_by": "keyurgolani, 2026-11-11",
       "manifest": "pocketbase/migration-manifests/1700006200_definitions_expand.json"
     },
     {
@@ -26,7 +26,7 @@
       "sha256": "b5fe69c335629cce6f9fc83cc6045ddd1861e0257e63c737c42c08f7594e0bbb",
       "issue": "#177",
       "reason": "Demo containment, stage 1 of manifest demo-contain-v1: deletes the resume share links (and with them their views), AI settings, and AI providers that accounts with users.is_demo own, except that a demo provider another account's AI settings point at keeps its row with its stored key cleared, and writes no row a standard account owns. Forward-only; the owner approves the drops.",
-      "reviewed_by": "pending owner review",
+      "reviewed_by": "keyurgolani, 2026-11-11",
       "manifest": "pocketbase/migration-manifests/demo-contain-v1.json"
     }
   ]
