@@ -45,8 +45,15 @@ function isSuperuser(httpContext) {
   return Boolean(httpContext && $apis.requestInfo(httpContext).admin);
 }
 
+// One log line per denial: what was refused and where, never an id, an
+// email, or a value.
+function logDenied(code, on, collection) {
+  console.log(JSON.stringify({ v: "obs/v1", event: "demo_denied", service: "pocketbase", code, on, collection }));
+}
+
 // 403 demo_not_permitted, in PocketBase's error shape.
-function notPermitted() {
+function notPermitted(on, collection) {
+  logDenied(NOT_PERMITTED, on, collection);
   return new ForbiddenError(NOT_PERMITTED_MESSAGE, { demo: new ValidationError(NOT_PERMITTED, NOT_PERMITTED_MESSAGE) });
 }
 
@@ -82,7 +89,10 @@ function lockAll(dao, env) {
 // 2. With the demo off, a demo account's sign-in fails as a wrong password
 // does, whatever the password.
 function guardSignIn(e, env) {
-  if (e.record && isDemo(e.record) && !enabled(env)) throw new BadRequestError(SIGN_IN_FAILED);
+  if (e.record && isDemo(e.record) && !enabled(env)) {
+    logDenied("demo_off", "sign_in", "users");
+    throw new BadRequestError(SIGN_IN_FAILED);
+  }
 }
 
 // 3. A demo caller changes its own name, bio, target, and avatar, and
@@ -92,16 +102,16 @@ function guardAccountUpdate(e) {
   if (isSuperuser(e.httpContext) || !isDemo(e.record.originalCopy())) return;
   const data = $apis.requestInfo(e.httpContext).data || {};
   const keys = Object.keys(data).concat(Object.keys(e.uploadedFiles || {}));
-  if (keys.some((key) => PROFILE_FIELDS.indexOf(key.replace(/[+-]$/, "")) < 0)) throw notPermitted();
+  if (keys.some((key) => PROFILE_FIELDS.indexOf(key.replace(/[+-]$/, "")) < 0)) throw notPermitted("update", "users");
 }
 
 // 3. A demo caller can't delete its account or change its email.
 function guardAccountDelete(e) {
-  if (!isSuperuser(e.httpContext) && isDemo(e.record)) throw notPermitted();
+  if (!isSuperuser(e.httpContext) && isDemo(e.record)) throw notPermitted("delete", "users");
 }
 
 function guardEmailChange(e) {
-  if (isDemo(e.record)) throw notPermitted();
+  if (isDemo(e.record)) throw notPermitted("email_change", "users");
 }
 
 // The account a contained row belongs to: its user, or its provider's.
@@ -112,6 +122,14 @@ function ownerOf(dao, record) {
   if (!provider) return "";
   try {
     return dao.findRecordById("ai_providers", provider).getString("user");
+  } catch (_) {
+    return "";
+  }
+}
+
+function collectionOf(record) {
+  try {
+    return record.tableName();
   } catch (_) {
     return "";
   }
@@ -131,13 +149,17 @@ function demoOwned(dao, record) {
 // gets 403, a superuser's included, and so does a row it already owns.
 function guardContainedRequest(e) {
   const dao = $app.dao();
-  if (demoOwned(dao, e.record) || demoOwned(dao, e.record.originalCopy())) throw notPermitted();
+  if (demoOwned(dao, e.record) || demoOwned(dao, e.record.originalCopy())) {
+    throw notPermitted("save", collectionOf(e.record));
+  }
 }
 
 // 4. The same for every other writer: a server hook, a migration, or the
 // runner, whichever token it holds.
 function guardContainedModel(e) {
-  if (demoOwned(e.dao, e.model)) throw new Error(NOT_PERMITTED);
+  if (!demoOwned(e.dao, e.model)) return;
+  logDenied(NOT_PERMITTED, "model_save", collectionOf(e.model));
+  throw new Error(NOT_PERMITTED);
 }
 
 module.exports = {

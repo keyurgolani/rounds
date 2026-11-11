@@ -34,12 +34,16 @@ globalThis.ValidationError = class ValidationError { constructor(code, message) 
 globalThis.$apis = { requestInfo: (ctx) => ctx.info };
 let draws = 0;
 globalThis.$security = { randomString: (n) => { draws += 1; return ("r" + draws).padEnd(n, "x"); } };
+// What the hooks log, for the "logged" step.
+const logs = [];
+console.log = (line) => { logs.push(JSON.parse(line)); };
 const demo = require(path.join(hooksDir, "demo.js"));
 
 function record(fields, original) {
   const data = Object.assign({ calls: [] }, fields || {});
   return {
     id: data.id || "",
+    tableName: () => data.table || "",
     getBool: (name) => data[name] === true,
     getString: (name) => (typeof data[name] === "string" ? data[name] : ""),
     setPassword: (password) => { data.calls.push("setPassword:" + password.length); },
@@ -89,7 +93,7 @@ function outcome(fn) {
 
 const ctx = (step) => ({ info: { admin: step.superuser ? { id: "admin" } : null, data: step.data || {} } });
 
-const results = JSON.parse(raw).map((step) => {
+function exec(step) {
   const store = db(step);
   globalThis.$app = { dao: () => store.dao };
   switch (step.call) {
@@ -121,11 +125,16 @@ const results = JSON.parse(raw).map((step) => {
       return outcome(() => demo.guardContainedModel({ dao: store.dao, model: record(step.fields) }));
     case "constants":
       return { profile: demo.PROFILE_FIELDS, contained: demo.CONTAINED, chars: demo.PASSWORD_CHARS };
+    case "logged": {
+      logs.length = 0;
+      const result = exec(step.step);
+      return { result, logs: logs.slice() };
+    }
     default:
       throw new Error("unknown call " + step.call);
   }
-});
-process.stdout.write(JSON.stringify(results));
+}
+process.stdout.write(JSON.stringify(JSON.parse(raw).map(exec)));
 """
 
 OFF: dict = {}
@@ -307,6 +316,41 @@ def test_the_constants_are_the_bodys():
                       "ai_provider_models", "ai_settings"],
         "chars": 48,
     }
+
+
+def test_each_denial_logs_one_line_without_an_id_or_a_value():
+    line = {"v": "obs/v1", "event": "demo_denied", "service": "pocketbase"}
+    results = run(
+        {"call": "logged", "step": {"call": "guardSignIn", "env": OFF, "record": DEMO}},
+        {"call": "logged", "step": {"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO,
+                                    "data": {"email": "someone@example.test"}}},
+        {"call": "logged", "step": {"call": "guardAccountDelete", "record": DEMO}},
+        {"call": "logged", "step": {"call": "guardEmailChange", "record": DEMO}},
+        {"call": "logged", "step": {"call": "guardContainedRequest", "users": USERS,
+                                    "fields": {"user": "demo00000000001", "table": "ai_providers"}}},
+        {"call": "logged", "step": {"call": "guardContainedModel", "users": USERS,
+                                    "fields": {"user": "demo00000000001", "table": "ai_settings"}}},
+    )
+    assert [r["logs"] for r in results] == [
+        [dict(line, code="demo_off", on="sign_in", collection="users")],
+        [dict(line, code="demo_not_permitted", on="update", collection="users")],
+        [dict(line, code="demo_not_permitted", on="delete", collection="users")],
+        [dict(line, code="demo_not_permitted", on="email_change", collection="users")],
+        [dict(line, code="demo_not_permitted", on="save", collection="ai_providers")],
+        [dict(line, code="demo_not_permitted", on="model_save", collection="ai_settings")],
+    ]
+    assert "demo00000000001" not in json.dumps(results[4]["logs"] + results[5]["logs"])
+
+
+def test_an_allowed_write_logs_nothing():
+    results = run(
+        {"call": "logged", "step": {"call": "guardSignIn", "env": ON, "record": DEMO}},
+        {"call": "logged", "step": {"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO,
+                                    "data": {"name": "Visitor"}}},
+        {"call": "logged", "step": {"call": "guardContainedModel", "users": USERS,
+                                    "fields": {"user": "user00000000001", "table": "ai_settings"}}},
+    )
+    assert [r["logs"] for r in results] == [[], [], []]
 
 
 # ---- registration --------------------------------------------------------------------------------------
