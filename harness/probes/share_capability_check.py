@@ -20,8 +20,8 @@ replicas and nginx up and signups still on:
   leaves none of its capabilities or snapshots.
 
 The superuser seeds the snapshots and capabilities, through the same model
-hooks and owner triggers every writer meets; nothing creates a capability
-any other way until #12.
+hooks and owner triggers every writer meets. #12's CreateShare, which makes
+them the other way, has its own phase (share_secrets_check.py).
 
 Prints one PASS/FAIL line per check and exits non-zero on any failure.
 """

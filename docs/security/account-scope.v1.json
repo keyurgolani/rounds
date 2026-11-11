@@ -580,8 +580,11 @@
       "expected": "uniform_not_found",
       "control": "the right password resolves",
       "owner_leaf": "ROUNDS-00B-L04",
-      "status": "pending",
+      "status": "pass",
       "lane": "pr",
+      "evidence": [
+        "isolation.share-resolver.password.uniform"
+      ],
       "guarantee": "a password mismatch answers exactly as an unknown capability does"
     },
     "isolation.share-resolver.throttle.independent": {
@@ -591,9 +594,40 @@
       "expected": "allow",
       "control": "requests under the limit are answered",
       "owner_leaf": "ROUNDS-00B-L04",
-      "status": "pending",
+      "status": "pass",
       "lane": "pr",
+      "evidence": [
+        "isolation.share-resolver.throttle.independent"
+      ],
       "guarantee": "throttling answers the same whether or not the capability exists"
+    },
+    "isolation.logs.share-secret.absent": {
+      "surface": "logs:share-secrets",
+      "actor": "share_bearer",
+      "variant": "valid",
+      "expected": "absent",
+      "control": "the same scan finds a value the phase writes to a scratch log on purpose",
+      "owner_leaf": "ROUNDS-00B-L04",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "isolation.logs.share-secret.absent"
+      ],
+      "guarantee": "a share capability's secret and its password never appear in a service log or in pb_data"
+    },
+    "isolation.logs.share-client-address.absent": {
+      "surface": "logs:share-routes",
+      "actor": "anonymous",
+      "variant": "valid",
+      "expected": "absent",
+      "control": "the probe's own address appears in the frontend log for a request outside the share routes",
+      "owner_leaf": "ROUNDS-00B-L04",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "isolation.logs.share-client-address.absent"
+      ],
+      "guarantee": "no service log keeps a full client address for a share capability resolve or its page"
     },
     "isolation.share-chain.capability-revoked": {
       "surface": "share:resolver",

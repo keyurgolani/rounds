@@ -53,6 +53,8 @@ ROUNDS_RUNNER_IMAGE=ghcr.io/keyurgolani/rounds-runner:latest
 | `PB_ADMIN_EMAIL`, `PB_ADMIN_PASSWORD` | see PocketBase admin bootstrap | Used by the runner's share endpoint to obtain a cached admin token so public-share reads can bypass per-user owner rules. |
 | `ROUNDS_ADMISSION_SECRET` | blank; dev compose sets a placeholder | The key the runner sends with every write to the admission store. Set the same value, at least 32 printable characters, on PocketBase and every runner replica. Without it the runner can't reach the store, so admission records `quota_unavailable` in observe mode and answers it in enforce mode. Candidate processes never get it. |
 | `ROUNDS_EXECUTION_SECRET` | blank, with no default in either compose file | The password the runner logs in to the execution job store with, as `execution-worker`. Set the same value, 32 to 72 printable characters with no spaces, on PocketBase and every runner replica before `ROUNDS_GATE_EXECUTION_STORE` is `on`. Without it nothing can log in as `execution-worker`, the runner starts no worker, and `/ready` stays ready. Candidate processes never get it. |
+| `ROUNDS_SHARE_RESOLVER_PASSWORD` | blank, with no default in either compose file | The password the runner logs in with as `share-resolver` to resolve share links. Set the same value, 32 to 72 printable characters with no spaces, on PocketBase and every runner replica before `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` is `enabled`. Without it nothing can log in as `share-resolver`, and every share link answers the uniform not-found. Candidate processes never get it. |
+| `ROUNDS_TRUSTED_PROXY_CIDRS` | blank (loopback and the RFC 1918 ranges) | The proxies whose `X-Real-IP` the share resolver's throttle counts a client by, as comma-separated CIDRs; any other peer counts as the client. `none` trusts no proxy. A value that can't be read trusts none and logs one error. |
 
 Use `*` only for local development. In production, set `CORS_ALLOW_ORIGINS` to your deployed origin, such as `https://rounds.example.com`.
 
@@ -84,9 +86,10 @@ These flags only control whether buttons render. The corresponding providers mus
 | --- | --- | --- | --- |
 | `ROUNDS_GATE_PUBLIC_SHARES` | blank (`enabled`) | runner | `disabled` answers every public share request, the public share read and `POST /api/share/resolve`, with the uniform not-found, before any lookup. |
 | `ROUNDS_DISABLE_PUBLIC_SHARES` | `false` | runner | Alias read while the gate is blank. Any value other than empty, `false`, `0`, `no`, or `off` does the same as `disabled`. |
-| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | blank (`disabled`) | runner | `enabled` lets `POST /api/share/resolve` look a Share Capability up. Until #12 ships the lookup, it resolves nothing either way. |
+| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | blank (`disabled`) | runner, frontend | `enabled` lets `POST /api/share/resolve` look a Share Capability up, makes `POST /api/share` CreateShare, turns rotation on, and switches the share dialog. Disabled, the resolver answers the uniform not-found and `POST /api/share` keeps the earlier create. Set it for the runner and the frontend together. |
+| `ROUNDS_FRONTEND_REAL_IP_FROM` | blank | frontend | Behind a proxy that isn't the public port, such as the k8s ingress controller, that proxy's addresses as comma-separated CIDRs: nginx then takes each client's address from `X-Forwarded-For`. Blank, nginx counts each client by its peer address. An entry that isn't an address or a CIDR stops the container. |
 
-Restart the runner after changing any of the three. See [Public shares](operations.md#public-shares).
+Restart the runner after changing any of the first three, and the frontend after the last two. See [Public shares](operations.md#public-shares).
 
 ## Signup Policy
 
@@ -143,7 +146,7 @@ Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads the
 | `ROUNDS_GATE_EXECUTION_DEFINITIONS` | `legacy`, `enforce`, `disabled` | `legacy` | runner, frontend | `legacy` loads run, evaluate, grade, run-project, and take-home from PocketBase as before; `enforce` takes only requests that name a compiled definition, which the app then sends, and runs only that definition; `disabled` answers 503 `definitions_disabled` on those six routes and keeps every draft. An unknown value closes to `disabled`. Restart the runner and the frontend together when it changes. |
 | `ROUNDS_GATE_EXECUTION_STORE` | `off`, `on` | `off` | runner, PocketBase | yes; `on` serves the execution job store's routes in PocketBase and runs each runner replica's worker and reaper, and `off` answers those routes 503 `store_off` and starts no worker. An unknown value closes to `off`. Set `ROUNDS_EXECUTION_SECRET` first, and restart PocketBase and every runner replica when it changes. Nothing runs through the store yet: #3's later PRs move the execution routes onto it. |
 | `ROUNDS_GATE_PUBLIC_SHARES` | `enabled`, `disabled` | `enabled` | runner | yes; disabled, every public share request answers the uniform not-found ([Public Shares](#public-shares)) |
-| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | `enabled`, `disabled` | `disabled` | runner | yes; disabled, `POST /api/share/resolve` answers the uniform not-found before any lookup. Leave it off until #12 lands |
+| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | `enabled`, `disabled` | `disabled` | runner, frontend | yes; disabled, `POST /api/share/resolve` answers the uniform not-found before any lookup, `POST /api/share` keeps the earlier create, and rotation answers 503 `route_disabled`. Leave it off until the steps in [Public shares](operations.md#public-shares) are done, and restart the runner and the frontend together when it changes |
 
 Each route gate is that route's off switch. Set it to `disabled` and restart the runner, and the route answers 503 `route_disabled` before it reads the request; nothing else changes. [The execution runbook](security/execution-runbook.md) covers flipping and confirming each gate and what each error code means.
 
@@ -181,6 +184,7 @@ PB_ADMIN_PASSWORD=<strong-password>
 AI_KEY_SECRET=<long-random-secret>
 ROUNDS_ADMISSION_SECRET=<another-long-random-secret>
 ROUNDS_EXECUTION_SECRET=<a-third-long-random-secret>
+ROUNDS_SHARE_RESOLVER_PASSWORD=<a-fourth-long-random-secret>
 VITE_POCKETBASE_URL=
 ROUNDS_GATE_SIGNUPS=disabled
 VITE_OAUTH_GOOGLE_ENABLED=false
@@ -196,6 +200,6 @@ The published frontend image generates `/runtime-config.js` at container startup
 - `VITE_DISABLE_SIGNUPS`
 - `VITE_OAUTH_GOOGLE_ENABLED`
 - `VITE_OAUTH_GITHUB_ENABLED`
-- the gates the SPA reads, today `ROUNDS_GATE_SIGNUPS` and `ROUNDS_GATE_EXECUTION_DEFINITIONS`
+- the gates the SPA reads, today `ROUNDS_GATE_SIGNUPS`, `ROUNDS_GATE_EXECUTION_DEFINITIONS`, and `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION`
 
 If you build the frontend outside the provided Docker image, make sure your deployment preserves the same runtime config behavior or sets the matching Vite build-time variables.
