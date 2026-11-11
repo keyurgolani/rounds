@@ -187,7 +187,7 @@ def fixtures() -> list[dict]:
     found = []
     for path in sorted(RD02_DIR.glob("*.json")):
         doc = json.loads(path.read_text())
-        found.append({"name": path.stem, "input": doc["input"], "expect": doc["expect"]})
+        found.append({"name": path.stem, "input": doc["input"], "expect": doc["expected"]})
     return found
 
 

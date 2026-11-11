@@ -52,6 +52,23 @@ def test_the_harness_passes_the_gate_to_pocketbase_and_both_runners():
         assert "ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}" in env, name
 
 
+def test_the_probe_reads_every_rd02_input_and_its_declared_outcome(monkeypatch):
+    monkeypatch.syspath_prepend(str(HARNESS / "probes"))
+    monkeypatch.setenv("RD02_DIR", str(ROOT / "tests" / "conformance" / "rd_02"))
+    import importlib
+
+    probe = importlib.import_module("legacy_snapshot_check")
+    probe = importlib.reload(probe)
+    found = probe.fixtures()
+    assert len(found) == len(list((ROOT / "tests" / "conformance" / "rd_02").glob("*.json"))) > 0
+    for fx in found:
+        assert fx["expect"]["status"] in ("ok", "ineligible"), fx["name"]
+        assert {"template_id", "data"} <= set(fx["input"]), fx["name"]
+    # The phases need one eligible input on the default template to build on.
+    assert any(fx["expect"]["status"] == "ok" and fx["input"].get("template_id") == "modern"
+               and not fx["expect"].get("template_fallback") for fx in found)
+
+
 def test_the_harness_scan_secret_is_one_the_signer_accepts():
     run_sh = (HARNESS / "run.sh").read_text()
     (template,) = re.findall(r'^SCAN_SECRET_V="([^"]+)"', run_sh, re.M)
