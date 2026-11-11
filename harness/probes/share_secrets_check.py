@@ -17,9 +17,10 @@ nginx:
     answer exactly as an unknown bearer does (receipt
     isolation.share-resolver.password.uniform);
   - password tries are limited per client and bearer; 1,000 random
-    well-formed bearers from one client, under three key ids, get the
-    uniform not-found until the client's limit, then 429; once throttled, a live bearer and an unknown
-    one get the same 429 (receipt isolation.share-resolver.throttle.independent);
+    well-formed bearers from one client, mixing three key ids, answer the
+    unknown bearer's 404 up to the client's limit and 429 after it; once
+    throttled, a live bearer and an unknown one get the same 429 (receipt
+    isolation.share-resolver.throttle.independent);
   - a client can't spread its count with its own X-Real-IP through nginx,
     and nginx's backstop answers a burst with 429.
 ``share-secrets-down``
