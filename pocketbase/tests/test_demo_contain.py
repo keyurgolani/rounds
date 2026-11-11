@@ -149,12 +149,15 @@ PLAN = {
         {"id": "sets0000000000a", "user": "demo00000000001", "text_provider": "prov0000000000a"},
         {"id": "sets0000000000b", "user": "demo00000000002", "vision_provider": "prov0000000000a"},
         # A standard account's settings that name a demo provider.
-        {"id": "sets0000000000c", "user": "user00000000001", "text_provider": "prov0000000000c"},
+        {"id": "sets0000000000c", "user": "user00000000001", "text_provider": "prov0000000000c",
+         "vision_provider": "prov0000000000d"},
     ],
     "ai_providers": [
         {"id": "prov0000000000a", "user": "demo00000000001"},
         {"id": "prov0000000000b", "user": "user00000000001"},
-        {"id": "prov0000000000c", "user": "demo00000000002"},
+        {"id": "prov0000000000c", "user": "demo00000000002", "encrypted_key": "ciphertext", "key_iv": "iv"},
+        # One a run before this already cleared: not written again.
+        {"id": "prov0000000000d", "user": "demo00000000002"},
     ],
     "todos": [{"id": "todo0000000000a", "user": "demo00000000001"}],
 }
@@ -182,7 +185,9 @@ def test_up_deletes_what_demo_accounts_own_there_every_settings_row_before_any_p
 
 
 def test_a_demo_provider_another_account_points_at_keeps_its_row_without_its_key(run):
-    # Its row stays so the standard account's settings aren't rewritten here.
+    # Its row stays so the standard account's settings aren't rewritten
+    # here, and one already without a key isn't saved again.
+    assert "ai_providers:prov0000000000d" not in run["up"]["deleted"]
     assert run["up"]["saved"] == [
         {"id": "ai_providers:prov0000000000c", "sets": ['encrypted_key=""', 'key_iv=""']},
     ]

@@ -131,10 +131,14 @@ def _owned(db: Path, accounts: dict[str, factory.Account]) -> dict[str, dict[str
                 continue
             for tag, acct in accounts.items():
                 rows = conn.execute(f'SELECT * FROM "{name}" WHERE "user" = ? ORDER BY id', (acct.user_id,)).fetchall()
-                out[tag][name] = {r[0]: hashlib.sha256(json.dumps(list(r), default=str).encode()).hexdigest()
+                # Keyed by the id column, wherever the table puts it.
+                at = cols.index("id")
+                out[tag][name] = {r[at]: hashlib.sha256(json.dumps(list(r), default=str).encode()).hexdigest()
                                   for r in rows}
+        cols = [r[1] for r in conn.execute('PRAGMA table_info("users")')]
+        at = cols.index("id")
         for r in conn.execute('SELECT * FROM "users" ORDER BY id').fetchall():
-            out["users"][r[0]] = hashlib.sha256(json.dumps(list(r), default=str).encode()).hexdigest()
+            out["users"][r[at]] = hashlib.sha256(json.dumps(list(r), default=str).encode()).hexdigest()
     finally:
         conn.close()
     return out

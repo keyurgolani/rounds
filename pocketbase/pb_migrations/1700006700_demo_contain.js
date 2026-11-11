@@ -43,7 +43,7 @@ migrate(
         );
         if (referenced.length === 0) {
           dao.deleteRecord(row);
-        } else {
+        } else if (row.getString("encrypted_key") !== "" || row.getString("key_iv") !== "") {
           row.set("encrypted_key", "");
           row.set("key_iv", "");
           dao.saveRecord(row);
