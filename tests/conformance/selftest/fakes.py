@@ -119,6 +119,13 @@ class FakeRunner:
             if "minimal-env" in self.off:
                 env += [[name, value] for name, value in self.canaries.present_values().items()]
             return _http(200, {"stdout": "ENV:" + json.dumps(env), "stderr": "", "return_value": [], "error": None})
+        definition = body.get("definition")
+        if path.startswith("/api/take-home/") and isinstance(definition, dict):
+            # A take-home answer names the definition that ran.
+            ran = {"track": definition.get("track"), "slug": definition.get("slug"),
+                   "variant": definition.get("variant"), "content_version": definition.get("version"),
+                   "checksum": "sha256:" + "0" * 64}
+            return _http(200, {"score": 0.0, "passed": False, "stdout": "", "stderr": "", "definition": ran})
         return _http(200, {"status": "ran"})
 
 

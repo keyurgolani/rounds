@@ -2,11 +2,12 @@
 
 Guarantee (closed by ROUNDS-00A-L01; the renderer's own echo is a
 white-box pending row for ROUNDS-00A-L06): ``/api/pdf/health`` answers
-only its status, one of ``ok`` and ``unavailable``, and a render the
-renderer can't finish answers a typed status with fixed text, never the
-renderer's body or a transport error. The corpus stack runs no renderer
-at stage 1, so the fixture's ordinary render request always fails at the
-renderer.
+only its status, ``ok`` with 200 or ``unavailable`` with 503, and a render
+the renderer can't finish answers its typed status with that code's fixed
+sentence, never the renderer's body or a transport error. The fixture
+compares the answer with exactly those, so any other text is a finding,
+whatever it says. The corpus stack runs no renderer at stage 1, so the
+fixture's ordinary render request always fails at the renderer.
 """
 from __future__ import annotations
 
@@ -16,10 +17,17 @@ from corpus._requests import bodies
 
 HEALTH = "RD-07.health-status-only"
 RENDER = "RD-07.render-failure-typed"
-# What health may answer (backend/routers/pdf.py).
-HEALTH_STATUSES = frozenset({"ok", "unavailable"})
-# Text that would come from the renderer or the transport, not the proxy.
-FOREIGN_TEXT = ("URLError", "ECONNREFUSED", "Connection refused", "pdf-renderer", "Traceback", "Errno")
+# What health may answer, and the HTTP status each comes with
+# (backend/routers/pdf.py).
+HEALTH_STATUSES = {"ok": 200, "unavailable": 503}
+# The typed failures a render may answer: the HTTP status and the fixed
+# sentence of each (backend/routers/pdf.py RENDER_FAILED, and
+# backend/app/errors.py for render_timeout, which the proxy sends with its
+# registered sentence).
+RENDER_FAILURES = {
+    "worker_unavailable": (503, "The PDF renderer couldn't finish this document. Try again shortly."),
+    "render_timeout": (422, "This document took too long to render. Simplify it and try again."),
+}
 ENVELOPE = {"detail", "code", "correlation_id"}
 
 
@@ -28,8 +36,11 @@ def _health(resp) -> tuple[str, str]:
         return Outcome.INCONCLUSIVE.value, f"health didn't answer JSON ({resp.status or resp.error})"
     if set(resp.body) != {"status"}:
         return Outcome.DETECTED.value, "health answered more than its status"
-    if resp.body["status"] not in HEALTH_STATUSES:
+    status = resp.body["status"]
+    if not isinstance(status, str) or status not in HEALTH_STATUSES:
         return Outcome.DETECTED.value, "health's status isn't one of its own values"
+    if resp.status != HEALTH_STATUSES[status]:
+        return Outcome.DETECTED.value, f"health answered {status} with {resp.status}, not {HEALTH_STATUSES[status]}"
     return Outcome.CONTAINED.value, ""
 
 
@@ -39,12 +50,12 @@ def _render(resp) -> tuple[str, str]:
     if resp.status == 200:
         return Outcome.INCONCLUSIVE.value, "a render succeeded, so this stack has a renderer and the check can't run"
     body = resp.body
-    detail = body.get("detail") if isinstance(body, dict) else None
-    typed = (isinstance(body, dict) and set(body) == ENVELOPE and isinstance(detail, str)
-             and code_of(body) in ("worker_unavailable", "render_timeout"))
-    if not typed or any(text in detail for text in FOREIGN_TEXT):
+    code = code_of(body)
+    expected = RENDER_FAILURES.get(code) if isinstance(code, str) else None
+    if (not isinstance(body, dict) or set(body) != ENVELOPE or expected is None
+            or (resp.status, body.get("detail")) != expected):
         return (Outcome.DETECTED.value,
-                f"the failed render wasn't the typed envelope with fixed text ({resp.status} {code_of(body)})")
+                f"the failed render wasn't the typed envelope with its fixed sentence ({resp.status} {code})")
     return Outcome.CONTAINED.value, ""
 
 

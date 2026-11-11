@@ -38,8 +38,10 @@ VERSION = 1
 # The active revision the corpus definition is keyed from.
 SOURCE = "store/ai-coding/hallucinated-http-client/python.v1.json"
 PATH = f"store/take-home/{SLUG}/{VARIANT}.v{VERSION}.json"
-# What the corpus changes in the source document.
-REKEYED = {"track": "take-home", "kind": "take-home", "slug": SLUG}
+# What the corpus changes in the source document. A take-home's AI policy
+# is ``off`` or ``allowed`` (contracts/definitions/harness-revision.v1),
+# never the AI-coding ``per-checkpoint``; the corpus needs no AI.
+REKEYED = {"track": "take-home", "kind": "take-home", "slug": SLUG, "ai_policy": "off"}
 
 DEFINITIONS = Path("backend") / "definitions"
 

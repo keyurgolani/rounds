@@ -10,7 +10,9 @@ definition.
 No take-home definition is active on this branch, so the take-home bodies
 name the one the corpus stack adds (conformance/overlay.py): the AI-coding
 HTTP-client revision keyed as a take-home, which grades ``client.py``.
-selftest/test_overlay.py keeps every definition named here active.
+selftest/test_overlay.py keeps every definition named here active, and
+EX-05 runs the take-home body, so the live run shows the runner resolves
+it.
 """
 from __future__ import annotations
 

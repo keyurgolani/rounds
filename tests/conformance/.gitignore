@@ -1,4 +1,6 @@
 /.env.*
 /.definitions*/
 .receipts/
+# Negative-control fault profiles stay local, never pushed (issue #8).
+/faults/
 __pycache__/

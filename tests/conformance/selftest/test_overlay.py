@@ -4,6 +4,7 @@ name is active there, so no body stops at a retired definition."""
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 
@@ -47,6 +48,37 @@ def test_the_corpus_definition_is_an_active_revision_keyed_as_a_take_home():
     # The take-home bodies send only paths the revision takes.
     for route in ("/api/take-home/run", "/api/take-home/submit"):
         assert set(bodies()[("POST", route)]["files"]) <= set(doc["candidate_paths"])
+
+
+def _contract_checker():
+    """The project's own contract checker (backend/app/contract_schema.py),
+    loaded from its file: standard library only, so the self-tests need
+    nothing more than CI installs."""
+    path = overlay.repo_root() / "backend" / "app" / "contract_schema.py"
+    spec = importlib.util.spec_from_file_location("corpus_contract_schema", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_corpus_definition_meets_the_take_home_contract():
+    _, document = overlay.overlay()
+    doc = json.loads(document)
+    checker = _contract_checker()
+    contract = checker.load("definitions/harness-revision.v1.schema.json")
+    # Against the take-home branch alone, so a failure names the field.
+    take_home = checker.Validator({"$defs": contract.schema["$defs"], "$ref": "#/$defs/take_home"})
+    assert take_home.errors(doc) == []
+    assert contract.errors(doc) == []
+    assert doc["ai_policy"] in ("off", "allowed")
+
+
+def test_the_contract_check_catches_the_ai_coding_policy():
+    # The check above is live: the source revision's AI-coding policy,
+    # left in a take-home, breaks the contract.
+    _, document = overlay.overlay()
+    doc = {**json.loads(document), "ai_policy": "per-checkpoint"}
+    assert _contract_checker().load("definitions/harness-revision.v1.schema.json").errors(doc)
 
 
 def test_every_definition_the_bodies_name_is_active_on_the_corpus_stack():

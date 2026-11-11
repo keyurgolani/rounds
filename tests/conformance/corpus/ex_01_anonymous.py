@@ -11,9 +11,11 @@ A route an operator turned off answers its gate's typed 503 before the
 account step (``route_disabled``, or ``definitions_disabled`` for the
 execution routes), which runs nothing for anyone: that route is
 contained by its gate and recorded as such, as the README's quarantine
-step turns a route off. Any other answer, a 2xx, a 422, or a different
-code, is a finding: it means something other than the account step
-decided.
+step turns a route off. A gate stop tests no account step, though, so
+the fixture needs at least one route to answer the 401: when every route
+answers its gate's stop, nothing was tested and the fixture is
+inconclusive. Any other answer, a 2xx, a 422, or a different code, is a
+finding: it means something other than the account step decided.
 """
 from __future__ import annotations
 
@@ -36,6 +38,7 @@ def run(ctx):
     findings: list[str] = []
     failed_to_answer: list[str] = []
     gated: list[str] = []
+    refused: list[str] = []
     for (method, path), body in bodies().items():
         resp = ctx.runner.request(method, path, json_body=body)
         code = code_of(resp.body)
@@ -48,6 +51,7 @@ def run(ctx):
             gated.append(f"{path} ({code})")
         elif (resp.status, code) == (401, "unauthenticated"):
             seen.append(f"{method} {path} -> {resp.status} {code}")
+            refused.append(path)
         else:
             seen.append(f"{method} {path} -> {resp.status} {code}")
             findings.append(f"{path} -> {resp.status} {code}")
@@ -57,10 +61,14 @@ def run(ctx):
         outcome, note = Outcome.DETECTED.value, "an anonymous request wasn't refused at the account step: " + "; ".join(findings)
     elif failed_to_answer:
         outcome, note = Outcome.INCONCLUSIVE.value, "no answer from " + ", ".join(failed_to_answer)
+    elif not refused:
+        # A gate stop runs nothing, but it doesn't reach the account step,
+        # so a run in which every route was gated tested nothing.
+        outcome = Outcome.INCONCLUSIVE.value
+        note = "no route reached the account step; every one answered its gate's stop: " + ", ".join(gated)
     else:
         outcome = Outcome.CONTAINED.value
-        refused = len(seen) - len(gated)
-        note = f"{refused} of {len(seen)} admitted routes refused the anonymous caller 401 unauthenticated"
+        note = f"{len(refused)} of {len(seen)} admitted routes refused the anonymous caller 401 unauthenticated"
         if gated:
             note += "; contained by their gates: " + ", ".join(gated)
     return result({SUBCASE: outcome}, note, evidence=evidence, canary_text=canary_text)

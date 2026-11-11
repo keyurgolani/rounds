@@ -22,8 +22,10 @@ MANIFEST = m.load_manifest()
 EX07 = MANIFEST.by_id("EX-07")
 EX02 = MANIFEST.by_id("EX-02")
 # A runnable not-applicable row: a surface this branch doesn't have yet.
+# Its id is one no manifest row uses, so it can't be read as a real row.
+NA_ID = "EX-99"
 NA = m.Fixture(
-    id="EX-09", attack="a surface this branch doesn't have", spec_ref="selftest", status="not-applicable",
+    id=NA_ID, attack="a surface this branch doesn't have", spec_ref="selftest", status="not-applicable",
     closing_leaf="ROUNDS-00A-L05", routes=["POST /api/run"], languages=[], control="selftest",
     destructive=False, environment_sensitive=False, setup="none", teardown="none", module="selftest_only",
     reason="the surface lands with ROUNDS-00A-L05",
@@ -178,6 +180,10 @@ def test_a_quarantined_fixture_gets_an_entry_with_owner_and_expiry():
 
 
 # ---- not-applicable is an outcome of its own ------------------------------------------
+
+
+def test_the_synthetic_not_applicable_row_is_no_real_row():
+    assert NA_ID not in {f.id for f in MANIFEST.fixtures}
 
 
 def test_a_not_applicable_row_passes_as_not_applicable():

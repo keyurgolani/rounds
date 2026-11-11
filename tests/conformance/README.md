@@ -113,9 +113,13 @@ No take-home definition is active on this branch, so a take-home body
 would stop at the definition step. The launcher writes one only the
 corpus stack has (`python3 tests/conformance/conformance/overlay.py --out
 DIR`, into `CORPUS_DEFINITIONS`): the real manifest plus one entry for the
-active AI-coding HTTP-client revision keyed as a take-home, which
-`compose.yml` mounts read-only into the runner's definitions directory. A
-direct `docker compose ... run` needs that directory written first, at
+active AI-coding HTTP-client revision keyed as a take-home (with the
+take-home AI policy `off`, and checked against the take-home contract by
+`selftest/test_overlay.py`), which `compose.yml` mounts read-only into the
+runner's definitions directory. EX-05 runs that definition through the
+take-home run route before it checks the refusal there, so a stack whose
+runner doesn't resolve it fails EX-05 as inconclusive. A direct
+`docker compose ... run` needs that directory written first, at
 `tests/conformance/.definitions` by default.
 
 ## When a fixture detects a regression
@@ -132,6 +136,8 @@ The run fails with the fixture id and its redacted evidence. To respond:
    registry. A quarantined containment fixture blocks promotion unless its
    route ships disabled. EX-01 records a route its gate turned off as
    contained by the gate, so turning a route off doesn't turn EX-01 red.
+   A gate stop doesn't test the account step, though: with every route
+   turned off, EX-01 is inconclusive and the lane fails.
 4. Rerun green.
 
 ## Receipts

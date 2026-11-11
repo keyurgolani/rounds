@@ -57,7 +57,7 @@
         "compose": "contained",
         "k8s": "contained"
       },
-      "guarantee": "every admitted route refuses a request that carries no account before it starts work; a route its gate turned off answers the gate's typed 503 first and is recorded as contained by its gate",
+      "guarantee": "every admitted route refuses a request that carries no account before it starts work; a route its gate turned off answers the gate's typed 503 first and is recorded as contained by its gate, and a run in which every route answered its gate's stop tested nothing and is inconclusive",
       "subcases": [
         {
           "id": "EX-01.anonymous-denied",
@@ -189,7 +189,8 @@
       "module": "ex_05_caller_command",
       "routes": [
         "POST /api/run",
-        "POST /api/ai-coding/run-project"
+        "POST /api/ai-coding/run-project",
+        "POST /api/take-home/run"
       ],
       "languages": [
         "python",
@@ -198,14 +199,14 @@
       ],
       "environment_sensitive": false,
       "control": "selftest/test_negative_controls.py: caller fields accepted",
-      "setup": "one synthetic account; the enforced execution-definitions gate",
+      "setup": "one synthetic account; the enforced execution-definitions gate; the corpus stack's take-home definition (conformance/overlay.py), which the take-home run must run when the body carries no caller field",
       "teardown": "the account removed with the admin token",
       "expected": {
         "ci": "contained",
         "compose": "contained",
         "k8s": "contained"
       },
-      "guarantee": "with server-owned definitions enforced, a caller-supplied test_command is refused legacy_request_rejected before anything runs",
+      "guarantee": "with server-owned definitions enforced, a caller-supplied test_command is refused legacy_request_rejected before anything runs, and on the take-home run route the same body without it runs the definition it names; a take-home answer that doesn't name that definition is inconclusive",
       "subcases": [
         {
           "id": "EX-05.caller-command-refused",
@@ -731,7 +732,7 @@
         "compose": "contained",
         "k8s": "contained"
       },
-      "guarantee": "the proxy answers a failed render with a typed status and fixed text and health answers only its status, ok or unavailable; the sidecar's own echo is a white-box pending row for ROUNDS-00A-L06",
+      "guarantee": "the proxy answers a failed render with its typed status and that code's fixed sentence, and health answers only its status, ok with 200 or unavailable with 503; the sidecar's own echo is a white-box pending row for ROUNDS-00A-L06",
       "subcases": [
         {
           "id": "RD-07.health-status-only",

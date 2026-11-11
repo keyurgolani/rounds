@@ -18,6 +18,7 @@ Both routes the manifest lists get both checks.
 """
 from __future__ import annotations
 
+from conformance import context
 from conformance.outcomes import Outcome
 from corpus._base import code_of, result
 from corpus._requests import bodies
@@ -43,7 +44,7 @@ def run(ctx):
         resp = ctx.runner.declare(method, path, CAP_BYTES + 1)
         code = code_of(resp.body)
         answers.append(f"declared {CAP_BYTES + 1} bytes to {path} -> {resp.status or resp.error} {code}")
-        if resp.error == "timeout":
+        if resp.error == context.TIMEOUT:
             cap_outcomes.append(Outcome.DETECTED.value)
         elif resp.error:
             cap_outcomes.append(Outcome.INCONCLUSIVE.value)
