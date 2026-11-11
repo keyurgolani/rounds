@@ -446,6 +446,32 @@ def test_with_the_gate_closed_post_api_share_is_the_create_it_was(client, world,
     assert client.post("/api/share", json={"resume_id": 5}, headers=world.headers).status_code == 422
 
 
+@pytest.mark.parametrize("extra", [{"password": "correct horse battery"}, {"expires_at": "2030-01-01"},
+                                   {"purpose": "For recruiters"}, {"password": None}])
+def test_with_the_gate_closed_a_create_asking_for_more_is_refused_and_makes_nothing(client, world, monkeypatch,
+                                                                                   extra):
+    # A dialog that reads the gate as open, during a flip, never gets a
+    # weaker link than it asked for: the fixed 400, and nothing written.
+    from routers import share
+
+    monkeypatch.setenv(GATE, "disabled")
+    made = []
+
+    async def current_user(_request):
+        return {"id": TEST_ACCOUNT_ID, "token": TEST_TOKEN}
+
+    async def pb_post(_token, _path, payload):
+        made.append(payload)
+        return {"id": "lnk000000000001", **payload, "created": ""}
+
+    monkeypatch.setattr(share, "current_user", current_user)
+    monkeypatch.setattr(share, "pb_post", pb_post)
+    res = client.post("/api/share", json={"resume_id": RESUME, **extra}, headers=world.headers)
+    assert _typed(res) == (400, "invalid_request")
+    assert made == [] and world.hooks.calls == []
+    assert "correct horse" not in res.text and "token" not in res.json()
+
+
 # ---- RotateShareBearer --------------------------------------------------------------------------------------
 
 

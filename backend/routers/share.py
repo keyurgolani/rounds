@@ -24,6 +24,7 @@ TODO(ROUNDS-00B-L06): legacy links move to share capabilities.
 """
 from __future__ import annotations
 
+import json
 import re
 import secrets
 from typing import Any
@@ -99,9 +100,28 @@ def _link_out(record: dict[str, Any]) -> ShareLinkOut:
 # ---------------------------------------------------------------------------
 
 
+# The create below takes these fields and no others.
+_EARLIER_CREATE_FIELDS = frozenset({"resume_id", "variant_id"})
+
+
+async def _asks_for_more_than_the_earlier_create(request: Request) -> bool:
+    """Whether a JSON object body names a field the create below doesn't
+    take. Any other body is the create's own to answer."""
+    try:
+        doc = json.loads(await request.body())
+    except ValueError:
+        return False
+    return isinstance(doc, dict) and not set(doc) <= _EARLIER_CREATE_FIELDS
+
+
 class _CreateShareRoute(APIRoute):
     """POST /api/share: CreateShare while the resolution gate is open, read
-    on each request, and the create below, as it was, while it's closed."""
+    on each request, and the create below, as it was, while it's closed.
+
+    Closed, a body asking for anything the create below can't give, a
+    password or an expiry from a dialog that reads the gate as open, gets
+    CreateShare's fixed 400 and makes nothing, so a gate flip never makes a
+    link weaker than the one asked for."""
 
     def get_route_handler(self):
         closed = super().get_route_handler()
@@ -109,6 +129,8 @@ class _CreateShareRoute(APIRoute):
         async def handler(request: Request) -> Response:
             if share_capabilities.resolution_open():
                 return await share_commands.create(request)
+            if await _asks_for_more_than_the_earlier_create(request):
+                raise TypedError("invalid_request", status=400)
             return await closed(request)
 
         return handler
