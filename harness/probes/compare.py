@@ -9,6 +9,8 @@ value, so a difference never puts record contents in a receipt.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from typing import Any, Iterable
 
@@ -18,18 +20,23 @@ VOLATILE_HEADERS = frozenset({"date", "x-correlation-id", "x-request-id"})
 VOLATILE_KEYS = frozenset({"correlation_id", "request_id"})
 # The request id the runner quotes inside an error message.
 _REQUEST_ID_TEXT = re.compile(r"(request id: )[A-Za-z0-9_-]+")
+# A per-request id as it sits in a raw JSON body, whatever the spacing.
+_VOLATILE_RAW = re.compile(r'("(?:' + "|".join(sorted(VOLATILE_KEYS)) + r')"\s*:\s*)"[^"\\]*"')
 # Raw lengths are compared as they are: a per-request id always has one
 # length, so two answers that differ only in those ids have equal lengths.
 
 
-def normalize(body: Any) -> Any:
-    if isinstance(body, dict):
-        return {k: ("<volatile>" if k in VOLATILE_KEYS else normalize(v)) for k, v in body.items()}
-    if isinstance(body, list):
-        return [normalize(v) for v in body]
-    if isinstance(body, str):
-        return _REQUEST_ID_TEXT.sub(r"\1<volatile>", body)
-    return body
+def body_digest(resp: Any) -> str:
+    """sha256 of the raw body with only the per-request ids replaced, so key
+    order, spacing, and non-JSON bodies all count. A response with no raw
+    bytes (a test double) is digested from its parsed body."""
+    raw = getattr(resp, "raw", b"") or b""
+    if not raw and resp.body is not None:
+        raw = json.dumps(resp.body, separators=(",", ":")).encode("utf-8")
+    text = raw.decode("utf-8", "surrogateescape")
+    text = _VOLATILE_RAW.sub(r'\1"<volatile>"', text)
+    text = _REQUEST_ID_TEXT.sub(r"\1<volatile>", text)
+    return hashlib.sha256(text.encode("utf-8", "surrogateescape")).hexdigest()
 
 
 def _headers(h: dict[str, str]) -> dict[str, str]:
@@ -42,7 +49,7 @@ def differences(first: Any, second: Any) -> list[str]:
     out: list[str] = []
     if first.status != second.status:
         out.append("status")
-    if normalize(first.body) != normalize(second.body):
+    if body_digest(first) != body_digest(second):
         out.append("body")
     if getattr(first, "length", 0) != getattr(second, "length", 0):
         out.append("length")

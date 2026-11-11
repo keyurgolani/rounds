@@ -21,10 +21,11 @@ class Response:
     status: int
     body: Any
     elapsed_ms: int
-    # Lower-cased response headers and the raw body length, for comparing
-    # two denials whole (compare.py).
+    # Lower-cased response headers, the raw body, and its length, for
+    # comparing two denials whole (compare.py).
     headers: dict[str, str] = field(default_factory=dict)
     length: int = 0
+    raw: bytes = b""
 
 
 class PBClient:
@@ -72,7 +73,7 @@ class PBClient:
                 parsed = json.loads(raw.decode("utf-8"))
             except (ValueError, UnicodeDecodeError):
                 parsed = None
-        return Response(status=status, body=parsed, elapsed_ms=elapsed_ms, headers=resp_headers, length=len(raw))
+        return Response(status=status, body=parsed, elapsed_ms=elapsed_ms, headers=resp_headers, length=len(raw), raw=raw)
 
     # -- auth -------------------------------------------------------------
     def wait_healthy(self, attempts: int = 60, delay: float = 1.0) -> None:

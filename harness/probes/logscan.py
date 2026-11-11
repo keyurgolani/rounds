@@ -6,9 +6,8 @@ service's logs. The scanner looks for the shapes the harness issues
 literal value the caller registers, and reports only how many of each kind
 it found and where, never the value.
 
-Text logs are scanned line by line; a SQLite log database (PocketBase's
-request log in pb_data) is opened read-only and every text column of every
-table is scanned.
+Text logs are scanned line by line; a SQLite log database is opened
+read-only and every text column of every table is scanned.
 """
 from __future__ import annotations
 

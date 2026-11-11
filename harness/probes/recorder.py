@@ -99,10 +99,19 @@ def owners_in(body: Any) -> set[str]:
     return found
 
 
-def entry(seq: int, method: str, raw_path: str, authorization: str | None, status: int,
+def auth_class(values: list[str]) -> str:
+    """The class of a request's Authorization headers. More than one is
+    `malformed`: the log must describe the one value that was forwarded."""
+    if len(values) > 1:
+        return "malformed"
+    return classify(values[0] if values else None)
+
+
+def entry(seq: int, method: str, raw_path: str, authorization: str | list[str] | None, status: int,
           body: bytes, salt: bytes) -> dict[str, Any]:
-    """The one log line for a call. Takes the raw request path and header,
-    and keeps neither."""
+    """The one log line for a call. Takes the raw request path and header
+    values, and keeps neither."""
+    values = authorization if isinstance(authorization, list) else ([] if authorization is None else [authorization])
     path = urllib.parse.urlsplit(raw_path).path
     try:
         parsed = json.loads(body.decode("utf-8")) if body else None
@@ -112,7 +121,7 @@ def entry(seq: int, method: str, raw_path: str, authorization: str | None, statu
         "seq": seq,
         "method": method,
         "path": path,
-        "auth": classify(authorization),
+        "auth": auth_class(values),
         "status": status,
         "length": len(body),
         "owners": sorted(pseudonym(salt, o) for o in owners_in(parsed)),
@@ -158,13 +167,18 @@ def _handler(rec: _Recorder):
         protocol_version = "HTTP/1.1"
 
         def log_message(self, *_args: Any) -> None:
-            # The default access log would print the path and query.
+            # Print nothing about a call; the log line is its only record.
             pass
 
         def _forward(self) -> None:
             length = int(self.headers.get("Content-Length") or 0)
             data = self.rfile.read(length) if length else None
-            headers = {k: v for k, v in self.headers.items() if k.lower() not in _HOP}
+            auth = list(self.headers.get_all("Authorization") or [])
+            headers = {k: v for k, v in self.headers.items() if k.lower() not in _HOP and k.lower() != "authorization"}
+            if auth:
+                # One value is forwarded, and the log describes that one; with
+                # more than one the line says `malformed` (auth_class).
+                headers["Authorization"] = auth[-1]
             req = urllib.request.Request(rec.upstream + self.path, data=data, headers=headers, method=self.command)
             try:
                 with urllib.request.urlopen(req, timeout=30) as resp:
@@ -173,7 +187,6 @@ def _handler(rec: _Recorder):
                 status, resp_headers, body = err.code, err.headers.items(), err.read()
             except (urllib.error.URLError, OSError):
                 status, resp_headers, body = 502, [("Content-Type", "application/json")], b'{"recorder":"upstream unreachable"}'
-            auth = self.headers.get("Authorization")
             rec.record(lambda seq: entry(seq, self.command, self.path, auth, status, body, rec.salt))
             self.send_response(status)
             for k, v in resp_headers:
@@ -188,9 +201,38 @@ def _handler(rec: _Recorder):
     return Handler
 
 
+# The log stays out of the folder the harness uploads as an artifact
+# (`/out` in the probe container, `harness/.receipts/` on the host): it
+# describes every call the runner makes, probed or not. The phase that starts
+# the recorder deletes the log when it ends (discard_log).
+DEFAULT_LOG = "/var/lib/rounds-recorder/recorder.jsonl"
+UPLOADED_DIRS = ("/out",)
+
+
+def log_is_uploaded(log_path: str, uploaded: tuple[str, ...] = UPLOADED_DIRS) -> bool:
+    real = os.path.realpath(log_path)
+    for d in uploaded:
+        base = os.path.realpath(d)
+        if real == base or real.startswith(base.rstrip(os.sep) + os.sep):
+            return True
+    return False
+
+
+def discard_log(log_path: str) -> None:
+    """Delete the log once its phase has read it."""
+    try:
+        os.unlink(log_path)
+    except FileNotFoundError:
+        pass
+
+
 def main() -> int:
     upstream = os.environ.get("RECORDER_UPSTREAM", "http://pocketbase:8090")
-    log_path = os.environ.get("RECORDER_LOG", "/out/recorder.jsonl")
+    log_path = os.environ.get("RECORDER_LOG", DEFAULT_LOG)
+    uploaded = UPLOADED_DIRS + tuple(d for d in os.environ.get("RECORDER_UPLOADED_DIRS", "").split(":") if d)
+    if log_is_uploaded(log_path, uploaded):
+        print("RECORDER_LOG must be outside the uploaded receipts folder", file=sys.stderr)
+        return 2
     salt = os.environ.get("RECORDER_SALT", "")
     if len(salt) < 16:
         print("RECORDER_SALT must be set (16+ characters)", file=sys.stderr)

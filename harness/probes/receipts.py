@@ -20,8 +20,9 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-# PocketBase session tokens are JWTs; the account factory's passwords and the
-# harness admin placeholder have fixed shapes (factory._gen_password).
+# PocketBase session tokens are JWTs, and the account factory's passwords
+# have a fixed shape (factory._gen_password). The harness admin password has
+# none, so each phase registers it with its writer (run.new_writer).
 JWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}")
 PASSWORD_RE = re.compile(r"Hx[0-9a-f]{32}!9")
 REDACTED_TOKEN = "<redacted:token>"
@@ -50,10 +51,10 @@ class Redactor:
     def value(self, value: Any) -> Any:
         if isinstance(value, str):
             return self.text(value)
-        if isinstance(value, list):
+        if isinstance(value, (list, tuple)):
             return [self.value(v) for v in value]
         if isinstance(value, dict):
-            return {k: self.value(v) for k, v in value.items()}
+            return {(self.text(k) if isinstance(k, str) else k): self.value(v) for k, v in value.items()}
         return value
 
 
@@ -113,9 +114,11 @@ class ReceiptWriter:
         r.migrations = self.context.get("migrations", [])
         r.policy_checksum = self.context.get("policy_checksum", "")
         r.migrations_checksum = self.context.get("migrations_checksum", "")
-        line = self.redactor.value(asdict(r))
+        # Every field, then the serialized line once more, so nothing that
+        # only takes a secret's shape once it's serialized gets through.
+        line = self.redactor.text(json.dumps(self.redactor.value(asdict(r)), separators=(",", ":")))
         with open(self.path, "a") as f:
-            f.write(json.dumps(line, separators=(",", ":")) + "\n")
+            f.write(line + "\n")
 
 
 def read_all(path: str) -> list[dict[str, Any]]:

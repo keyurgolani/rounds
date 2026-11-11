@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import datetime
+import http.client
 import json
 import sqlite3
 import sys
@@ -60,7 +61,7 @@ SERVICE_TOKEN = _jwt({"id": "s1", "type": "authRecord", "collectionId": "pbc_ser
 
 def case(status: str = "pass", **over) -> dict:
     row = {
-        "surface": "runner:/api/ai/providers/{id}",
+        "surface": "runner:providers",
         "actor": "authenticated-other",
         "variant": "foreign_owner",
         "expected": "uniform_not_found",
@@ -73,7 +74,7 @@ def case(status: str = "pass", **over) -> dict:
     if status == "pass":
         row["evidence"] = ["isolation.case.one"]
     if status == "quarantined":
-        row.update(evidence=["isolation.case.one"], quarantined_on="2026-11-05", expires="2026-11-15")
+        row.update(evidence=["campaigns:isolation.case.one"], quarantined_on="2026-11-05", expires="2026-11-15")
     row.update(over)
     return row
 
@@ -137,7 +138,17 @@ def test_committed_pass_rows_name_checks_a_run_reports():
     known = (run.families.IMPLEMENTED_FAMILIES | set(doc["deployment_checks"]))
     for cid, row in policy.cases_by_status(doc, "pass").items():
         for e in row["evidence"]:
-            assert e.startswith("phase:") or e in known or e == cid, (cid, e)
+            kind, ident, target = policy.parse_evidence(e)
+            assert kind == "phase" or ident in known or ident == cid, (cid, e)
+            if target is not None:
+                assert ident in doc["collections"][target]["probes"], (cid, e)
+
+
+def test_committed_share_rows_count_only_their_collection():
+    doc = policy.load(str(POLICY))
+    for cid in ("isolation.share-views.client-write.denied", "isolation.share-link.owner-only.isolated"):
+        for e in doc["cases"][cid]["evidence"]:
+            assert policy.parse_evidence(e)[2] is not None, (cid, e)
 
 
 def test_committed_pending_and_slot_rows_have_no_probe():
@@ -183,6 +194,56 @@ def test_load_rejects_a_pending_family_named_as_evidence(tmp_path):
     d["probe_families"]["account-scope.synthetic.pending"] = {"status": "pending", "deny_key": "view"}
     with pytest.raises(policy.PolicyError, match="pending family"):
         load(tmp_path, d)
+
+
+@pytest.mark.parametrize("cases", [None, {}])
+def test_load_rejects_a_missing_or_empty_case_table(tmp_path, cases):
+    d = doc_with(cases)
+    if cases is None:
+        del d["cases"]
+    with pytest.raises(policy.PolicyError, match="no case table"):
+        load(tmp_path, d)
+
+
+def test_load_rejects_an_unknown_key(tmp_path):
+    with pytest.raises(policy.PolicyError, match="unknown keys expiry"):
+        load(tmp_path, doc_with({"isolation.case.one": case(expiry="2026-11-20")}))
+
+
+@pytest.mark.parametrize("evidence", [
+    [f"campaigns:{ENFORCED}"],
+    ["campaigns:deployment.rules.match"],
+    ["phase:demo-on"],
+    ["isolation.case.one"],
+])
+def test_load_rejects_a_quarantine_over_shared_checks_or_without_a_target(tmp_path, evidence):
+    d = doc_with({"isolation.case.one": case("quarantined", evidence=evidence)})
+    d["deployment_checks"] = {"deployment.rules.match": {}}
+    with pytest.raises(policy.PolicyError, match="can't cover|must name the target"):
+        load(tmp_path, d)
+
+
+def test_load_rejects_a_check_that_backs_a_pass_and_a_quarantined_row(tmp_path):
+    d = doc_with({"isolation.case.one": case(evidence=["isolation.case.x"]),
+                  "isolation.case.two": case("quarantined", evidence=["campaigns:isolation.case.x"])})
+    with pytest.raises(policy.PolicyError, match="both a pass and a quarantined row"):
+        load(tmp_path, d)
+
+
+def test_load_rejects_a_pending_id_another_check_uses(tmp_path):
+    d = doc_with({ENFORCED: case("pending")})
+    with pytest.raises(policy.PolicyError, match="uses the id of an existing check"):
+        load(tmp_path, d)
+    d = doc_with({"isolation.case.one": case(evidence=["isolation.case.two"]),
+                  "isolation.case.two": case("slot")})
+    with pytest.raises(policy.PolicyError, match="named as another row's evidence"):
+        load(tmp_path, d)
+
+
+def test_load_rejects_scoped_evidence_on_a_collection_that_doesnt_run_it(tmp_path):
+    with pytest.raises(policy.PolicyError, match="doesn't run"):
+        load(tmp_path, doc_with({"isolation.case.one": case(evidence=[f"offers:{ENFORCED}"])}))
+    assert load(tmp_path, doc_with({"isolation.case.one": case(evidence=[f"campaigns:{ENFORCED}"])}))
 
 
 # --------------------------------------------------------------------------
@@ -241,6 +302,29 @@ def test_verdict_reports_a_quarantined_failure_and_fails_an_unexpected_pass(tmp_
     assert verdict(tmp_path, d, baseline()) == 1  # a quarantined row still runs
 
 
+def test_verdict_tolerates_a_quarantined_failure_only_on_its_target(tmp_path):
+    d = doc_with({"isolation.case.one": case("quarantined")})
+    covered = rcpt("isolation.case.one", passed=False)
+    other = rcpt("isolation.case.one", passed=False, collection="offers")
+    assert verdict(tmp_path, d, baseline() + [covered, rcpt("isolation.case.one", collection="offers")]) == 0
+    assert verdict(tmp_path, d, baseline() + [covered, other]) == 1
+
+
+@pytest.mark.parametrize("start, end", [("2026-11-20", "2026-11-25"), ("2026-11-15", "2026-11-28")])
+def test_verdict_fails_a_quarantine_window_that_doesnt_hold_today(tmp_path, start, end):
+    # Both start in the future; the second also ends more than 14 days out.
+    d = doc_with({"isolation.case.one": case("quarantined", quarantined_on=start, expires=end)})
+    assert verdict(tmp_path, d, baseline() + [rcpt("isolation.case.one", passed=False)]) == 1
+
+
+def test_verdict_counts_scoped_evidence_on_its_collection_only(tmp_path):
+    d = doc_with({"isolation.case.one": case(evidence=[f"campaigns:{ENFORCED}"])})
+    assert verdict(tmp_path, d, baseline()) == 0
+    # A passing receipt on another collection doesn't stand in for it.
+    rows = [rcpt(ENFORCED, passed=True, collection="offers"), rcpt(run.READBACK_PROBE)]
+    assert verdict(tmp_path, d, rows) == 1
+
+
 def test_verdict_fails_on_a_receipt_for_an_unknown_case(tmp_path):
     d = doc_with({"isolation.case.one": case()})
     rows = baseline() + [rcpt("isolation.case.one"), rcpt("isolation.case.unlisted")]
@@ -252,11 +336,28 @@ def test_verdict_fails_on_a_receipt_for_an_unknown_case(tmp_path):
 # --------------------------------------------------------------------------
 
 
-def _resp(status=404, body=None, headers=None, length=None) -> Response:
+def _resp(status=404, body=None, headers=None, length=None, raw=None) -> Response:
     body = {"detail": "Not found.", "code": "not_found", "correlation_id": "c" * 32} if body is None else body
-    raw = json.dumps(body)
+    raw = json.dumps(body).encode() if raw is None else raw
     return Response(status, body, 1, headers or {"content-type": "application/json", "date": "Tue"},
-                    len(raw) if length is None else length)
+                    len(raw) if length is None else length, raw)
+
+
+def test_comparator_compares_the_raw_body():
+    # Same parsed body, different key order: two answers, not one.
+    a = _resp(raw=b'{"detail":"Not found.","code":"not_found"}')
+    b = _resp(raw=b'{"code":"not_found","detail":"Not found."}')
+    assert "body" in compare.differences(a, b)
+    # Non-JSON bodies of one length still differ.
+    c = _resp(body=None, raw=b"<html>one</html>")
+    c.body = None
+    e = _resp(body=None, raw=b"<html>two</html>")
+    e.body = None
+    assert compare.differences(c, e) == ["body"]
+    # Per-request ids in the raw body are set aside, whatever the spacing.
+    f = _resp(raw=b'{"detail":"x", "correlation_id" : "' + b"a" * 32 + b'"}')
+    g = _resp(raw=b'{"detail":"x", "correlation_id" : "' + b"b" * 32 + b'"}')
+    assert compare.differences(f, g) == []
 
 
 def test_comparator_sets_aside_only_per_request_values():
@@ -315,11 +416,11 @@ def test_classifier(header, cls):
 def test_log_line_keeps_no_header_token_query_or_body():
     body = json.dumps({"items": [{"user": "owner000000000a", "secret_field": PLANTED_PASSWORD,
                                   "expand": {"user": {"user": "owner000000000b"}}}]}).encode()
-    line = recorder.entry(1, "GET", f"/api/collections/x/records?filter=token%3D%22{PLANTED_PASSWORD}%22",
+    line = recorder.entry(1, "GET", f"/api/collections/x/records?q={PLANTED_PASSWORD}",
                           f"Bearer {USER_TOKEN}", 200, body, b"salt-for-tests-0000")
     text = json.dumps(line)
     assert USER_TOKEN not in text and PLANTED_PASSWORD not in text
-    assert "owner000000000a" not in text and "filter" not in text
+    assert "owner000000000a" not in text and "q=" not in text
     assert line["path"] == "/api/collections/x/records"
     assert line["auth"] == "user" and line["status"] == 200 and line["length"] == len(body)
     salt = b"salt-for-tests-0000"
@@ -347,7 +448,7 @@ def test_recorder_forwards_and_logs(tmp_path):
     for s in (up, proxy):
         threading.Thread(target=s.serve_forever, daemon=True).start()
     try:
-        req = urllib.request.Request(f"http://127.0.0.1:{proxy.server_port}/api/x?filter=abc",
+        req = urllib.request.Request(f"http://127.0.0.1:{proxy.server_port}/api/x?q=abc",
                                      headers={"Authorization": f"Bearer {ADMIN_TOKEN}"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             got = json.loads(resp.read())
@@ -356,14 +457,58 @@ def test_recorder_forwards_and_logs(tmp_path):
         assert [(x["method"], x["path"], x["auth"], x["status"]) for x in lines] == [("GET", "/api/x", "superuser", 200)]
         assert ADMIN_TOKEN not in log.read_text() and "abc" not in log.read_text()
         assert recorder.log_length(str(log)) == 1 and recorder.read_log(str(log), 1) == []
+
+        # Two Authorization headers: one value is forwarded, and the line
+        # says malformed rather than describing the other one.
+        conn = http.client.HTTPConnection("127.0.0.1", proxy.server_port, timeout=5)
+        conn.putrequest("GET", "/api/y")
+        conn.putheader("Authorization", f"Bearer {USER_TOKEN}")
+        conn.putheader("Authorization", f"Bearer {ADMIN_TOKEN}")
+        conn.endheaders()
+        got = json.loads(conn.getresponse().read())
+        conn.close()
+        assert got["seen_auth"] == f"Bearer {ADMIN_TOKEN}"
+        assert recorder.read_log(str(log), 1)[0]["auth"] == "malformed"
     finally:
         proxy.shutdown()
         up.shutdown()
 
 
+def test_auth_class_of_header_values():
+    assert recorder.auth_class([]) == "none"
+    assert recorder.auth_class([f"Bearer {USER_TOKEN}"]) == "user"
+    assert recorder.auth_class([f"Bearer {USER_TOKEN}", f"Bearer {USER_TOKEN}"]) == "malformed"
+
+
 def test_recorder_refuses_to_start_without_a_salt(monkeypatch):
+    monkeypatch.setenv("RECORDER_LOG", "/var/lib/rounds-recorder/recorder.jsonl")
     monkeypatch.setenv("RECORDER_SALT", "")
     assert recorder.main() == 2
+
+
+def test_recorder_log_stays_out_of_the_uploaded_folder(monkeypatch, tmp_path):
+    # The default log path is outside the probe container's /out, which
+    # compose binds to the host folder CI uploads.
+    compose = (ROOT / "harness" / "compose.yml").read_text()
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert "./.receipts:/out" in compose and "path: harness/.receipts/" in ci
+    assert not recorder.log_is_uploaded(recorder.DEFAULT_LOG)
+    for inside in ("/out/recorder.jsonl", "/out/sub/recorder.jsonl", "/out/../out/recorder.jsonl"):
+        assert recorder.log_is_uploaded(inside), inside
+    monkeypatch.setenv("RECORDER_SALT", "salt-for-tests-000000")
+    monkeypatch.setenv("RECORDER_LOG", "/out/recorder.jsonl")
+    assert recorder.main() == 2
+    monkeypatch.setenv("RECORDER_LOG", str(tmp_path / "up" / "recorder.jsonl"))
+    monkeypatch.setenv("RECORDER_UPLOADED_DIRS", str(tmp_path / "up"))
+    assert recorder.main() == 2
+
+
+def test_discard_log_deletes_it(tmp_path):
+    log = tmp_path / "recorder.jsonl"
+    log.write_text('{"seq":1}\n')
+    recorder.discard_log(str(log))
+    assert not log.exists()
+    recorder.discard_log(str(log))  # already gone is fine
 
 
 # --------------------------------------------------------------------------
@@ -399,6 +544,28 @@ def test_receipts_carry_the_policy_and_migration_checksums(tmp_path, monkeypatch
     assert got["policy_checksum"] == ctx["policy_checksum"] and got["migrations"] == ctx["migrations"]
 
 
+def test_redactor_covers_tuples_dict_keys_and_the_serialized_line(tmp_path):
+    r = Redactor()
+    r.register("registered-session-value-0123456789", "token:a")
+    got = r.value({"k": (USER_TOKEN, "ok"), PLANTED_PASSWORD: "v", "registered-session-value-0123456789": 1})
+    assert got == {"k": ["<redacted:token>", "ok"], "<redacted:password>": "v", "<token:a>": 1}
+    path = tmp_path / "r.jsonl"
+    writer = ReceiptWriter(str(path), {"migrations": [PLANTED_PASSWORD]})
+    writer.write(Receipt("p", "c", "o", "a", 1, 1, True, 1))
+    assert PLANTED_PASSWORD not in path.read_text()
+    assert read_all(str(path))[0]["migrations"] == ["<redacted:password>"]
+
+
+def test_every_phase_writer_redacts_the_admin_password(tmp_path, monkeypatch):
+    placeholder = "harness-admin-placeholder-123"  # no fixed shape, like the harness's
+    monkeypatch.setenv("PB_ADMIN_PASSWORD", placeholder)
+    path = tmp_path / "r.jsonl"
+    for phase in ("deploy", "admission-deploy", "hook"):
+        run.new_writer(str(path), phase).write(Receipt("p", "c", "o", "a", 1, 1, True, 1, detail=f"pw {placeholder}"))
+    assert placeholder not in path.read_text()
+    assert all(r["detail"] == "pw <password:superuser>" for r in read_all(str(path)))
+
+
 def test_short_registered_values_are_ignored():
     # A short value would redact ordinary words; every harness secret is long.
     r = Redactor()
@@ -414,7 +581,7 @@ def test_short_registered_values_are_ignored():
 def test_log_scanner_finds_planted_credentials_and_reports_no_value(tmp_path):
     text = "\n".join([
         "GET /api/health 200",
-        f"POST /api/collections/users/auth-refresh Authorization: Bearer {USER_TOKEN}",
+        f"request carried {USER_TOKEN}",
         f'{{"msg": "login", "password": "{PLANTED_PASSWORD}"}}',
         "admin uses harness-admin-literal-0001",
     ])
@@ -427,17 +594,17 @@ def test_log_scanner_finds_planted_credentials_and_reports_no_value(tmp_path):
 
 
 def test_log_scanner_reads_a_sqlite_log_database_read_only(tmp_path):
-    db = tmp_path / "logs.db"
+    db = tmp_path / "service.db"
     con = sqlite3.connect(db)
-    con.execute("CREATE TABLE _logs (id TEXT, data TEXT, blobby BLOB)")
-    con.execute("INSERT INTO _logs VALUES ('1', ?, ?)", (json.dumps({"url": "/api/health"}), b"plain"))
+    con.execute("CREATE TABLE events (id TEXT, data TEXT, blobby BLOB)")
+    con.execute("INSERT INTO events VALUES ('1', ?, ?)", (json.dumps({"msg": "started"}), b"plain"))
     con.commit()
-    assert logscan.scan_sqlite(str(db), "pocketbase").clean
-    con.execute("INSERT INTO _logs VALUES ('2', ?, NULL)", (json.dumps({"auth": ADMIN_TOKEN}),))
+    assert logscan.scan_sqlite(str(db), "service").clean
+    con.execute("INSERT INTO events VALUES ('2', ?, NULL)", (json.dumps({"msg": ADMIN_TOKEN}),))
     con.commit()
     con.close()
-    found = logscan.scan_sqlite(str(db), "pocketbase")
-    assert found.tokens == 1 and found.where == {"pocketbase:_logs"}
+    found = logscan.scan_sqlite(str(db), "service")
+    assert found.tokens == 1 and found.where == {"service:events"}
     before = db.read_bytes()
-    logscan.scan_sqlite(str(db), "pocketbase")
+    logscan.scan_sqlite(str(db), "service")
     assert db.read_bytes() == before

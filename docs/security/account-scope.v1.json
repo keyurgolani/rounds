@@ -416,7 +416,7 @@
   },
   "cases": {
     "isolation.share-views.client-write.denied": {
-      "surface": "pb:/api/collections/resume_share_views/records",
+      "surface": "pb:resume_share_views",
       "actor": "authenticated-other",
       "variant": "foreign_owner",
       "expected": "uniform_reject",
@@ -425,13 +425,13 @@
       "status": "pass",
       "lane": "pr",
       "evidence": [
-        "account-scope.create.server-only.denied",
-        "account-scope.update.server-only.denied"
+        "resume_share_views:account-scope.create.server-only.denied",
+        "resume_share_views:account-scope.update.server-only.denied"
       ],
       "guarantee": "no client writes a share view row, for its own link or another account's"
     },
     "isolation.share-link.owner-only.isolated": {
-      "surface": "pb:/api/collections/resume_share_links/records",
+      "surface": "pb:resume_share_links",
       "actor": "authenticated-other",
       "variant": "foreign_owner",
       "expected": "uniform_not_found",
@@ -440,14 +440,14 @@
       "status": "pass",
       "lane": "pr",
       "evidence": [
-        "account-scope.share.owner-only.isolated",
-        "account-scope.update.server-only.denied",
-        "account-scope.create.relation-foreign-or-missing.indistinguishable"
+        "resume_share_links:account-scope.share.owner-only.isolated",
+        "resume_share_links:account-scope.update.server-only.denied",
+        "resume_share_links:account-scope.create.relation-foreign-or-missing.indistinguishable"
       ],
       "guarantee": "a share link reads only for its owner, keeps its target once made, and points only at the owner's own resume or variant"
     },
     "isolation.deploy.exposure.denied": {
-      "surface": "nginx:/_/ /api/admins /api/settings /api/backups /api/logs",
+      "surface": "nginx:admin",
       "actor": "anonymous",
       "variant": "valid",
       "expected": "not_routed",
@@ -467,7 +467,7 @@
       "guarantee": "the PocketBase admin UI and admin API aren't served at the public URL, and no shipped default login opens an admin account"
     },
     "isolation.deploy.share-headers.present": {
-      "surface": "nginx:/r /api/share/by-token",
+      "surface": "nginx:share-read",
       "actor": "anonymous",
       "variant": "missing_id",
       "expected": "uniform_not_found",
@@ -482,7 +482,7 @@
       "guarantee": "every share page path carries the share headers, and a malformed and an unknown share read answer one byte-identical not-found"
     },
     "isolation.demo.no-share-or-provider": {
-      "surface": "pb:/api/collections/resume_share_links/records",
+      "surface": "pb:resume_share_links",
       "actor": "demo",
       "variant": "valid",
       "expected": "uniform_reject",
@@ -497,7 +497,7 @@
       "guarantee": "a demo caller can't create a share link, an AI provider, or AI settings, and no demo account signs in when the demo is off"
     },
     "account-scope.create.owner-shape.uniform": {
-      "surface": "pb:/api/collections/{collection}/records",
+      "surface": "pb:{collection}",
       "actor": "authenticated-other",
       "variant": "foreign_owner",
       "expected": "uniform_reject",
@@ -508,7 +508,7 @@
       "guarantee": "a create naming a missing owner and one naming another account answer with the same status and body"
     },
     "account-scope.create.client-id.uniform": {
-      "surface": "pb:/api/collections/{collection}/records",
+      "surface": "pb:{collection}",
       "actor": "authenticated-other",
       "variant": "deleted_id",
       "expected": "uniform_reject",
@@ -574,7 +574,7 @@
       "guarantee": "once legacy share links are replaced, a legacy link answers as an unknown one on every path"
     },
     "isolation.demo.reset.zero-rows": {
-      "surface": "pb:/api/collections/{collection}/records",
+      "surface": "pb:{collection}",
       "actor": "demo",
       "variant": "valid",
       "expected": "allow",

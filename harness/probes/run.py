@@ -126,6 +126,14 @@ def _context(phase: str) -> dict:
     }
 
 
+def new_writer(receipts_path: str, phase: str) -> ReceiptWriter:
+    """A phase's receipt writer. The harness admin password has no fixed
+    shape the redactor knows, so every phase registers it."""
+    writer = ReceiptWriter(receipts_path, _context(phase))
+    writer.register_secret(os.environ.get("PB_ADMIN_PASSWORD", ""), "password:superuser")
+    return writer
+
+
 def _register_account(writer: ReceiptWriter, acct: Account) -> None:
     # Receipts carry neither an account's password nor its session token.
     writer.register_secret(acct.password, f"password:{acct.tag}")
@@ -210,7 +218,6 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
     for acct in (a, b, c):
         _register_account(writer, acct)
     writer.register_secret(admin_token, "token:superuser")
-    writer.register_secret(os.environ.get("PB_ADMIN_PASSWORD", ""), "password:superuser")
 
     fam = doc["probe_families"]
     for name, row in doc["collections"].items():
@@ -384,16 +391,21 @@ def admission_check_ids() -> set[str]:
     return set(vd.ADMISSION_CHECKS) | set(admission_deploy.CHECKS)
 
 
-def _verdict_cases(doc: dict, receipts: list[dict], today: datetime.date) -> tuple[list[str], set[str], set[str]]:
+def _verdict_cases(doc: dict, receipts: list[dict],
+                   today: datetime.date) -> tuple[list[str], set[str], set[tuple[str, str]]]:
     """The case table's part of the verdict: (failures, ids a receipt may
-    carry, quarantined ids).
+    carry, the (target, id) pairs a quarantine covers).
 
-    - a `pass` row needs passing receipts for every check it names (a
-      `phase:` entry is the launcher's own exit code, so it needs none here);
+    - a `pass` row needs passing receipts for every check it names, on the
+      named target when it names one (a `phase:` entry is the launcher's own
+      exit code, so it needs none here);
     - a `pending` or `slot` row has no implementation and no receipt;
-    - a `quarantined` row still runs; its failure is reported as the known
-      flake, and a pass fails the run until the row is flipped back;
-    - any row past its expiry fails the run.
+    - a `quarantined` row still runs; a failure on a target it covers is
+      reported as the known flake, a failure anywhere else under the same id
+      fails the run, and a pass on every covered target fails the run until
+      the row is flipped back;
+    - a quarantine that starts in the future or ends more than 14 days from
+      today fails the run, and so does any row past its expiry.
     """
     cases = doc.get("cases") or {}
     by_id: dict[str, list[dict]] = {}
@@ -401,25 +413,33 @@ def _verdict_cases(doc: dict, receipts: list[dict], today: datetime.date) -> tup
         by_id.setdefault(r["probe_id"], []).append(r)
     failures: list[str] = []
     allowed: set[str] = set()
-    quarantined: set[str] = set()
+    covered = policy.quarantined_targets(doc)
     for cid in policy.expired_cases(doc, today):
         failures.append(f"case {cid} expired on {cases[cid]['expires']}; renew it with an owner or fix it")
+    failures += policy.quarantine_window_problems(doc, today)
     for cid, row in sorted(cases.items()):
         status = row["status"]
-        own = [e for e in row.get("evidence", []) if not e.startswith("phase:")]
+        checks = [(ident, target) for kind, ident, target in map(policy.parse_evidence, row.get("evidence", []))
+                  if kind == "check"]
         if status == "pass":
-            allowed |= set(own)
-            for e in own:
-                results = by_id.get(e)
+            for ident, target in checks:
+                allowed.add(ident)
+                results = [x for x in by_id.get(ident, []) if target is None or x["collection"] == target]
+                label = ident if target is None else f"{target}:{ident}"
                 if not results:
-                    failures.append(f"missing result for case {cid} ({e})")
+                    failures.append(f"missing result for case {cid} ({label})")
                 elif not all(x["passed"] for x in results):
                     bad = next(x for x in results if not x["passed"])
-                    failures.append(f"case {cid} failed ({e}): {bad.get('detail', '')}")
+                    failures.append(f"case {cid} failed ({label}): {bad.get('detail', '')}")
         elif status == "quarantined":
-            allowed |= set(own)
-            quarantined |= set(own)
-            results = [x for e in own for x in by_id.get(e, [])]
+            results = []
+            for ident, target in checks:
+                allowed.add(ident)
+                for x in by_id.get(ident, []):
+                    if x["collection"] == target:
+                        results.append(x)
+                    elif not x["passed"]:
+                        failures.append(f"case {cid} failed on {x['collection']}, which its quarantine doesn't cover")
             if not results:
                 failures.append(f"missing result for quarantined case {cid}")
             elif all(x["passed"] for x in results):
@@ -429,7 +449,7 @@ def _verdict_cases(doc: dict, receipts: list[dict], today: datetime.date) -> tup
                 failures.append(f"{status} case {cid} is implemented; flip it to pass in the same PR")
             if cid in by_id:
                 failures.append(f"{status} case {cid} produced a receipt")
-    return failures, allowed, quarantined
+    return failures, allowed, covered
 
 
 def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozenset[str] = frozenset(),
@@ -499,7 +519,7 @@ def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozens
             failures.append(f"admission check {check_id} failed on {bad['collection']}: {bad.get('detail', '')}")
 
     # 4c. The case table (ROUNDS-00B-L05).
-    case_failures, case_ids, quarantined_ids = _verdict_cases(doc, receipts, today or datetime.date.today())
+    case_failures, case_ids, quarantined_pairs = _verdict_cases(doc, receipts, today or datetime.date.today())
     failures += case_failures
 
     # 5. No stray receipts for unknown or pending families.
@@ -519,8 +539,10 @@ def run_verdict(doc: dict, receipts_path: str, admission_ids: set[str] | frozens
 
     total = len(receipts)
     passed = sum(1 for r in receipts if r["passed"])
-    # A quarantined row's failure is its known flake, reported apart.
-    expected_fail = sum(1 for r in receipts if not r["passed"] and r["probe_id"] in quarantined_ids)
+    # A failure on a target a quarantine covers is its known flake, reported
+    # apart; a failure on any other target counts as a failure.
+    expected_fail = sum(1 for r in receipts
+                        if not r["passed"] and (r["collection"], r["probe_id"]) in quarantined_pairs)
     failed = sum(1 for r in receipts if not r["passed"]) - expected_fail
 
     print("=" * 60)
@@ -612,7 +634,7 @@ def main() -> int:
     if phase == "verdict":
         return run_verdict(doc, receipts_path, admission_check_ids())
 
-    writer = ReceiptWriter(receipts_path, _context(phase))
+    writer = new_writer(receipts_path, phase)
     if phase == "main":
         run_main(doc, writer)
     elif phase == "hook":
