@@ -1,7 +1,7 @@
 """Harness check for the demo containment migration (ROUNDS-00B-L07 stage 1).
 
 Applies ``1700006700_demo_contain.js`` with the pinned PocketBase binary,
-with no network, on a ``pb_data`` built from every migration before it.
+with no network, on a ``pb_data`` built from every other migration.
 Served once without the hooks, as a pre-upgrade database would have been,
 that copy gets a legacy fixture: one row in every account-scoped
 collection for the seeded demo account, for a second demo account, and
@@ -129,11 +129,12 @@ def main() -> int:
     full = work / "migrations"
     base.mkdir()
     full.mkdir()
+    # Every other migration, so the fixture reaches every account-scoped
+    # collection, including those added after this one.
     for path in sorted(MIGRATIONS.glob("*.js")):
-        if path.name < MIGRATION:
+        if path.name != MIGRATION:
             shutil.copy(path, base / path.name)
-            shutil.copy(path, full / path.name)
-    shutil.copy(MIGRATIONS / MIGRATION, full / MIGRATION)
+        shutil.copy(path, full / path.name)
 
     data = work / "pb_data"
     db = data / "data.db"

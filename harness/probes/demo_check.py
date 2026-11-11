@@ -83,8 +83,10 @@ def run_on(c: Checks, pb: PBClient, admin: str) -> None:
     c.check("demo.on.the-profile-changes", profile.status == 200 and (profile.body or {}).get("name") == "Visitor",
             f"status={profile.status}")
     new_password = factory.make_account("demo").password
+    locked = ("email", "username", "verified", "is_demo")
+    before = {k: (pb.view("users", d.user_id, admin).body or {}).get(k) for k in locked}
     refused = {
-        "password": pb.update("users", d.user_id, {"oldPassword": d.password, "password": new_password,
+        "password-change": pb.update("users", d.user_id, {"oldPassword": d.password, "password": new_password,
                                                    "passwordConfirm": new_password}, d.token),
         "email": pb.update("users", d.user_id, {"email": factory.make_account("other").email}, d.token),
         "username": pb.update("users", d.user_id, {"username": "visitor" + secrets.token_hex(4)}, d.token),
@@ -94,11 +96,16 @@ def run_on(c: Checks, pb: PBClient, admin: str) -> None:
     email_change = call(POCKETBASE_URL, "POST", "/api/collections/users/request-email-change", d.token,
                         {"newEmail": factory.make_account("other").email})
     still = pb.auth_password(d.email, d.password)
+    after = {k: (pb.view("users", d.user_id, admin).body or {}).get(k) for k in locked}
+    # PocketBase itself refuses a record email change by anyone but a
+    # superuser (400) before the demo hook sees it; every other refusal is
+    # the demo hook's.
     c.check("demo.on.the-account-fields-and-the-account-stay",
-            all(_not_permitted(r.status, r.body) for r in refused.values())
-            and _not_permitted(email_change[0], email_change[1]) and still.status == 200,
+            all(_not_permitted(r.status, r.body) for k, r in refused.items() if k != "email")
+            and refused["email"].status in (400, 403)
+            and _not_permitted(email_change[0], email_change[1]) and still.status == 200 and after == before,
             " ".join(f"{k}={r.status}" for k, r in refused.items()) + f" email-change={email_change[0]}"
-            f" sign-in={still.status}")
+            f" sign-in={still.status} unchanged={after == before}")
 
     # What a demo account may not own, through PocketBase and the runner.
     resume = pb.create("resumes", d.token, {"user": d.user_id, "name": "demo resume", "slug": "demo-" + secrets.token_hex(4)})
@@ -130,10 +137,12 @@ def run_on(c: Checks, pb: PBClient, admin: str) -> None:
     moved = pb.update("users", s.user_id, {"oldPassword": s.password, "password": new_password,
                                            "passwordConfirm": new_password}, s.token)
     c.check("demo.on.a-standard-account-is-held-to-none-of-it", own.status == 200 and moved.status == 200,
-            f"settings={own.status} password={moved.status}")
+            f"settings={own.status} password-change={moved.status}")
 
+    # Signups are off in the next phase, so it signs in with these.
     STATE.parent.mkdir(parents=True, exist_ok=True)
-    STATE.write_text(json.dumps({"email": d.email, "password": d.password, "token": d.token, "id": d.user_id}))
+    STATE.write_text(json.dumps({"email": d.email, "password": d.password, "token": d.token, "id": d.user_id,
+                                 "standard": {"email": s.email, "password": new_password}}))
 
 
 def run_off(c: Checks, pb: PBClient, admin: str) -> None:
@@ -161,8 +170,7 @@ def run_off(c: Checks, pb: PBClient, admin: str) -> None:
             all(got == control and got in (404, 405) for got, control in answers.values())
             and answers["status"][0] == 404,
             " ".join(f"{k}={got}/{control}" for k, (got, control) in answers.items()))
-    s = _standard(pb, admin)
-    signed = pb.auth_password(s.email, s.password)
+    signed = pb.auth_password(saved["standard"]["email"], saved["standard"]["password"])
     c.check("demo.off.a-standard-account-signs-in", signed.status == 200, f"status={signed.status}")
 
 
