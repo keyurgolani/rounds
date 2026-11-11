@@ -1,11 +1,11 @@
-// The Export tab's accessibility (ROUNDS-00A-L04): every server PDF state
-// is reached by keyboard alone and announced through a role="status"
-// region with an icon and words; focus stays on the server PDF button
-// through every one of them; an unavailable server PDF button stays
-// focusable with aria-disabled and is described by its message; the six
-// other formats stay usable in every state; and all seven buttons are at
-// least 44 by 44 CSS pixels. Layout at 390 px is checked in a real browser
-// (the design review's screenshots); jsdom has no layout.
+// The Export tab's accessibility (ROUNDS-00A-L04). Every server PDF state
+// is reached with the keyboard alone, and a polite live region speaks it,
+// in words with an icon beside them. Focus never leaves server PDF's
+// button. When that button can't act, it says so through aria-disabled,
+// takes its description from the message, and can still be focused. The
+// six other formats work in every state, and all seven buttons measure
+// at least 44 by 44 CSS pixels. Layout at 390 px is checked in a real
+// browser (the design review's screenshots); jsdom has no layout.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';

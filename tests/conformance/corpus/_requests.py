@@ -38,11 +38,11 @@ def render_body(snapshot_id: str, checksum: str, command_id: str = RENDER_COMMAN
     return {
         "snapshot_id": snapshot_id,
         "expected_checksum": checksum,
+        "idempotency_id": command_id,
         "format": "pdf",
+        "locale": "en",
         "page_size": "A4",
         "margin_mm": 0,
-        "locale": "en",
-        "idempotency_id": command_id,
     }
 
 

@@ -41,11 +41,11 @@ RENDER_KEY = "0190f000-0000-7000-8000-000000000001"
 RENDER_BODY = {
     "snapshot_id": SNAPSHOT_ID,
     "expected_checksum": SNAPSHOT_CHECKSUM,
+    "idempotency_id": RENDER_KEY,
     "format": "pdf",
+    "locale": "en",
     "page_size": "A4",
     "margin_mm": 0,
-    "locale": "en",
-    "idempotency_id": RENDER_KEY,
 }
 
 
@@ -125,7 +125,9 @@ GATES = {
 ALLOCATING = sorted(n for n in ROUTES if n not in ("ats_rule", "pdf_health"))
 WITH_BODY = sorted(n for n in ROUTES if ROUTES[n][2] is not None)
 WITH_LIMITS = sorted(n for n in ROUTES if ROUTES[n][3] is not None)
-WITH_LOOKUPS = ("run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit", "pdf_render")
+WITH_LOOKUPS = ("run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit")
+# The render reads its snapshot at step 8 too (ROUNDS-00A-L04).
+WITH_LOOKUPS += ("pdf_render",)
 
 
 def _send(client, name, headers=None, body=None, content=None):

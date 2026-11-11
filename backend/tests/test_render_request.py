@@ -17,11 +17,11 @@ from app import contract_schema, legacy_snapshots
 VALID = {
     "snapshot_id": "snapaaaaaaaaaa1",
     "expected_checksum": "sha256:" + "c" * 64,
+    "idempotency_id": "0190f000-0000-7000-8000-00000000000a",
     "format": "pdf",
+    "locale": "en",
     "page_size": "A4",
     "margin_mm": 0,
-    "locale": "en",
-    "idempotency_id": "0190f000-0000-7000-8000-00000000000a",
 }
 MISSING = object()
 

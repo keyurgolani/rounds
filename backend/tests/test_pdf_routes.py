@@ -37,11 +37,11 @@ def body(**change):
     out = {
         "snapshot_id": SNAPSHOT,
         "expected_checksum": CHECKSUM,
+        "idempotency_id": KEY,
         "format": "pdf",
+        "locale": "en",
         "page_size": "A4",
         "margin_mm": 0,
-        "locale": "en",
-        "idempotency_id": KEY,
     }
     out.update(change)
     return {k: v for k, v in out.items() if v is not None}

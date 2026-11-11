@@ -8,13 +8,13 @@
 // Server PDF (ROUNDS-00A-L04) renders the server's own snapshot of the
 // saved resume, never what's on screen: the tab saves pending edits,
 // asks for the snapshot, renders it by id, and downloads it. Each step
-// and every outcome shows in the row's polite status region with an icon
-// and text, never color alone. When the server can't make server PDF for
-// this resume, or it's turned off or at a limit, its button stays
-// focusable with aria-disabled and describes itself by the message. No
-// button is ever `disabled` mid-export, so focus stays where the user
-// left it. The six other formats export what's on screen whatever
-// server PDF says.
+// and every outcome lands in the row's polite live region as words with
+// an icon beside them, so no state rests on color. While server PDF
+// can't act for this resume (ineligible, turned off, or at a limit), its
+// button keeps keyboard focus, reports itself unavailable through
+// aria-disabled, and points at the message. No button is ever
+// `disabled` mid-export, so focus stays where the user left it. The six
+// other formats export what's on screen whatever server PDF says.
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {

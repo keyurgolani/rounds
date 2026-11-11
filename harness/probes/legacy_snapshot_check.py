@@ -144,8 +144,8 @@ def create(token: str, kind: str, source_id: str, updated: str, key: str | None 
 
 
 def render_body(snapshot_id: str, checksum: str, key: str) -> dict[str, Any]:
-    return {"snapshot_id": snapshot_id, "expected_checksum": checksum, "format": "pdf", "page_size": "A4",
-            "margin_mm": 0, "locale": "en", "idempotency_id": key}
+    return {"snapshot_id": snapshot_id, "expected_checksum": checksum, "idempotency_id": key, "format": "pdf",
+            "locale": "en", "page_size": "A4", "margin_mm": 0}
 
 
 class Rendered:

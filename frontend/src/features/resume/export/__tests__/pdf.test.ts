@@ -62,11 +62,11 @@ describe('exportPdfServer', () => {
     expect(render.body).toEqual({
       snapshot_id: 'snapaaaaaaaaaa1',
       expected_checksum: CHECKSUM,
+      idempotency_id: render.headers.get('Idempotency-Key'),
       format: 'pdf',
+      locale: 'en',
       page_size: 'A4',
       margin_mm: 0,
-      locale: 'en',
-      idempotency_id: render.headers.get('Idempotency-Key'),
     });
     expect(render.headers.get('Idempotency-Key')).toMatch(UUID_V7_PATTERN);
     // Each call is its own command.
