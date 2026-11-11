@@ -259,10 +259,14 @@ export function Toolbar({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        // On a narrow screen the controls move under the label rather
+        // than past the edge.
+        flexWrap: 'wrap',
         padding: '10px 14px',
         background: 'var(--bg-elev)',
         borderBottom: '1px solid var(--border)',
         gap: 10,
+        rowGap: 8,
       }}
     >
       <div className="eyebrow" style={{ fontSize: 9.5 }}>

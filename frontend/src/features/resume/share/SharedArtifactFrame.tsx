@@ -31,6 +31,9 @@ export default function SharedArtifactFrame({ markup }: { markup: string }) {
   const areaRef = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState(1);
+  // Fitted to the width until the reader picks a zoom; Fit goes back to it,
+  // and a fitted page follows the width, a phone turned sideways included.
+  const [fitted, setFitted] = useState(true);
 
   // The scroll area is this page's own element, so it can be measured.
   useLayoutEffect(() => {
@@ -47,19 +50,20 @@ export default function SharedArtifactFrame({ markup }: { markup: string }) {
     return () => ro.disconnect();
   }, []);
 
-  const fitZoom = useCallback(() => {
-    const el = areaRef.current;
-    if (!el) return;
-    const available = el.clientWidth - GUTTER_PX * 2;
-    if (available <= 0) return;
-    setZoom(clampZoom(available / SHARED_FRAME_WIDTH_PX));
-  }, []);
+  useLayoutEffect(() => {
+    const available = area.w - GUTTER_PX * 2;
+    if (fitted && available > 0) setZoom(clampZoom(available / SHARED_FRAME_WIDTH_PX));
+  }, [fitted, area.w]);
 
-  // Open fitted to the width, as the other share page does.
-  useEffect(() => {
-    const id = requestAnimationFrame(fitZoom);
-    return () => cancelAnimationFrame(id);
-  }, [fitZoom]);
+  const zoomBy = useCallback((step: number) => {
+    setFitted(false);
+    setZoom((z) => clampZoom(z + step));
+  }, []);
+  const zoomReset = useCallback(() => {
+    setFitted(false);
+    setZoom(1);
+  }, []);
+  const zoomFit = useCallback(() => setFitted(true), []);
 
   // The same shortcuts as the other share page: +/= and − zoom, 0 resets,
   // F fits. They work while focus is on this page, not inside the frame.
@@ -70,21 +74,21 @@ export default function SharedArtifactFrame({ markup }: { markup: string }) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === '+' || e.key === '=') {
         e.preventDefault();
-        setZoom((z) => clampZoom(z + ZOOM_STEP));
+        zoomBy(ZOOM_STEP);
       } else if (e.key === '-' || e.key === '_') {
         e.preventDefault();
-        setZoom((z) => clampZoom(z - ZOOM_STEP));
+        zoomBy(-ZOOM_STEP);
       } else if (e.key === '0') {
         e.preventDefault();
-        setZoom(1);
+        zoomReset();
       } else if (e.key === 'f' || e.key === 'F') {
         e.preventDefault();
-        fitZoom();
+        zoomFit();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [fitZoom]);
+  }, [zoomBy, zoomReset, zoomFit]);
 
   // Scaled, the frame fills the scroll area's height; unscaled, it's that
   // height over the zoom, so the document scrolls inside it.
@@ -96,10 +100,10 @@ export default function SharedArtifactFrame({ markup }: { markup: string }) {
       <Toolbar
         label={SHARE_TOOLBAR_LABEL}
         zoom={zoom}
-        onZoomIn={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
-        onZoomOut={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
-        onZoomReset={() => setZoom(1)}
-        onZoomFit={fitZoom}
+        onZoomIn={() => zoomBy(ZOOM_STEP)}
+        onZoomOut={() => zoomBy(-ZOOM_STEP)}
+        onZoomReset={zoomReset}
+        onZoomFit={zoomFit}
         actions={<ReadOnlyBadge />}
       />
       <div

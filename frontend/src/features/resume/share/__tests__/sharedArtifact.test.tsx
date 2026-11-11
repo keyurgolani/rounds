@@ -131,6 +131,24 @@ describe('the shared artifact frame', () => {
     expect(screen.getByRole('button', { name: /Fit/ })).toBeInTheDocument();
   });
 
+  it('opens fitted to the width, keeps a picked zoom, and fits again on Fit', async () => {
+    const user = userEvent.setup();
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(390);
+    try {
+      render(<SharedArtifactFrame markup={MARKUP} />);
+      const percent = () => screen.getByTitle(/Reset to 100%/);
+      // (390 - 2 * 16) / 826
+      expect(percent()).toHaveTextContent('43%');
+      await user.keyboard('+');
+      expect(percent()).toHaveTextContent('53%');
+      await user.click(screen.getByRole('button', { name: /Fit/ }));
+      expect(percent()).toHaveTextContent('43%');
+      expect(frame().style.transform).toBe(`scale(${(390 - 32) / SHARED_FRAME_WIDTH_PX})`);
+    } finally {
+      width.mockRestore();
+    }
+  });
+
   it('scales the frame with the zoom and leaves the browser zoom keys alone', async () => {
     const user = userEvent.setup();
     render(<SharedArtifactFrame markup={MARKUP} />);
