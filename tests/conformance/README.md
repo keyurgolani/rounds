@@ -30,7 +30,8 @@ A fixture module is committed only for a guarantee the branch already
 enforces (anonymous execution denied, oversized input refused,
 caller-supplied tests or validators refused, the demo flag immutable,
 cross-account result reads denied, no runner secret in the candidate
-environment, the render proxy echoing no sidecar text). Every other row
+environment, the render proxy echoing no sidecar text, no render of
+another account's snapshot). Every other row
 in `manifest.json` is a `pending` row that names the leaf which closes it
 and carries no fixture code: a runnable probe for a gap still open on
 `next` would publish working exploit code before the fix (orchestrator

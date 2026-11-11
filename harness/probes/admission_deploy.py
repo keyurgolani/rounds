@@ -252,13 +252,40 @@ def check_event_loop(writer: ReceiptWriter, replica: str, acct: factory.Account,
                          worst, f"busy={busy} health_ms={worst} run_status={finished}"))
 
 
-def check_renderer(writer: ReceiptWriter, replica: str, acct: factory.Account) -> None:
+def owned_snapshot(pb: PBClient, admin: str, acct: factory.Account) -> tuple[str, str]:
+    """A snapshot of the account's own resume, and its checksum. Only a
+    PocketBase hook writes snapshots in a deployment, so the harness seeds
+    this one with the admin token, as factory.seed does."""
+    resume = pb.create("resumes", acct.token, {"user": acct.user_id, "name": "render check",
+                                               "slug": "render-check-" + secrets.token_hex(4)})
+    if resume.status != 200 or not isinstance(resume.body, dict):
+        raise RuntimeError(f"render check resume create failed: status={resume.status}")
+    made = pb.create_with_file("legacy_artifact_snapshots", admin,
+                               {"user": acct.user_id, **factory.snapshot_fields(resume.body["id"])},
+                               "markup", "snapshot.html", factory.SNAPSHOT_MARKUP, "text/html")
+    if made.status != 200 or not isinstance(made.body, dict):
+        raise RuntimeError(f"render check snapshot seed failed: status={made.status}")
+    return made.body["id"], made.body["content_checksum"]
+
+
+def render_body(snapshot_id: str, checksum: str, key: str) -> dict[str, Any]:
+    """render-request/v1 for one snapshot; ``key`` is also the call's
+    Idempotency-Key."""
+    return {"snapshot_id": snapshot_id, "expected_checksum": checksum, "idempotency_id": key, "format": "pdf",
+            "locale": "en", "page_size": "A4", "margin_mm": 0}
+
+
+def check_renderer(writer: ReceiptWriter, replica: str, acct: factory.Account, pb: PBClient, admin: str) -> None:
     (status, body, _), ms = _timed(lambda: ac.call(replica, "GET", "/api/pdf/health", acct.token))
     ok = status in (200, 503) and isinstance(body, dict) and set(body) == {"status"} and isinstance(body["status"], str)
     writer.write(receipt("admission.closure.pdf-health.status-only", f"{replica} /api/pdf/health", "standard",
                          200, status, ok, ms, f"status={status} keys={sorted(body) if isinstance(body, dict) else None}"))
-    # The harness runs no renderer, so the runner can't reach one.
-    raw_status, raw, headers = _raw_call(replica, "/api/pdf/render", acct.token, {"html": "<p>harness</p>"})
+    # The account's own snapshot passes every check before the renderer;
+    # this phase runs no renderer, so the runner can't reach one.
+    snapshot_id, checksum = owned_snapshot(pb, admin, acct)
+    key = ac.uuid7()
+    raw_status, raw, headers = _raw_call(replica, "/api/pdf/render", acct.token, render_body(snapshot_id, checksum, key),
+                                         key=key)
     text = raw.decode("utf-8", "replace")
     problem = vd.envelope_problem(raw_status, raw, headers)
     leaked = [t for t in RENDERER_TEXT if t in text]
@@ -268,9 +295,11 @@ def check_renderer(writer: ReceiptWriter, replica: str, acct: factory.Account) -
                          raw_status, ok, 0, f"status={raw_status} code={code!r} {problem} leaked={leaked}".strip()))
 
 
-def _raw_call(base: str, path: str, token: str, body: dict, keyed: bool = True) -> tuple[int, bytes, dict[str, str]]:
+def _raw_call(base: str, path: str, token: str, body: dict, keyed: bool = True,
+              key: str | None = None) -> tuple[int, bytes, dict[str, str]]:
+    sent_key = ({"Idempotency-Key": key} if key else _keyed()) if keyed else {}
     req = urllib.request.Request(base + path, data=json.dumps(body).encode(), method="POST", headers={
-        "Content-Type": "application/json", "Authorization": "Bearer " + token, **(_keyed() if keyed else {})})
+        "Content-Type": "application/json", "Authorization": "Bearer " + token, **sent_key})
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             return resp.status, resp.read(), {k.lower(): v for k, v in resp.headers.items()}
@@ -295,7 +324,7 @@ def run_admission_deploy(writer: ReceiptWriter) -> None:
         check_closures(writer, replica, acct, slug, name)
         check_store_contract(writer, replica, acct, before)
         check_event_loop(writer, replica, acct, slug, name)
-        check_renderer(writer, replica, acct)
+        check_renderer(writer, replica, acct, pb, admin)
 
 
 # --------------------------------------------------------------------------

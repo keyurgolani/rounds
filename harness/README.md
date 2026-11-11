@@ -359,15 +359,45 @@ through nginx (`snapshot-create`) that:
 - every snapshot reconciles with its checksum, owner, and source rows.
 
 run.sh then runs the operator's scan in the PocketBase container and signs and
-verifies the report on the runner. With the materializer stopped, creation
-answers 503 `materializer_unavailable` and writes nothing; back up, the same key
-makes one snapshot. With the gate off, creation answers 503 `route_disabled`
-and every snapshot still reads back; a rescan gives the same report, which
-`snapshot-scan` compares with the signed one. With the gate on again, every
-snapshot's source gives `reused` with the same checksum, no resume, variant, or
-version row changed through any of it, and deleting an account deletes its
-snapshots. The scan secret is a per-run test value. Between phases the probe
-keeps only emails and ids, under `harness/.state/`.
+verifies the report on the runner.
+
+PR 3 adds server PDF on snapshot ids. The real PDF renderer, built from this
+commit, runs behind the `renderer` profile only during these phases, so every
+other phase's runner has no renderer to reach. Through nginx
+(`snapshot-render`):
+
+- the owner gets a PDF of each of its snapshots;
+- another account's snapshot, named with its checksum, answers exactly like a
+  missing one, and so does a snapshot whose source was deleted;
+- a checksum the snapshot doesn't hold, the request shape from before
+  snapshots, and an anonymous caller are refused;
+- a completed render's key doesn't render again, and another account's key on
+  its own request is its own command.
+
+The isolation check writes the receipts for the case table's
+`isolation.render.snapshot.uniform-not-found` row. run.sh then saves both
+replicas' decision lines for the render route into the run's state, and
+`snapshot-render-audit` checks that each refused render ended at its refusal
+before a slot ran and that the replicas answered exactly as many renders as
+the owner made. With the renderer stopped, a render is the typed 503 with the
+renderer's fixed sentence and none of its text.
+
+With the materializer stopped, creation answers 503 `materializer_unavailable`
+and writes nothing, and a snapshot that exists still renders; back up, the
+same key makes one snapshot. With the gate off, creation answers 503
+`route_disabled`, and every snapshot still reads back and renders, owner only;
+a rescan gives the same report, which `snapshot-scan` compares with the signed
+one. With the gate on again, every snapshot's source gives `reused` with the
+same checksum, no resume, variant, or version row changed through any of it,
+and deleting an account deletes its snapshots.
+
+Last, the Recovery check (`snapshot-recovery`): with PocketBase stopped, run.sh
+archives `pb_data` as Backups in `docs/operations.md` does, `storage/`
+included, empties the volume, and restores the archive. Every snapshot then
+renders for its owner with the checksum it had, and another account gets the
+404. The scan secret is a per-run test value. Between phases the probe keeps
+only emails, ids, and correlation ids, under `harness/.state/`, along with the
+decision lines and the backup archive, none of which go up with the receipts.
 
 ## Share Capabilities
 

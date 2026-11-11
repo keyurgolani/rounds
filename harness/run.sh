@@ -37,17 +37,25 @@
 #                     cancel, a cancel mid-run, a time limit, and a replica
 #                     killed mid-run whose job a same-key retry finishes
 #                     (ROUNDS-00A-L03 PR 2, harness/probes/scratch_check.py)
-#  3h. legacy snapshots - PocketBase, both replicas, and nginx with
-#                     ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE on and the
-#                     materializer up: each RD-02 input's declared outcome,
+#  3h. legacy snapshots - PocketBase, both replicas, nginx, and the PDF
+#                     renderer with ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE on and
+#                     the materializer up: each RD-02 input's declared outcome,
 #                     owner-only snapshots, replay, reuse, conflict, and the
-#                     operator's scan, signed by the runner (ROUNDS-00A-L04,
+#                     operator's scan, signed by the runner; then server PDF
+#                     renders only the caller's own snapshots, both replicas'
+#                     decision lines show no other render ran, and with the
+#                     renderer stopped a render is a typed 503 (ROUNDS-00A-L04,
 #                     harness/probes/legacy_snapshot_check.py)
-#  3i. the materializer stopped: creation is typed and writes nothing; back
-#                     up, a same-key retry makes one snapshot
-#  3j. the gate off: creation is refused, snapshots still read back, the
-#                     rescan matches; the gate on again: every snapshot is
-#                     reused, and no resume, variant, or version row changed
+#  3i. the materializer stopped: creation is typed and writes nothing, and
+#                     snapshots still render; back up, a same-key retry
+#                     makes one snapshot
+#  3j. the gate off: creation is refused, snapshots still read back and
+#                     render for their owners only, the rescan matches; the
+#                     gate on again: every snapshot is reused, and no resume,
+#                     variant, or version row changed
+# 3j2. recovery - pb_data, its stored files included, backed up with
+#                     PocketBase stopped and restored: every snapshot renders
+#                     for its owner with its checksum
 #  3k. share capabilities - both replicas and nginx: the owner list and
 #                     revoke through nginx, resume and variant deletes with
 #                     active and revoked capabilities keep their snapshots,
@@ -139,7 +147,7 @@ RECEIPTS_DIR="${HARNESS_DIR}/.receipts/${PROJECT}"
 # Image tags, network, and volume all derive from the project name.
 export IMAGE_PREFIX="${PROJECT}"
 PROBE_IMAGE="${IMAGE_PREFIX}-probes:test"
-BUILT_IMAGES="${IMAGE_PREFIX}-pocketbase:test ${IMAGE_PREFIX}-probes:test ${IMAGE_PREFIX}-runner:test ${IMAGE_PREFIX}-frontend:test ${IMAGE_PREFIX}-materializer:test"
+BUILT_IMAGES="${IMAGE_PREFIX}-pocketbase:test ${IMAGE_PREFIX}-probes:test ${IMAGE_PREFIX}-runner:test ${IMAGE_PREFIX}-frontend:test ${IMAGE_PREFIX}-materializer:test ${IMAGE_PREFIX}-pdf-renderer:test"
 # The pinned PocketBase binary, copied out of its image for the migration check.
 PBBIN_VOLUME="${PROJECT}_pbbin"
 RUNNER_URLS="http://runner:8000,http://runner-b:8000"
@@ -185,7 +193,9 @@ SCAN_SECRET_V="harness-scan-key-not-a-secret-${RUN_ID}-0123456789"
 # that profile so a plain deploy `up` starts without it; the flag is used
 # rather than COMPOSE_PROFILES because nerdctl honours the flag but not the
 # environment variable, and both finch and docker compose accept the flag.
-compose() { ${COMPOSE_BIN} -p "${PROJECT}" -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile materializer "$@"; }
+# --profile renderer makes the PDF renderer known; nothing depends on it, so
+# it runs only while a snapshot render phase starts it.
+compose() { ${COMPOSE_BIN} -p "${PROJECT}" -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --profile materializer --profile renderer "$@"; }
 
 # The demo phases carry one test account from phase 3d2 to 5b here; the run
 # removes it, and it never goes up with the receipts.
@@ -243,6 +253,45 @@ wait_materializer() {
     sleep 1
   done
   return 1
+}
+
+# The PDF renderer answering a runner replica, the way the runner calls it.
+wait_renderer() {
+  for _ in $(seq 1 60); do
+    compose exec -T runner python3 -c \
+      "import urllib.request; urllib.request.urlopen('http://pdf-renderer:4000/health', timeout=3)" >/dev/null 2>&1 \
+      && return 0
+    sleep 1
+  done
+  return 1
+}
+
+# Both replicas' decision lines for the render route since they last
+# started, for snapshot-render-audit: correlation ids, statuses, codes, and
+# charges, nothing from a request. They stay in the run's state, out of the
+# uploaded receipts.
+render_decisions() {
+  sleep 1
+  compose logs --no-color runner runner-b 2>/dev/null \
+    | sed -n 's/^[^{]*\({.*"event":"decision".*\)$/\1/p' \
+    | grep '"route":"/api/pdf/render"' > "${STATE_DIR}/render-decisions.jsonl" || true
+}
+
+# docs/operations.md's Backups and Restore on the run's pb_data, with
+# PocketBase stopped: an archive of the volume, storage/ and its snapshot
+# files included, then the volume emptied and the archive extracted back.
+# The archive stays in the run's state, never in the receipts, and goes
+# with the teardown. One PASS or FAIL line.
+backup_and_restore() {
+  local volume="${PROJECT}_pb_data" image="${IMAGE_PREFIX}-pocketbase:test"
+  if ${CONTAINER_BIN} run --rm --network none -v "${volume}:/data:ro" -v "${STATE_DIR}:/backup" "${image}" \
+       sh -c 'tar czf /backup/pb-backup.tar.gz -C /data . && tar tzf /backup/pb-backup.tar.gz | grep -q "^./storage/."' \
+     && ${CONTAINER_BIN} run --rm --network none -v "${volume}:/data" -v "${STATE_DIR}:/backup:ro" "${image}" \
+       sh -c 'find /data -mindepth 1 -delete && tar xzf /backup/pb-backup.tar.gz -C /data'; then
+    echo "PASS recovery.backup-taken-and-restored"
+  else
+    echo "FAIL recovery.backup-taken-and-restored"; return 1
+  fi
 }
 
 # The operator's scan and signing, as docs/operations.md gives them: the
@@ -406,9 +455,9 @@ offline() {
     "${PROBE_IMAGE}" "${phase}"
 }
 
-echo "--- building pocketbase, probes, runner, frontend, and materializer images ---"
+echo "--- building pocketbase, probes, runner, frontend, materializer, and pdf-renderer images ---"
 set_signups false
-compose build pocketbase probes runner frontend materializer
+compose build pocketbase probes runner frontend materializer pdf-renderer
 
 echo "--- phase 1: PocketBase up (signups enabled) ---"
 compose up -d pocketbase
@@ -520,7 +569,7 @@ compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
 # Snapshot creation runs while signups are still on, so it can make its
 # accounts; PocketBase is recreated for each gate value, then the runners
 # and nginx after it (ROUNDS-00A-L04).
-echo "--- phase 3h: legacy snapshots (gate on, the materializer up, both replicas and nginx) ---"
+echo "--- phase 3h: legacy snapshots (gate on, the materializer and the renderer up, both replicas and nginx) ---"
 legacy_rc=0
 snapshots_with_gate() {
   SNAPSHOT_GATE="$1"
@@ -529,11 +578,20 @@ snapshots_with_gate() {
   restart_runners
 }
 set +e
-compose up -d materializer
+compose up -d materializer pdf-renderer
 snapshots_with_gate enabled
 wait_materializer || legacy_rc=1
+wait_renderer || legacy_rc=1
 probe snapshot-create || legacy_rc=1
 scan_report scan-1 || legacy_rc=1
+# Server PDF on snapshot ids, then the replicas' record of every render.
+probe snapshot-render || legacy_rc=1
+render_decisions
+probe snapshot-render-audit || legacy_rc=1
+compose stop pdf-renderer
+probe snapshot-render-down || legacy_rc=1
+compose start pdf-renderer
+wait_renderer || legacy_rc=1
 
 echo "--- phase 3i: legacy snapshots with the materializer stopped, then a same-key retry ---"
 compose stop materializer
@@ -544,15 +602,24 @@ probe snapshot-create-retry || legacy_rc=1
 
 echo "--- phase 3j: legacy snapshots with the gate off, a rescan, then the gate on again ---"
 snapshots_with_gate ""
+wait_renderer || legacy_rc=1
 probe snapshot-create-off || legacy_rc=1
 scan_report scan-2 || legacy_rc=1
 probe snapshot-scan || legacy_rc=1
 snapshots_with_gate enabled
 probe snapshot-create-again || legacy_rc=1
+
+echo "--- phase 3j2: recovery (pb_data backed up with PocketBase stopped, restored, every snapshot renders) ---"
+compose stop runner runner-b frontend pocketbase
+backup_and_restore || legacy_rc=1
+compose up -d pocketbase
+restart_runners
+wait_renderer || legacy_rc=1
+probe snapshot-recovery || legacy_rc=1
 SNAPSHOT_GATE=""
 set_signups false
-compose stop runner runner-b frontend materializer
-compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
+compose stop runner runner-b frontend materializer pdf-renderer
+compose rm -f runner runner-b frontend pdf-renderer >/dev/null 2>&1 || true
 set -e
 
 # Share capabilities run while signups are still on, so they can make

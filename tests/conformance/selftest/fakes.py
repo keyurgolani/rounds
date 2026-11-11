@@ -41,7 +41,9 @@ GUARANTEES = (
     "health-status-only",   # RD-07: health answers only its status
     "health-status-value",  # RD-07: that status is one of health's own values
     "typed-render-failure", # RD-07: a failed render is the typed envelope
+    "snapshot-owner",       # RD-01: a render needs a snapshot the caller owns
 )
+RENDERER_FAILED = "The PDF renderer couldn't finish this document. Try again shortly."
 # Routes a test turns off by their gate, and the stop each answers.
 GATE_STOPS = {"route_disabled", "definitions_disabled"}
 
@@ -64,13 +66,15 @@ class Account:
 
 class FakeRunner:
     def __init__(self, budget: Budget, log: RouteLog, off: set[str], canaries: CanarySet,
-                 gated: dict[str, str] | None = None) -> None:
+                 gated: dict[str, str] | None = None, pb: "FakePocketBase | None" = None) -> None:
         self.budget = budget
         self.log = log
         self.off = off
         self.canaries = canaries
         # path -> the stop its gate answers, before the account.
         self.gated = gated or {}
+        # The store the render route reads snapshots from.
+        self.pb = pb
 
     def request(self, method: str, path: str, *, token: str | None = None, json_body: Any = None,
                 headers: dict[str, str] | None = None) -> Http:
@@ -110,7 +114,21 @@ class FakeRunner:
                 out["status"] = "URLError: renderer unreachable"
             return _http(503, out)
         if path == "/api/pdf/render":
-            detail = "The PDF renderer couldn't finish this document. Try again shortly."
+            # The shape from before snapshots asks the page to reload.
+            if "html" in body:
+                return _http(422, envelope("legacy_request_rejected"))
+            # Only the caller's own snapshot, with its checksum, gets past
+            # the reads; anything else is one not-found.
+            rows = self.pb.rows.get("legacy_artifact_snapshots", {}) if self.pb is not None else {}
+            snapshot = rows.get(body.get("snapshot_id"))
+            owner = self.pb.owner_of(token or "") if self.pb is not None else None
+            owned = snapshot is not None and (snapshot.get("user") == owner or "snapshot-owner" in self.off)
+            if not owned:
+                return _http(404, envelope("not_found", "Not found."))
+            if snapshot.get("content_checksum") != body.get("expected_checksum"):
+                return _http(409, envelope("checksum_mismatch"))
+            # The corpus stack runs no renderer.
+            detail = RENDERER_FAILED
             if "typed-render-failure" in self.off:
                 detail = "URLError: renderer unreachable"
             return _http(503, envelope("worker_unavailable", detail))
@@ -151,6 +169,13 @@ class FakePocketBase:
     def create(self, collection: str, token: str, payload: dict) -> Http:
         with self._count("POST", f"/api/collections/{collection}/records"):
             row = {"id": self._next(), **payload}
+            self.rows.setdefault(collection, {})[row["id"]] = row
+            return _http(200, row)
+
+    def create_with_file(self, collection: str, token: str, payload: dict, file_field: str, filename: str,
+                         content: bytes, content_type: str) -> Http:
+        with self._count("POST", f"/api/collections/{collection}/records"):
+            row = {"id": self._next(), **payload, file_field: filename}
             self.rows.setdefault(collection, {})[row["id"]] = row
             return _http(200, row)
 
@@ -231,7 +256,7 @@ class Target:
             raise RuntimeError("auth failed")
 
         return RunContext(
-            runner=FakeRunner(budget, log, self.off, self.canaries, self.gated),
+            runner=FakeRunner(budget, log, self.off, self.canaries, self.gated, pb),
             pb=pb,
             admin_token="admin-token",
             canaries=self.canaries,

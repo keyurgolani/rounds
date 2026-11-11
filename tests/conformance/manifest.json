@@ -620,24 +620,42 @@
       "id": "RD-01",
       "attack": "An anonymous render, or one account renders another's snapshot",
       "spec_ref": "renderer gate 2579; issue #8 RD-01",
-      "status": "pending",
+      "status": "contained",
       "closing_leaf": "ROUNDS-00A-L04",
+      "module": "rd_01_snapshot_owner",
       "routes": [
         "POST /api/pdf/render"
       ],
       "languages": [],
       "environment_sensitive": true,
-      "control": "ci-fault-snapshot-cross-account (the snapshot owner rule removed), landing with the closing leaf",
-      "setup": "two accounts and a server-built snapshot",
-      "teardown": "both accounts removed",
-      "guarantee": "a render needs an account and a snapshot the account owns; the anonymous denial is covered by EX-01, the snapshot sub-cases land with the snapshot bridge and the render worker"
+      "control": "selftest/test_negative_controls.py: the render route without the snapshot owner check",
+      "setup": "two synthetic accounts and a snapshot the first owns, seeded with the admin token over its own resume",
+      "teardown": "both accounts removed with the admin token, their resumes and snapshots with them",
+      "expected": {
+        "ci": "contained",
+        "compose": "contained",
+        "k8s": "contained"
+      },
+      "guarantee": "a render needs a snapshot the caller owns: another account naming it with its checksum gets the answer a missing snapshot gets and nothing renders, while the owner's own render gets past every snapshot check; the anonymous denial is EX-01's",
+      "subcases": [
+        {
+          "id": "RD-01.foreign-snapshot-not-rendered",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L04"
+        },
+        {
+          "id": "RD-01.foreign-reads-as-missing",
+          "status": "contained",
+          "closing_leaf": "ROUNDS-00A-L04"
+        }
+      ]
     },
     {
       "id": "RD-02",
       "attack": "Scripts, event handlers, javascript: URLs, meta refresh; CSS, image, font, and file injection",
       "spec_ref": "renderer gate 2580; issue #8 RD-02",
       "status": "pending",
-      "closing_leaf": "ROUNDS-00A-L04",
+      "closing_leaf": "ROUNDS-00A-L06",
       "routes": [
         "POST /api/pdf/render"
       ],
@@ -645,7 +663,7 @@
       "control": "ci-fault-snapshot-unsanitised (the snapshot sanitiser weakened), landing with the closing leaf",
       "setup": "a snapshot built from hostile resume data",
       "teardown": "the account removed",
-      "guarantee": "the server-built snapshot excludes active and resource-loading markup; lands with the snapshot bridge and the no-script render worker"
+      "guarantee": "the server-built snapshot excludes active and resource-loading markup, and the render worker runs none; the snapshot half already runs end to end in the harness's snapshot phases and the materializer's rd_02 tests, and this fixture lands with the no-script render worker, whose stack has a materializer and a renderer"
     },
     {
       "id": "RD-03",

@@ -1,24 +1,29 @@
 """PDF rendering proxy.
 
-Forwards a serialized HTML document to the Node Puppeteer sidecar and
-streams the resulting PDF back to the caller. The sidecar disables
-network access during render, so we don't expose anything new from
-the inside of our network — but we still keep the sidecar
-inside-only and require this proxy as the public entrypoint.
+``POST /api/pdf/render`` renders one of the caller's own Legacy Artifact
+Snapshots (ROUNDS-00A-L04): markup the server built and stored, never
+markup a caller sends. It takes only ``render-request/v1``, the snapshot's
+id and checksum and fixed output options. A body in the shape from before
+snapshots answers 422 ``legacy_request_rejected``, which asks the page to
+reload, and is never charged. The snapshot, its source, and its file are
+read with the caller's bearer (``app.legacy_snapshots``) before a slot is
+taken, and the markup goes to the Node Puppeteer sidecar, which disables
+network access during render and stays inside-only behind this proxy.
 
 Every route here is admitted (``app.admission``). A render whose document
 ran out of time answers 422 ``render_timeout``: the sidecar says so within
-its budgets, the caller's content caused it, so it keeps its charge and
-isn't retried. Any other failed render, a sidecar that couldn't open a
-page in time or didn't answer within ``RENDER_TIMEOUT_S`` included,
-answers a typed 503, which the infrastructure caused and admission
-refunds. Neither repeats the sidecar's text, and health answers only
-``{"status"}``.
+its budgets, the document decides how long it takes, so it keeps its
+charge and isn't retried. Any other failed render, a sidecar that
+couldn't open a page in time or didn't answer within ``RENDER_TIMEOUT_S``
+included, answers a typed 503, which the infrastructure caused and
+admission refunds. Neither repeats the sidecar's text, and health answers
+only ``{"status"}``.
 
 ``POST /api/pdf/snapshots`` creates a Legacy Artifact Snapshot through
-PocketBase's hook (``app.legacy_snapshots``, ROUNDS-00A-L04). It ships
-off behind ``ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE``; ``/render`` doesn't
-read snapshots until #4's PR 3.
+PocketBase's hook (``app.legacy_snapshots``). It ships off behind
+``ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE``, and the render route's own gate,
+``ROUNDS_GATE_PDF_RENDER``, is separate: either one off turns server PDF
+off.
 
 TODO(ROUNDS-00A-L06): #6's ephemeral no-script render workers replace
 the pooled sidecar behind this proxy.
@@ -33,11 +38,10 @@ import urllib.request
 from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
-from pydantic import Field
+from pydantic import ValidationError
 
-from app import admission, legacy_snapshots
+from app import admission, errors, legacy_snapshots
 from app.errors import TypedError
-from app.limits import StrictModel
 
 _log = logging.getLogger(__name__)
 
@@ -53,14 +57,9 @@ RENDER_FAILED = "The PDF renderer couldn't finish this document. Try again short
 SIDECAR_TIMEOUT_STATUS = 422
 SIDECAR_TIMEOUT_ERROR = "render_timeout"
 _SIDECAR_ERROR_BYTES = 1024
-
-
-class RenderRequest(StrictModel):
-    # The HTML payload to render. Templates serialize the live preview
-    # DOM (which already carries inline styles), so this is typically
-    # one A4-sized <article> wrapped in a small <html>/<style> shell.
-    html: str = Field(..., min_length=1)
-    margin_mm: int = Field(default=0, ge=0, le=30)
+# The field only the request shape from before snapshots carried.
+LEGACY_FIELD = "html"
+IDEMPOTENCY_HEADER = "idempotency-key"
 
 
 def _sidecar_ok() -> bool:
@@ -89,7 +88,7 @@ def _sidecar_timed_out(err: urllib.error.HTTPError) -> bool:
     return isinstance(answer, dict) and answer.get("error") == SIDECAR_TIMEOUT_ERROR
 
 
-def _render(html: str, margin_mm: int) -> Response:
+def _render(html: str, margin_mm: float) -> Response:
     body = json.dumps({"html": html, "marginMm": margin_mm}).encode("utf-8")
     request = urllib.request.Request(
         f"{PDF_RENDERER_URL}/render",
@@ -118,14 +117,46 @@ def _render(html: str, margin_mm: int) -> Response:
     return Response(content=data, media_type=content_type)
 
 
+async def _render_request(request: Request) -> legacy_snapshots.RenderRequestV1:
+    """Step 5 for a render: the body as render-request/v1. The older
+    shape answers 422 ``legacy_request_rejected``; anything else that
+    isn't the contract, or an ``Idempotency-Key`` that isn't the body's
+    ``idempotency_id``, answers 422 ``invalid_request``."""
+    try:
+        raw = json.loads(await request.body() or b"null")
+    except (ValueError, RecursionError):
+        raise TypedError("invalid_request") from None
+    if isinstance(raw, dict) and LEGACY_FIELD in raw:
+        raise TypedError("legacy_request_rejected")
+    try:
+        req = legacy_snapshots.RenderRequestV1.model_validate(raw)
+    except ValidationError as err:
+        raise TypedError(errors.validation_code(err.errors())) from None
+    # A missing key is step 6's to answer; a different one names another
+    # command than the body does.
+    sent = request.headers.get(IDEMPOTENCY_HEADER)
+    if sent is not None and sent.strip().lower() != req.idempotency_id:
+        raise TypedError("invalid_request")
+    return req
+
+
 @router.post("/render")
-async def render(request: Request, req: RenderRequest):
+async def render(request: Request):
+    req = await _render_request(request)
     # No PDF is kept, so a completed render's replay answers 409
     # already_completed.
     # TODO(ROUNDS-00A-L06): #6's stage 3 stores render output and replays it.
     await admission.begin(request, req, wall_seconds=RENDER_TIMEOUT_S)
+    caller = admission.account(request)
+    try:
+        markup = await legacy_snapshots.markup_for_render(caller["token"], caller["id"], req)
+    except legacy_snapshots.StoredMarkupUnusable as unusable:
+        # The operator's alert: a stored snapshot no longer holds what its
+        # checksum says, so no render of it can run.
+        _log.warning("pdf render refused: the snapshot's stored markup is unusable (%s)", unusable)
+        raise TypedError("worker_unavailable", RENDER_FAILED) from None
     async with admission.allocate():
-        return await run_in_threadpool(_render, req.html, req.margin_mm)
+        return await run_in_threadpool(_render, markup, req.margin_mm)
 
 
 @router.post("/snapshots")
