@@ -361,11 +361,13 @@ function shortText(value, max) {
   return value === null || (typeof value === "string" && value.length <= max);
 }
 
-// Each result id's outcome, as #2's fd 3 channel reports it.
+// Each result id's outcome, as #2's fd 3 channel reports it: `passed`
+// only with `ok`.
 function checkOutcomes(list) {
   return Array.isArray(list) && list.length <= MAX_PARTS && list.every((o) =>
     only(o, ["id", "outcome", "reason"]) && typeof o.id === "string" && PART_ID.test(o.id) &&
-    HARNESS_OUTCOMES.indexOf(o.outcome) >= 0 && HARNESS_REASONS.indexOf(o.reason) >= 0);
+    HARNESS_OUTCOMES.indexOf(o.outcome) >= 0 && HARNESS_REASONS.indexOf(o.reason) >= 0 &&
+    (o.outcome === "passed") === (o.reason === "ok"));
 }
 
 // A verdict and a score that agree with a part's class: kept on a class
