@@ -34,6 +34,21 @@
 #
 #      Restart PocketBase, then the runners, after adding or rotating it.
 #
+#   5. Before turning ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION on
+#      (gates.yaml), add the password the runner logs in with as
+#      share-resolver to resolve share links (ROUNDS-00B-L04). It goes in
+#      the step 1 secret too, and PocketBase reads that one key:
+#
+#      kubectl -n rounds patch secret rounds-runner-secrets --type merge \
+#        -p "{\"stringData\":{\"ROUNDS_SHARE_RESOLVER_PASSWORD\":\"$(openssl rand -hex 32)\"}}"
+#
+#      Restart PocketBase, then the runners. AI_KEY_SECRET also keys every
+#      share link's digest, so back it up with pb_data: without it every
+#      link answers not-found until its owner rotates it. The share
+#      throttle counts by the X-Real-IP the frontend sends from the pod
+#      network, inside the default ROUNDS_TRUSTED_PROXY_CIDRS; see
+#      frontend.yaml for the client address it forwards.
+#
 # The runner refuses to start when AI_KEY_SECRET is unset or matches
 # the dev placeholder, so a misconfigured rollout fails closed (the
 # pod will CrashLoopBackOff with a clear stderr message instead of
@@ -82,7 +97,8 @@ spec:
               value: ""
           envFrom:
             # AI_KEY_SECRET, PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD live here,
-            # and ROUNDS_EXECUTION_SECRET once step 4 adds it. See the
+            # ROUNDS_EXECUTION_SECRET once step 4 adds it, and
+            # ROUNDS_SHARE_RESOLVER_PASSWORD once step 5 does. See the
             # comment block at the top of this file for how to provision
             # the secret on first deploy. Candidate processes get none of
             # these.

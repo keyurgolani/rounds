@@ -223,16 +223,18 @@ REGISTRY: tuple[Gate, ...] = (
     ),
     Gate(
         # ROUNDS-00B-L03 stage 2: capability resolution stays closed until
-        # #12 (ROUNDS-00B-L04) lands and #13's share cases pass. Read on each
-        # request, like the switch above.
+        # #13's share cases pass and docs/operations.md's steps are done.
+        # Read on each request, like the switch above. ROUNDS-00B-L04: it
+        # also turns POST /api/share into CreateShare and rotate on, and the
+        # SPA reads it, so the share dialog matches the runner.
         name="SHARE_CAPABILITY_RESOLUTION",
         values=ROUTE_VALUES,
         default="disabled",
         closed="disabled",
-        readers=frozenset({RUNNER}),
+        readers=frozenset({RUNNER, FRONTEND}),
         description=(
-            "Lets POST /api/share/resolve look a share capability up; disabled answers the uniform not-found "
-            "before any lookup."
+            "Lets POST /api/share/resolve look a share capability up, and makes POST /api/share CreateShare with "
+            "rotation on; disabled answers the uniform not-found before any lookup and keeps the earlier create."
         ),
     ),
     Gate(

@@ -45,6 +45,17 @@
 #                          password the runner logs in with as
 #                          execution-worker. Set it before
 #                          ROUNDS_GATE_EXECUTION_STORE is `on`.
+#   ROUNDS_SHARE_RESOLVER_PASSWORD - 32 to 72 printable characters, the
+#                          same on PocketBase and the runner (`openssl rand
+#                          -hex 32`): the password the runner logs in with
+#                          as share-resolver to resolve share links. Set it
+#                          before ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION is
+#                          `enabled`.
+#   ROUNDS_TRUSTED_PROXY_CIDRS - the proxies whose X-Real-IP the share
+#                          throttle counts by, comma-separated CIDRs.
+#                          Unset keeps loopback and the private ranges,
+#                          where the bundled nginx sits; `none` trusts no
+#                          proxy.
 #
 # If admin creds are unset, no admin is bootstrapped and you must run:
 #
@@ -71,6 +82,9 @@ services:
       # no execution-worker record, so nothing can log in as it.
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
       - ROUNDS_EXECUTION_SECRET=${ROUNDS_EXECUTION_SECRET:-}
+      # The share resolver's password (ROUNDS-00B-L04). Blank, nothing can
+      # log in as share-resolver, so no share link resolves.
+      - ROUNDS_SHARE_RESOLVER_PASSWORD=${ROUNDS_SHARE_RESOLVER_PASSWORD:-}
       # Legacy Artifact Snapshot creation (ROUNDS-00A-L04). Empty is
       # "disabled": PocketBase never calls the materializer and the stack
       # needs no materializer image. Set "enabled" (here and on the
@@ -136,6 +150,10 @@ services:
       # Same value as PocketBase's. Blank, the execution worker doesn't
       # start. Candidate processes never get either secret.
       - ROUNDS_EXECUTION_SECRET=${ROUNDS_EXECUTION_SECRET:-}
+      # Same value as PocketBase's. Blank, every share link answers the
+      # uniform not-found. Candidate processes never get it.
+      - ROUNDS_SHARE_RESOLVER_PASSWORD=${ROUNDS_SHARE_RESOLVER_PASSWORD:-}
+      - ROUNDS_TRUSTED_PROXY_CIDRS=${ROUNDS_TRUSTED_PROXY_CIDRS:-}
       # Gates (docs/configuration.md#gates). Empty keeps each written
       # default, and the runner logs every value at startup.
       - ROUNDS_GATE_RUN=${ROUNDS_GATE_RUN:-}
@@ -156,7 +174,8 @@ services:
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
       # Public shares (docs/operations.md, "Public shares"): PUBLIC_SHARES
       # turns every public share read off, and capability resolution stays
-      # closed until #12 lands.
+      # closed until the steps there are done. The frontend reads the same
+      # resolution value.
       - ROUNDS_GATE_PUBLIC_SHARES=${ROUNDS_GATE_PUBLIC_SHARES:-}
       - ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=${ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION:-}
       # PUBLIC_SHARES's alias: anything but false, 0, no, off, or empty
@@ -177,6 +196,12 @@ services:
       - ROUNDS_GATE_SIGNUPS=${ROUNDS_GATE_SIGNUPS:-}
       # The SPA's request shapes follow the runner's (ROUNDS-00A-L02).
       - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
+      # The share dialog and page follow the runner's resolution gate
+      # (ROUNDS-00B-L04).
+      - ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=${ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION:-}
+      # Behind a proxy that isn't the public port, its addresses, so nginx
+      # counts each client by its own address (frontend/docker-entrypoint.d).
+      - ROUNDS_FRONTEND_REAL_IP_FROM=${ROUNDS_FRONTEND_REAL_IP_FROM:-}
     ports:
       - "${HTTP_PORT:-80}:80"
     depends_on:

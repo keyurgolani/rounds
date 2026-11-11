@@ -20,7 +20,10 @@ FROM nginx:1.27-alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker-entrypoint.d/10-runtime-config.sh /docker-entrypoint.d/10-runtime-config.sh
-RUN chmod +x /docker-entrypoint.d/10-runtime-config.sh
+# The client address behind a proxy, from ROUNDS_FRONTEND_REAL_IP_FROM
+# (ROUNDS-00B-L04).
+COPY docker-entrypoint.d/20-real-ip.sh /docker-entrypoint.d/20-real-ip.sh
+RUN chmod +x /docker-entrypoint.d/10-runtime-config.sh /docker-entrypoint.d/20-real-ip.sh
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

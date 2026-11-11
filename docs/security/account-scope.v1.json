@@ -168,6 +168,9 @@
     },
     "deployment.proxy.share-resolve.uniform": {
       "guarantee": "a share capability resolve with a malformed or unknown token answers one byte-identical 404 with no-store, noindex, no-referrer, nosniff, DENY framing, and the resolver CSP"
+    },
+    "deployment.proxy.share-resolvers.denied": {
+      "guarantee": "the share resolver record, its login included, is not reachable at the public URL"
     }
   },
   "server_derivation": {
