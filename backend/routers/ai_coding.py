@@ -9,7 +9,12 @@ harness revision the request names at ``enforce`` (``app.execution``),
 where grade answers per-result outcomes and server totals, never the
 harness's output. With ``ROUNDS_GATE_EXECUTION_SCRATCH`` on
 (ROUNDS-00A-L03), run-project admits and enqueues a job and answers 202
-(``execution.jobs``)."""
+(``execution.jobs``), and with ``ROUNDS_GATE_EXECUTION_GRADING`` on so does
+grade, whose graded row the server writes with its result;
+``POST /api/ai-coding/grade/{job_id}/review`` then asks for its rubric
+review, once per result (``execution.review``). A grade's answer carries
+only visible output, and a round with a checkpoint that has nothing to run
+is refused before anything is charged or runs."""
 from __future__ import annotations
 
 import json
@@ -36,6 +41,7 @@ from app.errors import TypedError
 from app.limits import StrictModel
 from app.pb_auth import current_user, pb_get
 from execution import jobs, keys
+from execution import review as reviews
 from routers.ai import (
     _active_text_config,
     _call_complete,
@@ -396,11 +402,16 @@ class GradeRequest(StrictModel):
 
 
 class DefinitionGradeRequest(StrictModel):
-    """A grade at enforce: the definition, the files, and the AI chats."""
+    """A grade at enforce: the definition, the files, and the AI chats.
+    With ``ROUNDS_GATE_EXECUTION_GRADING`` on the server writes the graded
+    row (ROUNDS-00A-L03 PR 3), so the request also names the campaign it
+    belongs to, which has to be the caller's, and its session time."""
 
     definition: execution.DefinitionRef
     files: Dict[str, str]
     ai_chats: List[Dict[str, Any]] = Field(default_factory=list)
+    campaign_id: str | None = Field(default=None, pattern=limits.OPTIONAL_RECORD_ID_PATTERN)
+    duration_ms: int = Field(default=0, ge=0)
 
     @field_validator("files")
     @classmethod
@@ -413,24 +424,22 @@ class DefinitionGradeRequest(StrictModel):
         return limits.check_json(v, limits.AI_CHATS_BYTES, "ai_chats")
 
 
+def _gradable(checkpoints: Any) -> bool:
+    """Whether every checkpoint has a command to run. A round with one that
+    doesn't is the definition's fault, never a failed solution."""
+    return all(
+        isinstance(cp, dict) and isinstance(cp.get("test_command"), str) and cp["test_command"].strip()
+        for cp in checkpoints
+    )
+
+
 def _grade_checkpoints(slug: str, checkpoints: Any, files: Dict[str, str], language: str, slot) -> list[dict]:
-    """Every checkpoint's tests, hidden files merged, in one slot."""
+    """Every checkpoint's tests, hidden files merged, in one slot. The
+    answer carries each checkpoint's totals and only visible output, so
+    nothing the merged files print reaches it."""
     test_results = []
     for idx, cp in enumerate(checkpoints):
-        test_command = cp.get("test_command")
-        if not test_command:
-            _log.warning(
-                "ai-coding grade: round %r checkpoint %d has no test_command; recording failure",
-                slug, idx,
-            )
-            test_results.append({
-                "passed": False,
-                "passed_count": 0,
-                "failed_count": 0,
-                "stdout": "",
-                "error": "Checkpoint is missing a test_command in the seeded round.",
-            })
-            continue
+        test_command = cp["test_command"]
         merged = {**files}
         for hf in (cp.get("hidden_files") or []):
             path = hf.get("path") if isinstance(hf, dict) else None
@@ -443,12 +452,17 @@ def _grade_checkpoints(slug: str, checkpoints: Any, files: Dict[str, str], langu
                 continue
             merged[path] = contents
         r = run_project(merged, language, test_command, timeout_s=GRADE_CHECKPOINT_TIMEOUT_S, sandbox=slot)
+        if r.passed:
+            error = None
+        elif (r.error or "").startswith("Time limit exceeded"):
+            error = CHECKPOINT_TIMED_OUT
+        else:
+            error = CHECKPOINT_FAILED
         test_results.append({
             "passed": r.passed,
             "passed_count": r.passed_count,
             "failed_count": r.failed_count,
-            "stdout": r.stdout[:8000],
-            "error": r.error,
+            "error": error,
         })
     return test_results
 
@@ -456,6 +470,8 @@ def _grade_checkpoints(slug: str, checkpoints: Any, files: Dict[str, str], langu
 @router.post("/grade")
 async def grade(request: Request, user: dict = Depends(_auth_user)) -> Dict[str, Any]:
     body = await execution.parse(request, GradeRequest, DefinitionGradeRequest)
+    if keys.grading() == "on" and isinstance(body, DefinitionGradeRequest):
+        return await _grade_job(request, body, user)
     if isinstance(body, DefinitionGradeRequest):
         return await _grade_definition(request, body, user)
     # Admitted on one checkpoint's time, up to GRADE_MAX_CHECKPOINTS; the
@@ -475,6 +491,10 @@ async def grade(request: Request, user: dict = Depends(_auth_user)) -> Dict[str,
     graded = len(checkpoints) if isinstance(checkpoints, (list, dict)) else 0
     if graded > GRADE_MAX_CHECKPOINTS:
         raise TypedError("invalid_request", "This round can't be graded here.")
+    # A checkpoint with nothing to run is the definition's fault: refused
+    # before anything is charged or runs, never graded as a failure.
+    if not _gradable(checkpoints):
+        raise TypedError("definition_invalid")
     await admission.settle(request, graded * GRADE_CHECKPOINT_TIMEOUT_S)
 
     async with admission.allocate() as slot:
@@ -536,6 +556,9 @@ async def list_available_models(user: dict = Depends(_auth_user)) -> List[AICodi
 # ---------------------------------------------------------------------------
 
 CHECKPOINT_TIMED_OUT = "This checkpoint ran out of time."
+CHECKPOINT_FAILED = "Some of this checkpoint's tests didn't pass."
+# A checkpoint a limit other than wall time stopped (ROUNDS-00A-L03 PR 3).
+CHECKPOINT_LIMITED = "This checkpoint stopped at a limit."
 
 
 def _definition_checkpoint(request: Request, resolved: definitions.Resolved, index: int) -> dict[str, Any]:
@@ -678,3 +701,75 @@ async def _grade_definition(request: Request, body: DefinitionGradeRequest, user
         "score": sum(r["score"] for r in test_results) / len(test_results) if test_results else 0.0,
         "definition": resolved.receipt(),
     }
+
+
+# ---------------------------------------------------------------------------
+# ROUNDS_GATE_EXECUTION_GRADING=on (ROUNDS-00A-L03 PR 3)
+# ---------------------------------------------------------------------------
+
+
+def graded_checkpoint(checkpoint: dict[str, Any], graded: execution.Graded, part: Any) -> dict[str, Any]:
+    """One checkpoint's entry in a grading job's graded row: its class and
+    limit, the server's totals, and per-result outcomes. Only a class the
+    run earned keeps a verdict and a score; a limit names itself instead."""
+    entry = checkpoint_result(checkpoint, graded)
+    earned = part.outcome_class in ("passed", "candidate-failure")
+    if part.limit is None:
+        error = None
+    elif part.limit == "wall_time":
+        error = CHECKPOINT_TIMED_OUT
+    else:
+        error = CHECKPOINT_LIMITED
+    return {
+        **entry,
+        "label": str(entry["label"])[:200],
+        "outcome_class": part.outcome_class,
+        "limit": part.limit,
+        "passed": (part.outcome_class == "passed") if earned else None,
+        "score": entry["score"] if earned else None,
+        "error": error,
+    }
+
+
+async def _grade_job(request: Request, body: DefinitionGradeRequest, user: dict):
+    """The grade as a job. Its checkpoints run in order in one slot, and
+    the server writes its graded row with its result. Every check the
+    in-request grade runs comes before any job, and so do the caller's
+    campaign and the round's own row, which the graded row points at."""
+    inputs = {"ai_chats": body.ai_chats, "campaign_id": body.campaign_id}
+    submission = await jobs.begin(request, "grade", body.definition, body.files, inputs,
+                                  wall_seconds=GRADE_CHECKPOINT_TIMEOUT_S, max_wall_seconds=GRADE_MAX_WALL_S)
+    if submission.answer is not None:
+        return submission.answer
+    resolved = execution.resolve(request, body.definition, "ai-coding")
+    checkpoints = resolved.document["checkpoints"]
+    if len(checkpoints) > GRADE_MAX_CHECKPOINTS:
+        raise TypedError("invalid_request", "This round can't be graded here.")
+    execution.check_paths(request, body.files, resolved)
+    if body.campaign_id:
+        await admission.own_campaign(pb_get, user, body.campaign_id)
+    await admission.first_item(pb_get, user["token"], "ai_coding_rounds", resolved.identity.slug)
+    await admission.settle(request, len(checkpoints) * GRADE_CHECKPOINT_TIMEOUT_S)
+    return await jobs.enqueue(request, submission, {
+        "files": body.files, "ai_chats": body.ai_chats, "campaign_id": body.campaign_id,
+        "duration_ms": body.duration_ms,
+    })
+
+
+class ReviewRequest(StrictModel):
+    """A review names the files that were graded; they have to be the ones
+    that ran."""
+
+    files: Dict[str, str]
+
+    @field_validator("files")
+    @classmethod
+    def _files(cls, v: Dict[str, str]) -> Dict[str, str]:
+        return dict(limits.check_files(v))
+
+
+@router.post("/grade/{job_id}/review")
+async def grade_review(request: Request, job_id: str, body: ReviewRequest):
+    """The rubric review of a grading job's result, once per result
+    (``execution.review``)."""
+    return await reviews.review(request, job_id, body.files, "grade")

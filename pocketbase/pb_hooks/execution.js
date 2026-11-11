@@ -376,11 +376,12 @@ function verdictFits(outcomeClass, passed, score) {
 }
 
 // A graded checkpoint, one per part (`checkpoint-<index>`), in order.
-function checkCheckpoint(entry, part, index) {
+function checkCheckpoint(entry, part) {
   const keys = ["index", "label", "outcome_class", "limit", "passed", "score", "executed", "passed_count",
     "failed_count", "outcomes", "error"];
   if (!only(entry, keys) || keys.some((key) => !has(entry, key))) return false;
-  if (entry.index !== index || part.id !== "checkpoint-" + index) return false;
+  if (!(isInt(entry.index) && entry.index >= 0 && entry.index < MAX_CHECKPOINTS)) return false;
+  if (part.id !== "checkpoint-" + entry.index) return false;
   if (entry.outcome_class !== part.outcome_class || entry.limit !== part.limit) return false;
   if (AUTHORITATIVE_CLASSES.indexOf(entry.outcome_class) < 0) return false;
   if (!verdictFits(entry.outcome_class, entry.passed, entry.score)) return false;
@@ -426,7 +427,8 @@ function checkGraded(kind, graded, result) {
     const parts = result.user_view.parts;
     if (!Array.isArray(entries) || entries.length === 0 || entries.length > MAX_CHECKPOINTS) return false;
     if (entries.length !== parts.length) return false;
-    return entries.every((entry, i) => checkCheckpoint(entry, parts[i], i));
+    // In the order they ran, each checkpoint once.
+    return entries.every((entry, i) => checkCheckpoint(entry, parts[i]) && (i === 0 || entry.index > entries[i - 1].index));
   }
   return checkHarnessOutput(graded.harness_output, result);
 }

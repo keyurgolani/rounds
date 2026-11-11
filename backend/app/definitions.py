@@ -241,6 +241,23 @@ class Store:
         obs.emit("definition.resolved", definition=identity.label(), route=route, service="runner")
         return Resolved(identity, entry.checksum, document)
 
+    def pinned(self, receipt: dict[str, Any]) -> dict[str, Any]:
+        """The version a result names in its receipt (``Resolved.receipt``),
+        whatever its lifecycle now, while its bytes still match the
+        receipt's checksum: a grade's review reads the rubric of the version
+        that graded it (ROUNDS-00A-L03 PR 3). Anything else is 404
+        ``definition_not_found``."""
+        track = receipt.get("track")
+        kind = TRACK_KIND.get(track) if isinstance(track, str) else None
+        identity = Identity(str(track), str(receipt.get("slug")), receipt.get("variant"),
+                            receipt.get("content_version") if isinstance(receipt.get("content_version"), int) else 0)
+        entry = self.entries.get((kind, identity)) if kind else None
+        ok = entry is not None and entry.path is not None and entry.checksum == receipt.get("checksum")
+        data = self._read(entry) if ok else None
+        if data is None:
+            raise self._reject(identity, None, TypedError("definition_not_found"))
+        return json.loads(data)
+
     def validators(self, slug: str, version: int, checksum: str) -> dict[str, Any]:
         """A coding question's validator revision, pinned by the test
         definition that names it."""

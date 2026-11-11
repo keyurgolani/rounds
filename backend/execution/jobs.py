@@ -1,8 +1,9 @@
-"""Scratch jobs on the execution routes (ROUNDS-00A-L03 PR 2).
+"""Jobs on the execution routes (ROUNDS-00A-L03 PRs 2 and 3).
 
 While ``ROUNDS_GATE_EXECUTION_SCRATCH`` is on (``execution/keys.py``),
-run, evaluate, run-project, and take-home run never run in their request.
-Each route, in order:
+run, evaluate, run-project, and take-home run never run in their request,
+and while ``ROUNDS_GATE_EXECUTION_GRADING`` is, neither do grade and
+take-home submit (PR 3). Each route, in order:
 
 1. checks this replica's worker is up and ready (``runtime``), so a store
    it can't reach or a worker secret PocketBase doesn't take is 503
@@ -43,12 +44,15 @@ from app.errors import TypedError
 from execution import kinds, runtime, store
 
 FINGERPRINT_VERSION = "execution-job/v1"
-# The route each scratch kind is enqueued from; a fingerprint covers it.
+# The route each kind is enqueued from; a fingerprint covers it. The two
+# grading kinds join in PR 3.
 ROUTES = {
     "run": "/api/run",
     "evaluate": "/api/evaluate",
     "run_project": "/api/ai-coding/run-project",
     "take_home_run": "/api/take-home/run",
+    "grade": "/api/ai-coding/grade",
+    "take_home_submit": "/api/take-home/submit",
 }
 # The longest a job read may wait for its job to change, and how often it
 # asks the store while it waits: quickly at first, then each second.

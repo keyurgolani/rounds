@@ -29,14 +29,13 @@ from execution.worker import Handler, Worker
 
 _log = logging.getLogger(__name__)
 
-# Each kind's handler: the scratch kinds' (PR 2).
-# TODO(ROUNDS-00A-L03): PR 3 adds the grading kinds' handlers; until then
-# a claimed grading job ends denied, definition-invalid.
+# Each kind's handler: the scratch kinds' (PR 2) and the grading kinds'
+# (PR 3).
 def default_handlers() -> dict[str, Handler]:
     # Imported here: the handlers import the routers, which import this.
     from execution import handlers
 
-    return dict(handlers.SCRATCH_HANDLERS)
+    return {**handlers.SCRATCH_HANDLERS, **handlers.GRADING_HANDLERS}
 
 
 class _Runtime:

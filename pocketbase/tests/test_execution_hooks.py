@@ -98,8 +98,61 @@ def result(job_id, state="completed", outcome="passed", authoritative=None, limi
             "user_view": user, "operator_view": operator}
 
 
-def complete(attempt_id, token, body, now=T0 + 1) -> dict:
-    return {"call": "complete", "input": {"attempt_id": attempt_id, "token": token, "result": body}, "now": now}
+def complete(attempt_id, token, body, now=T0 + 1, graded=None) -> dict:
+    data = {"attempt_id": attempt_id, "token": token, "result": body}
+    if graded is not None:
+        data["graded"] = graded
+    return {"call": "complete", "input": data, "now": now}
+
+
+# PR 3: what a grading kind's graded row holds, for an authoritative result.
+ITEMS = {"grade": "ai_coding_rounds", "take_home_submit": "take_home_assignments"}
+GRADED = {"grade": "ai_coding_attempts", "take_home_submit": "take_home_attempts"}
+
+
+def item(kind="grade", slug="two-sum") -> dict:
+    """The practice item's own row, which a graded row points at."""
+    return {"call": "seedItem", "collection": ITEMS[kind], "slug": slug}
+
+
+def graded_for(kind, body) -> dict:
+    """The graded content that matches ``body``'s parts: one checkpoint
+    per part for a grade, one criterion per part for a submission. A part
+    the run earned keeps a verdict and a score; any other keeps neither."""
+    parts = body["user_view"]["parts"]
+
+    def verdict(part):
+        if part["outcome_class"] not in ("passed", "candidate-failure"):
+            return None, None
+        passed = part["outcome_class"] == "passed"
+        return passed, 1.0 if passed else 0.0
+
+    if kind == "grade":
+        entries = []
+        for part in parts:
+            passed, score = verdict(part)
+            entries.append({"index": int(part["id"].split("-")[1]), "label": "Checkpoint", "outcome_class":
+                            part["outcome_class"], "limit": part["limit"], "passed": passed, "score": score,
+                            "executed": 1, "passed_count": 1 if passed else 0, "failed_count": 0 if passed else 1,
+                            "outcomes": [{"id": "r1", "outcome": "passed" if passed else "failed",
+                                          "reason": "ok" if passed else "assertion"}],
+                            "error": None})
+        return {"test_results": entries}
+    cls = body["outcome_class"]
+    passed, score = verdict({"outcome_class": cls})
+    criteria = [{"id": p["id"], "passed": {"passed": True, "candidate-failure": False}.get(p["outcome_class"]),
+                 "weight": 1.0, "logs": "ok" if p["outcome_class"] == "passed" else "assertion"} for p in parts]
+    return {"harness_output": {"outcome_class": cls, "limit": body["user_view"]["limit"], "score": score,
+                               "passed": passed, "criteria": criteria, "outcomes": [], "stdout": "", "stderr": "",
+                               "error": None, "duration_ms": 10, "truncated": False, "definition": None}}
+
+
+def graded_result(job_id, kind="grade", parts=None, **kwargs):
+    """An authoritative grading result and its graded content."""
+    body = result(job_id, **kwargs)
+    body["user_view"]["parts"] = parts if parts is not None else [
+        {"id": "checkpoint-0", "outcome_class": body["outcome_class"], "limit": body["user_view"]["limit"]}]
+    return body, graded_for(kind, body)
 
 
 def reap(now) -> dict:
@@ -388,10 +441,13 @@ def test_a_run_with_hidden_material_shows_its_account_outcome_classes_and_totals
                                   {"id": "checkpoint-2", "outcome_class": "candidate-failure", "limit": None}]
     shown = json.loads(json.dumps(body))
     shown["user_view"]["output"] = {"stdout": "what the hidden tests printed"}
-    refused = run(*steps, complete(attempt["id"], token, shown))
+    # From PR 3 an authoritative grading result comes with its graded row's
+    # content, and the row points at the practice item's own row.
+    steps = [*steps, item(kind)]
+    refused = run(*steps, complete(attempt["id"], token, shown, graded=graded_for(kind, shown)))
     assert refused["results"][-1] == {"status": 400, "body": {"v": "execution/v1", "error": "invalid_request"}}
     assert refused["store"]["envelopes"] == []
-    out = run(*steps, complete(attempt["id"], token, body))
+    out = run(*steps, complete(attempt["id"], token, body, graded=graded_for(kind, body)))
     assert out["results"][-1]["status"] == 200
     (envelope,) = out["store"]["envelopes"]
     allowed = {ENVELOPE, job["id"], "completed", "candidate-failure", "passed", "confirmed", "checkpoint-1",
@@ -666,6 +722,9 @@ def test_the_routes_need_the_right_principal():
         ("cancel", "handleCaller", "cancel", "users"),
         # PR 2: the account's own job, for the runner's job read.
         ("status", "handleCaller", "status", "users"),
+        # PR 3: a grading result's rubric review, for the account.
+        ("review_start", "handleCaller", "review_start", "users"),
+        ("review_finish", "handleCaller", "review_finish", "users"),
         ("claim", "handleService", "claim", "execution_service"),
         ("heartbeat", "handleService", "heartbeat", "execution_service"),
         ("complete", "handleService", "complete", "execution_service"),
@@ -966,7 +1025,8 @@ def test_the_purge_removes_a_scratch_job_seven_days_after_it_ended_with_everythi
 
 def test_the_purge_keeps_grading_jobs_and_unended_scratch_jobs_inside_the_window():
     grading_steps, grading, g_attempt, g_token = started_job(kind="grade")
-    graded = [*grading_steps, complete(g_attempt["id"], g_token, result(grading["id"]))]
+    body, content = graded_result(grading["id"])
+    graded = [*grading_steps, item(), complete(g_attempt["id"], g_token, body, graded=content)]
     out = run(*graded, *queued_job()[0], {"call": "purge", "now": T0 + 7 * DAY - 1})
     assert out["results"][-1] == {"purged": 0} and len(out["store"]["jobs"]) == 2
     out = run(*graded, {"call": "purge", "now": T0 + 30 * DAY})

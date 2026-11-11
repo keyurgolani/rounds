@@ -717,6 +717,15 @@ async def lookup(fetch: Fetch, token: str, path: str, params: dict[str, Any] | N
         raise TypedError("auth_unavailable") from None
 
 
+async def own_campaign(fetch: Fetch, user: dict[str, Any], campaign_id: str) -> None:
+    """Step 8 for a request that names a campaign: one the caller doesn't
+    own is not found. ``campaign_id`` is already validated against
+    ``limits.OPTIONAL_RECORD_ID_PATTERN``."""
+    record = await lookup(fetch, user["token"], f"/api/collections/campaigns/records/{campaign_id}")
+    if not isinstance(record, dict) or record.get("user") != user["id"]:
+        raise TypedError("not_found")
+
+
 async def first_item(fetch: Fetch, token: str, collection: str, slug: str) -> dict[str, Any]:
     """The record in ``collection`` whose ``slug`` is ``slug``, or 404.
     ``slug`` is already validated against ``limits.SLUG_PATTERN``."""

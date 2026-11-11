@@ -15,7 +15,9 @@
 // For the scratch job routes (PR 2) it also serves admission's routes on
 // the same rows, as admission.pb.js does, and the users auth-refresh the
 // runner checks a bearer with, so a test runs a route, its admission, its
-// job, and the worker against the hooks' own decisions.
+// job, and the worker against the hooks' own decisions. For the grading
+// routes (PR 3) it serves the review's start and finish, and seeds the
+// practice items' rows and the campaigns a graded row points at.
 
 const http = require("http");
 const path = require("path");
@@ -58,6 +60,9 @@ const CALLER = {
   enqueue: [execution.checkEnqueue, (account, input) => execution.enqueue(store, account, input, now())],
   cancel: [execution.checkCancel, (account, input) => execution.cancel(store, account, input, now())],
   status: [execution.checkStatus, (account, input) => execution.status(store, account, input)],
+  // A grading result's rubric review (PR 3).
+  review_start: [execution.checkReviewStart, (account, input) => execution.reviewStart(store, account, input, now())],
+  review_finish: [execution.checkReviewFinish, (account, input) => execution.reviewFinish(store, account, input, now())],
 };
 const ADMISSION = {
   admit: [admission.checkAdmit, (account, input) => {
@@ -130,6 +135,13 @@ function route(req, data, res) {
     return send(res, 200, { token });
   }
   if (url === "/__test/command") return send(res, 200, store.seedCommand(Object.assign({ expires_at: now() + 86400 }, data)));
+  // PR 3: a practice item's row, its removal, and a campaign's owner.
+  if (url === "/__test/item") return send(res, 200, { id: store.seedItem(data.collection, data.slug) });
+  if (url === "/__test/drop-item") return send(res, 200, { dropped: store.dropItem(data.collection, data.slug) });
+  if (url === "/__test/campaign") {
+    store.seedCampaign(data.id, data.user);
+    return send(res, 200, {});
+  }
   if (url === "/__test/advance") {
     offset += data.seconds;
     return send(res, 200, { now: now() });

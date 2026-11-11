@@ -38,6 +38,16 @@ function memoryStore(options) {
   const attempts = new Map();
   const envelopes = new Map();
   const admissionCalls = [];
+  // PR 3: the practice items' own rows (slug to id), the campaigns (id to
+  // owner), and the graded rows complete writes, by collection.
+  const items = { ai_coding_rounds: new Map(), take_home_assignments: new Map() };
+  const campaigns = new Map();
+  const graded = { ai_coding_attempts: new Map(), take_home_attempts: new Map() };
+  const currentEnvelope = (job) => {
+    const last = [...attempts.values()].find((a) => a.job === job.id && a.attempt_number === job.attempts);
+    if (!last) return null;
+    return [...envelopes.values()].find((e) => e.attempt === last.id) || null;
+  };
   const clone = (row) => (row === null || row === undefined ? null : JSON.parse(JSON.stringify(row)));
   function saver(map, uniques, name) {
     return (row) => {
@@ -57,7 +67,19 @@ function memoryStore(options) {
       leases: [...leases.values()].map(clone),
       counters: admissionView.dump().counters,
       admission_calls: admissionCalls.map(clone),
+      graded: {
+        ai_coding_attempts: [...graded.ai_coding_attempts.values()].map(clone),
+        take_home_attempts: [...graded.take_home_attempts.values()].map(clone),
+      },
     }),
+    // PR 3's seeds: a practice item's row, a campaign and its owner.
+    seedItem: (collection, slug) => {
+      const id = nextId();
+      items[collection].set(slug, id);
+      return id;
+    },
+    dropItem: (collection, slug) => items[collection].delete(slug),
+    seedCampaign: (id, user) => campaigns.set(id, user),
     // The admission side, over the same rows.
     admission: () => admissionView,
     seedCommand: (row) => {
@@ -124,6 +146,34 @@ function memoryStore(options) {
       const found = [...envelopes.values()].find((e) => e.attempt === last.id);
       return found ? clone({ state: found.state, outcome_class: found.outcome_class, user_view: found.user_view }) : null;
     },
+    // The same contract as the PocketBase store's PR 3 functions.
+    currentEnvelopeRecord: (job) => clone(currentEnvelope(job)),
+    saveEnvelopeView: (row) => {
+      envelopes.get(row.id).user_view = clone(row.user_view);
+      return clone(row);
+    },
+    linkGradedRow: (envelope, collection, rowId) => {
+      const stored = envelopes.get(envelope.id);
+      stored.graded_collection = collection;
+      stored.graded_row = rowId;
+    },
+    itemRow: (collection, slug) => (items[collection] && items[collection].get(slug)) || null,
+    ownsCampaign: (account, campaignId) => campaigns.get(campaignId) === account,
+    saveGradedRow: (collection, row) => {
+      const saved = Object.assign(clone(row), { id: nextId() });
+      graded[collection].set(saved.id, saved);
+      return { id: saved.id };
+    },
+    getGradedRow: (collection, id) => (graded[collection] ? clone(graded[collection].get(id) || null) : null),
+    saveRubricReview: (collection, row, review) => {
+      graded[collection].get(row.id).rubric_review = clone(review);
+    },
+    reviewCommand: (account, fingerprint) => {
+      const found = [...commands.values()].find((c) => c.account === account && c.operation === "review" &&
+        c.fingerprint === fingerprint);
+      return found ? { id: found.id } : null;
+    },
+    liveLeaseForCommand: (commandId, now) => admissionView.liveLeaseForCommand(commandId, now),
     jobStarted: (row) => {
       admissionCalls.push({ call: "jobStarted", job: row.id });
       if (admissionRules) admissionRules.jobStarted(admissionView, row.account, row.command_id, row.id);
