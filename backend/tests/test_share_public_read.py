@@ -227,6 +227,16 @@ def test_found_and_not_found_carry_the_resolver_headers(client, monkeypatch, mis
     assert want["content-security-policy"] == "default-src 'none'; frame-ancestors 'none'"
 
 
+def test_the_headers_and_body_match_what_the_deployment_verifier_checks(client, monkeypatch, missing):
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "harness"))
+    import verify_deployment as vd
+
+    assert _headers(missing) == dict(vd.SHARE_HEADERS, **{"content-security-policy": vd.SHARE_READ_CSP})
+    assert missing.content == vd.SHARE_NOT_FOUND
+
+
 @pytest.mark.parametrize("env, token", [({share.KILL_SWITCH_ENV: "1"}, TOKEN), ({}, "x"), ({}, "ab cd" * 4)])
 def test_the_kill_switch_and_token_format_come_before_any_lookup(client, monkeypatch, env, token):
     res, admin = _read(client, token=token, env=env, monkeypatch=monkeypatch)

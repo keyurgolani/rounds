@@ -33,6 +33,13 @@ NGINX_404 = b"<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<
 PB_404 = {"code": 404, "message": "The requested resource wasn't found.", "data": {}}
 PB_401 = {"code": 401, "message": "The request requires admin authorization token to be set.", "data": {}}
 DENIED_PREFIXES = ("/_/", "/api/admins", "/api/settings", "/api/backups", "/api/logs", "/api/rounds/admission/")
+SHARE_HEADERS = {
+    "Cache-Control": "no-store",
+    "X-Robots-Tag": "noindex, nofollow, noarchive",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+}
 
 
 class Deployment:
@@ -75,7 +82,20 @@ class Deployment:
             return 307, b"", {"Location": vd.OAUTH_FAILURE_LOCATION}
         if bare.startswith("/api/files/"):
             return 404, PB_404
+        if bare == "/r" or bare.startswith("/r/"):
+            headers = dict(SHARE_HEADERS, **{"Content-Security-Policy": vd.SHARE_PAGE_CSP})
+            headers.update(self.share_page_headers)
+            return 200, b"<!doctype html><div id=root></div>", {k: v for k, v in headers.items() if v is not None}
+        if bare.startswith("/api/share/by-token/"):
+            headers = dict(SHARE_HEADERS, **{"Content-Security-Policy": vd.SHARE_READ_CSP})
+            headers.update(self.share_read_headers)
+            body = self.share_read_bodies.get(bare, vd.SHARE_NOT_FOUND)
+            return 404, body, {k: v for k, v in headers.items() if v is not None}
         return 404, NGINX_404
+
+    share_page_headers: dict = {}
+    share_read_headers: dict = {}
+    share_read_bodies: dict = {}
 
     pb_port = False
 
@@ -161,6 +181,70 @@ def test_a_correctly_proxied_deployment_passes_every_proxy_check():
     assert failed == []
     ids = {r.check_id for r in results}
     assert {c for c in vd.CHECKS if c.startswith("deployment.proxy.")} == ids
+
+
+def test_the_share_checks_pass_on_the_real_shape():
+    with deployment() as (_, url):
+        page = vd.check_share_page_headers(url)
+        read = vd.check_share_read_uniform(url)
+    assert page.passed, page.detail
+    assert read.passed, read.detail
+
+
+@pytest.mark.parametrize("header", ["Cache-Control", "X-Robots-Tag", "Referrer-Policy", "X-Content-Type-Options",
+                                    "X-Frame-Options", "Content-Security-Policy"])
+def test_a_share_page_missing_a_header_fails(header):
+    dep = Deployment()
+    dep.share_page_headers = {header: None}
+    with deployment(dep) as (_, url):
+        r = vd.check_share_page_headers(url)
+    assert not r.passed and header.lower() in r.detail
+
+
+def test_a_share_page_with_a_looser_csp_fails():
+    dep = Deployment()
+    dep.share_page_headers = {"Content-Security-Policy": vd.SHARE_PAGE_CSP.replace("script-src 'self'",
+                                                                                   "script-src 'self' 'unsafe-inline'")}
+    with deployment(dep) as (_, url):
+        r = vd.check_share_page_headers(url)
+    assert not r.passed and "content-security-policy" in r.detail
+
+
+def test_a_share_page_that_is_not_the_app_fails():
+    dep = Deployment()
+    dep.overrides[("GET", "/r")] = (404, NGINX_404)
+    with deployment(dep) as (_, url):
+        r = vd.check_share_page_headers(url)
+    assert not r.passed and "/r status=404" in r.detail
+
+
+@pytest.mark.parametrize("path", vd.SHARE_READ_PATHS)
+def test_a_share_read_whose_not_found_differs_fails(path):
+    dep = Deployment()
+    dep.share_read_bodies = {path: b'{"detail":"Share link not found."}'}
+    with deployment(dep) as (_, url):
+        r = vd.check_share_read_uniform(url)
+    assert not r.passed and "uniform_body=False" in r.detail
+
+
+def test_a_share_read_without_its_headers_fails():
+    dep = Deployment()
+    dep.share_read_headers = {"Cache-Control": None, "Content-Security-Policy": vd.SHARE_PAGE_CSP}
+    with deployment(dep) as (_, url):
+        r = vd.check_share_read_uniform(url)
+    assert not r.passed and "cache-control" in r.detail and "content-security-policy" in r.detail
+
+
+def test_the_share_page_headers_match_nginx():
+    # The runner side is backend/tests/test_share_public_read.py.
+    conf = (ROOT / "frontend" / "nginx.conf").read_text()
+    for loc in ("location = /r {", "location ^~ /r/ {"):
+        start = conf.index(loc)
+        block = conf[start: conf.index("}", start)]
+        got = dict(re.findall(r'add_header\s+(\S+)\s+"([^"]*)"\s+always;', block))
+        want = dict(vd.SHARE_HEADERS, **{"content-security-policy": vd.SHARE_PAGE_CSP})
+        assert {k.lower(): v for k, v in got.items()} == want, loc
+        assert "try_files /index.html =404;" in block, loc
 
 
 def test_a_denied_route_that_reaches_pocketbase_fails():
