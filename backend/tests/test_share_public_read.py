@@ -263,6 +263,18 @@ def test_the_kill_switch_and_token_format_come_before_any_lookup(client, monkeyp
     assert store.calls == []
 
 
+@pytest.mark.parametrize("bearer", ["sd1_AbCdEfGhIjKlMnOpQrStUv", "sd7_AbCdEfGhIjKlMnOpQrStUv"])
+def test_a_share_capability_bearer_gets_the_uniform_not_found_before_any_lookup(client, monkeypatch, missing,
+                                                                             bearer):
+    # A share capability's bearer resolves only through the resolver
+    # (ROUNDS-00B-L04): here it gets the uniform not-found, and nothing is
+    # looked up.
+    store = FakeStore(dict(LINK, token=bearer), {RESUME["id"]: RESUME})
+    res, store = _read(client, token=bearer, store=store, monkeypatch=monkeypatch)
+    assert (res.status_code, res.content, _headers(res)) == (404, missing.content, _headers(missing))
+    assert store.calls == []
+
+
 @pytest.mark.parametrize("value", ["false", "0", "", "no", "off", " OFF ", "False"])
 def test_a_kill_switch_set_off_leaves_reads_on(client, monkeypatch, value):
     res, _ = _read(client, env={share.KILL_SWITCH_ENV: value}, monkeypatch=monkeypatch)
