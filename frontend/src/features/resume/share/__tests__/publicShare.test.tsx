@@ -50,7 +50,9 @@ const DATA = {
 };
 
 describe('the public share page', () => {
-  beforeEach(() => fetchMock.mockReset());
+  beforeEach(() => {
+    fetchMock.mockReset();
+  });
 
   it.each([
     ['a not-found', new RunnerError({ message: 'Share 404: Not found.', status: 404, detail: 'Not found.' })],
