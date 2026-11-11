@@ -20,15 +20,16 @@ Resolution, the same in all three readers:
    (``true``, ``1``, or ``yes``). The signup pair are aliases of
    ``SIGNUPS``: PocketBase reads ``ROUNDS_DISABLE_SIGNUPS`` and the
    SPA reads ``VITE_DISABLE_SIGNUPS``, as each does today.
+   ``ROUNDS_ENABLE_DEMO`` is PocketBase's alias of ``DEMO``.
 4. Otherwise the written default applies.
 
 Admission (``app/admission.py``) enforces the route gates and
 ``EXECUTION_DEFINITIONS`` and runs steps 6 and 7 as
 ``ENFORCE_IDEMPOTENCY`` and ``ENFORCE_QUOTA`` say, the AI router reads
-``PAPER_FETCH`` and ``PROVIDER_PRIVATE_NETWORK``, and PocketBase and the
-SPA read ``SIGNUPS``. ``EXECUTION_STORE`` turns on the execution job
-store (ROUNDS-00A-L03): PocketBase serves its hook routes and each runner
-replica runs its executor and reaper.
+``PAPER_FETCH`` and ``PROVIDER_PRIVATE_NETWORK``, PocketBase and the
+SPA read ``SIGNUPS``, and PocketBase reads ``DEMO``. ``EXECUTION_STORE``
+turns on the execution job store (ROUNDS-00A-L03): PocketBase serves its
+hook routes and each runner replica runs its executor and reaper.
 
 The two enforcement gates start at ``observe``: admission records what
 it would deny and denies nothing. The next ``v*`` release sets them to
@@ -186,6 +187,19 @@ REGISTRY: tuple[Gate, ...] = (
             Alias(env="ROUNDS_DISABLE_SIGNUPS", value="disabled", reader=POCKETBASE),
             Alias(env="VITE_DISABLE_SIGNUPS", value="disabled", reader=FRONTEND),
         ),
+    ),
+    # ROUNDS-00B-L07: the demo is off unless an operator opts in.
+    Gate(
+        name="DEMO",
+        values=ROUTE_VALUES,
+        default="disabled",
+        closed="disabled",
+        readers=frozenset({POCKETBASE}),
+        description=(
+            "The demo account (users.is_demo). Disabled, PocketBase refuses its sign-in and gives it a "
+            "random password and a new token key at every start."
+        ),
+        aliases=(Alias(env="ROUNDS_ENABLE_DEMO", value="enabled", reader=POCKETBASE),),
     ),
 )
 

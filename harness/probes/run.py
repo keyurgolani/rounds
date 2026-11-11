@@ -29,6 +29,16 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
   admission-migration
             apply and reverse the admission migration with the pinned binary on
             a 62d4eae-shaped pb_data; see admission_migration_check.py.
+  demo-contain-migration
+            apply and reverse the demo containment migration with the pinned
+            binary on a pb_data with a legacy demo fixture; see
+            demo_contain_migration_check.py.
+  demo-on, demo-off
+            the demo account's containment (ROUNDS-00B-L07 stage 1): with
+            ROUNDS_ENABLE_DEMO=true, what a demo caller may change and own,
+            through PocketBase and the runner; after a restart with the demo
+            at its default, no demo account signs in and an earlier token is
+            refused; see demo_check.py.
   admission-deploy
             with both replicas up: the admission policy, its order and byte
             caps, and stage 2's closures on each replica (ROUNDS-00A-L01 stage
@@ -458,7 +468,7 @@ def main() -> int:
         print("usage: run.py {main|hook|deploy|degraded|deploy-db|verdict|scan|admission|admission-migration|"
               "admission-deploy|emergency-disable|emergency-enable|relation-quarantine|snapshot-store|"
               "execution-store|execution-runners|execution-unready|execution-ready-again|execution-disabled|"
-              "execution-migration|json-limits}", file=sys.stderr)
+              "execution-migration|json-limits|demo-on|demo-off|demo-contain-migration}", file=sys.stderr)
         return 2
     phase = sys.argv[1]
     if phase == "relation-quarantine":
@@ -496,6 +506,14 @@ def main() -> int:
             print(f"unknown phase {phase!r}", file=sys.stderr)
             return 2
         return execution_check.main(phase)
+    if phase == "demo-contain-migration":
+        import demo_contain_migration_check
+
+        return demo_contain_migration_check.main()
+    if phase in ("demo-on", "demo-off"):
+        import demo_check
+
+        return demo_check.main(phase)
     policy_path = os.environ.get("POLICY_PATH", "/policy/account-scope.v1.json")
     receipts_path = os.environ.get("RECEIPTS_PATH", "/out/receipts.jsonl")
     doc = policy.load(policy_path)

@@ -81,3 +81,6 @@ harness/.env.*
 
 # account-scope migration-check scratch (generated per run)
 harness/.migcheck/
+
+# the harness demo phases' state (generated per run, removed at teardown)
+harness/.state/
