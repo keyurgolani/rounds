@@ -107,10 +107,16 @@ def test_the_scan_looks_for_every_form_a_bearer_or_password_could_take():
     import hashlib
     import urllib.parse
 
-    values = set(probe.literals([TOKEN], [PASSWORD]))
-    assert {TOKEN, urllib.parse.quote(TOKEN, safe=""), base64.b64encode(TOKEN.encode()).decode()} <= values
+    spaced = "a password with spaces/and+signs"
+    values = set(probe.literals([TOKEN], [PASSWORD, spaced]))
+    assert {TOKEN, base64.b64encode(TOKEN.encode()).decode(), base64.b64encode(TOKEN.encode()).decode().rstrip("="),
+            base64.urlsafe_b64encode(TOKEN.encode()).decode().rstrip("=")} <= values
     assert {PASSWORD, hashlib.sha1(PASSWORD.encode()).hexdigest(), hashlib.sha256(PASSWORD.encode()).hexdigest(),
             hashlib.md5(PASSWORD.encode()).hexdigest()} <= values
+    # A bearer needs no escaping, so its URL-encoded form is the bearer; a
+    # password may need it.
+    assert urllib.parse.quote(TOKEN, safe="") == TOKEN
+    assert urllib.parse.quote(spaced, safe="") != spaced and urllib.parse.quote(spaced, safe="") in values
 
 
 def test_the_scan_finds_bytes_inside_a_tarball(tmp_path):
