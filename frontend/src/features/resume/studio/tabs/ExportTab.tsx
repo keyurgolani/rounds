@@ -571,9 +571,10 @@ function ExportButton({
     padding: '0 14px',
     borderRadius: 'var(--radius)',
     border: 0,
-    // The board's primary action shade: a touch darker than the accent,
-    // so its label passes 4.5:1 in either theme.
-    background: slot.primary ? 'color-mix(in srgb, var(--accent) 86%, black)' : 'transparent',
+    // The board's primary action shade: the accent a step toward the
+    // text color and away from the label's, so the label passes 4.5:1 in
+    // the light and dark themes and gains contrast in every other one.
+    background: slot.primary ? 'color-mix(in srgb, var(--accent) 86%, var(--text))' : 'transparent',
     color: slot.primary ? 'var(--bg-elev)' : 'var(--text-2)',
     boxShadow: slot.primary ? 'none' : 'inset 0 0 0 1px var(--border-strong)',
     fontSize: 13,
