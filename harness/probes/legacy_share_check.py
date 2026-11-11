@@ -296,7 +296,9 @@ def check_uniform(c: Checks, writer: ReceiptWriter, pb: PBClient, state: dict, o
     if not uniform(resolved) or resolved[0][:2] != (404, NOT_FOUND):
         problems.append(f"resolver status={resolved[0][0]} uniform={uniform(resolved)}")
 
-    rest = PBClient(FRONTEND_URL if via_nginx() else POCKETBASE_URL)
+    # PocketBase itself, not through nginx: these carry a fixture value in
+    # their query, nginx's own log keeps queries, and the scan reads it.
+    rest = PBClient(POCKETBASE_URL)
     for label, token in (("anonymous", None), ("owner", owner), ("other", other)):
         by_filter = [rest.get(f"{LINKS_PATH}?filter=" + _q(f"token='{v}'"), token) for v in values]
         by_param = [rest.get(f"{LINKS_PATH}?token=" + _q(v), token) for v in values]
@@ -498,10 +500,13 @@ def run_scan() -> int:
     c = Checks()
     state = json.loads(STATE.read_text())
     values = tuple([link["value"] for link in state["links"].values()] + state["hashes"] + state["agents"])
-    hits = 0
+    hits, where = 0, []
     for path in sorted(SCAN_DIR.glob("*.log")):
-        hits += logscan.scan_text(path.read_text(errors="replace"), path.name, values).literals
-    c.check("legacy-shares.scan.logs-hold-no-fixture-value", hits == 0, f"{hits} found")
+        found = logscan.scan_text(path.read_text(errors="replace"), path.name, values).literals
+        hits += found
+        if found:
+            where.append(path.stem)
+    c.check("legacy-shares.scan.logs-hold-no-fixture-value", hits == 0, f"{hits} found in {', '.join(where)}")
     in_data = 0
     tarball = SCAN_DIR / "pb_data.tar"
     if tarball.exists():
