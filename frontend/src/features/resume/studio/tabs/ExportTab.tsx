@@ -574,6 +574,7 @@ function ExportButton({
     // The board's primary action shade: the accent a step toward the
     // text color and away from the label's, so the label passes 4.5:1 in
     // the light and dark themes and gains contrast in every other one.
+    // TODO(ROUNDS-33-L02): #166's derived accent tokens replace this mix.
     background: slot.primary ? 'color-mix(in srgb, var(--accent) 86%, var(--text))' : 'transparent',
     color: slot.primary ? 'var(--bg-elev)' : 'var(--text-2)',
     boxShadow: slot.primary ? 'none' : 'inset 0 0 0 1px var(--border-strong)',

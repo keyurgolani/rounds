@@ -31,17 +31,25 @@
 #                     each job claimed and ended once
 #  3g. execution readiness - PocketBase restarted with another secret: both
 #                     replicas go unready; restarted with it, ready again
-#  3h. legacy snapshots - PocketBase, both replicas, and nginx with
-#                     ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE on and the
-#                     materializer up: each RD-02 input's declared outcome,
+#  3h. legacy snapshots - PocketBase, both replicas, nginx, and the PDF
+#                     renderer with ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE on and
+#                     the materializer up: each RD-02 input's declared outcome,
 #                     owner-only snapshots, replay, reuse, conflict, and the
-#                     operator's scan, signed by the runner (ROUNDS-00A-L04,
+#                     operator's scan, signed by the runner; then server PDF
+#                     renders only the caller's own snapshots, both replicas'
+#                     decision lines show no other render ran, and with the
+#                     renderer stopped a render is a typed 503 (ROUNDS-00A-L04,
 #                     harness/probes/legacy_snapshot_check.py)
-#  3i. the materializer stopped: creation is typed and writes nothing; back
-#                     up, a same-key retry makes one snapshot
-#  3j. the gate off: creation is refused, snapshots still read back, the
-#                     rescan matches; the gate on again: every snapshot is
-#                     reused, and no resume, variant, or version row changed
+#  3i. the materializer stopped: creation is typed and writes nothing, and
+#                     snapshots still render; back up, a same-key retry
+#                     makes one snapshot
+#  3j. the gate off: creation is refused, snapshots still read back and
+#                     render for their owners only, the rescan matches; the
+#                     gate on again: every snapshot is reused, and no resume,
+#                     variant, or version row changed
+# 3j2. recovery - pb_data, its stored files included, backed up with
+#                     PocketBase stopped and restored: every snapshot renders
+#                     for its owner with its checksum
 #  3k. share capabilities - both replicas and nginx: the owner list and
 #                     revoke through nginx, resume and variant deletes with
 #                     active and revoked capabilities keep their snapshots,

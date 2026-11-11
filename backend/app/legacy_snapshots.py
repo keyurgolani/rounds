@@ -198,7 +198,10 @@ class RenderRequestV1(StrictModel):
     """render-request/v1 (contracts/definitions/render-request.v1.schema.json,
     ROUNDS-00A-L02). The runner image doesn't carry contracts/, so this model
     mirrors the schema and tests/test_render_request.py runs one set of
-    bodies through both."""
+    bodies through both.
+
+    TODO(ROUNDS-34-L08): #182's shared contracts package replaces this mirror.
+    """
 
     snapshot_id: str = Field(pattern=RECORD_ID)
     expected_checksum: str = Field(pattern=CHECKSUM)

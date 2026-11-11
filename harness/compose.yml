@@ -86,6 +86,7 @@ services:
   # runners call it, with no host port (ROUNDS-00A-L04). It sits behind the
   # `renderer` profile, and run.sh starts it only for the snapshot render
   # phases, so every other phase sees a runner with no renderer to reach.
+  # TODO(ROUNDS-00A-L06): #6's render workers replace this sidecar.
   pdf-renderer:
     profiles: ["renderer"]
     build:
