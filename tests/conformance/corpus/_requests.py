@@ -25,6 +25,26 @@ TAKE_HOME = {"track": "take-home", "slug": overlay.SLUG, "variant": overlay.VARI
 THREE_SUM = "def three_sum(nums):\n    return []\n"
 CLIENT = "def fetch_user(user_id):\n    return None\n"
 
+# The render route takes render-request/v1 (ROUNDS-00A-L04): one snapshot and
+# its checksum, never markup. The well-formed body names no snapshot that
+# exists; a fixture that renders seeds one its account owns
+# (corpus/_snapshots.py) and names it with render_body().
+NO_SNAPSHOT = "zzzzzzzzzzzzzz9"
+NO_CHECKSUM = "sha256:" + "0" * 64
+RENDER_COMMAND = "0190f000-0000-7000-8000-0000000000c1"
+
+
+def render_body(snapshot_id: str, checksum: str, command_id: str = RENDER_COMMAND) -> dict:
+    return {
+        "snapshot_id": snapshot_id,
+        "expected_checksum": checksum,
+        "format": "pdf",
+        "page_size": "A4",
+        "margin_mm": 0,
+        "locale": "en",
+        "idempotency_id": command_id,
+    }
+
 
 def bodies() -> dict[tuple[str, str], dict]:
     """A fresh copy of every admitted route's well-formed body."""
@@ -42,5 +62,5 @@ def bodies() -> dict[tuple[str, str], dict]:
             "definition": dict(TAKE_HOME), "files": {"client.py": CLIENT},
             "notes": "", "ai_chats": [], "duration_ms": 0,
         },
-        ("POST", "/api/pdf/render"): {"html": "<p>conformance</p>", "margin_mm": 0},
+        ("POST", "/api/pdf/render"): render_body(NO_SNAPSHOT, NO_CHECKSUM),
     }
