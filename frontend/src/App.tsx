@@ -26,6 +26,7 @@ import Todos from './pages/Todos';
 import ResumesList from './pages/ResumesList';
 import ResumeStudio from './pages/ResumeStudio';
 import PublicResume from './pages/PublicResume';
+import SharedArtifact from './pages/SharedArtifact';
 import ExperiencePage from './experience/ExperiencePage';
 import { CampaignProvider } from './campaign/CampaignContext';
 
@@ -34,8 +35,10 @@ export default function App() {
     <Routes>
       <Route path="login" element={<Login />} />
       <Route path="signup" element={<Signup />} />
-      {/* Only the lowercase path renders the share page, the one nginx
-          serves with the share headers (ROUNDS-00B-L03). */}
+      {/* Only the lowercase paths render the share pages, the ones nginx
+          serves with the share headers (ROUNDS-00B-L03). /r reads its
+          token from the fragment (stage 2). */}
+      <Route path="r" caseSensitive element={<SharedArtifact />} />
       <Route path="r/:token" caseSensitive element={<PublicResume />} />
 
       <Route
