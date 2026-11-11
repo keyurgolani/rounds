@@ -1402,8 +1402,8 @@
       "fixture": "resume_share_links",
       "owner_field": "user",
       "current_rules": {
-        "list": "user = @request.auth.id && legacy_status != \"revoked_ownership\"",
-        "view": "user = @request.auth.id && legacy_status != \"revoked_ownership\"",
+        "list": "legacy_status != \"revoked_ownership\" && user = @request.auth.id",
+        "view": "legacy_status != \"revoked_ownership\" && user = @request.auth.id",
         "create": null,
         "update": null,
         "delete": null
@@ -1474,8 +1474,8 @@
       "fixture": "resume_share_views",
       "owner_field": "user",
       "current_rules": {
-        "list": "user = @request.auth.id && link.legacy_status != \"revoked_ownership\"",
-        "view": "user = @request.auth.id && link.legacy_status != \"revoked_ownership\"",
+        "list": "link.legacy_status != \"revoked_ownership\" && user = @request.auth.id",
+        "view": "link.legacy_status != \"revoked_ownership\" && user = @request.auth.id",
         "create": null,
         "update": null,
         "delete": null

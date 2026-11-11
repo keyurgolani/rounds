@@ -66,15 +66,15 @@
           {"collection": "legacy_share_migration", "fields": ["manifest", "predicate_version", "link", "origin", "quarantine_entry", "outcome", "reason", "views", "first_view_day", "last_view_day", "incident"]}
         ],
         "drops": [
-          {"collection": "resume_share_links", "fields": ["token", "is_password", "password_hash", "expires_at"], "index": "idx_share_links_token", "disposition": "drop"}
+          {"collection": "resume_share_links", "fields": ["expires_at", "is_password", "password_hash", "token"], "index": "idx_share_links_token", "disposition": "drop"}
         ],
         "rules": {
-          "resume_share_links": {"list": "user = @request.auth.id && legacy_status != \"revoked_ownership\"", "view": "user = @request.auth.id && legacy_status != \"revoked_ownership\"", "create": null, "update": null, "delete": null},
-          "resume_share_views": {"list": "user = @request.auth.id && link.legacy_status != \"revoked_ownership\"", "view": "user = @request.auth.id && link.legacy_status != \"revoked_ownership\"", "create": null, "update": null, "delete": null}
+          "resume_share_links": {"list": "legacy_status != \"revoked_ownership\" && user = @request.auth.id", "view": "legacy_status != \"revoked_ownership\" && user = @request.auth.id", "create": null, "update": null, "delete": null},
+          "resume_share_views": {"list": "link.legacy_status != \"revoked_ownership\" && user = @request.auth.id", "view": "link.legacy_status != \"revoked_ownership\" && user = @request.auth.id", "create": null, "update": null, "delete": null}
         },
         "triggers": ["rel_authz_resume_share_links_replaced_by_ins", "rel_authz_resume_share_links_replaced_by_upd", "rel_authz_resume_share_links_replaced_by_tgt"]
       },
-      "down": "keeps the journal, the rules, legacy_status, replaced_by, and its triggers; removes legacy_reason, turned_off_at, and manifest_id; adds token, is_password, password_hash, and expires_at back empty, none required, with no index. It restores no secret and turns no link back on.",
+      "down": "keeps the journal, the rules, legacy_status, replaced_by, and its triggers; removes legacy_reason, turned_off_at, and manifest_id; puts expires_at, is_password, password_hash, and token back empty, none required, with no index. It restores no secret and turns no link back on.",
       "untouched": "every other collection, and every other field of the two share collections"
     }
   ]

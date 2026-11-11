@@ -41,8 +41,8 @@ finally:
 OWNER, OTHER = "acct00000000001", "acct00000000002"
 RESUME, OTHER_RESUME, VARIANT = "resumeaaaaaaaa1", "resumebbbbbbbb1", "variantaaaaaaa1"
 GOOD = "AbCdEfGhIjKlMnOpQrSt_-"
-LINK_RULE = 'user = @request.auth.id && legacy_status != "revoked_ownership"'
-VIEW_RULE = 'user = @request.auth.id && link.legacy_status != "revoked_ownership"'
+LINK_RULE = 'legacy_status != "revoked_ownership" && user = @request.auth.id'
+VIEW_RULE = 'link.legacy_status != "revoked_ownership" && user = @request.auth.id'
 
 
 def run(*steps: dict) -> list:
@@ -209,7 +209,7 @@ def test_the_migration_and_the_receipt_agree_on_every_code_and_field(constants):
     assert receipt["predicate_version"] == constants["predicate_version"] == 1
     assert receipt["outcomes"] == constants["outcomes"]
     assert receipt["reasons"] == constants["reasons"]
-    assert receipt["dropped"] == constants["dropped"] == ["token", "is_password", "password_hash", "expires_at"]
+    assert receipt["dropped"] == constants["dropped"] == ["expires_at", "is_password", "password_hash", "token"]
     assert receipt["link_payload_drops"] == constants["link_payload_drops"] == ["token", "password_hash", "expires_at"]
     assert receipt["view_payload_drops"] == constants["view_payload_drops"] == ["viewer_ip_hash", "user_agent"]
 

@@ -18,8 +18,10 @@
 //      (FIELDS, as 1700008200_share_capabilities.js adds them). The
 //      legacy_share_migration journal is created, every rule null.
 //   2. The rules on the two share collections become:
-//        resume_share_links  list, view   user = @request.auth.id && legacy_status != "revoked_ownership"
-//        resume_share_views  list, view   user = @request.auth.id && link.legacy_status != "revoked_ownership"
+//        resume_share_links  list, view
+//            legacy_status != "revoked_ownership" && user = @request.auth.id
+//        resume_share_views  list, view
+//            link.legacy_status != "revoked_ownership" && user = @request.auth.id
 //        both                create, update, delete: null, so no client
 //                            writes either one again
 //   3. Every link, in id order and BATCH at a time, gets one outcome
@@ -54,9 +56,9 @@
 // with its counts, never an id, a secret, or a value. `pocketbase
 // legacy-share-receipt` (pb_hooks/legacy_shares.js) reports the journal.
 //
-// down() keeps the journal, the rules, legacy_status, and replaced_by,
-// removes step 1's other fields, and adds step 6's fields back empty, with
-// no index. It brings no link back: nothing here kept a copy of any secret,
+// down() leaves the journal, the rules, legacy_status, and replaced_by as
+// they are. It takes off the other fields step 1 added and puts step 6's
+// fields back empty, with no index. It brings no link back: nothing here kept a copy of any secret,
 // and the rules and statuses it keeps still turn every old link off.
 //
 // The lint entry in scripts/migration-lint-allowlist.json is pinned to this
@@ -89,10 +91,10 @@ const QUARANTINE_KINDS = ["cross_owner", "missing_target", "dependent"];
 // Step 6's fields, as 1700000700_resume_studio.js made them; down() adds
 // them back empty, none of them required.
 const DROPPED = [
-  { name: "token", type: "text" },
+  { name: "expires_at", type: "text" },
   { name: "is_password", type: "bool" },
   { name: "password_hash", type: "text" },
-  { name: "expires_at", type: "text" },
+  { name: "token", type: "text" },
 ];
 const DROPPED_INDEX = "idx_share_links_token";
 // What a quarantined entry's payload loses, by collection.
@@ -267,14 +269,14 @@ migrate(
 
       // --- 2. Rules -----------------------------------------------------------
       step = "rules";
-      links.listRule = 'user = @request.auth.id && legacy_status != "revoked_ownership"';
-      links.viewRule = 'user = @request.auth.id && legacy_status != "revoked_ownership"';
+      links.listRule = 'legacy_status != "revoked_ownership" && user = @request.auth.id';
+      links.viewRule = 'legacy_status != "revoked_ownership" && user = @request.auth.id';
       links.createRule = null;
       links.updateRule = null;
       links.deleteRule = null;
       dao.saveCollection(links);
-      views.listRule = 'user = @request.auth.id && link.legacy_status != "revoked_ownership"';
-      views.viewRule = 'user = @request.auth.id && link.legacy_status != "revoked_ownership"';
+      views.listRule = 'link.legacy_status != "revoked_ownership" && user = @request.auth.id';
+      views.viewRule = 'link.legacy_status != "revoked_ownership" && user = @request.auth.id';
       views.createRule = null;
       views.updateRule = null;
       views.deleteRule = null;

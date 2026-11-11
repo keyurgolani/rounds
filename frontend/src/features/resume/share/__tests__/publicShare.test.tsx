@@ -1,6 +1,7 @@
-// Resume links in a shared resume (ROUNDS-00B-L03 stage 1): only http,
-// https, mailto, and tel links render as links. The share page itself is
-// sharedArtifact.test.tsx, and an older link's address shareRoute.test.tsx.
+// Resume links in a shared resume (ROUNDS-00B-L03 stage 1) keep to four
+// schemes (http, https, mailto, tel); anything else renders as plain text.
+// The share page itself is sharedArtifact.test.tsx, and an older link's
+// address shareRoute.test.tsx.
 
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';

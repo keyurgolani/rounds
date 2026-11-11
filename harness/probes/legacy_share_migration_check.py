@@ -63,11 +63,11 @@ VIEWS = "resume_share_views"
 # run may ask for fewer (at least two batches' worth).
 BULK = max(1000, int(os.environ.get("LEGACY_SHARES_BULK", "10000")))
 STAMP = "2024-01-01 00:00:00.000Z"
-DROPPED = ("token", "is_password", "password_hash", "expires_at")
+DROPPED = ("expires_at", "is_password", "password_hash", "token")
 ADDED_ONLY_FORWARD = ("legacy_reason", "turned_off_at", "manifest_id")
 KEPT = ("legacy_status", "replaced_by")
-LINK_RULE = 'user = @request.auth.id && legacy_status != "revoked_ownership"'
-VIEW_RULE = 'user = @request.auth.id && link.legacy_status != "revoked_ownership"'
+LINK_RULE = 'legacy_status != "revoked_ownership" && user = @request.auth.id'
+VIEW_RULE = 'link.legacy_status != "revoked_ownership" && user = @request.auth.id'
 REPLACED_TRIGGERS = tuple(f"rel_authz_{LINKS}_replaced_by_{k}" for k in ("ins", "upd", "tgt"))
 # Marks every fixture viewer value carries, so a scan can find any left.
 IP_MARK = "fixtureviewerhash"

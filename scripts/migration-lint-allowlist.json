@@ -32,7 +32,7 @@
     {
       "path": "pocketbase/pb_migrations/1700008400_legacy_share_migration.js",
       "rules": ["drops-field", "rewrites-rows"],
-      "sha256": "02ecc9336611ff1a021c750934f779e89fa6ac067fe9fedae2adf53e387862d6",
+      "sha256": "244f2fc15562bb03c147b8c5317204b20f96992bd8925f460f41eed74443e4f6",
       "issue": "#14",
       "reason": "Turns off every share link made before the release, for good: sets each link's outcome fields, keeps only the day on each view row, gives quarantined share entries the same treatment, journals one row per link, and drops the link fields only those links used, with their index. The disposition per collection is in the manifest; down() restores no secret and turns no link back on.",
       "reviewed_by": "pending owner review",

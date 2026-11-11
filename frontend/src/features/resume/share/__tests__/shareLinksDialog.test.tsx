@@ -518,7 +518,7 @@ describe('older links', () => {
     for (const name of [/^This resume Turned off on /, /^For Acme Turned off on /]) {
       expect(within(row(name)).getByRole('button', { name: 'Get a new link' })).toBeInTheDocument();
     }
-    for (const name of [/Turned off: demo account$/, /Turned off: couldn’t verify$/, /Replaced on /]) {
+    for (const name of [/Turned off: demo account$/, /Replaced on /, /Turned off: couldn’t verify$/]) {
       expect(within(row(name)).queryByRole('button')).toBeNull();
     }
     expect(within(area).getAllByRole('button').map((b) => b.textContent)).toEqual(['Get a new link', 'Get a new link']);

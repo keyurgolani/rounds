@@ -47,7 +47,7 @@ const REASONS = {
   revoked_unverified: ["owner_missing", "no_target", "target_missing", "token_format", "password_set", "expiry_set"],
 };
 // What the migration removes, which the receipt counts as left over.
-const DROPPED = ["token", "is_password", "password_hash", "expires_at"];
+const DROPPED = ["expires_at", "is_password", "password_hash", "token"];
 const LINK_PAYLOAD_DROPS = ["token", "password_hash", "expires_at"];
 const VIEW_PAYLOAD_DROPS = ["viewer_ip_hash", "user_agent"];
 // The journal's fields its checksum covers, in this order; never its dates.

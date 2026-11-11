@@ -148,7 +148,7 @@ def test_down_restores_nothing(src):
 def test_the_policy_row_names_both_rule_migrations_and_only_server_only_writes(policy):
     row = policy["collections"]["resume_share_links"]
     rules = row["current_rules"]
-    assert rules["list"] == rules["view"] == 'user = @request.auth.id && legacy_status != "revoked_ownership"'
+    assert rules["list"] == rules["view"] == 'legacy_status != "revoked_ownership" && user = @request.auth.id'
     assert rules["create"] is rules["update"] is rules["delete"] is None
     assert row["target_rules"] == {"create": None, "update": None}
     assert row["rule_overrides"] == [

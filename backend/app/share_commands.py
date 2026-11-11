@@ -36,10 +36,9 @@ single PocketBase transaction makes the capability.
 
 "Get a new link" (ROUNDS-00B-L06) is CreateShare with ``legacy_link_id``,
 one of the caller's older links. PocketBase decides which: only a migrated
-link of the caller's own, and the source is that link's own target, its
-variant if it names one, else its resume. A body ``resume_id`` or
-``variant_id`` that names anything else, and any other link, get the one
-not-found. The transaction that makes the capability also sets the link's
+link of the caller's own, and the source is that link's own target: its
+variant if it names one, and its resume if not. Naming any other target in
+the body, or any other link, gets the one not-found. The transaction that makes the capability also sets the link's
 ``replaced_by``, and a link that already has one answers that capability
 as already-issued, under its first key or a new one.
 
