@@ -52,8 +52,10 @@ const COMMAND_TTL_S = 24 * HOUR_S;
 const LEASE_GRACE_S = 30;
 // What a lease holds past its wall time for the work after the run: grade
 // and submit ask the provider for a rubric review, which the runner cuts
-// at 60 s, and save the attempt.
-const HOLD_S = { grade: 90, take_home_submit: 90 };
+// at 60 s, and save the attempt, in their request until their jobs take
+// over (ROUNDS-00A-L03 PR 3). A job's review is its own operation,
+// `review`, which runs nothing and holds its lease for the 60 s call.
+const HOLD_S = { grade: 90, take_home_submit: 90, review: 60 };
 // The secret only the runner and PocketBase hold, and requestInfo's name
 // for the header that carries it (X-Rounds-Admission-Key).
 const RUNNER_KEY_ENV = "ROUNDS_ADMISSION_SECRET";
@@ -85,7 +87,15 @@ const OPERATIONS = {
   // ROUNDS-00A-L04: one Legacy Artifact Snapshot, the materializer call
   // bounded at 10 s (legacy_snapshots.js).
   snapshot_create: [10, 10],
+  // ROUNDS-00A-L03 PR 3: one rubric review of a grading job's result. It
+  // runs no candidate code, so it charges one request and no wall seconds,
+  // and execution.js reviewStart admits it once per result.
+  review: [0, 0],
 };
+// Operations only another hook admits, in the transaction that decides
+// them, never the admit route: a review is admitted by execution.js
+// reviewStart as its result's rubric is marked requested.
+const HOOK_ONLY_OPERATIONS = ["review"];
 const OUTCOMES = ["completed", "denied", "infrastructure", "error"];
 const MODES = ["enforce", "observe"];
 // ROUNDS_GATE_ENFORCE_QUOTA: enforce denies, observe runs uncounted past a
@@ -133,6 +143,7 @@ function checkAdmit(data) {
   if (!only(data, keys)) return null;
   const operation = data.operation;
   if (typeof operation !== "string" || !Object.prototype.hasOwnProperty.call(OPERATIONS, operation)) return null;
+  if (HOOK_ONLY_OPERATIONS.indexOf(operation) >= 0) return null;
   if (!wallIn(operation, data.wall_seconds)) return null;
   const most = data.max_wall_seconds === undefined ? data.wall_seconds : data.max_wall_seconds;
   if (!wallIn(operation, most) || most < data.wall_seconds) return null;
@@ -902,6 +913,7 @@ module.exports = {
   IN_FLIGHT_RETRY_S,
   RESULT_MAX_CHARS,
   OPERATIONS,
+  HOOK_ONLY_OPERATIONS,
   DEMO_FIELDS,
   RUNNER_KEY_ENV,
   RUNNER_KEY_HEADER,

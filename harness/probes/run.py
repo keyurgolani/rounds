@@ -64,6 +64,11 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
             with the scratch key on and definitions enforced, then a job
             whose replica is killed mid-run retried under its key
             (ROUNDS-00A-L03 PR 2); see scratch_check.py.
+  execution-grading
+            a grade as a durable job through nginx, with the grading key on
+            and definitions enforced: the graded row the server writes, a
+            duplicate, and the review of another account's result
+            (ROUNDS-00A-L03 PR 3); see grading_check.py.
   execution-migration
             apply and reverse the execution job store's migration with the
             pinned binary; see execution_migration_check.py.
@@ -592,7 +597,7 @@ def main() -> int:
         print("usage: run.py {main|hook|deploy|degraded|deploy-db|verdict|scan|admission|admission-migration|"
               "admission-deploy|emergency-disable|emergency-enable|relation-quarantine|snapshot-store|"
               "execution-store|execution-runners|execution-unready|execution-ready-again|execution-disabled|"
-              "execution-scratch|execution-scratch-start|execution-scratch-retry|"
+              "execution-scratch|execution-scratch-start|execution-scratch-retry|execution-grading|"
               "execution-migration|json-limits|demo-on|demo-off|demo-contain-migration|snapshot-create|"
               "snapshot-create-down|snapshot-create-retry|snapshot-scan|snapshot-create-off|snapshot-create-again|"
               "snapshot-render|snapshot-render-audit|snapshot-render-down|snapshot-recovery|share-capabilities|"
@@ -648,6 +653,10 @@ def main() -> int:
             print(f"unknown phase {phase!r}", file=sys.stderr)
             return 2
         return scratch_check.main(phase, new_writer(os.environ.get("RECEIPTS_PATH", "/out/receipts.jsonl"), phase))
+    if phase == "execution-grading":
+        import grading_check
+
+        return grading_check.main(phase, new_writer(os.environ.get("RECEIPTS_PATH", "/out/receipts.jsonl"), phase))
     if phase.startswith("execution-"):
         import execution_check
 

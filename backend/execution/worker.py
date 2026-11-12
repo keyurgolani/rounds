@@ -20,9 +20,11 @@ and ``ROUNDS_EXECUTION_SECRET`` logs in as ``execution-worker``:
    which ends ``canceled``. A heartbeat or complete the store refuses as
    superseded means the lease was lost: the run stops and its result is
    dropped, and the store already counted the write as rejected.
-4. Complete. The envelope goes with both terminal states in one write.
-   An exception in a handler is the infrastructure's failure, never the
-   candidate's.
+4. Complete. The envelope goes with both terminal states in one write,
+   and a grading kind's authoritative result with its graded row (PR 3);
+   one that comes without its row's content ends
+   ``infrastructure-degraded``. An exception in a handler is the
+   infrastructure's failure, never the candidate's.
 5. Reap every 15 s, beside the reap each claim runs.
 6. Stop. When the replica stops, a run in flight stops too and ends
    ``failed``, ``worker-lost``, never with an outcome from the parts that
@@ -32,8 +34,8 @@ and ``ROUNDS_EXECUTION_SECRET`` logs in as ``execution-worker``:
 Each step writes a ``execution.job`` line in #1's kit, labeled by kind,
 purpose, state, outcome class, and executor kind, never by account.
 
-PR 2's handlers (``execution/handlers.py``) run the scratch kinds; the
-grading kinds have none until PR 3.
+The handlers in ``execution/handlers.py`` run the scratch kinds (PR 2)
+and the grading kinds (PR 3).
 """
 from __future__ import annotations
 
@@ -85,6 +87,9 @@ class Result:
     definition: dict[str, Any] | None = None
     rubric: dict[str, Any] | None = None
     observation: Observation | None = None
+    # A grading kind's graded row content (PR 3), which complete writes
+    # with an authoritative envelope.
+    graded: dict[str, Any] | None = None
 
 
 class Withdrawn(Exception):
@@ -362,6 +367,9 @@ class Worker:
             outcome = envelope.aggregate(result.parts)
         except envelope.InvalidEnvelope:
             outcome = envelope.outcome("failed", "infrastructure-degraded")
+        if outcome.authoritative and kind.purpose == "grading" and result.graded is None:
+            # A grading result is kept only with its graded row.
+            outcome = envelope.outcome("failed", "infrastructure-degraded")
         await self._finish(attempt, outcome, cleanup, result=result)
 
     async def _heartbeats(self, attempt: _Attempt) -> None:
@@ -428,9 +436,12 @@ class Worker:
                 input_digest=job.input_digest, queued_at=job.queued_at, started_at=attempt.started_at,
                 finished_at=int(time.time()), executor_kind=self._executor.kind,
             )
+        # A grading kind's authoritative result goes with its graded row
+        # (PR 3); every other end goes without one.
+        graded = result.graded if result is not None and hidden and outcome.authoritative else None
         for tries in range(COMPLETE_TRIES):
             try:
-                await self._client.complete(claim.attempt.id, claim.token, body)
+                done = await self._client.complete(claim.attempt.id, claim.token, body, graded=graded)
             except store.Superseded:
                 _metric("rounds_job_late_result_rejected_total", 1, job)
                 return
@@ -442,7 +453,9 @@ class Worker:
                     await asyncio.sleep(BACKOFF_S[tries])
                 continue
             self._ok()
-            labels = {"state": outcome.state, "outcome_class": outcome.outcome_class,
+            # How the store ended it: a grading result it couldn't keep ends
+            # infrastructure-degraded there.
+            labels = {"state": done.state or outcome.state, "outcome_class": done.outcome_class or outcome.outcome_class,
                       "executor_kind": self._executor.kind}
             _metric("rounds_job_terminal_total", 1, job, **labels)
             if attempt.started_at is not None:

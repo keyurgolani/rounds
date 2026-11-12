@@ -124,6 +124,8 @@ function handle(step) {
     id: who.id || "acct00000000001",
     collection: () => ({ name: who.collection }),
     username: () => who.username || "",
+    // admission.js's tierOf reads it (PR 3).
+    getBool: (name) => name === "is_demo" && who.demo === true,
   };
   const c = {
     info: { authRecord, headers: step.headers || {}, data: step.data || {}, admin: null },
@@ -176,6 +178,22 @@ const results = program.steps.map((step) => {
     }
     case "purge":
       return execution.purge(store, step.now);
+    // PR 3: a practice item's row, its removal, and a campaign's owner.
+    case "seedItem":
+      return store.seedItem(step.collection, step.slug);
+    case "dropItem":
+      return store.dropItem(step.collection, step.slug);
+    case "seedCampaign":
+      return store.seedCampaign(step.id, step.user);
+    case "reviewStart":
+    case "reviewFinish": {
+      const check = step.call === "reviewStart" ? execution.checkReviewStart : execution.checkReviewFinish;
+      const input = check(step.input);
+      if (input === null) return { status: 400, body: { error: "invalid_request" } };
+      return execution[step.call](store, step.account, input, step.now);
+    }
+    case "checkGraded":
+      return execution.checkGraded(step.kind, step.graded, step.result);
     case "checkEnqueue":
     case "checkCancel":
     case "checkStatus":
@@ -184,6 +202,8 @@ const results = program.steps.map((step) => {
     case "checkComplete":
     case "checkResult":
     case "checkReap":
+    case "checkReviewStart":
+    case "checkReviewFinish":
       return execution[step.call](step.input);
     // As the handlers do: the input is checked before the decision runs.
     case "enqueue":

@@ -1103,6 +1103,7 @@ const path = require("path");
 const admission = require(path.join(process.argv[1], "admission.js"));
 process.stdout.write(JSON.stringify({
   operations: admission.OPERATIONS,
+  hookOnly: admission.HOOK_ONLY_OPERATIONS,
   resultMaxChars: admission.RESULT_MAX_CHARS,
   hold: admission.HOLD_S,
   keyEnv: admission.RUNNER_KEY_ENV,
@@ -1134,8 +1135,15 @@ def test_each_operations_charge_matches_the_runners_timeouts():
         "take_home_submit": [take_home.SUBMIT_TIMEOUT_S] * 2,
         "pdf_render": [pdf.RENDER_TIMEOUT_S] * 2,
         "snapshot_create": [legacy_snapshots.MATERIALIZE_TIMEOUT_S] * 2,
+        # ROUNDS-00A-L03 PR 3: a review runs no candidate code.
+        "review": [0, 0],
     }
-    assert set(hook["operations"]) == {r.operation for r in admission.ROUTES.values() if r.allocates}
+    # A review's routes run steps 1 to 4 here; the store admits the review
+    # itself, so the admit route takes the operation from no one.
+    assert hook["hookOnly"] == ["review"]
+    reviews = {r.operation for r in admission.ROUTES.values() if not r.allocates and r.operation == "review"}
+    assert reviews == {"review"}
+    assert set(hook["operations"]) == {r.operation for r in admission.ROUTES.values() if r.allocates} | reviews
     # What each route charges at admission is inside the hook's range;
     # evaluate and grade start on one case or checkpoint, admitted up to
     # every case or checkpoint they may run.
@@ -1158,9 +1166,11 @@ def test_a_lease_holds_long_enough_for_the_work_after_the_run():
     from routers import take_home
 
     hold = _hook_table()["hold"]
-    assert set(hold) == {"grade", "take_home_submit"}
+    assert set(hold) == {"grade", "take_home_submit", "review"}
     assert hold["grade"] >= REVIEW_TIMEOUT_S
     assert hold["take_home_submit"] >= REVIEW_TIMEOUT_S + take_home.ATTEMPT_WRITE_TIMEOUT_S
+    # ROUNDS-00A-L03 PR 3: a job's review holds its lease for the call.
+    assert hold["review"] >= REVIEW_TIMEOUT_S
 
 
 def test_the_runner_key_is_named_the_same_on_both_sides():

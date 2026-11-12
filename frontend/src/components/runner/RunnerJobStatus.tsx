@@ -1,11 +1,13 @@
 // A runner action's durable job (ROUNDS-00A-L03), shown in the runner
 // notice's live region (RunnerDenialNotice) so a page has one polite
-// region for every runner state.
+// region for every runner state. The actions are a run, a test run, a
+// grade, and a take-home submission (PR 3).
 //
 // - Queued and running offer Cancel; running shows how long it has run
 //   and a thin progress line; a cancel asked for shows Stopping.
 // - A run that finished with a result says so to screen readers only:
-//   the result shows in the page's own result views.
+//   the result shows in the page's own result views, and a grade's or a
+//   submission's in its report.
 // - A limit names itself. An end the server caused (the runner was lost,
 //   or the server couldn't finish) offers Retry while the job has a retry
 //   left. A definition the server can't run, a run it stopped, and a job
@@ -32,7 +34,7 @@ import {
 } from 'lucide-react';
 import { isEnded, type JobAnswer, type JobLimit } from '../../lib/executionJobs';
 
-export type RunnerJobAction = 'run' | 'tests';
+export type RunnerJobAction = 'run' | 'tests' | 'grade' | 'submit';
 
 export interface RunnerJobView {
   job: JobAnswer | null;
@@ -63,29 +65,118 @@ interface JobCopy {
   reference?: boolean;
 }
 
-const WHO: Record<RunnerJobAction, { run: string; runs: string; kept: string }> = {
-  run: { run: 'run', runs: 'Your code is running', kept: 'Your code is still here.' },
-  tests: { run: 'test run', runs: 'Your tests are running', kept: 'Your code is still here.' },
+interface ActionWords {
+  /** The title once the server no longer has the job. */
+  missing: string;
+  /** What the job is called after "This" and "The": "run", "grade". */
+  noun: string;
+  queued: string;
+  runningTitle: string;
+  running: string;
+  stopping: string;
+  canceled: string;
+  /** What Retry does. */
+  again: string;
+  /** An end the server couldn't finish, before "so nothing was scored". */
+  unfinished: string;
+  invalidTitle: string;
+  invalid: string;
+  disallowed: string;
+  /** What a finished job says to screen readers. */
+  finished: { title: string; body: string };
+  /** A limit's body after its own sentence, or in place of it. */
+  limited: (limit: JobLimit) => string;
+  kept: string;
+}
+
+const LIMITS: Record<JobLimit, { title: string; body: string; noun: string }> = {
+  wall_time: { title: 'Time limit reached', body: 'It stopped when it reached its time limit.', noun: 'time limit' },
+  cpu_time: { title: 'CPU limit reached', body: 'It stopped when it used all the CPU time it may.', noun: 'CPU limit' },
+  memory: { title: 'Memory limit reached', body: 'It stopped when it used all the memory it may.', noun: 'memory limit' },
+  processes: {
+    title: 'Process limit reached',
+    body: 'It stopped when it started more processes than it may.',
+    noun: 'process limit',
+  },
+  files: { title: 'File limit reached', body: 'It stopped when it wrote more than it may.', noun: 'file limit' },
+  output: { title: 'Output limit reached', body: 'It stopped when its output reached the limit.', noun: 'output limit' },
 };
 
-const LIMITS: Record<JobLimit, { title: string; body: string }> = {
-  wall_time: { title: 'Time limit reached', body: 'It stopped when it reached its time limit.' },
-  cpu_time: { title: 'CPU limit reached', body: 'It stopped when it used all the CPU time it may.' },
-  memory: { title: 'Memory limit reached', body: 'It stopped when it used all the memory it may.' },
-  processes: { title: 'Process limit reached', body: 'It stopped when it started more processes than it may.' },
-  files: { title: 'File limit reached', body: 'It stopped when it wrote more than it may.' },
-  output: { title: 'Output limit reached', body: 'It stopped when its output reached the limit.' },
+/** A limit's name, as a grade's report shows it on the checkpoint it
+ *  stopped. */
+export function limitTitle(limit: string | null | undefined): string {
+  return limit && limit in LIMITS ? LIMITS[limit as JobLimit].title : LIMITS.wall_time.title;
+}
+
+function scratch(noun: string, running: string): ActionWords {
+  const kept = 'Your code is still here.';
+  return {
+    missing: 'Run not found',
+    noun,
+    queued: `Your ${noun} starts when a runner is free.`,
+    runningTitle: 'Running',
+    running: `${running} on the server.`,
+    stopping: `The ${noun} stops in a few seconds.`,
+    canceled: `The ${noun} was stopped.`,
+    again: 'Retry runs it again.',
+    unfinished: `The server couldn't finish this ${noun}`,
+    invalidTitle: "Can't run here",
+    invalid: "This practice item can't run on this server right now, so nothing ran.",
+    disallowed: `The ${noun} did something this server doesn't allow, so it was stopped.`,
+    finished: { title: 'Finished', body: 'The results are ready.' },
+    limited: (limit) => `${LIMITS[limit].body} ${kept}`,
+    kept,
+  };
+}
+
+// A grade and a submission end in a report: on a limit it opens too, and
+// shows what the limit stopped.
+function grading(noun: string, running: string, limited: (limit: JobLimit) => string, kept: string): ActionWords {
+  return {
+    missing: `${noun[0].toUpperCase()}${noun.slice(1)} not found`,
+    noun,
+    queued: 'Grading starts when a runner is free.',
+    runningTitle: 'Grading',
+    running: `${running} on the server.`,
+    stopping: 'Grading stops in a few seconds.',
+    canceled: 'Grading was stopped.',
+    again: 'Retry grades it again.',
+    unfinished: "The server couldn't finish grading",
+    invalidTitle: "Can't grade here",
+    invalid: "This practice item can't be graded on this server right now, so nothing was graded.",
+    disallowed: "The code being graded did something this server doesn't allow, so grading stopped.",
+    finished: { title: 'Graded', body: 'The report is ready.' },
+    limited,
+    kept,
+  };
+}
+
+const WORDS: Record<RunnerJobAction, ActionWords> = {
+  run: scratch('run', 'Your code is running'),
+  tests: scratch('test run', 'Your tests are running'),
+  grade: grading(
+    'grade',
+    'Your checkpoints are being graded',
+    (limit) => `A checkpoint reached its ${LIMITS[limit].noun}, so it has no score. The report shows each checkpoint.`,
+    'Your files are still here.',
+  ),
+  submit: grading(
+    'submission',
+    'Your submission is being graded',
+    (limit) => `The grader reached its ${LIMITS[limit].noun}, so this submission has no score. The report shows each criterion.`,
+    'Your files and notes are still here.',
+  ),
 };
 
 /** What a job view shows, or null when there's nothing to show. */
 export function jobCopy(view: RunnerJobView): JobCopy | null {
-  const who = WHO[view.action];
+  const who = WORDS[view.action];
   if (view.gone) {
     return {
       tone: 'quiet',
       icon: SearchX,
-      title: 'Run not found',
-      body: `This ${who.run} is no longer on the server. ${who.kept}`,
+      title: who.missing,
+      body: `This ${who.noun} is no longer on the server. ${who.kept}`,
     };
   }
   const job = view.job;
@@ -93,44 +184,45 @@ export function jobCopy(view: RunnerJobView): JobCopy | null {
   const waiting = view.reconnecting ? " Can't reach the server right now, so this page is checking again." : '';
   if (!isEnded(job.state)) {
     if (job.cancel_requested) {
-      return { tone: 'progress', icon: CircleStop, title: 'Stopping', body: `The ${who.run} stops in a few seconds.${waiting}` };
+      return { tone: 'progress', icon: CircleStop, title: 'Stopping', body: `${who.stopping}${waiting}` };
     }
     if (job.state === 'queued') {
       return {
         tone: 'progress',
         icon: Hourglass,
         title: 'Queued',
-        body: `Your ${who.run} starts when a runner is free.${waiting}`,
+        body: `${who.queued}${waiting}`,
         cancel: true,
       };
     }
     return {
       tone: 'progress',
       icon: Timer,
-      title: 'Running',
-      body: `${who.runs} on the server.${waiting}`,
+      title: who.runningTitle,
+      body: `${who.running}${waiting}`,
       cancel: true,
       running: true,
     };
   }
   const limit = job.envelope?.limit ?? null;
+  const finished: JobCopy = { tone: 'quiet', icon: null, ...who.finished, hidden: true };
   switch (job.outcome_class) {
     case 'passed':
     case 'candidate-failure':
-      return { tone: 'quiet', icon: null, title: 'Finished', body: 'The results are ready.', hidden: true };
+      return finished;
     case 'resource-limit': {
-      const named = limit ? LIMITS[limit] : LIMITS.wall_time;
-      return { tone: 'attention', icon: Timer, title: named.title, body: `${named.body} ${who.kept}` };
+      const named: JobLimit = limit !== null && limit in LIMITS ? limit : 'wall_time';
+      return { tone: 'attention', icon: Timer, title: LIMITS[named].title, body: who.limited(named) };
     }
     case 'canceled':
-      return { tone: 'quiet', icon: Ban, title: 'Canceled', body: `The ${who.run} was stopped. ${who.kept}` };
+      return { tone: 'quiet', icon: Ban, title: 'Canceled', body: `${who.canceled} ${who.kept}` };
     case 'worker-lost':
       return {
         tone: 'attention',
         icon: Unplug,
         title: 'Interrupted',
         body: `The server running this stopped before it finished, so nothing was scored. ${
-          job.retryable ? 'Retry runs it again.' : 'Try again later.'
+          job.retryable ? who.again : 'Try again later.'
         }`,
         retry: job.retryable,
         reference: true,
@@ -140,9 +232,7 @@ export function jobCopy(view: RunnerJobView): JobCopy | null {
         tone: 'attention',
         icon: ServerCrash,
         title: "Couldn't finish",
-        body: `The server couldn't finish this ${who.run}, so nothing was scored. ${
-          job.retryable ? 'Retry runs it again.' : 'Try again later.'
-        }`,
+        body: `${who.unfinished}, so nothing was scored. ${job.retryable ? who.again : 'Try again later.'}`,
         retry: job.retryable,
         reference: true,
       };
@@ -150,8 +240,8 @@ export function jobCopy(view: RunnerJobView): JobCopy | null {
       return {
         tone: 'quiet',
         icon: FileX,
-        title: "Can't run here",
-        body: `This practice item can't run on this server right now, so nothing ran. ${who.kept}`,
+        title: who.invalidTitle,
+        body: `${who.invalid} ${who.kept}`,
         reference: true,
       };
     case 'policy-violation':
@@ -159,11 +249,11 @@ export function jobCopy(view: RunnerJobView): JobCopy | null {
         tone: 'attention',
         icon: ShieldAlert,
         title: 'Stopped',
-        body: `The ${who.run} did something this server doesn't allow, so it was stopped. ${who.kept}`,
+        body: `${who.disallowed} ${who.kept}`,
         reference: true,
       };
     default:
-      return { tone: 'quiet', icon: null, title: 'Finished', body: 'The results are ready.', hidden: true };
+      return finished;
   }
 }
 

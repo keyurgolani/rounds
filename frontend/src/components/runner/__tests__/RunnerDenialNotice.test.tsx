@@ -128,6 +128,13 @@ describe('definition states (ROUNDS-00A-L02)', () => {
     ['reload', 'tests', 'Reload to continue', /This page is out of date\. No tests ran\. Your code is still here\./],
     ['retired', 'grade', 'Retired', /This practice item was retired, so it no longer runs\. Your files and notes are still here\./],
     ['not_found', 'run', 'Not on this server', /doesn't have this practice item in this language\. Nothing ran\./],
+    // ROUNDS-00A-L03 PR 3.
+    [
+      'not_gradable',
+      'grade',
+      "Can't grade here",
+      /This practice item can't be graded on this server\. Nothing was graded\. Your files and notes are still here\./,
+    ],
   ];
 
   it.each(DEFINITION_CASES)('%s reads as a titled message', (kind, action, title, body) => {
@@ -184,7 +191,7 @@ describe('definition states (ROUNDS-00A-L02)', () => {
     expect(reloadPage).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['retired', 'not_found', 'unsupported', 'path_not_allowed'] as const)('%s offers no Reload', (kind) => {
+  it.each(['retired', 'not_found', 'unsupported', 'path_not_allowed', 'not_gradable'] as const)('%s offers no Reload', (kind) => {
     renderNotice(<RunnerDenialNotice denial={denial(kind)} action="run" />);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });

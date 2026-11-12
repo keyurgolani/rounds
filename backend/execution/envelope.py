@@ -157,17 +157,27 @@ def channel_parts(expected: Iterable[str], reported: Mapping[str, str] | None, k
     return out
 
 
-def harness_parts(score: Any, timed_out: bool) -> list[Part]:
+def harness_parts(score: Any, timed_out: bool, limit: str | None = None) -> list[Part]:
     """A graded run's parts from #2's scored fd 3 channel
     (``app.harness_results.Score``, PR 2). A passed or failed result is the
     candidate's. A malformed channel is the driver's: every part is
     ``definition-invalid``. A result that never came back reads as
-    ``channel_parts`` reads an absent one: ``resource-limit`` ``wall_time``
-    when the run ran out of time, ``infrastructure-degraded`` otherwise."""
+    ``channel_parts`` reads an absent one: ``resource-limit`` naming the
+    enforced limit that ended the run (``limit``, or ``wall_time`` when it
+    ran out of time), ``infrastructure-degraded`` otherwise."""
     if score.malformed:
         return [Part(result.id, "definition-invalid") for result in score.results]
     reported = {r.id: r.outcome for r in score.results if r.outcome in ("passed", "failed")}
-    return channel_parts([r.id for r in score.results], reported, "wall_time" if timed_out else None)
+    killed_by = limit if limit is not None else ("wall_time" if timed_out else None)
+    return channel_parts([r.id for r in score.results], reported, killed_by)
+
+
+def fold(part_id: str, parts: Sequence[Part]) -> Part:
+    """One part standing for ``parts``, such as a checkpoint for its
+    results (PR 3): its class and limit are the ones ``aggregate`` gives
+    them."""
+    folded = aggregate(parts)
+    return Part(part_id, folded.outcome_class, folded.limit)
 
 
 # How many cuts fit_output makes before it drops whole fields.
@@ -302,7 +312,8 @@ def build(
             "peak_rss_bytes": peak_rss_bytes,
             "build_revision": build_revision,
             "image_digest": image_digest,
-            # PR 3 writes the graded row with the envelope.
+            # The store names the graded row here as complete writes it
+            # with the envelope (PR 3).
             "graded_row": None,
         },
     }

@@ -1,5 +1,6 @@
 import { definitionRef, definitionsEnforced } from '../../lib/definitions';
-import type { JobAnswer, RunnerCallInit } from '../../lib/executionJobs';
+import type { JobAnswer, JobLimit, OutcomeClass, RunnerCallInit } from '../../lib/executionJobs';
+import { readGradedRow, requestReview, type ReviewAnswer, type RubricReview } from '../../lib/gradedRows';
 import { pb } from '../../lib/pocketbase';
 import { runnerJSON } from '../../lib/runnerFetch';
 import type { DefinitionReceipt } from '../coding/types';
@@ -47,21 +48,20 @@ export type RunResult = {
   definition?: DefinitionReceipt | null;
 };
 
+/** A submission's harness result as its graded row keeps it. A grading
+ *  job's row (ROUNDS-00A-L03 PR 3) also names its outcome class and
+ *  limit, and keeps the score and each criterion's verdict only where the
+ *  run earned them: a submission a limit stopped has neither. */
+export type HarnessOutput = Omit<RunResult, 'score' | 'criteria'> & {
+  score: number | null;
+  criteria: Array<Omit<RubricCriterion, 'passed'> & { passed: boolean | null }>;
+  outcome_class?: OutcomeClass;
+  limit?: JobLimit | null;
+};
+
 export type SubmitResponse = {
   harness: RunResult;
-  rubric_review: {
-    items: Array<{
-      id: string;
-      score: number;
-      evidence: string;
-      suggestions: string[];
-      evidence_quotes?: Array<{ file: string; line: number; quote: string }>;
-    }>;
-    total: number;
-    skipped?: boolean;
-    reason?: string;
-    parse_error?: string;
-  };
+  rubric_review: RubricReview;
   definition?: DefinitionReceipt | null;
 };
 
@@ -146,13 +146,36 @@ export async function runProject(
   });
 }
 
-export async function submitAttempt(req: SubmitRequest): Promise<SubmitResponse> {
-  return runnerJSON<SubmitResponse>('/api/take-home/submit', {
+/** A submission. While ROUNDS_GATE_EXECUTION_GRADING is on it answers a
+ *  job (lib/executionJobs), whose end the server writes as the graded
+ *  row; otherwise the graded submission itself. */
+export async function submitAttempt(
+  req: SubmitRequest,
+  init: RunnerCallInit = {},
+): Promise<SubmitResponse | JobAnswer> {
+  return runnerJSON<SubmitResponse | JobAnswer>('/api/take-home/submit', {
     method: 'POST',
     auth: 'required',
     body: takeHomeSubmitBody(req),
     errorPrefix: 'take-home submit',
+    idempotencyKey: init.idempotencyKey,
   });
+}
+
+/** The graded row submission job `jobId` wrote, as the account reads it. */
+export async function getGradedTakeHomeAttempt(jobId: string): Promise<TakeHomeAttemptRow | null> {
+  return readGradedRow<TakeHomeAttemptRow>(jobId, 'take_home_attempts');
+}
+
+/** Asks for the rubric review of submission job `jobId`'s result
+ *  (lib/gradedRows). */
+export async function requestSubmissionReview(
+  jobId: string,
+  files: Record<string, string>,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<ReviewAnswer> {
+  return requestReview('/api/take-home/submit', jobId, files, idempotencyKey, signal);
 }
 
 // ---- Attempt persistence (chat log + last submission) ---------------
@@ -173,10 +196,14 @@ export type TakeHomeAttemptRow = {
   ai_assist_used?: boolean;
   ai_chats?: TakeHomeChatEntry[];
   notes?: string;
-  harness_output?: RunResult;
-  rubric_review?: SubmitResponse['rubric_review'];
+  harness_output?: HarnessOutput | null;
+  /** Null on a row the server wrote, until its review finishes. */
+  rubric_review?: SubmitResponse['rubric_review'] | null;
   status: 'in-progress' | 'submitted' | 'graded';
   duration_ms?: number;
+  /** The envelope of the grading job that wrote this row, when the
+   *  server wrote it (ROUNDS-00A-L03 PR 3). */
+  envelope?: string;
   updated: string;
 };
 

@@ -55,6 +55,12 @@ data:
   # "enforce"; without either it acts as "off" and the runner's start log
   # says which it needs.
   ROUNDS_GATE_EXECUTION_SCRATCH: ""
+  # Grade, take-home submit, and their rubric reviews, read by the runner:
+  # "legacy" (the default, in their request), "on" (as durable jobs whose
+  # graded row the server writes, each reviewed at most once), or "off"
+  # (503 execution_disabled, drafts kept). "on" needs the same two settings
+  # as the line above and acts as "off" without them.
+  ROUNDS_GATE_EXECUTION_GRADING: ""
   # Legacy Artifact Snapshot creation, read by the runner and PocketBase:
   # "enabled" or "disabled". Empty is "disabled". Turn it on only with
   # the materializer applied (k8s/overlays/materializer) and after the

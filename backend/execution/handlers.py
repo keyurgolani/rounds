@@ -1,14 +1,16 @@
-"""The scratch kinds' handlers (ROUNDS-00A-L03 PR 2).
+"""The job kinds' handlers (ROUNDS-00A-L03 PRs 2 and 3).
 
-``run``, ``evaluate``, ``run_project``, and ``take_home_run`` each run what
-their route runs at ``ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce``, in the
-slot the worker claimed, from the job alone:
+``run``, ``evaluate``, ``run_project``, and ``take_home_run`` (PR 2), and
+``grade`` and ``take_home_submit`` (PR 3), each run what their route runs
+at ``ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce``, in the slot the worker
+claimed, from the job alone:
 
-1. ``prepare``, before the job takes a slot: the scratch key has to be on,
-   or the job ends ``canceled``; and its input has to pass the route's own
-   request model and its pinned definition resolve from the compiled store
-   in the image (never PocketBase, never the caller's token), or it ends
-   ``denied``, ``definition-invalid``. Either way nothing started.
+1. ``prepare``, before the job takes a slot: its key (scratch or grading)
+   has to be on, or the job ends ``canceled``; and its input has to pass
+   the route's own request model and its pinned definition resolve from
+   the compiled store in the image (never PocketBase, never the caller's
+   token), or it ends ``denied``, ``definition-invalid``. Either way
+   nothing started.
 2. ``budget_s``: the attempt's wall budget, what its route was admitted
    for.
 3. ``run``: the parts, the output the route would have answered, fitted
@@ -18,9 +20,11 @@ slot the worker claimed, from the job alone:
 Each part's class: ``passed``, ``candidate-failure``, ``resource-limit``
 ``wall_time``, or ``definition-invalid`` when the run couldn't start. A
 take-home run's results read as ``envelope.harness_parts`` reads #2's fd 3
-channel. Scratch envelopes carry no score. Cleanup is ``confirmed`` only
-once every run's scratch directory is gone and its process group is
-empty.
+channel, and so do a grade's and a take-home submission's. Scratch
+envelopes carry no score; a grading envelope carries the server's, only on
+an end the run earned, and its graded row's content goes with it
+(``Result.graded``). Cleanup is ``confirmed`` only once every run's
+scratch directory is gone and its process group is empty.
 """
 from __future__ import annotations
 
@@ -132,8 +136,12 @@ class _Scratch:
 
     # -- the handler -------------------------------------------------------
 
+    def key(self) -> str:
+        """The effective value of the key this kind runs under."""
+        return keys.scratch()
+
     def prepare(self, job: Any) -> None:
-        if keys.scratch() != "on":
+        if self.key() != "on":
             raise Withdrawn
         prepared = self._plan(job)
         with self._lock:
@@ -298,4 +306,105 @@ class TakeHomeRunHandler(_Scratch):
 SCRATCH_HANDLERS: dict[str, _Scratch] = {
     handler.kind: handler
     for handler in (RunHandler(), EvaluateHandler(), RunProjectHandler(), TakeHomeRunHandler())
+}
+
+
+# ---------------------------------------------------------------------------
+# The grading kinds (PR 3)
+# ---------------------------------------------------------------------------
+
+
+class GradeHandler(_Scratch):
+    """A grade: every checkpoint in order, each held to its own 45 s, in
+    the one slot the job claimed. A checkpoint's part is its results read
+    as ``envelope.harness_parts`` reads them, folded into one class, so a
+    checkpoint out of time is ``resource-limit`` and the others keep their
+    own. The graded row's content is each checkpoint's server totals and
+    per-result outcomes, with no verdict or score where the run didn't earn
+    one."""
+
+    kind, track, model = "grade", "ai-coding", ai_coding.DefinitionGradeRequest
+
+    def key(self):
+        return keys.grading()
+
+    def check(self, request, resolved):
+        checkpoints = resolved.document["checkpoints"]
+        if not checkpoints or len(checkpoints) > kinds.KINDS[self.kind].max_parts:
+            raise InvalidJob
+        if definition_runs.files_problem(request.files, resolved) is not None:
+            raise InvalidJob
+        return {"checkpoints": checkpoints}
+
+    def budget_s(self, job):
+        return kinds.part_wall_s(self.kind) * len(self.plan(job).extra["checkpoints"])
+
+    def execute(self, job, plan, slot, stop):
+        resolved = plan.resolved
+        checkpoints = plan.extra["checkpoints"]
+        wall_s = kinds.part_wall_s(self.kind)
+        controls, runs = [], []
+        for checkpoint in checkpoints:
+            if stop.is_set():
+                break
+            control = sandbox.Control(stop=stop)
+            controls.append(control)
+            runs.append(definition_runs.grade(checkpoint, resolved.document["files"], plan.request.files, slot,
+                                              wall_s, control=control))
+        if stop.is_set() or len(runs) < len(checkpoints):
+            return Result(parts=[], observation=observation(job.id, controls, []))
+        parts = [
+            envelope.fold(f"checkpoint-{checkpoint['index']}",
+                          envelope.harness_parts(run.score, run.timed_out, run.limit))
+            for checkpoint, run in zip(checkpoints, runs)
+        ]
+        entries = [ai_coding.graded_checkpoint(checkpoint, run, part)
+                   for checkpoint, run, part in zip(checkpoints, runs, parts)]
+        scores = [entry["score"] for entry in entries]
+        return Result(
+            parts=parts,
+            score=sum(scores) / len(scores) if all(s is not None for s in scores) else None,
+            definition=resolved.receipt(),
+            observation=observation(job.id, controls, []),
+            graded={"test_results": entries},
+        )
+
+
+class TakeHomeSubmitHandler(_Scratch):
+    """A take-home submission: the one fd 3 checkpoint, as a take-home run
+    grades it, within the submission's 120 s. Its parts are its criteria,
+    and its graded row keeps the server's score and verdict only where the
+    run earned them."""
+
+    kind, track, model = "take_home_submit", "take-home", take_home.DefinitionTakeHomeSubmitRequest
+
+    def key(self):
+        return keys.grading()
+
+    def check(self, request, resolved):
+        if resolved.document.get("result_protocol") != "fd3":
+            raise InvalidJob
+        if definition_runs.files_problem(request.files, resolved) is not None:
+            raise InvalidJob
+        return {"checkpoint": resolved.document["checkpoints"][0]}
+
+    def execute(self, job, plan, slot, stop):
+        checkpoint, resolved = plan.extra["checkpoint"], plan.resolved
+        control = sandbox.Control(stop=stop)
+        run = definition_runs.grade(checkpoint, resolved.document["files"], plan.request.files, slot,
+                                    kinds.part_wall_s(self.kind), control=control)
+        if stop.is_set():
+            return Result(parts=[], observation=observation(job.id, [control], []))
+        parts = envelope.harness_parts(run.score, run.timed_out, run.limit)
+        return Result(
+            parts=parts,
+            score=run.score.score,
+            definition=resolved.receipt(),
+            observation=observation(job.id, [control], []),
+            graded={"harness_output": take_home.graded_harness_output(checkpoint, run, resolved, parts)},
+        )
+
+
+GRADING_HANDLERS: dict[str, _Scratch] = {
+    handler.kind: handler for handler in (GradeHandler(), TakeHomeSubmitHandler())
 }

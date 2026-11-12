@@ -98,8 +98,61 @@ def result(job_id, state="completed", outcome="passed", authoritative=None, limi
             "user_view": user, "operator_view": operator}
 
 
-def complete(attempt_id, token, body, now=T0 + 1) -> dict:
-    return {"call": "complete", "input": {"attempt_id": attempt_id, "token": token, "result": body}, "now": now}
+def complete(attempt_id, token, body, now=T0 + 1, graded=None) -> dict:
+    data = {"attempt_id": attempt_id, "token": token, "result": body}
+    if graded is not None:
+        data["graded"] = graded
+    return {"call": "complete", "input": data, "now": now}
+
+
+# PR 3: what a grading kind's graded row holds, for an authoritative result.
+ITEMS = {"grade": "ai_coding_rounds", "take_home_submit": "take_home_assignments"}
+GRADED = {"grade": "ai_coding_attempts", "take_home_submit": "take_home_attempts"}
+
+
+def item(kind="grade", slug="two-sum") -> dict:
+    """The practice item's own row, which a graded row points at."""
+    return {"call": "seedItem", "collection": ITEMS[kind], "slug": slug}
+
+
+def graded_for(kind, body) -> dict:
+    """The graded content that matches ``body``'s parts: one checkpoint
+    per part for a grade, one criterion per part for a submission. A part
+    the run earned keeps a verdict and a score; any other keeps neither."""
+    parts = body["user_view"]["parts"]
+
+    def verdict(part):
+        if part["outcome_class"] not in ("passed", "candidate-failure"):
+            return None, None
+        passed = part["outcome_class"] == "passed"
+        return passed, 1.0 if passed else 0.0
+
+    if kind == "grade":
+        entries = []
+        for part in parts:
+            passed, score = verdict(part)
+            entries.append({"index": int(part["id"].split("-")[1]), "label": "Checkpoint", "outcome_class":
+                            part["outcome_class"], "limit": part["limit"], "passed": passed, "score": score,
+                            "executed": 1, "passed_count": 1 if passed else 0, "failed_count": 0 if passed else 1,
+                            "outcomes": [{"id": "r1", "outcome": "passed" if passed else "failed",
+                                          "reason": "ok" if passed else "assertion"}],
+                            "error": None})
+        return {"test_results": entries}
+    cls = body["outcome_class"]
+    passed, score = verdict({"outcome_class": cls})
+    criteria = [{"id": p["id"], "passed": {"passed": True, "candidate-failure": False}.get(p["outcome_class"]),
+                 "weight": 1.0, "logs": "ok" if p["outcome_class"] == "passed" else "assertion"} for p in parts]
+    return {"harness_output": {"outcome_class": cls, "limit": body["user_view"]["limit"], "score": score,
+                               "passed": passed, "criteria": criteria, "outcomes": [], "stdout": "", "stderr": "",
+                               "error": None, "duration_ms": 10, "truncated": False, "definition": None}}
+
+
+def graded_result(job_id, kind="grade", parts=None, **kwargs):
+    """An authoritative grading result and its graded content."""
+    body = result(job_id, **kwargs)
+    body["user_view"]["parts"] = parts if parts is not None else [
+        {"id": "checkpoint-0", "outcome_class": body["outcome_class"], "limit": body["user_view"]["limit"]}]
+    return body, graded_for(kind, body)
 
 
 def reap(now) -> dict:
@@ -388,10 +441,13 @@ def test_a_run_with_hidden_material_shows_its_account_outcome_classes_and_totals
                                   {"id": "checkpoint-2", "outcome_class": "candidate-failure", "limit": None}]
     shown = json.loads(json.dumps(body))
     shown["user_view"]["output"] = {"stdout": "what the hidden tests printed"}
-    refused = run(*steps, complete(attempt["id"], token, shown))
+    # From PR 3 an authoritative grading result comes with its graded row's
+    # content, and the row points at the practice item's own row.
+    steps = [*steps, item(kind)]
+    refused = run(*steps, complete(attempt["id"], token, shown, graded=graded_for(kind, shown)))
     assert refused["results"][-1] == {"status": 400, "body": {"v": "execution/v1", "error": "invalid_request"}}
     assert refused["store"]["envelopes"] == []
-    out = run(*steps, complete(attempt["id"], token, body))
+    out = run(*steps, complete(attempt["id"], token, body, graded=graded_for(kind, body)))
     assert out["results"][-1]["status"] == 200
     (envelope,) = out["store"]["envelopes"]
     allowed = {ENVELOPE, job["id"], "completed", "candidate-failure", "passed", "confirmed", "checkpoint-1",
@@ -666,6 +722,9 @@ def test_the_routes_need_the_right_principal():
         ("cancel", "handleCaller", "cancel", "users"),
         # PR 2: the account's own job, for the runner's job read.
         ("status", "handleCaller", "status", "users"),
+        # PR 3: a grading result's rubric review, for the account.
+        ("review_start", "handleCaller", "review_start", "users"),
+        ("review_finish", "handleCaller", "review_finish", "users"),
         ("claim", "handleService", "claim", "execution_service"),
         ("heartbeat", "handleService", "heartbeat", "execution_service"),
         ("complete", "handleService", "complete", "execution_service"),
@@ -966,7 +1025,8 @@ def test_the_purge_removes_a_scratch_job_seven_days_after_it_ended_with_everythi
 
 def test_the_purge_keeps_grading_jobs_and_unended_scratch_jobs_inside_the_window():
     grading_steps, grading, g_attempt, g_token = started_job(kind="grade")
-    graded = [*grading_steps, complete(g_attempt["id"], g_token, result(grading["id"]))]
+    body, content = graded_result(grading["id"])
+    graded = [*grading_steps, item(), complete(g_attempt["id"], g_token, body, graded=content)]
     out = run(*graded, *queued_job()[0], {"call": "purge", "now": T0 + 7 * DAY - 1})
     assert out["results"][-1] == {"purged": 0} and len(out["store"]["jobs"]) == 2
     out = run(*graded, {"call": "purge", "now": T0 + 30 * DAY})
@@ -1036,3 +1096,313 @@ def test_the_purge_runs_every_five_minutes_and_keeps_scratch_jobs_seven_days():
     assert execution_constant("SCRATCH_RETENTION_S") == 7 * DAY
     # The interim number names the leaf that sets it.
     assert "TODO(ROUNDS-14-L01)" in (HOOKS / "execution.js").read_text()
+
+
+# ---- graded rows (PR 3) --------------------------------------------------------------
+
+CAMPAIGN = "campaign0000001"
+
+
+def grading_job(kind="grade", job_input=None, budget=45):
+    """Steps that leave a grading job started, with its input."""
+    key = new_key()
+    token = new_token()
+    body = enqueue(key, kind=kind)
+    body["input"]["input"] = job_input or {"files": {"a.py": "x"}, "ai_chats": [{"role": "user"}],
+                                           "campaign_id": CAMPAIGN, "duration_ms": 77, "notes": "n"}
+    steps = [command(key, operation=kind), body, claim(token)]
+    out = run(*steps)
+    attempt = out["results"][-1]["body"]["attempt"]
+    job = out["results"][-1]["body"]["job"]
+    return steps + [heartbeat(attempt["id"], token, budget=budget)], job, attempt, token
+
+
+@pytest.mark.parametrize("kind", ["grade", "take_home_submit"])
+def test_an_authoritative_grading_result_writes_its_graded_row_with_its_envelope(kind):
+    steps, job, attempt, token = grading_job(kind, job_input={
+        "files": {"a.py": "x"}, "ai_chats": [{"role": "user", "content": "hi"}], "campaign_id": CAMPAIGN,
+        "duration_ms": 77, "notes": "n"})
+    body, content = graded_result(job["id"], kind)
+    out = run(*steps, item(kind), {"call": "seedCampaign", "id": CAMPAIGN, "user": A["id"]},
+              complete(attempt["id"], token, body, graded=content))
+    assert out["results"][-1]["status"] == 200
+    (envelope,) = out["store"]["envelopes"]
+    (row,) = out["store"]["graded"][GRADED[kind]]
+    item_id = out["results"][-3]
+    assert (envelope["graded_collection"], envelope["graded_row"]) == (GRADED[kind], row["id"])
+    assert row["envelope"] == envelope["id"] and row["user"] == A["id"] and row["status"] == "graded"
+    assert row["round" if kind == "grade" else "assignment"] == item_id
+    assert (row["campaign"], row["duration_ms"], row["rubric_review"]) == (CAMPAIGN, 77, None)
+    assert row["ai_chats"] == [{"role": "user", "content": "hi"}]
+    if kind == "grade":
+        assert row["test_results"] == content["test_results"] and "files" not in row
+    else:
+        assert row["harness_output"] == content["harness_output"]
+        assert (row["files"], row["notes"], row["ai_assist_used"]) == ({"a.py": "x"}, "n", True)
+    (stored,) = out["store"]["attempts"]
+    assert stored["operator_view"]["graded_row"] == row["id"]
+    (ended,) = out["store"]["jobs"]
+    assert (ended["state"], ended["outcome_class"]) == ("completed", "passed")
+
+
+@pytest.mark.parametrize("kind", ["grade", "take_home_submit"])
+def test_a_campaign_that_isnt_the_accounts_stays_off_the_graded_row(kind):
+    steps, job, attempt, token = grading_job(kind)
+    body, content = graded_result(job["id"], kind)
+    out = run(*steps, item(kind), {"call": "seedCampaign", "id": CAMPAIGN, "user": B["id"]},
+              complete(attempt["id"], token, body, graded=content))
+    (row,) = out["store"]["graded"][GRADED[kind]]
+    assert row["campaign"] == ""
+
+
+def test_a_limited_grading_result_writes_its_row_with_no_score():
+    steps, job, attempt, token = grading_job()
+    body, content = graded_result(job["id"], state="timed-out", outcome="resource-limit", limit="wall_time")
+    assert content["test_results"][0]["passed"] is None and content["test_results"][0]["score"] is None
+    out = run(*steps, item(), complete(attempt["id"], token, body, graded=content))
+    assert out["results"][-1]["status"] == 200
+    (row,) = out["store"]["graded"]["ai_coding_attempts"]
+    assert row["test_results"][0]["outcome_class"] == "resource-limit"
+
+
+def _broken(content, change):
+    broken = copy.deepcopy(content)
+    change(broken)
+    return broken
+
+
+@pytest.mark.parametrize("change", [
+    lambda c: c.update(extra=1),
+    lambda c: c["test_results"][0].update(passed=False),
+    lambda c: c["test_results"][0].update(score=None),
+    lambda c: c["test_results"][0].update(outcome_class="candidate-failure"),
+    lambda c: c["test_results"][0].update(index=3),
+    lambda c: c["test_results"][0].update(stdout="what a hidden test printed"),
+    lambda c: c["test_results"][0]["outcomes"].append({"id": "r2", "outcome": "passed", "reason": "timeout"}),
+    lambda c: c.update(test_results=[]),
+    lambda c: c.update(test_results=c["test_results"] * 2),
+    lambda c: c.update(harness_output=c.pop("test_results")),
+], ids=["extra-key", "verdict", "score", "class", "index", "printed", "outcome", "none", "extra-checkpoint",
+        "other-kind"])
+def test_graded_content_that_doesnt_match_its_envelope_is_refused_and_writes_nothing(change):
+    steps, job, attempt, token = grading_job()
+    body, content = graded_result(job["id"])
+    out = run(*steps, item(), complete(attempt["id"], token, body, graded=_broken(content, change)))
+    assert out["results"][-1] == {"status": 400, "body": {"v": "execution/v1", "error": "invalid_request"}}
+    assert out["store"]["envelopes"] == [] and out["store"]["graded"]["ai_coding_attempts"] == []
+    (job_row,) = out["store"]["jobs"]
+    assert job_row["state"] == "started"
+
+
+@pytest.mark.parametrize("change", [
+    lambda h: h.update(score=None),
+    lambda h: h.update(stdout="what the harness printed"),
+    lambda h: h["criteria"][0].update(passed=False),
+    lambda h: h["criteria"].pop(),
+    lambda h: h.update(definition={"track": "nope"}),
+], ids=["score", "printed", "criterion", "missing-criterion", "receipt"])
+def test_a_submissions_harness_output_has_to_match_its_envelope(change):
+    steps, job, attempt, token = grading_job("take_home_submit", budget=120)
+    parts = [{"id": "adds_small", "outcome_class": "passed", "limit": None},
+             {"id": "adds_large", "outcome_class": "passed", "limit": None}]
+    body, content = graded_result(job["id"], "take_home_submit", parts=parts)
+    content["harness_output"]["score"] = 1.0
+    broken = {"harness_output": _broken(content["harness_output"], change)}
+    out = run(*steps, item("take_home_submit"), complete(attempt["id"], token, body, graded=broken))
+    assert out["results"][-1]["status"] == 400 and out["store"]["graded"]["take_home_attempts"] == []
+
+
+def test_only_an_authoritative_grading_result_comes_with_graded_content():
+    steps, job, attempt, token = grading_job()
+    body, content = graded_result(job["id"])
+    # A grading result without its content is refused, and so is content
+    # with a result that isn't authoritative or isn't a grading kind's.
+    missing = run(*steps, item(), complete(attempt["id"], token, body))
+    assert missing["results"][-1]["status"] == 400 and missing["store"]["envelopes"] == []
+    lost = result(job["id"], state="failed", outcome="infrastructure-degraded")
+    extra = run(*steps, item(), complete(attempt["id"], token, lost, graded=content))
+    assert extra["results"][-1]["status"] == 400
+    plain = run(*steps, item(), complete(attempt["id"], token, lost))
+    assert plain["results"][-1]["status"] == 200 and plain["store"]["graded"]["ai_coding_attempts"] == []
+    scratch_steps, scratch, s_attempt, s_token = started_job()
+    scratch_body, scratch_content = graded_result(scratch["id"])
+    out = run(*scratch_steps, complete(s_attempt["id"], s_token, scratch_body, graded=scratch_content))
+    assert out["results"][-1]["status"] == 400
+
+
+@pytest.mark.parametrize("kind", ["grade", "take_home_submit"])
+def test_a_result_whose_items_row_is_gone_ends_degraded_and_writes_no_row(kind):
+    steps, job, attempt, token = grading_job(kind)
+    body, content = graded_result(job["id"], kind)
+    out = run(*steps, complete(attempt["id"], token, body, graded=content))
+    assert out["results"][-1]["status"] == 200
+    (envelope,) = out["store"]["envelopes"]
+    assert (envelope["state"], envelope["outcome_class"], envelope["authoritative"]) == \
+        ("failed", "infrastructure-degraded", False)
+    assert envelope["user_view"]["score"] is None and envelope["graded_row"] == ""
+    assert out["store"]["graded"][GRADED[kind]] == []
+    (ended,) = out["store"]["jobs"]
+    assert (ended["state"], ended["outcome_class"]) == ("failed", "infrastructure-degraded")
+    assert run(*steps, complete(attempt["id"], token, body, graded=content),
+               {"call": "status", "account": A, "input": {"job_id": job["id"]}})["results"][-1]["body"]["retryable"]
+
+
+def test_a_late_or_second_complete_writes_no_second_row():
+    steps, job, attempt, token = grading_job()
+    body, content = graded_result(job["id"])
+    done = [*steps, item(), complete(attempt["id"], token, body, graded=content)]
+    out = run(*done, complete(attempt["id"], token, body, graded=content))
+    assert out["results"][-1]["status"] == 409 and len(out["store"]["graded"]["ai_coding_attempts"]) == 1
+    # After the lease ran out, the result isn't kept at all.
+    late = run(*steps, item(), complete(attempt["id"], token, body, now=T0 + 31, graded=content))
+    assert late["results"][-1]["status"] == 409 and late["store"]["graded"]["ai_coding_attempts"] == []
+
+
+# ---- rubric reviews (PR 3) ----------------------------------------------------------
+
+
+def review_start(job_id, key=None, source="c" * 64, lease="d" * 64, account=A, now=T0 + 2, quota="enforce"):
+    return {"call": "reviewStart", "account": account, "now": now,
+            "input": {"job_id": job_id, "source_checksum": source, "command_id": key or new_key(),
+                      "lease_hash": lease, "quota": quota}}
+
+
+def review_finish(job_id, lease_token, review=None, account=A, now=T0 + 3):
+    return {"call": "reviewFinish", "account": account, "now": now,
+            "input": {"job_id": job_id, "lease": lease_token,
+                      "review": review or {"items": [{"id": "x", "score": 1}], "total": 1.0}}}
+
+
+def graded_job(kind="grade"):
+    steps, job, attempt, token = grading_job(kind)
+    body, content = graded_result(job["id"], kind)
+    return [*steps, item(kind), complete(attempt["id"], token, body, graded=content)], job
+
+
+def test_a_review_is_marked_requested_and_charged_once_before_any_call():
+    steps, job = graded_job()
+    lease = new_token()
+    out = run(*steps, review_start(job["id"], lease=sha256(lease)))
+    started = out["results"][-1]
+    assert started["status"] == 200 and started["body"]["state"] == "requested"
+    material = started["body"]["material"]
+    assert material["kind"] == "grade" and material["definition"] == REF
+    assert material["ai_chats"] == [{"role": "user"}] and material["results"][0]["index"] == 0
+    (envelope,) = out["store"]["envelopes"]
+    assert envelope["user_view"]["rubric"] == {"state": "requested"}
+    review_commands = [c for c in out["store"]["commands"] if c["operation"] == "review"]
+    (command_row,) = review_commands
+    assert command_row["state"] == "in_flight" and command_row["fingerprint"] != FP
+    (counter,) = [c for c in out["store"]["counters"] if c["bucket"] == "account"]
+    # The grade's command was seeded uncharged, so this is the review's own:
+    # one request, no wall seconds.
+    assert (counter["requests"], counter["wall_seconds"]) == (1, 0)
+    (lease_row,) = [l for l in out["store"]["leases"] if l["command"] == command_row["id"]]
+    assert lease_row["expires_at"] == T0 + 2 + 90
+
+
+def test_a_second_review_while_one_is_live_is_in_flight_and_charges_nothing():
+    steps, job = graded_job()
+    out = run(*steps, review_start(job["id"], lease=sha256(new_token())), review_start(job["id"], lease="e" * 64))
+    assert out["results"][-1] == {"status": 409, "body": {"v": "execution/v1", "error": "in_flight",
+                                                            "state": "requested"}}
+    assert len([c for c in out["store"]["commands"] if c["operation"] == "review"]) == 1
+    (counter,) = [c for c in out["store"]["counters"] if c["bucket"] == "account"]
+    assert counter["requests"] == 1
+
+
+def test_a_finished_review_fills_the_row_and_never_runs_again():
+    steps, job = graded_job()
+    lease = new_token()
+    review = {"items": [{"id": "x", "score": 0.5}], "total": 0.5}
+    out = run(*steps, review_start(job["id"], lease=sha256(lease)), review_finish(job["id"], lease, review),
+              review_start(job["id"], lease="f" * 64))
+    assert out["results"][-2] == {"status": 200, "body": {"v": "execution/v1", "state": "completed"}}
+    assert out["results"][-1] == {"status": 200, "body": {"v": "execution/v1", "state": "completed"}}
+    (row,) = out["store"]["graded"]["ai_coding_attempts"]
+    assert row["rubric_review"] == review
+    (command_row,) = [c for c in out["store"]["commands"] if c["operation"] == "review"]
+    assert command_row["state"] == "completed"
+    assert [l for l in out["store"]["leases"] if l["command"] == command_row["id"]] == []
+
+
+def test_a_review_whose_lease_ran_out_is_lost_and_a_late_finish_writes_nothing():
+    steps, job = graded_job()
+    lease = new_token()
+    late = run(*steps, review_start(job["id"], lease=sha256(lease)),
+               review_finish(job["id"], lease, now=T0 + 2 + 90))
+    assert late["results"][-1]["status"] == 409 and late["results"][-1]["body"]["state"] == "lost"
+    assert late["store"]["graded"]["ai_coding_attempts"][0]["rubric_review"] is None
+    # A call that never came back reads as lost on the next ask.
+    crashed = run(*steps, review_start(job["id"], lease=sha256(lease)), review_start(job["id"], now=T0 + 200))
+    assert crashed["results"][-1] == {"status": 200, "body": {"v": "execution/v1", "state": "lost"}}
+    assert crashed["store"]["envelopes"][0]["user_view"]["rubric"] == {"state": "lost"}
+
+
+def test_a_review_needs_the_accounts_own_reviewable_result_and_the_same_files():
+    steps, job = graded_job()
+    out = run(*steps, review_start(job["id"], account=B), review_start("zzzzzzzzzzzzzzz"),
+              review_start(job["id"], source="0" * 64))
+    assert [r["status"] for r in out["results"][-3:]] == [404, 404, 409]
+    assert out["results"][-1]["body"]["error"] == "files_changed"
+    assert out["store"]["envelopes"][0]["user_view"]["rubric"] is None
+    assert [c for c in out["store"]["commands"] if c["operation"] == "review"] == []
+    scratch_steps, scratch, s_attempt, s_token = started_job()
+    out = run(*scratch_steps, complete(s_attempt["id"], s_token, result(scratch["id"])),
+              review_start(scratch["id"]))
+    assert out["results"][-1]["status"] == 404
+    lost_steps, lost_job, l_attempt, l_token = grading_job()
+    failed = result(lost_job["id"], state="failed", outcome="infrastructure-degraded")
+    out = run(*lost_steps, complete(l_attempt["id"], l_token, failed), review_start(lost_job["id"]))
+    assert out["results"][-1] == {"status": 409, "body": {"v": "execution/v1", "error": "not_reviewable"}}
+
+
+def test_a_review_over_the_hour_writes_nothing():
+    steps, job = graded_job()
+    busy = [{"call": "admit", "account": A, "now": T0 + 2,
+             "input": {"operation": "run", "wall_seconds": 3, "lease_hash": sha256(f"busy{i}"),
+                       "quota": "enforce"}} for i in range(2)]
+    out = run(*steps, *busy, review_start(job["id"]))
+    assert out["results"][-1]["status"] == 429 and out["results"][-1]["body"]["quota"] == "exceeded"
+    assert out["store"]["envelopes"][0]["user_view"]["rubric"] is None
+    assert [c for c in out["store"]["commands"] if c["operation"] == "review"] == []
+
+
+def test_a_finish_needs_the_reviews_own_lease():
+    steps, job = graded_job()
+    lease = new_token()
+    out = run(*steps, review_start(job["id"], lease=sha256(lease)), review_finish(job["id"], new_token()),
+              review_finish(job["id"], lease, account=B))
+    assert [r["status"] for r in out["results"][-2:]] == [409, 404]
+    assert out["store"]["graded"]["ai_coding_attempts"][0]["rubric_review"] is None
+
+
+@pytest.mark.parametrize("data", [
+    {"job_id": "x"},
+    {"job_id": "aaaaaaaaaaaaaaa", "source_checksum": "c" * 64, "command_id": "not-a-key", "lease_hash": "d" * 64},
+    {"job_id": "aaaaaaaaaaaaaaa", "source_checksum": "c" * 64, "command_id": "0190f000-0000-7000-8000-000000000001",
+     "lease_hash": "d" * 64, "quota": "maybe"},
+])
+def test_review_start_refuses_input_outside_its_contract(data):
+    assert run({"call": "checkReviewStart", "input": data})["results"][-1] is None
+
+
+@pytest.mark.parametrize("review", [
+    {"items": [], "total": 1, "parse_error": "raw provider text"},
+    {"items": "x", "total": 1},
+    {"items": [], "total": "1"},
+    {"items": [], "total": 1, "reason": "x" * 201},
+    {"items": [{"id": "x", "evidence": "y" * (256 * 1024)}], "total": 1},
+])
+def test_review_finish_refuses_a_review_outside_its_shape(review):
+    data = {"job_id": "aaaaaaaaaaaaaaa", "lease": new_token(), "review": review}
+    assert run({"call": "checkReviewFinish", "input": data})["results"][-1] is None
+
+
+def test_the_review_routes_need_the_callers_bearer_and_the_runner_key():
+    for action in ("review_start", "review_finish"):
+        out = run({"call": "handleCaller", "action": action, "principal": {"collection": "users"}, "headers": {},
+                   "env": {"ROUNDS_ADMISSION_SECRET": "k" * 40}})
+        assert out["results"][-1]["status"] == 403
+        out = run({"call": "handleCaller", "action": action, "principal": None})
+        assert out["results"][-1]["thrown"] == "UnauthorizedError"

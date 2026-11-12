@@ -15,7 +15,9 @@
 // an out-of-date page reloads (an older request shape, a case or
 // version the server replaced), a retired or missing practice item runs
 // nothing, and an unsupported language or a file the grader won't take
-// shows the server's fixed sentence, which never repeats the request.
+// shows the server's fixed sentence, which never repeats the request. A
+// practice item the server can't grade (ROUNDS-00A-L03 PR 3) grades
+// nothing.
 
 import { isRunnerError } from './runnerFetch';
 
@@ -30,7 +32,8 @@ export type RunnerDenialKind =
   | 'retired'
   | 'not_found'
   | 'unsupported'
-  | 'path_not_allowed';
+  | 'path_not_allowed'
+  | 'not_gradable';
 
 export interface RunnerDenial {
   kind: RunnerDenialKind;
@@ -55,6 +58,7 @@ const DEFINITION_KINDS: Record<string, RunnerDenialKind> = {
   definition_not_found: 'not_found',
   runtime_unsupported: 'unsupported',
   path_not_allowed: 'path_not_allowed',
+  definition_invalid: 'not_gradable',
 };
 const SHOWS_DETAIL = new Set<RunnerDenialKind>(['unsupported', 'path_not_allowed']);
 const TOO_LARGE_CODES = new Set(['payload_too_large', 'limit_exceeded']);
@@ -114,6 +118,21 @@ export function runFailureText(err: unknown): string {
     return "The runner couldn't find this practice item. Reload the page and run it again.";
   }
   return `The run failed with status ${status}. Run it again.`;
+}
+
+/** A grade's or a submission's failure that isn't a denial, as a fixed
+ *  sentence: nothing came back to score, so no score or verdict shows,
+ *  and the server's own text never reaches the page. */
+export function gradeFailureText(err: unknown): string {
+  if (!isRunnerError(err)) return "Grading didn't finish, so nothing was graded. Submit again.";
+  const { status, code } = err;
+  if (code === 'invalid_request' || status === 400 || status === 422) {
+    return "The runner couldn't read this submission. Reload the page and submit again.";
+  }
+  if (code === 'not_found' || status === 404) {
+    return "The runner couldn't find this practice item. Reload the page and submit again.";
+  }
+  return `Grading failed with status ${status}, so nothing was graded. Submit again.`;
 }
 
 /** The element that has focus now, so a denial can hand it back. */

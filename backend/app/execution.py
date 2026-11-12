@@ -351,6 +351,11 @@ class Graded:
     score: harness_results.Score
     timed_out: bool
     duration_ms: int
+    # A limit other than wall time that an executor enforced and that ended
+    # the run, as ``kinds.LIMITS`` names it. The legacy executor enforces
+    # wall time only, so it's None until #5's launcher reports one.
+    # TODO(ROUNDS-00A-L05): set from the isolated worker's observation.
+    limit: str | None = None
 
 
 def grade(checkpoint: dict[str, Any], harness_files: list[dict[str, Any]], files: Mapping[str, str],

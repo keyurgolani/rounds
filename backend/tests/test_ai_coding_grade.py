@@ -75,6 +75,8 @@ def test_build_prompt_includes_rubric_and_files():
     assert "x = 1" in prompt
 
 
+import json
+
 import pytest
 from unittest.mock import patch
 
@@ -402,9 +404,12 @@ def test_chat_route_rejects_partial_override(client):
         assert res.status_code == 422
 
 
-def test_grade_route_records_failure_for_missing_test_command(client, signed_in):
-    """A seeded checkpoint without a test_command should produce an
-    explicit failure in the grade report rather than a silent pass."""
+def test_grade_route_records_failure_for_missing_test_command(client, signed_in, monkeypatch):
+    """A seeded checkpoint without a test_command is the definition's
+    fault, not a failed solution (ROUNDS-00A-L03 PR 3): the grade answers
+    the typed definition_invalid before anything runs, with its wall
+    seconds refunded, so no checkpoint reads as passed: false and no rubric
+    review is asked for."""
     async def fake_user(_):
         return {"id": "u1", "token": "t"}
 
@@ -419,9 +424,17 @@ def test_grade_route_records_failure_for_missing_test_command(client, signed_in)
             ]
         }
 
+    calls = []
+
     async def fake_cfg(_):
+        calls.append("provider")
         raise Exception("no provider — skip rubric AI")
 
+    def no_run(*_args, **_kwargs):
+        calls.append("run")
+        raise AssertionError("nothing runs for a definition that can't be graded")
+
+    monkeypatch.setattr("routers.ai_coding.run_project", no_run)
     with patch("routers.ai_coding.current_user", fake_user), \
          patch("routers.ai_coding.pb_get", fake_pb_get), \
          patch("routers.ai_coding._active_text_config", fake_cfg):
@@ -430,7 +443,36 @@ def test_grade_route_records_failure_for_missing_test_command(client, signed_in)
             "files": {},
             "ai_chats": [],
         })
-    assert res.status_code == 200
+    assert res.status_code == 422
     body = res.json()
-    assert body["test_results"][0]["passed"] is False
-    assert "test_command" in (body["test_results"][0]["error"] or "")
+    assert body["code"] == "definition_invalid"
+    assert "test_results" not in body and calls == []
+
+
+def test_the_grade_answer_carries_only_visible_output(client, signed_in):
+    """What a checkpoint's merged files print stays out of the grade's
+    answer: each checkpoint carries its totals and a fixed sentence when it
+    didn't pass (ROUNDS-00A-L03 PR 3)."""
+    async def fake_user(_):
+        return {"id": "u1", "token": "t"}
+
+    async def fake_pb_get(_token, _path, params=None):
+        return {"items": [{"slug": "loud-round", "checkpoints": [
+            {"test_command": "echo 'stdout-marker-61c2'; echo 'stderr-marker-7d4e' >&2; exit 1",
+             "hidden_files": [{"path": "tests/hidden.txt", "contents": "x"}]},
+        ], "rubric": {"items": []}}]}
+
+    async def fake_cfg(_):
+        raise Exception("no provider configured for this test")
+
+    with patch("routers.ai_coding.current_user", fake_user), \
+         patch("routers.ai_coding.pb_get", fake_pb_get), \
+         patch("routers.ai_coding._active_text_config", fake_cfg):
+        res = client.post("/api/ai-coding/grade", headers=signed_in, json={
+            "round_slug": "loud-round", "files": {"a.py": "pass"}, "ai_chats": [],
+        })
+    assert res.status_code == 200
+    (checkpoint,) = res.json()["test_results"]
+    assert checkpoint["passed"] is False and "stdout" not in checkpoint
+    assert "marker" not in json.dumps(checkpoint)
+    assert checkpoint["error"] == "Some of this checkpoint's tests didn't pass."
