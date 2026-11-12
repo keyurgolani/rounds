@@ -13,6 +13,7 @@
 // them at its sink.
 
 import policyJson from './policy.json';
+import policySchemaJson from './policy.schema.json';
 import purposesJson from './purposes.json';
 import fieldMapJson from './field-map.json';
 import secretPatternsJson from './secret-patterns.json';
@@ -77,6 +78,8 @@ const LOC = POLICY.locations;
 const SYSTEM_FIELDS = ['id', 'created', 'updated'];
 const PATTERNS = SECRET_PATTERNS.patterns.map((p) => ({ id: p.id, re: new RegExp(p.regex, 'g') }));
 export const MAX_CODE_POINTS = SECRET_PATTERNS.maxCodePoints;
+// The field map's id forms: policy.schema.json's entries.id pattern.
+const ID_FORM = new RegExp(policySchemaJson.$defs.fieldMap.properties.entries.items.properties.id.pattern);
 // Context keys only evaluateEgress may set: it alone knows the purpose.
 const TRUSTED = ['purposeStatus', 'purposeDeclares'];
 
@@ -110,6 +113,16 @@ const whole = (x: unknown): number | null => (typeof x === 'number' && Number.is
 const isPort = (x: unknown) => { const n = whole(x); return n !== null && n >= 1 && n <= 65535; };
 const strings = (x: unknown): x is string[] => Array.isArray(x) && x.every((s) => typeof s === 'string');
 const optional = (x: Ctx, key: string, type: 'string' | 'boolean') => absent(x[key]) || typeof x[key] === type;
+
+/** A caller's id must take one of the field map's forms and name one path:
+ * a `*` pointer segment is the map's pattern syntax, not a caller's, so it's
+ * refused outside a storage key. */
+function malformedId(fieldId: unknown): boolean {
+  if (typeof fieldId !== 'string' || !ID_FORM.test(fieldId)) return true;
+  if (fieldId.startsWith('storage:')) return false;
+  const hash = fieldId.indexOf('#');
+  return hash !== -1 && fieldId.slice(hash + 1).split('/').slice(1).includes('*');
+}
 
 function ruleError(rule: unknown): boolean {
   if (!isObject(rule)) return true;
@@ -256,8 +269,9 @@ const STORE = /^pb:[a-z_][a-z0-9_]*$/;
 
 /** The ids below `fieldId` that the field map classes, in map order: a
  * store's fields and their paths, a column's paths, or the deeper paths
- * under a pointer, a `*` on either side matching any one segment. A path
- * read through `pathsFrom` keeps the caller's column. Matches
+ * under a pointer, a `*` in an entry matching any one segment (a caller's id
+ * has none; the entry points refuse it). A path read through `pathsFrom`
+ * keeps the caller's column. Matches
  * descendantsOf in scripts/conformance/lib/privacy/fields.mjs. */
 export function descendants(fieldId: string): string[] {
   if (typeof fieldId !== 'string' || fieldId.startsWith('storage:')) return [];
@@ -428,11 +442,12 @@ function sinkAnswer(fieldId: string, sink: string, context: Ctx, expand = true):
 
 /** Whether `fieldId` may reach `sink`, and on what terms. A parent id answers
  * allow only when every entry below it allows the same sink in the same
- * context; the first that doesn't is named in a FIELD_TOO_COARSE deny. Only
- * evaluateEgress vouches for a purpose, so purposeStatus and purposeDeclares
- * count for nothing here. */
+ * context; the first that doesn't is named in a FIELD_TOO_COARSE deny. An id
+ * outside the field map's forms, or with a `*` pointer segment, answers
+ * INPUT_INVALID. Only evaluateEgress vouches for a purpose, so purposeStatus
+ * and purposeDeclares count for nothing here. */
 export function evaluateSink(fieldId: string, sink: string, context?: Ctx | null): Decision {
-  if (typeof fieldId !== 'string') return invalid('field_id');
+  if (malformedId(fieldId)) return invalid('field_id');
   if (typeof sink !== 'string') return invalid('sink');
   const err = contextError(context);
   if (err) return invalid(err);
@@ -700,7 +715,7 @@ export interface Endpoint {
 export function evaluateEgress(purpose: string, fieldIds: string[], endpoint?: Endpoint | null, location?: string | null,
   consent?: Consent | null, context?: Ctx | null, registry?: Registry | null): Decision {
   if (typeof purpose !== 'string') return invalid('purpose');
-  if (!strings(fieldIds)) return invalid('field_ids');
+  if (!Array.isArray(fieldIds) || fieldIds.some(malformedId)) return invalid('field_ids');
   if (!absent(location) && typeof location !== 'string') return invalid('location');
   const err = (absent(consent) ? null : consentError(consent)) || contextError(context) || endpointError(endpoint);
   if (err) return invalid(err);

@@ -2,7 +2,7 @@
   "$schema": "../policy.schema.json",
   "registry": "rounds-privacy-vectors",
   "suite": "matrix",
-  "description": "One case per class and sink (40), each asserting the decision and obligations from the spec's cell, then the allow paths of the conditional cells, the verifier and digest fields, free text in logs, parent ids, and malformed context. Both evaluators run these.",
+  "description": "One case per class and sink (40), each asserting the decision and obligations from the spec's cell, then the allow paths of the conditional cells, the verifier and digest fields, free text in logs, parent ids, and malformed ids and context. Both evaluators run these.",
   "cases": [
     { "id": "private.remote-ai", "call": "evaluate_sink", "args": { "field_id": "pb:applications.company", "sink": "remote-ai", "context": { "consent": { "unit": "per-request", "preview": true }, "purpose": "resume.tailor", "purposeStatus": "current" } }, "expect": { "decision": "allow", "obligations": ["consent:per-request", "preview:payload", "snapshot:provider-payload-snapshot"], "versions": { "consent": "consent@1", "privacy": "privacy@1", "redaction": "redaction@1", "retention": "retention@1" } } },
     { "id": "private.index", "call": "evaluate_sink", "args": { "field_id": "pb:applications.company", "sink": "index" }, "expect": { "decision": "allow", "obligations": ["namespace:account"] } },
@@ -108,6 +108,10 @@
     { "id": "input.field-id-not-text", "call": "evaluate_sink", "args": { "field_id": 42, "sink": "logs" }, "expect": { "decision": "deny", "code": "INPUT_INVALID", "rule": "input.field_id" } },
     { "id": "input.context-not-an-object", "call": "evaluate_sink", "args": { "field_id": "pb:applications.company", "sink": "index", "context": "signed-in" }, "expect": { "decision": "deny", "code": "INPUT_INVALID", "rule": "input.context" } },
     { "id": "input.override-without-a-rule", "call": "evaluate_sink", "args": { "field_id": "pb:applications.company", "sink": "index", "context": { "overrides": [{ "source": "pack:example", "class": "Private", "sink": "index" }] } }, "expect": { "decision": "deny", "code": "INPUT_INVALID", "rule": "input.context.overrides" } },
-    { "id": "input.published-is-not-one", "call": "evaluate_sink", "args": { "field_id": "pb:interview_rounds.notes", "sink": "share", "context": { "published": 1 } }, "expect": { "decision": "deny", "code": "EXCLUDED_BY_DEFAULT", "rule": "matrix.third-party.share" } }
+    { "id": "input.published-is-not-one", "call": "evaluate_sink", "args": { "field_id": "pb:interview_rounds.notes", "sink": "share", "context": { "published": 1 } }, "expect": { "decision": "deny", "code": "EXCLUDED_BY_DEFAULT", "rule": "matrix.third-party.share" } },
+    { "id": "input.store-pointer-to-logs", "call": "evaluate_sink", "args": { "field_id": "pb:users#/passwordHash", "sink": "logs" }, "expect": { "decision": "deny", "code": "INPUT_INVALID", "rule": "input.field_id" } },
+    { "id": "input.store-pointer-to-export", "call": "evaluate_sink", "args": { "field_id": "pb:users#/passwordHash", "sink": "export", "context": { "exportScope": "full-account" } }, "expect": { "decision": "deny", "code": "INPUT_INVALID", "rule": "input.field_id" } },
+    { "id": "input.empty-pointer-to-export", "call": "evaluate_sink", "args": { "field_id": "pb:share_capabilities#", "sink": "export", "context": { "exportScope": "full-account" } }, "expect": { "decision": "deny", "code": "INPUT_INVALID", "rule": "input.field_id" } },
+    { "id": "input.valid-pointer-still-allowed", "call": "evaluate_sink", "args": { "field_id": "pb:resumes.data#/experience/0/company", "sink": "export" }, "expect": { "decision": "allow", "obligations": ["namespace:account"] } }
   ]
 }

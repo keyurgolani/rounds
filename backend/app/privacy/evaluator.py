@@ -46,6 +46,13 @@ _LOC = POLICY["locations"]
 _SYSTEM_FIELDS = ("id", "created", "updated")
 _PATTERNS = [(p["id"], re.compile(p["regex"], re.ASCII)) for p in SECRET_PATTERNS["patterns"]]
 MAX_CODE_POINTS = SECRET_PATTERNS["maxCodePoints"]
+# The field map's id forms, policy.schema.json's entries.id pattern, with
+# JavaScript's \s spelled out so both evaluators accept the same ids.
+_JS_SPACE = "\\t\\n\\x0b\\x0c\\r \\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff"
+_ID_PATTERN = _load("policy.schema.json")["$defs"]["fieldMap"]["properties"]["entries"]["items"]["properties"]["id"]["pattern"]
+if _ID_PATTERN.count("\\s") != _ID_PATTERN.count("[^\\s]"):
+    raise RuntimeError("policy.schema.json's id pattern uses \\s outside [^\\s]")
+_ID_FORM = re.compile(_ID_PATTERN.replace("[^\\s]", f"[^{_JS_SPACE}]"))
 # Context keys only evaluate_egress may set: it alone knows the purpose.
 _TRUSTED = ("purposeStatus", "purposeDeclares")
 _MISSING = object()
@@ -93,6 +100,18 @@ def _port(x: Any) -> bool:
 
 def _strings(x: Any) -> bool:
     return isinstance(x, (list, tuple)) and all(isinstance(s, str) for s in x)
+
+
+def _malformed_id(field_id: Any) -> bool:
+    """A caller's id must take one of the field map's forms and name one
+    path: a ``*`` pointer segment is the map's pattern syntax, not a
+    caller's, so it's refused outside a storage key."""
+    if not isinstance(field_id, str) or not _ID_FORM.fullmatch(field_id):
+        return True
+    if field_id.startswith("storage:"):
+        return False
+    _, sep, pointer = field_id.partition("#")
+    return bool(sep) and "*" in pointer.split("/")[1:]
 
 
 def _optional(x: Mapping[str, Any], key: str, kind: type) -> bool:
@@ -273,8 +292,9 @@ _STORE = re.compile(r"\Apb:[a-z_][a-z0-9_]*\Z")
 def descendants(field_id: str) -> list[str]:
     """The ids below ``field_id`` that the field map classes, in map order:
     a store's fields and their paths, a column's paths, or the deeper paths
-    under a pointer, a ``*`` on either side matching any one segment. A
-    path read through ``pathsFrom`` keeps the caller's column. Matches
+    under a pointer, a ``*`` in an entry matching any one segment (a
+    caller's id has none; the entry points refuse it). A path read through
+    ``pathsFrom`` keeps the caller's column. Matches
     ``descendantsOf`` in scripts/conformance/lib/privacy/fields.mjs."""
     if not isinstance(field_id, str) or field_id.startswith("storage:"):
         return []
@@ -483,10 +503,11 @@ def evaluate_sink(field_id: str, sink: str, context: Mapping[str, Any] | None = 
     """Whether ``field_id`` may reach ``sink``, and on what terms. A parent
     id answers allow only when every entry below it allows the same sink in
     the same context; the first that doesn't is named in a
-    ``FIELD_TOO_COARSE`` deny. Only ``evaluate_egress`` vouches for a
-    purpose, so ``purposeStatus`` and ``purposeDeclares`` count for nothing
-    here."""
-    if not isinstance(field_id, str):
+    ``FIELD_TOO_COARSE`` deny. An id outside the field map's forms, or
+    with a ``*`` pointer segment, answers ``INPUT_INVALID``. Only
+    ``evaluate_egress`` vouches for a purpose, so ``purposeStatus`` and
+    ``purposeDeclares`` count for nothing here."""
+    if _malformed_id(field_id):
         return _invalid("field_id")
     if not isinstance(sink, str):
         return _invalid("sink")
@@ -698,7 +719,7 @@ def evaluate_egress(purpose: str, field_ids: Sequence[str], endpoint: Mapping[st
     to the purpose registry beside this module."""
     if not isinstance(purpose, str):
         return _invalid("purpose")
-    if not isinstance(field_ids, (list, tuple)) or not _strings(field_ids):
+    if not isinstance(field_ids, (list, tuple)) or any(_malformed_id(f) for f in field_ids):
         return _invalid("field_ids")
     if location is not None and not isinstance(location, str):
         return _invalid("location")

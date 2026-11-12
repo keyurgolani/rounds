@@ -8,7 +8,7 @@ import { validate } from '../json-schema.mjs';
 import { leafResolver, loadLeafIds } from '../leaf-ids.mjs';
 import { extractBrowserKeys } from '../authority/browser-keys.mjs';
 import { AUTH_SYSTEM_FIELDS, extractSchema } from './schema-vm.mjs';
-import { ancestorOf, descendantsOf, fieldResolver, familyCovers, idForm, pointerMatch, segments, split, within } from './fields.mjs';
+import { ancestorOf, callerIdError, descendantsOf, fieldResolver, familyCovers, idForm, pointerMatch, segments, split, within } from './fields.mjs';
 import { definedFunctions, scanProviderCalls } from './scan.mjs';
 import {
   BASELINE_STORES_PATH, CONFIG_DOC_PATH, COPY_DIRS, DOC_PATH, DR_LEAF, FIELD_MAP_PATH, MATRIX_PATH, POLICY_PATH, PRIVACY_DIR,
@@ -439,6 +439,8 @@ function checkPurposes(ctx, P, F, A, resolveLeaf) {
     if (p.credential && R && R.resolve(p.credential)?.class !== 'Secret') push('PRIVACY_UNKNOWN_REF', [...parts, 'credential'], `${p.id} credential ${p.credential} is not a Secret field`);
     const classes = new Set();
     p.inputs.forEach((input, j) => {
+      const malformed = callerIdError(input.field);
+      if (malformed) { push('PRIVACY_FIELD_ID_INVALID', [...parts, 'inputs', j], `${p.id} input ${input.field} ${malformed}`); return; }
       const e = R?.resolve(input.field);
       if (R && !e) { push('PRIVACY_UNKNOWN_REF', [...parts, 'inputs', j], `${p.id} input ${input.field} has no class in the field map`); return; }
       if (!e) return;
@@ -653,24 +655,29 @@ function checkRecord(ctx, P, F, resolveLeaf) {
 // where it stopped the old kind (logs take metadata or ids, never content)
 // is looser too.
 function looserEntry(h, b, policy) {
+  // A tighter class or visibility can still come with a kind that opens a
+  // sink, so only a looser one returns here.
+  let tightened = false;
   if (b.class && h.class && b.class !== h.class) {
     const loosened = (b.class === 'Share Projection' || h.class === 'Share Projection') ? !(h.class === 'Secret') : CLASS_ORDER.indexOf(h.class) < CLASS_ORDER.indexOf(b.class);
-    return loosened ? `is ${h.class}, looser than ${b.class}` : null;
+    if (loosened) return `is ${h.class}, looser than ${b.class}`;
+    tightened = true;
   }
   if (b.visibility && h.visibility && b.visibility !== h.visibility) {
-    return VISIBILITY_ORDER.indexOf(h.visibility) < VISIBILITY_ORDER.indexOf(b.visibility) ? `is ${h.visibility}, looser than ${b.visibility}` : null;
+    if (VISIBILITY_ORDER.indexOf(h.visibility) < VISIBILITY_ORDER.indexOf(b.visibility)) return `is ${h.visibility}, looser than ${b.visibility}`;
+    tightened = true;
   }
   if (Boolean(b.class) !== Boolean(h.class)) return 'changed family';
   if (b.kind === h.kind) return null;
-  if (b.kind === 'content') return `is ${h.kind}, where it was content`;
+  if (!tightened && b.kind === 'content') return `is ${h.kind}, where it was content`;
+  // Each side's rule comes from its own class or visibility.
   const { cells, visibility } = policyIndex(policy);
   const sinks = h.class ? CLASS_SINKS : VISIBILITY_SINKS;
+  const ruleOf = (e, s) => (e.class ? cells.get(`${e.class}|${s}`) : visibility.get(`${e.visibility}|${s}`))?.rule;
   const takes = (rule, kind) => rule?.decision === 'allow-if' && rule.cases.some((c) => c.when.kind === kind);
-  const opened = sinks.filter((s) => {
-    const rule = (h.class ? cells.get(`${h.class}|${s}`) : visibility.get(`${h.visibility}|${s}`))?.rule;
-    return takes(rule, h.kind) && !takes(rule, b.kind);
-  });
-  return opened.length ? `is ${h.kind}, which ${opened.join(' and ')} take${opened.length === 1 ? 's' : ''} where ${b.kind} was stopped` : null;
+  const opened = sinks.filter((s) => takes(ruleOf(h, s), h.kind) && !takes(ruleOf(b, s), b.kind));
+  const as = tightened ? ` as ${h.class || h.visibility}` : '';
+  return opened.length ? `is ${h.kind}${as}, which ${opened.join(' and ')} take${opened.length === 1 ? 's' : ''} where ${b.kind} was stopped` : null;
 }
 
 const locationItems = (v) => [

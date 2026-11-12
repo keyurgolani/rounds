@@ -11,11 +11,15 @@
 
 const NAME = (name) => name.replace(/[$.]/g, '\\$&');
 // A helper's name is distinctive, so `module._call_complete` counts too. A
-// wrapper's name may be common (`_call`, `review`) and shadowed by a local,
-// so a bare name counts only as a call, never as an attribute of some other
-// object; `alias.name` counts whenever `alias` is the wrapper's module.
+// wrapper's name may be common (`_call`, `review`), so in its own module,
+// where a local can shadow it, a bare name counts only as a call. A name
+// another module imports from the wrapper's module counts wherever its code
+// uses it, passed as a value too, but never as some other object's attribute
+// or a keyword argument's name; `alias.name` counts whenever `alias` is the
+// wrapper's module.
 const HELPER_REF = (name) => new RegExp(`(?<![A-Za-z0-9_])${NAME(name)}(?![A-Za-z0-9_])`);
 const WRAPPER_REF = (name) => new RegExp(`(?<![A-Za-z0-9_.])${NAME(name)}\\s*\\(`);
+const BOUND_REF = (name) => new RegExp(`(?<![A-Za-z0-9_.])${NAME(name)}(?![A-Za-z0-9_])(?!\\s*=(?!=))`);
 const DOTTED_REF = (prefix, name) => new RegExp(`(?<![A-Za-z0-9_.])${NAME(prefix)}\\.${NAME(name)}(?![A-Za-z0-9_])`);
 const VENDOR_MARKERS = [
   /\bAsyncOpenAI\s*\(/, /\bAsyncAnthropic\s*\(/, /\bOpenAI\s*\(/, /\bAnthropic\s*\(/,
@@ -173,7 +177,7 @@ export function scanProviderCalls(ctx, registry) {
       const label = `${w.path}::${w.function}`;
       if (w.path === file) wrapped.push({ label, def: w.function, re: WRAPPER_REF(w.function) });
       for (const [local, target] of imports.names) {
-        if (target.module === module && target.name === w.function) wrapped.push({ label, re: WRAPPER_REF(local) });
+        if (target.module === module && target.name === w.function) wrapped.push({ label, re: BOUND_REF(local) });
       }
       for (const [local, target] of imports.modules) {
         if (target === module) wrapped.push({ label, re: DOTTED_REF(local, w.function) });

@@ -330,10 +330,17 @@ describe('privacy: the decision record', () => {
   });
 
   it('ratifies the record and the policy\'s current revisions together', () => {
-    only(check({ files: policyMarked('ratified') }), 'PRIVACY_STATUS_MISMATCH');
+    // Either half flipped alone fails, whichever state is committed.
+    const ratified = json(RECORD).status === 'ratified';
+    only(check({ files: policyMarked(ratified ? 'draft' : 'ratified') }), 'PRIVACY_STATUS_MISMATCH');
     const sha = (rel) => createHash('sha256').update(real.read(rel)).digest('hex');
     const record = edit(RECORD, (r) => {
-      Object.assign(r, { status: 'ratified', approver: 'a reviewer', approvalRef: { pr: 1, governedFiles: [POLICY, SCHEMA].map((p) => ({ path: p, sha256: sha(p) })) } });
+      if (ratified) {
+        Object.assign(r, { status: 'draft', approver: '', approvalRef: null });
+        delete r.ratifiedOn;
+      } else {
+        Object.assign(r, { status: 'ratified', approver: 'a reviewer', approvalRef: { pr: 1, governedFiles: [POLICY, SCHEMA].map((p) => ({ path: p, sha256: sha(p) })) } });
+      }
     });
     only(check({ files: record }), 'PRIVACY_STATUS_MISMATCH');
   });
@@ -385,6 +392,14 @@ describe('privacy: purposes and the provider-call scan', () => {
     only(check({ files: { [review]: extended } }), 'PURPOSE_UNREGISTERED_CALL');
   });
 
+  it('fails a registered call site passed as a value from a module that imports it', () => {
+    for (const body of [
+      ['import asyncio', 'from execution.review import review', '', '', 'async def overlay_grade(attempt):', '    return await asyncio.to_thread(review, attempt, 2)'],
+      ['import asyncio', 'from execution.review import review as run_review', '', '', 'async def overlay_grade(attempt):', '    return await asyncio.to_thread(run_review, attempt, 2)'],
+      ['import asyncio', 'from routers.ai import _summarize_doc', '', '', 'async def overlay_doc(doc):', '    return await asyncio.to_thread(_summarize_doc, doc)'],
+    ]) only(check({ files: caller(body) }), 'PURPOSE_UNREGISTERED_CALL');
+  });
+
   it('reads a wrapper\'s name as a call only in code, not in a string or as another object\'s attribute', () => {
     clean(check({ files: caller([
       'from execution.review import review', '', '', 'def overlay_text(attempt):', '    label = "review(attempt)"', '    return label, attempt.review',
@@ -424,6 +439,13 @@ describe('privacy: purposes and the provider-call scan', () => {
     only(check({ files: add('def:harness-revision#/checkpoints') }), 'PRIVACY_SERVER_ONLY_INPUT');
     only(check({ files: add('def:harness-revision#/rubric') }), 'PRIVACY_RUBRIC_OUTSIDE_GRADE');
     only(check({ files: add('pb:offers.annual_bonus_target_pct') }), 'PRIVACY_PURPOSE_CLASSES');
+  });
+
+  it('refuses a malformed input id rather than reading it', () => {
+    const add = (field) => edit(PURPOSES, (r) => { purpose(r, 'resume.improve').inputs.push({ field }); });
+    for (const field of ['pb:users#/passwordHash', 'pb:share_capabilities#', 'pb:ai_coding_rounds.checkpoints#/python/0/*']) {
+      only(check({ files: add(field) }), 'PRIVACY_FIELD_ID_INVALID');
+    }
   });
 
   it('reads an input\'s whole subtree: a parent holding a Secret or server-only entry fails', () => {
@@ -500,6 +522,15 @@ describe('privacy: loosening against the base branch', () => {
   it('fails a kind change that opens a log case', () => {
     only(check({ base: baseMap((m) => { entry(m, 'pb:offers.user').kind = 'metadata'; }) }), 'PRIVACY_RELAXED');
     only(check({ base: baseMap((m) => { entry(m, 'pb:offers.user').kind = 'content'; }) }), 'PRIVACY_RELAXED');
+  });
+
+  it('fails a kind that opens a log case even when the class tightens', () => {
+    const base = { [FIELD_MAP]: real.read(FIELD_MAP) };
+    const avatar = (fields) => edit(FIELD_MAP, (m) => { Object.assign(entry(m, 'pb:users.avatar'), fields); });
+    only(check({ base, files: avatar({ class: 'Third-party personal', kind: 'opaque-id' }) }), 'PRIVACY_RELAXED');
+    only(check({ base, files: avatar({ class: 'Sensitive', kind: 'opaque-id' }) }), 'PRIVACY_RELAXED');
+    // A Secret's logs cell takes no kind, so this tightening opens nothing.
+    clean(check({ base, files: avatar({ class: 'Secret', kind: 'opaque-id' }) }));
   });
 
   it('fails a register entry removed, given a new owner, or moved off its location while open', () => {

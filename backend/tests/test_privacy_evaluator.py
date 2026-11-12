@@ -133,6 +133,9 @@ SPECIAL_PURPOSE = [
     "2001:30::/28", "2001:db8::/32", "2002::/16", "2620:4f:8000::/48", "3fff::/20", "5f00::/16", "fc00::/7", "fe80::/10",
 ]
 PUBLIC = ["8.8.8.8", "104.18.6.192", "2606:4700::6812:6c0", "2a00:1450:4001:80b::200e"]
+# IANA's globally reachable exceptions inside 192.0.0.0/24 and 2001::/23,
+# which the policy refuses whole and R0 lets through.
+GLOBAL_EXCEPTIONS = ["192.0.0.9/32", "192.0.0.10/32", "2001:1::1/128", "2001:1::2/128", "2001:3::/32", "2001:4:112::/48", "2001:20::/28", "2001:30::/28"]
 
 
 def _samples(network):
@@ -163,8 +166,11 @@ def _policy_lists():
 
 def test_destination_lists_match_the_runner():
     """The policy's never and private lists are the ones the runner's
-    destination check refuses or gates today (ROUNDS-00A-L01), and every
-    address the policy refuses R0 refuses too, outside the named ranges."""
+    destination check refuses or gates today (ROUNDS-00A-L01). Over samples
+    of IANA's special-purpose ranges and the policy's own lists, a sampled
+    address the policy refuses, R0 refuses, outside the ranges named here.
+    The policy also refuses the globally reachable exceptions inside
+    192.0.0.0/24 and 2001::/23, with their ranges, which R0 allows."""
     loc = evaluator.POLICY["locations"]
     assert sorted(map(str, destinations.METADATA_ADDRESSES)) == sorted(str(ipaddress.ip_address(a)) for a in loc["never"]["metadata"])
     assert [str(n) for n in destinations.PRIVATE_NETWORKS] == loc["privateNetworks"]
@@ -173,15 +179,21 @@ def test_destination_lists_match_the_runner():
     for net in _policy_lists():
         for sample in _samples(net):
             assert not _policy_allows(sample), (net, str(sample))
-            if net not in STRICTER_THAN_R0 | RELEASE_DEPENDENT:
+    named = STRICTER_THAN_R0 | RELEASE_DEPENDENT | set(GLOBAL_EXCEPTIONS)
+    for net in SPECIAL_PURPOSE + _policy_lists():
+        if net in named:
+            continue
+        for sample in _samples(net):
+            if not _policy_allows(sample):
                 assert not destinations.address_allowed(sample, True), (net, str(sample))
+    # 5f00::/16 is in both sets on purpose: the R0 check skips it, so a CPython that starts refusing it needs no test change.
     for net in STRICTER_THAN_R0 - RELEASE_DEPENDENT:
         assert any(destinations.address_allowed(s, True) for s in _samples(net)), f"R0 refuses {net} now; drop it from STRICTER_THAN_R0"
 
 
 def test_the_policy_allows_no_address_the_runner_refuses():
-    """The other direction: over the special-purpose registries and the
-    policy's own lists, an address the policy allows R0 allows too."""
+    """The other direction: over the same samples, a sampled address the
+    policy allows, R0 allows too."""
     allowed = 0
     for net in SPECIAL_PURPOSE + _policy_lists():
         for sample in _samples(net):
@@ -191,6 +203,15 @@ def test_the_policy_allows_no_address_the_runner_refuses():
     for text in PUBLIC:
         assert _policy_allows(ipaddress.ip_address(text)) and destinations.address_allowed(ipaddress.ip_address(text), False), text
     assert allowed > 0
+
+
+def test_the_policy_refuses_the_globally_reachable_exceptions_r0_allows():
+    for net in GLOBAL_EXCEPTIONS:
+        inside = [ipaddress.ip_network(r) for r in ("192.0.0.0/24", "2001::/23")]
+        assert any(r.version == ipaddress.ip_network(net).version and ipaddress.ip_network(net).subnet_of(r) for r in inside), net
+        for sample in _samples(net):
+            assert not _policy_allows(sample), (net, str(sample))
+            assert destinations.address_allowed(sample, True), (net, str(sample))
 
 
 def test_versions_name_every_policy_version():

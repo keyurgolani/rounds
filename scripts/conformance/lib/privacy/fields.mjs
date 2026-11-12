@@ -16,6 +16,19 @@ export function idForm(id) {
   return null;
 }
 
+// Why a caller's id (a purpose input, or what a sink owner asks the
+// evaluators about) is refused, or null. It takes one of the forms above
+// and names one path: a `*` pointer segment is the map's pattern syntax,
+// not a caller's, so it's refused outside a storage key. The evaluators
+// refuse the same ids with INPUT_INVALID.
+export function callerIdError(id) {
+  if (typeof id !== 'string' || !idForm(id)) return 'is not a pb:, storage:, def:, request:, or <entity>.<field> id';
+  if (id.startsWith('storage:')) return null;
+  const hash = id.indexOf('#');
+  if (hash !== -1 && id.slice(hash + 1).split('/').slice(1).includes('*')) return 'has a * pointer segment; a caller names one path, not a pattern';
+  return null;
+}
+
 export function split(id) {
   const i = id.indexOf('#');
   return i === -1 ? [id, null] : [id.slice(0, i), id.slice(i + 1)];
@@ -103,8 +116,9 @@ const STORE = /^pb:[a-z_][a-z0-9_]*$/;
 // The entries below `id`, as [{ id, entry }] in map order, where `id` is
 // the descendant seen from `id` (a path read through `pathsFrom` keeps the
 // caller's column): a store's fields and their paths, a column's paths, or
-// the deeper paths under a pointer. A `*` on either side matches any one
-// segment. Matches the evaluators' `descendants`.
+// the deeper paths under a pointer. A `*` in an entry matches any one
+// segment; a caller's id has none (callerIdError). Matches the evaluators'
+// `descendants`.
 export function descendantsOf(id, entries, byId) {
   if (typeof id !== 'string' || id.startsWith('storage:')) return [];
   const out = [];

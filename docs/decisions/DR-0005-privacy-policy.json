@@ -75,7 +75,7 @@
         { "option": "The gate alone, without the allowlist", "reason": "A blanket allow over every private address the deployment can reach." },
         { "option": "Host names as allowlist entries", "reason": "A name can't be checked at startup and can resolve somewhere else later." }
       ],
-      "consequences": "ROUNDS-14-L02 applies the stricter reading at dispatch, which narrows R0's gate for operators who enabled it; its docs tell them. A test holds the policy's lists against R0's check in both directions: every address the policy allows, R0 allows, and every address the policy refuses, R0 refuses, outside the ranges it names where the policy is stricter. ROUNDS-14-L04 shows never destinations as blocked.",
+      "consequences": "ROUNDS-14-L02 applies the stricter reading at dispatch, which narrows R0's gate for operators who enabled it; its docs tell them. A test holds the policy's lists against R0's check in both directions, over samples of IANA's special-purpose ranges and the policy's own lists: a sampled address the policy allows, R0 allows, and a sampled address the policy refuses, R0 refuses, outside the ranges the test names. The policy also refuses the globally reachable exceptions inside 192.0.0.0/24 and 2001::/23, with their ranges, which R0 allows. ROUNDS-14-L04 shows never destinations as blocked.",
       "migrationImpact": "None; nothing reads the allowlist before ROUNDS-14-L02.",
       "rollbackImpact": "Supersede privacy@1; the runner then accepts the setting as before."
     },
