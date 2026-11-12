@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/database/erd-decisions.schema.json",
+  "title": "The written part of the canonical database's ERD",
+  "description": "DR-0004's ratified ERD fields (ROUNDS-02-L01): the delete and merge values, the stores, the groups, each entity's written fields, every planned or held table in full with its indexes, and each relation's merge behavior. scripts/conformance/rules/database-adr.mjs builds contracts/database/erd.json from this file and contracts/database/schema-snapshot.json. An entity without a status annotates the collection or system table of that name in the snapshot; a planned or held one is written in full.",
+  "type": "object",
+  "required": ["$schema", "registry", "decisionRecord", "revision", "description", "semantics", "stores", "groups", "entities", "relations"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "registry": { "const": "rounds-erd-decisions" },
+    "decisionRecord": { "type": "string", "pattern": "^DR-\\d{4}$" },
+    "revision": { "description": "DR-0004's revision; the record, this file, and the benchmark receipt share one counter.", "type": "integer", "minimum": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "semantics": {
+      "type": "object",
+      "required": ["onDelete", "onAccountDelete", "merge"],
+      "additionalProperties": false,
+      "properties": {
+        "onDelete": {
+          "type": "object",
+          "required": ["cascade", "restrict", "unset", "purge"],
+          "additionalProperties": false,
+          "properties": {
+            "cascade": { "type": "string", "minLength": 1 },
+            "restrict": { "type": "string", "minLength": 1 },
+            "unset": { "type": "string", "minLength": 1 },
+            "purge": { "type": "string", "minLength": 1 }
+          }
+        },
+        "onAccountDelete": {
+          "description": "The values a partition's onAccountDelete adds to onDelete's.",
+          "type": "object",
+          "required": ["expiry", "pocketbase"],
+          "additionalProperties": false,
+          "properties": {
+            "expiry": { "type": "string", "minLength": 1 },
+            "pocketbase": { "type": "string", "minLength": 1 }
+          }
+        },
+        "merge": {
+          "type": "object",
+          "required": ["none", "repoint", "n/a"],
+          "additionalProperties": false,
+          "properties": {
+            "none": { "type": "string", "minLength": 1 },
+            "repoint": { "type": "string", "minLength": 1 },
+            "n/a": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "stores": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "location", "process", "canonical", "backup", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "kind": { "enum": ["sqlite", "files", "object-store"] },
+          "location": { "type": "string", "minLength": 1 },
+          "process": { "type": "string", "minLength": 1 },
+          "canonical": { "type": "boolean" },
+          "backup": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["live", "planned"] }
+        }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "additionalProperties": false,
+        "properties": { "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }, "title": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "entities": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/entity" } },
+    "relations": { "type": "array", "items": { "$ref": "#/$defs/relation" } }
+  },
+  "$defs": {
+    "leafRef": { "type": "string", "pattern": "^ROUNDS-\\d{2}[A-Z]?-L\\d{2}(/[A-Za-z0-9.]+)?$" },
+    "partition": {
+      "type": "object",
+      "required": ["field", "kind", "onAccountDelete"],
+      "additionalProperties": false,
+      "properties": {
+        "field": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["relation", "text", "self"] },
+        "onAccountDelete": { "enum": ["cascade", "restrict", "unset", "purge", "expiry", "pocketbase"] }
+      }
+    },
+    "index": {
+      "type": "object",
+      "required": ["name", "unique", "columns"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^idx_[a-z0-9_]+$" },
+        "unique": { "type": "boolean" },
+        "columns": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" } },
+        "partial": { "type": "boolean" }
+      }
+    },
+    "entity": {
+      "type": "object",
+      "required": ["id", "group", "scope", "writers", "purge"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^_?[A-Za-z][A-Za-z0-9_]*$" },
+        "status": { "enum": ["planned", "held"] },
+        "kind": { "enum": ["collection", "system-table", "file-store"] },
+        "type": { "enum": ["base", "auth", "view"] },
+        "store": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "boolean" },
+        "group": { "type": "string", "minLength": 1 },
+        "scope": { "enum": ["account", "content", "platform", "service", "system"] },
+        "partition": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/partition" }] },
+        "indexes": { "type": "array", "items": { "$ref": "#/$defs/index" } },
+        "owningLeaf": { "$ref": "#/$defs/leafRef" },
+        "createdBy": { "type": "string", "minLength": 1 },
+        "rows": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" } },
+        "writers": { "type": "string", "minLength": 1 },
+        "purge": { "type": "string", "minLength": 1 },
+        "note": { "type": "string", "minLength": 1 }
+      },
+      "if": { "required": ["status"] },
+      "then": { "required": ["kind", "store", "partition", "indexes", "owningLeaf"] },
+      "else": {
+        "description": "An annotation of a live collection or system table: the snapshot supplies its kind, store, indexes, and relation partition, so only a partition the schema can't show (a text column) is written.",
+        "properties": {
+          "kind": false, "type": false, "store": false, "bytes": false, "indexes": false,
+          "partition": { "type": "object", "properties": { "kind": { "const": "text" } } }
+        }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "required": ["id", "merge"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^_?[A-Za-z][A-Za-z0-9_]*\\.[A-Za-z][A-Za-z0-9_]*$" },
+        "status": { "enum": ["planned", "held"] },
+        "from": { "type": "string", "minLength": 1 },
+        "field": { "type": "string", "minLength": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "cardinality": { "enum": ["many-to-one", "many-to-many"] },
+        "required": { "type": "boolean" },
+        "onDelete": { "enum": ["cascade", "restrict", "unset", "purge"] },
+        "merge": { "enum": ["none", "repoint", "n/a"] },
+        "authorization": { "enum": ["relation-endpoint", "owner", "content", "server"] },
+        "note": { "type": "string", "minLength": 1 }
+      },
+      "if": { "required": ["status"] },
+      "then": { "required": ["from", "field", "to", "cardinality", "required", "onDelete", "authorization"] },
+      "else": {
+        "description": "A live relation's merge behavior and note; the snapshot supplies the rest.",
+        "properties": { "from": false, "field": false, "to": false, "cardinality": false, "required": false, "onDelete": false, "authorization": false }
+      }
+    }
+  }
+}

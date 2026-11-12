@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "contracts/database/erd.schema.json",
-  "title": "Entity relationship diagram of the canonical database",
-  "description": "DR-0004's ERD (ROUNDS-02-L01): every PocketBase collection and system table, the platform tables and stores DR-0004 places, and every relation with its cardinality, account partition, delete behavior, merge behavior, and indexes. scripts/conformance/rules/database-adr.mjs regenerates the mechanical fields from schema-snapshot.json and keeps the written ones (group, scope, rows, writers, purge, owningLeaf, createdBy, note, merge).",
+  "title": "Entity relationship diagram of the canonical database, generated",
+  "description": "DR-0004's ERD (ROUNDS-02-L01), generated: every PocketBase collection and system table, the platform tables and stores DR-0004 places, and every relation with its cardinality, account partition, delete behavior, merge behavior, and indexes. scripts/conformance/rules/database-adr.mjs builds it from schema-snapshot.json and the written part, erd-decisions.json, which DR-0004 ratifies; this file is not edited by hand.",
   "type": "object",
-  "required": ["$schema", "registry", "decisionRecord", "revision", "description", "snapshot", "semantics", "stores", "groups", "entities", "relations"],
+  "required": ["$schema", "registry", "decisionRecord", "revision", "description", "decisions", "snapshot", "semantics", "stores", "groups", "entities", "relations"],
   "additionalProperties": false,
   "properties": {
     "$schema": { "type": "string" },
@@ -12,6 +12,7 @@
     "decisionRecord": { "type": "string", "pattern": "^DR-\\d{4}$" },
     "revision": { "type": "integer", "minimum": 1 },
     "description": { "type": "string", "minLength": 1 },
+    "decisions": { "const": "contracts/database/erd-decisions.json" },
     "snapshot": {
       "type": "object",
       "required": ["path", "revision", "pocketbaseVersion"],
@@ -23,13 +24,14 @@
       }
     },
     "semantics": {
+      "description": "The written part's delete and merge values, plus the delete behavior PocketBase showed for each relation shape on the snapshot's native run.",
       "type": "object",
-      "required": ["cascade", "restrict", "unset", "measured"],
+      "required": ["onDelete", "onAccountDelete", "merge", "measured"],
       "additionalProperties": false,
       "properties": {
-        "cascade": { "type": "string", "minLength": 1 },
-        "restrict": { "type": "string", "minLength": 1 },
-        "unset": { "type": "string", "minLength": 1 },
+        "onDelete": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+        "onAccountDelete": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+        "merge": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
         "measured": { "type": "object" }
       }
     },

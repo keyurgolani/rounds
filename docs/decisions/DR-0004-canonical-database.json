@@ -58,8 +58,8 @@
     "ROUNDS-34-L07",
     "ROUNDS-34-L08"
   ],
-  "prerequisites": ["ROUNDS-01-L01", "ROUNDS-01-L02", "ROUNDS-00B-L01", "ROUNDS-00A-L01/S3"],
-  "authorityBoundary": "contracts/database/erd.json",
+  "prerequisites": ["ROUNDS-01-L01", "ROUNDS-01-L02", "ROUNDS-01-L03/S2", "ROUNDS-00B-L01", "ROUNDS-00A-L01/S3"],
+  "authorityBoundary": "contracts/database/erd-decisions.json",
   "affectedPackages": [
     "command-gateway",
     "revision-audit",
@@ -72,12 +72,12 @@
     "execution-control-plane",
     "provider-gateway"
   ],
-  "versioning": "This record, contracts/database/erd.json, and contracts/database/benchmark.json share one revision counter, so a decision is cited as DR-0004@<revision>:<decision-id> (for example DR-0004@1:DB2) and a store as DR-0004@<revision>:<store-id>. A change to a decision's store, owning process, or owning leaf, or to an entity's store, partition, or delete behavior, is breaking; adding an entity, a planned table, or a limit is additive. A ratified revision pins the SHA-256 of the ERD, the receipt, their schemas, and the generated ADR, so an unapproved edit fails DR_APPROVAL_STALE.",
+  "versioning": "This record, the ERD's written part (contracts/database/erd-decisions.json), and contracts/database/benchmark.json share one revision counter, so a decision is cited as DR-0004@<revision>:<decision-id> (for example DR-0004@1:DB2) and a store as DR-0004@<revision>:<store-id>. A revision is needed only when one of those changes. A change to a decision's store, owning process, or owning leaf, or to a written entity's store, partition, or delete behavior, is breaking; adding an entity, a planned table, an index, or a limit is additive. The schema snapshot and the generated ERD (contracts/database/erd.json and docs/decisions/DR-0004-erd.md) are not governed: a PR that adds or changes a migration regenerates them, or DB_ERD_STALE fails it, and needs no revision of this record unless it changes a written field. A new table or relation field needs its written fields, so it comes with an additive revision. A ratified revision pins the SHA-256 of the written part, the receipt, their schemas, and the generated ADR, so an unapproved edit fails DR_APPROVAL_STALE. PocketBase is ratified by its line: a patch on the 0.22 line is a pin change, and a port to another line supersedes this record first.",
   "supersession": "A ratified revision is never edited. A leaf that needs another store, transaction owner, or process supersedes this record first: the new revision names DR-0004@<n> in supersedes, gives supersessionReason, and lists per decision whether it is kept or changed. Leaves citing a changed decision go back to blocked until they re-cite; leaves citing an unchanged one keep their citation. An unratified revision can be reverted.",
   "context": "Issue #18 (ROUNDS-02-L01). Spec lines cite rounds-review's docs/superpowers/specs/2026-10-18-rounds-review-board-design.md. A citation path@62d4eae:L<a>-L<b> is lines at the audited revision; facts about next were read at 6c4a5a3. Alternative A was the starting point because every store next added since R0 already works that way, and the SQLite benchmark (contracts/database/benchmark.json, synthetic data only) decides whether it holds.",
   "securityConsequences": {
     "account": "No runtime or privilege change here. DB2 and DB4 read the account from the bearer's auth record inside the command's transaction, so no command names its own account, and a record from another account answers like a missing one. Gateway-owned collections lose their REST write rules at each transfer.",
-    "privacy": "Rows keep the privacy floor DR-0002 gives them, and the ERD names each entity's partition column and what account deletion does to it. The byte store dedupes within one account only, so whether a file exists never shows across accounts (DB10). The benchmark seeds synthetic data and generates its accounts and passwords per run.",
+    "privacy": "Rows keep the privacy floor DR-0002 gives them, and the ERD names each entity's partition column and what account deletion does to it. The byte store dedupes within one account only, so whether a file exists never shows across accounts, and its bytes are read only through a route that checks the account (DB10). The benchmark seeds synthetic data and generates its accounts and passwords per run.",
     "secret": "Credentials appear by name only. No runtime writer uses the superuser; it keeps the bootstrap migration and operator use. Each service identity is a non-superuser auth record with its own secret, and its login answers only under its collection's exact name. #73's keyring encrypts provider keys, and later the byte store's files.",
     "publicBoundary": "#19's command routes sit behind nginx's existing /api/ pass-through to PocketBase: no new port, hostname, or route outside /api/. Each route authorizes the account inside its transaction (DB4), and #19's own PR carries the exposure review. The hook routes only the runner calls stay refused at the public URL, as nginx already refuses the admission, execution, snapshot, and share routes."
   },
@@ -88,9 +88,9 @@
       "status": "draft",
       "concern": "canonical-write-database",
       "store": "sqlite-data",
-      "process": "PocketBase (the pocketbase container), the only process that opens pb_data",
+      "process": "PocketBase (the pocketbase container), the only process that writes pb_data",
       "owningLeaf": "ROUNDS-02-L01",
-      "decision": "Career data has one canonical write database: PocketBase's SQLite file pb_data/data.db, in WAL mode. Canonical records, relations, versions, change sets, audit entries, idempotency results, and the outbox all live in it, so one SQLite transaction covers a command and everything it records. File bytes sit beside it in pb_data/storage (DB10). pb_data/logs.db is PocketBase's request log and never canonical. No other process opens these files while PocketBase runs.",
+      "decision": "Career data has one canonical write database: PocketBase's SQLite file pb_data/data.db, in WAL mode. Canonical records, relations, versions, change sets, audit entries, idempotency results, and the outbox all live in it, so one SQLite transaction covers a command and everything it records. File bytes sit beside it in pb_data/storage (DB10). pb_data/logs.db is PocketBase's request log and never canonical. No other process writes these files while PocketBase runs; #157's backup reader opens data.db read-only on the same host, since WAL mode needs its shared-memory file there.",
       "alternatives": [
         {
           "option": "A second database the runner owns (alternative C)",
@@ -102,13 +102,16 @@
         "One node: a deploy, restart, or crash makes the product unavailable until PocketBase is back (one replica, Recreate).",
         "A full disk stops every write, the audit and outbox rows with them.",
         "A long read transaction, such as a backup's, keeps the WAL from checkpointing, so the WAL grows until it ends.",
+        "A TRUNCATE, RESTART, or FULL checkpoint holds every writer until it ends, and a command waiting behind it can fail unacknowledged (limits). So no leaf runs one while commands run, and SQLite's passive autocheckpoint keeps the WAL in check.",
         "The live pragmas are journal_mode=wal and synchronous=1 (1 is NORMAL): a process crash loses no commit, but a power or kernel crash can lose the last commits before a checkpoint.",
-        "PocketBase's memory outgrows the shipped 512Mi limit at 10 accounts (limits), so under that load the kubelet would OOM-kill it until #176 raises the limit."
+        "PocketBase's memory outgrows the shipped 512Mi limit at 10 accounts (limits), so under that load the kernel's OOM killer would end the container until #176 raises the limit."
       ],
       "limits": [
-        "One writer: at most 252 commands per second with 10 accounts (249 with 1), on one Go scheduler thread standing in for the 500m CPU limit. More clients only queue longer: at 64 clients a command waited 1.2 s at p99 for the writer.",
-        "The WAL peaked at 391 MiB with 10 accounts and 44 MiB with 1.",
-        "PocketBase's RSS peaked at 682 MiB with 10 accounts and 325 MiB with 1, against the 512Mi limit, with GOMEMLIMIT at 460MiB. GOMEMLIMIT bounds only the Go heap, and PocketBase's SQLite driver allocates outside it, which likely holds the rest. #176 (ROUNDS-34-L07) ships a limit of at least 1Gi.",
+        "One writer: at most 293 commands per second with 10 accounts (207 with 1), on one Go scheduler thread standing in for the 500m CPU limit. That is a best case for the shipped limit: one core here is more than the 500m quota and never throttles, so the shipped throughput is at most this, and its hold times and lag at least those measured.",
+        "Commands per second at 10 accounts were 243 with 1 client, 293 with 4, 253 with 16, and 180 with 64: past the peak, more clients lost throughput and queued longer, and at 64 clients a command waited 1.4 s at p99 for the writer.",
+        "A TRUNCATE checkpoint under the steady load at 10 accounts took 5.9 s. The 7 commands in flight took up to 11.7 s end to end, and 1 of the phase's commands failed unacknowledged, so nothing was lost. Passive autocheckpoints fall inside the hold percentiles.",
+        "The WAL peaked at 393 MiB with 10 accounts and 43 MiB with 1.",
+        "PocketBase's RSS peaked at 663 MiB with 10 accounts and 309 MiB with 1, against the 512Mi limit, with GOMEMLIMIT at 460MiB. GOMEMLIMIT bounds only the Go heap, and PocketBase's SQLite driver allocates outside it, which likely holds the rest. #176 (ROUNDS-34-L07) ships a limit of at least 1Gi.",
         "It scales up, not out: no second replica and no second writer."
       ],
       "consequences": "#19 to #23 and every context build on one SQLite file, and throughput is bounded by one writer, which the receipt measures against the floor's load.",
@@ -124,7 +127,7 @@
       "store": "sqlite-data",
       "process": "the command's gateway hook route, in PocketBase's JSVM",
       "owningLeaf": "ROUNDS-02-L02",
-      "decision": "Each command runs in exactly one runInTransaction that its gateway route owns, and commits or rolls back whole. PocketBase queues all writes and explicit transactions through a single db connection (its v0.22.40 notes), so commands run one at a time and see each other as serial. Every read that decides the outcome (the expected versions, the account check, the invariant checks) goes through the transaction's Dao, never $app.dao(), so it sees the command's own writes and nothing that commits after it. No network call runs inside a transaction: provider calls, renders, and relays run outside and come back as new commands. Batch work (backfills, transfers, purges) commits at most 500 rows per transaction, as #14's migration does.",
+      "decision": "Each command runs in exactly one runInTransaction that its gateway route owns, and commits or rolls back whole. PocketBase 0.22 runs every write and explicit transaction on its one write connection, Dao.nonconcurrentDB() in its JSVM API, whose pragmas the receipt reads, so commands run one at a time and see each other as serial. Every read that decides the outcome (the expected versions, the account check, the invariant checks) goes through the transaction's Dao, never $app.dao(), so it sees the command's own writes and nothing that commits after it. No network call runs inside a transaction: provider calls, renders, and relays run outside and come back as new commands. Batch work (backfills, transfers, purges) commits at most 500 rows per transaction, as #14's migration does.",
       "alternatives": [
         {
           "option": "Optimistic transactions over several connections",
@@ -142,17 +145,15 @@
         "A command that throws after its writes leaves nothing behind (the before-commit failpoint), and its retry with the same command_id commits once."
       ],
       "limits": [
-        "Lock budget: at the steady rate with 10 accounts the writer is held 2 ms at p50 and 23 ms at p99 per command, and a command waits 23 ms at p99 for it.",
-        "Batches of at most 500 rows; the transfer's batches of 30 applications held the writer 92 ms at p99."
+        "Lock budget: at the steady rate with 10 accounts the writer is held 2 ms at p50 and 29 ms at p99 per command, and a command waits 29 ms at p99 for it, a best case for the shipped limit (DB1).",
+        "Batches of at most 500 rows; the transfer's batches of 30 applications held the writer 82 ms at p99.",
+        "A transfer's write freeze grows with its accounts: 4.01 s per account at the floor here, backup and transfer together, so about 224 accounts fit under 15 minutes on this machine, a best case for the shipped limit (DB1).",
+        "The largest single transaction, an account delete cascading the floor's legacy rows and #1's and #20's rows, isn't measured here; #76 (ROUNDS-14-L05) measures it before account deletion ships."
       ],
       "consequences": "#19's API is one function per command that takes the transaction's Dao. Throughput falls as hold time grows, so commands stay small and do their slow work outside.",
       "migrationImpact": "None now. #19 builds the gateway on it.",
       "rollbackImpact": "None until #19 ships; after that, a superseding revision.",
-      "sources": [
-        "spec 1942-1951",
-        "https://github.com/pocketbase/pocketbase/blob/master/CHANGELOG_16_22.md (v0.22.40)",
-        "contracts/database/benchmark.json"
-      ]
+      "sources": ["spec 1942-1951", "PocketBase 0.22's JSVM API: Dao.nonconcurrentDB()", "contracts/database/benchmark.json"]
     },
     {
       "id": "DB3",
@@ -162,7 +163,7 @@
       "store": "sqlite-data",
       "process": "PocketBase hook routes; the runner is only ever a caller",
       "owningLeaf": "ROUNDS-02-L02",
-      "decision": "The command gateway is a set of PocketBase hook routes under /api/rounds/commands/, registered as Caller rows in docs/security/server-writes.md. The SPA reaches them through nginx's existing /api/ pass-through, under its 1m body cap; no port, hostname, or route outside /api/ is added. The runner reaches PocketBase only through hook routes, never a collection write. On next it still makes 9 direct collection writes, all with the caller's token: the 7 provider and settings writes in backend/routers/ai.py move behind #73's routes, and the 2 in backend/routers/take_home.py end with #3's PR 4, which makes graded rows server-only. Its share and execution calls already use hook routes. PocketBase 0.22 loads *.pb.js only from the top of pb_hooks (checked on the native binary: a nested file never ran), so each package registers its routes in one top-level <package-id>.pb.js and keeps its code at its DR-0002@2 target path.",
+      "decision": "The command gateway is a set of PocketBase hook routes under /api/rounds/commands/, registered as Caller rows in docs/security/server-writes.md. The SPA reaches them through nginx's existing /api/ pass-through, under its 1m body cap; no port, hostname, or route outside /api/ is added. The runner reaches PocketBase only through hook routes, never a collection write. At 6c4a5a3 it still makes 9 direct collection writes, all with the caller's token: the 7 provider and settings writes in backend/routers/ai.py move behind #73's routes, and the 2 in backend/routers/take_home.py end with #3's PR 4, which makes graded rows server-only. Its share and execution calls already use hook routes. PocketBase 0.22 loads *.pb.js only from the top of pb_hooks (checked on the native binary: a nested file never ran), so each package registers its routes in one top-level <package-id>.pb.js and keeps its code at its DR-0002@2 target path.",
       "alternatives": [
         {
           "option": "Routes in the runner that call PocketBase's REST API",
@@ -237,7 +238,7 @@
       "store": "sqlite-data",
       "process": "the command's gateway hook route",
       "owningLeaf": "ROUNDS-02-L03",
-      "decision": "Command idempotency uses #1's admission_commands, keyed by its unique (account, command_id) index, with the v7 id check it already enforces. #20 adds domain-command rows kept 30 days; they cascade with the account, and the 30-day expiry bounds that cascade. A replay with the same fingerprint returns the stored result and writes nothing, and a changed body under the same id is a conflict. #22's due-work removes expired rows, and #20 owns the behavior.",
+      "decision": "Command idempotency uses #1's admission_commands, keyed by its unique (account, command_id) index, with the v7 id check it already enforces. #20 adds domain-command rows kept 30 days; they cascade with the account, and the 30-day expiry bounds that cascade. #20's body keys its rows on a non-cascading account_id; this record reads adopting #1's store as keeping its cascading relation instead, bounded by the 30-day expiry, as #18's body says. A replay with the same fingerprint returns the stored result and writes nothing, and a changed body under the same id is a conflict. #22's due-work removes expired rows, and #20 owns the behavior.",
       "alternatives": [
         {
           "option": "A new idempotency table for domain commands",
@@ -309,17 +310,22 @@
       ],
       "failureModes": [
         "A relay that applies events and dies before its checkpoint redelivers them; the bench's mid-relay failpoint shows they're skipped once.",
-        "A relay with a lapsed lease keeps writing; its fencing token is refused (the bench's fenced acks).",
+        "A relay with a lapsed lease keeps writing; its fencing token is refused. The native run's mid-relay step acks once more under the crashed relay's old token and is fenced, and pocketbase/tests/test_bench_hooks.py checks that a takeover fences the old holder.",
         "A crash after commit and before the relay leaves events in the outbox; the next holder relays them once (the after-commit failpoint)."
       ],
       "limits": [
-        "Relay lag p95 1.2 s at the steady rate with 10 accounts, against 2 s, and 291 ms with 1. It is the closest of the five targets, so #22 sizes its batches and poll interval against it.",
-        "Read-your-writes p99 79 ms through the projection, against 5 s."
+        "Relay lag p95 105 ms at the steady rate with 10 accounts, against 2 s, and 61 ms with 1, counted over the phase's own events once the sweep's backlog had drained; #22 sizes its batches and poll interval against it. The tail is the checkpoint's: p99.9 11.7 s at 10 accounts while a TRUNCATE checkpoint held the writer (DB1).",
+        "Read-your-writes p99 191 ms through the projection, against 5 s, with 3 of 184 reads taking the canonical fallback."
       ],
       "consequences": "#22 runs the relay in the runner and #23 the projectors in PocketBase; both write through dispatcher_service.",
       "migrationImpact": "#22 and #23 add their tables in additive migrations with null rules.",
       "rollbackImpact": "Their migrations have down steps; no canonical row depends on a projection.",
-      "sources": ["spec 2056-2067", "docs/security/server-writes.md", "contracts/database/benchmark.json"]
+      "sources": [
+        "spec 2056-2067",
+        "docs/security/server-writes.md",
+        "contracts/database/benchmark.json",
+        "pocketbase/tests/test_bench_hooks.py"
+      ]
     },
     {
       "id": "DB8",
@@ -327,27 +333,28 @@
       "status": "draft",
       "concern": "backup-restore",
       "store": "n/a:a procedure over sqlite-data and files; #157 names the backup target",
-      "process": "an operator procedure with a reader process beside PocketBase, owned by #157",
+      "process": "an operator procedure with a read-only reader process beside PocketBase, owned by #157",
       "owningLeaf": "ROUNDS-32-L03",
       "decision": "#157 owns backup and restore. The method is an online, SQLite-consistent copy of data.db by a reader (SQLite's backup API, or VACUUM INTO), then the byte store, with file deletes held until the next backup has run. A backup then stops nothing. PocketBase's own backup API zips all of pb_data while holding the writer, and today's procedure (docs/operations.md) stops PocketBase for as long as its tar takes; the receipt measured all three. A restore runs on the same image tag and is verified before traffic returns. docs/operations.md stays as it is until #157 changes it.",
       "alternatives": [
         {
           "option": "Stop PocketBase and tar pb_data (today)",
-          "reason": "A full outage for the archive's length: 25.37 s at 10 accounts, and 52.14 s at 1 account with its 2 GiB of files."
+          "reason": "A full outage for the archive's length: 25.21 s at 10 accounts, and 71.48 s at 1 account with its 2 GiB of files."
         },
         {
           "option": "PocketBase's backup API",
-          "reason": "It holds the writer for the whole zip: commands waited up to 8.5 s behind its 12.9 s zip at 10 accounts, and up to 15.6 s at 1 account with its files."
+          "reason": "It holds the writer for the whole zip: commands waited up to 8.1 s behind its 12.9 s zip at 10 accounts, and up to 14.8 s at 1 account with its files."
         }
       ],
       "failureModes": [
         "A file deleted before the backup that last saw it can't be restored; deletes wait for the next backup.",
         "A copy taken mid-write by a plain file copy can be torn; only SQLite's own copy is consistent.",
-        "A restore onto another image tag could migrate on first start; restores use the backup's tag."
+        "A restore onto another image tag could migrate on first start; restores use the backup's tag.",
+        "A restore needs the runner's AI_KEY_SECRET, which pb_data and so the backup don't hold: without it, what the runner sealed or keyed with it stops working, so #157's procedure keeps the key with the deployment's secrets."
       ],
       "limits": [
-        "Restore at 10 accounts: 304.04 s against 30 minutes (extrapolated): the database restored and checked in 2.76 s, and 100 GB of files at the 2 GiB sample's 332 MB/s.",
-        "Taking the online copy at 10 accounts: VACUUM INTO 11.9 s and SQLite's backup API 3.59 s, with commands waiting at most 84 ms meanwhile."
+        "Restore at 10 accounts: 381.74 s against 30 minutes (extrapolated): the database restored and checked in 2.23 s, and 100 GB of files at the 2 GiB sample's 263 MB/s.",
+        "Taking the online copy at 10 accounts: VACUUM INTO 5.4 s and SQLite's backup API 3.8 s, with commands waiting at most 6 ms meanwhile."
       ],
       "consequences": "#157 writes the procedure and its rehearsal; #76 holds file purges until a backup has run.",
       "migrationImpact": "None here. #157 changes docs/operations.md.",
@@ -367,30 +374,26 @@
       "store": "n/a:a binary version, not a store",
       "process": "the pocketbase image build (pocketbase/Dockerfile)",
       "owningLeaf": "ROUNDS-02-L01",
-      "decision": "Retain PocketBase and stay on its 0.22 line, which upstream still patches. Stage P3 (ROUNDS-02-L01/P3) moves the pin to 0.22.57, the newest 0.22 release, which adds no database migration and changes no hook API. The port to the current major line is deferred until a trigger in the version analysis fires. From #19 on, new hook code reaches PocketBase's API through one module, pocketbase/pb_hooks/lib/pocketbase.js, so that port rewrites one module and the migrations instead of every package.",
+      "decision": "Retain PocketBase and stay on its 0.22 line, which upstream patched through 0.22.57. Stage P3 (ROUNDS-02-L01/P3) moves the pin to 0.22.57, the newest 0.22 release, which adds no database migration and changes no hook API. This record ratifies the line: a patch on it is a pin change, and a port to another line supersedes the record first. The port is deferred until a trigger in the version analysis fires. From #19 on, new hook code reaches PocketBase's API through one module, pocketbase/pb_hooks/lib/pocketbase.js, so that port rewrites one module and the migrations instead of every package.",
       "alternatives": [
         {
-          "option": "Port to the current major line before #19",
+          "option": "Port to a newer line before #19",
           "reason": "Rewrites all 38 migrations and every containment hook now, for no target the benchmark misses."
         },
         {
-          "option": "Keep 0.22.22 as pinned",
-          "reason": "Upstream's later 0.22 releases carry its backported fixes; staying behind them buys nothing."
+          "option": "Replace PocketBase",
+          "reason": "PocketBase holds auth, files, and every containment store on next, and runs only on its embedded SQLite; replacing it means alternative C's two authorities or a rewrite of all of them (rejected options)."
         }
       ],
       "failureModes": [
-        "Upstream stops publishing 0.22 releases, so later fixes need the port; that is the first trigger.",
+        "Upstream publishes no further 0.22 release, so a later change needs the port; that is the first trigger.",
         "Upstream archived its GitHub repository on 2026-10-26 and its README points to a new home; the Dockerfile still fetches the release zip from GitHub against its pinned SHA-256, and a build fails rather than take another file."
       ],
       "limits": ["Every hook and migration on next is written against 0.22's API."],
-      "consequences": "P3 is a pin change; the port, when a trigger fires, is its own leaf with the strategy below.",
+      "consequences": "P3 is a pin change on the ratified line; the port, when a trigger fires, is its own leaf with the strategy below, and supersedes this record first.",
       "migrationImpact": "None within the 0.22 line. The port's migration plan is in the version analysis.",
       "rollbackImpact": "Within the 0.22 line, roll back by image tag. The port's boundary is in the version analysis.",
-      "sources": [
-        "https://pocketbase.io/v023upgrade/jsvm/",
-        "https://github.com/pocketbase/pocketbase/blob/master/CHANGELOG_16_22.md (v0.22.23 to v0.22.57)",
-        "https://github.com/pocketbase/pocketbase"
-      ]
+      "sources": ["https://pocketbase.io/v023upgrade/jsvm/", "PocketBase's 0.22 release line"]
     },
     {
       "id": "DB10",
@@ -400,7 +403,7 @@
       "store": "files",
       "process": "PocketBase file storage, written by gateway routes",
       "owningLeaf": "ROUNDS-10-L01",
-      "decision": "Bytes live in PocketBase's file storage, pb_data/storage, behind one account-scoped collection, account_blobs: one row per stored file, its SHA-256, size, privacy class, and retention metadata, unique on (account_id, sha256). Identical bytes in two accounts are two files. #73's keyring encrypts files once its keys exist, and older files are rewrapped as #22 due-work. #157's backup copies the files after the database, and #76 purges a row, then its file once the next backup has run. #53 (ROUNDS-10-L01) writes it first. #4's snapshot markup files stay where they are and are adopted as they stand. #6's render outputs get a path only: the same collection, written by complete as execution_service, held with the containment release. users.avatar, PocketBase's default file field, has no writer in the app and stays as it is. PocketBase's S3 setting is the path past one disk.",
+      "decision": "Bytes live in PocketBase's file storage, pb_data/storage, behind one account-scoped collection, account_blobs: one row per stored file, its SHA-256, size, privacy class, and retention metadata, unique on (account_id, sha256). Identical bytes in two accounts are two files. Its file field is protected and its REST rules are null, so bytes are read only through a gateway route that checks the account, never from a URL alone. #73's keyring encrypts files once its keys exist, and older files are rewrapped as #22 due-work. #157's backup copies the files after the database, and #76 purges a row, then its file once the next backup has run. #53 (ROUNDS-10-L01) writes it first. #4's snapshot markup files stay where they are and are adopted as they stand. #6's render outputs get a path only: the same collection, written by complete as execution_service, held with the containment release. users.avatar, PocketBase's default file field, has no writer in the app, and this decision doesn't adopt it. PocketBase's S3 setting is the path past one disk.",
       "dedupe": "Within one account only. The unique key starts with account_id, and a lookup never reads another account's rows, so uploading bytes can't reveal whether another account holds them.",
       "alternatives": [
         {
@@ -414,13 +417,14 @@
       ],
       "failureModes": [
         "A file whose row commits but whose write fails leaves a row without bytes; the row is written after the file, and a sweep finds orphans.",
+        "A file field that isn't protected is served to anyone holding its URL; account_blobs' field is protected, so a URL alone never reads it.",
         "Bytes written before #73's keys exist are plaintext until rewrapped.",
         "The disk fills with bytes before rows; the PVC sizing in the storage plan sets the floor."
       ],
       "limits": [
-        "The 2 GiB sample copied at 332 MB/s in a restore; 10 GB per account is extrapolated from that rate, labeled so in the receipt."
+        "The 2 GiB sample copied at 263 MB/s in a restore; 10 GB per account is extrapolated from that rate, labeled so in the receipt."
       ],
-      "consequences": "#53, #91, #6, and #4 share one byte store with one dedupe rule and one purge path.",
+      "consequences": "#53, #91, #6, and #4 share one byte store with one dedupe rule, one read path, and one purge path.",
       "migrationImpact": "#53 adds account_blobs in an additive migration; #4's files are adopted without moving.",
       "rollbackImpact": "#53's migration has a down step while account_blobs is empty; after files land, a forward fix.",
       "sources": ["spec 2020-2028", "docs/security/server-writes.md", "contracts/database/benchmark.json"]
@@ -441,7 +445,7 @@
       "id": "B",
       "name": "PocketBase as a Go framework",
       "runnerWritePath": "Go routes in a custom PocketBase build; the runner calls them as in A.",
-      "imageBuild": "A CI-built Go binary instead of the published release, rebuilt and re-pinned for every upstream fix.",
+      "imageBuild": "A CI-built Go binary instead of the published release, rebuilt and re-pinned for every upstream release.",
       "bindings": "Go types for every command contract, which #182 doesn't generate.",
       "nginxChange": "None.",
       "verdict": "rejected",
@@ -478,8 +482,8 @@
     {
       "id": "fastapi-sqlite",
       "option": "FastAPI writing the SQLite file directly",
-      "reason": "A second writer outside PocketBase's write queue that skips its rules, hooks, and realtime events, on a volume only PocketBase mounts.",
-      "source": "docker-compose.prod.yml@62d4eae:L38-L39; https://github.com/pocketbase/pocketbase/blob/master/CHANGELOG_16_22.md (v0.22.40)"
+      "reason": "A second writer outside PocketBase's write connection that skips its rules, hooks, and realtime events, on a volume only PocketBase mounts.",
+      "source": "docker-compose.prod.yml@62d4eae:L38-L39"
     },
     {
       "id": "postgres-pocketbase",
@@ -488,11 +492,18 @@
       "source": "https://pocketbase.io/faq/"
     }
   ],
-  "benchmark": {"receipt": "contracts/database/benchmark.json", "result": "pass"},
+  "benchmark": {
+    "receipt": "contracts/database/benchmark.json",
+    "revision": 1,
+    "result": "pass",
+    "seedReading": "the floor's 50,000 Activities, Actions, and audit entries is read as one combined count, 40,000 activities and actions plus 10,000 audit entries per account, the lighter of its two readings"
+  },
   "pocketbase": {
-    "pin": "0.22.22",
+    "line": "0.22",
+    "pinAtRatification": "0.22.22",
     "decision": "retain the 0.22 line",
-    "summary": "PocketBase stays, on the 0.22 line. P3 moves the pin to 0.22.57; the major-line port waits for a trigger, and new hook code goes through one module so the port stays bounded. The break sites below are what that port would touch on next.",
+    "countedAt": "6c4a5a345c8202ff29329ef01ed7ac14dfe5677c",
+    "summary": "PocketBase stays, on the 0.22 line, which this record ratifies. P3 moves the pin to 0.22.57, the newest 0.22 release; the port to another line waits for a trigger, and new hook code goes through one module so the port stays bounded. The break sites below are what that port would touch.",
     "breakSites": [
       {
         "id": "migrations",
@@ -520,14 +531,14 @@
         "site": "1700006000_account_scope_rules.js",
         "count": 1,
         "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (@request.data becomes @request.body)",
-        "note": "#9's rules, the only file that uses it."
+        "note": "The only file that uses it."
       },
       {
         "id": "hook-registrations",
         "site": "pocketbase/pb_hooks/*.pb.js (11 files)",
-        "count": 54,
+        "count": 56,
         "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (handlers call e.next(); onAfterBootstrap becomes onBootstrap; path params use {id}; requireRecordAuth becomes requireAuth)",
-        "note": "20 routes, 3 routerUse middlewares, 2 cronAdd jobs, 4 onAfterBootstrap hooks, 23 record and model hooks, and 2 CLI commands, listed in server-writes.md and account-scope.v1.json."
+        "note": "20 routes, 3 routerUse middlewares, 2 cronAdd jobs, 4 onAfterBootstrap hooks, 25 record and model hooks, and 2 CLI commands, listed in server-writes.md and account-scope.v1.json."
       },
       {
         "id": "dao-and-transactions",
@@ -552,14 +563,14 @@
       },
       {
         "id": "login-guards",
-        "site": "execution.pb.js, share_secrets.pb.js, demo.pb.js",
-        "count": 3,
+        "site": "admission.pb.js, demo.pb.js, execution.pb.js, share_secrets.pb.js",
+        "count": 5,
         "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (auth request hooks change name and take e.next())",
-        "note": "The sign-in guards of #3, #12, and #177 on PocketBase's password and OAuth2 hooks."
+        "note": "5 sign-in hooks in 4 files: the guards of #1, #3, #12, and #177 on PocketBase's password and OAuth2 hooks."
       },
       {
         "id": "system-migration-name",
-        "site": "scripts/migration-lint (D10's 1702134273)",
+        "site": "scripts/lint_migrations.py and scripts/migration-lint-allowlist.json (D10's 1702134273)",
         "count": 1,
         "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (system migrations are squashed)",
         "note": "D10 names a migration that follows 0.22's own system migration."
@@ -568,7 +579,7 @@
         "id": "admins-denials",
         "site": "frontend/nginx.conf, harness/verify_deployment.py (deployment.admins.present)",
         "count": 2,
-        "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (/api/admins is gone)",
+        "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (implied: admins become _superusers records, so /api/admins goes)",
         "note": "The nginx refusal and the verifier's check both name /api/admins."
       },
       {
@@ -597,16 +608,16 @@
         "site": "#172's normalization.v1.json (not on next)",
         "count": 0,
         "upstream": "n/a: a repository pin, not an upstream change",
-        "note": "#172 cites this record's pin when it lands."
+        "note": "#172 cites this record's line when it lands."
       }
     ],
     "strategy": "Within the 0.22 line (P3): a pin change with no migration, no hook change, and no data change; CI's harness checks the new image. New hook code goes through pocketbase/pb_hooks/lib/pocketbase.js, the only module that calls the Dao, runInTransaction, requestInfo, and the record API. When a trigger fires, the port is its own leaf: each deployment first runs the last 0.22 release, then the new image; fresh installs get a squashed baseline (one current-format snapshot plus the seed, the admin bootstrap, and the JSON size step) that passes #1's migration lint; existing installs keep their _migrations history; and the port re-runs this benchmark on the new version.",
-    "freezeWindow": "Within the 0.22 line, none: the new binary starts on the same data with no migration. For the port, the new binary's first start, which runs its system migrations over the whole database; the port measures it on a copy at the floor against the 15-minute freeze target. For scale, a startup schema change at 10 accounts here was down 6.95 s.",
+    "freezeWindow": "Within the 0.22 line, none: the new binary starts on the same data with no migration. For the port, the new binary's first start, which runs its system migrations over the whole database; the port measures it on a copy at the floor against the 15-minute freeze target. For scale, a startup schema change at 10 accounts here was down 7.65 s.",
     "rollbackBoundary": "Within the 0.22 line, roll back by image tag at any time. For the port, roll back by image tag before the new binary's first start; after it, only the pre-upgrade backup, which loses later writes, or a forward fix (spec 2699).",
     "triggers": [
-      "Upstream stops publishing 0.22 releases with backported fixes.",
-      "A fix the deployment needs lands only on the current major line.",
-      "A leaf needs a feature only the current major line has."
+      "Upstream publishes no further 0.22 release.",
+      "A fix the deployment needs lands only on a newer line.",
+      "A leaf needs a feature only a newer line has."
     ]
   },
   "identifiers": [
@@ -752,9 +763,9 @@
       "location": "pb_data/data.db (with -wal and -shm)",
       "growthAtFloor": "0.12 GB at 1 account and 1.19 GB at 10 accounts (about 0.12 GB each), synthetic rows at the floor",
       "writeAmplification": "5.08 rows per command, weighted over the mix",
-      "compaction": "Expired idempotency rows, relayed outbox rows, and #21's tombstones are #22 due-work, in batches of at most 500 rows.",
-      "lockBudget": "hold p99 23 ms, queue p99 23 ms at the steady rate; batches at most 500 rows",
-      "sizing": "The WAL peaked at 391 MiB; keep twice the database size free for VACUUM INTO and a restore copy. PocketBase's RSS reached 682 MiB at 10 accounts, so its memory limit is at least 1Gi (#176)."
+      "compaction": "Expired idempotency rows, relayed outbox rows, and #21's tombstones are #22 due-work, in batches of at most 500 rows; SQLite's passive autocheckpoint folds the WAL back, and no job runs a blocking checkpoint under load.",
+      "lockBudget": "hold p99 29 ms, queue p99 29 ms at the steady rate, a best case; batches at most 500 rows",
+      "sizing": "The WAL peaked at 393 MiB; keep twice the database size free for VACUUM INTO and a restore copy. PocketBase's RSS reached 663 MiB at 10 accounts, so its memory limit is at least 1Gi (#176)."
     },
     {
       "store": "files",
@@ -808,27 +819,43 @@
     },
     {
       "credential": "ROUNDS_ADMISSION_SECRET",
-      "holder": "the runner",
-      "disposition": "Kept: the runner key #1's routes require beside the caller's bearer; only the runner holds it, and no client does.",
+      "holder": "PocketBase and the runner",
+      "disposition": "Kept: the shared key #1's routes require beside the caller's bearer; PocketBase checks it, the runner sends it, and no client holds it.",
       "leaf": "ROUNDS-00A-L01"
+    },
+    {
+      "credential": "AI_KEY_SECRET",
+      "holder": "the runner",
+      "disposition": "Kept: the runner's key for what it seals or keys, stored provider keys among them (docs/operations.md), kept apart from the backups (DB8); #73's keyring takes over the provider keys.",
+      "leaf": "ROUNDS-14-L02"
     }
   ],
   "changes": [
     {
       "authority": "containment-stores",
       "disposition": "ratified in place, and #6's and #177's stores get a path (containment)",
-      "dependsOn": ["ROUNDS-00A-L01/S3", "ROUNDS-00A-L03", "ROUNDS-00B-L03", "ROUNDS-00B-L04"],
+      "dependsOn": [
+        "ROUNDS-00A-L01/S3",
+        "ROUNDS-00A-L02",
+        "ROUNDS-00A-L03",
+        "ROUNDS-00A-L04",
+        "ROUNDS-00B-L01",
+        "ROUNDS-00B-L02",
+        "ROUNDS-00B-L03",
+        "ROUNDS-00B-L04",
+        "ROUNDS-00B-L06"
+      ],
       "rollback": "Nothing moves, so nothing rolls back; a superseding revision would transfer a store under spec 2699."
     },
     {
       "authority": "pocketbase-version",
-      "disposition": "retain the 0.22 line; P3 moves the pin to 0.22.57; the major port waits for a trigger (DB9)",
+      "disposition": "retain the 0.22 line; P3 moves the pin to 0.22.57; the port to another line waits for a trigger (DB9)",
       "dependsOn": ["ROUNDS-02-L01/P3"],
       "rollback": "P3 rolls back by image tag; the port's boundary is the new binary's first start (DB9)."
     },
     {
       "authority": "byte-store",
-      "disposition": "account_blobs in pb_data/storage, deduped per account (DB10)",
+      "disposition": "account_blobs in pb_data/storage, deduped per account, read through the gateway (DB10)",
       "dependsOn": ["ROUNDS-10-L01", "ROUNDS-14-L02", "ROUNDS-32-L03", "ROUNDS-14-L05"],
       "rollback": "#53's migration drops account_blobs while it is empty; after files land, a forward fix."
     },
@@ -866,33 +893,29 @@
     {
       "id": "runner-writes-ai",
       "citation": "backend/routers/ai.py@62d4eae:L367-L542",
-      "now": "7 provider and settings writes in ai.py, all with the caller's token (DB3)."
+      "now": "7 provider and settings writes in ai.py at 6c4a5a3, all with the caller's token (DB3)."
     },
     {
       "id": "runner-writes-take-home",
       "citation": "backend/routers/take_home.py@62d4eae:L164-L167",
-      "now": "2 take-home writes in take_home.py with the caller's token, until #3's PR 4."
+      "now": "2 take-home writes in take_home.py at 6c4a5a3 with the caller's token, until #3's PR 4."
     },
     {
       "id": "runner-writes-share",
-      "citation": "backend/routers/share.py@62d4eae:L85-L214",
+      "citation": "backend/routers/share.py@62d4eae:L1",
       "now": "3 share writes at the audited revision; on next every share write is a hook route."
     },
-    {
-      "id": "pin",
-      "citation": "pocketbase/Dockerfile@62d4eae:L3-L11",
-      "now": "0.22.22 with SHA-256 checks for amd64 and arm64; P3 moves it to 0.22.57."
-    },
+    {"id": "pin", "citation": "pocketbase/Dockerfile@62d4eae:L3-L11", "now": "0.22.22 at 6c4a5a3, with SHA-256 checks for amd64 and arm64."},
     {"id": "sdk", "citation": "frontend/package.json@62d4eae:L29", "now": "^0.26.8, resolved to 0.26.8."},
     {
       "id": "signup-hook",
       "citation": "pocketbase/pb_hooks/main.pb.js@62d4eae:L3-L9",
-      "now": "11 .pb.js files with 20 routes; runInTransaction at 8 sites."
+      "now": "11 .pb.js files with 20 routes at 6c4a5a3; runInTransaction at 8 sites."
     },
     {
       "id": "admin-bootstrap",
       "citation": "pocketbase/pb_migrations/1700000500_bootstrap_admin.js@62d4eae:L33-L44",
-      "now": "Unchanged; 38 migrations, all with new Dao(."
+      "now": "Unchanged; 38 migrations at 6c4a5a3, all with new Dao(."
     },
     {"id": "pb-data-mount", "citation": "docker-compose.prod.yml@62d4eae:L38-L39", "now": "Only pocketbase mounts pb_data."},
     {
@@ -918,22 +941,30 @@
     }
   ],
   "deferred": [
-    {"item": "The major-line PocketBase port", "detail": "Waits for a DB9 trigger; it would be its own leaf under scope decision 3."},
+    {
+      "item": "The port to another PocketBase line",
+      "detail": "Waits for a DB9 trigger; it would be its own leaf under scope decision 3, and supersedes this record first."
+    },
     {
       "item": "The full 10 GB of bytes per account at 10 accounts",
       "detail": "Extrapolated from a measured 2 GiB sample, labeled extrapolated in the receipt."
     },
     {
       "item": "Real cgroup limits",
-      "detail": "macOS has none; one Go scheduler thread and GOMEMLIMIT stand in, and RSS is reported against 512Mi."
+      "detail": "macOS has none; one Go scheduler thread and GOMEMLIMIT stand in, and RSS is reported against 512Mi. One core here is more than the 500m quota and never throttles, so throughput, hold times, and lag are a best case for the shipped limits."
     },
     {
       "item": "A CI benchmark job",
       "detail": "A full run takes about half an hour of one machine, too long for the shared CI pool; CI runs the bench's unit tests."
     },
     {
+      "item": "PocketBase's memory limit",
+      "detail": "RSS reached 663 MiB at 10 accounts, over the shipped 512Mi (DB1); #176 (ROUNDS-34-L07) ships a limit of at least 1Gi with its release."
+    },
+    {
       "item": "Resizing the PVC",
       "detail": "The storage plan sizes it; #176 sets the shipped default, and only the k8s comment changes here."
-    }
+    },
+    {"item": "The account delete", "detail": "The largest single transaction isn't measured here (DB2); #76 (ROUNDS-14-L05) measures it."}
   ]
 }

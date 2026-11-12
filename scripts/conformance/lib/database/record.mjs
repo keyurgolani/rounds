@@ -3,11 +3,14 @@
 // one store, one owning process and leaf, alternatives, failure modes,
 // limits, and consequences; alternatives A to D and the three rejections;
 // invariants, containment dispositions, identifiers, the storage plan, the
-// PocketBase analysis, credentials, the export gate, and every changed
-// authority with its order and rollback. Citations at the audited revision
-// resolve there, and #16's storage and target_path cells cite DR-0004.
+// PocketBase analysis with its ratified line and the commit it counted,
+// credentials, the export gate, and every changed authority with its order
+// and rollback. Citations at the audited revision resolve there, and #16's
+// storage and target_path cells cite DR-0004.
 
 import { finding, jsonLine } from '../context.mjs';
+import { dockerfilePin, minor } from './benchmark.mjs';
+import { ERD_DOC_PATH } from './erd.mjs';
 
 export const RECORD_PATH = 'docs/decisions/DR-0004-canonical-database.json';
 export const ADR_PATH = 'docs/decisions/DR-0004-canonical-database.md';
@@ -110,6 +113,16 @@ export function checkRecord(ctx, { record, text, resolveLeaf, erd, matrix, matri
     for (const k of ['disposition', 'dependsOn', 'rollback']) if (!nonEmpty(c[k])) f('DB_CHANGE_INCOMPLETE', ['changes', i], `${c.authority} has no ${k}`);
     for (const ref of c.dependsOn || []) leaf(ref, ['changes', i, 'dependsOn'], `${c.authority} depends on`);
   });
+  // Ratifying the containment stores in place comes after each leaf that built one.
+  const contain = changes.find((c) => c.authority === 'containment-stores');
+  if (contain && Array.isArray(contain.dependsOn) && contain.dependsOn.length) {
+    const after = new Set(contain.dependsOn.map((ref) => String(ref).split('/')[0]));
+    for (const c of record.containment || []) {
+      if (c.disposition === 'ratified' && c.leaf && !after.has(c.leaf)) {
+        f('DB_CHANGE_INCOMPLETE', ['changes', changes.indexOf(contain), 'dependsOn'], `containment-stores ratifies ${c.store} in place but doesn't come after ${c.leaf}, which built it`);
+      }
+    }
+  }
 
   // Credentials: the superuser and every service identity, each with a
   // disposition and the leaf that retires or owns it.
@@ -134,11 +147,22 @@ export function checkRecord(ctx, { record, text, resolveLeaf, erd, matrix, matri
     for (const k of ['location', 'growthAtFloor', 'writeAmplification', 'compaction', 'lockBudget', 'sizing']) if (!nonEmpty(s[k])) f('DB_RECORD_INCOMPLETE', ['storagePlan', i], `${s.store} has no ${k}`);
   });
 
-  // PocketBase: the pin is the Dockerfile's.
+  // PocketBase: DR-0004 ratifies a line, so a patch on it is a pin change and
+  // a port to another line supersedes the record first. The pin at
+  // ratification is history, and the counts name the commit they counted.
   const pb = record.pocketbase || {};
-  for (const k of ['pin', 'decision', 'breakSites', 'strategy', 'freezeWindow', 'rollbackBoundary', 'triggers']) if (!nonEmpty(pb[k])) f('DB_RECORD_INCOMPLETE', ['pocketbase'], `pocketbase.${k} is missing`);
-  const pinned = /^ARG PB_VERSION=(\S+)$/m.exec(dockerfile || '')?.[1];
-  if (pb.pin && pinned && pb.pin !== pinned) f('DB_VERSION_MISMATCH', ['pocketbase', 'pin'], `DR-0004 ratifies PocketBase ${pb.pin}, but ${DOCKERFILE_PATH} pins ${pinned}`);
+  for (const k of ['line', 'pinAtRatification', 'decision', 'countedAt', 'breakSites', 'strategy', 'freezeWindow', 'rollbackBoundary', 'triggers']) {
+    if (!nonEmpty(pb[k])) f('DB_RECORD_INCOMPLETE', ['pocketbase'], `pocketbase.${k} is missing`);
+  }
+  const pinned = dockerfilePin(dockerfile);
+  if (!pinned) f('DB_VERSION_MISMATCH', ['pocketbase', 'line'], `${DOCKERFILE_PATH} has no readable ARG PB_VERSION=<x.y.z>, so the pin can't be checked against DR-0004's line`);
+  else if (pb.line && minor(pinned) !== pb.line) f('DB_VERSION_MISMATCH', ['pocketbase', 'line'], `${DOCKERFILE_PATH} pins ${pinned}, off DR-0004's ${pb.line} line; a port to another line supersedes DR-0004 first`);
+  if (pb.line && pb.pinAtRatification && minor(pb.pinAtRatification) !== pb.line) f('DB_VERSION_MISMATCH', ['pocketbase', 'pinAtRatification'], `the pin at ratification ${pb.pinAtRatification} is off the ${pb.line} line`);
+  if (pb.line && typeof pb.decision === 'string' && !pb.decision.includes(pb.line)) f('DB_VERSION_MISMATCH', ['pocketbase', 'decision'], `decision 9 "${pb.decision}" doesn't name the ${pb.line} line it ratifies`);
+  if (pb.countedAt) {
+    const t = ctx.tree(pb.countedAt);
+    if (!t.ok) f('DB_UNKNOWN_REF', ['pocketbase', 'countedAt'], `the version analysis counted ${pb.countedAt}, which can't be read: ${t.reason}`);
+  }
   (pb.breakSites || []).forEach((b, i) => {
     if (!nonEmpty(b.upstream)) f('DB_RECORD_INCOMPLETE', ['pocketbase', 'breakSites', i], `break site ${b.id} cites no upstream release note`);
   });
@@ -167,7 +191,7 @@ export function checkRecord(ctx, { record, text, resolveLeaf, erd, matrix, matri
   // that exists and a decision, store, or entity this record and its ERD name.
   const known = new Set([...decisions.map((d) => d.id), ...stores, ...entities]);
   for (const file of ctx.files()) {
-    if (!/^(docs|contracts)\/.+\.(md|json)$/.test(file) || file === ADR_PATH || file === MATRIX_PATH) continue;
+    if (!/^(docs|contracts)\/.+\.(md|json)$/.test(file) || [ADR_PATH, MATRIX_PATH, ERD_DOC_PATH].includes(file)) continue;
     const body = ctx.read(file);
     if (!body.includes('DR-0004@')) continue;
     body.split('\n').forEach((line, i) => {

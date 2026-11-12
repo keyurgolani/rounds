@@ -3,16 +3,29 @@
   "registry": "rounds-erd",
   "decisionRecord": "DR-0004",
   "revision": 1,
-  "description": "DR-0004's ERD: every PocketBase collection and system table at the snapshot's revision, the platform tables and stores DR-0004 places, and every relation with its cardinality, account partition, delete behavior, merge behavior, and indexes. The mechanical fields come from schema-snapshot.json through node scripts/conformance/run.mjs --write; the written fields are kept.",
+  "description": "DR-0004's ERD, generated: every PocketBase collection and system table at the snapshot's revision, the platform tables and stores DR-0004 places, and every relation with its cardinality, account partition, delete behavior, merge behavior, and indexes. The written fields come from erd-decisions.json, which DR-0004 ratifies; the rest comes from schema-snapshot.json through node scripts/conformance/run.mjs --write.",
+  "decisions": "contracts/database/erd-decisions.json",
   "snapshot": {
     "path": "contracts/database/schema-snapshot.json",
     "revision": "42673ffd14a7f73164ea6356200ff0071710c3ef",
     "pocketbaseVersion": "0.22.22"
   },
   "semantics": {
-    "cascade": "Deleting the target deletes this row in the same transaction.",
-    "restrict": "Deleting the target is refused while this row points at it.",
-    "unset": "Deleting the target removes its id from this field and keeps the row.",
+    "onDelete": {
+      "cascade": "Deleting the target deletes this row in the same transaction.",
+      "restrict": "Deleting the target is refused while this row points at it.",
+      "unset": "Deleting the target removes its id from this field and keeps the row.",
+      "purge": "Nothing happens in the delete's transaction; #76 removes the row in batches afterward."
+    },
+    "onAccountDelete": {
+      "expiry": "The row outlives the account until its own expiry removes it.",
+      "pocketbase": "PocketBase removes the row itself when it deletes the account."
+    },
+    "merge": {
+      "none": "No merge redirects this field; when its target goes, the field's delete behavior applies.",
+      "repoint": "A merge of the target moves this field to the surviving record, inside the merge's transaction.",
+      "n/a": "The field names the owning account, and no merge crosses accounts, so it never changes."
+    },
     "measured": {
       "multi-optional-no-cascade": "unset",
       "single-optional-cascade": "cascade",
@@ -201,7 +214,7 @@
       "indexes": [{"name":"idx_ai_attempts_user_round","unique":false,"columns":["ai_coding_attempts.user","ai_coding_attempts.round"]}],
       "rules": {"list":"expression","view":"expression","create":"expression","update":"expression","delete":"expression"},
       "rows": ["practice-attempt","campaign-membership"],
-      "writers": "the SPA and the runner with the caller's token today; with the grading gate on, only the execution store's completion (#3)",
+      "writers": "the SPA, under #9's rules; #3's PR 4 makes graded rows server-only",
       "purge": "cascades with the account"
     },
     {
@@ -1020,7 +1033,7 @@
       "rules": {"list":"null","view":"null","create":"null","update":"null","delete":"null"},
       "rows": ["share-capability-metadata","share-bearer-digest"],
       "writers": "the share capability and share secret hooks only (#11, #12)",
-      "purge": "cascades with the account"
+      "purge": "cascades with the account; #11's before-delete hook removes them first, so the restricting relation never blocks the delete"
     },
     {
       "id": "share_resolvers",
@@ -1134,7 +1147,7 @@
       ],
       "rules": {"list":"expression","view":"expression","create":"expression","update":"expression","delete":"expression"},
       "rows": ["practice-attempt","campaign-membership"],
-      "writers": "the runner with the caller's token today; with the grading gate on, only the execution store's completion (#3)",
+      "writers": "the SPA and the runner, under #9's rules; #3's PR 4 makes graded rows server-only",
       "purge": "cascades with the account"
     },
     {
@@ -1252,11 +1265,13 @@
       "group": "platform",
       "scope": "account",
       "partition": {"field":"account_id","kind":"text","onAccountDelete":"purge"},
+      "partitionIndexed": true,
+      "indexes": [{"name":"idx_account_blobs_hash","unique":true,"columns":["account_id","sha256"]}],
       "owningLeaf": "ROUNDS-10-L01",
       "rows": ["source-document","artifact-revision","account-export"],
       "writers": "the gateway for intake (#53 first); #6's render outputs as the execution identity once containment ships",
       "purge": "#76 removes the row, then its file once the next backup has run",
-      "note": "Decision 10: one row per stored file, unique on (account_id, sha256), bytes in pb_data/storage."
+      "note": "Decision 10: one row per stored file, unique on (account_id, sha256), with its bytes in pb_data/storage. The file field is protected, and the row's REST rules are null, so bytes are read only through a gateway route that checks the account, never from a URL alone."
     },
     {
       "id": "account_system_state",
@@ -1266,10 +1281,13 @@
       "group": "account",
       "scope": "account",
       "partition": {"field":"user","kind":"relation","onAccountDelete":"cascade"},
+      "partitionIndexed": true,
+      "indexes": [{"name":"idx_account_system_state_user","unique":false,"columns":["user"]}],
       "owningLeaf": "ROUNDS-00B-L07/S2",
       "rows": ["demo-state"],
       "writers": "#177's state migration and its demo hooks",
-      "purge": "cascades with the account"
+      "purge": "cascades with the account",
+      "note": "#177's stage 2 names the row's own key; this index leads with user, so the cascade and the tier lookup find an account's rows."
     },
     {
       "id": "audit_entries",
@@ -1279,6 +1297,8 @@
       "group": "platform",
       "scope": "account",
       "partition": {"field":"account_id","kind":"text","onAccountDelete":"purge"},
+      "partitionIndexed": true,
+      "indexes": [{"name":"idx_audit_entries_position","unique":false,"columns":["account_id","commit_position"]}],
       "owningLeaf": "ROUNDS-02-L04",
       "rows": ["audit-entry-change-set"],
       "writers": "#21's transaction writer, inside the gateway's transaction",
@@ -1292,6 +1312,11 @@
       "group": "platform",
       "scope": "account",
       "partition": {"field":"account_id","kind":"text","onAccountDelete":"purge"},
+      "partitionIndexed": true,
+      "indexes": [
+        {"name":"idx_change_sets_position","unique":true,"columns":["account_id","commit_position"]},
+        {"name":"idx_change_sets_command","unique":true,"columns":["account_id","command_id"]}
+      ],
       "owningLeaf": "ROUNDS-02-L04",
       "rows": ["audit-entry-change-set"],
       "writers": "#21's transaction writer, inside the gateway's transaction, with a per-account commit_position",
@@ -1306,6 +1331,12 @@
       "group": "platform",
       "scope": "account",
       "partition": {"field":"account_id","kind":"text","onAccountDelete":"purge"},
+      "partitionIndexed": true,
+      "indexes": [
+        {"name":"idx_domain_outbox_relay_seq","unique":true,"columns":["relay_seq"]},
+        {"name":"idx_domain_outbox_event","unique":true,"columns":["event_id"]},
+        {"name":"idx_domain_outbox_position","unique":true,"columns":["account_id","commit_position","ordinal"]}
+      ],
       "owningLeaf": "ROUNDS-02-L05",
       "rows": ["domain-event"],
       "writers": "#22's library, inside the gateway's transaction; delivery never rewrites a row",
@@ -1319,6 +1350,8 @@
       "group": "platform",
       "scope": "platform",
       "partition": null,
+      "partitionIndexed": false,
+      "indexes": [{"name":"idx_outbox_cursors_consumer","unique":true,"columns":["consumer"]}],
       "owningLeaf": "ROUNDS-02-L05",
       "writers": "the dispatcher identity through #22's routes; one row per consumer, its cursor the last relay_seq it stepped",
       "purge": "not account data"
@@ -1331,6 +1364,8 @@
       "group": "platform",
       "scope": "account",
       "partition": {"field":"account_id","kind":"text","onAccountDelete":"purge"},
+      "partitionIndexed": true,
+      "indexes": [{"name":"idx_outbox_parked_consumer","unique":false,"columns":["account_id","consumer"]}],
       "owningLeaf": "ROUNDS-02-L05",
       "writers": "the dispatcher identity through #22's routes; an event that kept failing for one consumer, with its disposition",
       "purge": "#76 purges with the account's history"
@@ -1343,9 +1378,12 @@
       "group": "platform",
       "scope": "account",
       "partition": {"field":"account_id","kind":"text","onAccountDelete":"purge"},
+      "partitionIndexed": true,
+      "indexes": [{"name":"idx_outbox_watermarks_aggregate","unique":true,"columns":["account_id","consumer","aggregate_id"]}],
       "owningLeaf": "ROUNDS-02-L05",
       "writers": "the dispatcher identity through #22's routes; one row per consumer and aggregate, the dedupe record a redelivery is checked against",
-      "purge": "#76 purges with the account's history"
+      "purge": "#76 purges with the account's history",
+      "note": "The key leads with account_id so #76's purge finds an account's rows; an aggregate belongs to one account, so it is still one row per consumer and aggregate."
     },
     {
       "id": "platform_leases",
@@ -1355,6 +1393,8 @@
       "group": "platform",
       "scope": "platform",
       "partition": null,
+      "partitionIndexed": false,
+      "indexes": [{"name":"idx_platform_leases_name","unique":true,"columns":["name"]}],
       "owningLeaf": "ROUNDS-02-L05",
       "writers": "the dispatcher identity through #22's routes; one row per lease (the relay and each due-work handler)",
       "purge": "not account data"
@@ -1367,6 +1407,8 @@
       "group": "platform",
       "scope": "account",
       "partition": {"field":"account_id","kind":"text","onAccountDelete":"purge"},
+      "partitionIndexed": true,
+      "indexes": [{"name":"idx_projector_checkpoints_projector","unique":true,"columns":["account_id","projector"]}],
       "owningLeaf": "ROUNDS-02-L06",
       "writers": "#23's projectors, in the transaction that applies their events; one row per account and projector",
       "purge": "#76 purges an account's rows; a rebuild resets a projector's rows"
@@ -1379,9 +1421,12 @@
       "group": "platform",
       "scope": "account",
       "partition": {"field":"account_id","kind":"text","onAccountDelete":"purge"},
+      "partitionIndexed": true,
+      "indexes": [{"name":"idx_slug_redirects_account","unique":false,"columns":["account_id"]}],
       "owningLeaf": "ROUNDS-32-L02",
       "writers": "#156's migration framework, which owns the map",
-      "purge": "#76 purges with the account"
+      "purge": "#76 purges with the account",
+      "note": "#156 adds its lookup key; this index leads with account_id, so #76's purge finds an account's rows."
     }
   ],
   "relations": [

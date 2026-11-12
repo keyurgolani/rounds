@@ -1,6 +1,6 @@
 # DR-0004: Canonical database and transaction owner
 
-<!-- Generated from docs/decisions/DR-0004-canonical-database.json, contracts/database/erd.json, and contracts/database/benchmark.json by node scripts/conformance/run.mjs --write. Edit those, not this file. -->
+<!-- Generated from docs/decisions/DR-0004-canonical-database.json, contracts/database/erd-decisions.json, and contracts/database/benchmark.json by node scripts/conformance/run.mjs --write. Edit those, not this file. -->
 
 | Record | Status | Owner | Approver | Approval | Leaf |
 | --- | --- | --- | --- | --- | --- |
@@ -12,24 +12,24 @@ Issue #18 (ROUNDS-02-L01). Spec lines cite rounds-review's docs/superpowers/spec
 
 | Decision | Concern | Store | Owning process | Owning leaf |
 | --- | --- | --- | --- | --- |
-| DB1. Canonical write database | canonical-write-database | sqlite-data | PocketBase (the pocketbase container), the only process that opens pb_data | ROUNDS-02-L01 |
+| DB1. Canonical write database | canonical-write-database | sqlite-data | PocketBase (the pocketbase container), the only process that writes pb_data | ROUNDS-02-L01 |
 | DB2. Transaction owner and isolation | transaction-owner | sqlite-data | the command's gateway hook route, in PocketBase's JSVM | ROUNDS-02-L02 |
 | DB3. Gateway placement | gateway-placement | sqlite-data | PocketBase hook routes; the runner is only ever a caller | ROUNDS-02-L02 |
 | DB4. Account authorization | account-authorization | sqlite-data | the command's gateway hook route, inside its transaction | ROUNDS-02-L02 |
 | DB5. Idempotency store | idempotency-store | sqlite-data | the command's gateway hook route | ROUNDS-02-L03 |
 | DB6. Aggregate and version model | aggregate-version-model | sqlite-data | the command's gateway hook route | ROUNDS-02-L03 |
 | DB7. Outbox and projectors | outbox-projectors | sqlite-data | the runner's dispatcher, as dispatcher_service | ROUNDS-02-L05 |
-| DB8. Backup and restore owner | backup-restore | n/a:a procedure over sqlite-data and files; #157 names the backup target | an operator procedure with a reader process beside PocketBase, owned by #157 | ROUNDS-32-L03 |
+| DB8. Backup and restore owner | backup-restore | n/a:a procedure over sqlite-data and files; #157 names the backup target | an operator procedure with a read-only reader process beside PocketBase, owned by #157 | ROUNDS-32-L03 |
 | DB9. PocketBase retained, upgraded, or replaced | pocketbase-version | n/a:a binary version, not a store | the pocketbase image build (pocketbase/Dockerfile) | ROUNDS-02-L01 |
 | DB10. Byte store | byte-store | files | PocketBase file storage, written by gateway routes | ROUNDS-10-L01 |
 
 ### DB1. Canonical write database
 
-Career data has one canonical write database: PocketBase's SQLite file pb_data/data.db, in WAL mode. Canonical records, relations, versions, change sets, audit entries, idempotency results, and the outbox all live in it, so one SQLite transaction covers a command and everything it records. File bytes sit beside it in pb_data/storage (DB10). pb_data/logs.db is PocketBase's request log and never canonical. No other process opens these files while PocketBase runs.
+Career data has one canonical write database: PocketBase's SQLite file pb_data/data.db, in WAL mode. Canonical records, relations, versions, change sets, audit entries, idempotency results, and the outbox all live in it, so one SQLite transaction covers a command and everything it records. File bytes sit beside it in pb_data/storage (DB10). pb_data/logs.db is PocketBase's request log and never canonical. No other process writes these files while PocketBase runs; #157's backup reader opens data.db read-only on the same host, since WAL mode needs its shared-memory file there.
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
-| canonical-write-database | sqlite-data | PocketBase (the pocketbase container), the only process that opens pb_data | ROUNDS-02-L01 | draft |
+| canonical-write-database | sqlite-data | PocketBase (the pocketbase container), the only process that writes pb_data | ROUNDS-02-L01 | draft |
 
 **Alternatives**
 
@@ -41,14 +41,17 @@ Career data has one canonical write database: PocketBase's SQLite file pb_data/d
 - One node: a deploy, restart, or crash makes the product unavailable until PocketBase is back (one replica, Recreate).
 - A full disk stops every write, the audit and outbox rows with them.
 - A long read transaction, such as a backup's, keeps the WAL from checkpointing, so the WAL grows until it ends.
+- A TRUNCATE, RESTART, or FULL checkpoint holds every writer until it ends, and a command waiting behind it can fail unacknowledged (limits). So no leaf runs one while commands run, and SQLite's passive autocheckpoint keeps the WAL in check.
 - The live pragmas are journal_mode=wal and synchronous=1 (1 is NORMAL): a process crash loses no commit, but a power or kernel crash can lose the last commits before a checkpoint.
-- PocketBase's memory outgrows the shipped 512Mi limit at 10 accounts (limits), so under that load the kubelet would OOM-kill it until #176 raises the limit.
+- PocketBase's memory outgrows the shipped 512Mi limit at 10 accounts (limits), so under that load the kernel's OOM killer would end the container until #176 raises the limit.
 
 **Limits**
 
-- One writer: at most 252 commands per second with 10 accounts (249 with 1), on one Go scheduler thread standing in for the 500m CPU limit. More clients only queue longer: at 64 clients a command waited 1.2 s at p99 for the writer.
-- The WAL peaked at 391 MiB with 10 accounts and 44 MiB with 1.
-- PocketBase's RSS peaked at 682 MiB with 10 accounts and 325 MiB with 1, against the 512Mi limit, with GOMEMLIMIT at 460MiB. GOMEMLIMIT bounds only the Go heap, and PocketBase's SQLite driver allocates outside it, which likely holds the rest. #176 (ROUNDS-34-L07) ships a limit of at least 1Gi.
+- One writer: at most 293 commands per second with 10 accounts (207 with 1), on one Go scheduler thread standing in for the 500m CPU limit. That is a best case for the shipped limit: one core here is more than the 500m quota and never throttles, so the shipped throughput is at most this, and its hold times and lag at least those measured.
+- Commands per second at 10 accounts were 243 with 1 client, 293 with 4, 253 with 16, and 180 with 64: past the peak, more clients lost throughput and queued longer, and at 64 clients a command waited 1.4 s at p99 for the writer.
+- A TRUNCATE checkpoint under the steady load at 10 accounts took 5.9 s. The 7 commands in flight took up to 11.7 s end to end, and 1 of the phase's commands failed unacknowledged, so nothing was lost. Passive autocheckpoints fall inside the hold percentiles.
+- The WAL peaked at 393 MiB with 10 accounts and 43 MiB with 1.
+- PocketBase's RSS peaked at 663 MiB with 10 accounts and 309 MiB with 1, against the 512Mi limit, with GOMEMLIMIT at 460MiB. GOMEMLIMIT bounds only the Go heap, and PocketBase's SQLite driver allocates outside it, which likely holds the rest. #176 (ROUNDS-34-L07) ships a limit of at least 1Gi.
 - It scales up, not out: no second replica and no second writer.
 
 **Consequences.** #19 to #23 and every context build on one SQLite file, and throughput is bounded by one writer, which the receipt measures against the floor's load.
@@ -61,7 +64,7 @@ Sources: spec 1942-1951; spec 2069-2071; https://pocketbase.io/faq/; contracts/d
 
 ### DB2. Transaction owner and isolation
 
-Each command runs in exactly one runInTransaction that its gateway route owns, and commits or rolls back whole. PocketBase queues all writes and explicit transactions through a single db connection (its v0.22.40 notes), so commands run one at a time and see each other as serial. Every read that decides the outcome (the expected versions, the account check, the invariant checks) goes through the transaction's Dao, never $app.dao(), so it sees the command's own writes and nothing that commits after it. No network call runs inside a transaction: provider calls, renders, and relays run outside and come back as new commands. Batch work (backfills, transfers, purges) commits at most 500 rows per transaction, as #14's migration does.
+Each command runs in exactly one runInTransaction that its gateway route owns, and commits or rolls back whole. PocketBase 0.22 runs every write and explicit transaction on its one write connection, Dao.nonconcurrentDB() in its JSVM API, whose pragmas the receipt reads, so commands run one at a time and see each other as serial. Every read that decides the outcome (the expected versions, the account check, the invariant checks) goes through the transaction's Dao, never $app.dao(), so it sees the command's own writes and nothing that commits after it. No network call runs inside a transaction: provider calls, renders, and relays run outside and come back as new commands. Batch work (backfills, transfers, purges) commits at most 500 rows per transaction, as #14's migration does.
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
@@ -81,8 +84,10 @@ Each command runs in exactly one runInTransaction that its gateway route owns, a
 
 **Limits**
 
-- Lock budget: at the steady rate with 10 accounts the writer is held 2 ms at p50 and 23 ms at p99 per command, and a command waits 23 ms at p99 for it.
-- Batches of at most 500 rows; the transfer's batches of 30 applications held the writer 92 ms at p99.
+- Lock budget: at the steady rate with 10 accounts the writer is held 2 ms at p50 and 29 ms at p99 per command, and a command waits 29 ms at p99 for it, a best case for the shipped limit (DB1).
+- Batches of at most 500 rows; the transfer's batches of 30 applications held the writer 82 ms at p99.
+- A transfer's write freeze grows with its accounts: 4.01 s per account at the floor here, backup and transfer together, so about 224 accounts fit under 15 minutes on this machine, a best case for the shipped limit (DB1).
+- The largest single transaction, an account delete cascading the floor's legacy rows and #1's and #20's rows, isn't measured here; #76 (ROUNDS-14-L05) measures it before account deletion ships.
 
 **Consequences.** #19's API is one function per command that takes the transaction's Dao. Throughput falls as hold time grows, so commands stay small and do their slow work outside.
 
@@ -90,11 +95,11 @@ Each command runs in exactly one runInTransaction that its gateway route owns, a
 
 **Rollback.** None until #19 ships; after that, a superseding revision.
 
-Sources: spec 1942-1951; https://github.com/pocketbase/pocketbase/blob/master/CHANGELOG_16_22.md (v0.22.40); contracts/database/benchmark.json.
+Sources: spec 1942-1951; PocketBase 0.22's JSVM API: Dao.nonconcurrentDB(); contracts/database/benchmark.json.
 
 ### DB3. Gateway placement
 
-The command gateway is a set of PocketBase hook routes under /api/rounds/commands/, registered as Caller rows in docs/security/server-writes.md. The SPA reaches them through nginx's existing /api/ pass-through, under its 1m body cap; no port, hostname, or route outside /api/ is added. The runner reaches PocketBase only through hook routes, never a collection write. On next it still makes 9 direct collection writes, all with the caller's token: the 7 provider and settings writes in backend/routers/ai.py move behind #73's routes, and the 2 in backend/routers/take_home.py end with #3's PR 4, which makes graded rows server-only. Its share and execution calls already use hook routes. PocketBase 0.22 loads *.pb.js only from the top of pb_hooks (checked on the native binary: a nested file never ran), so each package registers its routes in one top-level <package-id>.pb.js and keeps its code at its DR-0002@2 target path.
+The command gateway is a set of PocketBase hook routes under /api/rounds/commands/, registered as Caller rows in docs/security/server-writes.md. The SPA reaches them through nginx's existing /api/ pass-through, under its 1m body cap; no port, hostname, or route outside /api/ is added. The runner reaches PocketBase only through hook routes, never a collection write. At 6c4a5a3 it still makes 9 direct collection writes, all with the caller's token: the 7 provider and settings writes in backend/routers/ai.py move behind #73's routes, and the 2 in backend/routers/take_home.py end with #3's PR 4, which makes graded rows server-only. Its share and execution calls already use hook routes. PocketBase 0.22 loads *.pb.js only from the top of pb_hooks (checked on the native binary: a nested file never ran), so each package registers its routes in one top-level <package-id>.pb.js and keeps its code at its DR-0002@2 target path.
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
@@ -157,7 +162,7 @@ Sources: spec 1942-1951; docs/security/server-writes.md; docs/security/account-s
 
 ### DB5. Idempotency store
 
-Command idempotency uses #1's admission_commands, keyed by its unique (account, command_id) index, with the v7 id check it already enforces. #20 adds domain-command rows kept 30 days; they cascade with the account, and the 30-day expiry bounds that cascade. A replay with the same fingerprint returns the stored result and writes nothing, and a changed body under the same id is a conflict. #22's due-work removes expired rows, and #20 owns the behavior.
+Command idempotency uses #1's admission_commands, keyed by its unique (account, command_id) index, with the v7 id check it already enforces. #20 adds domain-command rows kept 30 days; they cascade with the account, and the 30-day expiry bounds that cascade. #20's body keys its rows on a non-cascading account_id; this record reads adopting #1's store as keeping its cascading relation instead, bounded by the 30-day expiry, as #18's body says. A replay with the same fingerprint returns the stored result and writes nothing, and a changed body under the same id is a conflict. #22's due-work removes expired rows, and #20 owns the behavior.
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
@@ -231,13 +236,13 @@ A command writes its domain events to domain_outbox in its own transaction, with
 **Failure modes**
 
 - A relay that applies events and dies before its checkpoint redelivers them; the bench's mid-relay failpoint shows they're skipped once.
-- A relay with a lapsed lease keeps writing; its fencing token is refused (the bench's fenced acks).
+- A relay with a lapsed lease keeps writing; its fencing token is refused. The native run's mid-relay step acks once more under the crashed relay's old token and is fenced, and pocketbase/tests/test_bench_hooks.py checks that a takeover fences the old holder.
 - A crash after commit and before the relay leaves events in the outbox; the next holder relays them once (the after-commit failpoint).
 
 **Limits**
 
-- Relay lag p95 1.2 s at the steady rate with 10 accounts, against 2 s, and 291 ms with 1. It is the closest of the five targets, so #22 sizes its batches and poll interval against it.
-- Read-your-writes p99 79 ms through the projection, against 5 s.
+- Relay lag p95 105 ms at the steady rate with 10 accounts, against 2 s, and 61 ms with 1, counted over the phase's own events once the sweep's backlog had drained; #22 sizes its batches and poll interval against it. The tail is the checkpoint's: p99.9 11.7 s at 10 accounts while a TRUNCATE checkpoint held the writer (DB1).
+- Read-your-writes p99 191 ms through the projection, against 5 s, with 3 of 184 reads taking the canonical fallback.
 
 **Consequences.** #22 runs the relay in the runner and #23 the projectors in PocketBase; both write through dispatcher_service.
 
@@ -245,7 +250,7 @@ A command writes its domain events to domain_outbox in its own transaction, with
 
 **Rollback.** Their migrations have down steps; no canonical row depends on a projection.
 
-Sources: spec 2056-2067; docs/security/server-writes.md; contracts/database/benchmark.json.
+Sources: spec 2056-2067; docs/security/server-writes.md; contracts/database/benchmark.json; pocketbase/tests/test_bench_hooks.py.
 
 ### DB8. Backup and restore owner
 
@@ -253,23 +258,24 @@ Sources: spec 2056-2067; docs/security/server-writes.md; contracts/database/benc
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
-| backup-restore | n/a:a procedure over sqlite-data and files; #157 names the backup target | an operator procedure with a reader process beside PocketBase, owned by #157 | ROUNDS-32-L03 | draft |
+| backup-restore | n/a:a procedure over sqlite-data and files; #157 names the backup target | an operator procedure with a read-only reader process beside PocketBase, owned by #157 | ROUNDS-32-L03 | draft |
 
 **Alternatives**
 
-- Stop PocketBase and tar pb_data (today): A full outage for the archive's length: 25.37 s at 10 accounts, and 52.14 s at 1 account with its 2 GiB of files.
-- PocketBase's backup API: It holds the writer for the whole zip: commands waited up to 8.5 s behind its 12.9 s zip at 10 accounts, and up to 15.6 s at 1 account with its files.
+- Stop PocketBase and tar pb_data (today): A full outage for the archive's length: 25.21 s at 10 accounts, and 71.48 s at 1 account with its 2 GiB of files.
+- PocketBase's backup API: It holds the writer for the whole zip: commands waited up to 8.1 s behind its 12.9 s zip at 10 accounts, and up to 14.8 s at 1 account with its files.
 
 **Failure modes**
 
 - A file deleted before the backup that last saw it can't be restored; deletes wait for the next backup.
 - A copy taken mid-write by a plain file copy can be torn; only SQLite's own copy is consistent.
 - A restore onto another image tag could migrate on first start; restores use the backup's tag.
+- A restore needs the runner's AI_KEY_SECRET, which pb_data and so the backup don't hold: without it, what the runner sealed or keyed with it stops working, so #157's procedure keeps the key with the deployment's secrets.
 
 **Limits**
 
-- Restore at 10 accounts: 304.04 s against 30 minutes (extrapolated): the database restored and checked in 2.76 s, and 100 GB of files at the 2 GiB sample's 332 MB/s.
-- Taking the online copy at 10 accounts: VACUUM INTO 11.9 s and SQLite's backup API 3.59 s, with commands waiting at most 84 ms meanwhile.
+- Restore at 10 accounts: 381.74 s against 30 minutes (extrapolated): the database restored and checked in 2.23 s, and 100 GB of files at the 2 GiB sample's 263 MB/s.
+- Taking the online copy at 10 accounts: VACUUM INTO 5.4 s and SQLite's backup API 3.8 s, with commands waiting at most 6 ms meanwhile.
 
 **Consequences.** #157 writes the procedure and its rehearsal; #76 holds file purges until a backup has run.
 
@@ -281,7 +287,7 @@ Sources: spec 2064-2065; https://pocketbase.io/docs/going-to-production/; docs/o
 
 ### DB9. PocketBase retained, upgraded, or replaced
 
-Retain PocketBase and stay on its 0.22 line, which upstream still patches. Stage P3 (ROUNDS-02-L01/P3) moves the pin to 0.22.57, the newest 0.22 release, which adds no database migration and changes no hook API. The port to the current major line is deferred until a trigger in the version analysis fires. From #19 on, new hook code reaches PocketBase's API through one module, pocketbase/pb_hooks/lib/pocketbase.js, so that port rewrites one module and the migrations instead of every package.
+Retain PocketBase and stay on its 0.22 line, which upstream patched through 0.22.57. Stage P3 (ROUNDS-02-L01/P3) moves the pin to 0.22.57, the newest 0.22 release, which adds no database migration and changes no hook API. This record ratifies the line: a patch on it is a pin change, and a port to another line supersedes the record first. The port is deferred until a trigger in the version analysis fires. From #19 on, new hook code reaches PocketBase's API through one module, pocketbase/pb_hooks/lib/pocketbase.js, so that port rewrites one module and the migrations instead of every package.
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
@@ -289,29 +295,29 @@ Retain PocketBase and stay on its 0.22 line, which upstream still patches. Stage
 
 **Alternatives**
 
-- Port to the current major line before #19: Rewrites all 38 migrations and every containment hook now, for no target the benchmark misses.
-- Keep 0.22.22 as pinned: Upstream's later 0.22 releases carry its backported fixes; staying behind them buys nothing.
+- Port to a newer line before #19: Rewrites all 38 migrations and every containment hook now, for no target the benchmark misses.
+- Replace PocketBase: PocketBase holds auth, files, and every containment store on next, and runs only on its embedded SQLite; replacing it means alternative C's two authorities or a rewrite of all of them (rejected options).
 
 **Failure modes**
 
-- Upstream stops publishing 0.22 releases, so later fixes need the port; that is the first trigger.
+- Upstream publishes no further 0.22 release, so a later change needs the port; that is the first trigger.
 - Upstream archived its GitHub repository on 2026-10-26 and its README points to a new home; the Dockerfile still fetches the release zip from GitHub against its pinned SHA-256, and a build fails rather than take another file.
 
 **Limits**
 
 - Every hook and migration on next is written against 0.22's API.
 
-**Consequences.** P3 is a pin change; the port, when a trigger fires, is its own leaf with the strategy below.
+**Consequences.** P3 is a pin change on the ratified line; the port, when a trigger fires, is its own leaf with the strategy below, and supersedes this record first.
 
 **Migration.** None within the 0.22 line. The port's migration plan is in the version analysis.
 
 **Rollback.** Within the 0.22 line, roll back by image tag. The port's boundary is in the version analysis.
 
-Sources: https://pocketbase.io/v023upgrade/jsvm/; https://github.com/pocketbase/pocketbase/blob/master/CHANGELOG_16_22.md (v0.22.23 to v0.22.57); https://github.com/pocketbase/pocketbase.
+Sources: https://pocketbase.io/v023upgrade/jsvm/; PocketBase's 0.22 release line.
 
 ### DB10. Byte store
 
-Bytes live in PocketBase's file storage, pb_data/storage, behind one account-scoped collection, account_blobs: one row per stored file, its SHA-256, size, privacy class, and retention metadata, unique on (account_id, sha256). Identical bytes in two accounts are two files. #73's keyring encrypts files once its keys exist, and older files are rewrapped as #22 due-work. #157's backup copies the files after the database, and #76 purges a row, then its file once the next backup has run. #53 (ROUNDS-10-L01) writes it first. #4's snapshot markup files stay where they are and are adopted as they stand. #6's render outputs get a path only: the same collection, written by complete as execution_service, held with the containment release. users.avatar, PocketBase's default file field, has no writer in the app and stays as it is. PocketBase's S3 setting is the path past one disk.
+Bytes live in PocketBase's file storage, pb_data/storage, behind one account-scoped collection, account_blobs: one row per stored file, its SHA-256, size, privacy class, and retention metadata, unique on (account_id, sha256). Identical bytes in two accounts are two files. Its file field is protected and its REST rules are null, so bytes are read only through a gateway route that checks the account, never from a URL alone. #73's keyring encrypts files once its keys exist, and older files are rewrapped as #22 due-work. #157's backup copies the files after the database, and #76 purges a row, then its file once the next backup has run. #53 (ROUNDS-10-L01) writes it first. #4's snapshot markup files stay where they are and are adopted as they stand. #6's render outputs get a path only: the same collection, written by complete as execution_service, held with the containment release. users.avatar, PocketBase's default file field, has no writer in the app, and this decision doesn't adopt it. PocketBase's S3 setting is the path past one disk.
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
@@ -325,14 +331,15 @@ Bytes live in PocketBase's file storage, pb_data/storage, behind one account-sco
 **Failure modes**
 
 - A file whose row commits but whose write fails leaves a row without bytes; the row is written after the file, and a sweep finds orphans.
+- A file field that isn't protected is served to anyone holding its URL; account_blobs' field is protected, so a URL alone never reads it.
 - Bytes written before #73's keys exist are plaintext until rewrapped.
 - The disk fills with bytes before rows; the PVC sizing in the storage plan sets the floor.
 
 **Limits**
 
-- The 2 GiB sample copied at 332 MB/s in a restore; 10 GB per account is extrapolated from that rate, labeled so in the receipt.
+- The 2 GiB sample copied at 263 MB/s in a restore; 10 GB per account is extrapolated from that rate, labeled so in the receipt.
 
-**Consequences.** #53, #91, #6, and #4 share one byte store with one dedupe rule and one purge path.
+**Consequences.** #53, #91, #6, and #4 share one byte store with one dedupe rule, one read path, and one purge path.
 
 **Migration.** #53 adds account_blobs in an additive migration; #4's files are adopted without moving.
 
@@ -347,7 +354,7 @@ Sources: spec 2020-2028; docs/security/server-writes.md; contracts/database/benc
 | Alternative | Runner write path | Image build | Bindings | nginx change | Verdict |
 | --- | --- | --- | --- | --- | --- |
 | A. PocketBase hook routes owning the transaction | Hook routes only, with the caller's bearer or a service identity, as the runner already does for admission, execution, snapshots, and shares. | Unchanged: the published PocketBase binary with pb_migrations, pb_hooks, and seeds copied in. | None new: hooks are JavaScript in PocketBase's JSVM, and #182's contracts are JSON Schema the SPA, hooks, and runner share. | None: commands use the existing /api/ pass-through. | chosen: One process and one transaction per command, the pattern every containment store on next already uses; the receipt decides whether it holds. |
-| B. PocketBase as a Go framework | Go routes in a custom PocketBase build; the runner calls them as in A. | A CI-built Go binary instead of the published release, rebuilt and re-pinned for every upstream fix. | Go types for every command contract, which #182 doesn't generate. | None. | rejected: The same database and transaction model as A, plus a Go toolchain, a custom binary, and a port of every JS hook on next, for nothing the benchmark asks for. |
+| B. PocketBase as a Go framework | Go routes in a custom PocketBase build; the runner calls them as in A. | A CI-built Go binary instead of the published release, rebuilt and re-pinned for every upstream release. | Go types for every command contract, which #182 doesn't generate. | None. | rejected: The same database and transaction model as A, plus a Go toolchain, a custom binary, and a port of every JS hook on next, for nothing the benchmark asks for. |
 | C. A separate database behind a runner gateway | The runner owns a new database and writes it directly. | A new database service with its own image, volume, backup, and credentials. | Runner models for every aggregate, plus a sync to PocketBase for auth and what stays there. | Command routes move to runner locations. | rejected: Two authorities: auth, files, and the containment stores stay in PocketBase, so no transaction covers a command that touches both, and every account check crosses the network. |
 | D. A PocketBase gateway the runner calls as a non-superuser client | The runner forwards each command to gateway hook routes as a service identity, passing the caller's bearer. | Unchanged. | None new. | Command routes go to the runner, and the gateway routes are refused at the public URL. | rejected: An extra hop and process per command, and the route must still verify the forwarded bearer. A keeps this shape for the runner's own calls, such as execution completions and provider results. |
 
@@ -356,12 +363,12 @@ Sources: spec 2020-2028; docs/security/server-writes.md; contracts/database/benc
 | Option | Why | Source |
 | --- | --- | --- |
 | FastAPI orchestrating PocketBase's REST API | Each REST call commits alone, so a command spanning records can stop halfway, which is how the browser invariants break today. | spec 1206-1210 |
-| FastAPI writing the SQLite file directly | A second writer outside PocketBase's write queue that skips its rules, hooks, and realtime events, on a volume only PocketBase mounts. | docker-compose.prod.yml@62d4eae:L38-L39; https://github.com/pocketbase/pocketbase/blob/master/CHANGELOG_16_22.md (v0.22.40) |
+| FastAPI writing the SQLite file directly | A second writer outside PocketBase's write connection that skips its rules, hooks, and realtime events, on a volume only PocketBase mounts. | docker-compose.prod.yml@62d4eae:L38-L39 |
 | Postgres through PocketBase, as the k8s comment promised | PocketBase runs only on embedded SQLite; its FAQ says "there are no plans for supporting other databases". | https://pocketbase.io/faq/ |
 
 ## Benchmark
 
-Synthetic data only. Receipt `contracts/database/benchmark.json`, 2026-11-12T13:15:52Z, result **pass**.
+Synthetic data only. Receipt `contracts/database/benchmark.json` (revision 1), 2026-11-12T15:18:26Z, result **pass**.
 
 | Profile | Value |
 | --- | --- |
@@ -370,59 +377,84 @@ Synthetic data only. Receipt `contracts/database/benchmark.json`, 2026-11-12T13:
 | k8s limits | 500m CPU, 512Mi memory, 1 replica, Recreate, 5Gi PVC |
 | Emulation | macOS has no cgroups: the 500m CPU limit is approximated with one Go scheduler thread and the memory limit with GOMEMLIMIT; RSS is reported against 512Mi |
 | Machine | a shared machine, not an exclusive one: other workloads may have run during the measurement, so the load averages at start and end are recorded |
-| Seed | the scale floor per account (spec 2020-2028), fraction 1, at 1 and 10 accounts |
-| Bytes | 2 GiB measured at 1 account; 10 GB per account extrapolated |
+| Load average | 34.2, 37.5, 37.8 at the start and 28.8, 30.9, 34.9 at the end (1, 5, and 15 minutes) |
+| Seed | the scale floor per account (spec 2020-2028), fraction 1, at 1 and 10 accounts; the floor's 50,000 Activities, Actions, and audit entries is read as one combined count, 40,000 activities and actions plus 10,000 audit entries per account, the lighter of its two readings |
+| Bytes | 2 GiB measured at 1 account; 100 GB extrapolated at the measured 263 MB/s (seconds = targetBytes / (measuredBytes / measuredSeconds)) |
 
 | Target | Limit | Value | Basis | Result | Detail | Consequence |
 | --- | --- | --- | --- | --- | --- | --- |
-| read-your-writes within 5 seconds or the canonical fallback (spec 2059-2060) | 5000 ms | 79.2 ms | measured | pass | p99 of 204 projection reads at 20/s and 10 accounts; 0 took the canonical fallback |  |
-| normal projection lag p95 below 2 seconds (spec 2061) | 2000 ms | 1178.18 ms | measured | pass | relay lag p95 over 1576 events at 20/s and 10 accounts |  |
-| final bounded-context write freeze below 15 minutes (spec 2062) | 900 s | 39.79 s | measured | pass | the pipeline transfer of 20000 applications under a write freeze, 10 accounts |  |
+| read-your-writes within 5 seconds or the canonical fallback (spec 2059-2060) | 5000 ms | 190.7 ms | measured | pass | p99 of 184 projection reads at 20/s and 10 accounts; 3 took the canonical fallback |  |
+| normal projection lag p95 below 2 seconds (spec 2061) | 2000 ms | 105.03 ms | measured | pass | relay lag p95 over 1337 events at 20/s and 10 accounts |  |
+| final bounded-context write freeze below 15 minutes (spec 2062) | 900 s | 40.12 s | measured | pass | the pipeline transfer of 20000 applications under a write freeze, 10 accounts |  |
 | zero accepted writes lost through freeze, rollback, and a crash (spec 2063) | 0 writes | 0 writes | measured | pass | acked writes missing after a kill -9, after the freeze rollback restore, and after the commit-then-crash failpoint, plus writes accepted during a freeze |  |
-| rollback or restore within 30 minutes at the scale floor (spec 2064-2065) | 1800 s | 304.04 s | extrapolated | pass | the 10-account database restored and checked (2.76 s, measured) plus 100 GB of bytes at the measured copy rate (301.283 s, extrapolated) |  |
+| rollback or restore within 30 minutes at the scale floor (spec 2064-2065) | 1800 s | 381.74 s | extrapolated | pass | the 10-account database restored and checked (2.23 s, measured) plus 100 GB of bytes at the measured copy rate (379.514 s, extrapolated) |  |
 
-| Scale | Lock queue p99 | Lock hold p50 | Lock hold p99 | Relay lag p95 | Read-your-writes p99 | Rows per command | Peak commands | Freeze | WAL max | RSS max |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 account(s) | 22 ms | 2 ms | 20 ms | 291.26 ms | 395.67 ms | 5.08 rows | 248.7 /s | 16.12 s | 43.99 MiB | 324.69 MiB |
-| 10 account(s) | 23 ms | 2 ms | 23 ms | 1178.18 ms | 79.2 ms | 5.08 rows | 252.2 /s | 39.79 s | 390.88 MiB | 682.14 MiB |
+| Scale | Lock queue p99 | Lock hold p50 | Lock hold p99 | Relay lag p95 | Read-your-writes p99 | Rows per command | Peak commands | Freeze | Checkpoint under load | WAL max | RSS max |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 account(s) | 29 ms | 2 ms | 27 ms | 60.99 ms | 92.13 ms | 5.08 rows | 207.2 /s | 11.21 s | 7 ms; commands in flight took up to 7.09 ms | 43.2 MiB | 309.17 MiB |
+| 10 account(s) | 29 ms | 2 ms | 29 ms | 105.03 ms | 190.7 ms | 5.08 rows | 292.9 /s | 40.12 s | 5864 ms; commands in flight took up to 11655.85 ms | 392.65 MiB | 662.63 MiB |
+
+**Rollback defaults (DR-0003 P5).** Each rests on a target and carries its basis, so an extrapolated pass reads as one.
+
+| Default | Met | Basis | Target | Detail |
+| --- | --- | --- | --- | --- |
+| freezeUnder15Minutes | yes | measured | write_freeze |  |
+| zeroAcceptedWritesLost | yes | measured | rpo_zero |  |
+| restoreWithin30Minutes | yes | extrapolated | restore_rto |  |
+| benchRestoresConsistent | yes | measured | none | every restore this run took, at both scales, checked consistent |
+| floorRestoreRehearsed | no | not-run | none | the rehearsal at the floor, bytes included, is #157's; owner ROUNDS-32-L03 |
 
 ## PocketBase version
 
-Pinned **0.22.22**. Decision: **retain the 0.22 line**. PocketBase stays, on the 0.22 line. P3 moves the pin to 0.22.57; the major-line port waits for a trigger, and new hook code goes through one module so the port stays bounded. The break sites below are what that port would touch on next.
+Line **0.22**, pinned 0.22.22 at ratification. Decision: **retain the 0.22 line**. PocketBase stays, on the 0.22 line, which this record ratifies. P3 moves the pin to 0.22.57, the newest 0.22 release; the port to another line waits for a trigger, and new hook code goes through one module so the port stays bounded. The break sites below are what that port would touch.
+
+The counts below are at `6c4a5a3`.
 
 | Break site | Where | Count | Upstream | Note |
 | --- | --- | --- | --- | --- |
 | migrations | pocketbase/pb_migrations/ | 38 | https://pocketbase.io/v023upgrade/jsvm/ (migrate((app)) replaces migrate((db)) and new Dao(db); a collection's schema becomes fields) | All 38 call new Dao(, with the schema and options shapes, raw-SQL triggers in 3 files, and indexes in 20. |
 | admin-bootstrap | pocketbase/pb_migrations/1700000500_bootstrap_admin.js | 1 | https://pocketbase.io/v023upgrade/jsvm/ (admins become _superusers records) | findAdminByEmail, new Admin(), and saveAdmin. |
 | runner-admin-login | backend/app/pb_auth.py | 1 | https://pocketbase.io/v023upgrade/jsvm/ (admin auth moves to the _superusers collection) | Unused helpers a test bans; #14 S3 removes them with PB_ADMIN_*. |
-| request-data-rules | 1700006000_account_scope_rules.js | 1 | https://pocketbase.io/v023upgrade/jsvm/ (@request.data becomes @request.body) | #9's rules, the only file that uses it. |
-| hook-registrations | pocketbase/pb_hooks/*.pb.js (11 files) | 54 | https://pocketbase.io/v023upgrade/jsvm/ (handlers call e.next(); onAfterBootstrap becomes onBootstrap; path params use {id}; requireRecordAuth becomes requireAuth) | 20 routes, 3 routerUse middlewares, 2 cronAdd jobs, 4 onAfterBootstrap hooks, 23 record and model hooks, and 2 CLI commands, listed in server-writes.md and account-scope.v1.json. |
+| request-data-rules | 1700006000_account_scope_rules.js | 1 | https://pocketbase.io/v023upgrade/jsvm/ (@request.data becomes @request.body) | The only file that uses it. |
+| hook-registrations | pocketbase/pb_hooks/*.pb.js (11 files) | 56 | https://pocketbase.io/v023upgrade/jsvm/ (handlers call e.next(); onAfterBootstrap becomes onBootstrap; path params use {id}; requireRecordAuth becomes requireAuth) | 20 routes, 3 routerUse middlewares, 2 cronAdd jobs, 4 onAfterBootstrap hooks, 25 record and model hooks, and 2 CLI commands, listed in server-writes.md and account-scope.v1.json. |
 | dao-and-transactions | pocketbase/pb_hooks/*.js | 35 | https://pocketbase.io/v023upgrade/jsvm/ (the Dao is removed; $app.runInTransaction((txApp) => ...)) | $app.dao() 27 times in 9 files, and runInTransaction at 8 sites in 5 libraries. |
 | superuser-checks | admission.js, demo.js, execution.js, relation_endpoints.js | 5 | https://pocketbase.io/v023upgrade/jsvm/ (requestInfo's admin becomes a _superusers auth record) | 5 checks of requestInfo().admin in 4 libraries. |
 | after-delete-hook | pocketbase/pb_hooks/share_capabilities.pb.js | 1 | https://pocketbase.io/v023upgrade/jsvm/ (model hooks become record hooks with explicit after-success events) | #11's onModelAfterDelete revoke relies on 0.22's after-commit timing. |
-| login-guards | execution.pb.js, share_secrets.pb.js, demo.pb.js | 3 | https://pocketbase.io/v023upgrade/jsvm/ (auth request hooks change name and take e.next()) | The sign-in guards of #3, #12, and #177 on PocketBase's password and OAuth2 hooks. |
-| system-migration-name | scripts/migration-lint (D10's 1702134273) | 1 | https://pocketbase.io/v023upgrade/jsvm/ (system migrations are squashed) | D10 names a migration that follows 0.22's own system migration. |
-| admins-denials | frontend/nginx.conf, harness/verify_deployment.py (deployment.admins.present) | 2 | https://pocketbase.io/v023upgrade/jsvm/ (/api/admins is gone) | The nginx refusal and the verifier's check both name /api/admins. |
+| login-guards | admission.pb.js, demo.pb.js, execution.pb.js, share_secrets.pb.js | 5 | https://pocketbase.io/v023upgrade/jsvm/ (auth request hooks change name and take e.next()) | 5 sign-in hooks in 4 files: the guards of #1, #3, #12, and #177 on PocketBase's password and OAuth2 hooks. |
+| system-migration-name | scripts/lint_migrations.py and scripts/migration-lint-allowlist.json (D10's 1702134273) | 1 | https://pocketbase.io/v023upgrade/jsvm/ (system migrations are squashed) | D10 names a migration that follows 0.22's own system migration. |
+| admins-denials | frontend/nginx.conf, harness/verify_deployment.py (deployment.admins.present) | 2 | https://pocketbase.io/v023upgrade/jsvm/ (implied: admins become _superusers records, so /api/admins goes) | The nginx refusal and the verifier's check both name /api/admins. |
 | verifier-shapes | harness/verify_deployment.py:123 and :431 | 2 | https://pocketbase.io/v023upgrade/jsvm/ (response shapes change) | The deployment verifier pins 0.22 answers. |
 | sdk-skew | frontend/package.json (pocketbase ^0.26.8) | 1 | https://pocketbase.io/v023upgrade/jsvm/ (a 0.22 server keeps the JS SDK below 0.22.0) | The SPA runs SDK 0.26.8 against a 0.22 server; #19's client uses only calls a 0.22 server answers, and the port settles the skew. |
 | gateway-transactions | #19's gateway routes (not built) | 0 | https://pocketbase.io/v023upgrade/jsvm/ ($app.runInTransaction((txApp) => ...)) | Goes through pocketbase/pb_hooks/lib/pocketbase.js, so the port changes one module. |
-| normalization-pin | #172's normalization.v1.json (not on next) | 0 | n/a: a repository pin, not an upstream change | #172 cites this record's pin when it lands. |
+| normalization-pin | #172's normalization.v1.json (not on next) | 0 | n/a: a repository pin, not an upstream change | #172 cites this record's line when it lands. |
 
 **Strategy.** Within the 0.22 line (P3): a pin change with no migration, no hook change, and no data change; CI's harness checks the new image. New hook code goes through pocketbase/pb_hooks/lib/pocketbase.js, the only module that calls the Dao, runInTransaction, requestInfo, and the record API. When a trigger fires, the port is its own leaf: each deployment first runs the last 0.22 release, then the new image; fresh installs get a squashed baseline (one current-format snapshot plus the seed, the admin bootstrap, and the JSON size step) that passes #1's migration lint; existing installs keep their _migrations history; and the port re-runs this benchmark on the new version.
 
-**Freeze window.** Within the 0.22 line, none: the new binary starts on the same data with no migration. For the port, the new binary's first start, which runs its system migrations over the whole database; the port measures it on a copy at the floor against the 15-minute freeze target. For scale, a startup schema change at 10 accounts here was down 6.95 s.
+**Freeze window.** Within the 0.22 line, none: the new binary starts on the same data with no migration. For the port, the new binary's first start, which runs its system migrations over the whole database; the port measures it on a copy at the floor against the 15-minute freeze target. For scale, a startup schema change at 10 accounts here was down 7.65 s.
 
 **Rollback boundary.** Within the 0.22 line, roll back by image tag at any time. For the port, roll back by image tag before the new binary's first start; after it, only the pre-upgrade backup, which loses later writes, or a forward fix (spec 2699).
 
-**Triggers for the major-line port**
+**Triggers for the port to another line**
 
-- Upstream stops publishing 0.22 releases with backported fixes.
-- A fix the deployment needs lands only on the current major line.
-- A leaf needs a feature only the current major line has.
+- Upstream publishes no further 0.22 release.
+- A fix the deployment needs lands only on a newer line.
+- A leaf needs a feature only a newer line has.
 
 ## ERD
 
-Every collection at snapshot `42673ff` (PocketBase 0.22.22), the system tables, and the platform tables and stores this record places. Delete behavior is PocketBase's own, measured: multi-optional-no-cascade unset, single-optional-cascade cascade, single-optional-no-cascade unset, single-required-cascade cascade, single-required-no-cascade restrict.
+The ERD's written fields are this record's, in `contracts/database/erd-decisions.json`, and are rendered here. `contracts/database/erd.json` joins them to PocketBase's own schema, `contracts/database/schema-snapshot.json` from a native `migrate up`, and `docs/decisions/DR-0004-erd.md` draws the result. A PR that adds or changes a migration regenerates the snapshot and both files (DB_ERD_STALE until it does), and needs a revision of this record only when it changes a written field.
+
+| Field | Value | Meaning |
+| --- | --- | --- |
+| On delete | cascade | Deleting the target deletes this row in the same transaction. |
+| On delete | restrict | Deleting the target is refused while this row points at it. |
+| On delete | unset | Deleting the target removes its id from this field and keeps the row. |
+| On delete | purge | Nothing happens in the delete's transaction; #76 removes the row in batches afterward. |
+| On account delete | expiry | The row outlives the account until its own expiry removes it. |
+| On account delete | pocketbase | PocketBase removes the row itself when it deletes the account. |
+| Merge | none | No merge redirects this field; when its target goes, the field's delete behavior applies. |
+| Merge | repoint | A merge of the target moves this field to the surviving record, inside the merge's transaction. |
+| Merge | n/a | The field names the owning account, and no merge crosses accounts, so it never changes. |
 
 | Store | Kind | Location | Canonical | Backup |
 | --- | --- | --- | --- | --- |
@@ -430,353 +462,136 @@ Every collection at snapshot `42673ff` (PocketBase 0.22.22), the system tables, 
 | files | files | pb_data/storage | yes | copied after the database copy; deletes wait for the backup (decision 8) |
 | sqlite-logs | sqlite | pb_data/logs.db | no | not needed for a restore |
 
-### Account, preferences, and AI settings
+### Planned and held tables
 
-```mermaid
-erDiagram
-  users ||--o{ ai_providers : "user (cascade)"
-  ai_providers |o--o{ ai_settings : "text_provider (unset)"
-  users ||--o{ ai_settings : "user (cascade)"
-  ai_providers |o--o{ ai_settings : "vision_provider (unset)"
-  campaigns |o--o{ user_preferences : "current_campaign (unset)"
-  users ||--o{ user_preferences : "user (cascade)"
-  account_system_state
-```
+| Table | Status | Owning leaf | Scope | Partition | Indexes | Writers | Purge |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| account_blobs | planned | ROUNDS-10-L01 | account | account_id (text, purge) | unique (account_id, sha256) | the gateway for intake (#53 first); #6's render outputs as the execution identity once containment ships | #76 removes the row, then its file once the next backup has run |
+| account_system_state | planned | ROUNDS-00B-L07/S2 | account | user (relation, cascade) | (user) | #177's state migration and its demo hooks | cascades with the account |
+| audit_entries | planned | ROUNDS-02-L04 | account | account_id (text, purge) | (account_id, commit_position) | #21's transaction writer, inside the gateway's transaction | #76 purges in batches; no cascade, so deleting a 50,000-row account never holds the writer |
+| change_sets | planned | ROUNDS-02-L04 | account | account_id (text, purge) | unique (account_id, commit_position); unique (account_id, command_id) | #21's transaction writer, inside the gateway's transaction, with a per-account commit_position | #76 purges in batches; no cascade, so deleting a 50,000-row account never holds the writer |
+| domain_outbox | planned | ROUNDS-02-L05 | account | account_id (text, purge) | unique (relay_seq); unique (event_id); unique (account_id, commit_position, ordinal) | #22's library, inside the gateway's transaction; delivery never rewrites a row | #76 purges with the account's history; relayed rows compact as #22 due-work |
+| outbox_cursors | planned | ROUNDS-02-L05 | platform | none | unique (consumer) | the dispatcher identity through #22's routes; one row per consumer, its cursor the last relay_seq it stepped | not account data |
+| outbox_parked | planned | ROUNDS-02-L05 | account | account_id (text, purge) | (account_id, consumer) | the dispatcher identity through #22's routes; an event that kept failing for one consumer, with its disposition | #76 purges with the account's history |
+| outbox_watermarks | planned | ROUNDS-02-L05 | account | account_id (text, purge) | unique (account_id, consumer, aggregate_id) | the dispatcher identity through #22's routes; one row per consumer and aggregate, the dedupe record a redelivery is checked against | #76 purges with the account's history |
+| platform_leases | planned | ROUNDS-02-L05 | platform | none | unique (name) | the dispatcher identity through #22's routes; one row per lease (the relay and each due-work handler) | not account data |
+| projector_checkpoints | planned | ROUNDS-02-L06 | account | account_id (text, purge) | unique (account_id, projector) | #23's projectors, in the transaction that applies their events; one row per account and projector | #76 purges an account's rows; a rebuild resets a projector's rows |
+| slug_redirects | planned | ROUNDS-32-L02 | account | account_id (text, purge) | (account_id) | #156's migration framework, which owns the map | #76 purges with the account |
 
-| Entity | Status | Scope | Partition | Indexed | Writers | On account delete |
-| --- | --- | --- | --- | --- | --- | --- |
-| ai_providers | live | account | user (relation, cascade) | 1, partition first | the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
-| ai_settings | live | account | user (relation, cascade) | 1, partition first | the SPA and the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
-| user_preferences | live | account | user (relation, cascade) | 1, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| users | live | account | id (self, pocketbase) | primary key | PocketBase's own auth routes under its rules; the signup, demo, and admission hooks guard what a client may set | PocketBase deletes the account; every relation to it cascades, unsets, or restricts as listed |
-| account_system_state | planned (ROUNDS-00B-L07/S2) | account | user (relation, cascade) |  | #177's state migration and its demo hooks | cascades with the account |
+- **account_blobs.** Decision 10: one row per stored file, unique on (account_id, sha256), with its bytes in pb_data/storage. The file field is protected, and the row's REST rules are null, so bytes are read only through a gateway route that checks the account, never from a URL alone.
+- **account_system_state.** #177's stage 2 names the row's own key; this index leads with user, so the cascade and the tier lookup find an account's rows.
+- **change_sets.** #21 adds its other tables (aggregate revisions, pins, purge tombstones, and the per-account position counter) to this ERD when it lands.
+- **outbox_watermarks.** The key leads with account_id so #76's purge finds an account's rows; an aggregate belongs to one account, so it is still one row per consumer and aggregate.
+- **slug_redirects.** #156 adds its lookup key; this index leads with account_id, so #76's purge finds an account's rows.
 
-### Campaigns, applications, rounds, offers, and todos
+### Written fields of the live tables
 
-```mermaid
-erDiagram
-  campaigns |o--o{ applications : "campaign (unset)"
-  users ||--o{ applications : "user (cascade)"
-  users ||--o{ campaigns : "user (cascade)"
-  applications ||--o{ interview_rounds : "application (cascade)"
-  campaigns |o--o{ interview_rounds : "campaign (unset)"
-  users ||--o{ interview_rounds : "user (cascade)"
-  applications ||--o{ offers : "application (cascade)"
-  offers |o--o{ offers : "previous_offer (unset)"
-  users ||--o{ offers : "user (cascade)"
-  campaigns ||--o{ todos : "campaign (cascade)"
-  users ||--o{ todos : "user (cascade)"
-```
+The snapshot gives each live table its partition relation, indexes, and rules; these fields are written.
 
-| Entity | Status | Scope | Partition | Indexed | Writers | On account delete |
-| --- | --- | --- | --- | --- | --- | --- |
-| applications | live | account | user (relation, cascade) | 1, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| campaigns | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| interview_rounds | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| offers | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| todos | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+#### Account, preferences, and AI settings
 
-### Experience records and their junctions
+| Table | Scope | Rows | Writers | Purge |
+| --- | --- | --- | --- | --- |
+| ai_providers | account | ai-provider-credential | the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
+| ai_settings | account | ai-role-settings | the SPA and the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
+| user_preferences | account | appearance, current-campaign | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| users | account | authentication-identity, professional-identity, demo-state | PocketBase's own auth routes under its rules; the signup, demo, and admission hooks guard what a client may set | PocketBase deletes the account; every relation to it cascades, unsets, or restricts as listed |
 
-```mermaid
-erDiagram
-  experience_bullets ||--o{ exp_anecdote_bullets : "child (cascade)"
-  experience_anecdotes ||--o{ exp_anecdote_bullets : "parent (cascade)"
-  users ||--o{ exp_anecdote_bullets : "user (cascade)"
-  experience_anecdotes ||--o{ exp_job_anecdotes : "child (cascade)"
-  experience_jobs ||--o{ exp_job_anecdotes : "parent (cascade)"
-  users ||--o{ exp_job_anecdotes : "user (cascade)"
-  experience_bullets ||--o{ exp_job_bullets : "child (cascade)"
-  experience_jobs ||--o{ exp_job_bullets : "parent (cascade)"
-  users ||--o{ exp_job_bullets : "user (cascade)"
-  experience_projects ||--o{ exp_job_projects : "child (cascade)"
-  experience_jobs ||--o{ exp_job_projects : "parent (cascade)"
-  users ||--o{ exp_job_projects : "user (cascade)"
-  experience_anecdotes ||--o{ exp_project_anecdotes : "child (cascade)"
-  experience_projects ||--o{ exp_project_anecdotes : "parent (cascade)"
-  users ||--o{ exp_project_anecdotes : "user (cascade)"
-  experience_bullets ||--o{ exp_project_bullets : "child (cascade)"
-  experience_projects ||--o{ exp_project_bullets : "parent (cascade)"
-  users ||--o{ exp_project_bullets : "user (cascade)"
-  behavioral_categories }o--o{ experience_anecdotes : "categories (unset)"
-  behavioral_questions }o--o{ experience_anecdotes : "linked_questions (unset)"
-  users ||--o{ experience_anecdotes : "user (cascade)"
-  users ||--o{ experience_bullets : "user (cascade)"
-  users ||--o{ experience_jobs : "user (cascade)"
-  users ||--o{ experience_projects : "user (cascade)"
-```
+#### Campaigns, applications, rounds, offers, and todos
 
-| Entity | Status | Scope | Partition | Indexed | Writers | On account delete |
-| --- | --- | --- | --- | --- | --- | --- |
-| exp_anecdote_bullets | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| exp_job_anecdotes | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| exp_job_bullets | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| exp_job_projects | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| exp_project_anecdotes | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| exp_project_bullets | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| experience_anecdotes | live | account | user (relation, cascade) | 1, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| experience_bullets | live | account | user (relation, cascade) | 1, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| experience_jobs | live | account | user (relation, cascade) | 1, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| experience_projects | live | account | user (relation, cascade) | 1, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| Table | Scope | Rows | Writers | Purge |
+| --- | --- | --- | --- | --- |
+| applications | account | opportunity, pursuit, campaign-membership | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| campaigns | account | campaign-definition | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| interview_rounds | account | career-activity-schedule, career-activity-outcome, interview-process, campaign-membership | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| offers | account | offer | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| todos | account | action, action-mention, campaign-membership | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 
-### Resumes, versions, snapshots, and shares
+#### Experience records and their junctions
 
-```mermaid
-erDiagram
-  share_capabilities |o--o{ resume_share_links : "replaced_by (cascade)"
-  resumes |o--o{ resume_share_links : "resume (cascade)"
-  users ||--o{ resume_share_links : "user (cascade)"
-  resume_variants |o--o{ resume_share_links : "variant (cascade)"
-  resume_share_links ||--o{ resume_share_views : "link (cascade)"
-  users ||--o{ resume_share_views : "user (cascade)"
-  applications |o--o{ resume_variants : "application (unset)"
-  resumes ||--o{ resume_variants : "resume (cascade)"
-  users ||--o{ resume_variants : "user (cascade)"
-  resumes |o--o{ resume_versions : "resume (cascade)"
-  users ||--o{ resume_versions : "user (cascade)"
-  resume_variants |o--o{ resume_versions : "variant (cascade)"
-  users ||--o{ resumes : "user (cascade)"
-```
+| Table | Scope | Rows | Writers | Purge |
+| --- | --- | --- | --- | --- |
+| exp_anecdote_bullets | account | typed-relation | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| exp_job_anecdotes | account | typed-relation | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| exp_job_bullets | account | typed-relation | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| exp_job_projects | account | typed-relation | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| exp_project_anecdotes | account | typed-relation | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| exp_project_bullets | account | typed-relation | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| experience_anecdotes | account | story | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| experience_bullets | account | achievement | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| experience_jobs | account | employment-facts | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| experience_projects | account | project-facts | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 
-| Entity | Status | Scope | Partition | Indexed | Writers | On account delete |
-| --- | --- | --- | --- | --- | --- | --- |
-| resume_share_links | live | account | user (relation, cascade) | 1, partition first | no client write since #14; one server write marks a link replaced | cascades with the account |
-| resume_share_views | live | account | user (relation, cascade) | 1 | no client write since #14 | cascades with the account |
-| resume_variants | live | account | user (relation, cascade) | 3, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| resume_versions | live | account | user (relation, cascade) | 3, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| resumes | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+#### Resumes, versions, snapshots, and shares
 
-### Practice drafts, attempts, progress, and content
+| Table | Scope | Rows | Writers | Purge |
+| --- | --- | --- | --- | --- |
+| resume_share_links | account | share-capability-metadata, share-bearer-digest | no client write since #14; one server write marks a link replaced | cascades with the account |
+| resume_share_views | account | share-view | no client write since #14 | cascades with the account |
+| resume_variants | account | artifact-edition, ats-analysis | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| resume_versions | account | artifact-revision | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| resumes | account | artifact-edition, resume-autosave, professional-identity, profile-contact-point, link, education, publication, skill | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 
-```mermaid
-erDiagram
-  campaigns |o--o{ ai_coding_attempts : "campaign (unset)"
-  execution_envelopes |o--o{ ai_coding_attempts : "envelope (unset)"
-  ai_coding_rounds ||--o{ ai_coding_attempts : "round (cascade)"
-  users ||--o{ ai_coding_attempts : "user (cascade)"
-  campaigns |o--o{ ai_coding_drafts : "campaign (unset)"
-  ai_coding_rounds ||--o{ ai_coding_drafts : "round (cascade)"
-  users ||--o{ ai_coding_drafts : "user (cascade)"
-  behavioral_categories }o--o{ behavioral_questions : "categories (unset)"
-  campaigns ||--o{ code_drafts : "campaign (cascade)"
-  users ||--o{ code_drafts : "user (cascade)"
-  users ||--o{ question_timers : "user (cascade)"
-  take_home_assignments ||--o{ take_home_attempts : "assignment (cascade)"
-  campaigns |o--o{ take_home_attempts : "campaign (unset)"
-  execution_envelopes |o--o{ take_home_attempts : "envelope (unset)"
-  users ||--o{ take_home_attempts : "user (cascade)"
-  take_home_assignments ||--o{ take_home_drafts : "assignment (cascade)"
-  campaigns |o--o{ take_home_drafts : "campaign (unset)"
-  users ||--o{ take_home_drafts : "user (cascade)"
-  campaigns |o--o{ user_progress : "campaign (unset)"
-  users ||--o{ user_progress : "user (cascade)"
-  behavioral_guides
-  coding_guides
-  coding_questions
-  system_design_guides
-  system_design_questions
-```
+#### Practice drafts, attempts, progress, and content
 
-| Entity | Status | Scope | Partition | Indexed | Writers | On account delete |
-| --- | --- | --- | --- | --- | --- | --- |
-| ai_coding_attempts | live | account | user (relation, cascade) | 1, partition first | the SPA and the runner with the caller's token today; with the grading gate on, only the execution store's completion (#3) | cascades with the account |
-| ai_coding_drafts | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| ai_coding_rounds | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
-| behavioral_categories | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
-| behavioral_guides | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
-| behavioral_questions | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
-| code_drafts | live | account | user (relation, cascade) | 1, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| coding_guides | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
-| coding_questions | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
-| question_timers | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| system_design_guides | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
-| system_design_questions | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
-| take_home_assignments | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
-| take_home_attempts | live | account | user (relation, cascade) | 1, partition first | the runner with the caller's token today; with the grading gate on, only the execution store's completion (#3) | cascades with the account |
-| take_home_drafts | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| user_progress | live | account | user (relation, cascade) | 1, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| Table | Scope | Rows | Writers | Purge |
+| --- | --- | --- | --- | --- |
+| ai_coding_attempts | account | practice-attempt, campaign-membership | the SPA, under #9's rules; #3's PR 4 makes graded rows server-only | cascades with the account |
+| ai_coding_drafts | account | practice-draft, campaign-membership | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| ai_coding_rounds | content | practice-item-content, test-definition | migrations at start (seed and definitions); no runtime writer | not account data |
+| behavioral_categories | content | practice-item-content | migrations at start (seed and definitions); no runtime writer | not account data |
+| behavioral_guides | content | practice-guides | migrations at start (seed and definitions); no runtime writer | not account data |
+| behavioral_questions | content | practice-item-content | migrations at start (seed and definitions); no runtime writer | not account data |
+| code_drafts | account | practice-draft, campaign-membership | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| coding_guides | content | practice-guides | migrations at start (seed and definitions); no runtime writer | not account data |
+| coding_questions | content | practice-item-content, test-definition | migrations at start (seed and definitions); no runtime writer | not account data |
+| question_timers | account | practice-progress | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| system_design_guides | content | practice-guides | migrations at start (seed and definitions); no runtime writer | not account data |
+| system_design_questions | content | practice-item-content | migrations at start (seed and definitions); no runtime writer | not account data |
+| take_home_assignments | content | practice-item-content, harness-revision | migrations at start (seed and definitions); no runtime writer | not account data |
+| take_home_attempts | account | practice-attempt, campaign-membership | the SPA and the runner, under #9's rules; #3's PR 4 makes graded rows server-only | cascades with the account |
+| take_home_drafts | account | practice-draft, campaign-membership | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
+| user_progress | account | practice-progress, campaign-membership | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 
-### Admission, execution, quarantine, and share secrets
+#### Admission, execution, quarantine, and share secrets
 
-```mermaid
-erDiagram
-  users ||--o{ admission_commands : "account (cascade)"
-  execution_jobs |o--o{ admission_commands : "job (unset)"
-  users |o--o{ admission_counters : "account (cascade)"
-  users ||--o{ admission_leases : "account (cascade)"
-  admission_commands |o--o{ admission_leases : "command (cascade)"
-  users ||--o{ execution_attempts : "account (cascade)"
-  execution_jobs ||--o{ execution_attempts : "job (cascade)"
-  users ||--o{ execution_envelopes : "user (cascade)"
-  users ||--o{ execution_jobs : "account (cascade)"
-  users ||--o{ legacy_artifact_snapshots : "user (cascade)"
-  legacy_artifact_snapshots ||--o{ share_capabilities : "snapshot (restrict)"
-  users ||--o{ share_capabilities : "user (cascade)"
-  definition_migration_journal
-  execution_service
-  legacy_share_migration
-  relation_quarantine
-  relation_quarantine_reports
-  share_resolvers
-  share_throttle
-```
+| Table | Scope | Rows | Writers | Purge |
+| --- | --- | --- | --- | --- |
+| admission_commands | account | execution-admission, idempotency-record | Caller routes and the sweep in the admission hooks (#1); #20 adds domain-command rows | cascades with the account; rows expire after 24 hours, #20's after 30 days |
+| admission_counters | account | execution-admission | Caller routes and the sweep in the admission hooks (#1) | cascades with the account; counters expire after a day |
+| admission_leases | account | execution-admission | Caller routes and the sweep in the admission hooks (#1) | cascades with the account |
+| definition_migration_journal | platform |  | #2's migration at start | not account data |
+| execution_attempts | account | execution-attempt | the execution store's Service routes only (#3) | cascades with the account |
+| execution_envelopes | account | execution-attempt | the execution store's Service routes only (#3) | cascades with the account |
+| execution_jobs | account | execution-attempt | the execution store's Caller and Service routes only (#3) | cascades with the account |
+| execution_service | service |  | a System hook sets its one record at start (#3) | not account data |
+| legacy_artifact_snapshots | account | legacy-artifact-snapshot | one Caller route of the snapshot store (#4) | cascades with the account |
+| legacy_share_migration | service |  | #14's migration at start | #76 purges an account's entries with its older links |
+| relation_quarantine (partition owner (text, purge)) | service | typed-relation | #10's migration, then an operator's replay | #76 purges an account's entries by their owner |
+| relation_quarantine_reports | service |  | #10's migration and its dry run | not account data: counts and checksums |
+| share_capabilities | account | share-capability-metadata, share-bearer-digest | the share capability and share secret hooks only (#11, #12) | cascades with the account; #11's before-delete hook removes them first, so the restricting relation never blocks the delete |
+| share_resolvers | service |  | a System hook sets its one record at start (#12) | not account data |
+| share_throttle | service |  | the share lookup route, as the resolver identity (#12) | not account data: keys only, and a lookup removes entries over a day old |
 
-| Entity | Status | Scope | Partition | Indexed | Writers | On account delete |
-| --- | --- | --- | --- | --- | --- | --- |
-| admission_commands | live | account | account (relation, cascade) | 3, partition first | Caller routes and the sweep in the admission hooks (#1); #20 adds domain-command rows | cascades with the account; rows expire after 24 hours, #20's after 30 days |
-| admission_counters | live | account | account (relation, cascade) | 2 | Caller routes and the sweep in the admission hooks (#1) | cascades with the account; counters expire after a day |
-| admission_leases | live | account | account (relation, cascade) | 4, partition first | Caller routes and the sweep in the admission hooks (#1) | cascades with the account |
-| definition_migration_journal | live | platform | none | 1 | #2's migration at start | not account data |
-| execution_attempts | live | account | account (relation, cascade) | 4 | the execution store's Service routes only (#3) | cascades with the account |
-| execution_envelopes | live | account | user (relation, cascade) | 3, partition first | the execution store's Service routes only (#3) | cascades with the account |
-| execution_jobs | live | account | account (relation, cascade) | 3, partition first | the execution store's Caller and Service routes only (#3) | cascades with the account |
-| execution_service | live | service | none | 0 | a System hook sets its one record at start (#3) | not account data |
-| legacy_artifact_snapshots | live | account | user (relation, cascade) | 1, partition first | one Caller route of the snapshot store (#4) | cascades with the account |
-| legacy_share_migration | live | service | none | 1 | #14's migration at start | #76 purges an account's entries with its older links |
-| relation_quarantine | live | service | owner (text, purge) | 0 | #10's migration, then an operator's replay | #76 purges an account's entries by their owner |
-| relation_quarantine_reports | live | service | none | 0 | #10's migration and its dry run | not account data: counts and checksums |
-| share_capabilities | live | account | user (relation, cascade) | 3, partition first | the share capability and share secret hooks only (#11, #12) | cascades with the account |
-| share_resolvers | live | service | none | 0 | a System hook sets its one record at start (#12) | not account data |
-| share_throttle | live | service | none | 2 | the share lookup route, as the resolver identity (#12) | not account data: keys only, and a lookup removes entries over a day old |
+#### PocketBase system tables
 
-### Platform tables DR-0004 places
+| Table | Scope | Rows | Writers | Purge |
+| --- | --- | --- | --- | --- |
+| _admins | system |  | PocketBase itself | not account data |
+| _collections | system |  | PocketBase itself | not account data |
+| _externalAuths (partition recordId (text, pocketbase)) | system |  | PocketBase itself | PocketBase removes an account's OAuth2 links with the account |
+| _migrations | system |  | PocketBase itself | not account data |
+| _params | system |  | PocketBase itself | not account data |
 
-```mermaid
-erDiagram
-  account_blobs
-  audit_entries
-  change_sets
-  domain_outbox
-  outbox_cursors
-  outbox_parked
-  outbox_watermarks
-  platform_leases
-  projector_checkpoints
-  slug_redirects
-```
+### Merge behavior
 
-| Entity | Status | Scope | Partition | Indexed | Writers | On account delete |
-| --- | --- | --- | --- | --- | --- | --- |
-| account_blobs | planned (ROUNDS-10-L01) | account | account_id (text, purge) |  | the gateway for intake (#53 first); #6's render outputs as the execution identity once containment ships | #76 removes the row, then its file once the next backup has run |
-| audit_entries | planned (ROUNDS-02-L04) | account | account_id (text, purge) |  | #21's transaction writer, inside the gateway's transaction | #76 purges in batches; no cascade, so deleting a 50,000-row account never holds the writer |
-| change_sets | planned (ROUNDS-02-L04) | account | account_id (text, purge) |  | #21's transaction writer, inside the gateway's transaction, with a per-account commit_position | #76 purges in batches; no cascade, so deleting a 50,000-row account never holds the writer |
-| domain_outbox | planned (ROUNDS-02-L05) | account | account_id (text, purge) |  | #22's library, inside the gateway's transaction; delivery never rewrites a row | #76 purges with the account's history; relayed rows compact as #22 due-work |
-| outbox_cursors | planned (ROUNDS-02-L05) | platform | none |  | the dispatcher identity through #22's routes; one row per consumer, its cursor the last relay_seq it stepped | not account data |
-| outbox_parked | planned (ROUNDS-02-L05) | account | account_id (text, purge) |  | the dispatcher identity through #22's routes; an event that kept failing for one consumer, with its disposition | #76 purges with the account's history |
-| outbox_watermarks | planned (ROUNDS-02-L05) | account | account_id (text, purge) |  | the dispatcher identity through #22's routes; one row per consumer and aggregate, the dedupe record a redelivery is checked against | #76 purges with the account's history |
-| platform_leases | planned (ROUNDS-02-L05) | platform | none |  | the dispatcher identity through #22's routes; one row per lease (the relay and each due-work handler) | not account data |
-| projector_checkpoints | planned (ROUNDS-02-L06) | account | account_id (text, purge) |  | #23's projectors, in the transaction that applies their events; one row per account and projector | #76 purges an account's rows; a rebuild resets a projector's rows |
-| slug_redirects | planned (ROUNDS-32-L02) | account | account_id (text, purge) |  | #156's migration framework, which owns the map | #76 purges with the account |
+| Merge | Relations |
+| --- | --- |
+| n/a | admission_commands.account, admission_counters.account, admission_leases.account, ai_coding_attempts.user, ai_coding_drafts.user, ai_providers.user, ai_settings.user, applications.user, campaigns.user, code_drafts.user, execution_attempts.account, execution_envelopes.user, execution_jobs.account, exp_anecdote_bullets.user, exp_job_anecdotes.user, exp_job_bullets.user, exp_job_projects.user, exp_project_anecdotes.user, exp_project_bullets.user, experience_anecdotes.user, experience_bullets.user, experience_jobs.user, experience_projects.user, interview_rounds.user, legacy_artifact_snapshots.user, offers.user, question_timers.user, resume_share_links.user, resume_share_views.user, resume_variants.user, resume_versions.user, resumes.user, share_capabilities.user, take_home_attempts.user, take_home_drafts.user, todos.user, user_preferences.user, user_progress.user |
+| none | admission_commands.job, admission_leases.command, ai_coding_attempts.campaign, ai_coding_attempts.envelope, ai_coding_attempts.round, ai_coding_drafts.campaign, ai_coding_drafts.round, ai_settings.text_provider, ai_settings.vision_provider, applications.campaign, behavioral_questions.categories, code_drafts.campaign, execution_attempts.job, experience_anecdotes.categories, experience_anecdotes.linked_questions, interview_rounds.application, interview_rounds.campaign, offers.application, offers.previous_offer, resume_share_links.replaced_by, resume_share_links.resume, resume_share_links.variant, resume_share_views.link, resume_variants.application, resume_variants.resume, resume_versions.resume, resume_versions.variant, share_capabilities.snapshot, take_home_attempts.assignment, take_home_attempts.campaign, take_home_attempts.envelope, take_home_drafts.assignment, take_home_drafts.campaign, todos.campaign, user_preferences.current_campaign, user_progress.campaign |
+| repoint | exp_anecdote_bullets.child, exp_anecdote_bullets.parent, exp_job_anecdotes.child, exp_job_anecdotes.parent, exp_job_bullets.child, exp_job_bullets.parent, exp_job_projects.child, exp_job_projects.parent, exp_project_anecdotes.child, exp_project_anecdotes.parent, exp_project_bullets.child, exp_project_bullets.parent |
 
-### PocketBase system tables
-
-```mermaid
-erDiagram
-  _admins
-  _collections
-  _externalAuths
-  _migrations
-  _params
-```
-
-| Entity | Status | Scope | Partition | Indexed | Writers | On account delete |
-| --- | --- | --- | --- | --- | --- | --- |
-| _admins | live | system | none |  | PocketBase itself | not account data |
-| _collections | live | system | none |  | PocketBase itself | not account data |
-| _externalAuths | live | system | recordId (text, pocketbase) |  | PocketBase itself | PocketBase removes an account's OAuth2 links with the account |
-| _migrations | live | system | none |  | PocketBase itself | not account data |
-| _params | live | system | none |  | PocketBase itself | not account data |
-
-### Relations
-
-| Relation | To | Cardinality | Required | On delete | Merge | Authorized by |
-| --- | --- | --- | --- | --- | --- | --- |
-| admission_commands.account | users | many-to-one | yes | cascade | n/a | owner |
-| admission_commands.job | execution_jobs | many-to-one | no | unset | none | server |
-| admission_counters.account | users | many-to-one | no | cascade | n/a | owner |
-| admission_leases.account | users | many-to-one | yes | cascade | n/a | owner |
-| admission_leases.command | admission_commands | many-to-one | no | cascade | none | server |
-| ai_coding_attempts.campaign | campaigns | many-to-one | no | unset | none | relation-endpoint |
-| ai_coding_attempts.envelope | execution_envelopes | many-to-one | no | unset | none | server |
-| ai_coding_attempts.round | ai_coding_rounds | many-to-one | yes | cascade | none | content |
-| ai_coding_attempts.user | users | many-to-one | yes | cascade | n/a | owner |
-| ai_coding_drafts.campaign | campaigns | many-to-one | no | unset | none | relation-endpoint |
-| ai_coding_drafts.round | ai_coding_rounds | many-to-one | yes | cascade | none | content |
-| ai_coding_drafts.user | users | many-to-one | yes | cascade | n/a | owner |
-| ai_providers.user | users | many-to-one | yes | cascade | n/a | owner |
-| ai_settings.text_provider | ai_providers | many-to-one | no | unset | none | relation-endpoint |
-| ai_settings.user | users | many-to-one | yes | cascade | n/a | owner |
-| ai_settings.vision_provider | ai_providers | many-to-one | no | unset | none | relation-endpoint |
-| applications.campaign | campaigns | many-to-one | no | unset | none | relation-endpoint |
-| applications.user | users | many-to-one | yes | cascade | n/a | owner |
-| behavioral_questions.categories | behavioral_categories | many-to-many | no | unset | none | content |
-| campaigns.user | users | many-to-one | yes | cascade | n/a | owner |
-| code_drafts.campaign | campaigns | many-to-one | yes | cascade | none | relation-endpoint |
-| code_drafts.user | users | many-to-one | yes | cascade | n/a | owner |
-| execution_attempts.account | users | many-to-one | yes | cascade | n/a | owner |
-| execution_attempts.job | execution_jobs | many-to-one | yes | cascade | none | server |
-| execution_envelopes.user | users | many-to-one | yes | cascade | n/a | owner |
-| execution_jobs.account | users | many-to-one | yes | cascade | n/a | owner |
-| exp_anecdote_bullets.child | experience_bullets | many-to-one | yes | cascade | repoint | relation-endpoint |
-| exp_anecdote_bullets.parent | experience_anecdotes | many-to-one | yes | cascade | repoint | relation-endpoint |
-| exp_anecdote_bullets.user | users | many-to-one | yes | cascade | n/a | owner |
-| exp_job_anecdotes.child | experience_anecdotes | many-to-one | yes | cascade | repoint | relation-endpoint |
-| exp_job_anecdotes.parent | experience_jobs | many-to-one | yes | cascade | repoint | relation-endpoint |
-| exp_job_anecdotes.user | users | many-to-one | yes | cascade | n/a | owner |
-| exp_job_bullets.child | experience_bullets | many-to-one | yes | cascade | repoint | relation-endpoint |
-| exp_job_bullets.parent | experience_jobs | many-to-one | yes | cascade | repoint | relation-endpoint |
-| exp_job_bullets.user | users | many-to-one | yes | cascade | n/a | owner |
-| exp_job_projects.child | experience_projects | many-to-one | yes | cascade | repoint | relation-endpoint |
-| exp_job_projects.parent | experience_jobs | many-to-one | yes | cascade | repoint | relation-endpoint |
-| exp_job_projects.user | users | many-to-one | yes | cascade | n/a | owner |
-| exp_project_anecdotes.child | experience_anecdotes | many-to-one | yes | cascade | repoint | relation-endpoint |
-| exp_project_anecdotes.parent | experience_projects | many-to-one | yes | cascade | repoint | relation-endpoint |
-| exp_project_anecdotes.user | users | many-to-one | yes | cascade | n/a | owner |
-| exp_project_bullets.child | experience_bullets | many-to-one | yes | cascade | repoint | relation-endpoint |
-| exp_project_bullets.parent | experience_projects | many-to-one | yes | cascade | repoint | relation-endpoint |
-| exp_project_bullets.user | users | many-to-one | yes | cascade | n/a | owner |
-| experience_anecdotes.categories | behavioral_categories | many-to-many | no | unset | none | content |
-| experience_anecdotes.linked_questions | behavioral_questions | many-to-many | no | unset | none | content |
-| experience_anecdotes.user | users | many-to-one | yes | cascade | n/a | owner |
-| experience_bullets.user | users | many-to-one | yes | cascade | n/a | owner |
-| experience_jobs.user | users | many-to-one | yes | cascade | n/a | owner |
-| experience_projects.user | users | many-to-one | yes | cascade | n/a | owner |
-| interview_rounds.application | applications | many-to-one | yes | cascade | none | relation-endpoint |
-| interview_rounds.campaign | campaigns | many-to-one | no | unset | none | relation-endpoint |
-| interview_rounds.user | users | many-to-one | yes | cascade | n/a | owner |
-| legacy_artifact_snapshots.user | users | many-to-one | yes | cascade | n/a | owner |
-| offers.application | applications | many-to-one | yes | cascade | none | relation-endpoint |
-| offers.previous_offer | offers | many-to-one | no | unset | none | relation-endpoint |
-| offers.user | users | many-to-one | yes | cascade | n/a | owner |
-| question_timers.user | users | many-to-one | yes | cascade | n/a | owner |
-| resume_share_links.replaced_by | share_capabilities | many-to-one | no | cascade | none | relation-endpoint |
-| resume_share_links.resume | resumes | many-to-one | no | cascade | none | relation-endpoint |
-| resume_share_links.user | users | many-to-one | yes | cascade | n/a | owner |
-| resume_share_links.variant | resume_variants | many-to-one | no | cascade | none | relation-endpoint |
-| resume_share_views.link | resume_share_links | many-to-one | yes | cascade | none | relation-endpoint |
-| resume_share_views.user | users | many-to-one | yes | cascade | n/a | owner |
-| resume_variants.application | applications | many-to-one | no | unset | none | relation-endpoint |
-| resume_variants.resume | resumes | many-to-one | yes | cascade | none | relation-endpoint |
-| resume_variants.user | users | many-to-one | yes | cascade | n/a | owner |
-| resume_versions.resume | resumes | many-to-one | no | cascade | none | relation-endpoint |
-| resume_versions.user | users | many-to-one | yes | cascade | n/a | owner |
-| resume_versions.variant | resume_variants | many-to-one | no | cascade | none | relation-endpoint |
-| resumes.user | users | many-to-one | yes | cascade | n/a | owner |
-| share_capabilities.snapshot | legacy_artifact_snapshots | many-to-one | yes | restrict | none | relation-endpoint |
-| share_capabilities.user | users | many-to-one | yes | cascade | n/a | owner |
-| take_home_attempts.assignment | take_home_assignments | many-to-one | yes | cascade | none | content |
-| take_home_attempts.campaign | campaigns | many-to-one | no | unset | none | relation-endpoint |
-| take_home_attempts.envelope | execution_envelopes | many-to-one | no | unset | none | server |
-| take_home_attempts.user | users | many-to-one | yes | cascade | n/a | owner |
-| take_home_drafts.assignment | take_home_assignments | many-to-one | yes | cascade | none | content |
-| take_home_drafts.campaign | campaigns | many-to-one | no | unset | none | relation-endpoint |
-| take_home_drafts.user | users | many-to-one | yes | cascade | n/a | owner |
-| todos.campaign | campaigns | many-to-one | yes | cascade | none | relation-endpoint |
-| todos.user | users | many-to-one | yes | cascade | n/a | owner |
-| user_preferences.current_campaign | campaigns | many-to-one | no | unset | none | relation-endpoint |
-| user_preferences.user | users | many-to-one | yes | cascade | n/a | owner |
-| user_progress.campaign | campaigns | many-to-one | no | unset | none | relation-endpoint |
-| user_progress.user | users | many-to-one | yes | cascade | n/a | owner |
+- exp_anecdote_bullets.child, exp_anecdote_bullets.parent, exp_job_anecdotes.child, exp_job_anecdotes.parent, exp_job_bullets.child, exp_job_bullets.parent, exp_job_projects.child, exp_job_projects.parent, exp_project_anecdotes.child, exp_project_anecdotes.parent, exp_project_bullets.child, exp_project_bullets.parent: A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints).
 
 ## Identifier rules
 
@@ -814,7 +629,7 @@ erDiagram
 
 | Store | Location | Growth at the floor | Rows per command | Compaction | Lock budget | Sizing |
 | --- | --- | --- | --- | --- | --- | --- |
-| sqlite-data | pb_data/data.db (with -wal and -shm) | 0.12 GB at 1 account and 1.19 GB at 10 accounts (about 0.12 GB each), synthetic rows at the floor | 5.08 rows per command, weighted over the mix | Expired idempotency rows, relayed outbox rows, and #21's tombstones are #22 due-work, in batches of at most 500 rows. | hold p99 23 ms, queue p99 23 ms at the steady rate; batches at most 500 rows | The WAL peaked at 391 MiB; keep twice the database size free for VACUUM INTO and a restore copy. PocketBase's RSS reached 682 MiB at 10 accounts, so its memory limit is at least 1Gi (#176). |
+| sqlite-data | pb_data/data.db (with -wal and -shm) | 0.12 GB at 1 account and 1.19 GB at 10 accounts (about 0.12 GB each), synthetic rows at the floor | 5.08 rows per command, weighted over the mix | Expired idempotency rows, relayed outbox rows, and #21's tombstones are #22 due-work, in batches of at most 500 rows; SQLite's passive autocheckpoint folds the WAL back, and no job runs a blocking checkpoint under load. | hold p99 29 ms, queue p99 29 ms at the steady rate, a best case; batches at most 500 rows | The WAL peaked at 393 MiB; keep twice the database size free for VACUUM INTO and a restore copy. PocketBase's RSS reached 663 MiB at 10 accounts, so its memory limit is at least 1Gi (#176). |
 | files | pb_data/storage | 10 GB per account at the floor (spec 2020-2028); 100 GB at 10 accounts | one file and one account_blobs row per stored file | #76's purges remove files once the next backup has run; orphans are swept as #22 due-work. | file writes happen outside the transaction; only the row holds the writer | The shipped 5Gi PVC holds well under one account at the floor. Size pb_data for 10 GB per account plus twice the database, plus a backup's staging copy; #176 (ROUNDS-34-L07) sets the shipped default from this plan. |
 | sqlite-logs | pb_data/logs.db | bounded by PocketBase's log retention setting | one row per logged request, written outside command transactions | PocketBase's own retention | its own file and writer; it never holds the data writer | small next to the database; not part of a restore |
 
@@ -827,15 +642,16 @@ erDiagram
 | ROUNDS_SHARE_RESOLVER_PASSWORD | share_resolvers | Kept: the share resolver's non-superuser identity, at class level. | ROUNDS-00B-L04 |
 | ROUNDS_AI_GATEWAY_SECRET | ai_gateway | Planned: #73's provider gateway identity, which takes over the runner's 7 provider and settings writes. | ROUNDS-14-L02 |
 | ROUNDS_DISPATCHER_SECRET | dispatcher_service | Planned: #22's relay, job queue, and due-work identity. | ROUNDS-02-L05 |
-| ROUNDS_ADMISSION_SECRET | the runner | Kept: the runner key #1's routes require beside the caller's bearer; only the runner holds it, and no client does. | ROUNDS-00A-L01 |
+| ROUNDS_ADMISSION_SECRET | PocketBase and the runner | Kept: the shared key #1's routes require beside the caller's bearer; PocketBase checks it, the runner sends it, and no client holds it. | ROUNDS-00A-L01 |
+| AI_KEY_SECRET | the runner | Kept: the runner's key for what it seals or keys, stored provider keys among them (docs/operations.md), kept apart from the backups (DB8); #73's keyring takes over the provider keys. | ROUNDS-14-L02 |
 
 ## Changed authorities
 
 | Authority | Disposition | After | Rollback |
 | --- | --- | --- | --- |
-| containment-stores | ratified in place, and #6's and #177's stores get a path (containment) | ROUNDS-00A-L01/S3, ROUNDS-00A-L03, ROUNDS-00B-L03, ROUNDS-00B-L04 | Nothing moves, so nothing rolls back; a superseding revision would transfer a store under spec 2699. |
-| pocketbase-version | retain the 0.22 line; P3 moves the pin to 0.22.57; the major port waits for a trigger (DB9) | ROUNDS-02-L01/P3 | P3 rolls back by image tag; the port's boundary is the new binary's first start (DB9). |
-| byte-store | account_blobs in pb_data/storage, deduped per account (DB10) | ROUNDS-10-L01, ROUNDS-14-L02, ROUNDS-32-L03, ROUNDS-14-L05 | #53's migration drops account_blobs while it is empty; after files land, a forward fix. |
+| containment-stores | ratified in place, and #6's and #177's stores get a path (containment) | ROUNDS-00A-L01/S3, ROUNDS-00A-L02, ROUNDS-00A-L03, ROUNDS-00A-L04, ROUNDS-00B-L01, ROUNDS-00B-L02, ROUNDS-00B-L03, ROUNDS-00B-L04, ROUNDS-00B-L06 | Nothing moves, so nothing rolls back; a superseding revision would transfer a store under spec 2699. |
+| pocketbase-version | retain the 0.22 line; P3 moves the pin to 0.22.57; the port to another line waits for a trigger (DB9) | ROUNDS-02-L01/P3 | P3 rolls back by image tag; the port's boundary is the new binary's first start (DB9). |
+| byte-store | account_blobs in pb_data/storage, deduped per account, read through the gateway (DB10) | ROUNDS-10-L01, ROUNDS-14-L02, ROUNDS-32-L03, ROUNDS-14-L05 | #53's migration drops account_blobs while it is empty; after files land, a forward fix. |
 | authority-matrix-cells | DR-0002@2 fills #16's 85 storage cells and 18 target paths from this record | ROUNDS-01-L02 | Revert DR-0002@2 while it is unratified; after, a superseding revision. |
 | k8s-comment | k8s/pocketbase.yaml's comment drops the Postgres plan and points here | ROUNDS-02-L01 | Reverting this PR restores the comment; no manifest value changes. |
 
@@ -859,7 +675,7 @@ This leaf produces the gate's first item, so the gate doesn't apply to its own m
 | Consequence | Statement |
 | --- | --- |
 | account | No runtime or privilege change here. DB2 and DB4 read the account from the bearer's auth record inside the command's transaction, so no command names its own account, and a record from another account answers like a missing one. Gateway-owned collections lose their REST write rules at each transfer. |
-| privacy | Rows keep the privacy floor DR-0002 gives them, and the ERD names each entity's partition column and what account deletion does to it. The byte store dedupes within one account only, so whether a file exists never shows across accounts (DB10). The benchmark seeds synthetic data and generates its accounts and passwords per run. |
+| privacy | Rows keep the privacy floor DR-0002 gives them, and the ERD names each entity's partition column and what account deletion does to it. The byte store dedupes within one account only, so whether a file exists never shows across accounts, and its bytes are read only through a route that checks the account (DB10). The benchmark seeds synthetic data and generates its accounts and passwords per run. |
 | secret | Credentials appear by name only. No runtime writer uses the superuser; it keeps the bootstrap migration and operator use. Each service identity is a non-superuser auth record with its own secret, and its login answers only under its collection's exact name. #73's keyring encrypts provider keys, and later the byte store's files. |
 | publicBoundary | #19's command routes sit behind nginx's existing /api/ pass-through to PocketBase: no new port, hostname, or route outside /api/. Each route authorizes the account inside its transaction (DB4), and #19's own PR carries the exposure review. The hook routes only the runner calls stay refused at the public URL, as nginx already refuses the admission, execution, snapshot, and share routes. |
 
@@ -868,13 +684,13 @@ This leaf produces the gate's first item, so the gate doesn't apply to its own m
 | Fact | At 62d4eae | On next |
 | --- | --- | --- |
 | spa-client | frontend/src/lib/pocketbase.ts@62d4eae:L14 | 11 SPA modules still write through the pb client on next. |
-| runner-writes-ai | backend/routers/ai.py@62d4eae:L367-L542 | 7 provider and settings writes in ai.py, all with the caller's token (DB3). |
-| runner-writes-take-home | backend/routers/take_home.py@62d4eae:L164-L167 | 2 take-home writes in take_home.py with the caller's token, until #3's PR 4. |
-| runner-writes-share | backend/routers/share.py@62d4eae:L85-L214 | 3 share writes at the audited revision; on next every share write is a hook route. |
-| pin | pocketbase/Dockerfile@62d4eae:L3-L11 | 0.22.22 with SHA-256 checks for amd64 and arm64; P3 moves it to 0.22.57. |
+| runner-writes-ai | backend/routers/ai.py@62d4eae:L367-L542 | 7 provider and settings writes in ai.py at 6c4a5a3, all with the caller's token (DB3). |
+| runner-writes-take-home | backend/routers/take_home.py@62d4eae:L164-L167 | 2 take-home writes in take_home.py at 6c4a5a3 with the caller's token, until #3's PR 4. |
+| runner-writes-share | backend/routers/share.py@62d4eae:L1 | 3 share writes at the audited revision; on next every share write is a hook route. |
+| pin | pocketbase/Dockerfile@62d4eae:L3-L11 | 0.22.22 at 6c4a5a3, with SHA-256 checks for amd64 and arm64. |
 | sdk | frontend/package.json@62d4eae:L29 | ^0.26.8, resolved to 0.26.8. |
-| signup-hook | pocketbase/pb_hooks/main.pb.js@62d4eae:L3-L9 | 11 .pb.js files with 20 routes; runInTransaction at 8 sites. |
-| admin-bootstrap | pocketbase/pb_migrations/1700000500_bootstrap_admin.js@62d4eae:L33-L44 | Unchanged; 38 migrations, all with new Dao(. |
+| signup-hook | pocketbase/pb_hooks/main.pb.js@62d4eae:L3-L9 | 11 .pb.js files with 20 routes at 6c4a5a3; runInTransaction at 8 sites. |
+| admin-bootstrap | pocketbase/pb_migrations/1700000500_bootstrap_admin.js@62d4eae:L33-L44 | Unchanged; 38 migrations at 6c4a5a3, all with new Dao(. |
 | pb-data-mount | docker-compose.prod.yml@62d4eae:L38-L39 | Only pocketbase mounts pb_data. |
 | k8s | k8s/pocketbase.yaml@62d4eae:L2-L68 | A 5Gi RWO PVC and one Recreate replica at 500m and 512Mi; this PR fixes the comment at lines 2 to 5. |
 | runner-replicas | k8s/runner.yaml@62d4eae:L30 | 2 runner replicas, so DB7 needs its lease. |
@@ -884,15 +700,17 @@ This leaf produces the gate's first item, so the gate doesn't apply to its own m
 
 ## Deferred
 
-- **The major-line PocketBase port.** Waits for a DB9 trigger; it would be its own leaf under scope decision 3.
+- **The port to another PocketBase line.** Waits for a DB9 trigger; it would be its own leaf under scope decision 3, and supersedes this record first.
 - **The full 10 GB of bytes per account at 10 accounts.** Extrapolated from a measured 2 GiB sample, labeled extrapolated in the receipt.
-- **Real cgroup limits.** macOS has none; one Go scheduler thread and GOMEMLIMIT stand in, and RSS is reported against 512Mi.
+- **Real cgroup limits.** macOS has none; one Go scheduler thread and GOMEMLIMIT stand in, and RSS is reported against 512Mi. One core here is more than the 500m quota and never throttles, so throughput, hold times, and lag are a best case for the shipped limits.
 - **A CI benchmark job.** A full run takes about half an hour of one machine, too long for the shared CI pool; CI runs the bench's unit tests.
+- **PocketBase's memory limit.** RSS reached 663 MiB at 10 accounts, over the shipped 512Mi (DB1); #176 (ROUNDS-34-L07) ships a limit of at least 1Gi with its release.
 - **Resizing the PVC.** The storage plan sizes it; #176 sets the shipped default, and only the k8s comment changes here.
+- **The account delete.** The largest single transaction isn't measured here (DB2); #76 (ROUNDS-14-L05) measures it.
 
 ## Versioning and supersession
 
-This record, contracts/database/erd.json, and contracts/database/benchmark.json share one revision counter, so a decision is cited as DR-0004@<revision>:<decision-id> (for example DR-0004@1:DB2) and a store as DR-0004@<revision>:<store-id>. A change to a decision's store, owning process, or owning leaf, or to an entity's store, partition, or delete behavior, is breaking; adding an entity, a planned table, or a limit is additive. A ratified revision pins the SHA-256 of the ERD, the receipt, their schemas, and the generated ADR, so an unapproved edit fails DR_APPROVAL_STALE.
+This record, the ERD's written part (contracts/database/erd-decisions.json), and contracts/database/benchmark.json share one revision counter, so a decision is cited as DR-0004@<revision>:<decision-id> (for example DR-0004@1:DB2) and a store as DR-0004@<revision>:<store-id>. A revision is needed only when one of those changes. A change to a decision's store, owning process, or owning leaf, or to a written entity's store, partition, or delete behavior, is breaking; adding an entity, a planned table, an index, or a limit is additive. The schema snapshot and the generated ERD (contracts/database/erd.json and docs/decisions/DR-0004-erd.md) are not governed: a PR that adds or changes a migration regenerates them, or DB_ERD_STALE fails it, and needs no revision of this record unless it changes a written field. A new table or relation field needs its written fields, so it comes with an additive revision. A ratified revision pins the SHA-256 of the written part, the receipt, their schemas, and the generated ADR, so an unapproved edit fails DR_APPROVAL_STALE. PocketBase is ratified by its line: a patch on the 0.22 line is a pin change, and a port to another line supersedes this record first.
 
 A ratified revision is never edited. A leaf that needs another store, transaction owner, or process supersedes this record first: the new revision names DR-0004@<n> in supersedes, gives supersessionReason, and lists per decision whether it is kept or changed. Leaves citing a changed decision go back to blocked until they re-cite; leaves citing an unchanged one keep their citation. An unratified revision can be reverted.
 

@@ -150,7 +150,7 @@
       "service": "Ephemeral Execution Worker pool",
       "spec": "spec 1935",
       "baseline_locations": ["backend/drivers/","backend/ai_coding/","backend/take_home/","backend/pdf_renderer/"],
-      "target_path": "backend/execution/"
+      "target_path": "backend/worker/"
     },
     {
       "id": "provider-gateway",

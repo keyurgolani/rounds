@@ -5,10 +5,12 @@
 Runs `pocketbase migrate up` (no serve, no port) on a throwaway directory
 under harness/bench/.scratch/, reads the migrated data.db read-only, and
 writes the collections, fields, relations, indexes, rules, system tables,
-and triggers as JSON. The ERD in contracts/database/erd.json is checked
-against this snapshot by scripts/conformance/rules/database-adr.mjs, so the
+and triggers as JSON. scripts/conformance/rules/database-adr.mjs builds the
+ERD's generated part, contracts/database/erd.json, from this snapshot, so the
 ERD's cascade flags, relation targets, and indexes are PocketBase's own, not
-a reading of the migration files. The scratch goes to the Trash afterwards.
+a reading of the migration files. A PR that adds or changes a migration runs
+this, then node scripts/conformance/run.mjs --write; until it does, the rule
+fails it with DB_ERD_STALE. The scratch goes to the Trash afterwards.
 """
 from __future__ import annotations
 

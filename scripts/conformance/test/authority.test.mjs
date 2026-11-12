@@ -18,6 +18,9 @@ const LEDGER = 'contracts/authority/disposition-ledger.json';
 const CORRECTIONS = 'contracts/authority/owner-sentence-corrections.json';
 const DR = 'docs/decisions/DR-0002-authority-matrix.json';
 const AUDITED = '62d4eae';
+// DR-0002@2 is a draft until #222's r2 review passes; harness/bench/ratify.py
+// sets this to 'ratified' in the ratification commit.
+const DR_STATUS = 'draft';
 // A rounds-review checkout, when one is named, for the verbatim checks.
 const ROUNDS_REVIEW = process.env.ROUNDS_REVIEW_ROOT || null;
 
@@ -220,8 +223,10 @@ describe('authority: matrix content', () => {
     assert.deepEqual(p.filter((x) => x.decision).map((x) => [x.id, x.service, x.spec, x.decision]), [['provider-gateway', 'Provider Gateway', 'spec 808', 'D8']]);
     // #18 (ROUNDS-02-L01, DR-0004) places every package: the gateway and its
     // audit package under lib/, the rest of the hook-route services
-    // under domain/, and the two runner-side packages in the runner.
-    const runner = { 'execution-worker': 'backend/execution/', 'provider-gateway': 'backend/app/provider_gateway/' };
+    // under domain/, the worker pool in its own image's directory (#5),
+    // apart from #3's control plane in backend/execution/, and the Provider
+    // Gateway in the runner.
+    const runner = { 'execution-worker': 'backend/worker/', 'provider-gateway': 'backend/app/provider_gateway/' };
     for (const x of p) {
       const want = runner[x.id] || `pocketbase/pb_hooks/${['command-gateway', 'revision-audit'].includes(x.id) ? 'lib' : 'domain'}/${x.id}/`;
       assert.equal(x.target_path, want, x.id);
@@ -445,6 +450,17 @@ describe('authority: rules 1 to 12, one negative control each', () => {
       });
       assert.deepEqual(run(fixture(ratify([MATRIX, PACKAGES, LABELS, STORES]))), []);
       only(run(fixture(ratify([MATRIX, PACKAGES, LABELS]))), 'AUTH_APPROVAL_INCOMPLETE');
+    });
+
+    it(`is ${DR_STATUS} as committed, and pins its four governed files once ratified`, () => {
+      const dr = repo(DR);
+      assert.equal(dr.status, DR_STATUS);
+      if (DR_STATUS === 'ratified') {
+        assert.match(dr.approver, /^rounds lane review \(PR #222, r\d+\), \d{4}-\d{2}-\d{2}$/);
+        assert.deepEqual(dr.approvalRef.governedFiles.map((g) => g.path), [MATRIX, PACKAGES, LABELS, STORES]);
+      } else {
+        assert.equal(dr.approvalRef, null);
+      }
     });
 
     it('fails closed when the base cannot be read, and when DR-0002 disagrees', () => {
