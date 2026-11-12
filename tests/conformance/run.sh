@@ -43,6 +43,11 @@ CANARY_ADMIN_PW="canary-pbpw-${RUN_ID}-$(rand)"
 CANARY_ADMIN_EMAIL="pbadmin-${RUN_ID}-$(rand)@canary.invalid"
 CANARY_ADMISSION="canary-adm-${RUN_ID}-$(rand)"
 BAIT_CANARY="canary-bait-${RUN_ID}-$(rand)"
+# The job store's worker secret, made here for this run only: every code
+# run is a job since ROUNDS-00A-L03 PR 4, so PocketBase and the runner
+# share it. It goes into the env file alone, which the teardown removes,
+# and is never printed, kept, or uploaded.
+EXECUTION_SECRET_V="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"
 
 compose() { ${COMPOSE_BIN} -p "${PROJECT}" -f "${HARNESS_FILE}" -f "${OVERLAY_FILE}" --env-file "${ENV_FILE}" "$@"; }
 
@@ -63,6 +68,9 @@ python3 "${CORPUS_DIR}/conformance/overlay.py" --out "${DEFINITIONS_DIR}"
 # The env file both compose files read. The runner picks up the canaries as
 # its environment (so a leak surfaces), and the corpus reads the same values
 # to scan for them. Signups stay enabled so the corpus can make accounts.
+# Only its owner reads it, since it holds the worker secret.
+old_umask="$(umask)"
+umask 077
 cat > "${ENV_FILE}" <<EOF
 IMAGE_PREFIX=${IMAGE_PREFIX}
 RUN_ID=${RUN_ID}
@@ -78,7 +86,11 @@ PB_ADMIN_PASSWORD=${CANARY_ADMIN_PW}
 ROUNDS_ADMISSION_SECRET=${CANARY_ADMISSION}
 BAIT_CANARY=${BAIT_CANARY}
 CORPUS_DEFINITIONS=${DEFINITIONS_DIR}
+PB_EXECUTION_SECRET=${EXECUTION_SECRET_V}
+RUNNER_EXECUTION_SECRET=${EXECUTION_SECRET_V}
 EOF
+umask "${old_umask}"
+unset EXECUTION_SECRET_V
 
 echo "--- building pocketbase, runner, corpus, and bait images ---"
 compose build pocketbase runner corpus bait-metadata

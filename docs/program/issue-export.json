@@ -1,0 +1,919 @@
+{
+  "$schema": "./issue-export.schema.json",
+  "description": "The \"Exact prerequisite leaf issues\" section of each filed issue, as GitHub held it on exportedOn, trimmed by scripts/program/export.mjs. scripts/program/dag.mjs builds leaf-dag.json from it, so CI never reads GitHub. sha256 covers the issues array (canonical JSON); refresh both with the command below and export.mjs.",
+  "source": {
+    "repo": "keyurgolani/rounds",
+    "command": "gh issue list --repo keyurgolani/rounds --state all --limit 300 --json number,title,body",
+    "exportedOn": "2026-11-12",
+    "section": "Exact prerequisite leaf issues"
+  },
+  "sha256": "bd55e7e3330052dd41f76069af4724dc39bc7d35a4d4f856cd1eae001dcbbe06",
+  "issues": [
+    {
+      "number": 1,
+      "title": "[ROUNDS-00A-L01] Authenticate, authorize, and quota every execution and render route",
+      "prerequisites": "- Stages 0 to 3 and 5: none; the spec exempts a foundation leaf from its own gates.\n- Stage 4: #9's harness skeleton. #9's stage 4 consumes stages 0 and 2; #17 records both edges. No ROUNDS-34 edge."
+    },
+    {
+      "number": 2,
+      "title": "[ROUNDS-00A-L02] Define server-owned Test Definitions, Harness Revisions, and Artifact Renderer Contracts",
+      "prerequisites": "- #1 (`ROUNDS-00A-L01`, route auth): the account dependency, gate registry, error envelope, and observability kit.\n- Stage prerequisite: #9's Compose harness.\n\nDownstream: #3 to #6; for rendering #78, #79, #83, #89 (`ROUNDS-15-L02`, `-L03`, `ROUNDS-16-L03`, `ROUNDS-18-L01`); for definitions #130, #133 to #135, #137, #163 (`ROUNDS-28-L01`, `-L04` to `-L06`, `-L08`, `ROUNDS-32-L09`)."
+    },
+    {
+      "number": 3,
+      "title": "[ROUNDS-00A-L03] Introduce the execution-control protocol and durable result envelope",
+      "prerequisites": "- #1 (`ROUNDS-00A-L01`, route auth): account dependency, quota, server-write record and idempotency store (both extended here), gate registry, observability kit, minimal-environment launcher.\n- #2 (`ROUNDS-00A-L02`, server-owned definitions): definition versions, hidden-material visibility, language selection, `resource-profile/v1` job classes."
+    },
+    {
+      "number": 4,
+      "title": "[ROUNDS-00A-L04] Create the Legacy Artifact Snapshot bridge and safe render disable",
+      "prerequisites": "- #1 (`ROUNDS-00A-L01`, route auth) supplies the bearer, server writes, idempotency store, quotas, gates, and envelopes, plus #9's (`ROUNDS-00B-L01`, account scope) harness.\n- #2 (`ROUNDS-00A-L02`, renderer contracts) supplies template ids, the design allowlist, margin bounds, and the render request."
+    },
+    {
+      "number": 5,
+      "title": "[ROUNDS-00A-L05] Isolate candidate code in ephemeral no-secret workers",
+      "prerequisites": "- `ROUNDS-00A-L01` (#1): route auth, quota, and the gate registry.\n- `ROUNDS-00A-L02` (#2): server-owned definitions and resource profiles.\n- `ROUNDS-00A-L03` (#3): execution protocol and result envelope.\n- `ROUNDS-00A-L08` (#8): conformance corpus stage only; its release gate stays downstream."
+    },
+    {
+      "number": 6,
+      "title": "[ROUNDS-00A-L06] Isolate document rendering in ephemeral no-script workers",
+      "prerequisites": "- #1 (`ROUNDS-00A-L01`, route auth and quota). Stage 1 needs only this.\n- #2 (`ROUNDS-00A-L02`, Artifact Renderer Contracts).\n- #3 (`ROUNDS-00A-L03`, job protocol). From stage 3.\n- #4 (`ROUNDS-00A-L04`, snapshot bridge and safe disable).\n- #5 (`ROUNDS-00A-L05`, code workers). From stage 2, only its sandbox decision record, launcher, and syscall profile.\n- #8 (`ROUNDS-00A-L08`, adversarial suites). Corpus stage only, from stage 2.\n- Test harness: #9 (`ROUNDS-00B-L01`, account scope) Compose harness, from stage 2.\n\nThis leaf is a prerequisite of #7 (`ROUNDS-00A-L07`, deployment proof), #8's release gate, #78 (`ROUNDS-15-L02`, materialization engine), #79 (`ROUNDS-15-L03`, immutable revisions), #89 (`ROUNDS-18-L01`, deterministic export), and font-package consumers #83 (`ROUNDS-16-L03`, template preview), #166, and #173. #182 (root build contexts) later generalizes stage 2's build context."
+    },
+    {
+      "number": 7,
+      "title": "[ROUNDS-00A-L07] Prove secret, network, and pooled-state containment",
+      "prerequisites": "- #5 (`ROUNDS-00A-L05`, code workers).\n- #6 (`ROUNDS-00A-L06`, render workers).\n- #8 (`ROUNDS-00A-L08`, conformance suites), corpus stage only.\n- Transitive: #1 (`ROUNDS-00A-L01`, route auth). Stage 4 needs #9's account factory.\n\nBlocks #8's release gate and #55 (`ROUNDS-10-L03`, URL retrieval). #170 (`ROUNDS-34-L01`, early harnesses) packages the probe. #175 (`ROUNDS-34-L06`, docs) documents the targets the owner ratifies. The demo run coordinates with #177 (demo lifecycle)."
+    },
+    {
+      "number": 8,
+      "title": "[ROUNDS-00A-L08] Establish adversarial execution and rendering conformance suites",
+      "prerequisites": "- Stage 1: #1 (`ROUNDS-00A-L01`, route auth) and #9 (`ROUNDS-00B-L01`, database harness).\n- Stage 2, each complete, current, and verified: #1, #2 (`ROUNDS-00A-L02`, definitions), #3 (`ROUNDS-00A-L03`, result envelope), #4 (`ROUNDS-00A-L04`, snapshot bridge), #5 (`ROUNDS-00A-L05`, code workers), #6 (`ROUNDS-00A-L06`, render workers), #7 (`ROUNDS-00A-L07`, deployment proof)."
+    },
+    {
+      "number": 9,
+      "title": "[ROUNDS-00B-L01] Establish the server-derived account-scope invariant",
+      "prerequisites": "- Stages 1 and 2: none. Stage 3: #1's stage 5 (release guard). Stage 4: #1's stages 0 (inventory) and 2 (proxy denials). Only #1's stage 4 waits on this harness, so there's no cycle; #17 (`ROUNDS-01-L03`, dependency program) records the edges."
+    },
+    {
+      "number": 10,
+      "title": "[ROUNDS-00B-L02] Authorize every typed relation and merge",
+      "prerequisites": "- #9 `ROUNDS-00B-L01`: Establish the server-derived account-scope invariant. L02 uses its owner immutability on update, its cross-owner scan, and its harness."
+    },
+    {
+      "number": 11,
+      "title": "[ROUNDS-00B-L03] Create immutable artifact share capabilities",
+      "prerequisites": "- #9 (`ROUNDS-00B-L01`, account scope): both stages; tests run in its harness.\n- #1 (`ROUNDS-00A-L01`, route auth and server writes): stage 2's server-write record and hook routes, gate registry, logging kit, and interim isolation.\n- #4 (`ROUNDS-00A-L04`, snapshot bridge): stage 2's snapshots, eligibility, sanitized markup, and referenced-snapshot delete guard."
+    },
+    {
+      "number": 12,
+      "title": "[ROUNDS-00B-L04] Implement one-time share secret delivery, password protection, and rotation",
+      "prerequisites": "- #11 (`ROUNDS-00B-L03`, share capabilities): record, owner list, lookup, projection, uniform not-found, headers, closed resolution gate.\n- #1 (`ROUNDS-00A-L01`, route auth and quota): server-write mechanism, per-account command idempotency store, gate registry, observability kit, client-immutable demo flag.\n- #4 (`ROUNDS-00A-L04`, snapshot bridge) PR 2: CreateShare calls its snapshot command.\n- Key custody: #5 (`ROUNDS-00A-L05`, no-secret workers) or #1's interim launcher stage."
+    },
+    {
+      "number": 13,
+      "title": "[ROUNDS-00B-L05] Add the complete two-account IDOR and disclosure suite",
+      "prerequisites": "- #9 (`ROUNDS-00B-L01`, account scope), and its harness: the database, runner, proxy, account factory, and receipts.\n- #10 (`ROUNDS-00B-L02`, relation and merge authorization).\n- #11 (`ROUNDS-00B-L03`, share capabilities).\n- #12 (`ROUNDS-00B-L04`, share secrets, passwords, and throttle)."
+    },
+    {
+      "number": 14,
+      "title": "[ROUNDS-00B-L06] Migrate legacy shares and prove immediate revocation",
+      "prerequisites": "- #9 `ROUNDS-00B-L01`: account scope.\n- #10 `ROUNDS-00B-L02`: relation authorization and quarantine.\n- #11 `ROUNDS-00B-L03`: share capabilities and kill switch.\n- #12 `ROUNDS-00B-L04`: secret delivery and share creation.\n- #13 `ROUNDS-00B-L05`: two-account IDOR suite.\n- #1 `ROUNDS-00A-L01`: route auth, server writes, migration lint.\n- #4 `ROUNDS-00A-L04`: snapshot bridge and scan.\n- #5 `ROUNDS-00A-L05` or #1's interim launcher stage: key custody.\n- #177 stage 1: the demo containment migration merges first."
+    },
+    {"number":15,"title":"[ROUNDS-01-L01] Ratify the product vocabulary and user-facing language","prerequisites":"- None."},
+    {
+      "number": 16,
+      "title": "[ROUNDS-01-L02] Ratify the source-of-truth and package-boundary matrix",
+      "prerequisites": "- `ROUNDS-01-L01` (#15, vocabulary): the record format, term registry, `contracts/vocabulary/leaf-ids.json`, rule interface, and `conformance` job.\n\nVia #17's re-authorization, #18 depends on #15, this leaf, the harness in #9 (`ROUNDS-00B-L01`, account scope), and #1's stage 3 (`ROUNDS-00A-L01/S3`, admission state) instead of #17, and #36 on this leaf."
+    },
+    {
+      "number": 17,
+      "title": "[ROUNDS-01-L03] Publish the transformation dependency and clean-cutover program",
+      "prerequisites": "- #15 (record format, rule interface, `conformance` job) and #16 (authority rows)."
+    },
+    {
+      "number": 18,
+      "title": "[ROUNDS-02-L01] Ratify the canonical database and transaction-owner ADR",
+      "prerequisites": "- #15 (`ROUNDS-01-L01`, vocabulary): terms, record format, conformance runner.\n- #16 (`ROUNDS-01-L02`, source-of-truth matrix): aggregate rows and packages.\n- #9 (`ROUNDS-00B-L01`, account scope): harness and rules.\n- #1 (`ROUNDS-00A-L01`, execution admission): stage 3 only (admission state, which lands `docs/security/server-writes.md` and the admission collections), recorded in #17 as `ROUNDS-00A-L01/S3`.\n\n#17 (`ROUNDS-01-L03`) consumes this ADR, so its filed edge is dropped."
+    },
+    {
+      "number": 19,
+      "title": "[ROUNDS-02-L02] Build the account-authorized domain command gateway",
+      "prerequisites": "- `ROUNDS-01-L03/S2` (#17, cutover program): rule format, gate binding.\n- #18 `ROUNDS-02-L01` (database ADR): placement, and any upgrade in its PR 3.\n- #1 `ROUNDS-00A-L01` (execution admission): gates, log kit, idempotency store, `/_/` denial.\n- #9 `ROUNDS-00B-L01` (account scope): account predicate, harness.\n- #10 `ROUNDS-00B-L02` (relation authorization): endpoint predicate.\n- #170 `ROUNDS-34-L01` (contract harnesses): S1 for harness and conformance, S2 for the failpoint seams.\n- #172 `ROUNDS-34-L03` (authorization matrix): schema stage only.\n- #182 (shared contracts package): images build from separate contexts (`publish-images.yml:25-32`)."
+    },
+    {
+      "number": 20,
+      "title": "[ROUNDS-02-L03] Enforce expected versions, idempotency, and conflict results",
+      "prerequisites": "- #18 `ROUNDS-02-L01` (database ADR): store location, version model, gateway placement.\n- #19 `ROUNDS-02-L02` (command gateway): envelope, taxonomy, fixture, SPA client, gates.\n- #1 `ROUNDS-00A-L01` (execution admission): interim store, gate registry, observability kit.\n- #9 `ROUNDS-00B-L01` (account scope): PocketBase-booting harness.\n- `ROUNDS-34-L01/S2` (#170, contract harnesses): fake clock, failpoints, two-account factory, and the typed command and idempotency slot this leaf fills."
+    },
+    {
+      "number": 21,
+      "title": "[ROUNDS-02-L04] Persist transactional change sets, revisions, and audit entries",
+      "prerequisites": "- #20 `ROUNDS-02-L03`: Enforce expected versions, idempotency, and conflict results. Its idempotency result commits in this transaction. #18, #19, #182, #9, and #170 come through it.\n- #72 `ROUNDS-14-L01`: Ratify privacy classes, sink policy, and numeric retention."
+    },
+    {
+      "number": 22,
+      "title": "[ROUNDS-02-L05] Publish domain events through a transactional outbox",
+      "prerequisites": "- `ROUNDS-02-L04` (#21, change sets): transaction writer, change-set id, commit position, aggregate versions. Brings #18 to #20.\n- `ROUNDS-14-L01` (#72, privacy classes): classes, field map, sink policy.\n- `ROUNDS-00A-L03` (#3, job protocol): fencing rule, lease timing, job-metric shape.\n- `ROUNDS-34-L01/S3` (#170, harness closure): required for this leaf's Security and harness Integration tests.\n\n#76 Stage 1b is a rollout gate instead: PR 4 needs its handler registry, journal, `accountState`, and `rounds-journal` `status` and `replay`. #76 Stage 1b needs PR 3's due-work host.\n\nTests run in #9's harness on #170's (`ROUNDS-34-L01`, harnesses) fake clock and failpoints; S3 is a direct edge."
+    },
+    {
+      "number": 23,
+      "title": "[ROUNDS-02-L06] Create checkpointed projectors and consistency envelopes",
+      "prerequisites": "- `ROUNDS-02-L05` (#22, outbox), the direct edge: `dispatcher`, cursor, dedupe record, `aggregate_seq`, withheld markers, poison signal.\n- `ROUNDS-02-L04` (#21, change sets): `commit_position`, `head` (position counter), `appendAuditEntry`.\n- `ROUNDS-02-L03` (#20, idempotency): replay returns the original position.\n- `ROUNDS-02-L02` (#19, command gateway): fixture aggregate, result schema, gateway-owned registry, gates in the registry of #1 (`ROUNDS-00A-L01`, route auth).\n- `ROUNDS-02-L01` (#18, database ADR): store, query placement, process model.\n- `ROUNDS-00B-L01` (#9, account scope): the `harness` CI job that boots PocketBase.\n- `ROUNDS-14-L01` (#72, privacy classes): the privacy-matrix version.\n\n#18 to #21 arrive through #22. `ROUNDS-01-L03` (#17) is dropped; it consumes #18's ADR."
+    },
+    {
+      "number": 24,
+      "title": "[ROUNDS-03-L01] Define Account and Career Profile aggregate contracts",
+      "prerequisites": "- `ROUNDS-00A-L01` (#1, gate registry)\n- `ROUNDS-00B-L01` (#9, account scope)\n- `ROUNDS-00B-L07` (#177, demo lifecycle)\n- `ROUNDS-01-L01` (#15, vocabulary)\n- `ROUNDS-01-L02` (#16, store matrix)\n- `ROUNDS-02-L01` (#18, database ADR)\n- `ROUNDS-02-L02` (#19, command gateway)\n- `ROUNDS-02-L03` (#20, idempotency)\n- `ROUNDS-02-L04` (#21, change sets)\n- `ROUNDS-02-L05` (#22, outbox)\n- `ROUNDS-08-L01` (#44, field contract)\n- `ROUNDS-14-L01` (#72, privacy classes)\n- `ROUNDS-18-L03` (#91 Stage 1, exporter contract)\n- `ROUNDS-34-L01` (#170, contract harness)\n- `ROUNDS-34-L03` (#172, authorization matrix)\n- `ROUNDS-34-L08` (#182, contracts package)\n\n#76 (`ROUNDS-14-L05`, purge) gates opening, not merging."
+    },
+    {
+      "number": 25,
+      "title": "[ROUNDS-03-L02] Migrate mixed profile fields with explicit disposition",
+      "prerequisites": "- #17 (`ROUNDS-01-L03`, cutover program)\n- #23 (`ROUNDS-02-L06`, checkpointed projectors)\n- #24 (`ROUNDS-03-L01`)\n- #72 (`ROUNDS-14-L01`)\n- #73 (`ROUNDS-14-L02`), stage A only\n- #155 (`ROUNDS-32-L01`)\n- #156 (`ROUNDS-32-L02`)\n- #157 (`ROUNDS-32-L03`)\n- #170 (`ROUNDS-34-L01`, contract harnesses)\n- #171 (`ROUNDS-34-L02`, migration fixtures)\n- #174 (`ROUNDS-34-L05`, observability)\n\n#155 to #157 drop their generated `ROUNDS-03-L03` prerequisite, or this leaf, #155, and #26 form a cycle."
+    },
+    {
+      "number": 26,
+      "title": "[ROUNDS-03-L03] Build the canonical Career Profile workspace",
+      "prerequisites": "Stage A, complete unless a state is given:\n\n- #17 (`ROUNDS-01-L03`, cutover program), #21 and #23 (`ROUNDS-02-L04`, `L06`, change sets, envelopes), #24 and #25 (`ROUNDS-03-L01`, `L02`, aggregates, profile migration)\n- #45 and #46 (`ROUNDS-08-L02`, `L03`, editors and drafts, dialogs), #165 and #166 (`ROUNDS-33-L01`, `L02`, routes, shell), #170 and #173 (`ROUNDS-34-L01`, `L04`, harnesses, browser tests)\n- #178 (Account surface): stage 2, with the editor removal shipped\n- #147 (`ROUNDS-31-L02`, read model): stage A section keys open (`identity`, `contact_points`, `preferences`, `history`, `duplicates`, `unresolved`)\n- #167 (`ROUNDS-33-L03`, interaction patterns): stage 1 merged; stage 2 (`Inspector`, `Timeline`, `Table`) merges in this leaf's stage A PR\n- #168 (`ROUNDS-33-L04`, layout templates): S1 merged\n\nStage B adds #31 to #34 (`ROUNDS-05-L01` to `L04`, fact contracts) and #37 (`ROUNDS-06-L02`, relation service) with their #147 section keys open, #47 (`ROUNDS-08-L04`, selectors), and #156 (`ROUNDS-32-L02`, migration framework).\n\n#35 needs only stage B deployed with keys off; this issue closes when stage B turns writable, before #164. #31 to #34, #77 to #80, #95 to #98, and #155 to #163 drop it, breaking the cycle through #25 and #156."
+    },
+    {
+      "number": 27,
+      "title": "[ROUNDS-04-L01] Define Organization and Person aggregates",
+      "prerequisites": "- #9 (`ROUNDS-00B-L01`, account scope and harness).\n- #19 to #22 (`ROUNDS-02-L02` to `L05`): command gateway, versions and idempotency, change sets and audit, outbox.\n- #44 (`ROUNDS-08-L01`, field ids).\n- #72 (`ROUNDS-14-L01`, privacy classes).\n- #76 (`ROUNDS-14-L05`, purge), Stage 1a: handler registry.\n- #91 (`ROUNDS-18-L03`, account export), Stage 1: exporter registration.\n\nEvery prerequisite lands by program step 3, so this leaf moves there for #36 (`ROUNDS-06-L01`, relationship registry). Downstream: #28 to #32, #36, #57, #64, #78, #95, #107, #111, #119, #139, #147, #148, and #168 (#123 waits through #29). Contract leaves need only this leaf, plus #29 where they store references, never #30."
+    },
+    {
+      "number": 28,
+      "title": "[ROUNDS-04-L02] Build identity resolution and duplicate-candidate scoring",
+      "prerequisites": "- #23 (`ROUNDS-02-L06`, projectors and consistency envelopes).\n- #27 (`ROUNDS-04-L01`, Organization and Person aggregates).\n- #19 (`ROUNDS-02-L02`, command gateway).\n- #20 (`ROUNDS-02-L03`, expected versions and idempotency).\n- #21 (`ROUNDS-02-L04`, change sets and audit entries).\n- #22 (`ROUNDS-02-L05`, transactional outbox).\n- #9 (`ROUNDS-00B-L01`, server-derived account scope).\n- #72 (`ROUNDS-14-L01`, privacy classes and retention).\n- #76 (`ROUNDS-14-L05`, deletion and purge).\n- #146 (`ROUNDS-31-L01`, projection framework), for the queue and blocking index.\n- #156 (`ROUNDS-32-L02`, migration manifests), for the re-key.\n\n#29 isn't a prerequisite; its events and resolver are stubbed until it ships."
+    },
+    {
+      "number": 29,
+      "title": "[ROUNDS-04-L03] Implement merge redirects, correction history, and privacy tombstones",
+      "prerequisites": "- #10 `ROUNDS-00B-L02`, relation and merge authorization. Its deleted and redirected endpoint checks move here.\n- #19 `ROUNDS-02-L02`, command gateway.\n- #20 `ROUNDS-02-L03`, versions and idempotency, once it accepts a registry-declared digest-covered set for merges and `CorrectMerge` (Commands).\n- #21 `ROUNDS-02-L04`, change sets and audit.\n- #22 `ROUNDS-02-L05`, outbox.\n- #23 `ROUNDS-02-L06`, projectors.\n- #27 `ROUNDS-04-L01`, Directory aggregates.\n- #37 `ROUNDS-06-L02`, relationship service.\n- #72 `ROUNDS-14-L01`, privacy classes.\n- #76 `ROUNDS-14-L05`, deletion and purge.\n- #146 `ROUNDS-31-L01`, projection framework.\n- #155 `ROUNDS-32-L01`, disposition inventory.\n- #170 `ROUNDS-34-L01`, security harnesses."
+    },
+    {
+      "number": 30,
+      "title": "[ROUNDS-04-L04] Migrate repeated organization and person strings",
+      "prerequisites": "- #23 (`ROUNDS-02-L06`, consistency envelopes)\n- #27 (`ROUNDS-04-L01`, Directory aggregates)\n- #28 (`ROUNDS-04-L02`, identity resolution)\n- #29 (`ROUNDS-04-L03`, merges and tombstones)\n- #72 (`ROUNDS-14-L01`, privacy classes)\n- #76 (`ROUNDS-14-L05`, deletion and purge)\n- #155 (`ROUNDS-32-L01`, disposition inventory)\n- #156 (`ROUNDS-32-L02`, migration framework)\n- #157 (`ROUNDS-32-L03`, restore rehearsal)\n- #171 (`ROUNDS-34-L02`, migration fixtures)"
+    },
+    {
+      "number": 31,
+      "title": "[ROUNDS-05-L01] Define career history, education, and publication contracts",
+      "prerequisites": "- `ROUNDS-02-L02` to `ROUNDS-02-L05` (#19 to #22): command gateway, versions and idempotency, change sets, outbox.\n- `ROUNDS-03-L01` (#24): Career Profile.\n- `ROUNDS-04-L01` (#27): Organization and Person.\n- `ROUNDS-04-L03` (#29): merge redirects.\n- `ROUNDS-06-L01` (#36): relation registry.\n- `ROUNDS-06-L02` (#37): relation service.\n- `ROUNDS-07-L01` (#39): Career Pack spec.\n- `ROUNDS-07-L03` (#41): pack storage.\n- `ROUNDS-08-L01` (#44): field contract.\n- `ROUNDS-14-L01` (#72): privacy classes.\n- `ROUNDS-14-L05` (#76): purge.\n- `ROUNDS-18-L03` (#91), Stage 1 only: exporter registration.\n\nAll but #91 precede ROUNDS-05; #91's Stage 1 lands with #76's handlers."
+    },
+    {
+      "number": 32,
+      "title": "[ROUNDS-05-L02] Define projects, achievements, and evidence contracts",
+      "prerequisites": "- #19 to #22 (`ROUNDS-02-L02` to `L05`; gateway, versions, history with pins and purge, outbox)\n- #24 (`ROUNDS-03-L01`, Career Profile contracts, brings #72)\n- #27 and #29 (`ROUNDS-04-L01`, `L03`; Organization and Person, merges and holders)\n- #31 (`ROUNDS-05-L01`, envelope, brings #44)\n- #34 (`ROUNDS-05-L04`, Skill and Link)\n- #36 and #37 (`ROUNDS-06-L01`, `L02`; relation registry and service)\n- #39 and #41 (`ROUNDS-07-L01`, `L03`; pack spec and storage)\n- #76 (`ROUNDS-14-L05`, purge handler interface; Stage 1b for Stage 2)\n- #91 (`ROUNDS-18-L03`, export, Stage 1 only)"
+    },
+    {
+      "number": 33,
+      "title": "[ROUNDS-05-L03] Define professional stories and behavioral evidence",
+      "prerequisites": "- #19 (`ROUNDS-02-L02`, command gateway)\n- #20 (`ROUNDS-02-L03`, versions and idempotency)\n- #21 (`ROUNDS-02-L04`, change sets and audit)\n- #22 (`ROUNDS-02-L05`, outbox events)\n- #24 (`ROUNDS-03-L01`, profile aggregates)\n- #31 (`ROUNDS-05-L01`, career history)\n- #32 (`ROUNDS-05-L02`, projects and achievements)\n- #34 (`ROUNDS-05-L04`, skills and extensions)\n- #36 (`ROUNDS-06-L01`, relationship registry)\n- #37 (`ROUNDS-06-L02`, relationship service)\n- #39 (`ROUNDS-07-L01`, Career Pack spec)\n- #41 (`ROUNDS-07-L03`, pack relations)\n- #44 (`ROUNDS-08-L01`, field contract)\n- #72 (`ROUNDS-14-L01`, privacy classes)\n- #76 (`ROUNDS-14-L05`, purge-handler interface only)\n- #91 (`ROUNDS-18-L03`, export), Stage 1 only\n- #171 (`ROUNDS-34-L02`, migration fixtures)"
+    },
+    {
+      "number": 34,
+      "title": "[ROUNDS-05-L04] Define skills, links, and profession-extension contracts",
+      "prerequisites": "- `ROUNDS-02-L02`, `ROUNDS-02-L03`, `ROUNDS-02-L04`, `ROUNDS-02-L05`: gateway, idempotency, change sets, outbox (#19 to #22)\n- `ROUNDS-03-L01`: Career Profile contracts (#24)\n- `ROUNDS-05-L01`: career history and envelope (#31)\n- `ROUNDS-06-L01`, `ROUNDS-06-L02`: relation registry and service (#36, #37)\n- `ROUNDS-07-L01`, `ROUNDS-07-L03`, `ROUNDS-07-L04`: pack spec, storage, fixture pack (#39, #41, #42)\n- `ROUNDS-08-L01`: field contract (#44)\n- `ROUNDS-14-L05`: purge-handler interface (#76)\n- `ROUNDS-18-L03`: Stage 1 exporter registration, at program step 3 (#91)"
+    },
+    {
+      "number": 35,
+      "title": "[ROUNDS-05-L05] Migrate Experience and resume-owned professional facts",
+      "prerequisites": "- #177\n- #25 (`ROUNDS-03-L02`)\n- #26 (`ROUNDS-03-L03`), stage B merged with its keys off\n- #30 (`ROUNDS-04-L04`), #31 to #34 (`ROUNDS-05-L01` to `ROUNDS-05-L04`)\n- #37 (`ROUNDS-06-L02`), #72 (`ROUNDS-14-L01`)\n- #155 (`ROUNDS-32-L01`), #156 (`ROUNDS-32-L02`), #157 (`ROUNDS-32-L03`), #171 (`ROUNDS-34-L02`, migration fixtures)\n\n#9, #10, #28 (`ROUNDS-04-L02`, identity resolution), and #36 (`ROUNDS-06-L01`, relation registry) arrive through #19, #30, and #37."
+    },
+    {
+      "number": 36,
+      "title": "[ROUNDS-06-L01] Ratify the typed relationship registry and invariants",
+      "prerequisites": "- #16 (`ROUNDS-01-L02`): source-of-truth matrix.\n- #18 (`ROUNDS-02-L01`): database ADR.\n- #19 (`ROUNDS-02-L02`): command gateway.\n- #20 (`ROUNDS-02-L03`): versions and conflicts.\n- #21 (`ROUNDS-02-L04`): change sets and audit.\n- #22 (`ROUNDS-02-L05`): transactional outbox.\n- #27 (`ROUNDS-04-L01`): Organization and Person.\n- #39 (`ROUNDS-07-L01`): pack spec.\n- #72 (`ROUNDS-14-L01`): privacy classes.\n- #170 (`ROUNDS-34-L01`): contract harnesses.\n- #172 (`ROUNDS-34-L03`): authorization matrix.\n- #182: contracts package."
+    },
+    {
+      "number": 37,
+      "title": "[ROUNDS-06-L02] Build the authorized relationship command and query service",
+      "prerequisites": "- #36 (`ROUNDS-06-L01`, relation registry)\n- #10 (`ROUNDS-00B-L02`, relation authorization)\n- #19 (`ROUNDS-02-L02`, command gateway)\n- #20 (`ROUNDS-02-L03`, versions and idempotency), with the revive amendment\n- #21 (`ROUNDS-02-L04`, change sets and audit)\n- #22 (`ROUNDS-02-L05`, outbox)\n- #170 (`ROUNDS-34-L01`, test harnesses)"
+    },
+    {
+      "number": 38,
+      "title": "[ROUNDS-06-L03] Migrate hard-coded junctions and encoded mentions",
+      "prerequisites": "- #35 (`ROUNDS-05-L05`, Experience migration)\n- #36 (`ROUNDS-06-L01`, relation registry)\n- #37 (`ROUNDS-06-L02`, relation service)\n- #72 (`ROUNDS-14-L01`, privacy classes)\n- #155 (`ROUNDS-32-L01`, store registry)\n- #156 (`ROUNDS-32-L02`, migration framework)\n- #157 (`ROUNDS-32-L03`, backup rehearsal)\n- #171 (`ROUNDS-34-L02`, migration fixtures)\n\n#30 stays ahead through #35 and #39 through #36; #43, #98, #110, and #121 are not prerequisites."
+    },
+    {
+      "number": 39,
+      "title": "[ROUNDS-07-L01] Ratify the Career Pack specification",
+      "prerequisites": "- `ROUNDS-01-L01` (#15, product vocabulary): labels, conformance runner.\n- `ROUNDS-01-L02` (#16, boundary matrix): service mapping.\n- `ROUNDS-02-L01` (#18, database ADR): identifier syntax.\n- `ROUNDS-00A-L02` (#2, server-owned definitions): interim identity.\n- `ROUNDS-14-L01` (#72, privacy classes): classes, purposes.\n- #182 (contracts package): `contracts/`, `packs/`, bindings.\n\n#23 (`ROUNDS-02-L06`, projectors) does not block ratification."
+    },
+    {
+      "number": 40,
+      "title": "[ROUNDS-07-L02] Build trusted pack discovery, activation, and lifecycle",
+      "prerequisites": "- `ROUNDS-01-L03` (#17): cutover program.\n- `ROUNDS-02-L06` (#23): projectors.\n- `ROUNDS-07-L01` (#39): pack contract, `lifecycle.mjs`, `compat.mjs`.\n- `ROUNDS-00B-L01` (#9): account scope.\n- `ROUNDS-02-L02` (#19): command gateway.\n- `ROUNDS-02-L03` (#20): versions and idempotency.\n- `ROUNDS-02-L04` (#21): audit entries.\n- `ROUNDS-34-L01` (#170): contract harness.\n- `ROUNDS-34-L08` (#182): contracts package and root build contexts."
+    },
+    {
+      "number": 41,
+      "title": "[ROUNDS-07-L03] Provide namespaced pack storage and typed relationships",
+      "prerequisites": "- #17 (`ROUNDS-01-L03`, cutover program)\n- #23 (`ROUNDS-02-L06`, projectors)\n- #39 (`ROUNDS-07-L01`, pack spec)\n- #40 (`ROUNDS-07-L02`)\n- #18 (`ROUNDS-02-L01`, database ADR)\n- #19 (`ROUNDS-02-L02`, command gateway)\n- #20 (`ROUNDS-02-L03`, versions and idempotency)\n- #21 (`ROUNDS-02-L04`, change sets and audit)\n- #36 (`ROUNDS-06-L01`)\n- #37 (`ROUNDS-06-L02`)\n- #10 (`ROUNDS-00B-L02`, relation authorization)\n- #72 (`ROUNDS-14-L01`, privacy classes)\n- #76 (`ROUNDS-14-L05`, purge; handler interface and journal)\n- #44 (`ROUNDS-08-L01`, field contract)\n- #91 (`ROUNDS-18-L03`, account export) Stage 1, exporter registration\n\n#29 (`ROUNDS-04-L03`, merge redirects), #32, #33, #92, #130, and #163 (`ROUNDS-32-L09`, pack state) must list #41."
+    },
+    {
+      "number": 42,
+      "title": "[ROUNDS-07-L04] Create the non-shipping conformance fixture pack",
+      "prerequisites": "- #17 (`ROUNDS-01-L03`, transformation program) and #23 (`ROUNDS-02-L06`, checkpointed projectors), both also through #40.\n- #39 (`ROUNDS-07-L01`, pack spec), #40 (`ROUNDS-07-L02`, pack lifecycle), #41 (`ROUNDS-07-L03`, pack storage).\n- #170 (`ROUNDS-34-L01`, contract harnesses). This leaf fills its pack slot.\n- #173 (`ROUNDS-34-L04`, browser infrastructure).\n- #8 (`ROUNDS-00A-L08`) stage 2, for the `images` job and the publish step this leaf extends.\n\nTransitive: #72 (`ROUNDS-14-L01`, privacy classes), #182 (shared build contexts), #13 (`ROUNDS-00B-L05`, two-account suite)."
+    },
+    {
+      "number": 43,
+      "title": "[ROUNDS-07-L05] Migrate Software Engineering into a first-party pack",
+      "prerequisites": "Stage A: #2 (`ROUNDS-00A-L02`, Test Definitions), #17 (`ROUNDS-01-L03`, cutover program), #39 (`ROUNDS-07-L01`, pack spec), #40 (`ROUNDS-07-L02`, pack lifecycle), #41 (`ROUNDS-07-L03`, pack storage), #42 (`ROUNDS-07-L04`, fixture pack), #72 (`ROUNDS-14-L01`, privacy classes), #130 (`ROUNDS-28-L01`, Practice contracts), #156 (`ROUNDS-32-L02`, migration framework), #157 (`ROUNDS-32-L03`, rehearsal), #171 (`ROUNDS-34-L02`, migration fixtures), and #182 (contracts package).\n\nStage B adds #137 (`ROUNDS-28-L08`, practice retirement), #173 (`ROUNDS-34-L04`, browser tests), and inventory owners #32, #34, #35, #38, #56, #65, #69, #71, #77, #78, #86, #106, #110, #125, #128, #165, #166, and #179.\n\n#132 to #136 depend on Stage A, and #138 and #140 on Stage B. #163 depends on Stage B and runs Stage A's manifest first, then #132 to #137's. #130 depends on #42, not this leaf."
+    },
+    {
+      "number": 44,
+      "title": "[ROUNDS-08-L01] Define the reusable field and validation contract",
+      "prerequisites": "- #15 `ROUNDS-01-L01` (product vocabulary): labels and terms.\n- #18 `ROUNDS-02-L01` (database ADR): gateway runtime, temporal storage.\n- #19 `ROUNDS-02-L02` (command gateway): validator interface, harness fixture.\n- #20 `ROUNDS-02-L03` (versions and conflicts): paths, conflict shape.\n- #39 `ROUNDS-07-L01` (Career Pack spec): registry convention, `fields` slot.\n- #72 `ROUNDS-14-L01` (privacy classes): field map, Secret rules.\n- #182 (shared contracts package): file placement, bindings."
+    },
+    {
+      "number": 45,
+      "title": "[ROUNDS-08-L02] Build composable editor and form primitives",
+      "prerequisites": "- `ROUNDS-02-L02` (#19): command gateway\n- `ROUNDS-02-L03` (#20): expected versions and conflict results\n- `ROUNDS-08-L01` (#44): field and validation contract\n- `ROUNDS-08-L03` (#46): dialogs and focus\n- `ROUNDS-14-L01` (#72): privacy classes and retention\n- `ROUNDS-14-L05` (#76): Stage 1a (registry and client hook), for stage 2\n- `ROUNDS-34-L01` (#170): security and architecture harnesses\n- `ROUNDS-34-L04` (#173): browser, accessibility, and visual harness\n\n#23 (`ROUNDS-02-L06`) is gate-only. Lands before #131 and #158."
+    },
+    {
+      "number": 46,
+      "title": "[ROUNDS-08-L03] Unify dialogs, drawers, popovers, and focus behavior",
+      "prerequisites": "- #173 (`ROUNDS-34-L04`, browser and accessibility infrastructure). It brings Playwright, axe, and the viewports, and through #170 (`ROUNDS-34-L01`) the conformance job.\n\nInherited, not functional; drop with owner approval:\n\n- #23 (`ROUNDS-02-L06`, projectors). No projection is read.\n- #44 (`ROUNDS-08-L01`, field contract). The capability plan runs L01 and L03 in parallel.\n\nThis leaf becomes a prerequisite of #45, #47, #48 (`ROUNDS-08-L05`) part (b), #166, #167, #169 (`ROUNDS-33-L05`), and every surface UI leaf that opens a layer, including #178 (Account and Settings)."
+    },
+    {
+      "number": 47,
+      "title": "[ROUNDS-08-L04] Unify selectors and entity lookup",
+      "prerequisites": "- #23 (`ROUNDS-02-L06`, consistency envelopes)\n- #44 (`ROUNDS-08-L01`, field contract)\n- #45 (`ROUNDS-08-L02`, commit port)\n- #46 (`ROUNDS-08-L03`, overlays)\n- #9 (`ROUNDS-00B-L01`, account scope)\n- #10 (`ROUNDS-00B-L02`, relation authorization)\n- #13 (`ROUNDS-00B-L05`, IDOR suite)\n- #146 (`ROUNDS-31-L01`, SPA read client)\n- #173 (`ROUNDS-34-L04`, browser tests)\n\nState gates only: #28 and #29. Not blocking: #153."
+    },
+    {
+      "number": 48,
+      "title": "[ROUNDS-08-L05] Centralize status registries and migrate surfaces",
+      "prerequisites": "Part (a):\n\n- #39 (`ROUNDS-07-L01`, Career Pack spec)\n- #40 (`ROUNDS-07-L02`, pack lifecycle)\n- #15 (`ROUNDS-01-L01`, vocabulary)\n- #44 (`ROUNDS-08-L01`, field contract)\n- #182 (shared contracts package)\n\nPart (b): part (a), plus\n\n- #45 (`ROUNDS-08-L02`, form primitives)\n- #46 (`ROUNDS-08-L03`, overlays)\n- #47 (`ROUNDS-08-L04`, selectors)\n- #156 (`ROUNDS-32-L02`, migration framework)\n- #157 (`ROUNDS-32-L03`, restore rehearsal)\n- #171 (`ROUNDS-34-L02`, migration fixtures)\n- #173 (`ROUNDS-34-L04`, browser and accessibility harness)\n- #174 (`ROUNDS-34-L05`, observability)"
+    },
+    {
+      "number": 49,
+      "title": "[ROUNDS-09-L01] Build contextual Capture Center invocation",
+      "prerequisites": "- `ROUNDS-00A-L01` (#1): the `ROUNDS_GATE_CAPTURE` keys.\n- `ROUNDS-01-L01` (#15): method and destination labels.\n- `ROUNDS-02-L02` (#19): command gateway.\n- `ROUNDS-02-L03` (#20): server-minted ids and `conflict`.\n- `ROUNDS-07-L01` (#39): the `capture_sources` slot.\n- `ROUNDS-07-L04` (#42): `registerSlotHandler`.\n- `ROUNDS-08-L01` (#44): field validation.\n- `ROUNDS-08-L02` (#45): `CommitPort` and the draft store.\n- `ROUNDS-08-L03` (#46): drawer, sheet, and layer stack.\n- `ROUNDS-08-L04` (#47): `resolve` and `legacyCreate.ts`.\n- `ROUNDS-33-L01` (#165): route keys and URL state.\n- `ROUNDS-33-L02` (#166): sign-in return and client counters.\n- `ROUNDS-33-L03` (#167): discard confirmation.\n- `ROUNDS-34-L04` (#173): browser runs and receipts."
+    },
+    {
+      "number": 50,
+      "title": "[ROUNDS-09-L02] Create the durable Capture Inbox",
+      "prerequisites": "- #49 (`ROUNDS-09-L01`)\n- #20 (`ROUNDS-02-L03`)\n- #21 (`ROUNDS-02-L04`)\n- #22 (`ROUNDS-02-L05`), stage 3 due-work host\n- #45 (`ROUNDS-08-L02`)\n- #72 (`ROUNDS-14-L01`)\n- #76 (`ROUNDS-14-L05`), registry and journal only\n- #91 (`ROUNDS-18-L03`), Stage 1 exporter contract\n- #146 (`ROUNDS-31-L01`)\n- #155 (`ROUNDS-32-L01`)\n- #166 (`ROUNDS-33-L02`, application shell)\n- #167 (`ROUNDS-33-L03`, shared patterns)\n- #170 (`ROUNDS-34-L01`)\n\n#19, #44, #46 (`ROUNDS-08-L03`, overlays), and #173 (`ROUNDS-34-L04`, browser) come through #20 and #45."
+    },
+    {
+      "number": 51,
+      "title": "[ROUNDS-09-L03] Unify manual and quick capture through field contracts",
+      "prerequisites": "- #49 (`ROUNDS-09-L01`), #50 (`ROUNDS-09-L02`), #19 (`ROUNDS-02-L02`), and #20 (`ROUNDS-02-L03`).\n- #44 (`ROUNDS-08-L01`), #45 (`ROUNDS-08-L02`), and #47 (`ROUNDS-08-L04`).\n- #170 (`ROUNDS-34-L01`, security harness) and #173 (`ROUNDS-34-L04`, browser harness).\n- #31 to #34 (`ROUNDS-05-L01` to `ROUNDS-05-L04`), #26 (`ROUNDS-03-L03`), and #35 (`ROUNDS-05-L05`).\n\nDropped #56 (`ROUNDS-10-L04`, extraction), #60 (`ROUNDS-11-L04`, claim lineage), #64 (`ROUNDS-12-L04`, revision commit), and #76 (`ROUNDS-14-L05`, purge), because manual capture runs no extraction or claims."
+    },
+    {
+      "number": 52,
+      "title": "[ROUNDS-09-L04] Expose processing, duplicate, and recovery states",
+      "prerequisites": "#46 (`ROUNDS-08-L03`, dialogs), #48 (`ROUNDS-08-L05`, status registries), #50 (`ROUNDS-09-L02`, Capture Inbox), #51 (`ROUNDS-09-L03`, manual capture), #55 (`ROUNDS-10-L03`, retrieval), #56 (`ROUNDS-10-L04`, adapters), #58 (`ROUNDS-11-L02`, matching), #61 (`ROUNDS-12-L01`, claim review), #62 (`ROUNDS-12-L02`, staged edits), #63 (`ROUNDS-12-L03`, commit preview), #64 (`ROUNDS-12-L04`, atomic commit), #74 (`ROUNDS-14-L03`, staged outcomes), #75 (`ROUNDS-14-L04`, receipts), #173 (`ROUNDS-34-L04`, browser harness), and #174 (`ROUNDS-34-L05`, observability).\n\nVia #50 and #56: #45, #53, #54, #57, #73, #146, #167, and #170 (`ROUNDS-34-L01`, harnesses)."
+    },
+    {
+      "number": 53,
+      "title": "[ROUNDS-10-L01] Define Source Document, Source Anchor, and retention contracts",
+      "prerequisites": "- `ROUNDS-00A-L04` (#4): Legacy Artifact Snapshot bridge\n- `ROUNDS-02-L01` (#18): database ADR and byte store\n- `ROUNDS-02-L02` (#19): command gateway\n- `ROUNDS-02-L03` (#20): expected versions and idempotency\n- `ROUNDS-02-L04` (#21): change sets and Audit Entries\n- `ROUNDS-02-L05` (#22): outbox and due-work\n- `ROUNDS-03-L04` (#178): stage 1b retention rows and `resolvePreference`\n- `ROUNDS-14-L01` (#72): privacy classes and retention numbers\n- `ROUNDS-14-L02` (#73): keyring and invocation check\n- `ROUNDS-34-L01` (#170): contract harnesses\n- `ROUNDS-34-L03` (#172): authorization and privacy matrix\n- `ROUNDS-34-L08` (#182): contracts package\n\n#76 (`ROUNDS-14-L05`, purge) enrollment and #157 (`ROUNDS-32-L03`, backup) coverage are rollout gates that pass before merge."
+    },
+    {
+      "number": 54,
+      "title": "[ROUNDS-10-L02] Define durable Processing Jobs and adapter versioning",
+      "prerequisites": "- `ROUNDS-10-L01` (#53): sources and anchors\n- `ROUNDS-00A-L03` (#3): execution protocol and result envelope\n- `ROUNDS-02-L01` (#18), `ROUNDS-02-L02` (#19, for the `processing_worker` row), `ROUNDS-02-L03` (#20): database ADR, command gateway, idempotency\n- `ROUNDS-14-L01` (#72), `ROUNDS-14-L02` (#73), `ROUNDS-14-L03` (#74): privacy classes, Intents, staged outcomes\n\n#76 (`ROUNDS-14-L05`, purge) is a rollout gate: this leaf's handler, the failed-intermediate handler #53 and #55 name, joins its registry before any production write. #3's reaper runs the expiry sweep until #22 (`ROUNDS-02-L05`) hosts due-work. Tests run in #9's (`ROUNDS-00B-L01`) PocketBase harness."
+    },
+    {
+      "number": 55,
+      "title": "[ROUNDS-10-L03] Contain URL retrieval and file parsing",
+      "prerequisites": "- `ROUNDS-10-L01` (#53): Source Documents and retention.\n- `ROUNDS-10-L02` (#54): Processing Jobs.\n- `ROUNDS-00A-L05` (#5): no-secret workers and launcher.\n- `ROUNDS-00A-L07` (#7): containment proof.\n- `ROUNDS-14-L02` (#73): invocation and destination policy.\n- `ROUNDS-34-L01` (#170): harnesses.\n- #178: Account and Settings preference registry.\n- Rollout gate only: `ROUNDS-14-L05` (#76): purge, holding this leaf's and #54's handlers before any production write.\n- Paper-fetch PR only: #179, which moves `resume.improve` onto #73."
+    },
+    {
+      "number": 56,
+      "title": "[ROUNDS-10-L04] Build the extraction adapter registry and reprocessing flow",
+      "prerequisites": "- `ROUNDS-10-L01` (#53), `ROUNDS-10-L02` (#54), `ROUNDS-10-L03` (#55): sources, jobs, contained parsing\n- `ROUNDS-07-L01` (#39), `ROUNDS-07-L04` (#42): pack spec and fixture pack\n- `ROUNDS-11-L01` (#57), `ROUNDS-11-L04` (#60): claims and lineage\n- `ROUNDS-14-L02` (#73), `ROUNDS-14-L03` (#74): invocation intents and staged outcomes\n- `ROUNDS-34-L01` (#170), `ROUNDS-34-L08` (#182): contract harnesses, shared contracts\n\n#17 (`ROUNDS-01-L03`, dependency map) must show ROUNDS-10 closing after #57 to #60, against the capability order.\n\nDownstream: #52, #61, #65, #66 to #70 (`ROUNDS-13-L02` to `L06`, bootstraps), and #181 (posting and note adapters)."
+    },
+    {
+      "number": 57,
+      "title": "[ROUNDS-11-L01] Define immutable Extracted Claim and source-anchor schemas",
+      "prerequisites": "- Platform and outbox: #18 to #22 (`ROUNDS-02-L01` to `L05`)\n- Targets, relations, packs, fields: #24, #27, #31 to #34, #36, #37 (`ROUNDS-06-L02`, relationship service), #39, #42, #44\n- Sources, privacy, and staging: #53, #54, #72 to #74\n- Harness and export: #170 (`ROUNDS-34-L01`), #91 Stage 1, #92 Stage 1 first PR (`account_import` actor kind, importer registration), #156 (identifier map)\n\n#170 adopts #9's (`ROUNDS-00B-L01`, account scope) booting harness; today's CI boots no PocketBase (`ci.yml:51`)."
+    },
+    {
+      "number": 58,
+      "title": "[ROUNDS-11-L02] Build deterministic normalization and candidate matching",
+      "prerequisites": "- #57 (`ROUNDS-11-L01`, claim schema) and #28 (`ROUNDS-04-L02`, identity resolution)\n- #24 (`ROUNDS-03-L01`, Career Profile) and #31 to #34 (`ROUNDS-05-L01` to `ROUNDS-05-L04`, career facts)\n- #39 (`ROUNDS-07-L01`, Career Pack spec) and #44 (`ROUNDS-08-L01`, field contract)\n\n#9, #19, #20 (`ROUNDS-02-L03`, idempotency), #21, #22, #72, #76, and #146 arrive through #28, and #42 (`ROUNDS-07-L04`, fixture pack) through #34."
+    },
+    {
+      "number": 59,
+      "title": "[ROUNDS-11-L03] Model field and relationship conflicts",
+      "prerequisites": "- #57 (`ROUNDS-11-L01`, claim schema) and #58 (`ROUNDS-11-L02`, candidates)\n- #20 (`ROUNDS-02-L03`, expected versions) and #21 (`ROUNDS-02-L04`, version reads)\n- #9 (`ROUNDS-00B-L01`, account scope) and #10 (`ROUNDS-00B-L02`, relation authorization)\n- #36 (`ROUNDS-06-L01`, relation registry) and #37 (`ROUNDS-06-L02`, relation service)\n- #40 (`ROUNDS-07-L02`, pack lifecycle), #44 (`ROUNDS-08-L01`, field contract), and #72 (`ROUNDS-14-L01`, privacy classes)\n\nSoft: #29 and #35. Fixtures: #13 (`ROUNDS-00B-L05`), #170 (`ROUNDS-34-L01`), #171 (`ROUNDS-34-L02`), and #40's synthetic packs.\n\n#60 (`ROUNDS-11-L04`, decision lineage) is downstream; decisions come through its `decisionsForClaims`. Until #60 lands, tests supply rows in that shape and production reads none, so no `previously-rejected` or `dependency-rejected` results appear."
+    },
+    {
+      "number": 60,
+      "title": "[ROUNDS-11-L04] Preserve claim lineage through review and commit",
+      "prerequisites": "- #57 `ROUNDS-11-L01`: claim and anchor schemas. Brings #53, #54, and #74.\n- #58 `ROUNDS-11-L02`: normalization and matching.\n- #59 `ROUNDS-11-L03`: conflicts.\n- #19 `ROUNDS-02-L02`: command gateway and its harness image.\n- #20 `ROUNDS-02-L03`: expected versions and idempotency.\n- #21 `ROUNDS-02-L04`: change sets. Provenance kinds, revision reads, `RevertChangeSet`.\n- #29 `ROUNDS-04-L03`: merge redirects.\n- #22 `ROUNDS-02-L05`: outbox. Runs the retention effect and the sweep.\n- #76 `ROUNDS-14-L05`: purge. Only its early purge-handler registry."
+    },
+    {
+      "number": 61,
+      "title": "[ROUNDS-12-L01] Build grouped field-level claim review",
+      "prerequisites": "- #1 (`ROUNDS-00A-L01`, gate keys)\n- #15 (`ROUNDS-01-L01`, product vocabulary)\n- #19 (`ROUNDS-02-L02`, command gateway)\n- #20 (`ROUNDS-02-L03`, versions and idempotency)\n- #21 (`ROUNDS-02-L04`, change sets and audit)\n- #22 (`ROUNDS-02-L05`, outbox)\n- #23 (`ROUNDS-02-L06`, projectors and envelopes)\n- #24 (`ROUNDS-03-L01`, Career Profile)\n- #31 (`ROUNDS-05-L01`, career history)\n- #32 (`ROUNDS-05-L02`, projects and evidence)\n- #33 (`ROUNDS-05-L03`, stories)\n- #34 (`ROUNDS-05-L04`, skills and links)\n- #36 (`ROUNDS-06-L01`, relationship registry)\n- #37 (`ROUNDS-06-L02`, relationship service)\n- #44 (`ROUNDS-08-L01`, field contract)\n- #45 (`ROUNDS-08-L02`, editor drafts)\n- #46 (`ROUNDS-08-L03`, dialogs and focus)\n- #53 (`ROUNDS-10-L01`, Source Documents and anchors)\n- #56 (`ROUNDS-10-L04`, reprocessing)\n- #60 (`ROUNDS-11-L04`, claim lineage)\n- #72 (`ROUNDS-14-L01`, privacy classes)\n- #75 (`ROUNDS-14-L04`, provider receipts)\n- #76 (`ROUNDS-14-L05`, deletion and purge)\n- #155 (`ROUNDS-32-L01`, disposition inventory)\n- #165 (`ROUNDS-33-L01`, route model)\n- #166 (`ROUNDS-33-L02`, application shell)\n- #167 (`ROUNDS-33-L03`, inspector)\n- #173 (`ROUNDS-34-L04`, browser harness)\n- #174 (`ROUNDS-34-L05`, observability)\n\n#57 to #59 arrive through #60. Not edges: #28, #47, #62 to #64; the order inside ROUNDS-12 is L01, L03, L02, L04."
+    },
+    {
+      "number": 62,
+      "title": "[ROUNDS-12-L02] Support staged edits and duplicate resolution",
+      "prerequisites": "- #57 to #60 (`ROUNDS-11-L01` to `L04`: claims, matching, conflicts, lineage), #61, #63, #28, and #29.\n- #19 and #20 (`ROUNDS-02-L02`, `L03`: command gateway, versions), #44 to #47 (`ROUNDS-08-L01` to `L04`: field contract, editors, overlays, selectors), #72, and #173 (`ROUNDS-34-L04`, browser tests). Stage 2 only: #73 to #75.\n\nROUNDS-12 runs L01, L03, this leaf, L04. #52 (`ROUNDS-09-L04`) routes \"Possible duplicate record\" here."
+    },
+    {
+      "number": 63,
+      "title": "[ROUNDS-12-L03] Preview downstream effects before commit",
+      "prerequisites": "- #15 to #17 (`ROUNDS-01-L01` to `L03`: vocabulary, ownership matrix, non-goals)\n- #19 to #21 (`ROUNDS-02-L02` to `L04`: gateway, versions, change sets), #23 (`ROUNDS-02-L06`, projectors)\n- #29 (`ROUNDS-04-L03`, merge redirects), #31 to #34 (`ROUNDS-05-L01` to `L04`, fact contracts), #35 (`ROUNDS-05-L05`, Experience migration)\n- #37 and #38 (`ROUNDS-06-L02`, `L03`: relationships, junction migration), #39 (`ROUNDS-07-L01`, Career Pack spec)\n- #44 to #46 (`ROUNDS-08-L01` to `L03`: fields, editors, dialogs)\n- #59 and #60 (`ROUNDS-11-L03`, `L04`: conflicts, lineage), #61 (`ROUNDS-12-L01`, claim review)\n- #72 (`ROUNDS-14-L01`, privacy classes), #146 and #147 (`ROUNDS-31-L01`, `L02`: projection framework, profile read model), #156 (`ROUNDS-32-L02`, migration framework)\n- #166 and #167 (`ROUNDS-33-L02`, `L03`: shell, shared patterns)\n- #173 and #174 (`ROUNDS-34-L04`, `L05`: browser harness, observability), #182 (contracts package)\n\nNot prerequisites: #64 (this leaf writes its v1 fixtures), #78, #84, #125, #149 to #151, #153."
+    },
+    {
+      "number": 64,
+      "title": "[ROUNDS-12-L04] Commit one atomic revision with history and rollback",
+      "prerequisites": "- #18 (`ROUNDS-02-L01`, database ADR)\n- #19 (`ROUNDS-02-L02`, command gateway)\n- #20 (`ROUNDS-02-L03`, idempotency)\n- #21 (`ROUNDS-02-L04`, change sets)\n- #22 (`ROUNDS-02-L05`, outbox)\n- #23 (`ROUNDS-02-L06`, projectors)\n- #24 (`ROUNDS-03-L01`, Career Profile)\n- #27 (`ROUNDS-04-L01`, Organization and Person)\n- #28 (`ROUNDS-04-L02`, identity resolution)\n- #29 (`ROUNDS-04-L03`, merge redirects)\n- #31 (`ROUNDS-05-L01`, career history)\n- #32 (`ROUNDS-05-L02`, projects)\n- #33 (`ROUNDS-05-L03`, stories)\n- #34 (`ROUNDS-05-L04`, skills)\n- #37 (`ROUNDS-06-L02`, relationships)\n- #39 (`ROUNDS-07-L01`, Career Pack spec)\n- #40 (`ROUNDS-07-L02`, pack lifecycle)\n- #60 (`ROUNDS-11-L04`, claim lineage)\n- #61 (`ROUNDS-12-L01`, claim review)\n- #62 (`ROUNDS-12-L02`, staged edits)\n- #63 (`ROUNDS-12-L03`, commit preview)\n- #76 (`ROUNDS-14-L05`, deletion and purge)\n- #170 (`ROUNDS-34-L01`, harnesses)\n- #171 (`ROUNDS-34-L02`, fixtures)\n\n#71 (`ROUNDS-13-L07`) and #35 (`ROUNDS-05-L05`) gate the opening, not the merge. Order inside ROUNDS-12: #61, #63, #62, this leaf."
+    },
+    {
+      "number": 65,
+      "title": "[ROUNDS-13-L01] Build the source-adapter bootstrap framework",
+      "prerequisites": "#56 (`ROUNDS-10-L04`), #60 (`ROUNDS-11-L04`, claim lineage), #64 (`ROUNDS-12-L04`), #24 (`ROUNDS-03-L01`, Account contracts), #26 (`ROUNDS-03-L03`), #31 to #34 (`ROUNDS-05-L01` to `ROUNDS-05-L04`, career facts), #49 (`ROUNDS-09-L01`), #50 (`ROUNDS-09-L02`), #52 (`ROUNDS-09-L04`), #73 (`ROUNDS-14-L02`), #74 (`ROUNDS-14-L03`), and #75 (`ROUNDS-14-L04`)."
+    },
+    {
+      "number": 66,
+      "title": "[ROUNDS-13-L02] Add resume file bootstrap",
+      "prerequisites": "- `ROUNDS-10-L04`: adapter registry (#56)\n- `ROUNDS-11-L04`: claim lineage (#60)\n- `ROUNDS-12-L04`: atomic commit (#64)\n- `ROUNDS-13-L01`: bootstrap framework (#65)\n- `ROUNDS-10-L03`: file parsing (#55)\n- `ROUNDS-14-L01`: privacy classes (#72)\n- `ROUNDS-14-L02`: Invocation Intent (#73)\n- `ROUNDS-14-L03`: staged outcomes (#74)\n- `ROUNDS-14-L04`: provider receipts (#75)\n\n#73 to #75 gate AI mode only. #53, #54, and #57 come through #56; #49, #52, and the target-kind leaves through #65.\n\nBefore the user gate opens, this leaf adds to #65's #52 `mapping_version` a `no-compatible-adapter` enqueue-refusal trigger and Paste on row 14, a `hidden_text` trigger on row 11, and Process without AI on rows 8 and 9; #65 adds Map manually."
+    },
+    {
+      "number": 67,
+      "title": "[ROUNDS-13-L03] Add JSON Resume bootstrap and portable mapping",
+      "prerequisites": "- `ROUNDS-10-L04` (#56), `ROUNDS-11-L04` (#60), `ROUNDS-12-L04` (#64), `ROUNDS-13-L01` (#65): adapter registry, claim lineage, atomic commit, bootstrap framework\n- `ROUNDS-10-L01` (#53), `ROUNDS-10-L03` (#55), `ROUNDS-11-L01` (#57), `ROUNDS-11-L02` (#58): Source Documents, file parsing, claims, matching\n- `ROUNDS-03-L01` (#24), `ROUNDS-05-L01` (#31), `ROUNDS-05-L02` (#32), `ROUNDS-05-L04` (#34): Career Profile, history, projects, skills and links contracts\n- `ROUNDS-14-L01` (#72): privacy classes and retention\n- `ROUNDS-34-L08` (#182): shared contracts package\n\nThis leaf blocks #90, which drops its import scope."
+    },
+    {
+      "number": 68,
+      "title": "[ROUNDS-13-L04] Add professional-network export bootstrap",
+      "prerequisites": "- `ROUNDS-10-L04` (#56, adapter registry)\n- `ROUNDS-11-L04` (#60, claim lineage)\n- `ROUNDS-12-L04` (#64, atomic commit)\n- `ROUNDS-13-L01` (#65, bootstrap framework)\n- `ROUNDS-10-L03` (#55, file parsing)\n- `ROUNDS-14-L01` (#72, privacy classes)\n\n#53, #54, and #57 come through #56; claim targets and #28 (`ROUNDS-04-L02`, identity matching) come through #60's #58."
+    },
+    {
+      "number": 69,
+      "title": "[ROUNDS-13-L05] Add GitHub profile and repository bootstrap",
+      "prerequisites": "- `ROUNDS-10-L04`: adapter registry (#56)\n- `ROUNDS-11-L04`: claim lineage (#60)\n- `ROUNDS-12-L04`: atomic commit (#64)\n- `ROUNDS-13-L01`: bootstrap framework (#65)\n- `ROUNDS-13-L03`: `json` parse row (#67)\n- `ROUNDS-10-L03`: URL retrieval (#55)\n- `ROUNDS-05-L02`: projects (#32)\n- `ROUNDS-05-L04`: skills and links (#34)\n- `ROUNDS-14-L01`: privacy classes (#72)\n- `ROUNDS-14-L02`: invocation (#73)\n- `ROUNDS-14-L03`: staged outcomes (#74)\n- `ROUNDS-14-L04`: receipts (#75)\n- `ROUNDS-14-L07`: Generation Proposals (#180)\n- `ROUNDS-03-L01`: Account contracts (#24)\n- `ROUNDS-03-L04`: Account and Settings (#178)\n\n#74, #75, and #180 gate only suggestions; #24 and #178 only Stage 2."
+    },
+    {
+      "number": 70,
+      "title": "[ROUNDS-13-L06] Add pasted-history and freeform bootstrap",
+      "prerequisites": "- `ROUNDS-10-L04` (#56, adapter registry)\n- `ROUNDS-11-L04` (#60, claim lineage)\n- `ROUNDS-12-L04` (#64, atomic commit)\n- `ROUNDS-13-L01` (#65, framework)\n- `ROUNDS-09-L04` (#52, processing states)\n- `ROUNDS-14-L01` (#72, privacy and retention)\n- `ROUNDS-14-L02` (#73, invocation intent)\n- `ROUNDS-14-L03` (#74, staged outcomes)\n- `ROUNDS-14-L04` (#75, provider choice)\n\n#73 to #75 gate only the AI PR; #49, #50, #53, #55, #57, #58, and #31 to #34 come through them. #179 (legacy AI call sites) leaves `/api/ai/experience-import` to #71."
+    },
+    {
+      "number": 71,
+      "title": "[ROUNDS-13-L07] Migrate existing profile and resume import entry points",
+      "prerequisites": "- `ROUNDS-05-L05`: Migrate Experience and resume-owned professional facts (#35)\n- `ROUNDS-09-L01`: Build contextual Capture Center invocation (#49)\n- `ROUNDS-12-L04`: Commit one atomic revision with history and rollback (#64)\n- `ROUNDS-13-L01`: Build the source-adapter bootstrap framework (#65)\n- `ROUNDS-13-L02`: Add resume file bootstrap (#66)\n- `ROUNDS-13-L05`: Add GitHub profile and repository bootstrap (#69)\n- `ROUNDS-13-L06`: Add pasted-history and freeform bootstrap (#70)\n- `ROUNDS-32-L02`: Build the migration framework, manifests, and journals (#156)\n- `ROUNDS-32-L03`: Prove encrypted backup, restore, and rollback rehearsal (#157)\n- `ROUNDS-32-L05`: Migrate identity, profile, directory, facts, and relationships (#159)\n\n\"Verified\" means merged with its gate off and passing its tests on #171 (`ROUNDS-34-L02`) fixtures in staging. #159's Career Profile transfer must be done, so #31 to #34 (`ROUNDS-05-L01` to `L04`) accept commits. #50, #52, #56, and #60 (`ROUNDS-09-L02`, `09-L04`, `10-L04`, `11-L04`) arrive through #65.\n\nCoordination: this leaf extends #49's `CaptureProvider` parser with the optional `method` key and the `initialFile` option. #179 marks the three purposes \"retired by ROUNDS-13-L07\". #84 and #164 (`ROUNDS-32-L10`, final cutover) list this leaf as a prerequisite."
+    },
+    {
+      "number": 72,
+      "title": "[ROUNDS-14-L01] Ratify privacy classes, sink policy, and numeric retention",
+      "prerequisites": "- `ROUNDS-00B-L01` (#9, account-scope invariant): account term, PocketBase harness.\n- `ROUNDS-01-L01` (#15, product vocabulary): record format and runner.\n- `ROUNDS-01-L02` (#16, source-of-truth matrix): floors, visibility.\n- `ROUNDS-02-L01` (#18, database and transaction ADR): ADR gate."
+    },
+    {
+      "number": 73,
+      "title": "[ROUNDS-14-L02] Define Provider Invocation Intent and authorization",
+      "prerequisites": "- #72 (`ROUNDS-14-L01`, privacy classes and retention)\n- #1 (`ROUNDS-00A-L01`, route authorization)\n- #5 (`ROUNDS-00A-L05`, code workers)\n- #9 (`ROUNDS-00B-L01`, account scope)\n- #12 (`ROUNDS-00B-L04`, share secrets)\n- #18 (`ROUNDS-02-L01`, database ADR)\n- #19 (`ROUNDS-02-L02`, command gateway)\n- #20 (`ROUNDS-02-L03`, idempotency)\n- #170 (`ROUNDS-34-L01`, contract harnesses)\n- #182 PR 2 (shared contracts package), before the PR that first writes `contracts/ai/`"
+    },
+    {
+      "number": 74,
+      "title": "[ROUNDS-14-L03] Stage provider outcomes and reconcile late or duplicate responses",
+      "prerequisites": "- #72 (`ROUNDS-14-L01`, privacy classes and retention)\n- #73 (`ROUNDS-14-L02`, Intent and authorization)\n- #20 (`ROUNDS-02-L03`, idempotency and conflicts)\n- #21 (`ROUNDS-02-L04`, change sets and revisions)\n- #22 (`ROUNDS-02-L05`, transactional outbox)\n- #76 (`ROUNDS-14-L05`, purge) Stage 1b, registry and executor\n\n#73 brings #9, #18, #19, and #170. Never #54 (`ROUNDS-10-L02`), which depends on ROUNDS-14."
+    },
+    {
+      "number": 75,
+      "title": "[ROUNDS-14-L04] Expose provider choice, receipts, and manual fallback",
+      "prerequisites": "PR 1:\n\n- #1 (`ROUNDS-00A-L01`, route auth and quotas): gate registry, observability kit, default flips\n- #3 (`ROUNDS-00A-L03`) PR 3: grading jobs and the `/review` routes\n- #173 (`ROUNDS-34-L04`, browser test infrastructure)\n\nPR 2 adds:\n\n- #72 (`ROUNDS-14-L01`)\n- #73 (`ROUNDS-14-L02`) stage C: prepare, confirm, and Intent commit\n- #74 (`ROUNDS-14-L03`) records-and-transaction PR: Outcome writer and display-only results\n- #45 (`ROUNDS-08-L02`, form primitives), #46 (`ROUNDS-08-L03`, dialogs and focus), #166 (`ROUNDS-33-L02`, app shell)\n- #167 (`ROUNDS-33-L03`) stage 1: `announce()` and `StateRenderer`\n\n#74's receipt poll and proposal-seeding gate, and #167's stage 3, come after PR 2."
+    },
+    {
+      "number": 76,
+      "title": "[ROUNDS-14-L05] Enforce deletion, purge, backup expiry, and restore suppression",
+      "prerequisites": "- Stage 1a: #72 and #21, which bring #9 (`ROUNDS-00B-L01`, account scope), #16, #18, #20, and #170 (`ROUNDS-34-L01`, harnesses); and #172 S1.\n- Stage 1b: #22 stage 3, the executor's due-work host, and #171 (`ROUNDS-34-L02`, fixtures) stage 2.\n- Stage 2: #73 (crypto-shred) and #74.\n- Stage 3: #14 (`ROUNDS-00B-L06`, legacy shares), which retires legacy links first (spec 2166), and #24 (`users.deleteRule` set to `null`)."
+    },
+    {
+      "number": 77,
+      "title": "[ROUNDS-15-L01] Define Artifact Edition, selection, override, and revision contracts",
+      "prerequisites": "- #2 (`ROUNDS-00A-L02`, renderer contracts) and #10 (`ROUNDS-00B-L02`, relation checks).\n- #19 to #22 (`ROUNDS-02-L02` to `ROUNDS-02-L05`, command platform).\n- #24 (`ROUNDS-03-L01`, Career Profile), #29 (`ROUNDS-04-L03`, closure-pin resolver), #31 to #34 (`ROUNDS-05-L01` to `ROUNDS-05-L04`, career facts).\n- #39 (`ROUNDS-07-L01`, packs), #44 (`ROUNDS-08-L01`, fields), #57 (`ROUNDS-11-L01`, claims).\n- #72 (`ROUNDS-14-L01`, privacy classes), #76 (`ROUNDS-14-L05`, purge), #95 (`ROUNDS-19-L01`, Opportunity).\n- #180 (unsupported-claim gate), #182 (contracts package), and #171 (`ROUNDS-34-L02`, migration fixtures).\n\nAll ship earlier. Not #23, #26, or #53."
+    },
+    {
+      "number": 78,
+      "title": "[ROUNDS-15-L02] Build the projection and materialization engine",
+      "prerequisites": "- #77 (`ROUNDS-15-L01`, Edition contracts), whose `closure_pins` cover the vector above.\n- #18 (`ROUNDS-02-L01`, runtime), #9 (`ROUNDS-00B-L01`, scope), #21 (`ROUNDS-02-L04`, pinned reads), #23 (`ROUNDS-02-L06`, `head` rule).\n- #24 (`ROUNDS-03-L01`, identity), #27 (`ROUNDS-04-L01`, directory), #29 (`ROUNDS-04-L03`, redirects), #31 to #34 (`ROUNDS-05-L01` to `ROUNDS-05-L04`, fact schemas).\n- #39 (`ROUNDS-07-L01`, projector slot), #41 (`ROUNDS-07-L03`, extension reads), #72 (`ROUNDS-14-L01`, privacy classes).\n- #2 (`ROUNDS-00A-L02`, template allowlist), #4 (`ROUNDS-00A-L04`, template module), #6 (`ROUNDS-00A-L06`, render input).\n- #182 (contracts package).\n\nNot prerequisites: #26 (`ROUNDS-03-L03`, profile UI), #35 (`ROUNDS-05-L05`, fact migration, kept on #80), #63, #174. Downstream: #79 to #83, #85, #87 (`ROUNDS-17-L03`, cover letters), #89, #150, and #43 Stage B."
+    },
+    {
+      "number": 79,
+      "title": "[ROUNDS-15-L03] Implement freeze, immutable revision, and submission semantics",
+      "prerequisites": "- #77 (`ROUNDS-15-L01`, editions), #78 (`ROUNDS-15-L02`, materializer).\n- #2 (`ROUNDS-00A-L02`, renderer contracts), #4 (`ROUNDS-00A-L04`, markup), #6 (`ROUNDS-00A-L06`, render workers).\n- #72 (`ROUNDS-14-L01`, privacy classes), #73 (`ROUNDS-14-L02`, keyring), #76 (`ROUNDS-14-L05`, purge) Stage 1.\n- #21 (`ROUNDS-02-L04`, change sets and pins).\n- #180 (unsupported-claim gate), upstream through #77; freeze calls it.\n\nDownstream: #80, #83, #87, #88, #89, #93, #94, #150."
+    },
+    {
+      "number": 80,
+      "title": "[ROUNDS-15-L04] Migrate legacy materials into editions and revisions",
+      "prerequisites": "- #4 (`ROUNDS-00A-L04`, snapshot bridge), #6 (`ROUNDS-00A-L06`, render workers), #11 (`ROUNDS-00B-L03`, share capabilities), #14 (`ROUNDS-00B-L06`, legacy shares), #177 (demo lifecycle).\n- #25 (`ROUNDS-03-L02`, profile fields), #30 (`ROUNDS-04-L04`, organization strings), #35 (`ROUNDS-05-L05`, resume facts), #72 (`ROUNDS-14-L01`, privacy classes).\n- #77 (`ROUNDS-15-L01`, edition contracts), #78 (`ROUNDS-15-L02`, materializer), #79 (`ROUNDS-15-L03`, revisions).\n- #155 (`ROUNDS-32-L01`, inventory), #156 (`ROUNDS-32-L02`, migration framework), #157 (`ROUNDS-32-L03`, restore rehearsal), #171 (`ROUNDS-34-L02`, fixtures)."
+    },
+    {
+      "number": 81,
+      "title": "[ROUNDS-16-L01] Recompose Resume Studio information architecture",
+      "prerequisites": "- #4 (`ROUNDS-00A-L04`, markup module) and #6 (`ROUNDS-00A-L06`, font package).\n- #45 (`ROUNDS-08-L02`, editor primitives and drafts) and #46 (`ROUNDS-08-L03`, dialogs).\n- #72 (`ROUNDS-14-L01`, privacy classes).\n- #77 to #79 (`ROUNDS-15-L01` to `ROUNDS-15-L03`: Edition contracts, materializer, freeze).\n- #150 (`ROUNDS-31-L05`, Materials read model), stage 1.\n- #165 to #167 (`ROUNDS-33-L01` to `ROUNDS-33-L03`: routes, shell, interaction patterns).\n- #170, #171, #173 (`ROUNDS-34-L01`, `ROUNDS-34-L02`, `ROUNDS-34-L04`: harness, fixtures, browser suite).\n- Test-only: #80 (`ROUNDS-15-L04`, legacy mapping).\n\n#89 (`ROUNDS-18-L01`) and #94 are forward edges. Downstream: #82 to #85, #104 (`ROUNDS-21-L03`), #164 (`ROUNDS-32-L10`), and #168 (`ROUNDS-33-L04`)."
+    },
+    {
+      "number": 82,
+      "title": "[ROUNDS-16-L02] Build canonical fact selection, ordering, and explicit overrides",
+      "prerequisites": "Stages 1 to 3:\n\n- #77 (`ROUNDS-15-L01`, edition contracts), #78 (`ROUNDS-15-L02`, materializer), #80 (`ROUNDS-15-L04`, legacy migration).\n- #81 (`ROUNDS-16-L01`, Studio layout), #150 (`ROUNDS-31-L05`, Materials reads), #153 (`ROUNDS-31-L08`, search projections).\n- #45 (`ROUNDS-08-L02`, editor primitives), #46 (`ROUNDS-08-L03`, overlays), #47 (`ROUNDS-08-L04`, entity lookup), #37 (`ROUNDS-06-L02`, relationship service).\n- #72 (`ROUNDS-14-L01`, privacy classes), #26 (`ROUNDS-03-L03`, Career Profile workspace).\n- #170 (`ROUNDS-34-L01`, contract harnesses), #171 (`ROUNDS-34-L02`, migration fixtures), #173 (`ROUNDS-34-L04`, browser harness).\n\nStage 4 adds #57 (`ROUNDS-11-L01`, Extracted Claims), #61 (`ROUNDS-12-L01`, claim review), and #64 (`ROUNDS-12-L04`, atomic commit).\n\nStage 5 adds #180 (Generation Proposals), #179 (legacy AI call sites, PR 3), #167 (`ROUNDS-33-L03`, `WritingSuggestion`), #73 (`ROUNDS-14-L02`, invocation intent), #74 (`ROUNDS-14-L03`, provider outcomes), and #75 (`ROUNDS-14-L04`, receipts).\n\nDownstream: #84 needs stages 1 to 3, and #87's gates 2 and 3 need this leaf's override editor."
+    },
+    {
+      "number": 83,
+      "title": "[ROUNDS-16-L03] Preserve templates, design, preview, and revision history",
+      "prerequisites": "- #2 (`ROUNDS-00A-L02`, renderer contracts): design grammar.\n- #4 (`ROUNDS-00A-L04`, snapshot bridge): materializer, committed markup.\n- #6 (`ROUNDS-00A-L06`, no-script render workers): font package, PDF job.\n- #45 (`ROUNDS-08-L02`, editor primitives): autosave, drafts.\n- #77 (`ROUNDS-15-L01`, edition contracts): commands.\n- #78 (`ROUNDS-15-L02`, materialization engine): document model.\n- #79 (`ROUNDS-15-L03`, freeze): freeze, export retry.\n- #80 (`ROUNDS-15-L04`, legacy migration): Legacy Draft History, restore mapping, migrated fixture.\n- #81 (`ROUNDS-16-L01`, Studio shell): panes, `GetEditionPreview`.\n- #150 (`ROUNDS-31-L05`, Materials read model): `history` section, frozen state.\n- #170 and #171 (`ROUNDS-34-L01`, `ROUNDS-34-L02`, harness and migration fixtures).\n- #182 (shared contracts package): bundle checksum.\n\nAll ship earlier in delivery order. #46, #72, #76, and #173 arrive through #45, and #166 through #81."
+    },
+    {
+      "number": 84,
+      "title": "[ROUNDS-16-L04] Migrate and retire link, detach, relink, and push workflows",
+      "prerequisites": "- `ROUNDS-15-L04` (#80), `ROUNDS-16-L01` (#81), `ROUNDS-16-L02` (#82), `ROUNDS-16-L03` (#83)\n- `ROUNDS-00B-L06` (#14), `ROUNDS-02-L02` (#19), `ROUNDS-14-L01` (#72)\n- `ROUNDS-13-L07` (#71, imports), `ROUNDS-17-L02` (#86, ATS guidance), `ROUNDS-17-L03` (#87), `ROUNDS-27-L03` (#128)\n- `ROUNDS-32-L02` (#156), `ROUNDS-32-L03` (#157, restore rehearsal), `ROUNDS-32-L04` (#158), `ROUNDS-33-L01` (#165)\n- `ROUNDS-34-L02` (#171, fixtures)\n\nStage 1 needs only #45. #85 to #87 first retire Tailor writes, the ATS tab, TailorButton, and coverage; Milestone 3 runs #81, #82, #83, ROUNDS-17, this leaf, #161."
+    },
+    {
+      "number": 85,
+      "title": "[ROUNDS-17-L01] Create opportunity-linked Artifact Edition workflows",
+      "prerequisites": "- #77 to #80 (`ROUNDS-15-L01` to `L04`) and #95 to #97 (`ROUNDS-19-L01` to `L03`, Opportunity and Pursuit).\n- #10, #20, #21, #72, #156, #81, #83, #104, and #150.\n- #45 to #47 (`ROUNDS-08-L02` to `L04`, UI primitives), #165 to #167 (`ROUNDS-33-L01` to `L03`), #173 (`ROUNDS-34-L04`, browser tests).\n\n#98 is not a prerequisite; its id maps gate the manifest per account."
+    },
+    {
+      "number": 86,
+      "title": "[ROUNDS-17-L02] Rebuild ATS analysis as evidence-linked guidance",
+      "prerequisites": "- #85 (`ROUNDS-17-L01`, targeted editions), #87 (`ROUNDS-17-L03`, suggestion review), #95 (`ROUNDS-19-L01`, requirement IDs)\n- #77 to #79 (`ROUNDS-15-L01` to `L03`, editions and freeze); #81, #82 (`ROUNDS-16-L01`, `L02`, slot and commands); #104 (`ROUNDS-21-L03`, workspace)\n- #31 to #34 (`ROUNDS-05-L01` to `L04`, fact revisions); #21 (`ROUNDS-02-L04`, revision reads)\n- #72 to #76 (`ROUNDS-14-L01` to `L05`, policy to purge); #91 (`ROUNDS-18-L03`, account export), Stage 1; #180 (proposal record)\n- #39 (`ROUNDS-07-L01`, slots), #58 (`ROUNDS-11-L02`, normalizer), #15 (`ROUNDS-01-L01`, labels), #158 (`ROUNDS-32-L04`, browser keys), #170 and #173 (`ROUNDS-34-L01`, `L04`, test harnesses)\n\n#80 (`ROUNDS-15-L04`) and #98 (`ROUNDS-19-L04`) are gate conditions only. #139 and #181 are not prerequisites."
+    },
+    {
+      "number": 87,
+      "title": "[ROUNDS-17-L03] Build cover-letter and tailoring proposals",
+      "prerequisites": "- Gate 1: #2 (`ROUNDS-00A-L02`, renderer contracts), #77 (`ROUNDS-15-L01`, editions), #79 (`ROUNDS-15-L03`, freeze), #180 (verifier), #89 (`ROUNDS-18-L01`, copy formats), #85 (`ROUNDS-17-L01`, targeted editions), #45 (`ROUNDS-08-L02`, editors), #46 (`ROUNDS-08-L03`, dialogs), #166 (`ROUNDS-33-L02`, shell), #167 (`ROUNDS-33-L03`, feedback), #173 (`ROUNDS-34-L04`, browser tests).\n- Gates 2 and 3 add #72 to #75 (`ROUNDS-14-L01` to `L04`, provider policy) and #82 (`ROUNDS-16-L02`, override editor).\n- PR 4 adds #158 stage 1. #80 and #95 come through #85, not #98 (`ROUNDS-19-L04`, application migration); never #86, which feeds this leaf."
+    },
+    {
+      "number": 88,
+      "title": "[ROUNDS-17-L04] Record immutable submitted-material history",
+      "prerequisites": "Stage 1:\n\n- #79 (`ROUNDS-15-L03`, freeze and revisions) and #89 (`ROUNDS-18-L01`, export contracts)\n- #107 (`ROUNDS-22-L02`, Career Activity), envelope stage, after the re-scope\n- #18 (`ROUNDS-02-L01`, database ADR), #19 (`ROUNDS-02-L02`, command gateway), #10 (`ROUNDS-00B-L02`, relations), and #44 (`ROUNDS-08-L01`, field contract)\n- #72 (`ROUNDS-14-L01`, privacy classes) and #76 (`ROUNDS-14-L05`, purge)\n- #95 (`ROUNDS-19-L01`, Opportunity) and #96 (`ROUNDS-19-L02`, Pursuit)\n\nStage 2: #6 (`ROUNDS-00A-L06`, render workers).\n\nStage 3:\n\n- #15 (`ROUNDS-01-L01`, vocabulary), #46 (`ROUNDS-08-L03`, dialogs), #167 (`ROUNDS-33-L03`, feedback), and #173 (`ROUNDS-34-L04`, browser tests)\n- #100 (`ROUNDS-20-L02`, transitions), #85 (`ROUNDS-17-L01`, opportunity editions), #104 (`ROUNDS-21-L03`, materials slice), and #81 (`ROUNDS-16-L01`, Studio layout)\n\n#107's envelope (Milestone 2) and #89 (before this leaf, Milestone 3) ship ahead of their capabilities."
+    },
+    {
+      "number": 89,
+      "title": "[ROUNDS-18-L01] Define deterministic artifact export contracts",
+      "prerequisites": "- #2 (`ROUNDS-00A-L02`, renderer contracts): `render-request/v1`, identity v1.\n- #4 (`ROUNDS-00A-L04`, legacy snapshot): template module.\n- #6 (`ROUNDS-00A-L06`, render workers): worker, fonts, CI job.\n- #78 (`ROUNDS-15-L02`, materializer): document model.\n- #79 (`ROUNDS-15-L03`, freeze and revisions): Revision fields, `render-request/v2`, record store, grounding status.\n- #91 (`ROUNDS-18-L03`, account export) Stage 1: exporter registration. `artifact_export_verifications` gets a #155 row and exports in #79's section.\n- #81 (`ROUNDS-16-L01`, Studio layout) and #83 (`ROUNDS-16-L03`, revision history): export slot and Version row.\n- #182 (shared contracts package): bundle digest.\n- #180 (unsupported-claim gate): the gate behind `grounding_status`.\n\nDownstream: #88 (`ROUNDS-17-L04`, submissions), #90, #91 Stage 2, #92 to #94, #161, and #176 (`ROUNDS-34-L07`, release runner), which reruns the proof."
+    },
+    {
+      "number": 90,
+      "title": "[ROUNDS-18-L02] Implement standards-compatible resume export",
+      "prerequisites": "- `ROUNDS-13-L03`: Add JSON Resume bootstrap and portable mapping (#67)\n- `ROUNDS-18-L01`: Define deterministic artifact export contracts (#89). Lists `json-resume` in `export-format-registry/v1` and sets the grounding and filename rules.\n- `ROUNDS-15-L02`: Build the projection and materialization engine (#78)\n- `ROUNDS-15-L03`: Implement freeze, immutable revision, and submission semantics (#79)\n- `ROUNDS-15-L04`: Migrate legacy materials into editions and revisions (#80)\n- `ROUNDS-14-L01`: Ratify privacy classes, sink policy, and numeric retention (#72)\n- `ROUNDS-16-L01`: Recompose Resume Studio information architecture (#81)\n- `ROUNDS-00B-L05`: Add the complete two-account IDOR and disclosure suite (#13)\n- `ROUNDS-34-L02`: Build representative migration and recovery fixtures (#171)\n- `ROUNDS-34-L04`: Build browser, accessibility, responsive, and visual infrastructure (#173)\n- `ROUNDS-34-L08`: Establish the shared contracts package and repository-root build contexts (#182)\n- Capability completion leaves: #8 (`ROUNDS-00A-L08`, adversarial suites), #14 (`ROUNDS-00B-L06`, legacy shares), #71 (`ROUNDS-13-L07`, legacy import entry points), #76 (`ROUNDS-14-L05`, purge), and #180 (unsupported-claim gate). None depends on this leaf; all land before Milestone 3.\n- Stage 2 only: `ROUNDS-16-L04`: Migrate and retire link, detach, relink, and push workflows (#84)"
+    },
+    {
+      "number": 91,
+      "title": "[ROUNDS-18-L03] Create complete versioned account export",
+      "prerequisites": "- Stage 1: `ROUNDS-00A-L03` (#3, jobs), `ROUNDS-00A-L08` (#8, adversarial suites), `ROUNDS-00B-L01` (#9, scope), `ROUNDS-00B-L06` (#14, shares), #177 (demo), `ROUNDS-01-L02` (#16, exporter column), `ROUNDS-02-L01` (#18, ADR), `ROUNDS-02-L04` (#21, revisions), `ROUNDS-14-L01` (#72, field map), `ROUNDS-32-L01` (#155, store registry), `ROUNDS-34-L01` (#170, conformance).\n- Stage 2 adds `ROUNDS-02-L02` (#19, gateway), `ROUNDS-02-L03` (#20, idempotency), `ROUNDS-02-L05` (#22, events), `ROUNDS-07-L03` (#41, pack sections), `ROUNDS-08-L03` (#46, dialogs), `ROUNDS-13-L07` (#71, imports), `ROUNDS-14-L02` (#73, keyring), `ROUNDS-14-L05` (#76 Stage 3, purge, re-auth), #180 (Generation Proposals), `ROUNDS-15-L04` (#80, editions), `ROUNDS-18-L01` (#89, bytes), `ROUNDS-18-L06` (#94, references), `ROUNDS-32-L04` (#158, local state), `ROUNDS-33-L03` (#167, masking), `ROUNDS-34-L02` (#171, fixtures), `ROUNDS-34-L03` (#172 S2, authorization), `ROUNDS-34-L04` (#173, browser), #178 (Account).\n- Downstream: leaves with export-participating stores take #17's stage edge `ROUNDS-18-L03/S1`, among them #24 (`ROUNDS-03-L01`, Career Profile), #27 (`ROUNDS-04-L01`, directory), #31 to #34 (`ROUNDS-05-L01` to `L04`, facts), #41 (`ROUNDS-07-L03`, pack storage), and #89. #92 (`ROUNDS-18-L04`, import) takes Stage 1 for its first PR and Stage 2 after; #176 (`ROUNDS-34-L07`, completeness proof) takes Stage 2."
+    },
+    {
+      "number": 92,
+      "title": "[ROUNDS-18-L04] Restore account exports into a fresh deployment",
+      "prerequisites": "- `ROUNDS-00B-L06` (#14), `ROUNDS-15-L04` (#80), `ROUNDS-18-L01` (#89): revoked shares, Editions, re-render.\n- `ROUNDS-18-L03` (#91), `ROUNDS-32-L02` (#156): archive; map, manifest, journal.\n- `ROUNDS-14-L01` (#72), `ROUNDS-14-L02` (#73), `ROUNDS-14-L05` (#76, Stage 3): retention, key wrap, purge.\n- `ROUNDS-07-L01` (#39), `ROUNDS-07-L02` (#40), `ROUNDS-07-L03` (#41): slots, pack states, `ImportExtensions`.\n- `ROUNDS-31-L01` (#146), `ROUNDS-02-L02` to `ROUNDS-02-L04` (#19 to #21): rebuild, commands, idempotency, history.\n- `ROUNDS-00A-L03` (#3), `ROUNDS-10-L01` (#53), `ROUNDS-34-L01` (#170), `ROUNDS-34-L02` (#171): jobs, `content_address`, harness, fixtures.\n- Stage 1's first PR: #19, #91 Stage 1, #170, and #172 only. Stage 2: every `owner_leaf` in #91's exporter registry. Stage 3: the leaves under Import commands; switches by #160 and #163."
+    },
+    {
+      "number": 93,
+      "title": "[ROUNDS-18-L05] Build revocable public artifact sharing",
+      "prerequisites": "- #14 (`ROUNDS-00B-L06`), #80 (`ROUNDS-15-L04`), #89 (`ROUNDS-18-L01`, export contracts), #79 (`ROUNDS-15-L03`), #22 (`ROUNDS-02-L05`, outbox), #76 (`ROUNDS-14-L05`).\n- #81 (`ROUNDS-16-L01`, Resume Studio layout), #83 (`ROUNDS-16-L03`, revision history), #178 stage 2 (Account sharing section).\n- #45 (`ROUNDS-08-L02`, form primitives), #46 (`ROUNDS-08-L03`, dialogs), #166 (`ROUNDS-33-L02`, application shell), #173 (`ROUNDS-34-L04`, browser tests).\n- #167 (`ROUNDS-33-L03`, feedback patterns) stages 1 (confirmation, notices, announcer, privacy mark) and 2 (table).\n\n#11 and #12 come through #14, and #19 and #72 through #79. #150 comes in at stage 1 through #81 and #83."
+    },
+    {
+      "number": 94,
+      "title": "[ROUNDS-18-L06] Guarantee immutable submitted and shared revisions",
+      "prerequisites": "- #79 (`ROUNDS-15-L03`, revisions and registry), #80 (`ROUNDS-15-L04`, retarget).\n- #88 (`ROUNDS-17-L04`, submissions), #89 (`ROUNDS-18-L01`, export contracts), #93 (`ROUNDS-18-L05`, revision shares).\n- #76 (`ROUNDS-14-L05`, purge, Stage 3), #73 (`ROUNDS-14-L02`, keyring).\n- #21 (`ROUNDS-02-L04`, pins), #18 (`ROUNDS-02-L01`, byte store), #150 (`ROUNDS-31-L05`, Materials read model), #170 (`ROUNDS-34-L01`, conformance runner).\n- PR 2: #83 (`ROUNDS-16-L03`, edition history), #46 (`ROUNDS-08-L03`, dialogs), #167 (`ROUNDS-33-L03`, announcer), #173 (`ROUNDS-34-L04`, browser tests).\n\nRemoved: #90 to #92 (#91 depends on this leaf). #14 (`ROUNDS-00B-L06`, legacy shares) comes through #80 and #93. Downstream: #91, #161."
+    },
+    {
+      "number": 95,
+      "title": "[ROUNDS-19-L01] Define Opportunity aggregate and source refresh",
+      "prerequisites": "- #9 (`ROUNDS-00B-L01`, account scope) and #10 (`ROUNDS-00B-L02`, relation authorization).\n- #18 to #22 (`ROUNDS-02-L01` to `ROUNDS-02-L05`): database ADR, gateway, versions, change sets, outbox. Merge also needs #20 to take #29's `inbound_digests` amendment.\n- #27 to #29 (`ROUNDS-04-L01` to `ROUNDS-04-L03`): Organization and Person, resolution, merges and tombstones.\n- #58 (`ROUNDS-11-L02`, matching), #72 (`ROUNDS-14-L01`, privacy classes), #76 (`ROUNDS-14-L05`, purge), #170 (`ROUNDS-34-L01`, harnesses), and #172 (`ROUNDS-34-L03`, authorization matrix)."
+    },
+    {
+      "number": 96,
+      "title": "[ROUNDS-19-L02] Define Pursuit lifecycle and transitions",
+      "prerequisites": "- #95 (`ROUNDS-19-L01`, Opportunity aggregate), which brings #9, #10, #18 to #22, and #170.\n- #99 (`ROUNDS-20-L01`, stage registry).\n- #39 (`ROUNDS-07-L01`, Career Pack spec).\n- #44 (`ROUNDS-08-L01`, field contract).\n- #48 (`ROUNDS-08-L05`, status registries).\n- #72 (`ROUNDS-14-L01`, privacy classes).\n\nRemoved #26 (`ROUNDS-03-L03`) and #30 (`ROUNDS-04-L04`): no field references the Career Profile, and organization strings feed #98. Order: #99, this leaf, then #100, #97, #98, and #148."
+    },
+    {
+      "number": 97,
+      "title": "[ROUNDS-19-L03] Relate pursuit context without duplicate ownership",
+      "prerequisites": "- #95 (`ROUNDS-19-L01`): Opportunity aggregate.\n- #96 (`ROUNDS-19-L02`): Pursuit lifecycle.\n- #36 (`ROUNDS-06-L01`): relationship registry.\n- #37 (`ROUNDS-06-L02`): relationship service.\n- #10 (`ROUNDS-00B-L02`): relation authorization.\n- #76 (`ROUNDS-14-L05`): deletion and purge.\n- #170 (`ROUNDS-34-L01`): contract harnesses."
+    },
+    {
+      "number": 98,
+      "title": "[ROUNDS-19-L04] Migrate combined application records",
+      "prerequisites": "- #95, #96, #97 (`ROUNDS-19-L01` to `L03`): Opportunity, Pursuit, pursuit context.\n- #99, #100 (`ROUNDS-20-L01`, `L02`): stage registry, transition history.\n- #30 (`ROUNDS-04-L04`), #19 (`ROUNDS-02-L02`), #44 (`ROUNDS-08-L01`), #46 (`ROUNDS-08-L03`), #72 (`ROUNDS-14-L01`).\n- #155, #156, #157 (`ROUNDS-32-L01` to `L03`): inventory, framework, rehearsal.\n- #170, #171 (`ROUNDS-34-L01`, `L02`): harnesses, fixtures.\n- #177: hosted demo lifecycle."
+    },
+    {
+      "number": 99,
+      "title": "[ROUNDS-20-L01] Ratify the pursuit stage and transition registry",
+      "prerequisites": "- #15, #16 (`ROUNDS-01-L01`, `ROUNDS-01-L02`): vocabulary, package-boundary matrix.\n- #18 (`ROUNDS-02-L01`): database and transaction ADR.\n- #39, #44 (`ROUNDS-07-L01`, `ROUNDS-08-L01`): Career Pack spec, field contract.\n- #48 (`ROUNDS-08-L05`): status registries, part (a) only.\n- #72 (`ROUNDS-14-L01`): privacy classes and sink policy.\n- #182: shared contracts package and root build contexts.\n- #17 (`ROUNDS-01-L03`), #19 to #22 (`ROUNDS-02-L02` to `ROUNDS-02-L05`), and #172 (`ROUNDS-34-L03`): export gate producers."
+    },
+    {
+      "number": 100,
+      "title": "[ROUNDS-20-L02] Build the transition command service and history",
+      "prerequisites": "- #99 `ROUNDS-20-L01`: stage registry.\n- #96 `ROUNDS-19-L02`: Pursuit aggregate.\n- #19 `ROUNDS-02-L02`: command gateway.\n- #20 `ROUNDS-02-L03`: versions and idempotency.\n- #21 `ROUNDS-02-L04`: change sets and audit.\n- #22 `ROUNDS-02-L05`: transactional outbox.\n- #44 `ROUNDS-08-L01`: field contract.\n- #72 `ROUNDS-14-L01`: privacy classes.\n- #76 `ROUNDS-14-L05`: deletion and purge.\n- #170 `ROUNDS-34-L01`: contract harnesses.\n- #172 `ROUNDS-34-L03`: authorization matrix."
+    },
+    {
+      "number": 101,
+      "title": "[ROUNDS-20-L03] Replace repeated pipeline state and component synchronization",
+      "prerequisites": "- Domain: #98, #99, #100, #148.\n- UI: #45 (`ROUNDS-08-L02`, forms), #46, #48, #51, #165, #166 (`ROUNDS-33-L02`, app shell), #167 (`ROUNDS-33-L03`, shared patterns).\n- Platform: #72 (`ROUNDS-14-L01`, privacy classes), #156, #158, #170 (`ROUNDS-34-L01`, harnesses), #171 (`ROUNDS-34-L02`, fixtures), #173 (`ROUNDS-34-L04`, browser tests)."
+    },
+    {
+      "number": 102,
+      "title": "[ROUNDS-21-L01] Design the persistent opportunity context and workspace shell",
+      "prerequisites": "- #149 (`ROUNDS-31-L04`, workspace read model) and #146 (`ROUNDS-31-L01`, read client)\n- #165 (`ROUNDS-33-L01`, route model), #166 (`ROUNDS-33-L02`, shell and `SectionNav`), #167 (`ROUNDS-33-L03`, state renderers and inspector)\n- #44, #45, #46 (`ROUNDS-08-L01` to `L03`, dates, draft store, drawers) and #20 (`ROUNDS-02-L03`, conflicts)\n- #155 (`ROUNDS-32-L01`, browser-key module) and #76 (`ROUNDS-14-L05`, local purge)\n- #95, #96, #98 (`ROUNDS-19-L01`, `L02`, `L04`, Opportunity, Pursuit, migrated ids)\n- #100, #101 (`ROUNDS-20-L02`, `L03`, transitions, Pipeline)\n- #170, #173, #174 (`ROUNDS-34-L01`, `L04`, `L05`, scan, browser tests, telemetry)"
+    },
+    {
+      "number": 103,
+      "title": "[ROUNDS-21-L02] Build overview, process, and activity slices",
+      "prerequisites": "Stage A: #102 (`ROUNDS-21-L01`, shell), #98 (`ROUNDS-19-L04`, migration), #99 (`ROUNDS-20-L01`, stage registry), #101 (`ROUNDS-20-L03`, `StageControl`), #95 (`ROUNDS-19-L01`, Opportunity), #96 (`ROUNDS-19-L02`, Pursuit), #100 (`ROUNDS-20-L02`, transitions), #149 (`ROUNDS-31-L04`, read model), #107 (`ROUNDS-22-L02`, Activity envelope), #72 (`ROUNDS-14-L01`, privacy), #48 (`ROUNDS-08-L05`, registries), #45 (`ROUNDS-08-L02`, drafts), #167 (`ROUNDS-33-L03`, masking), #173 (`ROUNDS-34-L04`, browser tests), #174 (`ROUNDS-34-L05`, observability).\n\nStage B adds #115 (`ROUNDS-24-L01`, Offer Revisions), #116 (`ROUNDS-24-L02`, negotiation), #118 (`ROUNDS-24-L04`, decisions), #160's S6 preconditions, shadow compare, and production dry run (`ROUNDS-32-L06`, offer migration), #171 (`ROUNDS-34-L02`, fixtures), #19 (`ROUNDS-02-L02`, gateway), #21 (`ROUNDS-02-L04`, revert), and #177 (demo lifecycle).\n\nSection gates: Process goes canonical at #110's switch (`ROUNDS-22-L05`, round migration), with #106 (`ROUNDS-22-L01`, process contracts), #107's interview-round kind, and #109 (`ROUNDS-22-L04`, round surface); source refresh needs #181.\n\nReferenced, not prerequisites: #1 (`ROUNDS-00A-L01`, gate registry), #17 (`ROUNDS-01-L03`, program), #20 (`ROUNDS-02-L03`, versions), #88 (`ROUNDS-17-L04`, submissions), #91 and #92 (`ROUNDS-18-L03`, `ROUNDS-18-L04`, export and restore), #112 (`ROUNDS-23-L02`, conversations), #117 (`ROUNDS-24-L03`, comparison), #143 (`ROUNDS-30-L02`, Today)."
+    },
+    {
+      "number": 104,
+      "title": "[ROUNDS-21-L03] Build preparation, materials, people, and actions slices",
+      "prerequisites": "- #102 (`ROUNDS-21-L01`, section contract), #149 (`ROUNDS-31-L04`, read model)\n- #165 to #167 (`ROUNDS-33-L01` to `L03`: routes, shell, patterns), #168 (`ROUNDS-33-L04`, templates) S1\n- #45 to #47 (`ROUNDS-08-L02` to `L04`: drafts, overlays, selectors)\n- #20 (`ROUNDS-02-L03`, conflicts), #72 (`ROUNDS-14-L01`, privacy classes)\n- #170 (`ROUNDS-34-L01`, scan), #173 (`ROUNDS-34-L04`, browser tests), #174 (`ROUNDS-34-L05`, counters)\n\nSection gates, none blocking Stage 1:\n\n- People: #111 to #113 (`ROUNDS-23-L01` to `L03`); #114 (`ROUNDS-23-L04`, note queue) behind `ROUNDS_GATE_NOTE_QUEUE_PURSUIT`, whose Stage 1 closes on this host; #107 (`ROUNDS-22-L02`) and #110 (`ROUNDS-22-L05`) for participants; #168's Directory (S2) for identity edits and Directory checks.\n- Actions: #122, #123 (`ROUNDS-26-L01`, `L02`), #125's switch (`ROUNDS-26-L04`), #168's Actions stage (S3).\n- Materials: #85 (`ROUNDS-17-L01`), #87, #88 (`ROUNDS-17-L04`), #150 (`ROUNDS-31-L05`).\n- Preparation: #108 (`ROUNDS-22-L03`) stage 2, #140 (`ROUNDS-29-L03`), #152 (`ROUNDS-31-L07`); \"Edit in Process\" targets #109 (`ROUNDS-22-L04`) after #110's switch."
+    },
+    {
+      "number": 105,
+      "title": "[ROUNDS-21-L04] Migrate application detail routes and complete responsive adoption",
+      "prerequisites": "- #1 (`ROUNDS-00A-L01`)\n- #72 (`ROUNDS-14-L01`)\n- #97 (`ROUNDS-19-L03`, pursuit context)\n- #98 (`ROUNDS-19-L04`)\n- #101 (`ROUNDS-20-L03`, Pipeline list)\n- #102 (`ROUNDS-21-L01`)\n- #103 (`ROUNDS-21-L02`)\n- #104 (`ROUNDS-21-L03`)\n- #107 (`ROUNDS-22-L02`, Career Activity)\n- #109 (`ROUNDS-22-L04`)\n- #110 (`ROUNDS-22-L05`)\n- #149 (`ROUNDS-31-L04`)\n- #156 (`ROUNDS-32-L02`)\n- #157 (`ROUNDS-32-L03`, restore rehearsal)\n- #165 (`ROUNDS-33-L01`)\n- #166 (`ROUNDS-33-L02`, application shell)\n- #171 (`ROUNDS-34-L02`)\n- #172 (`ROUNDS-34-L03`, authorization matrix)\n- #173 (`ROUNDS-34-L04`, browser tests)\n- #174 (`ROUNDS-34-L05`)\n\nShips in Milestone 4 after #110 and #103's Stage B. Downstream: #164 (`ROUNDS-32-L10`, legacy removal) deletes the redirects and `ApplicationDetail.tsx`; #168 (`ROUNDS-33-L04`, mobile recomposition) consumes this proof."
+    },
+    {
+      "number": 106,
+      "title": "[ROUNDS-22-L01] Define Interview Process, stage, and round contracts",
+      "prerequisites": "- #19 (`ROUNDS-02-L02`, command gateway)\n- #20 (`ROUNDS-02-L03`, versioning)\n- #21 (`ROUNDS-02-L04`, change sets)\n- #22 (`ROUNDS-02-L05`, outbox)\n- #39 (`ROUNDS-07-L01`, pack spec)\n- #40 (`ROUNDS-07-L02`, pack activation)\n- #97 (`ROUNDS-19-L03`, pursuit context)\n- #107 (`ROUNDS-22-L02`, Career Activity), envelope stage only\n- #111 (`ROUNDS-23-L01`, person roles)\n\nRemoved #30 (`ROUNDS-04-L04`, people migration) and #98 (`ROUNDS-19-L04`, application migration). Not adding #27 (`ROUNDS-04-L01`, Person aggregate); nothing here references a Person. #42 and #43 aren't prerequisites; whichever merges second fills the slot cases. #107's interview kind depends on this leaf, so #17 (`ROUNDS-01-L03`, dependency DAG) splits #107."
+    },
+    {
+      "number": 107,
+      "title": "[ROUNDS-22-L02] Use Career Activity as the scheduling authority",
+      "prerequisites": "- Stage A: #19 to #22 (`ROUNDS-02-L02` to `L05`, commands), #24 `ROUNDS-03-L01` (timezone), #27 `ROUNDS-04-L01` (Person), #29 `ROUNDS-04-L03` (merges), #36 and #37 (`ROUNDS-06-L01`, `L02`, relations), #44 `ROUNDS-08-L01` (time values), #48 `ROUNDS-08-L05` part (a) (registries), #72 `ROUNDS-14-L01` (privacy), #76 `ROUNDS-14-L05` (purge), #96 `ROUNDS-19-L02` (Pursuit), #13 `ROUNDS-00B-L05` (account suite), #156 `ROUNDS-32-L02` (manifests), #182 (contracts).\n- Stage B: #106 `ROUNDS-22-L01` (Interview Process), #39 `ROUNDS-07-L01` (pack spec).\n- Stage C: #53, #55, #56 (`ROUNDS-10-L01`, `L03`, `L04`), #57 `ROUNDS-11-L01`, #64 `ROUNDS-12-L04` (ingestion).\n\nOrder: #106 and #111, Stage B with #110's forward run, #110's switch, then #109 and #108's stage 2. Stage A precedes #112, #88, and #103."
+    },
+    {
+      "number": 108,
+      "title": "[ROUNDS-22-L03] Build preparation context per interview round",
+      "prerequisites": "- Stage 1: #19 (`ROUNDS-02-L02`, command gateway), #20 (`ROUNDS-02-L03`, idempotency), #21 (`ROUNDS-02-L04`, change sets), #22 (`ROUNDS-02-L05`, outbox), #44 (`ROUNDS-08-L01`, field contract), #72 (`ROUNDS-14-L01`, privacy classes), #106 (`ROUNDS-22-L01`, process contracts).\n- Stage 2: #23 (`ROUNDS-02-L06`, projectors), #33 (`ROUNDS-05-L03`, stories), #36 (`ROUNDS-06-L01`, relation registry), #37 (`ROUNDS-06-L02`, relation service), #39 (`ROUNDS-07-L01`, pack spec), #107 (`ROUNDS-22-L02`, scheduling authority), #110 (`ROUNDS-22-L05`, legacy migration), #171 (`ROUNDS-34-L02`, migration fixtures), #182 (shared contracts package).\n\nSection gates, not merge blockers: #43 (`ROUNDS-07-L05`, SWE pack), #79, #123 (`ROUNDS-26-L02`, Action relations)."
+    },
+    {
+      "number": 109,
+      "title": "[ROUNDS-22-L04] Build the interview round surface for scheduling, debrief, result, and follow-up",
+      "prerequisites": "- #106 to #108 (`ROUNDS-22-L01` to `L03`, process, Career Activity, prep context), #108 at its stage 1 for `SetPreparationNote`.\n- #24 (`ROUNDS-03-L01`, account zone); #44 to #48 (`ROUNDS-08-L01` to `L05`, form foundations).\n- #72 and #76 (`ROUNDS-14-L01`, `L05`, privacy and purge); #100 (`ROUNDS-20-L02`, transitions).\n- #122 to #124 (`ROUNDS-26-L01` to `L03`, Actions and effects); #149 (`ROUNDS-31-L04`, read model).\n- #166, #167 (`ROUNDS-33-L02`, `L03`, shell and masking); #173 (`ROUNDS-34-L04`, browser harness).\n- Stage 1: #49 and #51 (`ROUNDS-09-L01`, `L03`, Capture Center and capture types).\n- Stage 3: #57 (`ROUNDS-11-L01`, claim kinds), #64 (`ROUNDS-12-L04`, claim commit), #73 to #75 (`ROUNDS-14-L02` to `L04`, provider path), #181 (note adapter).\n\n#19 to #22 and #37 arrive through #107 and #123; #30 (`ROUNDS-04-L04`) and #98 (`ROUNDS-19-L04`) through #110.\n\nStage gates, not edges: #110's switch for stages 1 and 2, #33 and #34 for links, and #130 for Practice Attempt evidence."
+    },
+    {
+      "number": 110,
+      "title": "[ROUNDS-22-L05] Migrate legacy interview rounds and loop data",
+      "prerequisites": "- #106 (`ROUNDS-22-L01`): process contracts and `ImportInterviewProcess`, including archived Pursuits.\n- #107 (`ROUNDS-22-L02`), Stage B: `ImportInterviewActivity` with `legacy_text`, `raw_legacy_questions`, and `raw_legacy_result`.\n- #108 (`ROUNDS-22-L03`), stage 1: `ImportPreparationNote`.\n- #30 (`ROUNDS-04-L04`): organization and people strings.\n- #98 (`ROUNDS-19-L04`): application migration.\n- #121 (`ROUNDS-25-L03`): campaign migration.\n- #72 (`ROUNDS-14-L01`): privacy classes.\n- #76 (`ROUNDS-14-L05`), handler interface: purge and restore suppression.\n- #156 (`ROUNDS-32-L02`): migration framework.\n- #157 (`ROUNDS-32-L03`): backup and restore rehearsal.\n- #171 (`ROUNDS-34-L02`): migration fixtures.\n\nSwitch gates, not edges: #109 (`ROUNDS-22-L04`, round surface) stages 1 and 2; #43 (`ROUNDS-07-L05`, SWE pack) round types; #177 (demo lifecycle) session end covering the new stores.\n\nCoordination: #160 (`ROUNDS-32-L06`) runs this manifest. #114 (`ROUNDS-23-L04`) never maps `interviewer`; it may append promoted participants. #125, #38, and #105 resolve round ids through #156's map."
+    },
+    {
+      "number": 111,
+      "title": "[ROUNDS-23-L01] Define contextual person roles and relationship history",
+      "prerequisites": "- #16, #27, #29, #36, #37, #39, #40, #44, #72, #76, #91 (Stage 1), #155, #170.\n- Activation only: #96 and #97 for `person-pursuit-role`; #31 for `person-career-role`.\n\nThe filed #30 (`ROUNDS-04-L04`, string migration) and #38 (`ROUNDS-06-L03`, junction migration) edges are dropped; this leaf reads neither."
+    },
+    {
+      "number": 112,
+      "title": "[ROUNDS-23-L02] Model conversations and contact activities",
+      "prerequisites": "- #107 (`ROUNDS-22-L02`, Career Activity), Stage A (envelope) only, in Milestone 2 ahead of ROUNDS-22's slot.\n- #111 `ROUNDS-23-L01`, #29 `ROUNDS-04-L03`, #36 `ROUNDS-06-L01`, #37 `ROUNDS-06-L02`, #97 `ROUNDS-19-L03` (v2, context row), #44 `ROUNDS-08-L01`, #39 `ROUNDS-07-L01`, #53 `ROUNDS-10-L01`, #72 `ROUNDS-14-L01`, and #76 `ROUNDS-14-L05`.\n\n#19 to #22 come through #107. Dropped #30 (`ROUNDS-04-L04`) and #38 (`ROUNDS-06-L03`): this leaf reads no legacy strings, junctions, or mentions.\n\nMerge blocker: OD-2 in #16."
+    },
+    {
+      "number": 113,
+      "title": "[ROUNDS-23-L03] Build referral and follow-up workflows",
+      "prerequisites": "- #111, #112 (`ROUNDS-23-L01`, `L02`: person roles, conversations); #107 (`ROUNDS-22-L02`, Career Activity envelope stage)\n- #96 (`ROUNDS-19-L02`, Pursuit lifecycle); #100 (`ROUNDS-20-L02`, transitions); #122 to #124 (`ROUNDS-26-L01` to `L03`: Actions, relations, effects)\n- #29 (`ROUNDS-04-L03`, merge redirects); #44, #48 (`ROUNDS-08-L01`, `L05` part (a): fields, status registries); #72, #76 (`ROUNDS-14-L01`, `L05`: privacy classes, purge)\n- #19 to #22 (`ROUNDS-02-L02` to `L05`: gateway, versions, change sets, outbox); #170 (`ROUNDS-34-L01`, contract harnesses)\n- #91 (`ROUNDS-18-L03`, account export) Stage 1 and #155 (`ROUNDS-32-L01`, store registry) Stage 1"
+    },
+    {
+      "number": 114,
+      "title": "[ROUNDS-23-L04] Migrate contacts, recruiter fields, referrals, and follow-ups",
+      "prerequisites": "Stage 1, Milestone 2:\n\n- #28 (`ROUNDS-04-L02`, duplicate scoring), #72 (`ROUNDS-14-L01`, privacy classes), #76 (`ROUNDS-14-L05`, purge)\n- #98 (`ROUNDS-19-L04`, application migration)\n- #111, #112, #113 (`ROUNDS-23-L01` to `L03`: roles, conversations, referrals)\n- #125 (`ROUNDS-26-L04`, Todo migration, legacy follow-ups)\n- #155, #156, #157 (`ROUNDS-32-L01` to `L03`: inventory, migration framework, restore rehearsal)\n- #171 (`ROUNDS-34-L02`, migration fixtures)\n\nStage 2, Milestone 4, adds #30 (`ROUNDS-04-L04`, occurrence map, interviewer rows only), #107 (`ROUNDS-22-L02`, Career Activity), #108 (`ROUNDS-22-L03`, prep notes), and #110 (`ROUNDS-22-L05`, round migration).\n\nThe filed #38 (`ROUNDS-06-L03`) edge goes, since it arrives through #125. Closing, not merging, waits on the hosts: #104's (`ROUNDS-21-L03`) Stage 2 and #109's missing panel."
+    },
+    {
+      "number": 115,
+      "title": "[ROUNDS-24-L01] Define Offer and immutable Offer Revision contracts",
+      "prerequisites": "- #9 and #10 (`ROUNDS-00B-L01`, `L02`): account scope, relation authorization\n- #18 to #22 (`ROUNDS-02-L01` to `L05`): database ADR, command gateway, versions and idempotency, change sets and audit, event outbox\n- #44 and #48 (`ROUNDS-08-L01`, `L05`): field contract, status registry contract only\n- #53 (`ROUNDS-10-L01`, Source Documents)\n- #72 and #76 (`ROUNDS-14-L01`, `L05`): privacy classes, deletion and purge\n- #96 (`ROUNDS-19-L02`, Pursuit lifecycle)\n- #156 (`ROUNDS-32-L02`, migration framework) and #170 (`ROUNDS-34-L01`, contract harnesses)\n- #91 (`ROUNDS-18-L03`) Stage 1: exporter contract, for PR 1\n- #92 (`ROUNDS-18-L04`) Stage 1's first PR: `account_import` and importer registration, for PR 2\n- #118 (`ROUNDS-24-L04`), for PR 3 only: `RecordLegacyOfferDecision`"
+    },
+    {
+      "number": 116,
+      "title": "[ROUNDS-24-L02] Build negotiation and deadline workflows",
+      "prerequisites": "- #115 (`ROUNDS-24-L01`, Offer Revisions).\n- #107 (`ROUNDS-22-L02`, Career Activity), Stage A envelope and ICS serializer only.\n- #112 (`ROUNDS-23-L02`, conversations) and #111 (`ROUNDS-23-L01`, person roles).\n- #122 (`ROUNDS-26-L01`, Actions) and #123 (`ROUNDS-26-L02`, Action relations).\n- #36, #37, #10 (`ROUNDS-06-L01`, `ROUNDS-06-L02`, `ROUNDS-00B-L02`): relation registry, service, authorization.\n- #44 (`ROUNDS-08-L01`, day rules), #47 (`ROUNDS-08-L04`, entity lookup), and #48 (`ROUNDS-08-L05`, registries).\n- #24 (`ROUNDS-03-L01`, account timezone), set through #178.\n- #72 (`ROUNDS-14-L01`, privacy classes) and #76 (`ROUNDS-14-L05`, purge).\n- #155 (`ROUNDS-32-L01`, store inventory) and #91 (`ROUNDS-18-L03`, account export) Stage 1: registrations only."
+    },
+    {
+      "number": 117,
+      "title": "[ROUNDS-24-L03] Build private offer comparison",
+      "prerequisites": "- Stage 1: #115 (`ROUNDS-24-L01`, PRs 1 and 2), #23 (`ROUNDS-02-L06`), #44 (`ROUNDS-08-L01`, field kinds), #95 and #96 (`ROUNDS-19-L01`, `ROUNDS-19-L02`, organization lookup), #72 (`ROUNDS-14-L01`), #76 (`ROUNDS-14-L05`, purge registry contract).\n- Stage 2 adds #146 (`ROUNDS-31-L01`, SPA read client), #45 (`ROUNDS-08-L02`), #46 (`ROUNDS-08-L03`, dialogs and focus), #165 (`ROUNDS-33-L01`, route and URL-state keys), #166 (`ROUNDS-33-L02`), #167 (`ROUNDS-33-L03`, masking and inspector), #173 (`ROUNDS-34-L04`, browser harness), #174 (`ROUNDS-34-L05`, observability kit).\n- Rollout gate: #160's S6 (`ROUNDS-32-L06`). #91 and #155 take registrations only."
+    },
+    {
+      "number": 118,
+      "title": "[ROUNDS-24-L04] Implement offer decisions and pursuit effects",
+      "prerequisites": "- #115 `ROUNDS-24-L01` PRs 1 and 2: Offer and Revision records, the decision stores and schema, `current_decision_id`, `offer_decided`, and states.\n- #116 `ROUNDS-24-L02`: deadline states (`overdue` gates `deadline-passed`) and the `offer_decision_actions` rows the cancel effect reads.\n- #99 `ROUNDS-20-L01`: Pursuit keys and reason codes.\n- #100 `ROUNDS-20-L02`: `TransitionPursuit` and `CorrectPursuitTransition` through `ctx.invoke`.\n- #122 `ROUNDS-26-L01`: the Action aggregate, its `effect` origin, and `CancelAction` as `system`.\n- #123 `ROUNDS-26-L02`: relation registry and its reserved `action-offer` row, which #116 opens under `ROUNDS_GATE_ACTION_CONTEXT_OFFER`.\n- #124 `ROUNDS-26-L03`: effect registry, `actions.create_follow_up`, and the (`source_type`, `source_id`, `declaration_revision`, `effect_key`) form of #122's `effect` origin.\n- #170 `ROUNDS-34-L01` and #172 `ROUNDS-34-L03`: harness, two-account fixtures, authorization matrix.\n\n#19 to #22, #44, #48, #72, and #76 come through #115 and #100."
+    },
+    {
+      "number": 119,
+      "title": "[ROUNDS-25-L01] Define campaign goals, time boxes, and membership lenses",
+      "prerequisites": "- #19 to #22 (`ROUNDS-02-L02` to `L05`: gateway, versions, audit, events), #10 (`ROUNDS-00B-L02`, relation authorization), #36 and #37 (`ROUNDS-06-L01`, `L02`: relation registry and commands)\n- #24 (`ROUNDS-03-L01`, Account preferences), #44 (`ROUNDS-08-L01`, temporal kinds), #72 and #76 (`ROUNDS-14-L01`, `L05`: privacy classes, purge registry)\n- #27 (`ROUNDS-04-L01`, Organization), #29 (`ROUNDS-04-L03`, merge redirects)\n- #95, #96, #97 (`ROUNDS-19-L01` to `L03`: Opportunity, Pursuit, Pursuit context)\n- #99, #100 (`ROUNDS-20-L01`, `L02`: stage registry, transition history)\n- #170 (`ROUNDS-34-L01`, harnesses), #182 (contracts package)"
+    },
+    {
+      "number": 120,
+      "title": "[ROUNDS-25-L02] Build consistent campaign planning and reporting",
+      "prerequisites": "- Stage A: #119 (`ROUNDS-25-L01`, lens), #98 (`ROUNDS-19-L04`, Pursuits), #101 (`ROUNDS-20-L03`, pipeline state), #146 (`ROUNDS-31-L01`, projectors), #148 (`ROUNDS-31-L03`, Pipeline model), #149 (`ROUNDS-31-L04`, workspace model), #100 (`ROUNDS-20-L02`, transitions), #19 (`ROUNDS-02-L02`, gateway), #72 (`ROUNDS-14-L01`, privacy), #76 (`ROUNDS-14-L05`, purge), #44 (`ROUNDS-08-L01`, temporal), #24 (`ROUNDS-03-L01`, timezone), #171 (`ROUNDS-34-L02`, fixtures), #174 (`ROUNDS-34-L05`, counters).\n- Stage B: #178, #165 (`ROUNDS-33-L01`, routes), #168 S1 (`ROUNDS-33-L04`, templates), #25 (`ROUNDS-03-L02`, `cross_check` items), #166 (`ROUNDS-33-L02`, shell), #45, #46, #47 (`ROUNDS-08-L02` to `L04`, editors, dialogs, picker), #167 (`ROUNDS-33-L03`, patterns), #173 (`ROUNDS-34-L04`, browser tests).\n- Section sources, blocking only the close: #122, #123 (`ROUNDS-26-L01`, `L02`, Actions), #88 (`ROUNDS-17-L04`, submissions), #107 Stage B (`ROUNDS-22-L02`, interviews), #115, #118 (`ROUNDS-24-L01`, `L04`, Offers), #130 (`ROUNDS-28-L01`, Attempts).\n\n#101 keeps the Pipeline list and Dashboard on #148's `legacy_campaign` scope until #121's switch, when #101's step 4 moves them to `lens` on `ROUNDS_GATE_CAMPAIGN_LENS` (LENS) at `on`; this leaf's switcher supplies the selected lens."
+    },
+    {
+      "number": 121,
+      "title": "[ROUNDS-25-L03] Migrate active and historical campaigns",
+      "prerequisites": "- #98 (`ROUNDS-19-L04`, application records), #101 (`ROUNDS-20-L03`, pipeline state), #119, #120 (`ROUNDS-25-L01`, `L02`, lens, reports)\n- #10, #13 (`ROUNDS-00B-L02`, `L05`, relation authorization, two-account suite), #177 (demo reset)\n- #25 (`ROUNDS-03-L02`, `cross_check` items), #178 (Account preference commands)\n- #30 (`ROUNDS-04-L04`, Organization occurrences), #37 (`ROUNDS-06-L02`, relation commands)\n- #72, #76 (`ROUNDS-14-L01`, `L05`, privacy classes, purge)\n- #155, #156, #157 (`ROUNDS-32-L01` to `L03`, inventory, framework, restore rehearsal)\n- #170, #171, #174 (`ROUNDS-34-L01`, `L02`, `L05`, harness, fixtures, observability)"
+    },
+    {
+      "number": 122,
+      "title": "[ROUNDS-26-L01] Define native Action aggregate and lifecycle",
+      "prerequisites": "- #9 (`ROUNDS-00B-L01`, account scope) and #177 (demo lifecycle)\n- #18 to #23 (`ROUNDS-02-L01` to `L06`): ADR, gateway, idempotency, change sets, outbox, envelopes\n- #24 (`ROUNDS-03-L01`, Account aggregate) and #178 (Account preferences)\n- #39 (`ROUNDS-07-L01`, Career Pack spec), #44 (`ROUNDS-08-L01`, field contract), #48 (`ROUNDS-08-L05`, status registries) part (a)\n- #57 (`ROUNDS-11-L01`, Extracted Claims), #64 (`ROUNDS-12-L04`, claim commit), #72 (`ROUNDS-14-L01`, privacy classes), #76 (`ROUNDS-14-L05`, purge), #91 (`ROUNDS-18-L03`, export) Stage 1\n- #92 (`ROUNDS-18-L04`, account import) Stage 1's first PR: `account_import` and importer registration\n- #155 (`ROUNDS-32-L01`, disposition inventory), #170 (`ROUNDS-34-L01`, harnesses), #172 (`ROUNDS-34-L03`, authorization matrix), #182 (contracts package)"
+    },
+    {
+      "number": 123,
+      "title": "[ROUNDS-26-L02] Relate Actions to canonical context and portable references",
+      "prerequisites": "- #122 (`ROUNDS-26-L01`, Action aggregate)\n- #36, #37 (`ROUNDS-06-L01`, `L02`, relationship registry and commands)\n- #10 (`ROUNDS-00B-L02`, relation authorization), #29 (`ROUNDS-04-L03`, merges and tombstones)\n- #72, #76 (`ROUNDS-14-L01`, `L05`, privacy classes and purge)\n- #47 (`ROUNDS-08-L04`, entity lookup), #165 (`ROUNDS-33-L01`, route model)\n- #170 (`ROUNDS-34-L01`, harnesses), #91 (`ROUNDS-18-L03`, export) stage 1, #156 (`ROUNDS-32-L02`, migration framework)"
+    },
+    {
+      "number": 124,
+      "title": "[ROUNDS-26-L03] Implement recurrence, suggestions, and completion effects",
+      "prerequisites": "- #122 (`ROUNDS-26-L01`, Action aggregate)\n- #123 (`ROUNDS-26-L02`, Action relations)\n- #22 (`ROUNDS-02-L05`, outbox), which brings #18 to #21\n- #44 (`ROUNDS-08-L01`, field and validation contract)\n- #24 (`ROUNDS-03-L01`, Account aggregate) for `timezone`, set by #178 (Account preference commands)\n- #170 (`ROUNDS-34-L01`, contract harnesses)\n- #171 (`ROUNDS-34-L02`, migration and recovery fixtures)\n- #172 (`ROUNDS-34-L03`, authorization matrix)\n- #76 (`ROUNDS-14-L05`, deletion and purge), Stage 1a\n\nRequested edges onto this leaf: #109, #113, #118, #140, #142, #144, and #168's S4. The generated #125 (`ROUNDS-26-L04`, Todo migration) edge goes."
+    },
+    {
+      "number": 125,
+      "title": "[ROUNDS-26-L04] Migrate Todos and encoded entity mentions",
+      "prerequisites": "- #38 (`ROUNDS-06-L03`), #122 (`ROUNDS-26-L01`), #123 (`ROUNDS-26-L02`)\n- #168 (`ROUNDS-33-L04`), Actions route stage only.\n- #155, #156, #157 (`ROUNDS-32-L01` to `ROUNDS-32-L03`, registry, framework, rehearsal)\n- #72 (`ROUNDS-14-L01`), #170 (`ROUNDS-34-L01`, harnesses), #171 (`ROUNDS-34-L02`, fixtures)\n- #44 (`ROUNDS-08-L01`), #24 (`ROUNDS-03-L01`, account timezone), #165 (`ROUNDS-33-L01`)\n- Switch only: #98 (`ROUNDS-19-L04`), #35 (`ROUNDS-05-L05`), #121 (`ROUNDS-25-L03`), #177 (demo lifecycle)\n\nDropped: #124 (`ROUNDS-26-L03`, recurrence); todos have no recurrence or effect fields."
+    },
+    {
+      "number": 126,
+      "title": "[ROUNDS-27-L01] Build universal canonical search and navigation",
+      "prerequisites": "Before `ROUNDS_GATE_CC_HUB`: #23 (`ROUNDS-02-L06`); #48 (`ROUNDS-08-L05`), part (a) status contract only; #9, #10, #13 (`ROUNDS-00B-L01`, `L02`, `L05`); #45; #46 (`ROUNDS-08-L03`); #47; #76; #146 (`ROUNDS-31-L01`); #165; #166; #167; #170 (`ROUNDS-34-L01`); #173 (`ROUNDS-34-L04`); #174 (`ROUNDS-34-L05`); #178 (settings sections).\n\nBefore each type gate: that type's #153 indexer, #19, #72, #119 (`ROUNDS-25-L01`), and its #165 route; content also needs #123. Organization, Person, and Action routes come from #168's Directory and Actions stages."
+    },
+    {
+      "number": 127,
+      "title": "[ROUNDS-27-L02] Integrate shared capture modes",
+      "prerequisites": "- #126 (`ROUNDS-27-L01`): contribution registry; `capture` stays off until this leaf.\n- #49 (`ROUNDS-09-L01`), #50 (`ROUNDS-09-L02`), #51 (`ROUNDS-09-L03`): invocation, drafts and inbox, types and parity cases.\n- #23 (`ROUNDS-02-L06`), #48 (`ROUNDS-08-L05`): generator edges (`capabilities.ts:615-632`); their outputs arrive through #50, #146, and #51's fixture.\n\nAlso #102 (ROUNDS-21 ships first). Through #49: #45, #46, #47 (`ROUNDS-08-L04`, lookup), #165, #167, #173."
+    },
+    {
+      "number": 128,
+      "title": "[ROUNDS-27-L03] Create the allowlisted command registry and preview",
+      "prerequisites": "- `ROUNDS-02-L06` (#23): projectors; #19 to #22 arrive through it.\n- `ROUNDS-08-L01` (#44), `ROUNDS-08-L02` (#45), `ROUNDS-08-L03` (#46), `ROUNDS-08-L04` (#47): fields, editors, dialogs, selectors.\n- `ROUNDS-08-L05` (#48): status registries, contract only.\n- `ROUNDS-14-L01` (#72): privacy classes. `ROUNDS-27-L01` (#126): search.\n- `ROUNDS-33-L01` (#165), `ROUNDS-33-L02` (#166), `ROUNDS-33-L03` (#167): routes, shell, feedback patterns.\n- `ROUNDS-34-L01` (#170), `ROUNDS-34-L03` (#172), `ROUNDS-34-L04` (#173): harnesses, authorization matrix, browser and accessibility tests.\n- `ROUNDS-03-L04` (#178, Account commands) and `ROUNDS-34-L08` (#182, shared contracts).\n\nDownstream: #129, #143, #144."
+    },
+    {
+      "number": 129,
+      "title": "[ROUNDS-27-L04] Add optional natural-language command parsing safely",
+      "prerequisites": "- #126 (`ROUNDS-27-L01`, search, bringing #165 and #173), #127 (`ROUNDS-27-L02`, capture), #128 (`ROUNDS-27-L03`, command registry)\n- #72 (`ROUNDS-14-L01`, privacy policy), #73 (`ROUNDS-14-L02`, gateway), #74 (`ROUNDS-14-L03`, staging), #75 (`ROUNDS-14-L04`, consent), and #76 (`ROUNDS-14-L05`, purge) Stage 2, which runs #74's expiry\n- #47 (`ROUNDS-08-L04`, entity lookup), #153 (`ROUNDS-31-L08`, search projections), #170 (`ROUNDS-34-L01`, contract harnesses), #182 (contracts package)\n- #181 (natural-language capture adapters), stage 2\n- #23 (`ROUNDS-02-L06`) and #48 (`ROUNDS-08-L05`), generator edges kept as approved"
+    },
+    {
+      "number": 130,
+      "title": "[ROUNDS-28-L01] Define shared Practice Item, Attempt, Progress, and Feedback contracts",
+      "prerequisites": "- #2, #3.\n- #18, #19, #20, #21, #22.\n- #37, #97, #119.\n- #39, #41, #42.\n- #48, part (a); #72, #76.\n- #155; #170, #171, #172.\n- #182 (shared contracts package)."
+    },
+    {
+      "number": 131,
+      "title": "[ROUNDS-28-L02] Build draft-first offline journal and reconciliation",
+      "prerequisites": "- #130 (`ROUNDS-28-L01`, practice contracts), #20 (`ROUNDS-02-L03`, expected versions), #72 (`ROUNDS-14-L01`, privacy classes).\n- #45 (`ROUNDS-08-L02`, draft store), which brings #19 and #76 (`ROUNDS-14-L05`, purge).\n- #158 stage 1, for the bundled SHA-256.\n- #170 (`ROUNDS-34-L01`, security harnesses), #171 (`ROUNDS-34-L02`, migration fixtures).\n- UI: #46 (`ROUNDS-08-L03`, dialogs), #166 (`ROUNDS-33-L02`, app shell), #167 (`ROUNDS-33-L03`, feedback patterns), #173 (`ROUNDS-34-L04`, browser tests).\n\n#8 (`ROUNDS-00A-L08`, conformance suites) and #43 (`ROUNDS-07-L05`, SE pack) are dropped; the journal runs no code and moves no content. #132 to #137 and #158 stage 2 depend on this leaf."
+    },
+    {
+      "number": 132,
+      "title": "[ROUNDS-28-L03] Migrate System Design practice",
+      "prerequisites": "- #130 (`ROUNDS-28-L01`, practice contracts), #131 (`ROUNDS-28-L02`, offline journal), #43 (`ROUNDS-07-L05`, Software Engineering pack) Stage A.\n- #73 (`ROUNDS-14-L02`, intents), #74 (`ROUNDS-14-L03`, staged outcomes), #75 (`ROUNDS-14-L04`, receipts), #76 (`ROUNDS-14-L05`, purge); for Stage 4, #179 (AI routing) and #180 (Generation Proposals).\n- #155 (`ROUNDS-32-L01`, inventory), #156 (`ROUNDS-32-L02`, migrations), #157 (`ROUNDS-32-L03`, rollback rehearsal).\n- #46 (`ROUNDS-08-L03`, dialogs), #166 (`ROUNDS-33-L02`, app shell), #167 (`ROUNDS-33-L03`, interaction patterns), #171 (`ROUNDS-34-L02`, fixtures), #173 (`ROUNDS-34-L04`, browser tests)."
+    },
+    {
+      "number": 133,
+      "title": "[ROUNDS-28-L04] Migrate Coding practice",
+      "prerequisites": "- #130 (`ROUNDS-28-L01`, shared contracts) and #131 (`ROUNDS-28-L02`, offline journal).\n- #43 (`ROUNDS-07-L05`, Software Engineering pack), Stage A only.\n- #1 (`ROUNDS-00A-L01`, server-write record), #2 (`ROUNDS-00A-L02`, Test Definitions), #3 (`ROUNDS-00A-L03`, execution envelope), #8 (`ROUNDS-00A-L08`, conformance suites).\n- #19 (`ROUNDS-02-L02`, command gateway), #20 (`ROUNDS-02-L03`, expected versions).\n- #156 (`ROUNDS-32-L02`, migration framework), #157 (`ROUNDS-32-L03`, restore rehearsal), #158 (`ROUNDS-32-L04`) stage 2, #171 (`ROUNDS-34-L02`, fixtures).\n- #72 (`ROUNDS-14-L01`, privacy matrix), #76 (`ROUNDS-14-L05`, purge).\n- UI foundations: #45 (`ROUNDS-08-L02`), #46 (`ROUNDS-08-L03`), #166 (`ROUNDS-33-L02`), #167 (`ROUNDS-33-L03`), #173 (`ROUNDS-34-L04`).\n- #177 (demo lifecycle).\n\nDownstream: #163 (`ROUNDS-32-L09`) runs both manifests, #137 opens the wiring, #92 runs the draft transform on v1 bundles, #164 (`ROUNDS-32-L10`) deletes legacy code, and #151 (`ROUNDS-31-L06`) reads Attempts."
+    },
+    {
+      "number": 134,
+      "title": "[ROUNDS-28-L05] Migrate AI-assisted Coding practice",
+      "prerequisites": "- #2 (`ROUNDS-00A-L02`), #3 (`ROUNDS-00A-L03`), #8 (`ROUNDS-00A-L08`, conformance suites).\n- #43 (`ROUNDS-07-L05`, Software Engineering pack).\n- #73 (`ROUNDS-14-L02`, invocation intent), #74 (`ROUNDS-14-L03`, staged outcomes), #75 (`ROUNDS-14-L04`, receipts and manual fallback), #179 (legacy AI call routing, PR 9 included), #180 (Generation Proposal record).\n- #130 (`ROUNDS-28-L01`, practice contracts), #131 (`ROUNDS-28-L02`, offline journal).\n- #156 (`ROUNDS-32-L02`, migration framework), #157 (`ROUNDS-32-L03`, rollback rehearsal), #171 (`ROUNDS-34-L02`, migration fixtures)."
+    },
+    {
+      "number": 135,
+      "title": "[ROUNDS-28-L06] Migrate Take-home practice",
+      "prerequisites": "- #130 (`ROUNDS-28-L01`, practice contracts), #131 (`ROUNDS-28-L02`, offline journal)\n- #2 (`ROUNDS-00A-L02`, test definitions), #3 (`ROUNDS-00A-L03`, execution protocol), #8 (`ROUNDS-00A-L08`, conformance suites)\n- #43 (`ROUNDS-07-L05`, Software Engineering pack), #45 (`ROUNDS-08-L02`, editor primitives)\n- #73 to #76 (`ROUNDS-14-L02` to `-L05`, invocation intent, staging, receipts, purge), #179 (legacy AI call routing)\n- #156 (`ROUNDS-32-L02`, migration framework), #157 (`ROUNDS-32-L03`, rollback rehearsal)\n- #171 (`ROUNDS-34-L02`, migration fixtures), #173 (`ROUNDS-34-L04`, browser infrastructure)"
+    },
+    {
+      "number": 136,
+      "title": "[ROUNDS-28-L07] Migrate Behavioral practice",
+      "prerequisites": "- #130 (`ROUNDS-28-L01`, shared contracts), #131 (`ROUNDS-28-L02`, offline journal), #133 (`ROUNDS-28-L04`, Coding), for the status and timer wiring only\n- #33 (`ROUNDS-05-L03`, stories and tellings), #35 (`ROUNDS-05-L05`, Experience migration and adapter), #106 (`ROUNDS-22-L01`, interview process), for signal ids\n- #37 (`ROUNDS-06-L02`, relation commands), #38 (`ROUNDS-06-L03`, junction migration)\n- #43 (`ROUNDS-07-L05`, Software Engineering pack), Stage A only\n- #21 (`ROUNDS-02-L04`, revisions and pins), #72 (`ROUNDS-14-L01`, privacy classes)\n- #155 to #157 (`ROUNDS-32-L01` to `L03`, inventory, migration framework, backup rehearsal)\n- #171 (`ROUNDS-34-L02`, fixtures), #173 (`ROUNDS-34-L04`, browser and accessibility)\n- #177 (demo account lifecycle), to reset the new stores\n\n#26 (`ROUNDS-03-L03`, profile workspace), #46 (`ROUNDS-08-L03`, dialogs), and #167 (`ROUNDS-33-L03`, feedback patterns) arrive through #35 and #131."
+    },
+    {
+      "number": 137,
+      "title": "[ROUNDS-28-L08] Complete practice migration, reconciliation, and legacy retirement",
+      "prerequisites": "- #130 to #136 (`ROUNDS-28-L01` to `-L07`, contracts, journal, track migrations); #151 (`ROUNDS-31-L06`, read model), track and overview sections only.\n- #156 to #158 (`ROUNDS-32-L02` to `-L04`, migration framework, rollback rehearsal, local-state import).\n- #121 (`ROUNDS-25-L03`, campaign migration), #76 (`ROUNDS-14-L05`, purge), #39 (`ROUNDS-07-L01`, Career Pack spec), #171 (`ROUNDS-34-L02`, fixtures).\n- UI: #45, #46 (`ROUNDS-08-L02`, `-L03`), #166, #167 (`ROUNDS-33-L02`, `-L03`), #173 (`ROUNDS-34-L04`).\n- #177 (hosted demo lifecycle).\n\nDownstream: #43 (`ROUNDS-07-L05`, SWE pack) Stage B depends on this leaf, making this leaf a merge prerequisite of #138 (`ROUNDS-29-L01`, readiness snapshot) and #140 (`ROUNDS-29-L03`, prep plans)."
+    },
+    {
+      "number": 138,
+      "title": "[ROUNDS-29-L01] Define versioned readiness snapshot inputs and outputs",
+      "prerequisites": "- **PR 1:** schemas, `manifest.json`, `inputs.json`, the verification rule, the projector and queries on #42's fixture pack, and `contracts/readiness/fixtures/`, with the migrated-never-verified fixture that #137 and #163 (`ROUNDS-32-L09`, practice transfer) cite. Needs #146, #42, #130's PR 1, #95, #106, #107, #109, #124, #32 to #34, #24, #44, and #178 1b (timezone events). Merges before #137.\n- **PR 2:** SWE v1 registration, `readinessAdapter.ts`, and the read flag. Needs #43 (`ROUNDS-07-L05`, SWE pack) Stage B, which brings #137, #110 (`ROUNDS-22-L05`, interviews), and #98 (`ROUNDS-19-L04`, applications).\n\nThe read flag waits for #163 to open #137's switch."
+    },
+    {
+      "number": 139,
+      "title": "[ROUNDS-29-L02] Build explainable opportunity-to-evidence gap mapping",
+      "prerequisites": "- #138, #86, #95, #96, #100 (`ROUNDS-20-L02`, transitions), #106, #130; #32 to #34, #36, #37, #39, #43, #27, #28; #19 to #22; #72 to #76; Capture #45, #49, #50, #51, #64; reads #147, #151, #155; #182.\n- UI and harnesses: #15, #46, #47, #104, #109, #167, #166 (`ROUNDS-33-L02`, app shell), #173 (`ROUNDS-34-L04`, browser tests), #170 (`ROUNDS-34-L01`, harnesses)."
+    },
+    {
+      "number": 140,
+      "title": "[ROUNDS-29-L03] Generate editable preparation plans and native Actions",
+      "prerequisites": "- Stages A and B: #138, #139, #122, #123, #124, #106, #107, #100, #130 (`ROUNDS-28-L01`, Practice Items), #39, #43 Stage B, #44, #24, #146 (`ROUNDS-31-L01`, projections), #72 and #76 Stage 1b, and #178. Stage A's accept also needs #124's `ROUNDS_GATE_ACTION_FROM_RECOMMENDATION`.\n- Stage C: #152, #45 (`ROUNDS-08-L02`, forms), #46 (`ROUNDS-08-L03`, dialogs), #166 (`ROUNDS-33-L02`, app shell), #167, #173 (`ROUNDS-34-L04`, browser).\n- Stage D: #72 to #76, including #73 (`ROUNDS-14-L02`, Intent), and #180.\n- Every key outside #170 (`ROUNDS-34-L01`, harnesses): #98 (`ROUNDS-19-L04`, applications), #110, #137."
+    },
+    {
+      "number": 141,
+      "title": "[ROUNDS-29-L04] Adapt plans after attempts, feedback, schedule, and source changes",
+      "prerequisites": "Contract prerequisites:\n\n- #138, #139 (`ROUNDS-29-L02`, gap mapping), #140, and #152 or #140's fallback query.\n- #22, #146 (`ROUNDS-31-L01`, projections), #154, #170 (`ROUNDS-34-L01`, contract harnesses) S2.\n- #122 (`ROUNDS-26-L01`, Actions), #124 (`ROUNDS-26-L03`, effects), #44, #24.\n- Trigger owners: #130 (`ROUNDS-28-L01`), #107 (`ROUNDS-22-L02`), #109 (`ROUNDS-22-L04`), #95 (`ROUNDS-19-L01`), #100 (`ROUNDS-20-L02`), #40 (`ROUNDS-07-L02`).\n- Review surface: #45 (`ROUNDS-08-L02`), #46 (`ROUNDS-08-L03`), #166 (`ROUNDS-33-L02`), #167 (`ROUNDS-33-L03`), #173 (`ROUNDS-34-L04`).\n- AI summary only: #73, #74, #75 (`ROUNDS-14-L02` to `ROUNDS-14-L04`, provider invocation).\n\nReal-data gate:\n\n- #98 (`ROUNDS-19-L04`), #110 (`ROUNDS-22-L05`), and #137 (`ROUNDS-28-L08`): the application, interview, and practice migrations.\n- #35 (`ROUNDS-05-L05`) for `profile_changed`; #178 (Account preferences) for availability; #22 stage 3 (due-work host) for background `day_rollover`.\n\nAsks: #134 and #135 (`ROUNDS-28-L05`, `ROUNDS-28-L06`) map `skipped: true` to failed Feedback (missing, never a score); #40 publishes pack transitions to #22; #142 (`ROUNDS-30-L01`, attention) adds a plan-change candidate type and #143 (`ROUNDS-30-L02`, Today read model) a source projecting both plan events."
+    },
+    {
+      "number": 142,
+      "title": "[ROUNDS-30-L01] Define attention candidates, priority policy, and explanation contract",
+      "prerequisites": "#1 (`ROUNDS-00A-L01`, gate registry), #182, #24, #44, #72, #99, #107, #115, #116, #119, #122 to #124, #138, #140, and #146 (`ROUNDS-31-L01`, projection framework).\n\nThe filed #125 (`ROUNDS-26-L04`), #141 (`ROUNDS-29-L04`), and #154 are generator edges (rounds-review `src/data/capabilities.ts` L615-L632) that gate #145 instead; `validate-issues.mjs` L288-L311 needs the same rule change."
+    },
+    {
+      "number": 143,
+      "title": "[ROUNDS-30-L02] Build the server-side Today read model",
+      "prerequisites": "- #146 (`ROUNDS-31-L01`, projection framework)\n- #23 (`ROUNDS-02-L06`, envelopes)\n- #22 (`ROUNDS-02-L05`, outbox)\n- #142 (`ROUNDS-30-L01`, attention policy)\n- #124 (`ROUNDS-26-L03`, completion effects)\n- #107 (`ROUNDS-22-L02`, scheduling)\n- #100 (`ROUNDS-20-L02`, transition commands)\n- #116 (`ROUNDS-24-L02`, offer deadlines)\n- #140 (`ROUNDS-29-L03`, Recommendations)\n- #119 (`ROUNDS-25-L01`, campaign lenses)\n- #72 (`ROUNDS-14-L01`, privacy classes)\n- #24 (`ROUNDS-03-L01`, account preferences)\n- #44 (`ROUNDS-08-L01`, day rules)\n- #170 (`ROUNDS-34-L01`, security harnesses)\n\nStage 2 only: #154's (`ROUNDS-31-L09`, Data Health) signal registry. #125 (`ROUNDS-26-L04`) and #141 (`ROUNDS-29-L04`) become #145 go-live gates."
+    },
+    {
+      "number": 144,
+      "title": "[ROUNDS-30-L03] Implement accept, dismiss, snooze, and act workflows",
+      "prerequisites": "- `ROUNDS-30-L01` (#142): attention policy\n- `ROUNDS-30-L02` (#143): Today read model\n- `ROUNDS-29-L03` (#140): Recommendations\n- `ROUNDS-26-L03` (#124): Action origins\n- `ROUNDS-27-L03` (#128): command registry\n- `ROUNDS-02-L03` (#20): expected versions\n- `ROUNDS-03-L04` (#178): Account preferences\n- `ROUNDS-14-L05` (#76) Stage 1a: purge\n- `ROUNDS-34-L01` (#170): security harnesses\n\n#125 (`ROUNDS-26-L04`, Todos authority) gates Complete on Actions, and #122, #107, and #118 gate only their own type."
+    },
+    {
+      "number": 145,
+      "title": "[ROUNDS-30-L04] Design the prioritized narrative experience",
+      "prerequisites": "Stage 1:\n\n- #143 (`ROUNDS-30-L02`, Today read model)\n- #154 (`ROUNDS-31-L09`, Data Health)\n- #165 (`ROUNDS-33-L01`, route model)\n- #166 (`ROUNDS-33-L02`, app shell), for contrast, global motion, redirects, and the header and lens slots\n- #167 (`ROUNDS-33-L03`, interaction patterns) stages 1 and 2 (`Inspector`)\n- #168 (`ROUNDS-33-L04`, workflow recomposition) S1, for `ListTemplate` and the measured check\n- #173 (`ROUNDS-34-L04`, browser harness)\n- #49 (`ROUNDS-09-L01`, Capture invocation)\n\nStage 2: #144 (`ROUNDS-30-L03`, Today controls).\n\nStage 3:\n\n- #101 (`ROUNDS-20-L03`, pipeline state)\n- #148 (`ROUNDS-31-L03`, Pipeline read model)\n- #150 (`ROUNDS-31-L05`, Materials read model)\n- #151 (`ROUNDS-31-L06`, Practice read model)\n- #26 (`ROUNDS-03-L03`, Career Profile workspace)\n\nGo-live and stage 3: #125 (`ROUNDS-26-L04`, Todos migration) and #141 (`ROUNDS-29-L04`, plan adaptation).\n\nTransitive: #142, #178, #45 (`ROUNDS-08-L02`), #46, #48, #128. #168's S3 owns the Todos write path, not this page."
+    },
+    {
+      "number": 146,
+      "title": "[ROUNDS-31-L01] Build the account-scoped projection framework",
+      "prerequisites": "- `ROUNDS-02-L06` (#23).\n- `ROUNDS-02-L05` (#22).\n- `ROUNDS-02-L01` (#18).\n- `ROUNDS-00B-L01` (#9).\n- `ROUNDS-14-L01` (#72).\n- `ROUNDS-14-L05` (#76), Stage 1a only.\n- `ROUNDS-32-L01` (#155).\n- `ROUNDS-34-L01` (#170).\n- `ROUNDS-34-L03` (#172), S1 only.\n- `ROUNDS-34-L05` (#174), stage 2 only; its stage 3 depends on this leaf.\n\n#3, #19, #20 (`ROUNDS-02-L03`, idempotency), and #21 arrive through #22 and #23."
+    },
+    {
+      "number": 147,
+      "title": "[ROUNDS-31-L02] Build the Career Profile read model",
+      "prerequisites": "- #146 (`ROUNDS-31-L01`, projection framework): runtime, rebuild, purge handler, read client; brings #23.\n- #24 (`ROUNDS-03-L01`, profile contracts): stage A collections and events.\n\nThe catalog records two edge kinds:\n\n1. Merge prerequisites of the first PR: #146 and #24.\n2. Closure edges, one per section: #25 (`ROUNDS-03-L02`), #27 to #29 (`ROUNDS-04-L01` to `L03`), #31 to #34 (`ROUNDS-05-L01` to `L04`), #37 (`ROUNDS-06-L02`), #53 and #54 (`ROUNDS-10-L01`, `L02`), #57 and #59 (`ROUNDS-11-L01`, `L03`), and #150 stage 1. Each gates its section's PR and this issue's close, never the first PR.\n\nTest inputs: #171 (`ROUNDS-34-L02`, scale fixture), #172 (`ROUNDS-34-L03`, authorization matrix). Rollout gate only: #154 (`ROUNDS-31-L09`, Data Health) stage 1.\n\nDownstream: #26 per stage, #63 (`ROUNDS-12-L03`), #139 (`ROUNDS-29-L02`), and #37's `graph` callers."
+    },
+    {
+      "number": 148,
+      "title": "[ROUNDS-31-L03] Build the Pipeline read model",
+      "prerequisites": "- #146 (`ROUNDS-31-L01`, projection framework)\n- #96 (`ROUNDS-19-L02`, Pursuit lifecycle)\n- #99 (`ROUNDS-20-L01`, stage registry)\n- #100 (`ROUNDS-20-L02`, transitions and history)\n- #119 (`ROUNDS-25-L01`, campaign lenses)\n- #27 (`ROUNDS-04-L01`, Organizations)\n- #29 (`ROUNDS-04-L03`, merge redirects)\n\n#23 comes through #146 and #95 through #96. #153 gates only notes matching. Before `on`, #98 (`ROUNDS-19-L04`) has imported Pursuits, and #153's Pursuit type (CUR-26 keeps notes search) and #154 (`ROUNDS-31-L09`, Data Health) are live. PR 1 lands in Milestone 2 after #96, #97 (`ROUNDS-19-L03`), #100, and #119, alongside #98; PR 3 in Milestone 4. #101 and #120 need PR 1."
+    },
+    {
+      "number": 149,
+      "title": "[ROUNDS-31-L04] Build the Opportunity Workspace read model",
+      "prerequisites": "- #146 (`ROUNDS-31-L01`, projection framework).\n- #154 (`ROUNDS-31-L09`, Data Health), stage 1 only.\n- #95 (`ROUNDS-19-L01`, Opportunity aggregate).\n- #96 (`ROUNDS-19-L02`, Pursuit lifecycle), bringing #99.\n- #97 (`ROUNDS-19-L03`, pursuit context).\n- #100 (`ROUNDS-20-L02`, transitions).\n- #107 (`ROUNDS-22-L02`, Career Activity), Stage A only.\n- #172 (`ROUNDS-34-L03`, authorization matrix).\n- #23 (`ROUNDS-02-L06`, projectors and envelopes).\n\nSection gates: the registry's later owners, #119, and #63 (`ROUNDS-12-L03`, effect preview). #102 to #105 and #120 (`ROUNDS-25-L02`, campaigns) depend on this leaf; #154 doesn't."
+    },
+    {
+      "number": 150,
+      "title": "[ROUNDS-31-L05] Build the Materials read model",
+      "prerequisites": "- #146 (`ROUNDS-31-L01`), #77 (`ROUNDS-15-L01`), #78 (`ROUNDS-15-L02`), #79 (`ROUNDS-15-L03`), #4 (`ROUNDS-00A-L04`), and #6 (`ROUNDS-00A-L06`).\n\n#146 brings in #23, #72, #76, and #174 (`ROUNDS-34-L05`, observability), and #77 brings in #21, #24, and #31 to #34. #85, #88, #89, and #93 (with #11 and #14) gate only the sections that open after them, #80 only the legacy `history` rows, and #139, #140, and #63 only their providers.\n\nMilestone 3 ships stage 1 after #79 and before #81. #81 to #84, #94 (`ROUNDS-18-L06`, immutable revisions), #104, #145, #161, and parts of #147 and #149 depend on it."
+    },
+    {
+      "number": 151,
+      "title": "[ROUNDS-31-L06] Build the Practice and readiness read model",
+      "prerequisites": "- #146 `ROUNDS-31-L01`: projection framework.\n- #130 `ROUNDS-28-L01`: practice contracts.\n- #131 `ROUNDS-28-L02`: offline journal.\n- #39 `ROUNDS-07-L01`: Career Pack specification.\n- #40 `ROUNDS-07-L02`: pack lifecycle and state.\n- #119 `ROUNDS-25-L01`: campaign lenses.\n\n#23 (`ROUNDS-02-L06`, envelopes) comes through #146. PR 2 needs #138.\n\nOrder: PR 1 in Milestone 5 before #137, which depends on it (#17, `ROUNDS-01-L03`, reorders); PR 2 in Milestone 6. #163 (`ROUNDS-32-L09`) and #168 depend on this leaf; #154 no longer does."
+    },
+    {
+      "number": 152,
+      "title": "[ROUNDS-31-L07] Build the Preparation plan read model",
+      "prerequisites": "- #146 (`ROUNDS-31-L01`): registration, rebuild, purge handler.\n- #140 (`ROUNDS-29-L03`) stage A: Recommendation, Disposition, Placement records and their events.\n- #122 (`ROUNDS-26-L01`): Action events.\n- #138 (`ROUNDS-29-L01`): `GetReadinessSnapshot`, `snapshot_id`, input keys.\n- #96 (`ROUNDS-19-L02`): Pursuit and archive events.\n- #107 (`ROUNDS-22-L02`): Activity events for activity plans.\n- #119 (`ROUNDS-25-L01`): `EvaluateLens`.\n- #44 (`ROUNDS-08-L01`): `dayBucket`.\n- #172 (`ROUNDS-34-L03`), not reached through #146.\n- #23 (`ROUNDS-02-L06`): `envelope.v1`.\n\n#141 is a section gate; #72 and #76 arrive through #146. #149's `preparation` section gates on this leaf. #154 (`ROUNDS-31-L09`, Data Health) drops its last-leaf edge here."
+    },
+    {
+      "number": 153,
+      "title": "[ROUNDS-31-L08] Build universal search projections",
+      "prerequisites": "Before stage 1 merges: #146 with both registry edits; #23; #9 (`ROUNDS-00B-L01`, account scope); #72; #76 Stage 1a; #37; #47 stage 1 with its `contracts/` fixtures; #119; #170 (`ROUNDS-34-L01`, two-account fixtures); #172; and stage 0 ratified under #18's process, benchmarked on #171's (`ROUNDS-34-L02`) scale fixtures.\n\nBefore `ROUNDS_GATE_READ_SEARCH` opens: #154 (`ROUNDS-31-L09`, Data Health) stage 1, per the catalog's \"Ship framework and Data Health first\".\n\nType gates, not merge prerequisites: #27 (`ROUNDS-04-L01`) and #29 for Organization and Person; #31 to #34 (`ROUNDS-05-L01` to `L04`, fact contracts) after #35 (`ROUNDS-05-L05`); #95 and #96 (`ROUNDS-19-L01`, `L02`, Opportunity and Pursuit) after #98 (`ROUNDS-19-L04`); #119 after #121 (`ROUNDS-25-L03`) for Campaign; #122 (`ROUNDS-26-L01`, Action aggregate) after #125 (`ROUNDS-26-L04`); #53 (`ROUNDS-10-L01`) for Source Document. Content is built at stage 1 from #40, but its lookup types answer only once #123 (`ROUNDS-26-L02`, Action context) registers the question and category `entity-type/1` entries.\n\nROUNDS-04, ROUNDS-25, and ROUNDS-26 come later in capability order, so this ships in Milestone 2 with #126.\n\nDownstream: #126 depends on this leaf; #47 doesn't. A type leaves #47's adapter one release after its gate here opens, and #164 (`ROUNDS-32-L10`, legacy removal) deletes the adapter."
+    },
+    {
+      "number": 154,
+      "title": "[ROUNDS-31-L09] Build Data Health and freshness surfaces",
+      "prerequisites": "Stage 1:\n\n- `ROUNDS-31-L01` (#146)\n- `ROUNDS-02-L06` (#23)\n- `ROUNDS-08-L05` (#48), part (a)\n\n#3, #22, and #170 (`ROUNDS-34-L01`, conformance) come through #146. #156 and #157 take no edge.\n\nStage 2 adds:\n\n- #178 (Account and Settings) stage 2, which brings #45 (`ROUNDS-08-L02`, forms)\n- `ROUNDS-33-L01` (#165)\n- `ROUNDS-33-L02` (#166, application shell)\n- `ROUNDS-33-L03` (#167)\n- `ROUNDS-08-L03` (#46, dialogs and focus)\n- `ROUNDS-34-L04` (#173, browser and accessibility tooling)\n\nDropped: #147 to #153, added by the generator's last-leaf rule (rounds-review `src/data/capabilities.ts:615-632`). Consumers: #145, #149, #143 stage 2, and the deferred health candidate of #142 (`ROUNDS-30-L01`, attention policy), which takes no edge. #147, #148, and #150 to #153 open reads only once stage 1 is live, a rollout gate, not an edge."
+    },
+    {
+      "number": 155,
+      "title": "[ROUNDS-32-L01] Create the complete disposition inventory",
+      "prerequisites": "- `ROUNDS-01-L02` (#16): row ids.\n- `ROUNDS-02-L01` (#18, database ADR): identifier rules.\n- `ROUNDS-14-L01` (#72): `field-map.json`.\n- `ROUNDS-00B-L01` (#9): the `harness` job.\n- `ROUNDS-00A-L01` (#1): stage 0 (route inventory) and stage 3 (admission stores).\n- #177: its demo stores get rows in stage 1.\n- `ROUNDS-34-L02` (#171): stage 1 only.\n- `ROUNDS-32-L02` (#156): its stage 1 (fingerprint) gates this leaf's stage 2 and needs only this leaf's stage 1, as `leaf-dag.json` in #17 (`ROUNDS-01-L03`, dependency program) records.\n\n#76 isn't needed, since `purge_handler` allows `pending:` until it merges. The generated edges to #23 (`ROUNDS-02-L06`, projectors) and #26 (`ROUNDS-03-L03`, Career Profile workspace) are dropped."
+    },
+    {
+      "number": 156,
+      "title": "[ROUNDS-32-L02] Build the migration framework, manifests, and journals",
+      "prerequisites": "- #155 (`ROUNDS-32-L01`, inventory), staged: stage 1 here needs its stage 1, the report check its stage 2.\n- #18 (`ROUNDS-02-L01`, database ADR)\n- #19 (`ROUNDS-02-L02`, command gateway)\n- #20 (`ROUNDS-02-L03`, idempotency)\n- #21 (`ROUNDS-02-L04`, change sets)\n- #22 (`ROUNDS-02-L05`, outbox)\n- #72 (`ROUNDS-14-L01`, privacy classes) and #73 (`ROUNDS-14-L02`, keyring)\n- #76 (`ROUNDS-14-L05`, deletion journal)\n- #170 (`ROUNDS-34-L01`, contract harnesses) and #171 (`ROUNDS-34-L02`, migration fixtures)"
+    },
+    {
+      "number": 157,
+      "title": "[ROUNDS-32-L03] Prove encrypted backup, restore, and rollback rehearsal",
+      "prerequisites": "- Stage A: #18 (spec 1951), #72, #73 stage A, #76 stage 1b (stage 2 for the key-destroy control), #155, and #171.\n- Stage B: #22 stage 3, which #76's stage 1b already needs.\n- Stage C: #156's manifests, journals, and the run and freeze rows backup checks.\n- Dropped: `ROUNDS-03-L03` (#26), which cycles with #25, and `ROUNDS-02-L06` (#23); #146 (`ROUNDS-31-L01`) owns read-model rebuilds."
+    },
+    {
+      "number": 158,
+      "title": "[ROUNDS-32-L04] Reconcile client-local drafts and practice state",
+      "prerequisites": "Stage 1:\n\n- #155 (`ROUNDS-32-L01`), #156 (`ROUNDS-32-L02`), #72 (`ROUNDS-14-L01`).\n- #45 (`ROUNDS-08-L02`) stage 2 store, #76 (`ROUNDS-14-L05`) stage 1a hook.\n- #24 (`ROUNDS-03-L01`), #178 1a caches and 1b commands, #19 (`ROUNDS-02-L02`), #20 (`ROUNDS-02-L03`).\n- #46 (`ROUNDS-08-L03`), #166 (`ROUNDS-33-L02`), #167 (`ROUNDS-33-L03`), #173 (`ROUNDS-34-L04`), #174 (`ROUNDS-34-L05`).\n- #171 (`ROUNDS-34-L02`) stage 1 fixtures, browser included; #157 (`ROUNDS-32-L03`) stage A restore.\n\nStage 2: #131 (`ROUNDS-28-L02`).\n\nStage 1 lands at the end of step 3, stage 2 after #131 in Milestone 5. #137 and #163 (`ROUNDS-32-L09`) need stage 2; #134, #135, #159, #161, and (before retiring their keys) #86 and #87 need stage 1; #164 (`ROUNDS-32-L10`) needs both."
+    },
+    {
+      "number": 159,
+      "title": "[ROUNDS-32-L05] Migrate identity, profile, directory, facts, and relationships",
+      "prerequisites": "- #23 (`ROUNDS-02-L06`, projectors), #25, #178 (1a and 1b), #30, #35, #38, #72, #73 (stage A), #179, #177, #147, #155 to #157, #158 (stage 1), #171, and #174 (`ROUNDS-34-L05`, alerts).\n\n\"Complete, current, and verified\" means the named stage is merged gate-off and passes on #171 fixtures in staging; none has to close. #25, #35, and #38 hold manifests this leaf runs; #147 closes after #35's switch, #178 after the Account switch, #158 after its stage 2, and #30 after #168's Directory stage. The staged entries and #177's server-side demo reset deploy before the Account freeze. #26 and #84's PR 1 are rollout preconditions, since #26 closes after #35's switch record and #84 after #161; PR 1 needs only #45 (`ROUNDS-08-L02`, draft store)."
+    },
+    {
+      "number": 160,
+      "title": "[ROUNDS-32-L06] Migrate opportunities, pursuits, campaigns, interviews, people workflows, and offers",
+      "prerequisites": "- Before S1: #155 to #157 (`ROUNDS-32-L01` to `L03`, inventory, framework, rehearsal), #159 (`ROUNDS-32-L05`, runs #30's `ROUNDS-04-L04` maps), #72, #73, #76, #171, #177 (demo lifecycle)\n- S1: #98, #99 (`ROUNDS-20-L01`, stage registry), #100 (`ROUNDS-20-L02`, history), #148; #101's gates open in S1's switch release\n- S2: #121, #101\n- S3 and S5: #114 Stage 1 and Stage 2\n- S4: #110, #149\n- S6: #115, #118, #149\n\nDownstream: #116 (`ROUNDS-24-L02`) and #117 follow S6; #105 (`ROUNDS-21-L04`) follows S4 and S6."
+    },
+    {
+      "number": 161,
+      "title": "[ROUNDS-32-L07] Migrate materials, renders, submissions, and shares",
+      "prerequisites": "- #4 (`ROUNDS-00A-L04`, snapshot bridge), #14 (`ROUNDS-00B-L06`, legacy shares), #177 (demo lifecycle), #72 (`ROUNDS-14-L01`, privacy classes).\n- #80 (`ROUNDS-15-L04`), #84 (`ROUNDS-16-L04`), #85 (`ROUNDS-17-L01`), and #88 (`ROUNDS-17-L04`, submissions).\n- #89 (`ROUNDS-18-L01`, export contracts), #93 (`ROUNDS-18-L05`, public sharing), #94 (`ROUNDS-18-L06`, immutable revisions), #98 (`ROUNDS-19-L04`, application migration), #150 (`ROUNDS-31-L05`, Materials read model).\n- #155 to #159 (`ROUNDS-32-L01` to `ROUNDS-32-L05`): inventory, migration framework, restore rehearsal, local drafts, identity migration.\n\nDropped #26 (`ROUNDS-03-L03`) and #23 (`ROUNDS-02-L06`, through #150). No wait on #160 (`ROUNDS-32-L06`) to run #98."
+    },
+    {
+      "number": 162,
+      "title": "[ROUNDS-32-L08] Migrate Actions, Command Center references, and Today preferences",
+      "prerequisites": "Stage 1:\n\n- #125 (`ROUNDS-26-L04`), #38 (`ROUNDS-06-L03`): the manifests and reverse mapping.\n- #122, #123 (`ROUNDS-26-L01`, `L02`): `CreateAction` gate, `legacy` nodes, `applyActionContext`.\n- #155 to #157 (`ROUNDS-32-L01` to `L03`): registry, framework, restore.\n- #159 (`ROUNDS-32-L05`) and #160 (`ROUNDS-32-L06`) for applications and campaigns: the #35, #98, and #121 maps.\n- #168 (`ROUNDS-33-L04`) Actions stage, #127 (`ROUNDS-27-L02`), #165, #166 (`ROUNDS-33-L01`, `L02`), #177: the gates.\n- #49 and #128: the draft stores Stage 1 re-keys; #128 also registers no create-Action descriptor.\n- #23 (`ROUNDS-02-L06`), #146, #153 (`ROUNDS-31-L01`, `L08`): checkpoints, rebuild, Action index.\n- #72 (`ROUNDS-14-L01`), #170, #171 (`ROUNDS-34-L01`, `L02`): privacy class, harness, fixtures.\n\nStage 2: #160's rounds switch, #105, and #163. Stage 3: #143, #144 (`ROUNDS-30-L02`, `L03`). #164 depends on this leaf."
+    },
+    {
+      "number": 163,
+      "title": "[ROUNDS-32-L09] Migrate all practice tracks and pack-owned state",
+      "prerequisites": "- #155 (`ROUNDS-32-L01`, registry), #156 (`ROUNDS-32-L02`, framework), #157 (`ROUNDS-32-L03`, rehearsal), #158 (`ROUNDS-32-L04`, local import) stage 2.\n- #159 (`ROUNDS-32-L05`, identity) for stories; #160 (`ROUNDS-32-L06`, pipeline) for #121's campaign map.\n- #40 (`ROUNDS-07-L02`, pack lifecycle), #41 (`ROUNDS-07-L03`, pack storage), #43 (`ROUNDS-07-L05`, SWE pack) Stage B.\n- #132 to #137 (`ROUNDS-28-L03` to `ROUNDS-28-L08`, track manifests), #151 (`ROUNDS-31-L06`, practice read model).\n- #171 (`ROUNDS-34-L02`, fixtures), #173 (`ROUNDS-34-L04`, browser tests), #177 (demo lifecycle) stage 3.\n\nDownstream: #92 (`ROUNDS-18-L04`, account restore) stage 3, #162 (`ROUNDS-32-L08`, Actions and Today) Stage 2, and #164 (`ROUNDS-32-L10`, legacy removal)."
+    },
+    {
+      "number": 164,
+      "title": "[ROUNDS-32-L10] Cut over authorities and remove every legacy path",
+      "prerequisites": "- #155 to #163 (`ROUNDS-32-L01` to `L09`: inventory, framework, backup rehearsal, client-local reconciliation, five context transfers)\n- #26 (`ROUNDS-03-L03`, workspace, target of `/experience*`); #178 (Account surface); #177 (demo lifecycle); #179 (legacy AI calls)\n- Handoffs: #71 (`ROUNDS-13-L07`, import), #84 (`ROUNDS-16-L04`, link and push), #91 (`ROUNDS-18-L03`, export), #92 (`ROUNDS-18-L04`, v1 import), #98 (`ROUNDS-19-L04`, applications), #105 (`ROUNDS-21-L04`, detail routes), #125 (`ROUNDS-26-L04`, Todos), #137 (`ROUNDS-28-L08`, practice)\n- #165 (`ROUNDS-33-L01`, aliases), #166 (`ROUNDS-33-L02`, redirects, catch-all), #168 (`ROUNDS-33-L04`, Actions stage only), #170 (`ROUNDS-34-L01`, conformance job), #171 (`ROUNDS-34-L02`, fixtures, source), #174 (`ROUNDS-34-L05`, counters)\n\n\"Verified\" means merged and passing on #171 fixtures, with a receipt for #159 to #163."
+    },
+    {
+      "number": 165,
+      "title": "[ROUNDS-33-L01] Ratify cohesive information architecture and route model",
+      "prerequisites": "- #15 (`ROUNDS-01-L01`): labels, record format, runner.\n- #16 (`ROUNDS-01-L02`): entity rows, ledger, browser keys.\n- #17 (`ROUNDS-01-L03`) through S2: milestones, `consumes`.\n- #18 (`ROUNDS-02-L01`): identifier rules.\n- #182 PR 2 (contracts package): layout, `bindings.json`, `contracts` job.\n- S2 only: #39 (`ROUNDS-07-L01`), which names this leaf the `routes` slot publisher."
+    },
+    {
+      "number": 166,
+      "title": "[ROUNDS-33-L02] Build the editorial application shell and contextual navigation",
+      "prerequisites": "- #165 (`ROUNDS-33-L01`, route model).\n- #46 (`ROUNDS-08-L03`, overlays and focus).\n- #167 (`ROUNDS-33-L03`, interaction patterns) stage 1, before stage 2's banners and stage 3's `progress` slot.\n- #173 (`ROUNDS-34-L04`, browser tests).\n- #6 (`ROUNDS-00A-L06`, rendering workers) for fonts, with #182 (shared contracts package), since the frontend image builds from `./frontend`.\n- #1 (`ROUNDS-00A-L01`, admission), for the gate registry.\n- #48 (`ROUNDS-08-L05`, status registries), part (a) only.\n- #174 (`ROUNDS-34-L05`, observability), before the counters ship.\n\nSoft: #23 (`ROUNDS-02-L06`, envelopes) or #146 for freshness, #178 for the port.\n\nDownstream: every surface UI leaf waits on stage 1; the slot fillers are #26 (`ROUNDS-03-L03`, Career Profile), #81 (`ROUNDS-16-L01`, Studio IA), and #102 (`ROUNDS-21-L01`, workspace)."
+    },
+    {
+      "number": 167,
+      "title": "[ROUNDS-33-L03] Consolidate shared interaction and feedback patterns",
+      "prerequisites": "- #165 (`ROUNDS-33-L01`, routes and URL keys); #44, #45, #46 (`ROUNDS-08-L01` to `L03`: fields, staged values and slots, `AlertDialog`); #48 (`ROUNDS-08-L05`) part (a), the status contract\n- #3 (`ROUNDS-00A-L03`, job states); #19, #20, #21, #23 (`ROUNDS-02-L02` to `L04`, `L06`: command client, conflicts, revert and redact, envelopes)\n- #146 (`ROUNDS-31-L01`, SPA read client); #72 (`ROUNDS-14-L01`, privacy classes and sinks); #170, #173 (`ROUNDS-34-L01`, `L04`: conformance job, browser and axe harness)\n\nStage 3 gates, not merge edges: #180, #74, #75 (`ROUNDS-14-L04`), #150 (`ROUNDS-31-L05`). #166's route gates only the counters. #91 (`ROUNDS-18-L03`) and #93 (`ROUNDS-18-L05`) come after and only feed `PrivacyMark`."
+    },
+    {
+      "number": 168,
+      "title": "[ROUNDS-33-L04] Recompose product workflows for desktop and mobile",
+      "prerequisites": "- Every stage: #165, #166, #167, #173, and #48 (`ROUNDS-08-L05`, status registries).\n- S2: #27 to #30 (#30 merged, closes after S2) and #37; deletion also needs #76.\n- S3: #122, #123, #119, and #51.\n- S4: #124. S5: #43.\n\nEach verify stage waits on its listed leaves and gates only this issue's closure. #111 to #113, #140, and #153 fill slots and block no stage.\n\nEvery stage prerequisite and verify wait is a stage edge in #17's `leaf-dag.json`. Downstream edges: #26, #104 (`ROUNDS-21-L03`, people and actions slices), #120, and #145 on S1; #126's Organization and Person routes on S2; #125, #127, #162, #164, #104's Actions section, and #126's Action route on S3; #169 on every stage."
+    },
+    {
+      "number": 169,
+      "title": "[ROUNDS-33-L05] Complete accessibility and interaction adoption",
+      "prerequisites": "- #166 (`ROUNDS-33-L02`, application shell): tokens, token test, reduced motion, focus ring, WCAG record.\n- #167 (`ROUNDS-33-L03`, shared patterns): live regions, confirmations, AI progress visuals.\n- #168 (`ROUNDS-33-L04`, workflow composition), every route stage merged.\n- #173 (`ROUNDS-34-L04`, browser infrastructure).\n\n#165 arrives through #166 and #167, and #48 through #166 to #168 (all of it through #168). L05 runs at Milestone 7, step 9 of #17's (`ROUNDS-01-L03`, cutover program) plan, after #164 (`ROUNDS-32-L10`, legacy removal) and the table's owners. One not merged by then gets an entry, except for rows 8 to 10 and the never-excepted criteria, which keep L05 open until the owner merges. #176 (`ROUNDS-34-L07`, release runner) depends on L05."
+    },
+    {
+      "number": 170,
+      "title": "[ROUNDS-34-L01] Establish early security and architecture contract harnesses",
+      "prerequisites": "- S1: #8 (`ROUNDS-00A-L08`, conformance suites) stage 1; #9 (`ROUNDS-00B-L01`, PocketBase harness); #13 (`ROUNDS-00B-L05`, two-account suite); #15 (`ROUNDS-01-L01`, conformance runner); #17 (`ROUNDS-01-L03`, program DAG) S2, for the rule format.\n- S2: S1; #1 (`ROUNDS-00A-L01`, admission) stage 2, whose provider URL refusal the simulator must pass; #18 (`ROUNDS-02-L01`, database ADR) PR 1, whose failpoints move here.\n- S3: S2 and #19's first PR."
+    },
+    {
+      "number": 171,
+      "title": "[ROUNDS-34-L02] Build representative migration and recovery fixtures",
+      "prerequisites": "- #170 (`ROUNDS-34-L01`, early harnesses) S2 brings #9's harness and pinned binary, the fake clock, failpoints, receipts, the quarantine registry, and the CI lanes.\n\nDropped #8 (`ROUNDS-00A-L08`; its corpus skips these fixtures) and #14 (its rows are adopted). #155's stage 1 feeds stage 3 and #173's (`ROUNDS-34-L04`) journeys feed the spy; neither is a prerequisite.\n\nDownstream: #155's and #158's stage 1 need stage 1; #155's install scan follows #156. #76's stage 1b needs stage 2. Every other slot filler above and every later leaf loading these fixtures needs the closed leaf, as #17's (`ROUNDS-01-L03`, program DAG) `leaf-dag.json` records. Today the rest are #26, #31, #33, #48, #59, #64, #71, #77, #79, #81 to #83, #87, #88, #90, #91, #101, #103, #105, #108, #109, #112, #113, #116, #120, #124, #130, #147, #149, #153, #168, #174 to #176, and #179."
+    },
+    {
+      "number": 172,
+      "title": "[ROUNDS-34-L03] Maintain the authorization and privacy verification matrix",
+      "prerequisites": "- #170 (`ROUNDS-34-L01`, shared harness): S1 on #170 S1, S2 on #170 S2 (provider simulator).\n- #13 (`ROUNDS-00B-L05`, two-account suite): S1.\n- #72 (`ROUNDS-14-L01`, privacy classes): S2.\n- #177 (demo lifecycle): S2.\n\nDropped generator edges: #8 (`ROUNDS-00A-L08`, hostile corpus) and #14 (`ROUNDS-00B-L06`, legacy shares). #1, #2, #4, #8 stage 1, and #9 to #12 arrive through #170 and #13, plus #3 and #5 if #12 uses #5 for key custody; no other `ROUNDS-00A` or `ROUNDS-00B` leaf gates this one."
+    },
+    {
+      "number": 173,
+      "title": "[ROUNDS-34-L04] Build browser, accessibility, responsive, and visual infrastructure",
+      "prerequisites": "- #170 (`ROUNDS-34-L01`, contract harnesses) S2: stack, factory, simulator, fake clock, receipts, quarantine, lanes.\n- #6 (`ROUNDS-00A-L06`, rendering workers): stage 2's font package, needed before baseline approval and the required gate, not the first landing.\n\nThe generator rule (rounds-review `capabilities.ts:615-632`) re-adds #8 (`ROUNDS-00A-L08`, reached through #170) and #14 (`ROUNDS-00B-L06`, unused); the catalog change drops both.\n\n#1, #3, #4, #11, #12, and #177 don't wait on this leaf; containment ships first (spec 3178).\n\nDownstream, every leaf with Browser, Accessibility, or Visual tests: #25, #26, #42, #43, #45 to #52, #61 to #63, #65, #66, #69, #75, #81 to #91, #93, #94, #98, #101 to #105, #109, #117, #120, #121, #126 to #129, #131 to #137, #139 to #141, #145, #154, #155, #158, #159, #163, #166 to #169, #176, #178 (Account and Settings), #179 (legacy AI call sites), and #181 (job-posting capture). #17 records the edges."
+    },
+    {
+      "number": 174,
+      "title": "[ROUNDS-34-L05] Add privacy-safe observability and operational targets",
+      "prerequisites": "- Stage 1: #170 (`ROUNDS-34-L01`) S2, #1 (`ROUNDS-00A-L01`), and #12 (`ROUNDS-00B-L04`) for its trusted proxies, interim filter, and share-path log suppression.\n- Stage 2: #18 (`ROUNDS-02-L01`), whose benchmark is the first, synthetic receipt; #3 (`ROUNDS-00A-L03`, execution control); #72 (`ROUNDS-14-L01`, privacy classes); #182 (contracts package); #5 (`ROUNDS-00A-L05`, code workers) for ceiling commands.\n- Stage 3: #171 (`ROUNDS-34-L02`, fixtures) for the floor; #21 (`ROUNDS-02-L04`, audit entries); #23 (`ROUNDS-02-L06`, projectors) for read-your-writes; #146 (`ROUNDS-31-L01`, projections) for lag; #156 (`ROUNDS-32-L02`, migrations) for freeze and RPO; #157 (`ROUNDS-32-L03`, backup) for RTO.\n\n`ROUNDS-00B` lands before `ROUNDS-34`, so stage 2 registers #14's signals without an edge. #146 and #154 depend on stage 2, and #13's log rows pass from stage 1."
+    },
+    {
+      "number": 175,
+      "title": "[ROUNDS-34-L06] Publish implementer, operator, self-host, and user documentation",
+      "prerequisites": "- #15 (`ROUNDS-01-L01`, vocabulary): rule runner, record format; stages 2 and 4.\n- #170 (`ROUNDS-34-L01`, shared harness): S2's stack fixture, receipt, simulator; stage 2.\n- #1 (`ROUNDS-00A-L01`, route auth and gates): gate registry; stage 3.\n- #5 (`ROUNDS-00A-L05`, code workers) and #6 (`ROUNDS-00A-L06`, render workers): capacity models; stage 3.\n- #177 (demo lifecycle): demo docs and allowlist; stage 3.\n- #171 (`ROUNDS-34-L02`, migration fixtures), plus the owner's tag: upgrade test.\n\nStage 1 needs none. Coordination only: #7, #73, #157, #17 (`ROUNDS-01-L03`, program). #91 and #92 write export docs under stage 4; their edge goes to #176."
+    },
+    {
+      "number": 176,
+      "title": "[ROUNDS-34-L07] Create the final release runner and fresh-self-host proof",
+      "prerequisites": "- S1, pipeline and compose install: #170 (`ROUNDS-34-L01`, harness), #175 (`ROUNDS-34-L06`, docs) stage 1, #8 (`ROUNDS-00A-L08`, hostile corpus) stage 2 (`images` job).\n- S2, upgrade and recovery: #171 (`ROUNDS-34-L02`, migration fixtures), #156, #157, #76.\n- S3, journeys, artifacts, export, targets, k8s, inventory: #172 (`ROUNDS-34-L03`, authorization matrix), #173 (`ROUNDS-34-L04`, browser infrastructure), #174 (`ROUNDS-34-L05`, targets), #7, #91, #92, #175 (all stages).\n- S4, required gate: #14 (`ROUNDS-00B-L06`, legacy shares), #73, #164, #17, #182 (contracts package), #179 (legacy AI call sites), #177, and every global sink of the current `edgeSet` in #17's `leaf-dag.json`, recomputed when S4 opens. Under the filed edges they are #52, #71, #84, #88, #94, #105, #114, #118, #121, #129, #145, #164, and #169."
+    },
+    {
+      "number": 177,
+      "title": "[ROUNDS-00B-L07] Contain and own the hosted demo account lifecycle",
+      "prerequisites": "- #9: its harness for every stage and its rule table for the coverage check.\n- #1 (`ROUNDS-00A-L01`, execution and render route auth): its stage 3 (server-write record, counters, tier accessor, `users` hook) before stage 2 here.\n- Stage 4 is a switch gate on #76 Stage 1b.\n- Soft edges: #13 lands on either side, and this leaf's PR flips its `demo` rows. Hook 4's `share_capabilities` and #73 rows run once #11 and #73 stage A land."
+    },
+    {
+      "number": 178,
+      "title": "[ROUNDS-03-L04] Convert Profile into the Account and Settings surface with Account preference commands",
+      "prerequisites": "1a has none. 1b needs `ROUNDS-02-L02` to `ROUNDS-02-L06` (#19 to #23, command substrate), `ROUNDS-03-L01` (#24), `ROUNDS-14-L01` (#72), `ROUNDS-32-L02` (#156), and `ROUNDS-34-L01` (#170, harness).\n\nStage 2 adds `ROUNDS-03-L02` (#25), `ROUNDS-08-L02` and `ROUNDS-08-L03` (#45 editors, #46 dialogs), `ROUNDS-33-L01` to `ROUNDS-33-L03` (#165 routes, #166 shell, #167 patterns), and `ROUNDS-34-L04` (#173, browser tests); the `name` hook waits for #177 to delete `resetDemoUser`. 2d adds `ROUNDS-14-L05` (#76) Stage 3; 2i adds `ROUNDS-18-L04` (#92).\n\n#159 and #121 (`ROUNDS-25-L03`, campaign migration) need 1b deployed, not this issue closed; #26's stage A and #168 (`ROUNDS-33-L04`, workflow recomposition) need stage 2. It closes after #159's Account switch, the editor removal, and 2d, in Milestone 1. 2i ships at program step 9. #91 (`ROUNDS-18-L03`, export), #93 (`ROUNDS-18-L05`, shares), #154 (`ROUNDS-31-L09`, Data Health), and #158 fill sections and own their states."
+    },
+    {
+      "number": 179,
+      "title": "[ROUNDS-14-L06] Inventory, classify, and route legacy AI call sites through the invocation gateway",
+      "prerequisites": "- #73 (`ROUNDS-14-L02`, invocation intent), stage C\n- #74 (`ROUNDS-14-L03`, staged outcomes)\n- #75 (`ROUNDS-14-L04`, receipts and manual fallback), PR 2\n- #76 (`ROUNDS-14-L05`, purge), Stage 2\n- #43 (`ROUNDS-07-L05`, Software Engineering pack), Stage A with #39's `prompt_templates`, for PR 10\n- #156 (`ROUNDS-32-L02`, migration framework), for PR 9\n\nPR 1 needs only #1 and #72."
+    },
+    {
+      "number": 180,
+      "title": "[ROUNDS-14-L07] Define the Generation Proposal record, sentence-level grounding, and unsupported-claim gate",
+      "prerequisites": "- #74 (`ROUNDS-14-L03`, staged results), #75 (`ROUNDS-14-L04`, receipts), #21 (`ROUNDS-02-L04`, revisions and pins)\n- #31 (`ROUNDS-05-L01`, career history), #32 (`ROUNDS-05-L02`, projects and Measures), #33 (`ROUNDS-05-L03`, stories), #34 (`ROUNDS-05-L04`, skills)\n- #37 (`ROUNDS-06-L02`, relation queries)\n\n#74 brings #72, #73, #20, #22, and #76 Stage 1b (purge). Downstream: #77 (`ROUNDS-15-L01`, editions), #79 (`ROUNDS-15-L03`, freeze), #89 (`ROUNDS-18-L01`, export), #167 Stage 3, #69 (`ROUNDS-13-L05`, GitHub), #82 (`ROUNDS-16-L02`, overrides), and #87 (`ROUNDS-17-L03`, tailoring)."
+    },
+    {
+      "number": 181,
+      "title": "[ROUNDS-19-L05] Add job-posting and natural-language capture adapters for opportunity workflows",
+      "prerequisites": "- #95 and #96 (`ROUNDS-19-L01`, `ROUNDS-19-L02`): Opportunity and Pursuit commands.\n- #49 to #52 (`ROUNDS-09-L01` to `ROUNDS-09-L04`): capture, inbox, field contracts, processing states.\n- #53 to #60 (`ROUNDS-10-L01` to `ROUNDS-11-L04`): sources, jobs, retrieval, adapters, claims, matching, pairing, lineage.\n- #64 (`ROUNDS-12-L04`, claim commit) and #72 to #75 (`ROUNDS-14-L01` to `ROUNDS-14-L04`): privacy classes, invocation, staging, consent.\n\nGate conditions, not edges: #98's rollback deadline, #107, #109, #122, #149, and #103 (`ROUNDS-21-L02`, overview slices), which PR B's button and AI-off edit path wait on; its server half ships first. This leaf blocks #109's stage 3 (debrief capture) and #129's stage 2 (natural-language commands). #98 and #105 never wait on it."
+    },
+    {
+      "number": 182,
+      "title": "[ROUNDS-34-L08] Establish the shared contracts package and repository-root build contexts",
+      "prerequisites": "- All PRs: #170 (`ROUNDS-34-L01`, shared harness) S1, for the `images` job and harness manifest.\n- PR 2: #15 (`ROUNDS-01-L01`, product vocabulary), for `run.mjs` and `contracts/vocabulary/`; #18 (`ROUNDS-02-L01`, database ADR) PR 2, for decisions 3 (gateway placement) and 9 (PocketBase version). An upgrade in #18's PR 3 keeps `contracts-jsvm` green.\n- PR 3: PR 2.\n\nAdopted in place when merged first, not prerequisites: #2's `contracts/definitions/`, the contexts of #4 and #6, `contracts/authority/` of #16 (`ROUNDS-01-L02`, source-of-truth matrix), `contracts/authz/` of #172 (`ROUNDS-34-L03`, authorization matrix), and #72's copy step."
+    }
+  ]
+}

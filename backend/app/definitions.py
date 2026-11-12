@@ -6,8 +6,8 @@ version's bytes against its checksum. A manifest that's missing, isn't
 JSON, or isn't the manifest's shape in any way leaves the store empty, and
 a file that's missing or doesn't match makes that version answer 503
 ``definition_integrity_mismatch``; each logs a ``definition.rejected``
-line. Startup goes on either way, so legacy routes keep serving while an
-operator repairs the image.
+line. Startup goes on either way, so the routes that run no code keep
+serving while an operator repairs the image.
 
 ``resolve()`` turns a request's ``{track, slug, variant, version}`` into
 one ``active``, checksum-verified definition, rereading its file each

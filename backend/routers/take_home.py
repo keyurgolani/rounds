@@ -14,7 +14,13 @@ retired, so at enforce they answer 410 ``definition_retired``. With
 enqueues a job and answers 202 (``execution.jobs``), and with
 ``ROUNDS_GATE_EXECUTION_GRADING`` on so does submit, whose graded row the
 server writes with its result; ``POST /api/take-home/submit/{job}/review``
-then asks for its rubric review, once per result (``execution.review``)."""
+then asks for its rubric review, once per result (``execution.review``).
+
+Since PR 4 both keys are on by default and no value runs code or grades
+here: below ``on`` (``legacy`` included) admission answers 503
+``execution_disabled`` before the account, and ``keys.require_on`` checks
+it again first in each route, so the in-request paths below never run and
+never write an attempt row."""
 from __future__ import annotations
 
 import json
@@ -145,6 +151,7 @@ async def run_route(
     request: Request,
     user: dict = Depends(_auth_user),
 ) -> TakeHomeRunResponse:
+    keys.require_on("take_home_run")
     body = await execution.parse(request, TakeHomeRunRequest, DefinitionTakeHomeRunRequest)
     if keys.scratch() == "on" and isinstance(body, DefinitionTakeHomeRunRequest):
         return await _run_job(request, body)
@@ -222,6 +229,7 @@ async def submit_route(
     request: Request,
     user: dict = Depends(_auth_user),
 ) -> Dict[str, Any]:
+    keys.require_on("take_home_submit")
     body = await execution.parse(request, TakeHomeSubmitRequest, DefinitionTakeHomeSubmitRequest)
     if keys.grading() == "on" and isinstance(body, DefinitionTakeHomeSubmitRequest):
         return await _submit_job(request, body, user)

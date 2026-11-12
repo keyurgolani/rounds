@@ -147,7 +147,16 @@ describe('CodingDetail definition requests', () => {
       .mockResolvedValue({ ...QUESTION, definition_version: 2 } as never);
     vi.mocked(evaluateCode)
       .mockRejectedValueOnce(superseded())
-      .mockResolvedValue({ passed: 2, failed: 0, results: [] });
+      .mockResolvedValue({
+        job_id: 'jobaaaaaaaaaaa1', state: 'completed', outcome_class: 'passed', retryable: false,
+        cancel_requested: false,
+        envelope: {
+          version: 'rounds.execution-envelope/v1', job_id: 'jobaaaaaaaaaaa1', state: 'completed',
+          outcome_class: 'passed', authoritative: true, limit: null, parts: [], score: null, definition: null,
+          queued_at: 1, started_at: 2, finished_at: 3, cleanup: 'confirmed', rubric: null,
+          output: { passed: 2, failed: 0, results: [] },
+        },
+      } as never);
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run all (2)' }));
@@ -155,7 +164,9 @@ describe('CodingDetail definition requests', () => {
     const versions = vi.mocked(evaluateCode).mock.calls.map(([payload]) => payload.definition_version);
     expect(versions).toEqual([1, 2]);
     const region = within(screen.getByTestId('right-dock')).getByRole('status');
-    expect(region).toBeEmptyDOMElement();
+    // No reload asked for: the retry's job ended and shows its result.
+    await waitFor(() => expect(region).toHaveTextContent('Finished. The results are ready.'));
+    expect(region).not.toHaveTextContent('Reload');
 
     // The next call names the reread version straight away.
     await user.click(screen.getByRole('button', { name: 'Run all (2)' }));

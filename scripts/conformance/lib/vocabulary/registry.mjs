@@ -22,7 +22,9 @@ export const REQUIRED_TERMS = [
 
 // Paths the data-preserving cutover wording scan skips: fixtures that hold
 // deliberate violations for the rule's own tests.
-export const CUTOVER_SCAN_SKIP = ['scripts/conformance/test/fixtures/'];
+// The issue export (ROUNDS-01-L03 S2) copies GitHub issue text verbatim, so
+// its wording changes in the catalog, not here.
+export const CUTOVER_SCAN_SKIP = ['scripts/conformance/test/fixtures/', 'docs/program/issue-export.json'];
 
 const MATCH_KEYS = {
   collection: ['legacyName'],

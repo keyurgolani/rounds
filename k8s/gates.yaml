@@ -41,25 +41,27 @@ data:
   ROUNDS_GATE_ENFORCE_QUOTA: ""
   # Where the six execution routes get what they run: "legacy",
   # "enforce", or "disabled". The runner and the frontend both read it,
-  # so restart both Deployments when it changes.
+  # so restart both Deployments when it changes. Code runs need
+  # "enforce": at any other value the execution keys act as "off".
   ROUNDS_GATE_EXECUTION_DEFINITIONS: ""
-  # The execution job store, read by PocketBase and the runner: "off" or
-  # "on". On, PocketBase serves the store's hook routes and each runner
-  # runs its worker. Turn it on in both, and set ROUNDS_EXECUTION_SECRET
-  # first (runner.yaml, step 4).
+  # The execution job store, read by PocketBase and the runner: "on" (the
+  # default) or "off", its emergency stop. On, PocketBase serves the
+  # store's hook routes and each runner runs its worker. It needs
+  # ROUNDS_EXECUTION_SECRET in both (runner.yaml, step 4).
   ROUNDS_GATE_EXECUTION_STORE: ""
   # Run, evaluate, run-project, and take-home run, read by the runner:
-  # "legacy" (the default, in their request), "on" (as durable jobs), or
-  # "off" (503 execution_disabled, drafts kept). "on" needs
-  # ROUNDS_GATE_EXECUTION_STORE "on" and ROUNDS_GATE_EXECUTION_DEFINITIONS
-  # "enforce"; without either it acts as "off" and the runner's start log
-  # says which it needs.
+  # "on" (the default, as durable jobs) or "off" (503 execution_disabled,
+  # drafts kept); "legacy" acts as "off", and no value runs code in its
+  # request. "on" needs ROUNDS_GATE_EXECUTION_STORE "on",
+  # ROUNDS_GATE_EXECUTION_DEFINITIONS "enforce", ROUNDS_EXECUTION_SECRET,
+  # and ROUNDS_ADMISSION_SECRET; without any of them it acts as "off" and
+  # the runner's start log names what it needs.
   ROUNDS_GATE_EXECUTION_SCRATCH: ""
   # Grade, take-home submit, and their rubric reviews, read by the runner:
-  # "legacy" (the default, in their request), "on" (as durable jobs whose
-  # graded row the server writes, each reviewed at most once), or "off"
-  # (503 execution_disabled, drafts kept). "on" needs the same two settings
-  # as the line above and acts as "off" without them.
+  # "on" (the default, as durable jobs whose graded row the server writes,
+  # each reviewed at most once) or "off" (503 execution_disabled, drafts
+  # kept); "legacy" acts as "off", and no value grades in the request.
+  # "on" needs what the line above needs and acts as "off" without it.
   ROUNDS_GATE_EXECUTION_GRADING: ""
   # Legacy Artifact Snapshot creation, read by the runner and PocketBase:
   # "enabled" or "disabled". Empty is "disabled". Turn it on only with

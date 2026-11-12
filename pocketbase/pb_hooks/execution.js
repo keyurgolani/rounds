@@ -1634,6 +1634,25 @@ function guardEnvelopeUpdate(e) {
   }
 }
 
+const GRADED_LOCKED = "Only the server writes a graded attempt.";
+
+// No client creates a graded attempt row, moves a row to graded, or
+// changes a graded row (PR 4). The rules refuse each of these; this checks
+// the record as PocketBase would save it, whatever shape the request's
+// data came in.
+function guardGradedCreate(e) {
+  if (isSuperuser(e.httpContext)) return;
+  if (e.record.getString("status") === "graded") throw new BadRequestError(GRADED_LOCKED);
+}
+
+function guardGradedUpdate(e) {
+  if (isSuperuser(e.httpContext)) return;
+  const original = e.record.originalCopy();
+  if (e.record.getString("status") === "graded" || (original ? original.getString("status") : "") === "graded") {
+    throw new BadRequestError(GRADED_LOCKED);
+  }
+}
+
 module.exports = {
   VERSION,
   ENVELOPE_VERSION,
@@ -1692,4 +1711,6 @@ module.exports = {
   syncWorkerForLogin,
   guardEnvelopeCreate,
   guardEnvelopeUpdate,
+  guardGradedCreate,
+  guardGradedUpdate,
 };

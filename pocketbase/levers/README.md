@@ -9,7 +9,10 @@ it.
   rules become `null`, superuser only) when its rules turn out too loose and a
   forward fix is not ready yet.
 - `restore_collection.template.js` restores the server-derived ownership rules
-  once the fix ships.
+  once the fix ships. It refuses `ai_coding_attempts` and `take_home_attempts`,
+  whose rules come from `1700008700_attempt_grade_rules.js` and keep graded rows
+  the server's (ROUNDS-00A-L03 PR 4); a fix for either sets that migration's
+  rules.
 - `replay_quarantine.template.js` (ROUNDS-00B-L02) writes listed
   `relation_quarantine` entries back: a moved row exactly as it was, created
   and updated included, and a cleared field back to its target, through the

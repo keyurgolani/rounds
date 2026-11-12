@@ -9,11 +9,10 @@
 // and the page follows it with GET /api/execution/jobs/{job_id}?wait=20,
 // which answers the same shape once the job changed or ended. The
 // envelope is the user view of rounds.execution-envelope/v1, and its
-// `output` is the body the route answers in its request, shown only on
-// an end the run earned (`earnedOutput`). Until PR 4 a route may answer
-// either way, so a caller takes both: `isJobAnswer` tells them apart.
-// TODO(ROUNDS-00A-L03): PR 4 retires the in-request answer, and with it
-// the pages' handling of a 200.
+// `output` is the result the page shows, only on an end the run earned
+// (`earnedOutput`). Since PR 4 every code run is a job, so an answer that
+// isn't one (`isJobAnswer`) is a failure the page reports with
+// `notAJobAnswer`, and it shows nothing it didn't get from a job.
 //
 // One command id per user action lives in sessionStorage, with the job
 // id once the 202 arrives and a hash of the work it sent. A reload picks
@@ -145,6 +144,12 @@ export const BACKOFF_MS: readonly number[] = [1000, 2000, 5000, 10000, 15000];
 // the poll backs off and asks again.
 function malformed(): RunnerError {
   return new RunnerError({ message: "job 502: The server's answer wasn't a job.", status: 502 });
+}
+
+/** The failure a page reports when a code run answers anything but a job:
+ *  the server failing, shown as its fixed sentence. */
+export function notAJobAnswer(): RunnerError {
+  return malformed();
 }
 
 /** The account's job as it is, or once it changed or ended within

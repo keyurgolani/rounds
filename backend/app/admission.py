@@ -164,7 +164,7 @@ def route_for(method: str, path: str) -> tuple[str, Route] | None:
 # The routes that run a definition's code and tests (ROUNDS-00A-L02).
 DEFINITION_OPERATIONS = frozenset({"run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit"})
 # The fixed sentence a grading route answers while its key is off.
-GRADING_OFF = "Grading practice code is turned off on this server."
+GRADING_OFF = keys.GRADING_OFF
 
 TIERS = ("standard", "demo")
 # (tier, operation) -> permitted. Every pair is permitted, as #1 starts;

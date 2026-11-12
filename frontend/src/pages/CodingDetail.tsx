@@ -41,7 +41,7 @@ import {
 } from '../lib/runnerDenial';
 import { reloadPage, retrySuperseded } from '../lib/definitions';
 import { useRunnerJob } from '../hooks/useRunnerJob';
-import { earnedOutput, type JobAnswer } from '../lib/executionJobs';
+import { earnedOutput, notAJobAnswer, type JobAnswer } from '../lib/executionJobs';
 import type { RunnerJobView } from '../components/runner/RunnerJobStatus';
 import type { RunnerError } from '../lib/runnerFetch';
 
@@ -446,9 +446,8 @@ export default function CodingDetail() {
           rereadDefinitionVersion,
         );
         // A job: the notice follows it, and its end shows the result.
-        if (runJob.follow(res)) return;
-        setRunResult(res as CodeRunResult);
-        setSideTab('run');
+        // Anything else is a failure.
+        if (!runJob.follow(res)) throw notAJobAnswer();
       } catch (e) {
         const denial = classifyRunnerError(e, trigger);
         if (denial) {
@@ -500,8 +499,7 @@ export default function CodingDetail() {
           },
           rereadDefinitionVersion,
         );
-        if (testsJob.follow(res)) return;
-        setEvalResults((prev) => mergeEvaluate(prev, res as CodeEvaluateResult));
+        if (!testsJob.follow(res)) throw notAJobAnswer();
       } catch (e) {
         // Denials show in the dock; other failures propagate as before.
         const denial = classifyRunnerError(e, trigger);

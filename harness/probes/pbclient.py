@@ -28,6 +28,22 @@ class Response:
     raw: bytes = b""
 
 
+def _form_part(boundary: str, name: str, value: Any) -> bytes:
+    """One multipart form field; a value that isn't a string goes as JSON
+    text."""
+    text = value if isinstance(value, str) else json.dumps(value)
+    return f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{text}\r\n'.encode("utf-8")
+
+
+def _form_body(fields: list[tuple[str, Any]]) -> tuple[bytes, str]:
+    """A multipart body with one form field per (name, value) pair, in
+    order, so a name can appear more than once."""
+    boundary = "harness" + secrets.token_hex(12)
+    parts = [_form_part(boundary, name, value) for name, value in fields]
+    parts.append(f"--{boundary}--\r\n".encode("utf-8"))
+    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
+
+
 class PBClient:
     def __init__(self, base_url: str, timeout: float = 10.0) -> None:
         self.base_url = base_url.rstrip("/")
@@ -134,12 +150,7 @@ class PBClient:
         """A multipart create: each payload field as a form field (JSON
         values encoded as JSON text) and one file."""
         boundary = "harness" + secrets.token_hex(12)
-        parts: list[bytes] = []
-        for name, value in payload.items():
-            text = value if isinstance(value, str) else json.dumps(value)
-            parts.append(
-                f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{text}\r\n'.encode("utf-8")
-            )
+        parts = [_form_part(boundary, name, value) for name, value in payload.items()]
         parts.append(
             f'--{boundary}\r\nContent-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'
             f"Content-Type: {content_type}\r\n\r\n".encode("utf-8") + content + b"\r\n"
@@ -150,6 +161,25 @@ class PBClient:
             f"/api/collections/{collection}/records",
             token=token,
             raw_body=(b"".join(parts), f"multipart/form-data; boundary={boundary}"),
+        )
+
+    def create_form(self, collection: str, token: str, fields: list[tuple[str, Any]]) -> Response:
+        """A multipart create with these form fields, in order."""
+        return self._request(
+            "POST",
+            f"/api/collections/{collection}/records",
+            token=token,
+            raw_body=_form_body(fields),
+        )
+
+    def update_form(self, collection: str, record_id: str, fields: list[tuple[str, Any]],
+                    token: str | None = None) -> Response:
+        """A multipart update with these form fields, in order."""
+        return self._request(
+            "PATCH",
+            f"/api/collections/{collection}/records/{record_id}",
+            token=token,
+            raw_body=_form_body(fields),
         )
 
     def update(self, collection: str, record_id: str, payload: dict, token: str | None = None) -> Response:

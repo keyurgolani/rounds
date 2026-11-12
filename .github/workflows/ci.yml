@@ -98,10 +98,11 @@ jobs:
             rounds-materializer:test node --test 'test/*.test.mjs'
 
   conformance:
-    # Repository conformance rules (ROUNDS-01-L01, ROUNDS-01-L02): the
+    # Repository conformance rules (ROUNDS-01-L01 to ROUNDS-01-L03): the
     # product vocabulary registry and its coverage of baseline names, the
     # source-of-truth and package-boundary matrix and its coverage of the
-    # audited revision's stores, decision records, and generated-file drift.
+    # audited revision's stores, decision records, the program files and
+    # leaf DAG, and generated-file drift.
     # Node 22 built-ins only, so there is no install step. Revision checks
     # compare with the branch a pull request targets (main for pushes), and
     # the authority rule reads the audited revision, so the full fetch keeps
@@ -125,6 +126,16 @@ jobs:
         run: |
           git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
           node scripts/conformance/run.mjs --base "origin/${BASE_REF}"
+      - name: Leaf prerequisites
+        # ROUNDS-01-L03: reports LEAF_GATE_BLOCKED for each prerequisite of
+        # the title's [LEAF-ID] or [LEAF-ID/<stage>] that hasn't merged into
+        # the base. The title is the author's text, so it reaches the script
+        # only through env. docs/program/leaf-gate.json sets report or enforce.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: ${{ github.base_ref }}
+        run: node scripts/program/leaf-gate.mjs --base "origin/${BASE_REF}"
 
   harness:
     # Two-account account-scope security harness (ROUNDS-00B-L01). Builds the
