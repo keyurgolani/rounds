@@ -102,11 +102,13 @@
         "One node: a deploy, restart, or crash makes the product unavailable until PocketBase is back (one replica, Recreate).",
         "A full disk stops every write, the audit and outbox rows with them.",
         "A long read transaction, such as a backup's, keeps the WAL from checkpointing, so the WAL grows until it ends.",
-        "The live pragmas are journal_mode=pending and synchronous=pending (1 is NORMAL): a process crash loses no commit, but a power or kernel crash can lose the last commits before a checkpoint."
+        "The live pragmas are journal_mode=wal and synchronous=1 (1 is NORMAL): a process crash loses no commit, but a power or kernel crash can lose the last commits before a checkpoint.",
+        "PocketBase's memory outgrows the shipped 512Mi limit at 10 accounts (limits), so under that load the kubelet would OOM-kill it until #176 raises the limit."
       ],
       "limits": [
-        "One writer: pending commands per second at saturation with 10 accounts (pending with 1), on one Go scheduler thread standing in for the 500m CPU limit.",
-        "The WAL peaked at pending under load, and PocketBase's RSS at pending against the 512Mi limit.",
+        "One writer: at most 252 commands per second with 10 accounts (249 with 1), on one Go scheduler thread standing in for the 500m CPU limit. More clients only queue longer: at 64 clients a command waited 1.2 s at p99 for the writer.",
+        "The WAL peaked at 391 MiB with 10 accounts and 44 MiB with 1.",
+        "PocketBase's RSS peaked at 682 MiB with 10 accounts and 325 MiB with 1, against the 512Mi limit, with GOMEMLIMIT at 460MiB. GOMEMLIMIT bounds only the Go heap, and PocketBase's SQLite driver allocates outside it, which likely holds the rest. #176 (ROUNDS-34-L07) ships a limit of at least 1Gi.",
         "It scales up, not out: no second replica and no second writer."
       ],
       "consequences": "#19 to #23 and every context build on one SQLite file, and throughput is bounded by one writer, which the receipt measures against the floor's load.",
@@ -140,8 +142,8 @@
         "A command that throws after its writes leaves nothing behind (the before-commit failpoint), and its retry with the same command_id commits once."
       ],
       "limits": [
-        "Lock budget: at the steady rate with 10 accounts the writer is held pending at p50 and pending at p99 per command, and a command waits pending at p99 for it.",
-        "Batches of at most 500 rows; the transfer's batches of 30 applications held the writer pending at p99."
+        "Lock budget: at the steady rate with 10 accounts the writer is held 2 ms at p50 and 23 ms at p99 per command, and a command waits 23 ms at p99 for it.",
+        "Batches of at most 500 rows; the transfer's batches of 30 applications held the writer 92 ms at p99."
       ],
       "consequences": "#19's API is one function per command that takes the transaction's Dao. Throughput falls as hold time grows, so commands stay small and do their slow work outside.",
       "migrationImpact": "None now. #19 builds the gateway on it.",
@@ -282,7 +284,7 @@
         "Two commands on one aggregate serialize on the writer; the second sees the first's version."
       ],
       "limits": [
-        "The mix writes pending rows per command on average (weighted), counting the record, its change set, audit, outbox, and idempotency rows."
+        "The mix writes 5.08 rows per command on average (weighted), counting the record, its change set, audit, outbox, and idempotency rows."
       ],
       "consequences": "#20 owns versions and conflicts, #21 the change-set log, and #19 the composition of sub-commands.",
       "migrationImpact": "Each context's transfer adds its version column; no data changes here.",
@@ -311,8 +313,8 @@
         "A crash after commit and before the relay leaves events in the outbox; the next holder relays them once (the after-commit failpoint)."
       ],
       "limits": [
-        "Relay lag p95 pending at the steady rate with 10 accounts, against 2 s.",
-        "Read-your-writes p99 pending through the projection, against 5 s."
+        "Relay lag p95 1.2 s at the steady rate with 10 accounts, against 2 s, and 291 ms with 1. It is the closest of the five targets, so #22 sizes its batches and poll interval against it.",
+        "Read-your-writes p99 79 ms through the projection, against 5 s."
       ],
       "consequences": "#22 runs the relay in the runner and #23 the projectors in PocketBase; both write through dispatcher_service.",
       "migrationImpact": "#22 and #23 add their tables in additive migrations with null rules.",
@@ -329,15 +331,24 @@
       "owningLeaf": "ROUNDS-32-L03",
       "decision": "#157 owns backup and restore. The method is an online, SQLite-consistent copy of data.db by a reader (SQLite's backup API, or VACUUM INTO), then the byte store, with file deletes held until the next backup has run. A backup then stops nothing. PocketBase's own backup API zips all of pb_data while holding the writer, and today's procedure (docs/operations.md) stops PocketBase for as long as its tar takes; the receipt measured all three. A restore runs on the same image tag and is verified before traffic returns. docs/operations.md stays as it is until #157 changes it.",
       "alternatives": [
-        {"option": "Stop PocketBase and tar pb_data (today)", "reason": "A full outage for the archive's length: pending s at 10 accounts."},
-        {"option": "PocketBase's backup API", "reason": "It holds the writer for the whole zip, so every command waits."}
+        {
+          "option": "Stop PocketBase and tar pb_data (today)",
+          "reason": "A full outage for the archive's length: 25.37 s at 10 accounts, and 52.14 s at 1 account with its 2 GiB of files."
+        },
+        {
+          "option": "PocketBase's backup API",
+          "reason": "It holds the writer for the whole zip: commands waited up to 8.5 s behind its 12.9 s zip at 10 accounts, and up to 15.6 s at 1 account with its files."
+        }
       ],
       "failureModes": [
         "A file deleted before the backup that last saw it can't be restored; deletes wait for the next backup.",
         "A copy taken mid-write by a plain file copy can be torn; only SQLite's own copy is consistent.",
         "A restore onto another image tag could migrate on first start; restores use the backup's tag."
       ],
-      "limits": ["Restore at 10 accounts: pending s against 30 minutes (pending)."],
+      "limits": [
+        "Restore at 10 accounts: 304.04 s against 30 minutes (extrapolated): the database restored and checked in 2.76 s, and 100 GB of files at the 2 GiB sample's 332 MB/s.",
+        "Taking the online copy at 10 accounts: VACUUM INTO 11.9 s and SQLite's backup API 3.59 s, with commands waiting at most 84 ms meanwhile."
+      ],
       "consequences": "#157 writes the procedure and its rehearsal; #76 holds file purges until a backup has run.",
       "migrationImpact": "None here. #157 changes docs/operations.md.",
       "rollbackImpact": "The old procedure stays valid until #157 replaces it.",
@@ -389,7 +400,7 @@
       "store": "files",
       "process": "PocketBase file storage, written by gateway routes",
       "owningLeaf": "ROUNDS-10-L01",
-      "decision": "Bytes live in PocketBase's file storage, pb_data/storage, behind one account-scoped collection, account_blobs: one row per stored file, its SHA-256, size, privacy class, and retention metadata, unique on (account_id, sha256). Identical bytes in two accounts are two files. #73's keyring encrypts files once its keys exist, and older files are rewrapped as #22 due-work. #157's backup copies the files after the database, and #76 purges a row, then its file once the next backup has run. #53 (ROUNDS-10-L01) writes it first. #4's snapshot markup files stay where they are and are adopted as they stand. #6's render outputs get a path only: the same collection, written by complete as execution_service, held with the containment release. PocketBase's S3 setting is the path past one disk.",
+      "decision": "Bytes live in PocketBase's file storage, pb_data/storage, behind one account-scoped collection, account_blobs: one row per stored file, its SHA-256, size, privacy class, and retention metadata, unique on (account_id, sha256). Identical bytes in two accounts are two files. #73's keyring encrypts files once its keys exist, and older files are rewrapped as #22 due-work. #157's backup copies the files after the database, and #76 purges a row, then its file once the next backup has run. #53 (ROUNDS-10-L01) writes it first. #4's snapshot markup files stay where they are and are adopted as they stand. #6's render outputs get a path only: the same collection, written by complete as execution_service, held with the containment release. users.avatar, PocketBase's default file field, has no writer in the app and stays as it is. PocketBase's S3 setting is the path past one disk.",
       "dedupe": "Within one account only. The unique key starts with account_id, and a lookup never reads another account's rows, so uploading bytes can't reveal whether another account holds them.",
       "alternatives": [
         {
@@ -407,7 +418,7 @@
         "The disk fills with bytes before rows; the PVC sizing in the storage plan sets the floor."
       ],
       "limits": [
-        "The 2 GiB sample copied at pending in a restore; 10 GB per account is extrapolated from that rate, labeled so in the receipt."
+        "The 2 GiB sample copied at 332 MB/s in a restore; 10 GB per account is extrapolated from that rate, labeled so in the receipt."
       ],
       "consequences": "#53, #91, #6, and #4 share one byte store with one dedupe rule and one purge path.",
       "migrationImpact": "#53 adds account_blobs in an additive migration; #4's files are adopted without moving.",
@@ -477,7 +488,7 @@
       "source": "https://pocketbase.io/faq/"
     }
   ],
-  "benchmark": {"receipt": "contracts/database/benchmark.json", "result": "pending"},
+  "benchmark": {"receipt": "contracts/database/benchmark.json", "result": "pass"},
   "pocketbase": {
     "pin": "0.22.22",
     "decision": "retain the 0.22 line",
@@ -590,7 +601,7 @@
       }
     ],
     "strategy": "Within the 0.22 line (P3): a pin change with no migration, no hook change, and no data change; CI's harness checks the new image. New hook code goes through pocketbase/pb_hooks/lib/pocketbase.js, the only module that calls the Dao, runInTransaction, requestInfo, and the record API. When a trigger fires, the port is its own leaf: each deployment first runs the last 0.22 release, then the new image; fresh installs get a squashed baseline (one current-format snapshot plus the seed, the admin bootstrap, and the JSON size step) that passes #1's migration lint; existing installs keep their _migrations history; and the port re-runs this benchmark on the new version.",
-    "freezeWindow": "Within the 0.22 line, none: the new binary starts on the same data with no migration. For the port, the new binary's first start, which runs its system migrations over the whole database; the port measures it on a copy at the floor against the 15-minute freeze target. For scale, a startup schema change at 10 accounts here was down pending s.",
+    "freezeWindow": "Within the 0.22 line, none: the new binary starts on the same data with no migration. For the port, the new binary's first start, which runs its system migrations over the whole database; the port measures it on a copy at the floor against the 15-minute freeze target. For scale, a startup schema change at 10 accounts here was down 6.95 s.",
     "rollbackBoundary": "Within the 0.22 line, roll back by image tag at any time. For the port, roll back by image tag before the new binary's first start; after it, only the pre-upgrade backup, which loses later writes, or a forward fix (spec 2699).",
     "triggers": [
       "Upstream stops publishing 0.22 releases with backported fixes.",
@@ -739,11 +750,11 @@
     {
       "store": "sqlite-data",
       "location": "pb_data/data.db (with -wal and -shm)",
-      "growthAtFloor": "pending at 1 account and pending at 10 accounts (about pending each), synthetic rows at the floor",
-      "writeAmplification": "pending rows per command, weighted over the mix",
+      "growthAtFloor": "0.12 GB at 1 account and 1.19 GB at 10 accounts (about 0.12 GB each), synthetic rows at the floor",
+      "writeAmplification": "5.08 rows per command, weighted over the mix",
       "compaction": "Expired idempotency rows, relayed outbox rows, and #21's tombstones are #22 due-work, in batches of at most 500 rows.",
-      "lockBudget": "hold p99 pending, queue p99 pending at the steady rate; batches at most 500 rows",
-      "sizing": "The WAL peaked at pending; keep twice the database size free for VACUUM INTO and a restore copy."
+      "lockBudget": "hold p99 23 ms, queue p99 23 ms at the steady rate; batches at most 500 rows",
+      "sizing": "The WAL peaked at 391 MiB; keep twice the database size free for VACUUM INTO and a restore copy. PocketBase's RSS reached 682 MiB at 10 accounts, so its memory limit is at least 1Gi (#176)."
     },
     {
       "store": "files",
@@ -907,18 +918,21 @@
     }
   ],
   "deferred": [
-    {"item": "the major-line PocketBase port", "detail": "Waits for a DB9 trigger; it would be its own leaf under scope decision 3."},
+    {"item": "The major-line PocketBase port", "detail": "Waits for a DB9 trigger; it would be its own leaf under scope decision 3."},
     {
-      "item": "the full 10 GB of bytes per account at 10 accounts",
+      "item": "The full 10 GB of bytes per account at 10 accounts",
       "detail": "Extrapolated from a measured 2 GiB sample, labeled extrapolated in the receipt."
     },
     {
-      "item": "real cgroup limits",
+      "item": "Real cgroup limits",
       "detail": "macOS has none; one Go scheduler thread and GOMEMLIMIT stand in, and RSS is reported against 512Mi."
     },
-    {"item": "a CI benchmark job", "detail": "The run takes over an hour on the shared pool; CI runs the bench's unit tests."},
     {
-      "item": "resizing the PVC",
+      "item": "A CI benchmark job",
+      "detail": "A full run takes about half an hour of one machine, too long for the shared CI pool; CI runs the bench's unit tests."
+    },
+    {
+      "item": "Resizing the PVC",
       "detail": "The storage plan sizes it; #176 sets the shipped default, and only the k8s comment changes here."
     }
   ]

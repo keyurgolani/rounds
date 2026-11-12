@@ -41,12 +41,14 @@ Career data has one canonical write database: PocketBase's SQLite file pb_data/d
 - One node: a deploy, restart, or crash makes the product unavailable until PocketBase is back (one replica, Recreate).
 - A full disk stops every write, the audit and outbox rows with them.
 - A long read transaction, such as a backup's, keeps the WAL from checkpointing, so the WAL grows until it ends.
-- The live pragmas are journal_mode=pending and synchronous=pending (1 is NORMAL): a process crash loses no commit, but a power or kernel crash can lose the last commits before a checkpoint.
+- The live pragmas are journal_mode=wal and synchronous=1 (1 is NORMAL): a process crash loses no commit, but a power or kernel crash can lose the last commits before a checkpoint.
+- PocketBase's memory outgrows the shipped 512Mi limit at 10 accounts (limits), so under that load the kubelet would OOM-kill it until #176 raises the limit.
 
 **Limits**
 
-- One writer: pending commands per second at saturation with 10 accounts (pending with 1), on one Go scheduler thread standing in for the 500m CPU limit.
-- The WAL peaked at pending under load, and PocketBase's RSS at pending against the 512Mi limit.
+- One writer: at most 252 commands per second with 10 accounts (249 with 1), on one Go scheduler thread standing in for the 500m CPU limit. More clients only queue longer: at 64 clients a command waited 1.2 s at p99 for the writer.
+- The WAL peaked at 391 MiB with 10 accounts and 44 MiB with 1.
+- PocketBase's RSS peaked at 682 MiB with 10 accounts and 325 MiB with 1, against the 512Mi limit, with GOMEMLIMIT at 460MiB. GOMEMLIMIT bounds only the Go heap, and PocketBase's SQLite driver allocates outside it, which likely holds the rest. #176 (ROUNDS-34-L07) ships a limit of at least 1Gi.
 - It scales up, not out: no second replica and no second writer.
 
 **Consequences.** #19 to #23 and every context build on one SQLite file, and throughput is bounded by one writer, which the receipt measures against the floor's load.
@@ -79,8 +81,8 @@ Each command runs in exactly one runInTransaction that its gateway route owns, a
 
 **Limits**
 
-- Lock budget: at the steady rate with 10 accounts the writer is held pending at p50 and pending at p99 per command, and a command waits pending at p99 for it.
-- Batches of at most 500 rows; the transfer's batches of 30 applications held the writer pending at p99.
+- Lock budget: at the steady rate with 10 accounts the writer is held 2 ms at p50 and 23 ms at p99 per command, and a command waits 23 ms at p99 for it.
+- Batches of at most 500 rows; the transfer's batches of 30 applications held the writer 92 ms at p99.
 
 **Consequences.** #19's API is one function per command that takes the transaction's Dao. Throughput falls as hold time grows, so commands stay small and do their slow work outside.
 
@@ -203,7 +205,7 @@ Every aggregate row carries an integer version that each committed change raises
 
 **Limits**
 
-- The mix writes pending rows per command on average (weighted), counting the record, its change set, audit, outbox, and idempotency rows.
+- The mix writes 5.08 rows per command on average (weighted), counting the record, its change set, audit, outbox, and idempotency rows.
 
 **Consequences.** #20 owns versions and conflicts, #21 the change-set log, and #19 the composition of sub-commands.
 
@@ -234,8 +236,8 @@ A command writes its domain events to domain_outbox in its own transaction, with
 
 **Limits**
 
-- Relay lag p95 pending at the steady rate with 10 accounts, against 2 s.
-- Read-your-writes p99 pending through the projection, against 5 s.
+- Relay lag p95 1.2 s at the steady rate with 10 accounts, against 2 s, and 291 ms with 1. It is the closest of the five targets, so #22 sizes its batches and poll interval against it.
+- Read-your-writes p99 79 ms through the projection, against 5 s.
 
 **Consequences.** #22 runs the relay in the runner and #23 the projectors in PocketBase; both write through dispatcher_service.
 
@@ -255,8 +257,8 @@ Sources: spec 2056-2067; docs/security/server-writes.md; contracts/database/benc
 
 **Alternatives**
 
-- Stop PocketBase and tar pb_data (today): A full outage for the archive's length: pending s at 10 accounts.
-- PocketBase's backup API: It holds the writer for the whole zip, so every command waits.
+- Stop PocketBase and tar pb_data (today): A full outage for the archive's length: 25.37 s at 10 accounts, and 52.14 s at 1 account with its 2 GiB of files.
+- PocketBase's backup API: It holds the writer for the whole zip: commands waited up to 8.5 s behind its 12.9 s zip at 10 accounts, and up to 15.6 s at 1 account with its files.
 
 **Failure modes**
 
@@ -266,7 +268,8 @@ Sources: spec 2056-2067; docs/security/server-writes.md; contracts/database/benc
 
 **Limits**
 
-- Restore at 10 accounts: pending s against 30 minutes (pending).
+- Restore at 10 accounts: 304.04 s against 30 minutes (extrapolated): the database restored and checked in 2.76 s, and 100 GB of files at the 2 GiB sample's 332 MB/s.
+- Taking the online copy at 10 accounts: VACUUM INTO 11.9 s and SQLite's backup API 3.59 s, with commands waiting at most 84 ms meanwhile.
 
 **Consequences.** #157 writes the procedure and its rehearsal; #76 holds file purges until a backup has run.
 
@@ -308,7 +311,7 @@ Sources: https://pocketbase.io/v023upgrade/jsvm/; https://github.com/pocketbase/
 
 ### DB10. Byte store
 
-Bytes live in PocketBase's file storage, pb_data/storage, behind one account-scoped collection, account_blobs: one row per stored file, its SHA-256, size, privacy class, and retention metadata, unique on (account_id, sha256). Identical bytes in two accounts are two files. #73's keyring encrypts files once its keys exist, and older files are rewrapped as #22 due-work. #157's backup copies the files after the database, and #76 purges a row, then its file once the next backup has run. #53 (ROUNDS-10-L01) writes it first. #4's snapshot markup files stay where they are and are adopted as they stand. #6's render outputs get a path only: the same collection, written by complete as execution_service, held with the containment release. PocketBase's S3 setting is the path past one disk.
+Bytes live in PocketBase's file storage, pb_data/storage, behind one account-scoped collection, account_blobs: one row per stored file, its SHA-256, size, privacy class, and retention metadata, unique on (account_id, sha256). Identical bytes in two accounts are two files. #73's keyring encrypts files once its keys exist, and older files are rewrapped as #22 due-work. #157's backup copies the files after the database, and #76 purges a row, then its file once the next backup has run. #53 (ROUNDS-10-L01) writes it first. #4's snapshot markup files stay where they are and are adopted as they stand. #6's render outputs get a path only: the same collection, written by complete as execution_service, held with the containment release. users.avatar, PocketBase's default file field, has no writer in the app and stays as it is. PocketBase's S3 setting is the path past one disk.
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
@@ -327,7 +330,7 @@ Bytes live in PocketBase's file storage, pb_data/storage, behind one account-sco
 
 **Limits**
 
-- The 2 GiB sample copied at pending in a restore; 10 GB per account is extrapolated from that rate, labeled so in the receipt.
+- The 2 GiB sample copied at 332 MB/s in a restore; 10 GB per account is extrapolated from that rate, labeled so in the receipt.
 
 **Consequences.** #53, #91, #6, and #4 share one byte store with one dedupe rule and one purge path.
 
@@ -358,7 +361,30 @@ Sources: spec 2020-2028; docs/security/server-writes.md; contracts/database/benc
 
 ## Benchmark
 
-No receipt yet.
+Synthetic data only. Receipt `contracts/database/benchmark.json`, 2026-11-12T13:15:52Z, result **pass**.
+
+| Profile | Value |
+| --- | --- |
+| Hardware | Apple M5 Pro, 18 cores, 48 GiB, macOS 27.2.1, SSD (APFS) |
+| PocketBase | 0.22.22 (binary sha256 `493cbaca2d05...`; Dockerfile pin at the run 0.22.22) |
+| k8s limits | 500m CPU, 512Mi memory, 1 replica, Recreate, 5Gi PVC |
+| Emulation | macOS has no cgroups: the 500m CPU limit is approximated with one Go scheduler thread and the memory limit with GOMEMLIMIT; RSS is reported against 512Mi |
+| Machine | a shared machine, not an exclusive one: other workloads may have run during the measurement, so the load averages at start and end are recorded |
+| Seed | the scale floor per account (spec 2020-2028), fraction 1, at 1 and 10 accounts |
+| Bytes | 2 GiB measured at 1 account; 10 GB per account extrapolated |
+
+| Target | Limit | Value | Basis | Result | Detail | Consequence |
+| --- | --- | --- | --- | --- | --- | --- |
+| read-your-writes within 5 seconds or the canonical fallback (spec 2059-2060) | 5000 ms | 79.2 ms | measured | pass | p99 of 204 projection reads at 20/s and 10 accounts; 0 took the canonical fallback |  |
+| normal projection lag p95 below 2 seconds (spec 2061) | 2000 ms | 1178.18 ms | measured | pass | relay lag p95 over 1576 events at 20/s and 10 accounts |  |
+| final bounded-context write freeze below 15 minutes (spec 2062) | 900 s | 39.79 s | measured | pass | the pipeline transfer of 20000 applications under a write freeze, 10 accounts |  |
+| zero accepted writes lost through freeze, rollback, and a crash (spec 2063) | 0 writes | 0 writes | measured | pass | acked writes missing after a kill -9, after the freeze rollback restore, and after the commit-then-crash failpoint, plus writes accepted during a freeze |  |
+| rollback or restore within 30 minutes at the scale floor (spec 2064-2065) | 1800 s | 304.04 s | extrapolated | pass | the 10-account database restored and checked (2.76 s, measured) plus 100 GB of bytes at the measured copy rate (301.283 s, extrapolated) |  |
+
+| Scale | Lock queue p99 | Lock hold p50 | Lock hold p99 | Relay lag p95 | Read-your-writes p99 | Rows per command | Peak commands | Freeze | WAL max | RSS max |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 account(s) | 22 ms | 2 ms | 20 ms | 291.26 ms | 395.67 ms | 5.08 rows | 248.7 /s | 16.12 s | 43.99 MiB | 324.69 MiB |
+| 10 account(s) | 23 ms | 2 ms | 23 ms | 1178.18 ms | 79.2 ms | 5.08 rows | 252.2 /s | 39.79 s | 390.88 MiB | 682.14 MiB |
 
 ## PocketBase version
 
@@ -384,7 +410,7 @@ Pinned **0.22.22**. Decision: **retain the 0.22 line**. PocketBase stays, on the
 
 **Strategy.** Within the 0.22 line (P3): a pin change with no migration, no hook change, and no data change; CI's harness checks the new image. New hook code goes through pocketbase/pb_hooks/lib/pocketbase.js, the only module that calls the Dao, runInTransaction, requestInfo, and the record API. When a trigger fires, the port is its own leaf: each deployment first runs the last 0.22 release, then the new image; fresh installs get a squashed baseline (one current-format snapshot plus the seed, the admin bootstrap, and the JSON size step) that passes #1's migration lint; existing installs keep their _migrations history; and the port re-runs this benchmark on the new version.
 
-**Freeze window.** Within the 0.22 line, none: the new binary starts on the same data with no migration. For the port, the new binary's first start, which runs its system migrations over the whole database; the port measures it on a copy at the floor against the 15-minute freeze target. For scale, a startup schema change at 10 accounts here was down pending s.
+**Freeze window.** Within the 0.22 line, none: the new binary starts on the same data with no migration. For the port, the new binary's first start, which runs its system migrations over the whole database; the port measures it on a copy at the floor against the 15-minute freeze target. For scale, a startup schema change at 10 accounts here was down 6.95 s.
 
 **Rollback boundary.** Within the 0.22 line, roll back by image tag at any time. For the port, roll back by image tag before the new binary's first start; after it, only the pre-upgrade backup, which loses later writes, or a forward fix (spec 2699).
 
@@ -788,7 +814,7 @@ erDiagram
 
 | Store | Location | Growth at the floor | Rows per command | Compaction | Lock budget | Sizing |
 | --- | --- | --- | --- | --- | --- | --- |
-| sqlite-data | pb_data/data.db (with -wal and -shm) | pending at 1 account and pending at 10 accounts (about pending each), synthetic rows at the floor | pending rows per command, weighted over the mix | Expired idempotency rows, relayed outbox rows, and #21's tombstones are #22 due-work, in batches of at most 500 rows. | hold p99 pending, queue p99 pending at the steady rate; batches at most 500 rows | The WAL peaked at pending; keep twice the database size free for VACUUM INTO and a restore copy. |
+| sqlite-data | pb_data/data.db (with -wal and -shm) | 0.12 GB at 1 account and 1.19 GB at 10 accounts (about 0.12 GB each), synthetic rows at the floor | 5.08 rows per command, weighted over the mix | Expired idempotency rows, relayed outbox rows, and #21's tombstones are #22 due-work, in batches of at most 500 rows. | hold p99 23 ms, queue p99 23 ms at the steady rate; batches at most 500 rows | The WAL peaked at 391 MiB; keep twice the database size free for VACUUM INTO and a restore copy. PocketBase's RSS reached 682 MiB at 10 accounts, so its memory limit is at least 1Gi (#176). |
 | files | pb_data/storage | 10 GB per account at the floor (spec 2020-2028); 100 GB at 10 accounts | one file and one account_blobs row per stored file | #76's purges remove files once the next backup has run; orphans are swept as #22 due-work. | file writes happen outside the transaction; only the row holds the writer | The shipped 5Gi PVC holds well under one account at the floor. Size pb_data for 10 GB per account plus twice the database, plus a backup's staging copy; #176 (ROUNDS-34-L07) sets the shipped default from this plan. |
 | sqlite-logs | pb_data/logs.db | bounded by PocketBase's log retention setting | one row per logged request, written outside command transactions | PocketBase's own retention | its own file and writer; it never holds the data writer | small next to the database; not part of a restore |
 
@@ -855,6 +881,14 @@ This leaf produces the gate's first item, so the gate doesn't apply to its own m
 | backup | docs/operations.md@62d4eae:L66-L75 | operations.md now stops PocketBase before the tar, so a backup is an outage (DB8). |
 | slug-paths | frontend/src/applications/api.ts@62d4eae:L329-L346 | getApplication still falls back to a slug match, and the mention index keys by title slug (identifiers). |
 | nginx | frontend/nginx.conf@62d4eae:L17-L41 | /api/ passes through to PocketBase, and the runner-only hook routes are refused at the public URL. |
+
+## Deferred
+
+- **The major-line PocketBase port.** Waits for a DB9 trigger; it would be its own leaf under scope decision 3.
+- **The full 10 GB of bytes per account at 10 accounts.** Extrapolated from a measured 2 GiB sample, labeled extrapolated in the receipt.
+- **Real cgroup limits.** macOS has none; one Go scheduler thread and GOMEMLIMIT stand in, and RSS is reported against 512Mi.
+- **A CI benchmark job.** A full run takes about half an hour of one machine, too long for the shared CI pool; CI runs the bench's unit tests.
+- **Resizing the PVC.** The storage plan sizes it; #176 sets the shipped default, and only the k8s comment changes here.
 
 ## Versioning and supersession
 

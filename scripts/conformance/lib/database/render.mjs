@@ -130,6 +130,7 @@ export function renderAdr(record, erd, receipt) {
   out.push('## AI, exposure, and security', '', `**AI.** ${record.catalogRule}`, '', `**Exposure.** ${record.exposure}`, '');
   out.push(table(['Consequence', 'Statement'], Object.entries(record.securityConsequences).map(([k, v]) => [k, v])), '');
   out.push('## Baseline facts', '', table(['Fact', 'At 62d4eae', 'On next'], record.baselineFacts.map((b) => [b.id, b.citation, b.now])), '');
+  if ((record.deferred || []).length) out.push('## Deferred', '', list(record.deferred.map((d) => `**${d.item}.** ${d.detail}`)), '');
   out.push('## Versioning and supersession', '', record.versioning, '', record.supersession, '', `Consumers: ${record.consumers.join(', ')}.`, '');
   return `${out.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
 }
