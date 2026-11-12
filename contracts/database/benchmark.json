@@ -3,8 +3,9 @@
   "version": "rounds-db-benchmark/v1",
   "synthetic": true,
   "decisionRecord": "DR-0004",
-  "generatedAt": "2026-11-12T13:15:52Z",
-  "durationSeconds": 1313.4,
+  "revision": 1,
+  "generatedAt": "2026-11-12T15:18:26Z",
+  "durationSeconds": 1288.4,
   "command": "python harness/bench/bench.py --accounts 1,10 --out contracts/database/benchmark.json",
   "profile": {
     "hardware": {
@@ -37,17 +38,17 @@
       "GOMAXPROCS": 1,
       "note": "macOS has no cgroups: the 500m CPU limit is approximated with one Go scheduler thread and the memory limit with GOMEMLIMIT; RSS is reported against 512Mi"
     },
-    "revision": "0cd9219d88734a8d383f19bab1c24fe45d69aa55",
+    "revision": "5821e9d7f6f980b2c7f0411fae67aa2f5184eca4",
     "loadAverageAtStart": [
-      33.501953125,
-      41.2421875,
-      41.27490234375
+      34.220703125,
+      37.52294921875,
+      37.8125
     ],
     "sharedMachine": "a shared machine, not an exclusive one: other workloads may have run during the measurement, so the load averages at start and end are recorded",
     "loadAverageAtEnd": [
-      22.044921875,
-      29.9404296875,
-      35.42431640625
+      28.83056640625,
+      30.8837890625,
+      34.89208984375
     ]
   },
   "seedPlan": {
@@ -112,7 +113,7 @@
           "bench_lib.js"
         ]
       },
-      "firstStartSeconds": 1.32,
+      "firstStartSeconds": 1.51,
       "pragmas": {
         "read": {
           "busy_timeout": 10000,
@@ -140,7 +141,7 @@
       },
       "seed": {
         "fraction": 1.0,
-        "seconds": 28.41,
+        "seconds": 54.0,
         "rowsPerAccount": {
           "bench_records": 81000,
           "bench_change_sets": 81000,
@@ -159,43 +160,43 @@
       "bytesSample": {
         "blobs": 1024,
         "bytes": 2147483648,
-        "seconds": 13.42
+        "seconds": 20.05
       },
       "databaseBytes": 123969536,
       "sweep": {
         "1": {
-          "commands": 7344,
-          "perSecond": 233.2,
+          "commands": 6438,
+          "perSecond": 204.3,
           "statuses": {
-            "200": 6996,
-            "409": 348
+            "200": 6129,
+            "409": 309
           },
           "clientMs": {
-            "n": 6996,
-            "p50": 3.058333008084446,
-            "p95": 7.506208989070728,
-            "p99": 23.04720800020732,
-            "p999": 34.62695897906087,
-            "max": 56.57741700997576,
-            "mean": 3.868
+            "n": 6129,
+            "p50": 3.146083006868139,
+            "p95": 7.34987499890849,
+            "p99": 25.92275000642985,
+            "p999": 78.16425000783056,
+            "max": 1133.3393749955576,
+            "mean": 4.45
           },
           "queueMs": {
-            "n": 6996,
+            "n": 6129,
             "p50": 0.0,
             "p95": 0.0,
             "p99": 1.0,
-            "p999": 5.0,
-            "max": 18.0,
-            "mean": 0.03
+            "p999": 7.0,
+            "max": 881.0,
+            "mean": 0.194
           },
           "holdMs": {
-            "n": 6996,
+            "n": 6129,
             "p50": 2.0,
             "p95": 4.0,
-            "p99": 19.0,
-            "p999": 28.0,
-            "max": 49.0,
-            "mean": 2.199
+            "p99": 23.0,
+            "p999": 63.0,
+            "max": 1126.0,
+            "mean": 2.65
           },
           "writesByType": {
             "update": 5.0,
@@ -209,48 +210,48 @@
             "bg_admission": 3.0
           },
           "writeAmplification": 5.08,
-          "conflicts": 348,
-          "replays": 342
+          "conflicts": 309,
+          "replays": 288
         },
         "4": {
-          "commands": 7860,
-          "perSecond": 248.7,
+          "commands": 6544,
+          "perSecond": 207.2,
           "statuses": {
-            "200": 7461,
-            "409": 399
+            "200": 6216,
+            "409": 328
           },
           "clientMs": {
-            "n": 7461,
-            "p50": 10.695459000999108,
-            "p95": 34.30658302386291,
-            "p99": 48.85608400218189,
-            "p999": 172.1599580196198,
-            "max": 2191.902749997098,
-            "mean": 15.093
+            "n": 6216,
+            "p50": 10.334332997445017,
+            "p95": 35.80391698051244,
+            "p99": 66.68887502746657,
+            "p999": 3211.5502920059953,
+            "max": 4220.814500004053,
+            "mean": 18.556
           },
           "queueMs": {
-            "n": 7461,
+            "n": 6216,
             "p50": 0.0,
-            "p95": 5.0,
-            "p99": 17.0,
-            "p999": 137.0,
-            "max": 2160.0,
-            "mean": 2.005
+            "p95": 6.0,
+            "p99": 26.0,
+            "p999": 206.0,
+            "max": 4194.0,
+            "mean": 4.318
           },
           "holdMs": {
-            "n": 7461,
+            "n": 6216,
             "p50": 2.0,
             "p95": 4.0,
             "p99": 22.0,
-            "p999": 38.0,
-            "max": 189.0,
-            "mean": 2.385
+            "p999": 162.0,
+            "max": 4207.0,
+            "mean": 3.705
           },
           "writesByType": {
             "update": 5.0,
+            "create": 5.0,
             "delete_revive": 11.0,
             "compose": 11.0,
-            "create": 5.0,
             "bg_admission": 3.0,
             "bg_share": 1.0,
             "bg_execution": 1.0,
@@ -258,146 +259,146 @@
             "conflict": null
           },
           "writeAmplification": 5.08,
-          "conflicts": 399,
-          "replays": 368
+          "conflicts": 328,
+          "replays": 311
         },
         "16": {
-          "commands": 7754,
-          "perSecond": 246.0,
+          "commands": 4989,
+          "perSecond": 158.3,
           "statuses": {
-            "200": 7380,
-            "409": 374
+            "200": 4750,
+            "409": 239
           },
           "clientMs": {
-            "n": 7380,
-            "p50": 37.40041601122357,
-            "p95": 176.39070900622755,
-            "p99": 351.4067910145968,
-            "p999": 930.431332992157,
-            "max": 1277.339791005943,
-            "mean": 61.757
+            "n": 4750,
+            "p50": 54.94175001513213,
+            "p95": 279.451667011017,
+            "p99": 485.32279100618325,
+            "p999": 3376.8751669849735,
+            "max": 3423.5957079799846,
+            "mean": 95.912
           },
           "queueMs": {
-            "n": 7380,
-            "p50": 0.0,
-            "p95": 97.0,
-            "p99": 147.0,
-            "p999": 238.0,
-            "max": 351.0,
-            "mean": 20.067
+            "n": 4750,
+            "p50": 9.0,
+            "p95": 157.0,
+            "p99": 294.0,
+            "p999": 3322.0,
+            "max": 3354.0,
+            "mean": 45.574
           },
           "holdMs": {
-            "n": 7380,
+            "n": 4750,
             "p50": 2.0,
-            "p95": 4.0,
-            "p99": 35.0,
-            "p999": 58.0,
-            "max": 654.0,
-            "mean": 2.744
+            "p95": 5.0,
+            "p99": 54.0,
+            "p999": 243.0,
+            "max": 3278.0,
+            "mean": 4.48
           },
           "writesByType": {
             "update": 5.0,
             "compose": 11.0,
-            "create": 5.0,
+            "bg_admission": 3.0,
             "delete_revive": 11.0,
-            "bg_admission": 3.0,
-            "bg_execution": 1.0,
-            "bg_share": 1.0,
-            "conflict": null,
-            "replay": 0.0
-          },
-          "writeAmplification": 5.08,
-          "conflicts": 374,
-          "replays": 396
-        },
-        "64": {
-          "commands": 5867,
-          "perSecond": 185.8,
-          "statuses": {
-            "200": 5575,
-            "409": 292
-          },
-          "clientMs": {
-            "n": 5575,
-            "p50": 258.401708008023,
-            "p95": 842.7372499718331,
-            "p99": 1283.239708020119,
-            "p999": 1983.7509579956532,
-            "max": 2192.61629099492,
-            "mean": 327.452
-          },
-          "queueMs": {
-            "n": 5575,
-            "p50": 141.0,
-            "p95": 669.0,
-            "p99": 1096.0,
-            "p999": 1825.0,
-            "max": 2068.0,
-            "mean": 209.397
-          },
-          "holdMs": {
-            "n": 5575,
-            "p50": 2.0,
-            "p95": 4.0,
-            "p99": 59.0,
-            "p999": 166.0,
-            "max": 193.0,
-            "mean": 3.542
-          },
-          "writesByType": {
-            "compose": 11.0,
-            "update": 5.0,
             "create": 5.0,
-            "bg_admission": 3.0,
             "bg_execution": 1.0,
             "replay": 0.0,
             "conflict": null,
-            "bg_share": 1.0,
-            "delete_revive": 11.0
+            "bg_share": 1.0
           },
           "writeAmplification": 5.08,
-          "conflicts": 292,
-          "replays": 294
+          "conflicts": 239,
+          "replays": 243
+        },
+        "64": {
+          "commands": 4484,
+          "perSecond": 141.5,
+          "statuses": {
+            "200": 4246,
+            "409": 238
+          },
+          "clientMs": {
+            "n": 4246,
+            "p50": 302.1123750077095,
+            "p95": 1295.88612500811,
+            "p99": 2764.589791011531,
+            "p999": 4118.531249987427,
+            "max": 5059.465708996868,
+            "mean": 450.464
+          },
+          "queueMs": {
+            "n": 4246,
+            "p50": 193.0,
+            "p95": 1173.0,
+            "p99": 2674.0,
+            "p999": 3948.0,
+            "max": 4241.0,
+            "mean": 345.605
+          },
+          "holdMs": {
+            "n": 4246,
+            "p50": 2.0,
+            "p95": 5.0,
+            "p99": 82.0,
+            "p999": 405.0,
+            "max": 2086.0,
+            "mean": 5.407
+          },
+          "writesByType": {
+            "update": 5.0,
+            "compose": 11.0,
+            "create": 5.0,
+            "bg_admission": 3.0,
+            "replay": 0.0,
+            "bg_share": 1.0,
+            "delete_revive": 11.0,
+            "bg_execution": 1.0,
+            "conflict": null
+          },
+          "writeAmplification": 5.08,
+          "conflicts": 238,
+          "replays": 228
         }
       },
       "steady": {
         "commands": 1200,
-        "perSecond": 18.8,
+        "perSecond": 19.0,
         "statuses": {
-          "200": 1130,
-          "409": 70
+          "200": 1142,
+          "409": 58
         },
         "clientMs": {
-          "n": 1130,
-          "p50": 4.629167000530288,
-          "p95": 21.09424999798648,
-          "p99": 60.926082980586216,
-          "p999": 1896.3582500000484,
-          "max": 1909.3152499990538,
-          "mean": 16.525
+          "n": 1142,
+          "p50": 5.303167010424659,
+          "p95": 25.21312501630746,
+          "p99": 49.90370900486596,
+          "p999": 2592.045124998549,
+          "max": 2776.7831250093877,
+          "mean": 12.805
         },
         "queueMs": {
-          "n": 1130,
+          "n": 1142,
           "p50": 0.0,
-          "p95": 1.0,
-          "p99": 22.0,
-          "p999": 1711.0,
-          "max": 1886.0,
-          "mean": 8.064
+          "p95": 6.0,
+          "p99": 29.0,
+          "p999": 214.0,
+          "max": 2588.0,
+          "mean": 3.618
         },
         "holdMs": {
-          "n": 1130,
+          "n": 1142,
           "p50": 2.0,
-          "p95": 4.0,
-          "p99": 20.0,
-          "p999": 52.0,
-          "max": 1895.0,
-          "mean": 4.069
+          "p95": 5.0,
+          "p99": 27.0,
+          "p999": 229.0,
+          "max": 2775.0,
+          "mean": 5.363
         },
         "writesByType": {
-          "conflict": null,
           "bg_admission": 3.0,
           "update": 5.0,
+          "conflict": null,
           "delete_revive": 11.0,
           "bg_execution": 1.0,
           "compose": 11.0,
@@ -406,103 +407,133 @@
           "create": 5.0
         },
         "writeAmplification": 5.08,
-        "conflicts": 70,
-        "replays": 72,
+        "conflicts": 58,
+        "replays": 62,
         "rate": 20,
         "relayLagMs": {
-          "n": 1457,
-          "p50": 30.236083984375,
-          "p95": 291.260986328125,
-          "p99": 640.260986328125,
-          "p999": 1911.48291015625,
-          "max": 1911.48291015625,
-          "mean": 71.426
+          "n": 1353,
+          "p50": 30.748046875,
+          "p95": 60.990966796875,
+          "p99": 115.935302734375,
+          "p999": 2790.06689453125,
+          "max": 2800.06689453125,
+          "mean": 37.492
         },
         "readYourWritesMs": {
-          "n": 195,
-          "p50": 33.49900245666504,
-          "p95": 71.06399536132812,
-          "p99": 395.66636085510254,
-          "p999": 401.19123458862305,
-          "max": 401.19123458862305,
-          "mean": 45.106
+          "n": 184,
+          "p50": 33.66518020629883,
+          "p95": 74.90897178649902,
+          "p99": 92.13089942932129,
+          "p999": 111.2828254699707,
+          "max": 111.2828254699707,
+          "mean": 42.295
         },
         "readYourWritesFallbacks": 0,
-        "probes": 195
+        "probes": 184,
+        "sweepDrainSeconds": 0.11,
+        "tailDrainSeconds": 0.01,
+        "lagWindow": "events that occurred inside the phase, relayed after the sweep's backlog drained",
+        "checkpoint": {
+          "status": 200,
+          "clientMs": 13.4,
+          "busy": 0,
+          "checkpointed": 0,
+          "log": 0,
+          "ms": 7,
+          "commandsDuring": 3,
+          "clientMsDuring": {
+            "n": 3,
+            "p50": 3.096583008300513,
+            "p95": 7.089040998835117,
+            "p99": 7.089040998835117,
+            "p999": 7.089040998835117,
+            "max": 7.089040998835117,
+            "mean": 4.368
+          },
+          "queueMsDuring": {
+            "n": 3,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "p999": 0.0,
+            "max": 0.0,
+            "mean": 0.0
+          }
+        }
       },
       "backups": [
         {
           "method": "vacuum-into",
           "status": 200,
-          "ms": 1474,
-          "storageCopySeconds": 6.290451917011524,
+          "ms": 3904,
+          "storageCopySeconds": 12.456189209013246,
           "holdMsDuring": {
-            "n": 156,
+            "n": 324,
             "p50": 2.0,
             "p95": 4.0,
-            "p99": 22.0,
-            "p999": 24.0,
-            "max": 24.0,
-            "mean": 2.327
+            "p99": 33.0,
+            "p999": 51.0,
+            "max": 51.0,
+            "mean": 2.571
           },
           "queueMsDuring": {
-            "n": 156,
+            "n": 324,
             "p50": 0.0,
-            "p95": 4.0,
-            "p99": 21.0,
-            "p999": 26.0,
-            "max": 26.0,
-            "mean": 0.846
+            "p95": 14.0,
+            "p99": 1712.0,
+            "p999": 1738.0,
+            "max": 1738.0,
+            "mean": 32.463
           }
         },
         {
           "method": "sqlite-backup-api",
-          "seconds": 1.69,
+          "seconds": 1.29,
           "queueMsDuring": {
-            "n": 36,
+            "n": 28,
             "p50": 0.0,
-            "p95": 15.0,
-            "p99": 23.0,
-            "p999": 23.0,
-            "max": 23.0,
-            "mean": 3.917
+            "p95": 12.0,
+            "p99": 18.0,
+            "p999": 18.0,
+            "max": 18.0,
+            "mean": 1.607
           }
         },
         {
           "method": "pocketbase-backup-api",
           "status": 204,
-          "seconds": 49.81,
-          "zipBytes": 2219784716,
+          "seconds": 41.16,
+          "zipBytes": 2204489354,
           "queueMsDuring": {
-            "n": 966,
+            "n": 824,
             "p50": 0.0,
-            "p95": 63.0,
-            "p99": 505.0,
-            "p999": 15570.0,
-            "max": 15570.0,
-            "mean": 92.783
+            "p95": 35.0,
+            "p99": 1248.0,
+            "p999": 14828.0,
+            "max": 14828.0,
+            "mean": 89.038
           },
           "holdMsDuring": {
-            "n": 966,
+            "n": 824,
             "p50": 2.0,
-            "p95": 21.0,
-            "p99": 78.0,
-            "p999": 4046.0,
-            "max": 4046.0,
-            "mean": 12.7
+            "p95": 7.0,
+            "p99": 35.0,
+            "p999": 1386.0,
+            "max": 1386.0,
+            "mean": 6.232
           }
         }
       ],
       "restores": [
         {
           "method": "vacuum-into",
-          "copySeconds": 6.47,
-          "startSeconds": 0.41,
-          "verifySeconds": 1.6,
-          "restoreSeconds": 8.47,
-          "bytes": 2315272376,
+          "copySeconds": 8.15,
+          "startSeconds": 0.55,
+          "verifySeconds": 1.34,
+          "restoreSeconds": 10.04,
+          "bytes": 2305835192,
           "quickCheck": "ok",
-          "ackedChecked": 24054,
+          "ackedChecked": 18970,
           "ackedMissing": 0,
           "changeSetsWithoutIdempotency": 0,
           "idempotencyWithoutChangeSet": 0,
@@ -514,13 +545,13 @@
         },
         {
           "method": "sqlite-backup-api",
-          "copySeconds": 0.07,
-          "startSeconds": 0.33,
-          "verifySeconds": 0.3,
-          "restoreSeconds": 0.7,
-          "bytes": 177115320,
+          "copySeconds": 0.05,
+          "startSeconds": 0.32,
+          "verifySeconds": 0.28,
+          "restoreSeconds": 0.66,
+          "bytes": 167682232,
           "quickCheck": "ok",
-          "ackedChecked": 24054,
+          "ackedChecked": 18970,
           "ackedMissing": 0,
           "changeSetsWithoutIdempotency": 0,
           "idempotencyWithoutChangeSet": 0,
@@ -530,13 +561,13 @@
         },
         {
           "method": "pocketbase-backup-api",
-          "copySeconds": 4.82,
-          "startSeconds": 0.39,
-          "verifySeconds": 1.49,
-          "restoreSeconds": 6.7,
-          "bytes": 2324668600,
+          "copySeconds": 3.77,
+          "startSeconds": 0.33,
+          "verifySeconds": 1.19,
+          "restoreSeconds": 5.3,
+          "bytes": 2315215032,
           "quickCheck": "ok",
-          "ackedChecked": 24054,
+          "ackedChecked": 18970,
           "ackedMissing": 0,
           "changeSetsWithoutIdempotency": 0,
           "idempotencyWithoutChangeSet": 0,
@@ -548,13 +579,13 @@
         },
         {
           "method": "stop-and-tar",
-          "copySeconds": 5.31,
-          "startSeconds": 0.33,
-          "verifySeconds": 1.61,
-          "restoreSeconds": 7.25,
-          "bytes": 2330673567,
+          "copySeconds": 24.95,
+          "startSeconds": 0.42,
+          "verifySeconds": 3.81,
+          "restoreSeconds": 29.19,
+          "bytes": 2321011103,
           "quickCheck": "ok",
-          "ackedChecked": 25026,
+          "ackedChecked": 19958,
           "ackedMissing": 0,
           "changeSetsWithoutIdempotency": 0,
           "idempotencyWithoutChangeSet": 0,
@@ -578,15 +609,16 @@
         },
         "midRelay": {
           "crashed": true,
-          "redeliveredSkipped": 6,
-          "survivorFenced": 0,
+          "redeliveredSkipped": 2,
+          "survivorFenced": 2,
+          "oldTokenAckFenced": true,
           "passed": true
         }
       },
       "crash": {
-        "restartSeconds": 0.33,
+        "restartSeconds": 0.38,
         "quickCheck": "ok",
-        "ackedChecked": 25026,
+        "ackedChecked": 19958,
         "ackedMissing": 0,
         "changeSetsWithoutIdempotency": 0,
         "idempotencyWithoutChangeSet": 0,
@@ -595,35 +627,35 @@
         "consistent": true
       },
       "freeze": {
-        "seconds": 16.12,
-        "backupMs": 1236,
-        "storageCopySeconds": 8.86,
+        "seconds": 11.21,
+        "backupMs": 1227,
+        "storageCopySeconds": 3.97,
         "transfer": {
           "applications": 2000,
           "rows": 16000,
           "batches": 67,
-          "seconds": 2.8,
+          "seconds": 3.28,
           "batchHoldMs": {
             "n": 67,
-            "p50": 34.0,
-            "p95": 68.0,
-            "p99": 73.0,
-            "p999": 73.0,
-            "max": 73.0,
-            "mean": 40.418
+            "p50": 38.0,
+            "p95": 87.0,
+            "p99": 213.0,
+            "p999": 213.0,
+            "max": 213.0,
+            "mean": 47.313
           }
         },
         "acceptedDuringFreeze": 0,
-        "refusedDuringFreeze": 47,
+        "refusedDuringFreeze": 46,
         "rollback": {
           "method": "freeze-rollback",
-          "copySeconds": 5.6,
-          "startSeconds": 0.35,
-          "verifySeconds": 1.54,
-          "restoreSeconds": 7.49,
-          "bytes": 2317107384,
+          "copySeconds": 6.78,
+          "startSeconds": 0.38,
+          "verifySeconds": 1.45,
+          "restoreSeconds": 8.61,
+          "bytes": 2307723448,
           "quickCheck": "ok",
-          "ackedChecked": 25026,
+          "ackedChecked": 19958,
           "ackedMissing": 0,
           "changeSetsWithoutIdempotency": 0,
           "idempotencyWithoutChangeSet": 0,
@@ -635,29 +667,29 @@
         }
       },
       "stopAndTar": {
-        "archiveSeconds": 51.69,
-        "startSeconds": 0.45,
-        "downtimeSeconds": 52.14,
-        "archiveBytes": 2201381573
+        "archiveSeconds": 70.43,
+        "startSeconds": 1.05,
+        "downtimeSeconds": 71.48,
+        "archiveBytes": 2198363795
       },
       "schemaChange": {
-        "startSeconds": 3.02,
+        "startSeconds": 2.77,
         "rows": 368001,
-        "downtimeSeconds": 3.02
+        "downtimeSeconds": 2.77
       },
       "samplers": {
-        "walMaxBytes": 46123432,
-        "walTruncations": 2,
-        "rssMaxBytes": 340459520,
-        "rssSamples": 283
+        "walMaxBytes": 45303552,
+        "walTruncations": 3,
+        "rssMaxBytes": 324190208,
+        "rssSamples": 290
       },
       "relays": [
         {
           "holder": "relay-a",
-          "applied": 544,
-          "skipped": 11,
+          "applied": 13479,
+          "skipped": 52,
           "gaps": 0,
-          "fenced": 0,
+          "fenced": 2,
           "errors": 17
         },
         {
@@ -685,7 +717,7 @@
           "bench_lib.js"
         ]
       },
-      "firstStartSeconds": 1.55,
+      "firstStartSeconds": 2.3,
       "pragmas": {
         "read": {
           "busy_timeout": 10000,
@@ -713,7 +745,7 @@
       },
       "seed": {
         "fraction": 1.0,
-        "seconds": 568.82,
+        "seconds": 475.4,
         "rowsPerAccount": {
           "bench_records": 81000,
           "bench_change_sets": 81000,
@@ -729,41 +761,41 @@
         },
         "rowsTotal": 3680010
       },
-      "databaseBytes": 1191821312,
+      "databaseBytes": 1192407040,
       "sweep": {
         "1": {
-          "commands": 7165,
-          "perSecond": 227.1,
+          "commands": 7678,
+          "perSecond": 243.4,
           "statuses": {
-            "200": 6813,
-            "409": 352
+            "200": 7301,
+            "409": 377
           },
           "clientMs": {
-            "n": 6813,
-            "p50": 3.0963750032242388,
-            "p95": 7.76783301262185,
-            "p99": 24.109958001645282,
-            "p999": 34.239583008456975,
-            "max": 43.469290976645425,
-            "mean": 3.978
+            "n": 7301,
+            "p50": 2.8525000088848174,
+            "p95": 6.629792012972757,
+            "p99": 24.9609159945976,
+            "p999": 30.947708000894636,
+            "max": 42.47754201060161,
+            "mean": 3.7
           },
           "queueMs": {
-            "n": 6813,
+            "n": 7301,
             "p50": 0.0,
             "p95": 0.0,
             "p99": 1.0,
-            "p999": 5.0,
-            "max": 12.0,
-            "mean": 0.033
+            "p999": 7.0,
+            "max": 21.0,
+            "mean": 0.035
           },
           "holdMs": {
-            "n": 6813,
+            "n": 7301,
             "p50": 2.0,
-            "p95": 4.0,
-            "p99": 21.0,
-            "p999": 31.0,
-            "max": 38.0,
-            "mean": 2.396
+            "p95": 3.0,
+            "p99": 22.0,
+            "p999": 28.0,
+            "max": 32.0,
+            "mean": 2.205
           },
           "writesByType": {
             "compose": 11.0,
@@ -777,47 +809,47 @@
             "delete_revive": 11.0
           },
           "writeAmplification": 5.08,
-          "conflicts": 352,
-          "replays": 362
+          "conflicts": 377,
+          "replays": 391
         },
         "4": {
-          "commands": 7930,
-          "perSecond": 252.2,
+          "commands": 9210,
+          "perSecond": 292.9,
           "statuses": {
-            "200": 7565,
-            "409": 365
+            "200": 8786,
+            "409": 424
           },
           "clientMs": {
-            "n": 7565,
-            "p50": 11.482917005196214,
-            "p95": 38.02916701533832,
-            "p99": 50.80341699067503,
-            "p999": 63.94979200558737,
-            "max": 70.74270799057558,
-            "mean": 14.899
+            "n": 8786,
+            "p50": 9.780833002878353,
+            "p95": 32.337917014956474,
+            "p99": 40.68083400488831,
+            "p999": 51.27624998567626,
+            "max": 76.94737499696203,
+            "mean": 12.864
           },
           "queueMs": {
-            "n": 7565,
+            "n": 8786,
             "p50": 0.0,
-            "p95": 9.0,
-            "p99": 22.0,
-            "p999": 34.0,
+            "p95": 4.0,
+            "p99": 13.0,
+            "p999": 26.0,
             "max": 43.0,
-            "mean": 1.107
+            "mean": 0.557
           },
           "holdMs": {
-            "n": 7565,
+            "n": 8786,
             "p50": 2.0,
-            "p95": 4.0,
-            "p99": 24.0,
-            "p999": 33.0,
-            "max": 45.0,
-            "mean": 2.522
+            "p95": 3.0,
+            "p99": 22.0,
+            "p999": 26.0,
+            "max": 33.0,
+            "mean": 2.184
           },
           "writesByType": {
-            "update": 5.0,
-            "create": 5.0,
             "bg_share": 1.0,
+            "create": 5.0,
+            "update": 5.0,
             "conflict": null,
             "compose": 11.0,
             "replay": 0.0,
@@ -826,47 +858,47 @@
             "bg_admission": 3.0
           },
           "writeAmplification": 5.08,
-          "conflicts": 365,
-          "replays": 409
+          "conflicts": 424,
+          "replays": 468
         },
         "16": {
-          "commands": 5491,
-          "perSecond": 172.4,
+          "commands": 8021,
+          "perSecond": 253.0,
           "statuses": {
-            "200": 5173,
-            "409": 318
+            "200": 7589,
+            "409": 432
           },
           "clientMs": {
-            "n": 5173,
-            "p50": 59.79600001592189,
-            "p95": 245.48362498171628,
-            "p99": 352.1972500020638,
-            "p999": 498.1482919829432,
-            "max": 595.1846250100061,
-            "mean": 86.473
+            "n": 7589,
+            "p50": 40.31149999354966,
+            "p95": 157.0281669846736,
+            "p99": 267.49329100130126,
+            "p999": 511.79020799463615,
+            "max": 678.8560840068385,
+            "mean": 59.01
           },
           "queueMs": {
-            "n": 5173,
-            "p50": 12.0,
-            "p95": 151.0,
-            "p99": 229.0,
-            "p999": 351.0,
-            "max": 429.0,
-            "mean": 36.843
+            "n": 7589,
+            "p50": 1.0,
+            "p95": 89.0,
+            "p99": 133.0,
+            "p999": 234.0,
+            "max": 268.0,
+            "mean": 20.504
           },
           "holdMs": {
-            "n": 5173,
+            "n": 7589,
             "p50": 2.0,
-            "p95": 5.0,
-            "p99": 53.0,
-            "p999": 150.0,
-            "max": 241.0,
-            "mean": 3.831
+            "p95": 3.0,
+            "p99": 35.0,
+            "p999": 55.0,
+            "max": 62.0,
+            "mean": 2.6
           },
           "writesByType": {
             "update": 5.0,
-            "bg_execution": 1.0,
             "delete_revive": 11.0,
+            "bg_execution": 1.0,
             "bg_admission": 3.0,
             "compose": 11.0,
             "create": 5.0,
@@ -875,202 +907,233 @@
             "replay": 0.0
           },
           "writeAmplification": 5.08,
-          "conflicts": 318,
-          "replays": 258
+          "conflicts": 432,
+          "replays": 402
         },
         "64": {
-          "commands": 5657,
-          "perSecond": 179.0,
+          "commands": 5671,
+          "perSecond": 179.5,
           "statuses": {
-            "200": 5370,
-            "409": 287
+            "200": 5385,
+            "409": 286
           },
           "clientMs": {
-            "n": 5370,
-            "p50": 265.6502079917118,
-            "p95": 871.8074999924283,
-            "p99": 1333.6397919920273,
-            "p999": 2025.1856250106357,
-            "max": 3628.232291986933,
-            "mean": 337.594
+            "n": 5385,
+            "p50": 240.79608300235122,
+            "p95": 897.8342920017894,
+            "p99": 1533.3559589926153,
+            "p999": 2508.9382919832133,
+            "max": 3343.320166983176,
+            "mean": 337.97
           },
           "queueMs": {
-            "n": 5370,
-            "p50": 151.0,
-            "p95": 700.0,
-            "p99": 1217.0,
-            "p999": 1849.0,
-            "max": 3613.0,
-            "mean": 223.19
+            "n": 5385,
+            "p50": 142.0,
+            "p95": 769.0,
+            "p99": 1406.0,
+            "p999": 2419.0,
+            "max": 3274.0,
+            "mean": 235.829
           },
           "holdMs": {
-            "n": 5370,
+            "n": 5385,
             "p50": 2.0,
             "p95": 4.0,
-            "p99": 57.0,
-            "p999": 182.0,
-            "max": 263.0,
-            "mean": 3.688
+            "p99": 55.0,
+            "p999": 161.0,
+            "max": 643.0,
+            "mean": 3.635
           },
           "writesByType": {
             "update": 5.0,
-            "create": 5.0,
             "conflict": null,
-            "bg_execution": 1.0,
+            "create": 5.0,
             "bg_admission": 3.0,
-            "compose": 11.0,
+            "bg_execution": 1.0,
             "delete_revive": 11.0,
             "replay": 0.0,
+            "compose": 11.0,
             "bg_share": 1.0
           },
           "writeAmplification": 5.08,
-          "conflicts": 287,
-          "replays": 280
+          "conflicts": 286,
+          "replays": 291
         }
       },
       "steady": {
         "commands": 1200,
         "perSecond": 19.1,
         "statuses": {
-          "200": 1149,
-          "409": 51
+          "200": 1144,
+          "400": 1,
+          "409": 55
         },
         "clientMs": {
-          "n": 1149,
-          "p50": 5.2172499999869615,
-          "p95": 23.2577080023475,
-          "p99": 31.406624999362975,
-          "p999": 44.43408298538998,
-          "max": 49.40250000800006,
-          "mean": 7.272
+          "n": 1144,
+          "p50": 6.653666001511738,
+          "p95": 31.596833985531703,
+          "p99": 49.526457994943485,
+          "p999": 11453.310790995602,
+          "max": 11655.853333999403,
+          "mean": 40.013
         },
         "queueMs": {
-          "n": 1149,
+          "n": 1144,
           "p50": 0.0,
-          "p95": 6.0,
-          "p99": 23.0,
-          "p999": 39.0,
-          "max": 47.0,
-          "mean": 1.131
+          "p95": 5.0,
+          "p99": 29.0,
+          "p999": 11449.0,
+          "max": 11630.0,
+          "mean": 31.131
         },
         "holdMs": {
-          "n": 1149,
+          "n": 1144,
           "p50": 2.0,
           "p95": 6.0,
-          "p99": 23.0,
-          "p999": 28.0,
-          "max": 35.0,
-          "mean": 2.851
+          "p99": 29.0,
+          "p999": 37.0,
+          "max": 38.0,
+          "mean": 2.889
         },
         "writesByType": {
           "create": 5.0,
           "update": 5.0,
           "compose": 11.0,
-          "bg_share": 1.0,
           "delete_revive": 11.0,
+          "bg_share": 1.0,
           "replay": 0.0,
           "bg_execution": 1.0,
           "conflict": null,
           "bg_admission": 3.0
         },
         "writeAmplification": 5.08,
-        "conflicts": 51,
-        "replays": 64,
+        "conflicts": 55,
+        "replays": 60,
         "rate": 20,
         "relayLagMs": {
-          "n": 1576,
-          "p50": 33.9111328125,
-          "p95": 1178.183837890625,
-          "p99": 1536.183837890625,
-          "p999": 1580.183837890625,
-          "max": 1583.183837890625,
-          "mean": 170.855
+          "n": 1337,
+          "p50": 35.819091796875,
+          "p95": 105.031982421875,
+          "p99": 144.175048828125,
+          "p999": 11687.7626953125,
+          "max": 11689.7626953125,
+          "mean": 66.37
         },
         "readYourWritesMs": {
-          "n": 204,
-          "p50": 35.18795967102051,
-          "p95": 69.3368911743164,
-          "p99": 79.20312881469727,
-          "p999": 85.73102951049805,
-          "max": 85.73102951049805,
-          "mean": 40.685
+          "n": 184,
+          "p50": 41.899919509887695,
+          "p95": 126.86800956726074,
+          "p99": 190.69910049438477,
+          "p999": 195.15395164489746,
+          "max": 195.15395164489746,
+          "mean": 51.193
         },
-        "readYourWritesFallbacks": 0,
-        "probes": 204
+        "readYourWritesFallbacks": 3,
+        "probes": 187,
+        "sweepDrainSeconds": 0.12,
+        "tailDrainSeconds": 0.0,
+        "lagWindow": "events that occurred inside the phase, relayed after the sweep's backlog drained",
+        "checkpoint": {
+          "status": 200,
+          "clientMs": 5871.2,
+          "busy": 0,
+          "checkpointed": 0,
+          "log": 0,
+          "ms": 5864,
+          "commandsDuring": 7,
+          "clientMsDuring": {
+            "n": 7,
+            "p50": 11440.97037499887,
+            "p95": 11655.853333999403,
+            "p99": 11655.853333999403,
+            "p999": 11655.853333999403,
+            "max": 11655.853333999403,
+            "mean": 6573.291
+          },
+          "queueMsDuring": {
+            "n": 6,
+            "p50": 0.0,
+            "p95": 11630.0,
+            "p99": 11630.0,
+            "p999": 11630.0,
+            "max": 11630.0,
+            "mean": 5753.833
+          }
+        }
       },
       "backups": [
         {
           "method": "vacuum-into",
           "status": 200,
-          "ms": 11919,
+          "ms": 5440,
           "storageCopySeconds": null,
           "holdMsDuring": {
-            "n": 240,
+            "n": 112,
             "p50": 2.0,
-            "p95": 5.0,
-            "p99": 39.0,
-            "p999": 52.0,
-            "max": 52.0,
-            "mean": 3.029
+            "p95": 4.0,
+            "p99": 7.0,
+            "p999": 11.0,
+            "max": 11.0,
+            "mean": 1.991
           },
           "queueMsDuring": {
-            "n": 240,
+            "n": 112,
             "p50": 0.0,
-            "p95": 19.0,
-            "p99": 69.0,
-            "p999": 84.0,
-            "max": 84.0,
-            "mean": 2.888
+            "p95": 0.0,
+            "p99": 6.0,
+            "p999": 6.0,
+            "max": 6.0,
+            "mean": 0.134
           }
         },
         {
           "method": "sqlite-backup-api",
-          "seconds": 3.59,
+          "seconds": 3.8,
           "queueMsDuring": {
-            "n": 72,
+            "n": 76,
             "p50": 0.0,
-            "p95": 1.0,
+            "p95": 0.0,
             "p99": 7.0,
             "p999": 7.0,
             "max": 7.0,
-            "mean": 0.236
+            "mean": 0.145
           }
         },
         {
           "method": "pocketbase-backup-api",
           "status": 204,
           "seconds": 12.9,
-          "zipBytes": 406908850,
+          "zipBytes": 404284861,
           "queueMsDuring": {
-            "n": 264,
+            "n": 260,
             "p50": 0.0,
-            "p95": 33.0,
-            "p99": 8449.0,
-            "p999": 8477.0,
-            "max": 8477.0,
-            "mean": 131.5
+            "p95": 13.0,
+            "p99": 8069.0,
+            "p999": 8097.0,
+            "max": 8097.0,
+            "mean": 126.008
           },
           "holdMsDuring": {
-            "n": 264,
+            "n": 260,
             "p50": 2.0,
-            "p95": 4.0,
-            "p99": 35.0,
-            "p999": 47.0,
-            "max": 47.0,
-            "mean": 2.674
+            "p95": 3.0,
+            "p99": 30.0,
+            "p999": 38.0,
+            "max": 38.0,
+            "mean": 2.573
           }
         }
       ],
       "restores": [
         {
           "method": "vacuum-into",
-          "copySeconds": 0.7,
-          "startSeconds": 0.56,
-          "verifySeconds": 1.5,
-          "restoreSeconds": 2.76,
-          "bytes": 1195380920,
+          "copySeconds": 0.53,
+          "startSeconds": 0.33,
+          "verifySeconds": 1.37,
+          "restoreSeconds": 2.23,
+          "bytes": 1202024632,
           "quickCheck": "ok",
-          "ackedChecked": 21937,
+          "ackedChecked": 25378,
           "ackedMissing": 0,
           "changeSetsWithoutIdempotency": 0,
           "idempotencyWithoutChangeSet": 0,
@@ -1080,13 +1143,13 @@
         },
         {
           "method": "sqlite-backup-api",
-          "copySeconds": 0.9,
-          "startSeconds": 0.34,
-          "verifySeconds": 1.63,
-          "restoreSeconds": 2.87,
-          "bytes": 1260019896,
+          "copySeconds": 0.78,
+          "startSeconds": 0.36,
+          "verifySeconds": 1.97,
+          "restoreSeconds": 3.11,
+          "bytes": 1268814008,
           "quickCheck": "ok",
-          "ackedChecked": 21937,
+          "ackedChecked": 25378,
           "ackedMissing": 0,
           "changeSetsWithoutIdempotency": 0,
           "idempotencyWithoutChangeSet": 0,
@@ -1096,13 +1159,13 @@
         },
         {
           "method": "pocketbase-backup-api",
-          "copySeconds": 2.87,
-          "startSeconds": 0.33,
-          "verifySeconds": 1.73,
-          "restoreSeconds": 4.93,
-          "bytes": 1260163256,
+          "copySeconds": 2.8,
+          "startSeconds": 0.3,
+          "verifySeconds": 1.71,
+          "restoreSeconds": 4.81,
+          "bytes": 1268949176,
           "quickCheck": "ok",
-          "ackedChecked": 21937,
+          "ackedChecked": 25378,
           "ackedMissing": 0,
           "changeSetsWithoutIdempotency": 0,
           "idempotencyWithoutChangeSet": 0,
@@ -1112,13 +1175,13 @@
         },
         {
           "method": "stop-and-tar",
-          "copySeconds": 3.82,
-          "startSeconds": 0.51,
-          "verifySeconds": 1.7,
-          "restoreSeconds": 6.03,
-          "bytes": 1304301983,
+          "copySeconds": 3.83,
+          "startSeconds": 0.29,
+          "verifySeconds": 1.65,
+          "restoreSeconds": 5.77,
+          "bytes": 1313005983,
           "quickCheck": "ok",
-          "ackedChecked": 22444,
+          "ackedChecked": 25788,
           "ackedMissing": 0,
           "changeSetsWithoutIdempotency": 0,
           "idempotencyWithoutChangeSet": 0,
@@ -1140,15 +1203,16 @@
         },
         "midRelay": {
           "crashed": true,
-          "redeliveredSkipped": 3,
-          "survivorFenced": 0,
+          "redeliveredSkipped": 2,
+          "survivorFenced": 1,
+          "oldTokenAckFenced": true,
           "passed": true
         }
       },
       "crash": {
-        "restartSeconds": 0.34,
+        "restartSeconds": 0.35,
         "quickCheck": "ok",
-        "ackedChecked": 22443,
+        "ackedChecked": 25787,
         "ackedMissing": 0,
         "changeSetsWithoutIdempotency": 0,
         "idempotencyWithoutChangeSet": 0,
@@ -1157,35 +1221,35 @@
         "consistent": true
       },
       "freeze": {
-        "seconds": 39.79,
-        "backupMs": 6332,
+        "seconds": 40.12,
+        "backupMs": 6291,
         "storageCopySeconds": 0.0,
         "transfer": {
           "applications": 20000,
           "rows": 160000,
           "batches": 670,
-          "seconds": 32.44,
+          "seconds": 32.82,
           "batchHoldMs": {
             "n": 670,
-            "p50": 35.0,
-            "p95": 83.0,
-            "p99": 92.0,
-            "p999": 119.0,
-            "max": 119.0,
-            "mean": 47.016
+            "p50": 42.0,
+            "p95": 75.0,
+            "p99": 82.0,
+            "p999": 97.0,
+            "max": 97.0,
+            "mean": 47.373
           }
         },
         "acceptedDuringFreeze": 0,
         "refusedDuringFreeze": 46,
         "rollback": {
           "method": "freeze-rollback",
-          "copySeconds": 0.6,
-          "startSeconds": 0.35,
-          "verifySeconds": 1.47,
-          "restoreSeconds": 2.42,
-          "bytes": 1196404920,
+          "copySeconds": 0.45,
+          "startSeconds": 0.33,
+          "verifySeconds": 2.05,
+          "restoreSeconds": 2.83,
+          "bytes": 1202823352,
           "quickCheck": "ok",
-          "ackedChecked": 22444,
+          "ackedChecked": 25788,
           "ackedMissing": 0,
           "changeSetsWithoutIdempotency": 0,
           "idempotencyWithoutChangeSet": 0,
@@ -1195,51 +1259,52 @@
         }
       },
       "stopAndTar": {
-        "archiveSeconds": 24.76,
-        "startSeconds": 0.62,
-        "downtimeSeconds": 25.37,
-        "archiveBytes": 371418608
+        "archiveSeconds": 24.62,
+        "startSeconds": 0.59,
+        "downtimeSeconds": 25.21,
+        "archiveBytes": 373905120
       },
       "schemaChange": {
-        "startSeconds": 6.95,
+        "startSeconds": 7.65,
         "rows": 3680010,
-        "downtimeSeconds": 6.95
+        "downtimeSeconds": 7.65
       },
       "samplers": {
-        "walMaxBytes": 409865872,
-        "walTruncations": 2,
-        "rssMaxBytes": 715276288,
-        "rssSamples": 271
+        "walMaxBytes": 411723992,
+        "walTruncations": 3,
+        "rssMaxBytes": 694812672,
+        "rssSamples": 260
       },
       "relays": [
         {
           "holder": "relay-a",
-          "applied": 30381,
-          "skipped": 3,
+          "applied": 992,
+          "skipped": 2,
           "gaps": 0,
-          "fenced": 0,
+          "fenced": 1,
           "errors": 17
         },
         {
           "holder": "relay-b-restarted",
-          "applied": 1,
+          "applied": 0,
           "skipped": 0,
           "gaps": 0,
           "fenced": 0,
           "errors": 17
         }
       ],
-      "unknownOutcomes": 63
+      "unknownOutcomes": 62
     }
   },
   "extrapolations": [
     {
       "basis": "extrapolated",
+      "target": "restore_rto",
       "measuredBytes": 2147483648,
-      "measuredSeconds": 6.47,
-      "throughputBytesPerSecond": 331914010.5,
+      "measuredSeconds": 8.15,
+      "throughputBytesPerSecond": 263494926.1,
       "targetBytes": 100000000000,
-      "seconds": 301.283,
+      "seconds": 379.514,
       "formula": "seconds = targetBytes / (measuredBytes / measuredSeconds)"
     }
   ],
@@ -1250,10 +1315,10 @@
       "target": "read-your-writes within 5 seconds or the canonical fallback",
       "limit": 5000,
       "unit": "ms",
-      "value": 79.20312881469727,
+      "value": 190.69910049438477,
       "basis": "measured",
       "result": "pass",
-      "detail": "p99 of 204 projection reads at 20/s and 10 accounts; 0 took the canonical fallback"
+      "detail": "p99 of 184 projection reads at 20/s and 10 accounts; 3 took the canonical fallback"
     },
     {
       "id": "projection_lag_p95",
@@ -1261,10 +1326,10 @@
       "target": "normal projection lag p95 below 2 seconds",
       "limit": 2000,
       "unit": "ms",
-      "value": 1178.183837890625,
+      "value": 105.031982421875,
       "basis": "measured",
       "result": "pass",
-      "detail": "relay lag p95 over 1576 events at 20/s and 10 accounts"
+      "detail": "relay lag p95 over 1337 events at 20/s and 10 accounts"
     },
     {
       "id": "write_freeze",
@@ -1272,7 +1337,7 @@
       "target": "final bounded-context write freeze below 15 minutes",
       "limit": 900,
       "unit": "s",
-      "value": 39.79,
+      "value": 40.12,
       "basis": "measured",
       "result": "pass",
       "detail": "the pipeline transfer of 20000 applications under a write freeze, 10 accounts"
@@ -1294,18 +1359,42 @@
       "target": "rollback or restore within 30 minutes at the scale floor",
       "limit": 1800,
       "unit": "s",
-      "value": 304.04,
+      "value": 381.74,
       "basis": "extrapolated",
       "result": "pass",
-      "detail": "the 10-account database restored and checked (2.76 s, measured) plus 100 GB of bytes at the measured copy rate (301.283 s, extrapolated)"
+      "detail": "the 10-account database restored and checked (2.23 s, measured) plus 100 GB of bytes at the measured copy rate (379.514 s, extrapolated)"
     }
   ],
   "rollbackDefaults": {
     "source": "DR-0003 P5",
-    "freezeUnder15Minutes": true,
-    "zeroAcceptedWritesLost": true,
-    "restoreWithin30Minutes": true,
-    "restoreRehearsed": true
+    "freezeUnder15Minutes": {
+      "met": true,
+      "basis": "measured",
+      "target": "write_freeze"
+    },
+    "zeroAcceptedWritesLost": {
+      "met": true,
+      "basis": "measured",
+      "target": "rpo_zero"
+    },
+    "restoreWithin30Minutes": {
+      "met": true,
+      "basis": "extrapolated",
+      "target": "restore_rto"
+    },
+    "benchRestoresConsistent": {
+      "met": true,
+      "basis": "measured",
+      "target": null,
+      "detail": "every restore this run took, at both scales, checked consistent"
+    },
+    "floorRestoreRehearsed": {
+      "met": false,
+      "basis": "not-run",
+      "target": null,
+      "owner": "ROUNDS-32-L03",
+      "detail": "the rehearsal at the floor, bytes included, is #157's"
+    }
   },
   "result": "pass"
 }
