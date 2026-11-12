@@ -77,8 +77,8 @@ def test_ids_follow_the_identifier_rules():
 
 
 def test_extrapolation_is_labeled_with_its_formula():
-    ex = benchlib.extrapolate(2 * 1024**3, 4.0, 100 * 1000**3)
-    assert ex["basis"] == "extrapolated" and ex["formula"].startswith("seconds = targetBytes")
+    ex = benchlib.extrapolate(2 * 1024**3, 4.0, 100 * 1000**3, "restore_rto")
+    assert ex["basis"] == "extrapolated" and ex["target"] == "restore_rto" and ex["formula"].startswith("seconds = targetBytes")
     # Rounded to the millisecond in the receipt.
     assert ex["seconds"] == pytest.approx(100 * 1000**3 / (2 * 1024**3 / 4.0), abs=0.001)
 
@@ -122,7 +122,7 @@ def _receipt(**kw) -> dict:
                            "dockerfilePin": {"PB_VERSION": "0.22.22", "PB_SHA256": "b" * 64, "PB_SHA256_ARM64": "c" * 64}},
             "k8sLimits": {"cpuLimit": "500m", "memoryLimit": "512Mi", "replicas": 1, "strategy": "Recreate", "pvc": "5Gi"},
             "emulation": {"GOMAXPROCS": 1, "note": "x"}, "revision": "d" * 40, "sharedMachine": "x"}
-    args = argparse.Namespace(steady_rate=20.0, bytes_mb=2048, fraction=1.0)
+    args = argparse.Namespace(steady_rate=20.0, bytes_mb=2048, fraction=1.0, revision=1)
     return bench.build_receipt(prof, {"1": _scale(1), "10": _scale(10, **kw)}, args, time.monotonic())
 
 
@@ -156,7 +156,25 @@ def test_a_miss_fails_the_receipt_and_names_its_consequence(tmp_path):
     failed = {t["id"]: t for t in doc["targets"] if t["result"] == "fail"}
     assert set(failed) == {"projection_lag_p95", "rpo_zero"}
     assert all(t["consequence"] and t["consequence"] != "unrecorded" for t in failed.values())
-    assert doc["rollbackDefaults"]["zeroAcceptedWritesLost"] is False
+    assert doc["rollbackDefaults"]["zeroAcceptedWritesLost"] == {"met": False, "basis": "measured", "target": "rpo_zero"}
+
+
+def test_each_rollback_default_carries_the_basis_of_its_target(tmp_path):
+    doc = _receipt()
+    d = doc["rollbackDefaults"]
+    basis = {t["id"]: t["basis"] for t in doc["targets"]}
+    for name, target in (("freezeUnder15Minutes", "write_freeze"), ("zeroAcceptedWritesLost", "rpo_zero"), ("restoreWithin30Minutes", "restore_rto")):
+        assert d[name]["target"] == target and d[name]["basis"] == basis[target], name
+    # The restore default rests mostly on extrapolated bytes, and says so.
+    assert d["restoreWithin30Minutes"]["basis"] == "extrapolated"
+    # The bench's own restores aren't the floor rehearsal, which is #157's.
+    assert d["benchRestoresConsistent"]["met"] is True and "restoreRehearsed" not in d
+    assert d["floorRestoreRehearsed"] == {"met": False, "basis": "not-run", "target": None, "owner": "ROUNDS-32-L03",
+                                          "detail": d["floorRestoreRehearsed"]["detail"]}
+    assert doc["revision"] == 1 and doc["extrapolations"][0]["target"] == "restore_rto"
+    no_basis = json.loads(json.dumps(doc))
+    del no_basis["rollbackDefaults"]["restoreWithin30Minutes"]["basis"]
+    assert _validate(no_basis, tmp_path)
 
 
 def test_the_schema_refuses_a_receipt_without_its_label_or_a_target(tmp_path):
@@ -169,3 +187,30 @@ def test_the_schema_refuses_a_receipt_without_its_label_or_a_target(tmp_path):
     for t in no_consequence["targets"]:
         t.pop("consequence", None)
     assert _validate(no_consequence, tmp_path)
+
+
+def test_the_steady_phase_counts_only_its_own_relayed_events():
+    # A relay batch can carry the previous phase's backlog; the window keeps
+    # only events that occurred inside the phase.
+    relay = bench.Relay(0, "k" * 32, "relay-test")
+    relay.lags = [(1_000.0, 900.0), (2_000.0, 40.0), (2_500.0, 60.0), (9_000.0, 30.0)]
+    assert relay.take_lags(1_500.0, 3_000.0) == [40.0, 60.0]
+    assert relay.take_lags() == []
+
+
+def test_the_relay_backlog_is_the_outbox_past_the_cursor(tmp_path):
+    import sqlite3
+    data = tmp_path / "pb_data"
+    data.mkdir()
+    con = sqlite3.connect(data / "data.db")
+    con.execute("CREATE TABLE bench_outbox (relay_seq INTEGER)")
+    con.execute("CREATE TABLE bench_checkpoints (name TEXT, last_seq INTEGER)")
+    con.executemany("INSERT INTO bench_outbox VALUES (?)", [(i,) for i in range(1, 8)])
+    con.execute("INSERT INTO bench_checkpoints VALUES ('relay', 5)")
+    con.commit()
+    dirs = bench.pbnative.Dirs(tmp_path, tmp_path, tmp_path, data)
+    assert bench.relay_backlog(dirs) == 2
+    con.execute("UPDATE bench_checkpoints SET last_seq = 7")
+    con.commit()
+    con.close()
+    assert bench.relay_backlog(dirs) == 0 and bench.wait_relayed(dirs, timeout=1) < 1

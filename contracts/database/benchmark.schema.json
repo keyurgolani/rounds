@@ -4,12 +4,13 @@
   "title": "Database benchmark receipt",
   "description": "What harness/bench/bench.py writes for DR-0004 (ROUNDS-02-L01): the profile it ran on, the synthetic seed at the scale floor, the command mix, the measures per scale, labeled extrapolations, and pass or fail against each of the five targets of spec 2056-2067. A failed target names its consequence. scripts/conformance/rules/database-adr.mjs checks it.",
   "type": "object",
-  "required": ["$schema", "version", "synthetic", "decisionRecord", "generatedAt", "command", "profile", "seedPlan", "commandMix", "scales", "extrapolations", "targets", "rollbackDefaults", "result"],
+  "required": ["$schema", "version", "synthetic", "decisionRecord", "revision", "generatedAt", "command", "profile", "seedPlan", "commandMix", "scales", "extrapolations", "targets", "rollbackDefaults", "result"],
   "properties": {
     "$schema": { "type": "string" },
     "version": { "const": "rounds-db-benchmark/v1" },
     "synthetic": { "const": true },
     "decisionRecord": { "type": "string", "pattern": "^DR-\\d{4}$" },
+    "revision": { "description": "The decision record revision this receipt belongs to; they share one counter.", "type": "integer", "minimum": 1 },
     "generatedAt": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" },
     "durationSeconds": { "type": "number", "minimum": 0 },
     "command": { "type": "string", "pattern": "^python harness/bench/bench\\.py" },
@@ -91,8 +92,12 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["basis", "measuredBytes", "measuredSeconds", "throughputBytesPerSecond", "targetBytes", "seconds", "formula"],
-        "properties": { "basis": { "const": "extrapolated" }, "formula": { "type": "string", "minLength": 1 } }
+        "required": ["basis", "target", "measuredBytes", "measuredSeconds", "throughputBytesPerSecond", "targetBytes", "seconds", "formula"],
+        "properties": {
+          "basis": { "const": "extrapolated" },
+          "target": { "enum": ["read_your_writes", "projection_lag_p95", "write_freeze", "rpo_zero", "restore_rto"] },
+          "formula": { "type": "string", "minLength": 1 }
+        }
       }
     },
     "targets": {
@@ -102,19 +107,33 @@
       "items": { "$ref": "#/$defs/target" }
     },
     "rollbackDefaults": {
+      "description": "DR-0003 P5's defaults, each with the basis of what it rests on, so an extrapolated pass reads as one.",
       "type": "object",
-      "required": ["source", "freezeUnder15Minutes", "zeroAcceptedWritesLost", "restoreWithin30Minutes", "restoreRehearsed"],
+      "required": ["source", "freezeUnder15Minutes", "zeroAcceptedWritesLost", "restoreWithin30Minutes", "benchRestoresConsistent", "floorRestoreRehearsed"],
+      "additionalProperties": false,
       "properties": {
         "source": { "type": "string", "minLength": 1 },
-        "freezeUnder15Minutes": { "type": "boolean" },
-        "zeroAcceptedWritesLost": { "type": "boolean" },
-        "restoreWithin30Minutes": { "type": "boolean" },
-        "restoreRehearsed": { "type": "boolean" }
+        "freezeUnder15Minutes": { "$ref": "#/$defs/default" },
+        "zeroAcceptedWritesLost": { "$ref": "#/$defs/default" },
+        "restoreWithin30Minutes": { "$ref": "#/$defs/default" },
+        "benchRestoresConsistent": { "$ref": "#/$defs/default" },
+        "floorRestoreRehearsed": { "$ref": "#/$defs/default" }
       }
     },
     "result": { "enum": ["pass", "fail"] }
   },
   "$defs": {
+    "default": {
+      "type": "object",
+      "required": ["met", "basis", "target"],
+      "properties": {
+        "met": { "type": "boolean" },
+        "basis": { "enum": ["measured", "extrapolated", "not-run"] },
+        "target": { "type": ["null", "string"] },
+        "owner": { "type": "string", "pattern": "^ROUNDS-\\d{2}[A-Z]?-L\\d{2}$" },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    },
     "summary": {
       "type": "object",
       "required": ["n"],

@@ -152,12 +152,13 @@ def rows_per_account() -> dict[str, int]:
     return out
 
 
-def extrapolate(measured_bytes: int, measured_seconds: float, target_bytes: int) -> dict:
-    """Linear extrapolation of a byte-store timing, labeled as such."""
+def extrapolate(measured_bytes: int, measured_seconds: float, target_bytes: int, target: str) -> dict:
+    """Linear extrapolation of a byte-store timing, labeled as such, naming the target it feeds."""
     throughput = measured_bytes / measured_seconds if measured_seconds > 0 else math.inf
     seconds = target_bytes / throughput if throughput > 0 else math.inf
     return {
         "basis": "extrapolated",
+        "target": target,
         "measuredBytes": measured_bytes,
         "measuredSeconds": round(measured_seconds, 3),
         "throughputBytesPerSecond": round(throughput, 1),

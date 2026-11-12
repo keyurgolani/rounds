@@ -230,9 +230,11 @@ class Relay(threading.Thread):
     def __init__(self, port: int, key: str, holder: str, ttl_ms: int = 3000, batch: int = 500):
         super().__init__(daemon=True, name=holder)
         self.port, self.key, self.holder, self.ttl_ms, self.batch = port, key, holder, ttl_ms, batch
-        self.lags: list[float] = []
+        self.lags: list[tuple[float, float]] = []  # (occurred_at ms, lag ms) per relayed event
         self.applied = self.skipped = self.gaps = self.fenced = self.batches = self.errors = 0
         self.holding = False
+        self.token = 0
+        self.last_cursor = 0
         self.crash_before_ack = threading.Event()
         self.crashed = threading.Event()
         self.paused = threading.Event()
@@ -248,6 +250,8 @@ class Relay(threading.Thread):
             try:
                 s, lease, _ = conn.post("/api/bench/relay/lease", {"holder": self.holder, "ttl_ms": self.ttl_ms}, key=self.key)
                 self.holding = s == 200 and bool(lease.get("held"))
+                if self.holding:
+                    self.token = lease["token"]
                 if not self.holding:
                     time.sleep(self.ttl_ms / 3000)
                     continue
@@ -259,7 +263,8 @@ class Relay(threading.Thread):
                 s, applied, _ = conn.post("/api/bench/relay/apply", {"events": events}, key=self.key)
                 now = time.time() * 1000
                 with self.lock:
-                    self.lags.extend(now - e["occurred_at"] for e in events)
+                    self.lags.extend((e["occurred_at"], now - e["occurred_at"]) for e in events)
+                    self.last_cursor = events[-1]["relay_seq"]
                     self.applied += applied.get("applied", 0)
                     self.skipped += applied.get("skipped", 0)
                     self.gaps += applied.get("gaps", 0)
@@ -280,10 +285,34 @@ class Relay(threading.Thread):
                 time.sleep(0.2)
         conn.close()
 
-    def take_lags(self) -> list[float]:
+    def take_lags(self, since: float | None = None, until: float | None = None) -> list[float]:
+        """The lags recorded so far, cleared. With a window, only events that
+        occurred inside it (ms since the epoch), so a phase measures its own."""
         with self.lock:
             out, self.lags = self.lags, []
-        return out
+        return [lag for occurred, lag in out if (since is None or occurred >= since) and (until is None or occurred <= until)]
+
+
+def relay_backlog(dirs: pbnative.Dirs) -> int:
+    """Outbox events the relay hasn't acknowledged yet, read from a read-only connection."""
+    con = sqlite3.connect(f"file:{dirs.data / 'data.db'}?mode=ro", uri=True)
+    try:
+        newest = con.execute("SELECT COALESCE(MAX(relay_seq), 0) FROM bench_outbox").fetchone()[0]
+        row = con.execute("SELECT last_seq FROM bench_checkpoints WHERE name = 'relay'").fetchone()
+        return max(0, newest - (row[0] if row else 0))
+    finally:
+        con.close()
+
+
+def wait_relayed(dirs: pbnative.Dirs, timeout: float = 300) -> float:
+    """Waits until the relay's cursor reaches the newest outbox event. Returns
+    the seconds waited; raises if the backlog doesn't drain in time."""
+    t0 = time.monotonic()
+    while relay_backlog(dirs) > 0:
+        if time.monotonic() - t0 > timeout or STOP.is_set():
+            raise Bench(f"the relay didn't drain its backlog in {timeout} s")
+        time.sleep(0.1)
+    return time.monotonic() - t0
 
 
 class Sampler(threading.Thread):
@@ -635,13 +664,47 @@ def run_scale(args, binary: Path, n_accounts: int) -> dict:
             t.start()
             probes.append(t)
 
+        # The sweep leaves a backlog behind 64 closed-loop clients; the steady
+        # phase starts once the relay has caught up, so its lag is its own.
+        drain_s = wait_relayed(dirs)
+        for r in relays:
+            r.take_lags()
+        checkpoint: dict = {}
+
+        def checkpoint_midway() -> None:
+            # A TRUNCATE checkpoint under the steady load: how long it takes,
+            # and what the commands in flight meanwhile waited.
+            time.sleep(args.steady_seconds / 2)
+            c = Conn(server.port, timeout=900)
+            try:
+                t0 = time.time()
+                s, doc, ms = c.post("/api/bench/checkpoint", {}, key=key)
+                checkpoint.update({"status": s, "startedAt": t0, "endedAt": time.time(), "clientMs": round(ms, 1), **doc})
+            finally:
+                c.close()
+
+        cp = threading.Thread(target=checkpoint_midway, daemon=True)
+        phase_start = time.time() * 1000
+        cp.start()
         recs = load.run(args.steady_clients, args.steady_seconds, rate=args.steady_rate, probe=probe)
+        phase_end = time.time() * 1000
+        cp.join(timeout=900)
         for t in probes:
             t.join(timeout=10)
-        lags = [x for r in relays for x in r.take_lags()]
+        tail_s = wait_relayed(dirs)
+        lags = [x for r in relays for x in r.take_lags(phase_start, phase_end)]
+        if checkpoint.get("startedAt"):
+            t0, t1 = checkpoint.pop("startedAt"), checkpoint.pop("endedAt")
+            during = [r for r in recs if r["at"] - r["client_ms"] / 1000 <= t1 and r["at"] >= t0]
+            checkpoint.update({"commandsDuring": len(during),
+                               "clientMsDuring": benchlib.summarize([r["client_ms"] for r in during]),
+                               "queueMsDuring": benchlib.summarize([r["timing"].get("queue_ms", 0) for r in during if r["timing"]])})
         out["steady"] = summarize_records(recs, args.steady_seconds)
         out["steady"].update({"rate": args.steady_rate, "relayLagMs": benchlib.summarize(lags), "readYourWritesMs": benchlib.summarize(ryw),
-                              "readYourWritesFallbacks": fallbacks[0], "probes": len(probes)})
+                              "readYourWritesFallbacks": fallbacks[0], "probes": len(probes),
+                              "sweepDrainSeconds": round(drain_s, 2), "tailDrainSeconds": round(tail_s, 2),
+                              "lagWindow": "events that occurred inside the phase, relayed after the sweep's backlog drained",
+                              "checkpoint": checkpoint})
 
         # 3. Backups under load, each restored and checked.
         backups = []
@@ -911,11 +974,16 @@ def run_failpoints(server, conn, key, load, accounts, relays, dirs, rng) -> dict
     time.sleep(active.ttl_ms / 1000 + 2)
     skipped_after = sum(r.skipped for r in relays)
     survivor = [r for r in relays if r is not active][0]
+    # The crashed holder's lease has passed to the survivor, so an ack under
+    # its old token is fenced off.
+    s, stale_ack, _ = conn.post("/api/bench/relay/ack", {"holder": active.holder, "token": active.token, "cursor": active.last_cursor}, key=key)
+    old_token_fenced = s == 200 and stale_ack.get("acked") is False and stale_ack.get("reason") == "fenced"
     replacement = Relay(server.port, key, active.holder + "-restarted")
     replacement.start()
     relays[relays.index(active)] = replacement
     out["midRelay"] = {"crashed": active.crashed.is_set(), "redeliveredSkipped": skipped_after - skipped_before,
-                       "survivorFenced": survivor.fenced, "passed": active.crashed.is_set() and skipped_after > skipped_before}
+                       "survivorFenced": survivor.fenced, "oldTokenAckFenced": old_token_fenced,
+                       "passed": active.crashed.is_set() and skipped_after > skipped_before and old_token_fenced}
     return out
 
 
@@ -976,7 +1044,7 @@ def build_receipt(prof: dict, scales: dict, args, started: float) -> dict:
     bytes_restore = next((r for r in small["restores"] if r["method"] == "vacuum-into"), None)
     if sample and bytes_restore:
         storage_s = bytes_restore["copySeconds"]
-        ex = benchlib.extrapolate(sample["bytes"], storage_s, benchlib.FLOOR_BYTES_PER_ACCOUNT * big["accounts"])
+        ex = benchlib.extrapolate(sample["bytes"], storage_s, benchlib.FLOOR_BYTES_PER_ACCOUNT * big["accounts"], "restore_rto")
     else:
         ex = None
     total = vac["restoreSeconds"] + (ex["seconds"] if ex else 0)
@@ -988,6 +1056,7 @@ def build_receipt(prof: dict, scales: dict, args, started: float) -> dict:
         "version": benchlib.RECEIPT_VERSION,
         "synthetic": True,
         "decisionRecord": "DR-0004",
+        "revision": args.revision,
         "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "durationSeconds": round(time.monotonic() - started, 1),
         "command": "python harness/bench/bench.py " + " ".join(sys.argv[1:]),
@@ -1000,12 +1069,17 @@ def build_receipt(prof: dict, scales: dict, args, started: float) -> dict:
         "scales": scales,
         "extrapolations": [ex] if ex else [],
         "targets": [v.as_dict() for v in verdicts],
+        # Each default carries the basis of the target it rests on, so #17 S3
+        # reads an extrapolated pass as one.
         "rollbackDefaults": {
             "source": "DR-0003 P5",
-            "freezeUnder15Minutes": verdicts[2].passed,
-            "zeroAcceptedWritesLost": verdicts[3].passed,
-            "restoreWithin30Minutes": verdicts[4].passed,
-            "restoreRehearsed": all(r.get("consistent") for sc in scales.values() for r in sc["restores"]),
+            "freezeUnder15Minutes": {"met": verdicts[2].passed, "basis": verdicts[2].basis, "target": "write_freeze"},
+            "zeroAcceptedWritesLost": {"met": verdicts[3].passed, "basis": verdicts[3].basis, "target": "rpo_zero"},
+            "restoreWithin30Minutes": {"met": verdicts[4].passed, "basis": verdicts[4].basis, "target": "restore_rto"},
+            "benchRestoresConsistent": {"met": all(r.get("consistent") for sc in scales.values() for r in sc["restores"]), "basis": "measured",
+                                        "target": None, "detail": "every restore this run took, at both scales, checked consistent"},
+            "floorRestoreRehearsed": {"met": False, "basis": "not-run", "target": None, "owner": "ROUNDS-32-L03",
+                                      "detail": "the rehearsal at the floor, bytes included, is #157's"},
         },
         "result": "pass" if all(v.passed for v in verdicts) else "fail",
     }
@@ -1028,6 +1102,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-failpoints", dest="failpoints", action="store_false")
     ap.add_argument("--no-schema-change", dest="schema_change", action="store_false")
     ap.add_argument("--min-free-gb", type=float, default=70)
+    ap.add_argument("--revision", type=int, default=1, help="the DR-0004 revision this receipt belongs to")
     args = ap.parse_args(argv)
     args.sweep = [int(x) for x in args.sweep.split(",") if x]
     binary = pbnative.binary_path(args.pocketbase)
