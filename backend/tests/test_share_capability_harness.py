@@ -40,6 +40,7 @@ def test_the_probe_checks_the_owner_fields_the_runner_answers(monkeypatch):
     import importlib
 
     probe = importlib.import_module("share_capability_check")
-    assert probe.OWNER_FIELDS == set(share_capabilities.OWNER_FIELDS)
+    # The probe checks the list, which adds the resume each link shares.
+    assert probe.OWNER_FIELDS == set(share_capabilities.LIST_FIELDS)
     assert probe.ROUTE == "/api/share/capabilities"
     assert probe.NOT_FOUND == {"detail": "Not found.", "code": "not_found"}

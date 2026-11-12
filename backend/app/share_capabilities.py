@@ -64,6 +64,9 @@ RECORD_ID = re.compile(r"[a-z0-9]{15}")
 OWNER_FIELDS = ("id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at",
                 "capability_version", "password_set")
 _TEXT_FIELDS = OWNER_FIELDS[:7]
+# The owner's list adds root_resume_id, the resume each link shares, a
+# variant's by its resume: a record id, or empty.
+LIST_FIELDS = OWNER_FIELDS + ("root_resume_id",)
 STATUSES = ("active", "revoked")
 
 # The headers every public share read answers with, found or not: no
@@ -242,6 +245,19 @@ def owner_view(item: Any) -> dict[str, Any] | None:
     return out
 
 
+def list_view(item: Any) -> dict[str, Any] | None:
+    """One row of the owner's list: the owner's fields and the resume it
+    shares, or None for any other shape, a missing resume field included."""
+    out = owner_view(item)
+    if out is None or "root_resume_id" not in item:
+        return None
+    root = item["root_resume_id"]
+    if not isinstance(root, str) or (root and RECORD_ID.fullmatch(root) is None):
+        return None
+    out["root_resume_id"] = root
+    return out
+
+
 def _log_revoke(account: str, record: str | None, code: str) -> None:
     obs.emit("share.revoke", correlation_id=obs.current_correlation_id(),
              account=obs.account_pseudonym(account), record=record, code=code)
@@ -276,14 +292,15 @@ def _unavailable(status: int) -> TypedError:
 
 
 async def list_own(request: Request) -> list[dict[str, Any]]:
-    """The caller's capabilities, newest first, the owner's fields only."""
+    """The caller's capabilities, newest first: the owner's fields only, and
+    the resume each one shares."""
     account = await _authenticate(request)
     status, body = await _hook("GET", HOOK_PATH, account["token"])
     if status == 401:
         raise TypedError("unauthenticated")
     if status != 200 or not isinstance(body, dict) or body.get("v") != VERSION or not isinstance(body.get("items"), list):
         raise _unavailable(status)
-    items = [owner_view(item) for item in body["items"]]
+    items = [list_view(item) for item in body["items"]]
     if any(item is None for item in items):
         raise _unavailable(status)
     return items  # type: ignore[return-value]

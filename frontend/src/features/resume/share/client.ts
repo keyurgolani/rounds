@@ -82,6 +82,10 @@ export type ShareCapability = {
   password_set: boolean;
 };
 
+/** One row of the owner's list (LIST_FIELDS): the owner's fields, and the
+ *  resume the link shares, a variant's by its resume. */
+export type ListedCapability = ShareCapability & { root_resume_id: string };
+
 /** The fields CreateShare and RotateShareBearer answer for the link. */
 export type IssuedFields = {
   capability_id: string;
@@ -139,10 +143,14 @@ function isCapability(value: unknown): value is ShareCapability {
   );
 }
 
-/** The caller's links, newest first. */
-export async function listCapabilities(): Promise<ShareCapability[]> {
+function isListed(value: unknown): value is ListedCapability {
+  return isCapability(value) && typeof (value as Record<string, unknown>).root_resume_id === 'string';
+}
+
+/** The caller's links, newest first, each with the resume it shares. */
+export async function listCapabilities(): Promise<ListedCapability[]> {
   const items = await runnerJSON<unknown>('/api/share/capabilities', { method: 'GET', errorPrefix: 'Share' });
-  if (!Array.isArray(items) || !items.every(isCapability)) throw new Error('Share: unexpected answer');
+  if (!Array.isArray(items) || !items.every(isListed)) throw new Error('Share: unexpected answer');
   return items;
 }
 

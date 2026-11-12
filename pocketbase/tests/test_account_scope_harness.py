@@ -991,7 +991,9 @@ class _CapabilityPB:
         mine = {"a-token": ["a-share_capabilities-id"], "b-token": ["b-share_capabilities-id"]}[token]
         if self.leak_list and token == "b-token":
             mine = mine + ["a-share_capabilities-id"]
-        return Response(200, {"v": "share-capability/v1", "items": [self._item(c) for c in mine]}, 1)
+        # The list adds the resume each link shares; a revoke answers without it.
+        return Response(200, {"v": "share-capability/v1",
+                              "items": [dict(self._item(c), root_resume_id="") for c in mine]}, 1)
 
     def post(self, path, body, token=None):
         self.calls.append(("post", path, token, body))
