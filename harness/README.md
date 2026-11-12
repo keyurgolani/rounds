@@ -475,17 +475,16 @@ and the materializer on, and the probe checks, in three phases:
 - `legacy-shares-fixture`: the pb_data, with the pinned binary and no network.
 - `legacy-shares`: every older link's value, and as many random ones, gets
   one answer per path and caller (the older read path through nginx and at
-  each replica, the resolver, the `/r/<value>` page, and PocketBase's REST API
-  by filter and by query parameter, anonymously, as the owner, and as another
-  account); the owner's list and Get a new link, its replay and second press,
+  each replica, the resolver, the `/r/<value>` page, and PocketBase's own
+  API, anonymously, as the owner, and as another account); the owner's list
+  and Get a new link, its replay and second press,
   and the refusals; revoke, then resolve at once on both replicas; deleting
   the resume revokes its variant's new link; every way a capability fails to
   resolve has one shape; the quarantined link shows to nobody; and the
   recorder shows public share requests reaching PocketBase only as the share
   resolver's own login and identity.
 - `legacy-shares-scan`: no fixture value is in any service's log or in that
-  pb_data, past the rows PocketBase's request log keeps for the every-value
-  check's own requests, which name themselves.
+  pb_data. The scan passes over the every-value check's own tagged requests.
 
 PocketBase then goes back to the main volume. The recorder publishes no port,
 and its log stays on its own volume, never the receipts.

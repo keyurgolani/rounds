@@ -40,7 +40,7 @@ MIGRATION = ROOT / "pocketbase" / "pb_migrations" / "1700007000_relation_endpoin
 # Later migrations that add a typed relation, with its owner-equality
 # triggers, keep a FIELDS array in the same shape (ROUNDS-00B-L03 stage 2).
 LATER_MIGRATIONS = (ROOT / "pocketbase" / "pb_migrations" / "1700008200_share_capabilities.js",
-                    ROOT / "pocketbase" / "pb_migrations" / "1700008400_legacy_share_migration.js")
+                    ROOT / "pocketbase" / "pb_migrations" / "1700008500_legacy_share_migration.js")
 TABLE = ROOT / "pocketbase" / "pb_hooks" / "relation_endpoints.v1.json"
 POLICY = ROOT / "docs" / "security" / "account-scope.v1.json"
 TOUCHED = ROOT / "pocketbase" / "migration-manifests" / "1700007000_relation_endpoint_authz.json"

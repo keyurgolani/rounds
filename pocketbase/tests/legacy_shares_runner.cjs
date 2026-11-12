@@ -7,8 +7,8 @@
 // A program is {"steps": [...]}, each step a call and its arguments; the
 // output is {"results": [...]}. The migration file is loaded with a
 // `migrate` that only keeps its two callbacks, so nothing in it runs but
-// its pure decisions. Node's own SHA-256 stands in for $security.sha256, and
-// #4's canonical() for the receipt's.
+// its pure decisions. Node's own SHA-256 and #4's canonical() stand in for
+// the receipt's.
 
 const crypto = require("crypto");
 const fs = require("fs");
@@ -23,7 +23,7 @@ globalThis.migrate = (up, down) => {
 };
 globalThis.__hooks = hooksDir;
 
-const migration = require(path.join(migrationsDir, "1700008400_legacy_share_migration.js"));
+const migration = require(path.join(migrationsDir, "1700008500_legacy_share_migration.js"));
 const receipts = require(path.join(hooksDir, "legacy_shares.js"));
 const snapshots = require(path.join(hooksDir, "legacy_snapshots.js"));
 const links = require(path.join(hooksDir, "share_links.js"));
@@ -61,13 +61,16 @@ const results = program.steps.map((step) => {
       return step.rows.map((row) => migration.classify(row));
     case "classifyQuarantined":
       return step.kinds.map((kind) => migration.classifyQuarantined(kind));
-    case "base32":
-      return step.hex.map((hex) => migration.base32OfHex(hex));
-    case "journalId":
-      return step.links.map((id) => migration.journalId(id, sha256));
+    case "quarantinedLinks": {
+      const live = {};
+      step.live.forEach((id) => {
+        live[id] = true;
+      });
+      return migration.quarantinedLinks(step.entries, live);
+    }
     case "journalRow": {
       const views = step.views.reduce((counts, day) => migration.countView(counts, day), migration.noViews());
-      return migration.journalRow(step.link, step.origin, step.entry, step.decided, views, sha256);
+      return migration.journalRow(step.link, step.origin, step.entry, step.decided, views);
     }
     case "day":
       return migration.DAY(step.expr);

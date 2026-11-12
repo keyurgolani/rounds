@@ -14,12 +14,12 @@ Three phases:
   first request. Both runner replicas reach it through the recorder, nginx
   is up, snapshot creation is on, and the materializer is up.
   - every fixture link value, and as many random ones, gets byte for byte
-    the same answer on every path: the older read path through nginx and at
-    each replica, the resolver through nginx and at each replica (as given
-    and as a capability bearer), the /r/<value> page, and PocketBase's REST
-    API filtered by the value and with it as a query parameter, as an
-    anonymous caller, the owner, and another account; the owner's new link
-    resolves (receipt isolation.share-legacy.replaced);
+    the same answer on every path, for every caller: the older read path
+    through nginx and at each replica, the resolver through nginx and at each
+    replica (as given and as a capability bearer), the /r/<value> page, and
+    PocketBase's own API, as an anonymous caller, the owner, and another
+    account; the owner's new link resolves (receipt
+    isolation.share-legacy.replaced);
   - the owner's list holds its older links and never the one on another
     account's resume; Get a new link gives a bearer that resolves on both
     replicas; a second press, a replay, and a replaced link answer
@@ -37,8 +37,8 @@ Three phases:
     isolation.share-public.resolver-identity).
 ``legacy-shares-scan``
   No fixture link value, viewer hash, or user agent is in any service log
-  or in that pb_data, past the rows PocketBase's request log keeps for the
-  every-value check's own requests, which name themselves.
+  or in that pb_data. The scan passes over the every-value check's own
+  tagged requests.
 
 The direct calls to a replica name a client of their own, as the share
 secrets phases do, and the calls through nginx stay under its backstop.
@@ -100,9 +100,8 @@ IP_MARK = "olderviewerhash"
 AGENT_MARK = "OlderFixtureAgent"
 # nginx's backstop takes a burst of 20 resolves, then 2 a second.
 NGINX_PACE_S = 0.6
-# The every-value check's own REST requests carry a fixture value in their
-# query, and PocketBase's request log keeps each request's address, so they
-# name themselves and the scan passes over exactly those log rows.
+# The every-value check's requests to PocketBase name themselves, and the
+# scan passes over the check's own tagged requests.
 PROBE_AGENT = "rounds-harness/legacy-shares-every-value"
 
 
@@ -301,7 +300,7 @@ def check_uniform(c: Checks, writer: ReceiptWriter, pb: PBClient, state: dict, o
     if not uniform(resolved) or resolved[0][:2] != (404, NOT_FOUND):
         problems.append(f"resolver status={resolved[0][0]} uniform={uniform(resolved)}")
 
-    # PocketBase itself, not through nginx, whose own log keeps queries.
+    # PocketBase itself, not through nginx, as the scan expects.
     for label, token in (("anonymous", None), ("owner", owner), ("other", other)):
         by_filter = [_rest(f"{LINKS_PATH}?filter=" + _q(f"token='{v}'"), token) for v in values]
         by_param = [_rest(f"{LINKS_PATH}?token=" + _q(v), token) for v in values]
@@ -535,7 +534,8 @@ def run_scan() -> int:
 
 
 def _own_request(table: str, record: dict[str, Any]) -> bool:
-    """A request log row for one of the every-value check's own requests."""
+    """Whether a row belongs to one of the every-value check's own tagged
+    requests."""
     if table != "_logs":
         return False
     try:
@@ -547,7 +547,7 @@ def _own_request(table: str, record: dict[str, Any]) -> bool:
 
 def scan_db(db: Path, values: tuple[str, ...]) -> tuple[int, int]:
     """Every text value of every table in ``db``: the fixture values found,
-    and how many request log rows were the every-value check's own."""
+    and how many rows were the every-value check's own tagged requests."""
     found = passed = 0
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:

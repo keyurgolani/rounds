@@ -200,12 +200,12 @@
     },
     {
       "kind": "collection",
-      "source": {"path": "pocketbase/pb_migrations/1700008400_legacy_share_migration.js", "lines": "293"},
+      "source": {"path": "pocketbase/pb_migrations/1700008500_legacy_share_migration.js", "lines": "285"},
       "legacyName": "legacy_share_migration",
       "decidedBy": "ROUNDS-00B-L06",
       "targetLabel": null,
       "retiringLeaf": "ROUNDS-02-L01",
-      "note": "Server-only journal of the older share links' migration, created non-literally at line 293: one row per older link with its outcome and reason, and no secret. All rules null; never user-facing. #18 ratifies or migrates it."
+      "note": "Server-only journal of the older share links' migration, created non-literally at line 285: one row per older link with its outcome and reason, and no secret. All rules null; never user-facing. #18 ratifies or migrates it."
     },
     {
       "kind": "collection",

@@ -24,13 +24,13 @@ The demo is off unless the operator sets `ROUNDS_ENABLE_DEMO=true` on PocketBase
 
 **Upgrading a hosted demo:** set `ROUNDS_ENABLE_DEMO=true` on the PocketBase service before you deploy the release that adds `1700006700_demo_contain.js`, or the demo login stops working. That migration deletes the demo account's share links (and their view records), AI providers, and AI settings.
 
-**Upgrading to the release that adds `1700008400_legacy_share_migration.js`:** every share link made before it stops working when it deploys, for good. Owners make new ones in the share dialog: open Share on the resume, then Get a new link under Older links. Before you deploy, set up what new links need, so Get a new link works the moment the old links stop:
+**Upgrading to the release that adds `1700008500_legacy_share_migration.js`:** every share link made before it stops working when it deploys, for good. Owners make new ones in the share dialog: open Share on the resume, then Get a new link under Older links. Sharing stays closed after the deploy: until you open it, no share link resolves, old or new, and nobody can make one. To open it:
 
 1. Start the snapshot materializer, run and sign its scan, and set `ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=enabled` on PocketBase and every runner ("Legacy Artifact Snapshots" in [docs/operations.md](docs/operations.md#legacy-artifact-snapshots)).
 2. Set `ROUNDS_ADMISSION_SECRET` and `ROUNDS_SHARE_RESOLVER_PASSWORD` on PocketBase and every runner.
-3. Leave `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` empty or `enabled` on the runner and the frontend. It's on by default from this release.
+3. Set `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=enabled` on every runner and the frontend, together. Empty, or any other value, keeps sharing closed.
 
-Skip these and the old links still stop at the deploy, but nobody can make a new link until they're done. The dry run and the receipt are in the "Older share links" runbook in [docs/operations.md](docs/operations.md#older-share-links).
+Opened without steps 1 and 2, the share dialog says it can't create a new link yet. The dry run and the receipt are in the "Older share links" runbook in [docs/operations.md](docs/operations.md#older-share-links).
 
 ## Features
 
@@ -127,7 +127,7 @@ Fresh deployments run these migrations in order:
 
 `1700006700_demo_contain.js` deletes what accounts with `is_demo` own in `resume_share_links` (with their `resume_share_views`), `ai_settings`, and `ai_providers`. It's forward-only and touches nothing a standard account owns. See the hosted-demo upgrade note above.
 
-`1700008400_legacy_share_migration.js` turns off every share link made before it, for good, records each one's outcome in `legacy_share_migration`, and drops the link fields only those links used. Its `migrate down` keeps every link off. See the upgrade note above.
+`1700008500_legacy_share_migration.js` turns off every share link made before it, for good, records each one's outcome in `legacy_share_migration`, and drops the link fields only those links used. Its `migrate down` keeps every link off. See the upgrade note above.
 
 The release that adds `1700006000_account_scope_rules.js` tightens the create and update rules on every user-owned collection so a write must name the signed-in account, and makes `resume_share_views` superuser-only. Before deploying it, back up `pb_data` and run the cross-owner relation scan on a copy taken with PocketBase stopped. The rules are forward-only: `migrate down` keeps them. See the "Account-scope rules" runbook in [docs/operations.md](docs/operations.md).
 

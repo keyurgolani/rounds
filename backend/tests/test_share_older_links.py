@@ -20,7 +20,7 @@ The guarantees checked here:
 
 "Get a new link" is CreateShare with legacy_link_id
 (backend/tests/test_share_commands.py), and the old-link page is the
-browser's (frontend/src/pages/__tests__).
+browser's (frontend/src/features/resume/share/__tests__/shareRoute.test.tsx).
 """
 from __future__ import annotations
 

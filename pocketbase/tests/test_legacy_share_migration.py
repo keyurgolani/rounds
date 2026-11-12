@@ -1,9 +1,9 @@
 """The older share links' migration (ROUNDS-00B-L06 stage 1).
 
-1700008400_legacy_share_migration.js turns off every share link made before
+1700008500_legacy_share_migration.js turns off every share link made before
 the release that carries it. Its decisions run here under node
-(legacy_shares_runner.cjs): each link's outcome and reason, the journal's
-row ids and rows. Static checks hold its order, its lint entry (pinned to
+(legacy_shares_runner.cjs): each link's outcome and reason, and the journal's
+rows, each under its own link's id. Static checks hold its order, its lint entry (pinned to
 the file and waiting on the owner's review), its manifest, and its down
 step to what the header says. Harness phase 15 runs it on real databases
 with PocketBase 0.22.22: a copy, a forward run, a run stopped part way and
@@ -11,8 +11,6 @@ run again, the down step, and a second forward run.
 """
 from __future__ import annotations
 
-import base64
-import hashlib
 import json
 import re
 import shutil
@@ -23,7 +21,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-NAME = "1700008400_legacy_share_migration"
+NAME = "1700008500_legacy_share_migration"
 MIGRATIONS = ROOT / "pocketbase" / "pb_migrations"
 MIGRATION = MIGRATIONS / f"{NAME}.js"
 HOOKS = ROOT / "pocketbase" / "pb_hooks"
@@ -137,13 +135,19 @@ def test_each_predicate_clause_gives_its_outcome_and_reason(name):
     assert run({"call": "classify", "rows": [row]})[0] == [{"outcome": outcome, "reason": reason}]
 
 
-def test_classifying_twice_gives_the_same_outcomes_ids_and_rows():
+def journal_rows(ids: list[str], decided: list[dict], origin: str = "live") -> list[dict]:
+    return run(*({"call": "journalRow", "link": i, "origin": origin, "entry": "" if origin == "live" else
+                  f"q{n:014d}", "decided": d, "views": []} for n, (i, d) in enumerate(zip(ids, decided))))
+
+
+def test_classifying_twice_gives_the_same_outcomes_and_rows():
     rows = [row for row, _want in CASES.values()]
     ids = [f"link{n:011d}" for n in range(len(rows))]
-    first = run({"call": "classify", "rows": rows}, {"call": "journalId", "links": ids})
-    again = run({"call": "classify", "rows": rows}, {"call": "journalId", "links": ids})
+    (first,) = run({"call": "classify", "rows": rows})
+    (again,) = run({"call": "classify", "rows": rows})
     assert first == again
-    assert [tuple(r.values()) for r in first[0]] == [want for _row, want in CASES.values()]
+    assert [tuple(r.values()) for r in first] == [want for _row, want in CASES.values()]
+    assert journal_rows(ids, first) == journal_rows(ids, again)
 
 
 def test_ownership_comes_before_the_demo_account_and_the_demo_account_before_the_rest():
@@ -164,21 +168,63 @@ def test_a_quarantined_link_is_revoked_for_ownership_with_its_kind_as_the_reason
     ]
 
 
-def test_base32_is_rfc_4648_lowercase_without_padding():
-    words = [b"", b"f", b"fo", b"foo", b"foob", b"fooba", b"foobar"]
-    got = run({"call": "base32", "hex": [w.hex() for w in words]})[0]
-    assert got == [base64.b32encode(w).decode().rstrip("=").lower() for w in words]
-    assert got[-1] == "mzxw6ytboi"
+# Ids a client could pick for its own links: near neighbours, ones that
+# differ only in letter case, and PocketBase's other id characters.
+CHOSEN = ["aaaaaaaaaaaaaaa", "aaaaaaaaaaaaaab", "AAAAAAAAAAAAAAA", "aAaAaAaAaAaAaAa", "a_a_a_a_a_a_a_a",
+          "zzzzzzzzzzzzzzz", "000000000000000", "00000000000000O", "link00000000001", "LINK00000000001"]
+ELIGIBLE = {"outcome": "migrated", "reason": "eligible"}
 
 
-def test_a_journal_row_id_is_15_characters_of_the_base32_of_sha256_over_the_manifest_and_link():
-    ids = [f"link{n:011d}" for n in range(50)]
-    (got,) = run({"call": "journalId", "links": ids})
-    want = [base64.b32encode(hashlib.sha256(f"legacy-shares-v1:{i}".encode()).digest()).decode().lower()[:15]
-            for i in ids]
-    assert got == want
-    assert len(set(got)) == len(got)
-    assert all(re.fullmatch(r"[a-z2-7]{15}", i) for i in got)
+def test_a_journal_rows_id_is_its_links_own_id():
+    rows = journal_rows(CHOSEN, [ELIGIBLE] * len(CHOSEN))
+    assert [r["id"] for r in rows] == CHOSEN
+    assert all(r["link"] == r["id"] for r in rows)
+    quarantined = journal_rows(CHOSEN[:2], [{"outcome": "revoked_ownership", "reason": "quarantined_cross_owner"}] * 2,
+                               origin="quarantine")
+    assert [r["id"] for r in quarantined] == CHOSEN[:2]
+
+
+def test_the_journal_row_ids_are_unique_by_construction(src):
+    # Every row is journalRow's, whose id is its link's, and only two paths
+    # insert one: step 3's live links, which are unique ids in id order, and
+    # the quarantined links quarantinedLinks() picks.
+    assert src.count("insertJournal(entry)") == 2 and src.count("journalRow(") == 3
+    assert "id: linkId," in src and "journalId" not in src
+    live = CHOSEN[:4]
+    entries = [{"id": f"q{n:014d}", "source_id": s, "kind": "cross_owner"} for n, s in
+               enumerate([CHOSEN[0], CHOSEN[4], CHOSEN[4], CHOSEN[5], CHOSEN[2], CHOSEN[6], CHOSEN[6], CHOSEN[6]])]
+    (held,) = run({"call": "quarantinedLinks", "entries": entries, "live": live})
+    # One per link, its first entry, and none for a link that's live again.
+    assert [(e["source_id"], e["id"]) for e in held] == [(CHOSEN[4], entries[1]["id"]), (CHOSEN[5], entries[3]["id"]),
+                                                          (CHOSEN[6], entries[5]["id"])]
+    rows = journal_rows(live, [ELIGIBLE] * len(live)) + journal_rows(
+        [e["source_id"] for e in held], [{"outcome": "revoked_ownership", "reason": "quarantined_cross_owner"}] * len(held),
+        origin="quarantine")
+    ids = [r["id"] for r in rows]
+    assert len(ids) == len(set(ids)) == len(live) + len(held)
+
+
+def test_a_rerun_reproduces_the_journal_checksum():
+    rows = [row for row, _want in CASES.values()]
+    ids = [f"link{n:011d}" for n in range(len(rows))]
+    (decided,) = run({"call": "classify", "rows": rows})
+    first = journal_rows(ids, decided)
+    # A second run keeps each link's row, whatever order it meets them in;
+    # a fresh one in another order writes the same rows.
+    kept = {r["link"]: r for r in first}
+    rerun = [kept[i] for i in reversed(ids)]
+    fresh = journal_rows(list(reversed(ids)), list(reversed(decided)))
+
+    def checksum(journal: list[dict]) -> str:
+        data = {"journal": journal, "links": [{"id": r["link"], "status": r["outcome"], "replaced": False}
+                                              for r in journal],
+                "linkColumns": ["user", "resume", "variant"], "linkEntries": [], "viewRows": {"rows": 0, "detailed": 0},
+                "viewEntries": {"entries": 0, "detailed": 0}, "commit": "", "unavailable": None}
+        (out,) = run({"call": "receipt", "input": data})
+        assert out["reconciled"] is True
+        return out["journal"]["checksum"]
+
+    assert checksum(first) == checksum(rerun) == checksum(fresh)
 
 
 def test_a_journal_row_counts_views_and_flags_a_viewed_link_of_another_account_as_an_incident():

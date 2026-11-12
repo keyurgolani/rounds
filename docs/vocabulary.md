@@ -360,7 +360,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 | execution_service | `pocketbase/pb_migrations/1700007100_execution_jobs.js:87` | decided by #3 (ROUNDS-00A-L03) |  | #18 (ROUNDS-02-L01) |
 | share_resolvers | `pocketbase/pb_migrations/1700008300_share_secrets.js:44` | decided by #12 (ROUNDS-00B-L04) |  | #18 (ROUNDS-02-L01) |
 | share_throttle | `pocketbase/pb_migrations/1700008300_share_secrets.js:67` | decided by #12 (ROUNDS-00B-L04) |  | #18 (ROUNDS-02-L01) |
-| legacy_share_migration | `pocketbase/pb_migrations/1700008400_legacy_share_migration.js:293` | decided by #14 (ROUNDS-00B-L06) |  | #18 (ROUNDS-02-L01) |
+| legacy_share_migration | `pocketbase/pb_migrations/1700008500_legacy_share_migration.js:285` | decided by #14 (ROUNDS-00B-L06) |  | #18 (ROUNDS-02-L01) |
 | exp_anecdote_bullets | `pocketbase/pb_migrations/1700003000_experience_connections.js:20-29` | decided by #36 (ROUNDS-06-L01) |  | #164 (ROUNDS-32-L10) |
 | exp_job_anecdotes | `pocketbase/pb_migrations/1700003000_experience_connections.js:20-29` | decided by #36 (ROUNDS-06-L01) |  | #164 (ROUNDS-32-L10) |
 | exp_job_bullets | `pocketbase/pb_migrations/1700003000_experience_connections.js:20-29` | decided by #36 (ROUNDS-06-L01) |  | #164 (ROUNDS-32-L10) |

@@ -1,6 +1,6 @@
 """Harness check for the older share links' migration (ROUNDS-00B-L06 stage 1).
 
-Runs ``1700008400_legacy_share_migration.js`` with the pinned PocketBase
+Runs ``1700008500_legacy_share_migration.js`` with the pinned PocketBase
 binary on a ``pb_data`` that holds every other migration, as an upgraded
 install does, and a fixture
 built in two steps: links that #10 quarantines (another account's resume, a
@@ -54,7 +54,7 @@ PB_BIN = Path(os.environ.get("PB_BIN", "/pbbin/pocketbase"))
 MIGRATIONS = Path(os.environ.get("PB_MIGRATIONS_DIR", "/pb_migrations"))
 HOOKS = Path(os.environ.get("PB_HOOKS_DIR", "/pb_hooks"))
 SEEDS_DIR = os.environ.get("PB_SEEDS_DIR", "")
-MIGRATION = "1700008400_legacy_share_migration.js"
+MIGRATION = "1700008500_legacy_share_migration.js"
 QUARANTINE_MIGRATION = "1700007000_relation_endpoint_authz.js"
 JOURNAL = "legacy_share_migration"
 LINKS = "resume_share_links"
@@ -391,6 +391,9 @@ def check_forward(c: Checks, name: str, db: Path, planted: set[str], log: str) -
                    or (rows.get(k) or {}).get("reason") != v[1])
     c.check(f"legacy-shares.{name}.journals-each-link-with-its-outcome", not wrong and len(rows) == len(want),
             f"rows={len(rows)} want={len(want)} wrong={wrong[:5]}")
+    elsewhere = sum(1 for k, r in rows.items() if r.get("id") != k)
+    c.check(f"legacy-shares.{name}.journal-rows-take-their-links-ids", elsewhere == 0,
+            f"{elsewhere} not under their link's id")
     now = links(db)
     off = [k for k, v in now.items() if v.get("legacy_status") != want.get(k, ("?",))[0]
            or v.get("manifest_id") != "legacy-shares-v1" or not v.get("turned_off_at")]

@@ -215,7 +215,7 @@ SHARE_LABEL = "rounds/legacy-share-receipt/v1"
 
 
 def _journal_row(n: int, outcome: str, reason: str, origin: str = "live", views: int = 0) -> dict:
-    return {"id": f"j{n:014d}", "manifest": "legacy-shares-v1", "predicate_version": 1, "link": f"link{n:011d}",
+    return {"id": f"link{n:011d}", "manifest": "legacy-shares-v1", "predicate_version": 1, "link": f"link{n:011d}",
             "origin": origin, "quarantine_entry": "" if origin == "live" else f"q{n:014d}", "outcome": outcome,
             "reason": reason, "views": views, "first_view_day": "2024-01-02" if views else "",
             "last_view_day": "2024-02-03" if views else "",

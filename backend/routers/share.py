@@ -2,8 +2,8 @@
 
 Endpoints:
   POST /api/share   CreateShare (app/share_commands.py, ROUNDS-00B-L04) while
-                    ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION is enabled, its
-                    default; 503 route_disabled while it's closed. With
+                    ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION is enabled; 503
+                    route_disabled while it's closed, its default. With
                     legacy_link_id it is "Get a new link" for one of the
                     caller's older links (ROUNDS-00B-L06).
   GET  /api/share   the caller's older links: every share link made before

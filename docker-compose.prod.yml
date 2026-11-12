@@ -49,9 +49,8 @@
 #                          same on PocketBase and the runner (`openssl rand
 #                          -hex 32`): the password the runner logs in with
 #                          as share-resolver to resolve share links. Set it
-#                          before you deploy the release that turns older
-#                          share links off: capability resolution is on by
-#                          default from then.
+#                          before ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION is
+#                          `enabled`.
 #   ROUNDS_TRUSTED_PROXY_CIDRS - the addresses nginx reaches the runner
 #                          from, whose X-Real-IP the share throttle counts
 #                          by, comma-separated CIDRs. Unset keeps loopback
@@ -176,8 +175,9 @@ services:
       - ROUNDS_GATE_EXECUTION_SCRATCH=${ROUNDS_GATE_EXECUTION_SCRATCH:-}
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
       # Public shares (docs/operations.md, "Public shares"): PUBLIC_SHARES
-      # turns every share resolve off. Capability resolution is on by
-      # default (ROUNDS-00B-L06); closed, nobody can make a link. The
+      # turns every share resolve off. Capability resolution is closed by
+      # default: no share link resolves and nobody can make one until the
+      # owner sets it enabled (ROUNDS-00B-L06). The
       # frontend reads the same resolution value.
       - ROUNDS_GATE_PUBLIC_SHARES=${ROUNDS_GATE_PUBLIC_SHARES:-}
       - ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=${ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION:-}

@@ -1,5 +1,5 @@
 {
-  "$comment": "Touched-row manifest legacy-shares-v1 (ROUNDS-00B-L06, #14): what pocketbase/pb_migrations/1700008400_legacy_share_migration.js changes, with each change's disposition. Every share link made before the release that carries it stops working, its owner can get a new link for a migrated one, and no secret any of them was made with survives. Which rows a database holds depends on its data, so the dispositions are per collection. The owner approves the drops and the quarantine strip, so owner_approval stays pending until the owner reviews it, and the migration's lint entry waits on that review.",
+  "$comment": "Touched-row manifest legacy-shares-v1 (ROUNDS-00B-L06, #14): what pocketbase/pb_migrations/1700008500_legacy_share_migration.js changes, with each change's disposition. Every share link made before the release that carries it stops working, its owner can get a new link for a migrated one, and no secret any of them was made with survives. Which rows a database holds depends on its data, so the dispositions are per collection. The owner approves the drops and the quarantine strip, so owner_approval stays pending until the owner reviews it, and the migration's lint entry waits on that review.",
   "manifest": "legacy-shares-v1",
   "issue": "#14",
   "owner_approval": "pending owner review",
@@ -8,7 +8,7 @@
   "journal": {
     "collection": "legacy_share_migration",
     "rows": "one per share link, live or quarantined, keyed by (manifest, link)",
-    "id": "the first 15 characters of the lowercase RFC 4648 base32 of SHA-256 over \"legacy-shares-v1:<link id>\"",
+    "id": "the link's own id, so no two links share a row; a later manifest keeps a journal of its own",
     "checksum": "sha256 over the canonical JSON of the rows sorted by id: id, manifest, predicate_version, link, origin, quarantine_entry, outcome, reason, views, first_view_day, last_view_day, incident; never their dates",
     "rerun": "a link that already has a journal row keeps its outcome, reason, view counts, and date, so a second forward run writes the same journal"
   },
@@ -21,7 +21,7 @@
   "precedence": "ownership, then the demo account, then the other reasons in the order listed",
   "migrations": [
     {
-      "migration": "1700008400_legacy_share_migration",
+      "migration": "1700008500_legacy_share_migration",
       "stage": 1,
       "user_row_writes": [
         {

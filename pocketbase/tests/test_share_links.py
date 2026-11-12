@@ -4,13 +4,13 @@ Two halves, both static or pure so they run without a PocketBase:
 
   * the older links' guard in pb_hooks/share_links.js: screenUpdate() is
     pure, so legacy_shares_runner.cjs require()s it into Node. Once
-    1700008400_legacy_share_migration.js has turned every link off, a row
+    1700008500_legacy_share_migration.js has turned every link off, a row
     changes only when "Get a new link" sets its replaced_by, from empty to a
     capability, once; any other change by any writer the app's Dao runs is
     refused;
   * 1700008100_share_link_owner_rules.js: list and view read only the owner,
     no client updates a link, and its down step restores nothing.
-    1700008400 sets every rule again, and docs/security/account-scope.v1.json
+    1700008500 sets every rule again, and docs/security/account-scope.v1.json
     names both.
 
 The live rules and the guard on PocketBase 0.22.22 are the two-account
@@ -153,7 +153,7 @@ def test_the_policy_row_names_both_rule_migrations_and_only_server_only_writes(p
     assert row["target_rules"] == {"create": None, "update": None}
     assert row["rule_overrides"] == [
         {"migration": MIGRATION.name, "rules": ["list", "view", "update"]},
-        {"migration": "1700008400_legacy_share_migration.js", "rules": ["list", "view", "create", "update", "delete"]},
+        {"migration": "1700008500_legacy_share_migration.js", "rules": ["list", "view", "create", "update", "delete"]},
     ]
     assert row["hook"] == "pocketbase/pb_hooks/share_links.pb.js"
     assert not row.get("exceptions")

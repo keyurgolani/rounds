@@ -11,7 +11,7 @@
     },
     "SHARE_CAPABILITY_RESOLUTION": {
       "values": ["enabled", "disabled"],
-      "default": "enabled",
+      "default": "disabled",
       "closed": "disabled",
       "aliases": []
     },

@@ -92,9 +92,11 @@ def test_written_defaults_keep_routes_on_and_outbound_reach_off():
         elif name == "EXECUTION_SCRATCH":
             # #3 PR 2 keeps the four scratch routes in their request.
             expected = "legacy"
+        elif name == "SHARE_CAPABILITY_RESOLUTION":
+            # Closed until the owner opens it: no share link resolves and
+            # none is made (ROUNDS-00B-L06).
+            expected = "disabled"
         else:
-            # SHARE_CAPABILITY_RESOLUTION too: #14 stage 1 opens it, since
-            # it is the only way to make a share link.
             expected = "enabled"
         assert r.value == expected, name
     assert gates.load({}, gates.POCKETBASE)["SIGNUPS"] == gates.Resolved("enabled", "default")
@@ -201,7 +203,7 @@ def test_a_set_public_shares_gate_wins_over_its_alias_and_a_bad_one_closes_it():
 
 
 @pytest.mark.parametrize("raw, want", [
-    ("", gates.Resolved("enabled", "default")),
+    ("", gates.Resolved("disabled", "default")),
     ("enabled", gates.Resolved("enabled", "env")),
     (" Enabled ", gates.Resolved("enabled", "env")),
     ("disabled", gates.Resolved("disabled", "env")),
@@ -209,7 +211,7 @@ def test_a_set_public_shares_gate_wins_over_its_alias_and_a_bad_one_closes_it():
     ("on", gates.Resolved("disabled", "invalid")),
     ("open", gates.Resolved("disabled", "invalid")),
 ])
-def test_capability_resolution_is_open_by_default_and_any_odd_value_closes_it(raw, want):
+def test_capability_resolution_opens_only_on_enabled(raw, want):
     assert gates.load({"ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION": raw})["SHARE_CAPABILITY_RESOLUTION"] == want
 
 

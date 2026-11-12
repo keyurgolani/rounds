@@ -242,11 +242,12 @@ REGISTRY: tuple[Gate, ...] = (
         # ROUNDS-00B-L03 stage 2 and ROUNDS-00B-L04: capability resolution,
         # CreateShare, and rotation. Read on each request, like the switch
         # above, and by the SPA, so the share dialog matches the runner.
-        # ROUNDS-00B-L06 stage 1 opens it by default: it is the only way to
-        # make a link, and closing it stops new links and every resolve.
+        # Closed by default: until the owner opens it, no share link
+        # resolves and none is made (ROUNDS-00B-L06), so a deploy changes
+        # nothing about who can read a link.
         name="SHARE_CAPABILITY_RESOLUTION",
         values=ROUTE_VALUES,
-        default="enabled",
+        default="disabled",
         closed="disabled",
         readers=frozenset({RUNNER, FRONTEND}),
         description=(

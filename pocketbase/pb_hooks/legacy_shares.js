@@ -4,7 +4,7 @@
 //
 //   pocketbase legacy-share-receipt [--out PATH] [--scan] [--commit SHA]
 //
-// Reports what 1700008400_legacy_share_migration.js wrote: the journal of
+// Reports what 1700008500_legacy_share_migration.js wrote: the journal of
 // manifest legacy-shares-v1 and what the share collections and
 // relation_quarantine hold now. It prints the receipt and its checksum, and
 // with --out writes it to a new file, mode 0600, outside pb_data (the path
@@ -93,6 +93,8 @@ function receipt(input, canonical, sha256) {
     else unknown += 1;
     if (Object.prototype.hasOwnProperty.call(origins, row.origin)) origins[row.origin] += 1;
     else unknown += 1;
+    // The migration gives each row its link's own id.
+    if (row.id !== row.link) unknown += 1;
     if (row.incident) incidents += 1;
     views += row.views;
     byLink[row.link] = row;

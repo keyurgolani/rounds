@@ -209,7 +209,7 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
     resume = mk("resumes", {"name": f"{tag} resume", "slug": f"{tag}-resume"})
     variant = mk("resume_variants", {"resume": resume, "name": "variant"})
     mk("resume_versions", {"resume": resume, "data": {}})
-    # Once 1700008400_legacy_share_migration.js has run (ROUNDS-00B-L06), no
+    # Once 1700008500_legacy_share_migration.js has run (ROUNDS-00B-L06), no
     # client creates a share link row, so the fixture goes in with the admin
     # token, as the views' does. A database built on earlier migrations (the
     # demo containment check) still takes the owner's create.

@@ -1437,7 +1437,7 @@
           ]
         },
         {
-          "migration": "1700008400_legacy_share_migration.js",
+          "migration": "1700008500_legacy_share_migration.js",
           "rules": [
             "list",
             "view",
@@ -1525,7 +1525,7 @@
       ],
       "rule_overrides": [
         {
-          "migration": "1700008400_legacy_share_migration.js",
+          "migration": "1700008500_legacy_share_migration.js",
           "rules": [
             "list",
             "view",

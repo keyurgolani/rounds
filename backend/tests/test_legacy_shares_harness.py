@@ -176,7 +176,7 @@ def test_the_stack_phase_writes_the_receipts_of_four_pass_rows():
         "a public share request reaches PocketBase only as the share resolver's own service identity")
 
 
-def _request_log(tmp_path: Path, rows: list[tuple[str, str]]) -> Path:
+def _tagged_rows(tmp_path: Path, rows: list[tuple[str, str]]) -> Path:
     import sqlite3
 
     db = tmp_path / "logs.db"
@@ -193,10 +193,10 @@ def _request_log(tmp_path: Path, rows: list[tuple[str, str]]) -> Path:
 def test_the_scan_passes_over_only_the_every_value_checks_own_requests(tmp_path):
     value = "FixtureLinkValue0123456"
     own = (stack.PROBE_AGENT, f"{stack.LINKS_PATH}?token={value}")
-    db = _request_log(tmp_path, [own, own])
+    db = _tagged_rows(tmp_path, [own, own])
     assert stack.scan_db(db, (value,)) == (0, 2)
     for other in ("python-httpx/0.27.2", "Python-urllib/3.12", "", stack.PROBE_AGENT + "-x"):
         db.unlink()
-        db = _request_log(tmp_path, [own, (other, f"{stack.LINKS_PATH}?filter={value}")])
+        db = _tagged_rows(tmp_path, [own, (other, f"{stack.LINKS_PATH}?q={value}")])
         found, passed = stack.scan_db(db, (value,))
         assert passed == 1 and found == 2, other

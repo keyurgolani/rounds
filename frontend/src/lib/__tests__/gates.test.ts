@@ -58,10 +58,9 @@ describe('resolveGate', () => {
   // The runner and the SPA read the same value, so their request shapes
   // switch together (ROUNDS-00A-L02).
   // The share dialog follows the runner's resolution gate (ROUNDS-00B-L04):
-  // open by default since ROUNDS-00B-L06, and any value outside the list
-  // closes it.
-  it('share capability resolution defaults to enabled and fails closed', () => {
-    expect(resolveGate('SHARE_CAPABILITY_RESOLUTION', {})).toEqual({ value: 'enabled', source: 'default' });
+  // closed by default, and anything but enabled keeps it closed.
+  it('share capability resolution defaults to disabled and fails closed', () => {
+    expect(resolveGate('SHARE_CAPABILITY_RESOLUTION', {})).toEqual({ value: 'disabled', source: 'default' });
     expect(
       resolveGate('SHARE_CAPABILITY_RESOLUTION', { ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION: 'disabled' }),
     ).toEqual({ value: 'disabled', source: 'env' });

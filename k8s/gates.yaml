@@ -67,8 +67,8 @@ data:
   # on unless it's set to anything but false, 0, no, or off.
   ROUNDS_GATE_PUBLIC_SHARES: ""
   # Share capability resolution, read by the runner and the frontend:
-  # "enabled" or "disabled". Empty is "enabled" (ROUNDS-00B-L06). Disabled,
-  # the resolver answers the uniform not-found and nobody can make a link.
+  # "enabled" or "disabled". Empty is "disabled": no share link resolves and
+  # nobody can make one until the owner sets it "enabled" (ROUNDS-00B-L06).
   ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION: ""
   # Signups, read by PocketBase and the frontend: "enabled" or "disabled".
   ROUNDS_GATE_SIGNUPS: ""

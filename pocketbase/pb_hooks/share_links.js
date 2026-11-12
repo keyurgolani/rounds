@@ -2,7 +2,7 @@
 //
 // Older share links (ROUNDS-00B-L06 stage 1).
 //
-// 1700008400_legacy_share_migration.js turned off every share link made
+// 1700008500_legacy_share_migration.js turned off every share link made
 // before it, and no client creates, changes, or deletes one: every write rule
 // on resume_share_links is null. This holds every writer the app's Dao runs to
 // the same, the admin UI and the hooks included: an older link's row changes

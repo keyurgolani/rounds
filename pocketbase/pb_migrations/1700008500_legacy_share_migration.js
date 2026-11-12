@@ -37,9 +37,10 @@
 //        revoked_demo        its owner is a demo account.
 //        revoked_unverified  anything else, with a reason code.
 //      Its views are counted (how many, and the first and last day) into
-//      one journal row per link, whose id comes from journalId(). A link
-//      that already has a journal row keeps that row's outcome, reason,
-//      counts, and date, so running this again writes the same journal.
+//      one journal row per link, whose id is the link's own id, so no two
+//      links can ever share a row. A link that already has a journal row
+//      keeps that row's outcome, reason, counts, and date, so running this
+//      again writes the same journal.
 //   4. Every view row keeps only the day it was viewed (DAY below).
 //   5. relation_quarantine's entries for both collections
 //      (ROUNDS-00B-L02) keep nothing of an old link's secret or of who
@@ -156,30 +157,20 @@ function classifyQuarantined(kind) {
   return outcome("revoked_ownership", QUARANTINE_KINDS.indexOf(kind) >= 0 ? "quarantined_" + kind : "quarantined_other");
 }
 
-const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
-
-// Lowercase RFC 4648 base32 of the bytes `hex` spells, without padding.
-function base32OfHex(hex) {
-  let bits = 0;
-  let value = 0;
-  let out = "";
-  for (let i = 0; i < hex.length; i += 2) {
-    value = (value << 8) | parseInt(hex.slice(i, i + 2), 16);
-    bits += 8;
-    while (bits >= 5) {
-      out += BASE32[(value >>> (bits - 5)) & 31];
-      bits -= 5;
-    }
-    value &= (1 << bits) - 1;
+// The quarantined links that get a journal row of their own, from
+// relation_quarantine's link entries in (source_id, id) order: one per link,
+// its first entry, and none for a link back in the live table, whose row
+// step 3 wrote. With the live links' own rows, that's one row per link id.
+function quarantinedLinks(entries, live) {
+  const seen = {};
+  const out = [];
+  for (let i = 0; i < entries.length; i += 1) {
+    const e = entries[i];
+    if (seen[e.source_id] || live[e.source_id]) continue;
+    seen[e.source_id] = true;
+    out.push(e);
   }
-  if (bits > 0) out += BASE32[(value << (5 - bits)) & 31];
   return out;
-}
-
-// A link's journal row id: the first 15 characters of the lowercase base32
-// of SHA-256 over "<manifest>:<link id>". `sha256` answers hex.
-function journalId(linkId, sha256) {
-  return base32OfHex(sha256(MANIFEST + ":" + linkId)).slice(0, 15);
 }
 
 // Folds one view's day into a link's counts.
@@ -196,10 +187,12 @@ function noViews() {
   return { count: 0, first: "", last: "" };
 }
 
-// A link's new journal row, from its outcome and its view counts.
-function journalRow(linkId, origin, entryId, decided, views, sha256) {
+// A link's new journal row, from its outcome and its view counts. Its id is
+// the link's own: link ids are unique, so the journal's are too, however
+// they were chosen.
+function journalRow(linkId, origin, entryId, decided, views) {
   return {
-    id: journalId(linkId, sha256),
+    id: linkId,
     manifest: MANIFEST,
     predicate_version: PREDICATE_VERSION,
     link: linkId,
@@ -227,7 +220,6 @@ migrate(
     let step = "lookup";
     try {
       const dao = new Dao(db);
-      const sha256 = (text) => $security.sha256(text);
       const find = (name) => {
         try {
           return dao.findCollectionByNameOrId(name);
@@ -436,7 +428,7 @@ migrate(
             tally(reuse, true);
             return { outcome: reuse.outcome, reason: reuse.reason, at: reuse.created, link: row.id };
           }
-          const entry = journalRow(row.id, "live", "", classify(row), viewed[row.id] || noViews(), sha256);
+          const entry = journalRow(row.id, "live", "", classify(row), viewed[row.id] || noViews());
           insertJournal(entry);
           tally(entry, false);
           journaled += 1;
@@ -508,11 +500,9 @@ migrate(
       const entries = arrayOf(new DynamicModel({ id: "", source_id: "", kind: "" }));
       db.newQuery("SELECT id, source_id, kind FROM " + QUARANTINE + " WHERE source_collection = {:links} ORDER BY source_id, id")
         .bind({ links: LINKS }).all(entries);
-      const done = {};
-      for (let i = 0; i < entries.length; i += 1) {
-        const e = entries[i];
-        if (done[e.source_id] || live[e.source_id]) continue;
-        done[e.source_id] = true;
+      const held = quarantinedLinks(entries, live);
+      for (let i = 0; i < held.length; i += 1) {
+        const e = held[i];
         counts.quarantined += 1;
         const prior = arrayOf(journalModel());
         db.newQuery("SELECT " + JOURNAL_COLUMNS + " FROM " + JOURNAL + " WHERE manifest = {:m} AND link = {:link}")
@@ -522,7 +512,7 @@ migrate(
           continue;
         }
         const entry = journalRow(e.source_id, "quarantine", e.id, classifyQuarantined(e.kind),
-          quarantinedViews[e.source_id] || noViews(), sha256);
+          quarantinedViews[e.source_id] || noViews());
         insertJournal(entry);
         tally(entry, false);
       }
@@ -575,8 +565,7 @@ if (typeof module !== "undefined" && module.exports) {
     DAY,
     classify,
     classifyQuarantined,
-    base32OfHex,
-    journalId,
+    quarantinedLinks,
     journalRow,
     countView,
     noViews,

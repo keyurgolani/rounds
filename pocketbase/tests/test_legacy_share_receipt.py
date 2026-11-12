@@ -39,7 +39,7 @@ def run(*steps: dict) -> list:
 
 
 def journal_row(n: int, outcome: str, reason: str, origin: str = "live", views: int = 0, incident: bool = False):
-    return {"id": f"j{n:014d}", "manifest": "legacy-shares-v1", "predicate_version": 1, "link": LINKS[n],
+    return {"id": LINKS[n], "manifest": "legacy-shares-v1", "predicate_version": 1, "link": LINKS[n],
             "origin": origin, "quarantine_entry": "" if origin == "live" else f"q{n:014d}", "outcome": outcome,
             "reason": reason, "views": views, "first_view_day": "2024-01-02" if views else "",
             "last_view_day": "2024-02-03" if views else "", "incident": incident}
@@ -148,8 +148,11 @@ def test_anything_left_of_an_old_links_secret_or_its_viewers_fails_reconciliatio
     {"linkEntries": [{"link": LINKS[5], "secret_keys": 0}]},
     {"journal": migrated_input()["journal"] + [journal_row(5, "turned_on", "eligible")]},
     {"journal": migrated_input()["journal"] + [journal_row(5, "migrated", "made_up")]},
+    {"journal": migrated_input()["journal"][:4] + [dict(journal_row(4, "revoked_ownership", "quarantined_cross_owner",
+                                                                    origin="quarantine", views=2, incident=True),
+                                                         id="j00000000000004")]},
 ], ids=["a-link-not-journaled", "a-status-unlike-its-journal", "a-quarantined-link-not-journaled",
-        "an-unknown-outcome", "an-unknown-reason"])
+        "an-unknown-outcome", "an-unknown-reason", "a-row-not-under-its-links-id"])
 def test_a_link_the_journal_doesnt_account_for_fails_reconciliation(change):
     assert receipt(migrated_input(**change))["reconciled"] is False
 

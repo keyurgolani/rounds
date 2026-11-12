@@ -456,6 +456,14 @@ def test_each_write_answer_maps_to_one_typed_answer_with_no_pocketbase_text(clie
     assert "PocketBase" not in res.text and "token" not in res.json()
 
 
+def test_with_the_gate_unset_post_api_share_is_closed(client, world, monkeypatch):
+    # Closed by default: no link is made until the owner opens the gate.
+    monkeypatch.delenv(GATE)
+    res = create(client, world, body={"resume_id": RESUME})
+    assert _typed(res) == (503, "route_disabled")
+    assert world.hooks.calls == [] and world.snapshots.calls == []
+
+
 @pytest.mark.parametrize("body", [{"resume_id": RESUME}, {"resume_id": RESUME, "password": "correct horse battery"},
                                   {"legacy_link_id": "linkaaaaaaaaaa1"}, {"resume_id": 5}],
                          ids=["create", "with-a-password", "get-a-new-link", "malformed"])
