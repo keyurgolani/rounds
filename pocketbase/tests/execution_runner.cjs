@@ -240,6 +240,8 @@ const results = program.steps.map((step) => {
     }
     case "guardEnvelopeCreate":
     case "guardEnvelopeUpdate":
+    case "guardGradedCreate":
+    case "guardGradedUpdate":
       return guard(step);
     case "handleCaller":
     case "handleService":

@@ -16,6 +16,16 @@ Both clients type a failed connection the same way, ``unreachable``
 ``timeout``, a connection that got no answer in time; a fixture reads
 the first as inconclusive.
 
+Since ROUNDS-00A-L03 PR 4 every code run is a durable job: the six
+code-run routes answer 202 with the job, and each needs an
+``Idempotency-Key``, the job's command id. The runner client sends one
+with a code run that has none, as the app does, and follows a job to its
+end, so a fixture gets the run's own result as the route answered it in
+its request before: 200 and the job's output. A job that ended without a
+result, or didn't end in time, comes back under its 202, as the job, so
+a fixture reads no result from it. Every read of a job is counted and
+recorded as one route, ``GET /api/execution/jobs/{job_id}``.
+
 The harness account factory and PocketBase client (``harness/probes``)
 are imported lazily, so the self-tests exercise the framework without the
 harness on the path; tests pass their own account factory and clients.
@@ -25,6 +35,7 @@ from __future__ import annotations
 import http.client
 import json
 import re
+import secrets
 import socket
 import time
 import urllib.error
@@ -42,6 +53,28 @@ UNREACHABLE = "unreachable"
 TIMEOUT = "timeout"
 # The emails #9's factory makes, the only ones teardown looks up.
 _FACTORY_EMAIL = re.compile(r"harness-[a-z0-9-]{1,40}-[0-9a-f]{12}@harness\.invalid")
+# The six code-run routes, each a durable job since ROUNDS-00A-L03 PR 4.
+JOB_ROUTES = frozenset({
+    ("POST", "/api/run"), ("POST", "/api/evaluate"), ("POST", "/api/ai-coding/run-project"),
+    ("POST", "/api/ai-coding/grade"), ("POST", "/api/take-home/run"), ("POST", "/api/take-home/submit"),
+})
+JOB_READ = "/api/execution/jobs/{job_id}"
+JOB_ENDED = frozenset({"completed", "timed-out", "denied", "canceled", "failed"})
+_JOB_ID = re.compile(r"[a-z0-9]{15}")
+# One read waits up to the runner's most for the job to change; a job gets
+# this many reads before the client hands it back as it last was.
+JOB_WAIT_S = 20
+JOB_READS = 5
+
+
+def command_id() -> str:
+    """A fresh UUIDv7, the key shape the runner takes."""
+    raw = bytearray(secrets.token_bytes(16))
+    raw[0:6] = int(time.time() * 1000).to_bytes(6, "big")
+    raw[6] = (raw[6] & 0x0F) | 0x70
+    raw[8] = (raw[8] & 0x3F) | 0x80
+    h = raw.hex()
+    return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}"
 
 
 @dataclass
@@ -96,6 +129,47 @@ class RunnerClient:
         json_body: Any = None,
         headers: dict[str, str] | None = None,
     ) -> Http:
+        job_route = (method.upper(), path.split("?", 1)[0]) in JOB_ROUTES
+        if job_route and not any(name.lower() == "idempotency-key" for name in headers or {}):
+            headers = {**(headers or {}), "Idempotency-Key": command_id()}
+        answer = self._send(method, path, token=token, json_body=json_body, headers=headers)
+        if job_route and answer.status == 202:
+            return self._follow(answer, token)
+        return answer
+
+    def _follow(self, started: Http, token: str | None) -> Http:
+        """The job a code run started, read until it ended: 200 and its
+        output when it ended with one, else the job as it last was under
+        the start's 202. A read that fails comes back as it is."""
+        job = started.body if isinstance(started.body, dict) else {}
+        job_id = job.get("job_id")
+        if not isinstance(job_id, str) or not _JOB_ID.fullmatch(job_id):
+            return started
+        last = started
+        for _ in range(JOB_READS):
+            if job.get("state") in JOB_ENDED:
+                break
+            last = self._send("GET", JOB_READ.format(job_id=job_id) + f"?wait={JOB_WAIT_S}", token=token,
+                              route=JOB_READ)
+            if last.error or last.status != 200 or not isinstance(last.body, dict):
+                return last
+            job = last.body
+        envelope = job.get("envelope")
+        output = envelope.get("output") if isinstance(envelope, dict) else None
+        if job.get("state") in JOB_ENDED and isinstance(output, dict):
+            return Http(200, output, last.text, last.headers)
+        return Http(202, job, last.text, last.headers)
+
+    def _send(
+        self,
+        method: str,
+        path: str,
+        *,
+        token: str | None = None,
+        json_body: Any = None,
+        headers: dict[str, str] | None = None,
+        route: str | None = None,
+    ) -> Http:
         data = None
         hdrs = {"Accept": "application/json"}
         if json_body is not None:
@@ -105,7 +179,7 @@ class RunnerClient:
             hdrs["Authorization"] = "Bearer " + token
         if headers:
             hdrs.update(headers)
-        self.log.add(method, path)
+        self.log.add(method, route or path)
         req = urllib.request.Request(self.base_url + path, data=data, headers=hdrs, method=method)
         with self.budget.spend():
             try:
@@ -295,12 +369,15 @@ class RunContext:
 
 
 def wait_for_runner(base_url: str, attempts: int = 60, delay: float = 1.0) -> None:
+    """Until the runner answers ``/ready``: with the job store on, once its
+    worker is logged in, so a code run's job can start (ROUNDS-00A-L03);
+    otherwise as soon as it answers ``/health``."""
     for _ in range(attempts):
         try:
-            with urllib.request.urlopen(base_url.rstrip("/") + "/health", timeout=5) as resp:
+            with urllib.request.urlopen(base_url.rstrip("/") + "/ready", timeout=5) as resp:
                 if resp.status == 200:
                     return
         except Exception:
             pass
         time.sleep(delay)
-    raise RuntimeError("runner did not become healthy")
+    raise RuntimeError("runner did not become ready")

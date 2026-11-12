@@ -113,3 +113,14 @@ onRecordBeforeCreateRequest((e) => {
 onRecordBeforeUpdateRequest((e) => {
   require(`${__hooks}/execution.js`).guardEnvelopeUpdate(e);
 }, "ai_coding_attempts", "take_home_attempts");
+
+// No client creates a graded attempt row, moves a row to graded, or
+// changes a graded row: only complete writes one (PR 4). The rules refuse
+// these too; this checks the record as it would be saved.
+onRecordBeforeCreateRequest((e) => {
+  require(`${__hooks}/execution.js`).guardGradedCreate(e);
+}, "ai_coding_attempts", "take_home_attempts");
+
+onRecordBeforeUpdateRequest((e) => {
+  require(`${__hooks}/execution.js`).guardGradedUpdate(e);
+}, "ai_coding_attempts", "take_home_attempts");

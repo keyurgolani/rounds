@@ -35,7 +35,6 @@ import {
   getLatestAttempt,
   getRound,
   gradeAttempt,
-  persistAttempt,
   requestGradeReview,
   resolveRound,
   runProject,
@@ -44,7 +43,6 @@ import {
   type AICodingRound,
   type AICodingRoundRaw,
   type CheckpointResult,
-  type GradeResponse,
   type RunProjectResult,
 } from './aiCodingApi';
 import { useAICodingDrafts } from '../../hooks/useAICodingDrafts';
@@ -66,7 +64,7 @@ import {
 } from '../../lib/runnerDenial';
 import { useRunnerJob } from '../../hooks/useRunnerJob';
 import { useRubricReview } from '../../hooks/useRubricReview';
-import { earnedOutput, isJobAnswer, type JobAnswer } from '../../lib/executionJobs';
+import { earnedOutput, isJobAnswer, notAJobAnswer, type JobAnswer } from '../../lib/executionJobs';
 import { envelopeJob, rubricState, type RubricReview, type RubricState } from '../../lib/gradedRows';
 import type { RunnerJobView } from '../../components/runner/RunnerJobStatus';
 import { RunErrorOutput } from '../../components/runner/RunErrorOutput';
@@ -421,19 +419,9 @@ export default function AICodingDetail() {
       );
       if (reqId !== runReqIdRef.current) return;
       // A job: the notice follows it, and its end shows the result.
-      if (runJob.follow(answer)) {
-        setDockOpen(false);
-        return;
-      }
-      const r = answer as RunProjectResult;
-      setRunResult(r);
-      if (r.passed) {
-        setPassedByCheckpoint((prev) => {
-          const next = [...prev];
-          next[checkpointIdx] = true;
-          return next;
-        });
-      }
+      // Anything else is a failure.
+      if (!runJob.follow(answer)) throw notAJobAnswer();
+      setDockOpen(false);
     } catch (e) {
       if (reqId !== runReqIdRef.current) return;
       const denial = classifyRunnerError(e, trigger);
@@ -466,7 +454,6 @@ export default function AICodingDetail() {
     // What this grade sends, which its review sends again.
     const sent = files;
     const chats = chatLog;
-    let graded = false;
     try {
       const answer = await retrySuperseded(
         definitionVersionRef.current,
@@ -489,35 +476,11 @@ export default function AICodingDetail() {
         rereadDefinitionVersion,
       );
       // A job: the notice follows it, and an authoritative end opens the
-      // report from the row the server wrote. The page writes no row.
+      // report from the row the server wrote. The page writes no row, and
+      // anything but a job is a failure.
       if (isJobAnswer(answer)) gradedRef.current = { jobId: answer.job_id, files: sent };
-      if (gradeJob.follow(answer)) return;
-      // TODO(ROUNDS-00A-L03): PR 4 retires the in-request grade and
-      // this answer.
-      const result = answer as GradeResponse;
-      graded = true;
-      setReport({ test_results: result.test_results, rubric_review: result.rubric_review });
-      showReview(result.rubric_review);
-      setReportOpen(true);
-      if (
-        result.test_results.length > 0 &&
-        result.test_results.every((tr) => tr.passed)
-      ) {
-        setPracticeStatus('mastered');
-      }
-      await persistAttempt({
-        roundId: round.id,
-        campaignId: campaignId ?? undefined,
-        currentCheckpoint: checkpointIdx,
-        files: sent,
-        test_results: result.test_results,
-        rubric_review: result.rubric_review,
-        ai_chats: chats,
-        duration_ms: Date.now() - startedAtRef.current,
-      });
+      if (!gradeJob.follow(answer)) throw notAJobAnswer();
     } catch (e) {
-      // The report already shows; only saving it failed.
-      if (graded) return;
       // A denied grade isn't a graded attempt, so no report opens.
       const denial = classifyRunnerError(e, trigger);
       if (denial) {

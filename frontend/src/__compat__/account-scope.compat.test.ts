@@ -3,10 +3,13 @@
 // The tightened rules (pocketbase/pb_migrations/1700006000_account_scope_rules.js)
 // accept a create only when its body names the caller as `user`, and an
 // update only when its body leaves `user` out or names the caller again.
-// Every SPA write path below runs its real code against a recording fake of
-// the PocketBase client, and every recorded body is held to those two
-// conditions. The coverage guard at the bottom scans the source, so a new
-// write can't land without a case here.
+// On the two attempt collections, 1700008700_attempt_grade_rules.js also
+// keeps graded rows the server's: a client's write sends no envelope, and
+// any status it sends is in progress or submitted. Every SPA write path
+// below runs its real code against a recording fake of the PocketBase
+// client, and every recorded body is held to those conditions. The
+// coverage guard at the bottom scans the source, so a new write can't land
+// without a case here.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
@@ -201,6 +204,18 @@ function userField({ body }: Recorded): string {
 function rulesAccept(write: Recorded): boolean {
   const user = userField(write);
   return user === 'caller' || (write.op === 'update' && user === 'omitted');
+}
+
+const ATTEMPTS = new Set(['ai_coding_attempts', 'take_home_attempts']);
+const OPEN_STATUSES = new Set(['in-progress', 'submitted']);
+
+/** What the attempt collections' rules add: no envelope from a client, and
+ *  only an open status, which a create has to send. */
+function gradeRulesAccept({ collection, op, body }: Recorded): boolean {
+  if (!ATTEMPTS.has(collection)) return true;
+  if ('envelope' in body) return false;
+  if ('status' in body) return OPEN_STATUSES.has(body.status as string);
+  return op === 'update';
 }
 
 /** Runs `fn` inside act, then lets the async writes it started land. */
@@ -637,23 +652,6 @@ const WRITE_PATHS: Record<string, Branch[]> = {
       writes: [['ai_coding_attempts', 'update', 'caller']],
     },
   ],
-  'pages/ai-coding/aiCodingApi.ts#persistAttempt': [
-    {
-      when: 'records the graded attempt',
-      run: () =>
-        aiCoding.persistAttempt({
-          roundId: 'rounds-1',
-          campaignId: 'campaigns-1',
-          currentCheckpoint: 2,
-          files: { 'main.py': 'print(1)' },
-          test_results: [{ passed: true, passed_count: 3, failed_count: 0, stdout: '', error: null }],
-          rubric_review: { items: [], total: 0 },
-          ai_chats: AI_CODING_ATTEMPT.chats,
-          duration_ms: 60000,
-        }),
-      writes: [['ai_coding_attempts', 'create', 'caller']],
-    },
-  ],
 
   'pages/take-home/takeHomeApi.ts#upsertInProgressTakeHomeAttempt': [
     {
@@ -751,6 +749,10 @@ describe('SPA writes under the account-scope rules', () => {
       .filter((write) => !rulesAccept(write))
       .map((write) => `${write.op} ${write.collection}: user is ${userField(write)}`);
     expect(rejected).toEqual([]);
+    const grading = fake.recorded
+      .filter((write) => !gradeRulesAccept(write))
+      .map((write) => `${write.op} ${write.collection}: status ${JSON.stringify(write.body.status)}`);
+    expect(grading).toEqual([]);
     expect(fake.recorded.map((write) => [write.collection, write.op, userField(write)])).toEqual(writes);
   });
 });
