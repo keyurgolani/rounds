@@ -117,11 +117,12 @@ def test_every_pattern_has_a_fixture_and_a_near_miss():
 
 # Ranges the policy refuses and R0 lets through. R0's own table is
 # ROUNDS-14-L02's to replace, so they stay named here until then.
-STRICTER_THAN_R0 = {"::/96", "::ffff:0:0:0/96"}
-# Ranges R0 refuses only on newer CPython point releases, through
-# ipaddress's is_global; the policy refuses them on every release.
-RELEASE_DEPENDENT = {"3fff::/20", "64:ff9b:1::/48"}
-# IANA's special-purpose address registries, as of RFC 9637.
+STRICTER_THAN_R0 = {"::/96", "::ffff:0:0:0/96", "5f00::/16"}
+# Ranges whose R0 answer depends on the CPython point release, through
+# ipaddress's is_global; the policy refuses them on every release. CPython
+# still calls 5f00::/16 (RFC 9602) global, and a later release may not.
+RELEASE_DEPENDENT = {"3fff::/20", "64:ff9b:1::/48", "5f00::/16"}
+# IANA's special-purpose address registries.
 SPECIAL_PURPOSE = [
     "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24",
     "192.0.0.0/29", "192.0.0.8/32", "192.0.0.9/32", "192.0.0.10/32", "192.0.0.170/32", "192.0.0.171/32", "192.0.2.0/24",
@@ -129,7 +130,7 @@ SPECIAL_PURPOSE = [
     "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4", "255.255.255.255/32",
     "::1/128", "::/128", "::ffff:0:0/96", "64:ff9b::/96", "64:ff9b:1::/48", "100::/64", "2001::/23", "2001::/32",
     "2001:1::1/128", "2001:1::2/128", "2001:1::3/128", "2001:2::/48", "2001:3::/32", "2001:4:112::/48", "2001:20::/28",
-    "2001:30::/28", "2001:db8::/32", "2002::/16", "2620:4f:8000::/48", "3fff::/20", "fc00::/7", "fe80::/10",
+    "2001:30::/28", "2001:db8::/32", "2002::/16", "2620:4f:8000::/48", "3fff::/20", "5f00::/16", "fc00::/7", "fe80::/10",
 ]
 PUBLIC = ["8.8.8.8", "104.18.6.192", "2606:4700::6812:6c0", "2a00:1450:4001:80b::200e"]
 
@@ -174,7 +175,7 @@ def test_destination_lists_match_the_runner():
             assert not _policy_allows(sample), (net, str(sample))
             if net not in STRICTER_THAN_R0 | RELEASE_DEPENDENT:
                 assert not destinations.address_allowed(sample, True), (net, str(sample))
-    for net in STRICTER_THAN_R0:
+    for net in STRICTER_THAN_R0 - RELEASE_DEPENDENT:
         assert any(destinations.address_allowed(s, True) for s in _samples(net)), f"R0 refuses {net} now; drop it from STRICTER_THAN_R0"
 
 

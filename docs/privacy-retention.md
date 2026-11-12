@@ -103,7 +103,7 @@ A destination's location comes from the resolved address, not the base URL.
 
 Never destinations, which get no location class: loopback (127.0.0.0/8, ::1/128), link-local (fe80::/10, 169.254.0.0/16), unspecified (0.0.0.0/32, ::/128), the metadata addresses (169.254.169.254, 169.254.170.2, 169.254.170.23, 100.100.100.200, 168.63.129.16, fd00:ec2::254, fd00:ec2::23), single-label host names, the service names `pocketbase`, `pdf-renderer`, `runner`, `frontend`, `materializer`, `localhost`, and names ending `.localhost`, `.internal`, `.svc`, `.cluster.local`.
 
-Other non-public ranges, which get no location class either: 0.0.0.0/8, 192.0.0.0/24, 192.0.2.0/24, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 240.0.0.0/4, ::/96, ::ffff:0:0:0/96, 64:ff9b:1::/48, 100::/64, 2001::/23, 2001:db8::/32, 3fff::/20, fec0::/10, ff00::/8.
+Other non-public ranges, which get no location class either: 0.0.0.0/8, 192.0.0.0/24, 192.0.2.0/24, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 240.0.0.0/4, ::/96, ::ffff:0:0:0/96, 64:ff9b:1::/48, 100::/64, 2001::/23, 2001:db8::/32, 3fff::/20, 5f00::/16, fec0::/10, ff00::/8.
 
 An IPv6 address inside ::ffff:0:0/96, 2002::/16, 64:ff9b::/96 is judged as the IPv4 address that follows the prefix.
 
