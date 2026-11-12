@@ -72,6 +72,8 @@ const OWNER_FIELDS = [
   "id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at", "capability_version",
   "password_set",
 ];
+// The owner's list adds the resume each link shares.
+const LIST_FIELDS = OWNER_FIELDS.concat(["root_resume_id"]);
 // What lookup_capability answers with, for #12's route: #12's fields plus
 // the markup, which is projection v1.
 const LOOKUP_FIELDS = ["id", "status", "expires_at", "capability_version", "snapshot", "password_policy_ref", "markup"];
@@ -189,6 +191,21 @@ function ownerView(row) {
     else out[key] = typeof row[key] === "string" ? row[key] : "";
   });
   return out;
+}
+
+// One row of the owner's list: the owner's fields and the resume it shares.
+function listView(row, root) {
+  return Object.assign(ownerView(row), { root_resume_id: isId(root) ? root : "" });
+}
+
+// The resume a link shares, read from its snapshot: the resume itself, or
+// the resume a variant's snapshot was built from. Empty for a snapshot
+// that's missing or in another account.
+function rootOf(snapshot, owner) {
+  if (snapshot === null || snapshot.user !== owner) return "";
+  const root = snapshot.source_kind === "resume" ? snapshot.source_id
+    : snapshot.source_kind === "variant" ? snapshot.parent_id : "";
+  return isId(root) ? root : "";
 }
 
 // The fields a revoke sets on an active row.
@@ -423,10 +440,19 @@ function screenUpdate(before, after) {
 // The owner's routes
 // ---------------------------------------------------------------------------
 
-// deps.store.ownRows(user, limit): the account's rows, newest first.
+// deps.store: ownRows(user, limit), the account's rows, newest first, and
+// snapshot(id), read once for each snapshot the rows name.
 function listOwn(deps, caller) {
   if (!isId(caller)) return { status: 200, body: { v: VERSION, items: [] } };
-  return { status: 200, body: { v: VERSION, items: deps.store.ownRows(caller, LIST_LIMIT).map(ownerView) } };
+  const roots = {};
+  const items = deps.store.ownRows(caller, LIST_LIMIT).map((row) => {
+    const id = isId(row.snapshot) ? row.snapshot : "";
+    if (!Object.prototype.hasOwnProperty.call(roots, id)) {
+      roots[id] = id === "" ? "" : rootOf(deps.store.snapshot(id), caller);
+    }
+    return listView(row, roots[id]);
+  });
+  return { status: 200, body: { v: VERSION, items } };
 }
 
 // deps:
@@ -563,6 +589,8 @@ function snapshotOf(record) {
     user: record.getString("user"),
     source_kind: record.getString("source_kind"),
     source_id: record.getString("source_id"),
+    // A variant's resume; empty for a resume.
+    parent_id: record.getString("parent_id"),
     content_checksum: record.getString("content_checksum"),
     markup: record.getString("markup"),
     // The markup file's key in PocketBase's file storage.
@@ -774,6 +802,7 @@ module.exports = {
   PURPOSE_FALLBACK,
   LIST_LIMIT,
   OWNER_FIELDS,
+  LIST_FIELDS,
   LOOKUP_FIELDS,
   FIXED,
   MUTABLE,

@@ -45,7 +45,8 @@ function storeOver(state, calls, options) {
   const view = (id) => {
     const s = state.snapshots[id];
     return s
-      ? { id, user: s.user, source_kind: s.source_kind, source_id: s.source_id, content_checksum: s.content_checksum,
+      ? { id, user: s.user, source_kind: s.source_kind, source_id: s.source_id,
+          parent_id: typeof s.parent_id === "string" ? s.parent_id : "", content_checksum: s.content_checksum,
           markup: typeof s.markup === "string" ? s.markup : "snapshot_x.html", key: "snapshots/" + id }
       : null;
   };
@@ -179,7 +180,7 @@ for (const step of program.steps) {
         VIEW_POLICY: caps.VIEW_POLICY, DEFAULT_DAYS: caps.DEFAULT_DAYS, MAX_DAYS: caps.MAX_DAYS,
         MIN_LIFETIME_MS: caps.MIN_LIFETIME_MS, PURPOSE_MAX: caps.PURPOSE_MAX, PURPOSE_FALLBACK: caps.PURPOSE_FALLBACK,
         LIST_LIMIT: caps.LIST_LIMIT, OWNER_FIELDS: caps.OWNER_FIELDS, LOOKUP_FIELDS: caps.LOOKUP_FIELDS,
-        FIXED: caps.FIXED, MUTABLE: caps.MUTABLE,
+        FIXED: caps.FIXED, MUTABLE: caps.MUTABLE, LIST_FIELDS: caps.LIST_FIELDS,
       } };
       break;
     case "parseDate":

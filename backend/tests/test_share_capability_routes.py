@@ -8,7 +8,9 @@ The guarantees checked here:
   * revoking another account's capability, a missing one, and a malformed
     id get one 404, and a malformed id or a request body is refused before
     PocketBase is asked;
-  * revoking again answers the same;
+  * revoking again answers the same, and revoke works whatever the
+    resolution gate says;
+  * each listed link names the resume it shares by a record id, or none;
   * no PocketBase text reaches a response, and an answer of the wrong shape
     is a typed 503;
   * the revoke line names the account by pseudonym only.
@@ -25,6 +27,8 @@ from conftest import TEST_ACCOUNT_ID, TEST_TOKEN
 V = "share-capability/v1"
 CAP = "capaaaaaaaaaaa1"
 OTHER = "capbbbbbbbbbbb1"
+RESUME = "resumeaaaaaaaa1"
+GATE = "ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION"
 
 
 def item(cid: str = CAP, **over) -> dict:
@@ -36,6 +40,11 @@ def item(cid: str = CAP, **over) -> dict:
     return row
 
 
+def listed(cid: str = CAP, **over) -> dict:
+    """A row of the owner's list: the owner fields and the resume the link shares."""
+    return item(cid, **{"root_resume_id": RESUME, **over})
+
+
 REVOKED = item(status="revoked", revoked_reason="owner", revoked_at="2026-11-12 09:00:00.000Z")
 
 
@@ -45,7 +54,7 @@ class FakeHooks:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, str]] = []
-        self.list_answer: tuple[int, object] = (200, {"v": V, "items": [item(), item(OTHER)]})
+        self.list_answer: tuple[int, object] = (200, {"v": V, "items": [listed(), listed(OTHER)]})
         self.revoked = False
         self.revoke_answer: tuple[int, object] | None = None
 
@@ -79,14 +88,21 @@ def _body(res) -> dict:
 
 
 def test_the_list_asks_with_the_callers_bearer_and_answers_only_the_owner_fields(client, hooks, signed_in):
-    hooks.list_answer = (200, {"v": V, "items": [dict(item(), bearer_digest="d" * 64, snapshot="snapaaaaaaaaaa1",
+    hooks.list_answer = (200, {"v": V, "items": [dict(listed(), bearer_digest="d" * 64, snapshot="snapaaaaaaaaaa1",
                                                        user=TEST_ACCOUNT_ID, password_policy_ref="pw1$x")]})
     res = client.get("/api/share/capabilities", headers=signed_in)
     assert res.status_code == 200
-    assert res.json() == [item()]
+    assert res.json() == [listed()]
     assert hooks.calls == [("GET", share_capabilities.HOOK_PATH, TEST_TOKEN)]
     for leaked in ("d" * 64, "snapaaaaaaaaaa1", "pw1$x"):
         assert leaked not in res.text
+
+
+def test_each_listed_link_names_the_resume_it_shares_or_none(client, hooks, signed_in):
+    hooks.list_answer = (200, {"v": V, "items": [listed(), listed(OTHER, root_resume_id="")]})
+    res = client.get("/api/share/capabilities", headers=signed_in)
+    assert res.status_code == 200
+    assert [i["root_resume_id"] for i in res.json()] == [RESUME, ""]
 
 
 def test_an_empty_list_is_empty(client, hooks, signed_in):
@@ -95,14 +111,19 @@ def test_an_empty_list_is_empty(client, hooks, signed_in):
 
 
 @pytest.mark.parametrize("answer", [
-    (200, {"v": V, "items": [item(id="short")]}),
-    (200, {"v": V, "items": [item(status="paused")]}),
-    (200, {"v": V, "items": [item(purpose=7)]}),
-    (200, {"v": V, "items": [item(capability_version="1")]}),
-    (200, {"v": V, "items": [item(capability_version=0)]}),
-    (200, {"v": V, "items": [item(capability_version=True)]}),
-    (200, {"v": V, "items": [item(password_set="yes")]}),
-    (200, {"v": V, "items": [{k: v for k, v in item().items() if k != "password_set"}]}),
+    (200, {"v": V, "items": [listed(id="short")]}),
+    (200, {"v": V, "items": [listed(status="paused")]}),
+    (200, {"v": V, "items": [listed(purpose=7)]}),
+    (200, {"v": V, "items": [listed(capability_version="1")]}),
+    (200, {"v": V, "items": [listed(capability_version=0)]}),
+    (200, {"v": V, "items": [listed(capability_version=True)]}),
+    (200, {"v": V, "items": [listed(password_set="yes")]}),
+    (200, {"v": V, "items": [listed(root_resume_id="RESUMEAAAAAAAA1")]}),
+    (200, {"v": V, "items": [listed(root_resume_id="resumes/" + RESUME)]}),
+    (200, {"v": V, "items": [listed(root_resume_id=7)]}),
+    (200, {"v": V, "items": [listed(root_resume_id=None)]}),
+    (200, {"v": V, "items": [{k: v for k, v in listed().items() if k != "password_set"}]}),
+    (200, {"v": V, "items": [{k: v for k, v in listed().items() if k != "root_resume_id"}]}),
     (200, {"v": V, "items": "not a list"}),
     (200, {"v": "other/v9", "items": []}),
     (200, None),
@@ -146,6 +167,17 @@ def test_revoking_again_answers_the_same(client, hooks, signed_in):
     again = client.post(f"/api/share/capabilities/{CAP}/revoke", headers=signed_in)
     assert (first.status_code, again.status_code) == (200, 200)
     assert first.json() == again.json()
+
+
+@pytest.mark.parametrize("gate", ["disabled", "enabled", None])
+def test_revoke_works_whatever_the_resolution_gate_says(client, hooks, signed_in, monkeypatch, gate):
+    if gate is None:
+        monkeypatch.delenv(GATE, raising=False)
+    else:
+        monkeypatch.setenv(GATE, gate)
+    res = client.post(f"/api/share/capabilities/{CAP}/revoke", headers=signed_in)
+    assert (res.status_code, res.json()) == (200, REVOKED)
+    assert hooks.calls == [("POST", f"{share_capabilities.HOOK_PATH}/{CAP}/revoke", TEST_TOKEN)]
 
 
 def test_another_accounts_capability_answers_like_a_missing_one(client, hooks, signed_in):
