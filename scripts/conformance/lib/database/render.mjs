@@ -49,7 +49,7 @@ function benchmarkSection(receipt) {
   for (const [n, s] of Object.entries(receipt.scales || {})) {
     rows.push([`${n} account(s)`, num(s.steady?.queueMs?.p99, 'ms'), num(s.steady?.holdMs?.p50, 'ms'), num(s.steady?.holdMs?.p99, 'ms'),
       num(s.steady?.relayLagMs?.p95, 'ms'), num(s.steady?.readYourWritesMs?.p99, 'ms'), num(s.steady?.writeAmplification, 'rows'),
-      num(Math.max(...Object.values(s.sweep || {}).map((x) => x.perSecond || 0)), '/s'), num(s.freeze?.seconds, 's'),
+      num(Object.keys(s.sweep || {}).length ? Math.max(...Object.values(s.sweep).map((x) => x.perSecond || 0)) : null, '/s'), num(s.freeze?.seconds, 's'),
       num((s.samplers?.walMaxBytes || 0) / 1024 ** 2, 'MiB'), num((s.samplers?.rssMaxBytes || 0) / 1024 ** 2, 'MiB')]);
   }
   out.push(table(['Scale', 'Lock queue p99', 'Lock hold p50', 'Lock hold p99', 'Relay lag p95', 'Read-your-writes p99', 'Rows per command', 'Peak commands', 'Freeze', 'WAL max', 'RSS max'], rows));
@@ -115,7 +115,7 @@ export function renderAdr(record, erd, receipt) {
     out.push(`### ${g.title}`, '', renderMermaid(erd, g.id), '');
     out.push(table(['Entity', 'Status', 'Scope', 'Partition', 'Indexed', 'Writers', 'On account delete'], members.map((e) => [
       e.id, e.status + (e.owningLeaf ? ` (${e.owningLeaf})` : ''), e.scope, e.partition ? `${e.partition.field} (${e.partition.kind}, ${e.partition.onAccountDelete})` : 'none',
-      e.indexes ? `${e.indexes.length}${e.partitionIndexed ? ', partition first' : ''}` : '', e.writers, e.purge])), '');
+      e.partition?.kind === 'self' ? 'primary key' : e.indexes ? `${e.indexes.length}${e.partitionIndexed ? ', partition first' : ''}` : '', e.writers, e.purge])), '');
   }
   out.push('### Relations', '', table(['Relation', 'To', 'Cardinality', 'Required', 'On delete', 'Merge', 'Authorized by'],
     erd.relations.map((r) => [r.id + (r.status === 'live' ? '' : ` (${r.status})`), r.to, r.cardinality, r.required ? 'yes' : 'no', r.onDelete, r.merge, r.authorization])), '');

@@ -1295,7 +1295,8 @@
       "owningLeaf": "ROUNDS-02-L04",
       "rows": ["audit-entry-change-set"],
       "writers": "#21's transaction writer, inside the gateway's transaction, with a per-account commit_position",
-      "purge": "#76 purges in batches; no cascade, so deleting a 50,000-row account never holds the writer"
+      "purge": "#76 purges in batches; no cascade, so deleting a 50,000-row account never holds the writer",
+      "note": "#21 adds its other tables (aggregate revisions, pins, purge tombstones, and the per-account position counter) to this ERD when it lands."
     },
     {
       "id": "domain_outbox",
@@ -1309,6 +1310,42 @@
       "rows": ["domain-event"],
       "writers": "#22's library, inside the gateway's transaction; delivery never rewrites a row",
       "purge": "#76 purges with the account's history; relayed rows compact as #22 due-work"
+    },
+    {
+      "id": "outbox_cursors",
+      "status": "planned",
+      "kind": "collection",
+      "store": "sqlite-data",
+      "group": "platform",
+      "scope": "platform",
+      "partition": null,
+      "owningLeaf": "ROUNDS-02-L05",
+      "writers": "the dispatcher identity through #22's routes; one row per consumer, its cursor the last relay_seq it stepped",
+      "purge": "not account data"
+    },
+    {
+      "id": "outbox_parked",
+      "status": "planned",
+      "kind": "collection",
+      "store": "sqlite-data",
+      "group": "platform",
+      "scope": "account",
+      "partition": {"field":"account_id","kind":"text","onAccountDelete":"purge"},
+      "owningLeaf": "ROUNDS-02-L05",
+      "writers": "the dispatcher identity through #22's routes; an event that kept failing for one consumer, with its disposition",
+      "purge": "#76 purges with the account's history"
+    },
+    {
+      "id": "outbox_watermarks",
+      "status": "planned",
+      "kind": "collection",
+      "store": "sqlite-data",
+      "group": "platform",
+      "scope": "account",
+      "partition": {"field":"account_id","kind":"text","onAccountDelete":"purge"},
+      "owningLeaf": "ROUNDS-02-L05",
+      "writers": "the dispatcher identity through #22's routes; one row per consumer and aggregate, the dedupe record a redelivery is checked against",
+      "purge": "#76 purges with the account's history"
     },
     {
       "id": "platform_leases",
@@ -1328,11 +1365,11 @@
       "kind": "collection",
       "store": "sqlite-data",
       "group": "platform",
-      "scope": "platform",
-      "partition": null,
+      "scope": "account",
+      "partition": {"field":"account_id","kind":"text","onAccountDelete":"purge"},
       "owningLeaf": "ROUNDS-02-L06",
-      "writers": "#23's projectors, in the transaction that applies their events",
-      "purge": "not account data; a rebuild resets a projector's row"
+      "writers": "#23's projectors, in the transaction that applies their events; one row per account and projector",
+      "purge": "#76 purges an account's rows; a rebuild resets a projector's rows"
     },
     {
       "id": "slug_redirects",

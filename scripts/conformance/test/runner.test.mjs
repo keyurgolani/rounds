@@ -13,7 +13,7 @@ const allFindings = (results) => results.flatMap((r) => r.findings);
 describe('runner', () => {
   it('runs every rule clean on the repository with no drift', async () => {
     const results = await runConformance({ ...parseArgs([]), root: REPO_ROOT, base: 'none' });
-    assert.deepEqual(results.map((r) => r.id).sort(), ['authority', 'decision-records', 'vocabulary']);
+    assert.deepEqual(results.map((r) => r.id).sort(), ['authority', 'database-adr', 'decision-records', 'vocabulary']);
     assert.deepEqual(allFindings(results), []);
     for (const r of results) assert.deepEqual(r.written, []);
   });
@@ -66,9 +66,11 @@ describe('runner', () => {
   it('prints the matrix revision, blocked rows with their decisions, and pending counts by leaf', async () => {
     const results = await runConformance({ ...parseArgs(['--rule', 'authority']), root: REPO_ROOT, base: 'none' });
     const summary = results[0].summary.join('\n');
-    assert.match(summary, /matrix revision 1 \(DR-0002@1 /);
+    assert.match(summary, /matrix revision 2 \(DR-0002@2 /);
     assert.match(summary, /blocked rows: 1 \(OD-5: login-streak\)/);
-    assert.match(summary, /pending cells by leaf \(\d+ cells, \d+ leaves\): ROUNDS-02-L01 \d+, /);
+    assert.match(summary, /pending cells by leaf \(\d+ cells, \d+ leaves\): /);
+    // #18 (ROUNDS-02-L01) filled its storage and target_path cells.
+    assert.doesNotMatch(summary, /ROUNDS-02-L01 \d+/);
     assert.match(summary, /40 collections and 82 browser key families at 62d4eae/);
     assert.equal(parseArgs(['--review', 'some/dir']).review, path.resolve('some/dir'));
   });
@@ -94,7 +96,7 @@ describe('runner', () => {
     }
     assert.ok(failed, 'the run fails');
     assert.equal(failed.status, 2);
-    assert.match(failed.stderr, /unknown rule vocabulry; rules are authority, decision-records, vocabulary/);
+    assert.match(failed.stderr, /unknown rule vocabulry; rules are authority, database-adr, decision-records, vocabulary/);
   });
 
   it('compares with the branch a pull request targets, and runs on pushes to next', () => {
@@ -111,7 +113,7 @@ describe('runner', () => {
   it('exits 1 with path:line findings and 0 when clean', () => {
     const script = path.join(REPO_ROOT, 'scripts/conformance/run.mjs');
     const ok = execFileSync(process.execPath, [script, '--base', 'none'], { cwd: REPO_ROOT, encoding: 'utf8', env: { ...process.env, GITHUB_ACTIONS: '' } });
-    assert.match(ok, /conformance: 3 rule\(s\), 0 finding\(s\)/);
+    assert.match(ok, /conformance: 4 rule\(s\), 0 finding\(s\)/);
     const dir = fixture((d) => editText(d, 'README.md', (s) => s.replace(/^Rounds is a self-hostable career command center.*$/m, 'Rounds is a tool.')));
     let failed = null;
     try {

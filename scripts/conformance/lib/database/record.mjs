@@ -76,9 +76,13 @@ export function checkRecord(ctx, { record, text, resolveLeaf, erd, matrix, matri
     if (!r || !nonEmpty(r.reason) || !nonEmpty(r.source)) f('DB_RECORD_INCOMPLETE', ['rejected'], `the rejected option ${id} has no reason and source`);
   }
 
-  // Invariants: a #16 row and a mechanism each.
+  // Invariants: a #16 row and a mechanism each, owned by the row's command owner.
+  const commandOwner = new Map((matrix?.rows || []).map((r) => [r.id, r.command_owner?.leaf]));
   (record.invariants || []).forEach((inv, i) => {
     if (!rows.has(inv.row)) f('DB_UNKNOWN_REF', ['invariants', i, 'row'], `invariant ${inv.id} names row ${inv.row}, which ${MATRIX_PATH} doesn't have`);
+    else if (inv.owningLeaf && commandOwner.get(inv.row) && inv.owningLeaf !== commandOwner.get(inv.row)) {
+      f('DB_TWO_AUTHORITIES', ['invariants', i, 'owningLeaf'], `invariant ${inv.id} names ${inv.owningLeaf}, but ${inv.row}'s commands belong to ${commandOwner.get(inv.row)}; the row's command owner owns its invariant`);
+    }
     const mech = Array.isArray(inv.mechanism) ? inv.mechanism : [inv.mechanism];
     if (!mech.length || mech.some((m) => !MECHANISMS.includes(m))) f('DB_RECORD_INCOMPLETE', ['invariants', i, 'mechanism'], `invariant ${inv.id} needs a mechanism from ${MECHANISMS.join(', ')}`);
     if (inv.owningLeaf) leaf(inv.owningLeaf, ['invariants', i, 'owningLeaf'], `invariant ${inv.id} owner`);

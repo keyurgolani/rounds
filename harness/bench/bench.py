@@ -408,7 +408,9 @@ class Load:
         interval = (clients / rate) if rate else 0.0
 
         def worker(n: int) -> None:
-            conn = Conn(self.port)
+            # A long timeout: a command waiting behind a held writer (a backup
+            # that zips under a transaction) is a measurement, not a failure.
+            conn = Conn(self.port, timeout=900)
             rng = random.Random(self.rng.random())
             i = 0
             next_at = time.monotonic()
@@ -430,6 +432,7 @@ class Load:
                 rec["at"] = time.time()
                 with self.lock:
                     out.append(rec)
+                    self.records.append(rec)
                 i += 1
                 if probe and rec["status"] == 200 and rec.get("position") and not rec["replay"] and i % probe_every == 0:
                     probe(acct, rec)
@@ -440,8 +443,6 @@ class Load:
             t.start()
         for t in threads:
             t.join(timeout=seconds + 120)
-        with self.lock:
-            self.records.extend(out)
         return out
 
 
@@ -786,7 +787,8 @@ def run_scale(args, binary: Path, n_accounts: int) -> dict:
             r.paused.set()
         server.stop()
         archive = tar_root / "pb_data.tar.gz"
-        with tarfile.open(archive, "w:gz") as tar:
+        # gzip at its default level 6, as operations.md's tar czf does.
+        with tarfile.open(archive, "w:gz", compresslevel=6) as tar:
             tar.add(str(dirs.data), arcname="pb_data")
         tar_s = time.monotonic() - t_stop
         start_s = server.start(timeout=600)

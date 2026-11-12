@@ -156,7 +156,11 @@ const push = (findings, code, file, text, parts, message) => findings.push(findi
 export function checkErd(ctx, { erd, erdText, schema, snapshot, resolveLeaf, record }) {
   const findings = [];
   const f = (code, parts, message) => push(findings, code, ERD_PATH, erdText, parts, message);
-  for (const err of validate(erd, schema)) f(err.keyword === 'required' ? 'DB_ERD_INCOMPLETE' : 'DB_ERD_INVALID', err.pointer.split('/').slice(1), `${err.pointer || '/'} ${err.message}`);
+  for (const err of validate(erd, schema)) {
+    // A relation without delete or merge behavior is DB_ERD_DELETE_MISSING, reported below.
+    if (err.keyword === 'required' && /^\/relations\/\d+$/.test(err.pointer) && ['onDelete', 'merge'].includes(err.property)) continue;
+    f(err.keyword === 'required' ? 'DB_ERD_INCOMPLETE' : 'DB_ERD_INVALID', err.pointer.split('/').slice(1), `${err.pointer || '/'} ${err.message}`);
+  }
   const stores = new Set((erd.stores || []).map((s) => s.id));
   const groups = new Set((erd.groups || []).map((g) => g.id));
   const ids = new Map();

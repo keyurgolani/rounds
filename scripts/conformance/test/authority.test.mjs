@@ -207,15 +207,25 @@ describe('authority: matrix content', () => {
     const c = repo(CORRECTIONS);
     assert.equal(c.entries.length, 101);
     assert.equal(new Set(c.entries.map((e) => e.issue)).size, 101);
-    assert.equal(c.matrixRevision, m.revision);
+    // The corrected sentences cite DR-0002@1; an additive revision keeps
+    // them valid, so the corrections may trail the matrix.
+    assert.equal(c.matrixRevision, 1);
+    assert.ok(m.revision >= c.matrixRevision);
   });
 
-  it('lists one package per spec service, plus D8\'s Provider Gateway, with target paths pending #18', () => {
+  it('lists one package per spec service, plus D8\'s Provider Gateway, each at the path DR-0004 places it', () => {
     const p = repo(PACKAGES).packages;
     assert.equal(p.length, 18);
     assert.deepEqual(p.filter((x) => !x.decision).map((x) => x.spec), Array.from({ length: 17 }, (_, i) => `spec ${1919 + i}`));
     assert.deepEqual(p.filter((x) => x.decision).map((x) => [x.id, x.service, x.spec, x.decision]), [['provider-gateway', 'Provider Gateway', 'spec 808', 'D8']]);
-    for (const x of p) assert.equal(x.target_path, 'pending:ROUNDS-02-L01');
+    // #18 (ROUNDS-02-L01, DR-0004) places every package: the gateway and its
+    // audit package under lib/, the rest of the hook-route services
+    // under domain/, and the two runner-side packages in the runner.
+    const runner = { 'execution-worker': 'backend/execution/', 'provider-gateway': 'backend/app/provider_gateway/' };
+    for (const x of p) {
+      const want = runner[x.id] || `pocketbase/pb_hooks/${['command-gateway', 'revision-audit'].includes(x.id) ? 'lib' : 'domain'}/${x.id}/`;
+      assert.equal(x.target_path, want, x.id);
+    }
   });
 
   it('gives Recommendation dispositions one owner and keeps #144 to Today hides and reminder acknowledgments', () => {
@@ -369,10 +379,11 @@ describe('authority: rules 1 to 12, one negative control each', () => {
       fn(m);
       return { base: { files: { [MATRIX]: JSON.stringify(m) } } };
     };
-    // Raises the matrix and DR-0002 to revision 2, as one counter.
+    // Raises the matrix and DR-0002 one revision above the committed one, as one counter.
+    const next = repo(MATRIX).revision + 1;
     const bump = (d, compatibility = 'additive') => {
-      editJson(d, DR, (r) => { r.revision = 2; r.compatibility = compatibility; });
-      editJson(d, MATRIX, (m) => { m.revision = 2; m.compatibility = compatibility; });
+      editJson(d, DR, (r) => { r.revision = next; r.compatibility = compatibility; });
+      editJson(d, MATRIX, (m) => { m.revision = next; m.compatibility = compatibility; });
     };
 
     it('passes an unchanged matrix', () => {
@@ -386,7 +397,7 @@ describe('authority: rules 1 to 12, one negative control each', () => {
     });
 
     it('passes an additive change that bumps the row and the matrix', () => {
-      const dir = fixture((d) => { bump(d); editJson(d, MATRIX, (m) => { Object.assign(row(m, 'offer'), { revision: 2, storage: 'postgres:offers' }); }); });
+      const dir = fixture((d) => { bump(d); editJson(d, MATRIX, (m) => { Object.assign(row(m, 'offer'), { revision: next, storage: 'postgres:offers' }); }); });
       assert.deepEqual(run(dir, base()), []);
     });
 
@@ -394,7 +405,7 @@ describe('authority: rules 1 to 12, one negative control each', () => {
       const change = (compat, rowCompat) => fixture((d) => {
         bump(d, compat);
         editJson(d, MATRIX, (m) => { const r = row(m, 'offer');
-          Object.assign(r, { revision: 2, compatibility: rowCompat, privacy_floor: r.privacy_floor === 'Sensitive' ? 'Private' : 'Sensitive' }); });
+          Object.assign(r, { revision: next, compatibility: rowCompat, privacy_floor: r.privacy_floor === 'Sensitive' ? 'Private' : 'Sensitive' }); });
       });
       only(run(change('additive', 'additive'), base()), 'AUTH_COMPATIBILITY_UNDECLARED');
       only(run(change('additive', 'breaking'), base()), 'AUTH_COMPATIBILITY_UNDECLARED');
@@ -406,7 +417,7 @@ describe('authority: rules 1 to 12, one negative control each', () => {
       only(run(fixture((d) => bump(d)), retired), 'AUTH_ROW_REMOVED');
       const added = base((m) => { m.rows = m.rows.filter((r) => r.id !== 'view-state'); });
       only(run(fixture((d) => bump(d)), added), 'AUTH_REVISION_NOT_BUMPED');
-      assert.deepEqual(run(fixture((d) => { bump(d); editJson(d, MATRIX, (m) => { row(m, 'view-state').revision = 2; }); }), added), []);
+      assert.deepEqual(run(fixture((d) => { bump(d); editJson(d, MATRIX, (m) => { row(m, 'view-state').revision = next; }); }), added), []);
     });
 
     it('checks the hand-written baseline store rows against the base', () => {
@@ -427,14 +438,18 @@ describe('authority: rules 1 to 12, one negative control each', () => {
     });
 
     it('fails a ratified DR-0002 that leaves a governed file unpinned', () => {
-      const dr = repo(DR);
-      assert.deepEqual(dr.approvalRef.governedFiles.map((g) => g.path), [MATRIX, PACKAGES, LABELS, STORES]);
-      only(run(fixture((d) => editJson(d, DR, (r) => { r.approvalRef.governedFiles = r.approvalRef.governedFiles.filter((g) => g.path !== STORES); }))), 'AUTH_APPROVAL_INCOMPLETE');
+      // Ratifies the fixture's copy, whatever the committed record's status.
+      const ratify = (keep) => (d) => editJson(d, DR, (r) => {
+        Object.assign(r, { status: 'ratified', approver: 'a reviewer', approvalRef: { pr: 1, governedFiles: keep.map((f) => ({
+          path: f, sha256: createHash('sha256').update(fs.readFileSync(path.join(d, f))).digest('hex') })) } });
+      });
+      assert.deepEqual(run(fixture(ratify([MATRIX, PACKAGES, LABELS, STORES]))), []);
+      only(run(fixture(ratify([MATRIX, PACKAGES, LABELS]))), 'AUTH_APPROVAL_INCOMPLETE');
     });
 
     it('fails closed when the base cannot be read, and when DR-0002 disagrees', () => {
       only(run(fixture(), { base: 'no-such-ref' }), 'AUTH_REVISION_UNAVAILABLE');
-      only(run(fixture((d) => editJson(d, DR, (r) => { r.revision = 2; }))), 'AUTH_REVISION_MISMATCH');
+      only(run(fixture((d) => editJson(d, DR, (r) => { r.revision += 1; }))), 'AUTH_REVISION_MISMATCH');
     });
   });
 
@@ -566,7 +581,7 @@ describe('authority: documentation', () => {
   it('checks DR-0002@<n>:<row> examples against the matrix', () => {
     const write = (text) => fixture((d) => fs.writeFileSync(path.join(d, 'docs/example-citations.md'), text));
     assert.deepEqual(run(write('Cite DR-0002@1:appearance in consumes.\n')), []);
-    const bad = run(write('Cite DR-0002@2:appearance or DR-0002@1:no-such-row.\n'));
+    const bad = run(write(`Cite DR-0002@${repo(MATRIX).revision + 1}:appearance or DR-0002@1:no-such-row.\n`));
     only(bad, 'AUTH_CITATION_UNRESOLVED');
     assert.equal(bad.length, 2);
   });
@@ -633,7 +648,7 @@ describe('authority: open decisions, labels, and corrections', () => {
     only(run(fixture((d) => editJson(d, CORRECTIONS, (c) => { c.entries[0].rows = []; }))), 'AUTH_CORRECTION_INVALID');
     only(run(fixture((d) => editJson(d, CORRECTIONS, (c) => { c.entries.find((e) => e.kind === 'none').rows = ['offer']; }))), 'AUTH_CORRECTION_INVALID');
     only(run(fixture((d) => editJson(d, CORRECTIONS, (c) => { c.entries[0].label = 'Directory'; }))), 'AUTH_CORRECTION_INVALID');
-    includes(run(fixture((d) => editJson(d, CORRECTIONS, (c) => { c.matrixRevision = 2; }))), 'AUTH_REVISION_MISMATCH');
+    includes(run(fixture((d) => editJson(d, CORRECTIONS, (c) => { c.matrixRevision = repo(MATRIX).revision + 1; }))), 'AUTH_REVISION_MISMATCH');
   });
 });
 

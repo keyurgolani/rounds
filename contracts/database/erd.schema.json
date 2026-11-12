@@ -72,7 +72,7 @@
       "required": ["id", "status", "kind", "store", "group", "scope", "partition", "writers", "purge"],
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "string", "pattern": "^_?[a-z][a-z0-9_]*$" },
+        "id": { "type": "string", "pattern": "^_?[A-Za-z][A-Za-z0-9_]*$" },
         "status": { "enum": ["live", "planned", "held"] },
         "kind": { "enum": ["collection", "system-table", "file-store"] },
         "type": { "enum": ["base", "auth", "view"] },
@@ -120,7 +120,7 @@
       "required": ["id", "status", "from", "field", "to", "cardinality", "required", "onDelete", "merge", "authorization"],
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "string", "pattern": "^_?[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$" },
+        "id": { "type": "string", "pattern": "^_?[A-Za-z][A-Za-z0-9_]*\\.[A-Za-z][A-Za-z0-9_]*$" },
         "status": { "enum": ["live", "planned", "held"] },
         "from": { "type": "string", "minLength": 1 },
         "field": { "type": "string", "minLength": 1 },
