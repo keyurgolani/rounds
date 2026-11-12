@@ -1,7 +1,7 @@
 """Harness check for the cross-owner relation scan (ROUNDS-00B-L01 stage 2).
 
 Runs ``pocketbase/tools/scan_cross_owner.py`` against the ``pb_data`` the
-main phase produced (real PocketBase 0.22.22 storage after every migration,
+main phase produced (real PocketBase 0.22.57 storage after every migration,
 two accounts with a full fixture graph), with PocketBase stopped and the
 volume mounted read-only:
 
