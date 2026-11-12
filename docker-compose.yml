@@ -153,14 +153,17 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
+      # Vite listens on 127.0.0.1 unless this says otherwise. In here it has
+      # to listen beyond the container's own loopback; the port above is
+      # published on the host's 127.0.0.1 only.
+      - VITE_DEV_HOST=0.0.0.0
       # Same-origin /api/* is proxied to the backend service via
       # frontend/devProxy.ts. Override VITE_API_PROXY_TARGET only when
       # pointing the dev server at a backend on a different host.
       # Runner is reached through the /api/run etc. proxy; PB via /api/*.
       - VITE_API_PROXY_TARGET=${VITE_API_PROXY_TARGET:-http://runner:8000}
       - VITE_POCKETBASE_PROXY_TARGET=${VITE_POCKETBASE_PROXY_TARGET:-http://pocketbase:8090}
-      # Leave VITE_POCKETBASE_URL empty so the browser uses same-origin
-      # — works from the host *and* from any device on the LAN.
+      # Leave VITE_POCKETBASE_URL empty so the browser uses same-origin.
       - VITE_POCKETBASE_URL=${VITE_POCKETBASE_URL:-}
       - VITE_OAUTH_GOOGLE_ENABLED=${VITE_OAUTH_GOOGLE_ENABLED:-false}
       - VITE_OAUTH_GITHUB_ENABLED=${VITE_OAUTH_GITHUB_ENABLED:-false}

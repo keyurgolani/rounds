@@ -45,6 +45,8 @@ Useful scripts:
 - `npm run build`: run TypeScript and build the production bundle.
 - `npm run check`: run tests and build.
 
+The Vite dev and preview servers listen on `127.0.0.1` by default; set `VITE_DEV_HOST` to listen on another address. Dev compose sets it to `0.0.0.0` inside the frontend container and publishes that container's port on the host's `127.0.0.1` only.
+
 The frontend test suite uses Vitest, Testing Library, and jsdom.
 
 ## Backend Commands
@@ -61,7 +63,7 @@ To run the backend directly:
 
 ```sh
 cd backend
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ## Routing And Proxies
