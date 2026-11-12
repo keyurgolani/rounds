@@ -99,7 +99,7 @@ def test_every_probe_start_that_names_a_hooks_dir_turns_watch_mode_off():
             if isinstance(node, ast.List) and any(_flag(e, "--hooksDir=") for e in node.elts):
                 watch = [e.value for e in node.elts if isinstance(e, ast.Constant) and _flag(e, "--hooksWatch")]
                 starts.setdefault(path.name, []).append(watch)
-    assert {"demo_contain_migration_check.py", "legacy_share_migration_check.py",
+    assert {"demo_contain_migration_check.py", "grade_rules_migration_check.py", "legacy_share_migration_check.py",
             "relation_quarantine_check.py"} <= set(starts)
     for name, flags in starts.items():
         assert all(watch == ["--hooksWatch=false"] for watch in flags), name
