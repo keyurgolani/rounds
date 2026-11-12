@@ -265,11 +265,17 @@ collection's census from the manifest
 (`pocketbase/migration-manifests/attempt-grade-rules-v1.json`) before and after
 the migration and prints them as one reconciliation line, counts and
 checksums only, which must match; the rules must be the policy's and the
-`_params` record the rules they replaced, with nothing else changed. On the
-copy, served with no hooks so only the rules decide, every client write to a
+`_params` record the rules they replaced, with nothing else changed. On a
+second copy, where the lock lever froze `take_home_attempts` before the
+upgrade, that collection keeps its lock, the other takes the new rules, and
+the record holds what was found. On the first copy, served with no hooks so only the rules decide, every client write to a
 graded row, or one that would grade a row or give it an envelope, is refused,
 and in-progress rows still save. `migrate down 1` keeps the rules and the
-record, and applying it again changes neither.
+record, and applying it again changes neither. Last, a copy without the
+migration, whose rules still take an owner's graded write, is served with the
+execution hooks alone: their record checks refuse every client write that
+would grade a row, change a graded row, or set an envelope, in each request
+form, and open rows still save.
 [`probes/json_limits_check.py`](probes/json_limits_check.py) holds every JSON
 field's maxSize to the limit its migrations declare (D10). PocketBase's own
 `1702134272_set_default_json_max_size` resets them all to 2,000,000 bytes and

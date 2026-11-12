@@ -146,9 +146,11 @@
 #  16. attempt grade rules - with the pinned binary and no network: the
 #                     census of both attempt collections before and after the
 #                     rule migration on a seeded copy (the reconciliation
-#                     report), the client writes the rules refuse on a served
-#                     copy with no hooks, and its down step
-#                     (harness/probes/grade_rules_migration_check.py)
+#                     report), a lock the lock lever made kept on another
+#                     copy, the client writes the rules refuse on a served
+#                     copy with no hooks, the same refused by the execution
+#                     hooks alone on a copy without the migration, and its
+#                     down step (harness/probes/grade_rules_migration_check.py)
 #
 # The stack is built and brought up with compose; the probe container runs
 # directly on the compose network so the flow is identical under Finch
@@ -987,9 +989,13 @@ ${CONTAINER_BIN} run --rm --network none \
   -e PB_BIN="/pbbin/pocketbase" \
   -e PB_MIGRATIONS_DIR="/pb_migrations" \
   -e PB_MANIFESTS_DIR="/pb_manifests" \
+  -e PB_LEVERS_DIR="/pb_levers" \
+  -e PB_HOOKS_DIR="/pb_hooks" \
   -v "${PBBIN_VOLUME}:/pbbin:ro" \
   -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
   -v "${ROOT}/pocketbase/migration-manifests:/pb_manifests:ro" \
+  -v "${ROOT}/pocketbase/levers:/pb_levers:ro" \
+  -v "${ROOT}/pocketbase/pb_hooks:/pb_hooks:ro" \
   -v "${ROOT}/docs/security:/policy:ro" \
   -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
   "${PROBE_IMAGE}" grade-rules-migration

@@ -704,6 +704,46 @@ def test_no_client_links_an_attempt_row_to_an_envelope(call, fields, original, s
         assert out["bad_request"] is True
 
 
+@pytest.mark.parametrize(
+    "call, status, original, superuser, allowed",
+    [
+        ("guardGradedCreate", "in-progress", None, False, True),
+        ("guardGradedCreate", "submitted", None, False, True),
+        ("guardGradedCreate", "graded", None, False, False),
+        ("guardGradedCreate", "graded", None, True, True),
+        ("guardGradedUpdate", "in-progress", "in-progress", False, True),
+        ("guardGradedUpdate", "submitted", "in-progress", False, True),
+        ("guardGradedUpdate", "graded", "in-progress", False, False),
+        ("guardGradedUpdate", "graded", "submitted", False, False),
+        ("guardGradedUpdate", "graded", "graded", False, False),
+        ("guardGradedUpdate", "in-progress", "graded", False, False),
+        ("guardGradedUpdate", "graded", "in-progress", True, True),
+        ("guardGradedUpdate", "in-progress", "graded", True, True),
+    ],
+    ids=["create-in-progress", "create-submitted", "create-graded", "create-superuser", "update-in-progress",
+         "update-submitted", "update-to-graded", "update-submitted-to-graded", "update-graded-row",
+         "update-graded-row-reopened", "superuser-grades", "superuser-reopens"],
+)
+def test_no_client_write_ends_at_graded_or_changes_a_graded_row(call, status, original, superuser, allowed):
+    step = {"call": call, "fields": {"status": status}, "superuser": superuser}
+    if original is not None:
+        step["original"] = {"status": original}
+    (out,) = run(step)["results"]
+    assert out["allowed"] is allowed
+    if not allowed:
+        assert out["bad_request"] is True and out["message"] == "Only the server writes a graded attempt."
+
+
+def test_both_attempt_collections_run_the_graded_and_envelope_guards_on_every_client_write():
+    pb = (HOOKS / "execution.pb.js").read_text()
+    for event, guards in (("Create", ("guardEnvelopeCreate", "guardGradedCreate")),
+                          ("Update", ("guardEnvelopeUpdate", "guardGradedUpdate"))):
+        for guard in guards:
+            pattern = (r"onRecordBefore%sRequest\(\(e\) => \{\s*require\(`\$\{__hooks\}/execution\.js`\)"
+                       r"\.%s\(e\);\s*\}, \"ai_coding_attempts\", \"take_home_attempts\"\);" % (event, guard))
+            assert re.search(pattern, pb), guard
+
+
 # ---- in step with admission and the route table -------------------------------------
 
 
@@ -730,7 +770,8 @@ def test_the_routes_need_the_right_principal():
         ("complete", "handleService", "complete", "execution_service"),
         ("reap", "handleService", "reap", "execution_service"),
     ])
-    assert pb.count('"ai_coding_attempts", "take_home_attempts");') == 2
+    # The envelope's two guards and, since PR 4, the graded status's two.
+    assert pb.count('"ai_coding_attempts", "take_home_attempts");') == 4
     # The worker record follows the secret at every start and before every
     # execution-worker login.
     assert "onAfterBootstrap(" in pb and ".bootstrapWorker()" in pb

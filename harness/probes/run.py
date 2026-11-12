@@ -243,7 +243,12 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
     # because the account is not allowed to create it.
     c = make_account("c")
     register(pb, c)
-    for acct in (a, b, c):
+    # A fourth, also with no rows, that only the graded create's other
+    # request forms use, so whatever PocketBase makes of them stays out of
+    # c's counts.
+    d = make_account("d")
+    register(pb, d)
+    for acct in (a, b, c, d):
         _register_account(writer, acct)
     writer.register_secret(admin_token, "token:superuser")
 
@@ -288,8 +293,9 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
                 # refused create left behind shows in its count; the envelope
                 # it names is account a's seeded one.
                 payload = factory.fresh_payload(name, c.user_id, a, b, content, secrets.token_hex(6))
-                writer.write(families.create_graded_denied(pb, name, c, payload, a.ids["execution_envelopes"],
-                                                           admin_token, expected))
+                forms = factory.fresh_payload(name, d.user_id, a, b, content, secrets.token_hex(6))
+                writer.write(families.create_graded_denied(pb, name, c, payload, d, forms,
+                                                           a.ids["execution_envelopes"], admin_token, expected))
             elif pid == families.UPDATE_GRADED_FAMILY:
                 # Account a's graded row, which the superuser writes as the
                 # server does, and a's seeded in-progress row.

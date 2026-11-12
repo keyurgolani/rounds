@@ -420,8 +420,10 @@ class _ProbePB:
     """Configurable fake PocketBase for the ownership probe functions.
 
     ``update`` may be a single Response or a list consumed in order (the
-    accept probe issues two updates). ``listing`` is used for the superuser
-    owner-count check.
+    accept probe issues two updates), whose last answer repeats once it's
+    reached. ``listing`` is used for the superuser owner-count check, and
+    may be a function of the listing's params. Multipart writes are
+    recorded beside the JSON ones and answered the same.
     """
 
     def __init__(self, *, create=None, update=None, view=None, listing=None, delete=None):
@@ -437,10 +439,21 @@ class _ProbePB:
         self.calls.append(("create", collection, token, dict(payload) if payload else payload))
         return self._create
 
+    def create_form(self, collection, token, fields):
+        self.calls.append(("create_form", collection, token, list(fields)))
+        return self._create
+
     def update(self, collection, record_id, payload, token=None):
         self.calls.append(("update", collection, record_id, token, dict(payload)))
+        return self._next_update()
+
+    def update_form(self, collection, record_id, fields, token=None):
+        self.calls.append(("update_form", collection, record_id, token, list(fields)))
+        return self._next_update()
+
+    def _next_update(self):
         if isinstance(self._update, list):
-            return self._update.pop(0)
+            return self._update.pop(0) if len(self._update) > 1 else self._update[0]
         return self._update
 
     def view(self, collection, record_id, token=None):
@@ -449,7 +462,7 @@ class _ProbePB:
 
     def listing(self, collection, token=None, params=None):
         self.calls.append(("listing", collection, token, params))
-        return self._listing
+        return self._listing(params) if callable(self._listing) else self._listing
 
 
 def _count(total):
@@ -529,18 +542,43 @@ def test_update_own_accepted_fails_if_either_shape_is_rejected():
 
 OWNER = factory.Account(tag="c", email="c@harness.invalid", password="x", user_id="uid-c", token="c-token",
                         ids={"ai_coding_attempts": "inprogress00001"})
+# The second no-rows account, which sends the other request forms.
+FORMS = factory.Account(tag="d", email="d@harness.invalid", password="x", user_id="uid-d", token="d-token")
+FORMS_ROW = {"user": "uid-d", "round": "round0000000001", "status": "in-progress"}
+REFUSED = Response(400, {"message": "Failed to create record.", "data": {}}, 1)
+
+
+def _graded_create(pb):
+    return families.create_graded_denied(pb, "ai_coding_attempts", OWNER, {"user": "uid-c", "status": "in-progress"},
+                                         FORMS, FORMS_ROW, "envelope0000001", "admin", 400)
 
 
 def test_create_graded_denied_passes_when_both_creates_are_refused_and_nothing_is_left():
-    pb = _ProbePB(create=Response(400, {"message": "Failed to create record.", "data": {}}, 1), listing=_count(0))
-    r = families.create_graded_denied(pb, "ai_coding_attempts", OWNER, {"user": "uid-c", "status": "in-progress"},
-                                      "envelope0000001", "admin", 400)
+    pb = _ProbePB(create=REFUSED, listing=_count(0))
+    r = _graded_create(pb)
     assert r.passed and r.probe_id == families.CREATE_GRADED_FAMILY
     # One graded create and one in progress naming the envelope, both by the owner.
-    (first, second) = [call for call in pb.calls if call[0] == "create"]
-    assert first[2] == second[2] == "c-token"
+    (first, second) = [call for call in pb.calls if call[0] == "create" and call[2] == "c-token"]
     assert first[3]["status"] == "graded" and "envelope" not in first[3]
     assert second[3] == {"user": "uid-c", "status": "in-progress", "envelope": "envelope0000001"}
+
+
+def test_create_graded_denied_sends_every_other_request_form_from_the_second_account():
+    pb = _ProbePB(create=REFUSED, listing=_count(0))
+    _graded_create(pb)
+    sent = [call for call in pb.calls if call[0] in ("create", "create_form") and call[2] == "d-token"]
+    bodies = [call[3] for call in sent if call[0] == "create"]
+    assert [b.get("status") for b in bodies] == [["graded"], " graded ", "Graded", "in-progress",
+                                                 ["in-progress", "graded"], "in-progress"]
+    assert [b.get(k) for b, k in zip(bodies[3:], ("status+", "status-", "envelope+"))] == [
+        "graded", "in-progress", "envelope0000001"]
+    forms = [call[3] for call in sent if call[0] == "create_form"]
+    assert [[v for k, v in f if k in ("status", "envelope")] for f in forms] == [
+        ["graded"], ["in-progress", "graded"], ["in-progress", "envelope0000001"]]
+    assert all(("user", "uid-d") in f and ("round", "round0000000001") in f for f in forms)
+    # The superuser counts the second account's graded or enveloped rows.
+    (graded_count,) = [call[3]["filter"] for call in pb.calls if call[0] == "listing" and "uid-d" in call[3]["filter"]]
+    assert graded_count == 'user = "uid-d" && (status = "graded" || envelope != "")'
 
 
 @pytest.mark.parametrize("create, left, why", [
@@ -549,22 +587,77 @@ def test_create_graded_denied_passes_when_both_creates_are_refused_and_nothing_i
 ], ids=["created", "validation-not-the-rule"])
 def test_create_graded_denied_fails_on_a_create_that_got_in_or_a_refusal_that_isnt_the_rules(create, left, why):
     pb = _ProbePB(create=create, listing=_count(left))
-    r = families.create_graded_denied(pb, "ai_coding_attempts", OWNER, {"user": "uid-c", "status": "in-progress"},
-                                      "envelope0000001", "admin", 400)
+    r = _graded_create(pb)
     assert not r.passed and why in r.detail
 
 
+def test_create_graded_denied_fails_when_another_form_leaves_a_graded_or_enveloped_row():
+    pb = _ProbePB(create=REFUSED, listing=lambda params: _count(1 if "uid-d" in params["filter"] else 0))
+    r = _graded_create(pb)
+    assert not r.passed and "forms_landed=1" in r.detail
+
+
+GRADED_ROW = Response(200, {"id": "graded000000001", "status": "graded", "envelope": ""}, 1)
+OPEN_ROW = Response(200, {"id": "inprogress00001", "status": "in-progress", "envelope": ""}, 1)
+
+
+class _RowsPB(_ProbePB):
+    """Answers each row's views in order, its last answer repeating."""
+
+    def __init__(self, rows, **kw):
+        super().__init__(**kw)
+        self._rows = {rid: list(answers) for rid, answers in rows.items()}
+
+    def view(self, collection, record_id, token=None):
+        self.calls.append(("view", collection, record_id, token))
+        answers = self._rows[record_id]
+        return answers.pop(0) if len(answers) > 1 else answers[0]
+
+
+def _graded_update(pb):
+    return families.update_graded_denied(pb, "ai_coding_attempts", OWNER, "graded000000001", "envelope0000001",
+                                         "admin", 404)
+
+
 def test_update_graded_denied_passes_when_every_update_is_not_found_and_both_rows_are_unchanged():
-    pb = _ProbePB(update=Response(404, {}, 1), view=Response(200, {"id": "x", "status": "graded"}, 1))
-    r = families.update_graded_denied(pb, "ai_coding_attempts", OWNER, "graded000000001", "envelope0000001", "admin",
-                                      404)
+    pb = _RowsPB({"graded000000001": [GRADED_ROW], "inprogress00001": [OPEN_ROW]}, update=Response(404, {}, 1))
+    r = _graded_update(pb)
     assert r.passed and r.probe_id == families.UPDATE_GRADED_FAMILY
-    updates = [(call[2], call[4]) for call in pb.calls if call[0] == "update"]
+    updates = [(call[2], call[4]) for call in pb.calls if call[0] == "update"][:5]
     assert updates == [("graded000000001", {}), ("graded000000001", {"status": "in-progress"}),
                        ("graded000000001", {"duration_ms": 1}), ("inprogress00001", {"status": "graded"}),
                        ("inprogress00001", {"envelope": "envelope0000001"})]
     # The superuser reads both rows back; the owner never does.
     assert {call[3] for call in pb.calls if call[0] == "view"} == {"admin"}
+
+
+def test_update_graded_denied_sends_every_other_request_form_as_the_owner():
+    pb = _RowsPB({"graded000000001": [GRADED_ROW], "inprogress00001": [OPEN_ROW]}, update=Response(404, {}, 1))
+    _graded_update(pb)
+    sent = [call for call in pb.calls if call[0] in ("update", "update_form")][5:]
+    assert {call[3] for call in sent} == {"c-token"}
+    on_graded = [call[4] for call in sent if call[2] == "graded000000001"]
+    on_open = [call[4] for call in sent if call[2] == "inprogress00001"]
+    assert on_graded == [{"status-": "graded"}, {"status+": "in-progress"}, [("status", "in-progress")]]
+    assert on_open == [{"status": ["graded"]}, {"status": " graded "}, {"status": "Graded"}, {"status+": "graded"},
+                       {"status": ["in-progress", "graded"], "status-": "in-progress"},
+                       {"envelope+": "envelope0000001"}, [("status", "graded")],
+                       [("status", "in-progress"), ("status", "graded")], [("envelope", "envelope0000001")]]
+
+
+@pytest.mark.parametrize("graded_after, open_after", [
+    (Response(200, {"id": "graded000000001", "status": "in-progress", "envelope": ""}, 1), OPEN_ROW),
+    (GRADED_ROW, Response(200, {"id": "inprogress00001", "status": "graded", "envelope": ""}, 1)),
+    (GRADED_ROW, Response(200, {"id": "inprogress00001", "status": "in-progress", "envelope": "envelope0000001"}, 1)),
+], ids=["graded-row-changed", "open-row-graded", "open-row-linked"])
+def test_update_graded_denied_fails_when_another_form_changes_the_graded_row_or_grades_the_open_one(graded_after,
+                                                                                                   open_after):
+    # Both rows read back as they were after the plain updates, and only
+    # change under the other forms.
+    pb = _RowsPB({"graded000000001": [GRADED_ROW, GRADED_ROW, graded_after],
+                  "inprogress00001": [OPEN_ROW, OPEN_ROW, open_after]}, update=Response(404, {}, 1))
+    r = _graded_update(pb)
+    assert not r.passed and "forms_ok=False" in r.detail
 
 
 def test_update_graded_denied_fails_when_an_update_goes_through():

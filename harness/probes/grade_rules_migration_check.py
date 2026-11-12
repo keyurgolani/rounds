@@ -13,7 +13,10 @@ account included:
    equal: that comparison is the reconciliation report, printed as one
    line with counts and checksums only. The new rules are the policy's,
    the ``_params`` record holds the rules they replaced, and no other
-   table, row, or rule changed.
+   table, row, or rule changed. On another copy, a lock the lock lever put
+   on take_home_attempts before the upgrade stays: its two rules stay
+   null, the other collection takes the new rules, and the record holds
+   what the up step found.
 3. Serves the copy on loopback with no hooks, so only the rules decide:
    each client write to a graded row, or one that would grade a row or
    give it an envelope, is refused and leaves the rows as they were, and
@@ -21,6 +24,10 @@ account included:
 4. ``pocketbase migrate down 1``, confirmed on a pseudo terminal as an
    operator would, keeps the rules and the record, and applying the
    migration again changes neither.
+5. Serves a copy without the migration, whose rules still take an owner's
+   graded write, with the execution hooks only: their record checks alone
+   refuse every client write that would grade a row, change a graded row,
+   or set an envelope, in each request form, and open rows still save.
 
 Prints one PASS/FAIL line per check and exits non-zero on any failure.
 """
@@ -39,10 +46,19 @@ import tempfile
 from pathlib import Path
 
 import factory
+import families
 from admission_migration_check import MIGRATIONS, PB_BIN, RULES, Checks, _migrate_down_confirmed
 from pbclient import PBClient
 
 MIGRATION = "1700008700_attempt_grade_rules.js"
+LEVERS = Path(os.environ.get("PB_LEVERS_DIR", "/pb_levers"))
+HOOKS = Path(os.environ.get("PB_HOOKS_DIR", "/pb_hooks"))
+# The execution hooks and the modules they load: nothing else is served
+# in step 5.
+EXECUTION_HOOKS = ("execution.pb.js", "execution.js", "admission.js", "gates.js")
+# The lock lever as an operator copies it in, with a fresh timestamp, so
+# it sorts after this migration and was applied before it.
+LOCK_FILE = "1762000000_lock_take_home_attempts.js"
 COLLECTIONS = ("ai_coding_attempts", "take_home_attempts")
 POLICY = Path(os.environ.get("POLICY_PATH", "/policy/account-scope.v1.json"))
 MANIFEST = Path(os.environ.get("PB_MANIFESTS_DIR", "/pb_manifests")) / "attempt-grade-rules-v1.json"
@@ -198,6 +214,35 @@ def _applied(db: Path) -> bool:
         conn.close()
 
 
+def check_a_lock_is_kept(c: Checks, work: Path, base_data: Path, base: Path, full: Path,
+                         base_rules: dict, want: dict) -> None:
+    """The lock lever on take_home_attempts before the upgrade, then the
+    upgrade, on a copy of its own."""
+    lever = (LEVERS / "lock_collection.template.js").read_text().replace("__COLLECTION__", "take_home_attempts")
+    locked_base, locked_full = work / "locked_base_migrations", work / "locked_migrations"
+    shutil.copytree(base, locked_base)
+    shutil.copytree(full, locked_full)
+    for folder in (locked_base, locked_full):
+        (folder / LOCK_FILE).write_text(lever)
+    data = work / "locked_pb_data"
+    shutil.copytree(base_data, data)
+    db = data / "data.db"
+    lock = _migrate(data, locked_base)
+    held = _rules(db)["take_home_attempts"]
+    up = _migrate(data, locked_full)
+    rules = _rules(db)
+    other = "ai_coding_attempts"
+    found = [{"collection": other, "create": base_rules[other]["createRule"],
+              "update": base_rules[other]["updateRule"]},
+             {"collection": "take_home_attempts", "create": None, "update": None}]
+    kept = (held["createRule"], held["updateRule"]) == (None, None) and rules["take_home_attempts"] == held
+    c.check("grade-rules.a-locked-collection-keeps-its-lock",
+            lock.returncode == 0 and up.returncode == 0 and _applied(db) and kept
+            and rules[other] == want[other] and _record(db) == found,
+            f"lock={lock.returncode} up={up.returncode} kept={kept} other={rules[other] == want[other]} "
+            f"record={_record(db) == found}")
+
+
 # -- PocketBase served on loopback, with no hooks ------------------------------------
 
 def _free_port() -> int:
@@ -207,11 +252,12 @@ def _free_port() -> int:
 
 
 class Served:
-    def __init__(self, work: Path, data: Path, migrations: Path) -> None:
-        hooks = work / "no_hooks"
-        hooks.mkdir(exist_ok=True)
+    def __init__(self, work: Path, data: Path, migrations: Path, hooks: Path | None = None) -> None:
+        if hooks is None:
+            hooks = work / "no_hooks"
+            hooks.mkdir(exist_ok=True)
         self.port = _free_port()
-        self.log = open(work / "served.log", "w")
+        self.log = open(work / f"served-{hooks.name}.log", "w")
         self.proc = subprocess.Popen(
             [str(PB_BIN), "serve", f"--http=127.0.0.1:{self.port}", f"--dir={data}",
              f"--migrationsDir={migrations}", f"--hooksDir={hooks}"],
@@ -279,6 +325,42 @@ def check_client_writes(c: Checks, pb: PBClient, admin: str, envelope: str, pare
                 f"graded={bool(graded)} statuses={[a.status for a in answers]} unchanged={unchanged}")
 
 
+def check_the_guards_alone(c: Checks, pb: PBClient, admin: str, envelope: str, parents: dict[str, str]) -> None:
+    acct = factory.make_account("guard")
+    factory.register(pb, acct)
+    tok, uid = acct.token, acct.user_id
+    for collection in COLLECTIONS:
+        field = PARENT[collection][0]
+        open_row = {"user": uid, field: parents[collection], "status": "in-progress"}
+        own = pb.create(collection, tok, open_row)
+        row = own.body.get("id", "") if own.status == 200 and isinstance(own.body, dict) else ""
+        edits = [pb.update(collection, row, body, token=tok) for body in (EDIT[collection], {"status": "submitted"})]
+        c.check(f"grade-rules.guards.{collection}.open-rows-still-save",
+                bool(row) and all(r.status == 200 for r in edits), f"create={own.status} "
+                f"updates={[r.status for r in edits]}")
+
+        plain = [("plain", pb.create(collection, tok, {**open_row, "status": "graded"})),
+                 ("envelope", pb.create(collection, tok, {**open_row, "envelope": envelope}))]
+        sent = plain + families.graded_create_forms(pb, collection, tok, open_row, envelope)
+        landed = families.graded_or_enveloped(pb, collection, admin, uid)
+        c.check(f"grade-rules.guards.{collection}.no-client-create-is-graded-or-linked", landed == 0,
+                f"landed={landed} " + " ".join(f"{form}={r.status}" for form, r in sent))
+
+        server = pb.create(collection, admin, {**open_row, "status": "graded"})
+        graded = server.body.get("id", "") if server.status == 200 and isinstance(server.body, dict) else ""
+        seen = pb.view(collection, graded, token=admin)
+        plain = [(f"graded:{i}", pb.update(collection, graded, body, token=tok))
+                 for i, body in enumerate(({}, {"status": "in-progress"}, EDIT[collection]))]
+        plain += [("open:plain", pb.update(collection, row, {"status": "graded"}, token=tok)),
+                  ("open:envelope", pb.update(collection, row, {"envelope": envelope}, token=tok))]
+        sent = plain + families.graded_update_forms(pb, collection, tok, graded, row, envelope)
+        kept = pb.view(collection, graded, token=admin)
+        ok = (bool(graded) and seen.status == 200 and kept.status == 200 and kept.body == seen.body
+              and families.still_open(pb, collection, admin, row))
+        c.check(f"grade-rules.guards.{collection}.no-client-update-grades-a-row-or-changes-a-graded-one", ok,
+                f"graded={bool(graded)} " + " ".join(f"{form}={r.status}" for form, r in sent))
+
+
 def main() -> int:
     c = Checks()
     work = Path(tempfile.mkdtemp(prefix="grade-rules-check-"))
@@ -332,6 +414,7 @@ def main() -> int:
                 _tables(db) == _tables(base_db)
                 and _collections_but_the_two_rules(db) == _collections_but_the_two_rules(base_db),
                 "a table or another rule changed")
+        check_a_lock_is_kept(c, work, base_data, base, full, base_rules, want)
 
         parents = {}
         conn = _ro(base_db)
@@ -348,6 +431,22 @@ def main() -> int:
                     check_client_writes(c, pb, admin, envelope, parents)
         except Exception as err:  # noqa: BLE001 - report, never crash the phase
             c.check("grade-rules.served-copy", False, str(err)[:300])
+
+        # Step 5, on a copy of its own, before the down step.
+        guarded = work / "guarded_pb_data"
+        shutil.copytree(base_data, guarded)
+        hooks = work / "execution_hooks"
+        hooks.mkdir()
+        for name in EXECUTION_HOOKS:
+            shutil.copy(HOOKS / name, hooks / name)
+        try:
+            with Served(work, guarded, base, hooks) as pb:
+                auth = pb.admin_auth(admin_env["PB_ADMIN_EMAIL"], admin_env["PB_ADMIN_PASSWORD"])
+                admin = auth.body.get("token", "") if isinstance(auth.body, dict) else ""
+                if c.check("grade-rules.guards.superuser", auth.status == 200 and bool(admin), f"status={auth.status}"):
+                    check_the_guards_alone(c, pb, admin, envelope, parents)
+        except Exception as err:  # noqa: BLE001 - report, never crash the phase
+            c.check("grade-rules.guards-copy", False, str(err)[:300])
 
         kept_rules, kept_record = _rules(db), _record(db)
         code, out = _migrate_down_confirmed(data, full)

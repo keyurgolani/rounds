@@ -3,8 +3,9 @@
 Static checks on 1700008700_attempt_grade_rules.js, plus runs of its up()
 and down() against a stubbed Dao through node, as
 test_grading_review_migration.py does: up sets the two rules on both
-attempt collections and records the ones it replaced once, a missing
-collection fails it before it changes either, and down() changes nothing.
+attempt collections and records the ones it found once, a rule an
+operator's lock left null stays null, a missing collection fails it
+before it changes either, and down() changes nothing.
 The rules agree with docs/security/account-scope.v1.json and with the
 manifest, whose record of the rules replaced is checked against
 1700006000_account_scope_rules.js. The migration runs on a real pb_data in
@@ -52,7 +53,7 @@ const db = { collections: {}, saves: [], params: {} };
 // assignment writes through, and that serializes to that value.
 function asVm(stored) {
   const values = { ...stored };
-  const out = { name: stored.name };
+  const out = { id: stored.id, name: stored.name };
   for (const key of ["listRule", "viewRule", "createRule", "updateRule", "deleteRule"]) {
     Object.defineProperty(out, key, {
       enumerable: true,
@@ -65,12 +66,12 @@ function asVm(stored) {
 }
 for (const [name, rules] of Object.entries(JSON.parse(before))) {
   if (process.env.MISSING === name) continue;
-  const stored = { name, listRule: "list", viewRule: "view", deleteRule: "delete", ...rules };
+  const stored = { id: "id" + name, name, listRule: "list", viewRule: "view", deleteRule: "delete", ...rules };
   db.collections[name] = process.env.REFS === "1" ? asVm(stored) : stored;
 }
 function Dao(d) {
   this.findCollectionByNameOrId = (n) => {
-    const c = d.collections[n];
+    const c = d.collections[n] || Object.values(d.collections).find((each) => each.id === n);
     if (!c) throw new Error("missing collection " + n);
     return c;
   };
@@ -97,12 +98,14 @@ process.stdout.write(JSON.stringify({ upError, up: afterUp, saves, params, down:
 """
 
 
-def _run(tmp_path_factory, missing: str = "", refs: bool = False) -> dict:
+def _run(tmp_path_factory, missing: str = "", refs: bool = False, found: dict | None = None) -> dict:
+    """``found`` sets rules a collection holds before up, over #9's."""
     node = shutil.which("node")
     assert node, "node is required for the PocketBase migration checks; CI installs it"
     harness = tmp_path_factory.mktemp("grade-rules") / "harness.cjs"
     harness.write_text(_HARNESS)
-    before = {name: {"createRule": _ownership_rule("CREATE_RULE"), "updateRule": _ownership_rule("UPDATE_RULE")}
+    before = {name: {"createRule": _ownership_rule("CREATE_RULE"), "updateRule": _ownership_rule("UPDATE_RULE"),
+                     **(found or {}).get(name, {})}
               for name in COLLECTIONS}
     res = subprocess.run([node, str(harness), str(MIGRATION), json.dumps(before)], capture_output=True, text=True,
                          timeout=60, env={"PATH": "", "MISSING": missing, "REFS": "1" if refs else ""})
@@ -171,6 +174,43 @@ def test_with_rules_handed_out_as_the_vm_does_the_record_keeps_the_replaced_rule
     assert run_as_the_vm["twice"]["saves"] == [] and run_as_the_vm["twice"]["params"] == run["params"]
 
 
+# The lock lever's rules (pocketbase/levers/lock_collection.template.js).
+LOCKED = {"createRule": None, "updateRule": None}
+
+
+@pytest.mark.parametrize("refs", [False, True])
+def test_a_locked_collection_keeps_its_lock_and_the_record_shows_what_was_found(run, tmp_path_factory, refs):
+    out = _run(tmp_path_factory, refs=refs, found={"take_home_attempts": LOCKED})
+    assert out["upError"] is None and out["saves"] == ["ai_coding_attempts"]
+    locked, other = out["up"]["take_home_attempts"], out["up"]["ai_coding_attempts"]
+    assert (locked["createRule"], locked["updateRule"]) == (None, None)
+    assert other == run["up"]["ai_coding_attempts"]
+    assert out["params"][MIGRATION.name] == [
+        {"collection": "ai_coding_attempts", "create": _ownership_rule("CREATE_RULE"),
+         "update": _ownership_rule("UPDATE_RULE")},
+        {"collection": "take_home_attempts", "create": None, "update": None},
+    ]
+    # A second run changes nothing, and the first record stands.
+    assert out["twice"]["saves"] == [] and out["twice"]["collections"] == out["up"]
+    assert out["twice"]["params"] == out["params"]
+
+
+def test_a_rule_left_null_stays_null_beside_one_that_changes(run, tmp_path_factory):
+    out = _run(tmp_path_factory, found={"ai_coding_attempts": {"updateRule": None}})
+    assert out["upError"] is None and out["saves"] == COLLECTIONS
+    half = out["up"]["ai_coding_attempts"]
+    assert (half["createRule"], half["updateRule"]) == (run["up"]["ai_coding_attempts"]["createRule"], None)
+    assert out["up"]["take_home_attempts"] == run["up"]["take_home_attempts"]
+    assert out["params"][MIGRATION.name][0] == {"collection": "ai_coding_attempts",
+                                                "create": _ownership_rule("CREATE_RULE"), "update": None}
+
+
+def test_with_both_collections_locked_up_changes_and_records_nothing(tmp_path_factory):
+    out = _run(tmp_path_factory, found={name: LOCKED for name in COLLECTIONS})
+    assert out["upError"] is None and out["saves"] == [] and out["params"] == {}
+    assert all((c["createRule"], c["updateRule"]) == (None, None) for c in out["up"].values())
+
+
 @pytest.mark.parametrize("missing", COLLECTIONS)
 def test_a_missing_collection_fails_up_before_it_changes_either(tmp_path_factory, missing):
     out = _run(tmp_path_factory, missing=missing)
@@ -217,16 +257,17 @@ def test_the_policy_and_the_manifest_hold_the_same_rules(run):
 LEVER = ROOT / "pocketbase" / "levers" / "restore_collection.template.js"
 
 
-def _run_lever(tmp_path_factory, collection: str) -> dict:
-    """The restore lever filled in for ``collection``, run once against the
-    same stub, starting from the rules this migration sets."""
+def _run_lever(tmp_path_factory, collection: str, ref: str | None = None) -> dict:
+    """The restore lever filled in for ``collection``, by name or by
+    ``ref``, run once against the same stub, starting from the rules this
+    migration sets. The stub's collection ids are "id" and the name."""
     node = shutil.which("node")
     assert node, "node is required for the PocketBase migration checks; CI installs it"
     folder = tmp_path_factory.mktemp("restore-lever")
     harness = folder / "harness.cjs"
     harness.write_text(_HARNESS)
     lever = folder / "1900000000_restore.js"
-    lever.write_text(LEVER.read_text().replace("__COLLECTION__", collection))
+    lever.write_text(LEVER.read_text().replace("__COLLECTION__", ref or collection))
     graded = _run(tmp_path_factory)["up"]["ai_coding_attempts"]
     before = {collection: {"createRule": graded["createRule"], "updateRule": graded["updateRule"]}}
     res = subprocess.run([node, str(harness), str(lever), json.dumps(before)], capture_output=True, text=True,
@@ -235,9 +276,10 @@ def _run_lever(tmp_path_factory, collection: str) -> dict:
     return {"before": before[collection], **json.loads(res.stdout)}
 
 
+@pytest.mark.parametrize("by_id", [False, True], ids=["by-name", "by-id"])
 @pytest.mark.parametrize("collection", COLLECTIONS)
-def test_the_restore_lever_refuses_an_attempt_collection_and_changes_nothing(tmp_path_factory, collection):
-    out = _run_lever(tmp_path_factory, collection)
+def test_the_restore_lever_refuses_an_attempt_collection_and_changes_nothing(tmp_path_factory, collection, by_id):
+    out = _run_lever(tmp_path_factory, collection, ref="id" + collection if by_id else None)
     assert out["upError"] and "1700008700_attempt_grade_rules.js" in out["upError"]
     assert out["saves"] == []
     kept = out["up"][collection]

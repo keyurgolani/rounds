@@ -33,8 +33,9 @@
   },
   "journal": {
     "param": "1700008700_attempt_grade_rules.js",
-    "holds": "one {collection, create, update} per collection, with the rules the up step replaced",
-    "rerun": "the up step records nothing when both collections already hold the new rules, so a second forward run keeps the first record",
+    "holds": "one {collection, create, update} per collection, with the rules the up step found",
+    "locked": "a null create or update rule, superuser only as the lock lever leaves it, stays null, and the record holds it as null; the operator lifts the lock with the after rules",
+    "rerun": "the up step records nothing when it would change no rule, each one already the new rule or null, so a second forward run keeps the first record",
     "down": "kept, with the new rules"
   },
   "census": {
