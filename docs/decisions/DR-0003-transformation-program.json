@@ -7,7 +7,7 @@
   "owner": "Product Architecture",
   "approver": "keyurgolani",
   "approvalRef": {
-    "pr": 199,
+    "pr": 206,
     "governedFiles": [
       {"path":"docs/program/cutover-policy.md","sha256":"324d1b55c81c94bc887c2e20e03d1c5551762b8b6389d39f31aefedf7695fe89"},
       {"path":"docs/program/reauthorization.md","sha256":"c42802dd9233951699ff00d40c8c320ca4fdedfa118642408ae1596fb815fc8a"},
@@ -18,13 +18,22 @@
       {"path":"docs/program/definition-of-done.schema.json","sha256":"fe06032731eb6880495bf678bc2467caa9785f9143c35178672fcf7452f8466b"},
       {"path":"docs/program/journeys.json","sha256":"4b8ffc7210ca1b6e87e3828efb7c56a1c65a87d897262fdaf52ffb39bb4ace3a"},
       {"path":"docs/program/journeys.schema.json","sha256":"e688a2b7aad59871c89fe1fa5d46e8b2c35fc28f4ff37dde4296a7c13d86bea9"},
-      {"path":"docs/program/program-record.schema.json","sha256":"530dbe0bd33507b008e087375c4c225392a17b789ac7c32517e3233a33a34e42"}
+      {"path":"docs/program/program-record.schema.json","sha256":"530dbe0bd33507b008e087375c4c225392a17b789ac7c32517e3233a33a34e42"},
+      {"path":"docs/program/issue-export.json","sha256":"19513e17f905f012682b9c5eb37313efaa240aa18ea095154499e88763ad569f"},
+      {"path":"docs/program/issue-export.schema.json","sha256":"76b11eaa412a189bbdbd37afe1867a7d0973b3c79b4a70d2bf731d96b7a0e14e"},
+      {"path":"docs/program/leaf-program.json","sha256":"a33479badf0557b768030b9c9fcddfbb0ef6488c8efbb8f5cf5543e6c2a87fa7"},
+      {"path":"docs/program/leaf-program.schema.json","sha256":"64f521d20793a35dda819c45028b360c5bb0974b0be9a75b56d60a24d211636b"},
+      {"path":"docs/program/leaf-dag.json","sha256":"2d52232633991519efff0f8d1ad81d1a79e655083953daf5595c2c563bd84d30"},
+      {"path":"docs/program/leaf-dag.schema.json","sha256":"f7ea1d5849f46f95fe6fca5d778fb1c245b1fc352268b5335b1a8a0fce38f0e5"},
+      {"path":"docs/program/leaf-gate.json","sha256":"90ac73d7b1be483f694b7e121f55f00b86d21f602f6580c09af1c767ccab8072"},
+      {"path":"docs/program/leaf-gate.schema.json","sha256":"27e8888595ac46e4f1c6648206086acb20e1b53485afbade4c4563579c5a6606"}
     ]
   },
-  "ratifiedOn": "2026-10-20",
+  "ratifiedOn": "2026-11-11",
   "compatibility": "additive",
-  "revision": 1,
-  "supersedes": null,
+  "revision": 2,
+  "supersedes": "DR-0003@1",
+  "supersessionReason": "S2 builds the leaf DAG and the prerequisite check. It adds the issue export, leaf-program.json, leaf-dag.json, leaf-gate.json, and their schemas to the governed files, and runs the prerequisite check as a read-only step of the conformance job in report mode instead of revision 1's disabled leaf-gate workflow pair. That pair, the open-PR limit, edge kinds, and each node's consumes and dod go to the backlog (P8, P11, P12, P13). Additive: no producer, DOD item, or context moves.",
   "consumers": [
     "ROUNDS-00A-L01",
     "ROUNDS-00A-L08",
@@ -128,9 +137,9 @@
     "Ephemeral Execution Worker pool",
     "Provider Gateway"
   ],
-  "versioning": "DR-0003 and the files it governs share one revision counter, cited as DR-0003@<revision>, or DR-0003@<revision>:<artifact-id> for one gateArtifacts row (each node's consumes in S2). definition-of-done.json, non-goals.json, and journeys.json carry their own revision, raised with this record's. Adding an artifact, edge, context, or journey mapping is additive; removing a producer or moving it later, dropping or loosening a DOD item, and reordering contexts are breaking. A ratified revision pins the SHA-256 of each governed file under docs/program/, so an unapproved edit fails DR_APPROVAL_STALE.",
-  "supersession": "A ratified revision is never edited. A changed decision gets a new revision that names the prior one in supersedes and gives a supersessionReason. From S2, leaf-gate fails a PR citing a breaking-superseded revision until it cites the successor (LEAF_GATE_SUPERSEDED); an additive successor passes. S3 supersedes this revision to ratify P3 and P5 against #18's ADR.",
-  "context": "Issue #17 (ROUNDS-01-L03), stage S1 of four. Spec lines refer to rounds-review docs/superpowers/specs/2026-10-18-rounds-review-board-design.md, and the catalog is rounds-review src/data/capabilities.json and src/data/capabilities.ts. The gates, gateArtifacts, and closure fields follow docs/program/program-record.schema.json. S2 adds docs/program/leaf-dag.json, its schema, scripts/conformance/rules/program.mjs, scripts/program/reconcile.mjs, and leaf-gate in report mode; S3 ratifies the context order and rollback defaults; S4 sets leaf-gate to enforce. Orchestrator decisions are taken under the owner's delegation to execute the approved plan.",
+  "versioning": "DR-0003 and the files it governs share one revision counter, cited as DR-0003@<revision>, or DR-0003@<revision>:<artifact-id> for one gateArtifacts row (each node's consumes, once the DAG carries it). definition-of-done.json, non-goals.json, and journeys.json carry their own revision, raised with this record's. Adding an artifact, edge, context, or journey mapping is additive; removing a producer or moving it later, dropping or loosening a DOD item, and reordering contexts are breaking. A ratified revision pins the SHA-256 of each governed file under docs/program/, so an unapproved edit fails DR_APPROVAL_STALE.",
+  "supersession": "A ratified revision is never edited. A changed decision gets a new revision that names the prior one in supersedes and gives a supersessionReason. The program conformance rule fails a program file citing a revision that a breaking successor superseded until it cites the successor, and leaf-dag.json, leaf-program.json, and leaf-gate.json must cite the current revision (PROGRAM_DR_UNRESOLVED); an additive successor leaves older citations valid. A leaf-gate verdict on each node's consumes comes with them, later. S3 supersedes this revision to ratify P3 and P5 against #18's ADR.",
+  "context": "Issue #17 (ROUNDS-01-L03), stages S1 and S2 of four. Spec lines refer to rounds-review docs/superpowers/specs/2026-10-18-rounds-review-board-design.md, and the catalog is rounds-review src/data/capabilities.json and src/data/capabilities.ts. The gates, gateArtifacts, and closure fields follow docs/program/program-record.schema.json. S2 (revision 2) adds the issue export, leaf-program.json, leaf-dag.json, leaf-gate.json and their schemas, scripts/program/dag.mjs, export.mjs, and leaf-gate.mjs, and scripts/conformance/rules/program.mjs; S3 ratifies the context order and rollback defaults; S4 sets leaf-gate to enforce. Orchestrator decisions are taken under the owner's delegation to execute the approved plan.",
   "securityConsequences": {
     "account": "No runtime or privilege change. The program puts account isolation first (#9 to #14 in phase 1), and DOD-1 makes server-derived account scope part of every leaf's definition of done.",
     "privacy": "Fixtures and examples are synthetic: the rollback fixture holds placeholder tags, commits, and digests and no account data. Transfer templates record procedures, never user data. DOD-6 keeps career content out of logs, traces, and metrics.",
@@ -277,7 +286,7 @@
         "rounds-review src/data/capabilities.json, tradeoffs",
         "rounds-review DESIGN.md"
       ],
-      "decision": "docs/program/definition-of-done.json (revision 1) holds DOD-1 to DOD-7: account-authorized, expected version, idempotent, revisioned and audited, one writable authority, correlation and redaction, and DESIGN.md plus a design review for surface leaves. From S2 each node's dod names the items it meets. docs/program/non-goals.json holds the product non-goals (spec 177-184 with their PRODUCT.md counterparts), every catalog tradeoffs entry verbatim, and the reference leaf issue.",
+      "decision": "docs/program/definition-of-done.json (revision 1) holds DOD-1 to DOD-7: account-authorized, expected version, idempotent, revisioned and audited, one writable authority, correlation and redaction, and DESIGN.md plus a design review for surface leaves. Each node's dod, naming the items it meets, waits on re-authorization item 5's dod lines (backlog). docs/program/non-goals.json holds the product non-goals (spec 177-184 with their PRODUCT.md counterparts), every catalog tradeoffs entry verbatim, and the reference leaf issue.",
       "alternatives": [
         {
           "option": "Each body writes its own definition of done",
@@ -328,7 +337,7 @@
         "rounds-review scripts/file-issues.mjs:79",
         "rounds-review scripts/file-issues.mjs:755"
       ],
-      "decision": "docs/program/reauthorization.md orders the rounds-review changes for one owner authorization, items 1 to 8, starting with per-leaf state in the filer so issues:file never reopens a completed leaf. Its edge table records the edges S2's DAG adds or drops, among them #13, #19, #29, #37, and #47 on #10 (ROUNDS-00B-L02). Until the re-authorization receipt, leaf-gate enforces the filed prerequisites (edgeSet filed), and then the proposed ones. Only the owner regenerates leaf-dag.json, from the catalog.",
+      "decision": "docs/program/reauthorization.md orders the rounds-review changes for one owner authorization, items 1 to 8, starting with per-leaf state in the filer so issues:file never reopens a completed leaf. Its edge table records the edges the re-authorization adds or drops, among them #13, #19, #29, #37, and #47 on #10 (ROUNDS-00B-L02). Until the receipt, leaf-dag.json carries the filed prerequisites (edgeSet filed), parsed by scripts/program/dag.mjs from a committed export of each issue's Exact prerequisite leaf issues section, and the leaf gate reports on those. The receipt's export replaces it under a new revision, with the catalog's phase, milestone, and stages in place of leaf-program.json's draft fields.",
       "alternatives": [
         {"option":"Edit issue bodies directly","reason":"issues:file reverts any body the catalog doesn't carry."},
         {
@@ -336,41 +345,41 @@
           "reason": "Each run re-renders every body, and until item 1 every run reopens closed leaves."
         }
       ],
-      "consequences": "S2 is built after item 6. Until the receipt, scripts/program/report.mjs lists the table's edges as pending.",
+      "consequences": "S2 is built from the filed bodies without waiting for item 6, so the DAG is reproducible offline and CI never reads GitHub. Until the receipt, scripts/program/report.mjs lists the table's edges as pending.",
       "migrationImpact": "None.",
       "rollbackImpact": "An unapplied item can be dropped in a superseding revision; an applied one is undone by a later catalog change and export."
     },
     {
       "id": "P12",
-      "title": "leaf-gate ships disabled, then reports, then enforces",
+      "title": "The leaf gate reports, then enforces, inside the conformance job",
       "status": "ratified",
       "sources": ["#17 Data and API contracts","#17 Rollout gate and rollback boundary","orchestrator decision for #17 S2"],
-      "decision": "S2's leaf-gate-dispatch.yml and leaf-gate.yml ship disabled: every job runs only when vars.LEAF_GATE_ENABLED == 'true', so no dispatch fires and no status posts until the owner sets that variable, together with the main ruleset that requires the leaf-gate status. From then leaf-gate runs in report mode (success, with the code it would fail in the description) until S4 sets docs/program/leaf-gate.json to enforce. No agent runs workflow_dispatch; only the owner-enabled dispatcher does.",
+      "decision": "scripts/program/leaf-gate.mjs runs as a step of the conformance job on pull_request, with contents: read and no pull_request_target, workflow_dispatch, or status write. It reads the PR title from the step's environment (never interpolated into the script), the prerequisites of that leaf or stage in leaf-dag.json, and the base branch's commit messages, and reports LEAF_GATE_BLOCKED for each prerequisite not merged into the base. A prerequisite counts once it merges into the base, since issues close only when the owner promotes next. docs/program/leaf-gate.json holds the mode: report prints the verdict and passes until S4 sets enforce, once the owner's main and next rulesets require conformance. A missing or unlabeled title, an unknown leaf or stage, and an unreadable DAG or history are blocked verdicts, never a pass. Revision 1's disabled leaf-gate-dispatch.yml and leaf-gate.yml pair is deferred.",
       "alternatives": [
         {
-          "option": "Enable the workflows on merge",
-          "reason": "The dispatcher would call workflow_dispatch on main for agent PRs, which the execution rules forbid, and nothing requires the status before the owner's ruleset."
+          "option": "The dispatcher pair of revision 1, posting a leaf-gate status",
+          "reason": "It needs workflow_dispatch on main and statuses: write. A read-only step in the existing conformance job meets criterion 2 without a privileged workflow."
         },
         {
           "option": "Check out PR code in pull_request_target",
-          "reason": "That runs untrusted code with a write token; leaf-gate.yml reads only base-tip files and the PR's transfer templates as data."
+          "reason": "That runs untrusted code with a write token; the step reads only the checkout, the base history, and the title as data."
         }
       ],
-      "consequences": "Until the owner enables it, the conformance job and scripts/program/report.mjs are the program's signal.",
+      "consequences": "Until S4 the gate blocks nothing: its log line and warning annotation, with scripts/program/report.mjs, are the program's signal. A verdict is computed on the PR's last push, so a retitled PR needs a new push or a re-run.",
       "migrationImpact": "None.",
-      "rollbackImpact": "The owner unsets LEAF_GATE_ENABLED, or an owner PR with program:override sets leaf-gate.json back to report."
+      "rollbackImpact": "A PR sets leaf-gate.json back to report; the step stays read-only either way."
     },
     {
       "id": "P13",
-      "title": "Edge kinds, stage nodes, and work in progress",
+      "title": "Stage nodes and merged prerequisites",
       "status": "ratified",
       "sources": ["#17 Domain ownership and invariants","#17 Data and API contracts"],
-      "decision": "A leaf is merged once its [LEAF-ID] PR or every stage PR merges, and done once a merged PR closed its issue as completed. Stage IDs are the body's per-PR labels (S<n>, S<letter>, P<n>, and #2's step numbers); a multi-PR stage gets one .k node per PR (ROUNDS-32-L10/SB.3). An edge's kind is done (the prerequisite is done), merged (merged, open or not), or closure (it gates only the dependent's closing PR). Open, non-draft PRs cover at most one authorityTransfer node, two implementation leaves, and one architecture-decision leaf; the next fails LEAF_GATE_WIP. Containment preempts and doesn't count.",
+      "decision": "A leaf is merged once its [LEAF-ID] PR merges, its finishing PR's squash message says Closes #N, or every stage PR merges; when satisfiedBy names stages, a dependent of the whole leaf waits on those only (#17's dependents need S2, rounds lead decision D12). A stage is merged once its PR merges. Stage IDs are the body's per-PR labels (S<n>, S<letter>, P<n>, and the numbers #2, #3, and #4 use); leaf-program.json lists them where the body has a stage section, and otherwise the DAG derives them from other sections' references (stagesComplete false). An edge with forStages binds only those stages of the dependent. Edge kinds (done, merged, closure) and the open-PR limit (LEAF_GATE_WIP) are deferred, so every S2 edge waits for a merge into the base.",
       "alternatives": [
         {"option":"Only done edges","reason":"#30 and #168/S2 deadlock: each waits for the other's closing PR."},
         {"option":"No limit on open PRs","reason":"Parallel transfer PRs would race for the one-context-at-a-time rollout."}
       ],
-      "consequences": "scripts/program/report.mjs parses titles this way today; S2's leaf-gate applies the kinds and the limit.",
+      "consequences": "scripts/program/report.mjs and the leaf gate read title labels the same way. A stage label the DAG doesn't list blocks the PR, so a staged leaf's list is completed before its next stage PR.",
       "migrationImpact": "Transfers run after merge, under #156's one-context-at-a-time rollout; the limit covers only open PRs.",
       "rollbackImpact": "A superseding revision changes a kind or the limit."
     }

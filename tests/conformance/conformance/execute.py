@@ -6,11 +6,10 @@ rules are tested where they are applied:
 
 - the fixture runs under its budget and a deadline; a fixture that raises,
   runs out of budget, or runs past its deadline is ``inconclusive``;
-- every contained sub-case the manifest lists needs an outcome from the
+- every sub-case the fixture's spec lists needs an outcome from the
   fixture (one it skipped is ``inconclusive``), and an outcome for a
-  sub-case the manifest doesn't list fails; pending sub-cases are
-  recorded as pending with their closing leaf;
-- a row with no contained sub-case (a ``not-applicable`` row) reports one
+  sub-case the spec doesn't list fails;
+- a spec with no sub-case (a ``not-applicable`` fixture) reports one
   outcome for the whole fixture, and passes only as ``not-applicable``;
 - whatever the fixture hands back is read as text, so a result in the
   wrong shape is a recorded failure, never an exception that leaves the
@@ -20,11 +19,11 @@ rules are tested where they are applied:
   verdict;
 - any canary in what the fixture saw fails it, whatever the fixture
   concluded;
-- every route the manifest lists for the fixture must be one it exercised;
+- every route the spec lists for the fixture must be one it exercised;
 - the kept evidence is redacted, capped, and checksummed, and a canary
   that survives redaction fails the run;
 - a failed teardown fails the fixture;
-- the verdict is the strict comparison with the manifest's expectation.
+- the verdict is the strict comparison with the spec's expectation.
 """
 from __future__ import annotations
 
@@ -35,7 +34,7 @@ from typing import Any, Callable, Iterable
 from .budget import Budget, deadline
 from .canaries import CanarySet
 from .outcomes import Outcome, decide
-from .receipts import FixtureReceipt, cap_evidence, checksum
+from .receipts import QUARANTINED, RAN, FixtureReceipt, cap_evidence, checksum
 from .redaction import clean, redact
 
 DEFAULT_MAX_REQUESTS = 25
@@ -130,28 +129,24 @@ def run_fixture(
     seen = "\n".join([_text(getattr(result, "canary_text", ""))] + list(evidence_raw.values()))
     note = redact(_text(getattr(result, "note", "")), canary_values)
 
-    # Sub-cases: each contained one needs an outcome; unknown ones fail.
-    listed = {s.id for s in fx.subcases}
-    unknown = sorted(set(subcase_outcomes) - listed)
+    # Sub-cases: each one the spec lists needs an outcome; unknown ones fail.
+    unknown = sorted(set(subcase_outcomes) - set(fx.subcases))
     if unknown:
-        problems.append("outcomes for sub-cases the manifest doesn't list: " + ", ".join(unknown))
+        problems.append("outcomes for sub-cases the spec doesn't list: " + ", ".join(unknown))
     entries: list[dict[str, Any]] = []
     contained_outcomes: list[str] = []
     for sub in fx.subcases:
-        if sub.status == "pending":
-            entries.append({"id": sub.id, "status": "pending", "closing_leaf": sub.closing_leaf})
-            continue
-        got = subcase_outcomes.get(sub.id, Outcome.INCONCLUSIVE.value)
-        if sub.id not in subcase_outcomes:
-            problems.append(f"no outcome for {sub.id}")
+        got = subcase_outcomes.get(sub, Outcome.INCONCLUSIVE.value)
+        if sub not in subcase_outcomes:
+            problems.append(f"no outcome for {sub}")
         contained_outcomes.append(got)
-        entries.append({"id": sub.id, "status": "contained", "closing_leaf": sub.closing_leaf, "outcome": got})
+        entries.append({"id": sub, "status": "contained", "outcome": got})
 
-    if fx.contained_subcases():
+    if fx.subcases:
         observed = _worst(contained_outcomes)
     else:
-        # No contained sub-case: the fixture reports one outcome for the
-        # whole row, which a not-applicable row meets as not-applicable.
+        # No sub-case: the fixture reports one outcome for the whole row,
+        # which a not-applicable fixture meets as not-applicable.
         overall = getattr(result, "overall", None)
         if result is not None and overall is None:
             problems.append("no outcome for the fixture")
@@ -164,7 +159,7 @@ def run_fixture(
         observed = Outcome.DETECTED.value
         problems.append("canary seen: " + ", ".join(hit_names))
 
-    # The routes the manifest lists must be ones the fixture exercised.
+    # The routes the spec lists must be ones the fixture exercised.
     exercised = list(ctx.log.routes)
     unexercised = [route for route in fx.routes if route not in exercised]
     if unexercised:
@@ -189,8 +184,7 @@ def run_fixture(
     reason = redact("; ".join(problems) or verdict.reason, canary_values)
     receipt = FixtureReceipt(
         id=fx.id,
-        status="ran",
-        closing_leaf=fx.closing_leaf,
+        status=RAN,
         target=target,
         outcome=verdict.outcome if not hit_names else Outcome.DETECTED.value,
         expectation=expectation,
@@ -219,8 +213,7 @@ def quarantined(fx, skip, target: str) -> FixtureReceipt:
     """The receipt entry for a fixture the skip ledger quarantines."""
     return FixtureReceipt(
         id=fx.id,
-        status="quarantined",
-        closing_leaf=fx.closing_leaf,
+        status=QUARANTINED,
         target=target,
         expectation=fx.expectation(target),
         quarantine={"owner": skip.owner, "expiry": skip.expiry.isoformat(), "reason": skip.reason},

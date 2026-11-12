@@ -96,9 +96,9 @@ echo "--- building pocketbase, runner, corpus, and bait images ---"
 compose build pocketbase runner corpus bait-metadata
 
 echo "--- bringing up PocketBase, the runner, and the bait decoys ---"
-# The bait decoys bring up the internal bait network and idle on it (the
-# fixtures that exercise them are pending rows); PocketBase and the runner
-# are what the stage-1 fixtures drive.
+# The bait decoys bring up the internal bait network and idle on it until
+# a fixture reads their logs; PocketBase and the runner are what the
+# fixtures drive.
 compose up -d pocketbase runner bait-metadata bait-rfc1918 bait-dns
 
 echo "--- running the containment corpus ---"
