@@ -6,9 +6,10 @@
 #   2. main phase   - create two accounts, seed fixtures, run enforced probes,
 #                     read the live rules back against the policy table
 #   3. admission    - two runner replicas built from this commit on the one
-#                     PocketBase, enforcing idempotency and quotas; check that
-#                     they replay, count, and limit as one
-#                     (harness/probes/admission_check.py)
+#                     PocketBase, enforcing idempotency and quotas, with both
+#                     execution keys on as in every phase outside 3e to 3g3:
+#                     a run's duplicate answers its job on either replica,
+#                     and the two count as one (harness/probes/admission_check.py)
 #  3b. admission deploy - on each replica, the admitted routes' anonymous
 #                     refusals and typed envelope, the runner's byte caps
 #                     before the account, field and key checks before any
@@ -23,25 +24,26 @@
 #                     phase 1, as a hosted demo does: what a demo caller may
 #                     change and own, through PocketBase and the runner, and
 #                     the deployment verifier's demo check through nginx: with
-#                     the runners at ROUNDS_GATE_DEMO_EXECUTION's default since
-#                     phase 3c, the seeded demo account's code run is refused
+#                     the runners at ROUNDS_GATE_DEMO_EXECUTION's default,
+#                     the seeded demo account's code run is refused
 #                     (harness/probes/demo_check.py)
 #  3e. execution store - PocketBase restarted with ROUNDS_GATE_EXECUTION_STORE
 #                     on and a worker secret: the job store's routes, rules,
 #                     fencing, and reaper on the real store
 #                     (harness/probes/execution_check.py)
-#  3f. execution workers - both replicas up with the store on: ready, and
-#                     each job claimed and ended once
+#  3f. execution workers - both replicas up with the store on and both
+#                     execution keys off: ready, and each job claimed and
+#                     ended once
 #  3g. execution readiness - PocketBase restarted with another secret: both
 #                     replicas go unready; restarted with it, ready again
 #  3g2. execution scratch - both replicas and nginx with the scratch key on
-#                     and definitions enforced: runs as jobs through nginx,
+#                     and the grading key off: runs as jobs through nginx,
 #                     duplicates, mismatches, another account's read and
 #                     cancel, a cancel mid-run, a time limit, and a replica
 #                     killed mid-run whose job a same-key retry finishes
 #                     (ROUNDS-00A-L03 PR 2, harness/probes/scratch_check.py)
 #  3g3. execution grading - both replicas and nginx with the grading key on
-#                     and definitions enforced: a grade as a job whose
+#                     and the scratch key off: a grade as a job whose
 #                     graded row the server writes, a duplicate, another
 #                     account's review, and a review with no provider
 #                     (ROUNDS-00A-L03 PR 3, harness/probes/grading_check.py)
@@ -94,8 +96,9 @@
 #   5. hook phase   - signup-disabled probe
 #  5b. demo off     - PocketBase recreated with the demo at its default: no
 #                     demo account signs in and a token from before is refused
-#   6. bring the runner and the nginx frontend up (after the last PocketBase
-#      recreate, since nginx looks PocketBase's address up once at start)
+#   6. recreate PocketBase with the worker secret again, then bring the
+#      runner and the nginx frontend up (after the last PocketBase recreate,
+#      since nginx looks PocketBase's address up once at start)
 #   7. deploy       - the deployment verifier (harness/verify_deployment.py)
 #                     through the real nginx config and at PocketBase's port,
 #                     with its admission and gate checks and the runner's
@@ -252,6 +255,9 @@ trap cleanup EXIT
 # optional second argument sets ROUNDS_GATE_RUN for the emergency phases;
 # the third, fourth, and fifth set ROUNDS_GATE_EXECUTION_STORE and the
 # worker secret PocketBase and the runners get, for the execution phases.
+# Left out, the fourth and fifth are the run's worker secret, so code runs
+# as jobs from phase 3 on; given empty, that service has none, as phase 5
+# needs.
 # PocketBase runs with the demo on (DEMO_V) until the signup restart, so
 # the admission phase's demo accounts sign in; it's off from then on.
 DEMO_V=true
@@ -265,14 +271,16 @@ SHARE_GATE=""
 # ROUNDS_GATE_EXECUTION_DEFINITIONS for both runners, for the scratch job
 # phases (ROUNDS-00A-L03 PR 2), and GRADING_GATE sets
 # ROUNDS_GATE_EXECUTION_GRADING for them, for the grading phase (PR 3).
+# Empty, both keys are on, their default since PR 4, and definitions are
+# enforced in every phase, so a key acts as on wherever a phase leaves it.
 SCRATCH_GATE=""
-DEFINITIONS_GATE=""
+DEFINITIONS_GATE=enforce
 GRADING_GATE=""
-# DEMO_EXECUTION_GATE sets ROUNDS_GATE_DEMO_EXECUTION for both runners. The
-# admission phase's demo accounts run code, so it's enabled for phases 3 and
-# 3b; from the emergency phases on the runners run with it at its default,
-# off, which phase 3d2 checks through nginx (ROUNDS-00B-L07).
-DEMO_EXECUTION_GATE=enabled
+# DEMO_EXECUTION_GATE sets ROUNDS_GATE_DEMO_EXECUTION for both runners. No
+# phase's demo account runs code since the admission checks moved to jobs
+# (ROUNDS-00A-L03 PR 4), so the runners keep it at its default, off, which
+# phase 3d2 checks through nginx (ROUNDS-00B-L07).
+DEMO_EXECUTION_GATE=""
 # PB_DATA_V picks PocketBase's volume and RUNNER_PB_URL where both runners
 # reach it; phase 3o sets them to the legacy volume and the recorder
 # (ROUNDS-00B-L06).
@@ -280,7 +288,8 @@ PB_DATA_V="pb_data"
 RUNNER_PB_URL="http://pocketbase:8090"
 set_signups() {
   printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\nROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=%s\nROUNDS_GATE_EXECUTION_SCRATCH=%s\nROUNDS_GATE_EXECUTION_DEFINITIONS=%s\nAI_KEY_SECRET=%s\nROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=%s\nROUNDS_SHARE_RESOLVER_PASSWORD=%s\nROUNDS_GATE_EXECUTION_GRADING=%s\nPB_DATA_VOLUME=%s\nPB_LEGACY_VOLUME=%s\nRUNNER_POCKETBASE_URL=%s\nRECORDER_VOLUME=%s\nRECORDER_SALT=%s\nROUNDS_GATE_DEMO_EXECUTION=%s\n' \
-    "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${DEMO_V}" \
+    "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" "${3:-}" "${4-${EXECUTION_SECRET_V}}" \
+    "${5-${EXECUTION_SECRET_V}}" "${DEMO_V}" \
     "${SNAPSHOT_GATE}" "${SCRATCH_GATE}" "${DEFINITIONS_GATE}" "${SCAN_SECRET_V}" "${SHARE_GATE}" \
     "${SHARE_RESOLVER_SECRET_V}" "${GRADING_GATE}" "${PB_DATA_V}" "${LEGACY_VOLUME}" "${RUNNER_PB_URL}" \
     "${RECORDER_VOLUME}" "${RECORDER_SALT_V}" "${DEMO_EXECUTION_GATE}" > "${ENV_FILE}"
@@ -381,6 +390,13 @@ capture_gates() {
     sleep 1
   done
   printf '%s\n' "${line}" > "${out}"
+  # The execution keys' start lines follow it: what a key that acts as off
+  # needs, by name only (ROUNDS-00A-L03 PR 4).
+  sleep 1
+  compose logs --no-color "${service}" 2>/dev/null \
+    | grep -e '"event":"gates"' -e '"event":"execution.scratch"' -e '"event":"execution.grading"' \
+    | awk '/"event":"gates"/ { kept = "" } { kept = kept $0 "\n" } END { printf "%s", kept }' \
+    | grep -v '"event":"gates"' >> "${out}" || true
 }
 
 # Restart both runner replicas and nginx with the env file as it is now:
@@ -534,8 +550,6 @@ compose stop runner runner-b
 # their accounts; nginx starts with the runner each time and is removed
 # again before PocketBase is recreated, since it looks addresses up once.
 echo "--- phase 3c: emergency disable (ROUNDS_GATE_RUN=disabled, both replicas restarted) ---"
-# The demo's code runs go back to their default, off, with this restart.
-DEMO_EXECUTION_GATE=""
 set_signups false disabled
 restart_runners
 capture_gates emergency-disable
@@ -563,6 +577,10 @@ compose stop runner runner-b frontend
 compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
 
 echo "--- phase 3e: execution store (PocketBase with the store on and a worker secret) ---"
+# Both keys off until phase 3g2, so phase 3f's workers end each kind's job
+# canceled before it starts.
+SCRATCH_GATE=off
+GRADING_GATE=off
 set_signups false "" on "${EXECUTION_SECRET_V}" "${EXECUTION_SECRET_V}"
 compose up -d --force-recreate pocketbase
 set +e
@@ -596,7 +614,6 @@ rc_step=$?
 # with the scratch key on and definitions enforced (ROUNDS-00A-L03 PR 2).
 echo "--- phase 3g2: execution scratch (scratch on, definitions enforced, both replicas and nginx) ---"
 SCRATCH_GATE=on
-DEFINITIONS_GATE=enforce
 set_signups false "" on "${EXECUTION_ROTATED_V}" "${EXECUTION_ROTATED_V}"
 restart_runners
 capture_gates execution-scratch
@@ -619,7 +636,7 @@ rc_step=$?
 # Both replicas and nginx again, with the grading key on in place of the
 # scratch key (ROUNDS-00A-L03 PR 3).
 echo "--- phase 3g3: execution grading (grading on, definitions enforced, both replicas and nginx) ---"
-SCRATCH_GATE=""
+SCRATCH_GATE=off
 GRADING_GATE=on
 set_signups false "" on "${EXECUTION_ROTATED_V}" "${EXECUTION_ROTATED_V}"
 restart_runners
@@ -630,7 +647,6 @@ rc_step=$?
 [ "${rc_step}" -eq 0 ] || execution_rc=1
 GRADING_GATE=""
 SCRATCH_GATE=""
-DEFINITIONS_GATE=""
 set -e
 compose stop runner runner-b frontend
 compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
@@ -774,7 +790,9 @@ SNAPSHOT_GATE=enabled
 SHARE_GATE=enabled
 PB_DATA_V="pb_data_legacy"
 RUNNER_PB_URL="http://recorder:8090"
-set_signups false
+# The job store off here, so the recorder sees only the share calls this
+# phase makes and no worker's.
+set_signups false "" off
 compose up -d materializer
 compose up -d --force-recreate pocketbase
 wait_pocketbase || legacy_shares_rc=1
@@ -810,7 +828,8 @@ set -e
 
 echo "--- phase 4: recreate PocketBase (signups disabled, the demo at its default) ---"
 DEMO_V=false
-set_signups true
+# No worker secret, for phase 5's check that none logs in.
+set_signups true "" "" "" ""
 compose up -d --force-recreate pocketbase
 
 echo "--- phase 5: hook (signup-disabled probe) ---"
@@ -829,6 +848,10 @@ probe demo-off
 set -e
 
 echo "--- phase 6: runner and nginx frontend up ---"
+# PocketBase and the runner both get the worker secret again, so the keys
+# act as on for the deployment checks.
+set_signups true
+compose up -d --force-recreate pocketbase
 compose up -d runner frontend
 capture_gates deploy
 

@@ -3,12 +3,13 @@
 
 Two runner replicas built from this commit share one PocketBase, with
 ``ROUNDS_GATE_ENFORCE_IDEMPOTENCY`` and ``ROUNDS_GATE_ENFORCE_QUOTA`` at
-``enforce``. Every account here is generated for the run.
+``enforce``, and the execution keys on, as every code run is a job since
+ROUNDS-00A-L03 PR 4. Every account here is generated for the run.
 
-1. A command completed on one replica replays on the other; a key reused
-   for another request, or a missing key, is refused.
-2. Requests on both replicas land in one hourly count, and an account's
-   in-flight limit holds across them, as does the shared demo tier's.
+1. A run's command on one replica answers its job on the other; a key
+   reused for another request, or a missing key, is refused.
+2. Requests on both replicas land in one hourly count, an evaluate settles
+   on the cases it runs, and each account's tier comes from its record.
 3. A step 8 denial leaves its command retryable, with no live lease, on
    either replica.
 4. No client sets or clears ``is_demo``, the admission collections are
@@ -30,7 +31,6 @@ import os
 import secrets
 import string
 import sys
-import threading
 import time
 import urllib.error
 import urllib.parse
@@ -43,8 +43,10 @@ from pbclient import PBClient
 POCKETBASE_URL = os.environ.get("POCKETBASE_URL", "http://pocketbase:8090")
 RUNNERS = [u.strip().rstrip("/") for u in os.environ.get("RUNNER_URLS", "").split(",") if u.strip()]
 COLLECTIONS = ("admission_commands", "admission_counters", "admission_leases")
-# A run's own work: the second one sleeps long enough for others to queue.
-SLOW_S = 2
+# The definition every run here names, and what an evaluate of all of its
+# cases settles on: nine standard cases at 3 s and three large ones at 10 s.
+TWO_SUM = {"track": "coding", "slug": "two-sum", "variant": "python", "version": 1}
+EVALUATE_CHARGE = 9 * 3 + 3 * 10
 # The harness's test runner key, the one PocketBase and both runners get.
 RUNNER_KEY = os.environ.get("ROUNDS_ADMISSION_SECRET", "")
 RUNNER_KEY_HEADER = "X-Rounds-Admission-Key"
@@ -98,9 +100,11 @@ def call(base: str, method: str, path: str, token: str | None = None, body: Any 
 
 
 def wait_up(base: str, attempts: int = 90) -> bool:
+    """Whether ``base`` answers ready in time: up, and with the store on,
+    its worker logged in, so it takes jobs."""
     for _ in range(attempts):
         try:
-            if call(base, "GET", "/health", timeout=3)[0] == 200:
+            if call(base, "GET", "/ready", timeout=3)[0] == 200:
                 return True
         except (urllib.error.URLError, OSError):
             pass
@@ -135,25 +139,50 @@ def demo_account(pb: PBClient, admin: str) -> factory.Account:
     return acct
 
 
-def a_question(pb: PBClient, admin: str) -> tuple[str, str, int]:
-    """A seeded question with a plain function entry and test cases: its
-    slug, its function name, and the wall seconds its cases charge."""
-    resp = pb.listing("coding_questions", admin, {"perPage": 200, "fields": "slug,entry,test_cases"})
-    for item in (resp.body or {}).get("items", []):
-        entry = item.get("entry") or {}
-        cases = [tc for tc in (item.get("test_cases") or []) if isinstance(tc, dict)]
-        if entry.get("kind") == "function" and isinstance(entry.get("name"), str) and 0 < len(cases) <= 32:
-            charge = sum(10 if "large" in (tc.get("tags") or []) else 3 for tc in cases)
-            return item["slug"], entry["name"], charge
-    raise RuntimeError("no seeded coding question with a function entry")
+def run_body(sleep_s: float = 0, marker: int = 1, code: str | None = None) -> dict:
+    """A run of TWO_SUM whose code sleeps and returns as asked, or runs
+    ``code``."""
+    if code is None:
+        code = f"import time\ndef two_sum(nums, target):\n    time.sleep({sleep_s})\n    return {marker}\n"
+    return {"definition": TWO_SUM, "code": code, "input": {"nums": [1, 2], "target": 3}}
 
 
-def run_body(slug: str, name: str, sleep_s: float = 0, marker: int = 1, printed: int = 0) -> dict:
-    code = (
-        f"import time\ndef {name}(*args, **kwargs):\n    print('x' * {printed})\n"
-        f"    time.sleep({sleep_s})\n    return {marker}\n"
-    )
-    return {"question_slug": slug, "language": "python", "code": code, "input": {}}
+def evaluate_body() -> dict:
+    """A test run of every one of TWO_SUM's cases."""
+    return {"definition": TWO_SUM, "code": run_body()["code"]}
+
+
+JOBS = "/api/execution/jobs"
+ENDED = {"completed", "timed-out", "denied", "canceled", "failed"}
+
+
+def job_id(answer: Any) -> str:
+    return answer.get("job_id", "") if isinstance(answer, dict) else ""
+
+
+def job_until(base: str, token: str, job: str, done=None, timeout_s: float = 120) -> dict:
+    """The account's job once ``done`` holds of it, by default once it
+    ended, or as it last was when the time is up."""
+    done = done or (lambda answer: answer.get("state") in ENDED)
+    deadline = time.monotonic() + timeout_s
+    last: dict = {}
+    while job and time.monotonic() < deadline:
+        status, answer, _ = call(base, "GET", f"{JOBS}/{job}?wait=5", token, timeout=20)
+        if status == 200 and isinstance(answer, dict):
+            last = answer
+            if done(answer):
+                return answer
+        else:
+            time.sleep(1)
+    return last
+
+
+def all_ended(base: str, made: list[tuple[str, str]], timeout_s: float = 120) -> bool:
+    """Whether each (token, job) in ``made`` ended within the time. A later
+    phase's claims take the oldest queued job, so none is left behind."""
+    deadline = time.monotonic() + timeout_s
+    return all(job and job_until(base, token, job, timeout_s=max(1.0, deadline - time.monotonic()))
+               .get("state") in ENDED for token, job in made)
 
 
 def usage(token: str) -> dict:
@@ -161,26 +190,6 @@ def usage(token: str) -> dict:
     if status != 200 or not isinstance(body, dict):
         raise RuntimeError(f"usage failed: status={status}")
     return body
-
-
-def wait_in_flight(token: str, count: int, timeout_s: float = 10) -> bool:
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if usage(token)["in_flight"] >= count:
-            return True
-        time.sleep(0.05)
-    return False
-
-
-def in_background(fn) -> tuple[threading.Thread, dict]:
-    out: dict = {}
-
-    def target() -> None:
-        out["result"] = fn()
-
-    thread = threading.Thread(target=target)
-    thread.start()
-    return thread, out
 
 
 def lease_token() -> str:
@@ -296,87 +305,59 @@ def main() -> int:
         return 1
     pb = PBClient(POCKETBASE_URL)
     pb.wait_healthy()
-    c.check("admission.replicas.both-up", all(wait_up(r) for r in RUNNERS), "a runner never answered /health")
+    c.check("admission.replicas.both-ready", all(wait_up(r) for r in RUNNERS), "a runner never answered /ready")
     admin = admin_token(pb)
-    slug, name, evaluate_charge = a_question(pb, admin)
     one, two = RUNNERS
 
-    # 1. Idempotency across replicas.
+    # 1. Idempotency across replicas. Every run is a job, so a duplicate
+    # answers the job, wherever it lands.
     a = account(pb, "adm-a")
     key = uuid7()
-    first = call(one, "POST", "/api/run", a.token, run_body(slug, name), {"Idempotency-Key": key})
-    c.check("admission.idempotency.first-run-admitted", first[0] == 200, f"status={first[0]}")
-    again = call(two, "POST", "/api/run", a.token, run_body(slug, name), {"Idempotency-Key": key})
-    c.check("admission.idempotency.replays-on-the-other-replica",
-            again[0] == 200 and again[2].get("idempotent-replayed") == "true" and again[1] == first[1],
-            f"status={again[0]} replayed={again[2].get('idempotent-replayed')}")
-    changed = call(two, "POST", "/api/run", a.token, run_body(slug, name, marker=2), {"Idempotency-Key": key})
+    first = call(one, "POST", "/api/run", a.token, run_body(), {"Idempotency-Key": key})
+    job = job_id(first[1])
+    c.check("admission.idempotency.first-run-admitted", first[0] == 202 and bool(job), f"status={first[0]}")
+    again = call(two, "POST", "/api/run", a.token, run_body(), {"Idempotency-Key": key})
+    c.check("admission.idempotency.the-other-replica-answers-its-job",
+            again[0] == 202 and job_id(again[1]) == job, f"status={again[0]}")
+    changed = call(two, "POST", "/api/run", a.token, run_body(marker=2), {"Idempotency-Key": key})
     c.check("admission.idempotency.reused-key-refused",
             changed[0] == 409 and (changed[1] or {}).get("code") == "idempotency_mismatch", f"status={changed[0]}")
-    keyless = call(one, "POST", "/api/run", a.token, run_body(slug, name))
+    keyless = call(one, "POST", "/api/run", a.token, run_body())
     c.check("admission.idempotency.key-required",
             keyless[0] == 400 and (keyless[1] or {}).get("code") == "idempotency_key_required", f"status={keyless[0]}")
-    # A result near the runner's 64 KiB output cap is kept and replayed whole.
-    big = uuid7()
-    loud = call(two, "POST", "/api/run", a.token, run_body(slug, name, printed=60_000), {"Idempotency-Key": big})
-    echoed = call(one, "POST", "/api/run", a.token, run_body(slug, name, printed=60_000), {"Idempotency-Key": big})
-    c.check("admission.idempotency.large-result-replays",
-            loud[0] == 200 and len((loud[1] or {}).get("stdout", "")) >= 60_000
-            and echoed[2].get("idempotent-replayed") == "true" and echoed[1] == loud[1],
-            f"status={loud[0]}/{echoed[0]}")
 
     # 2. One count across replicas.
+    made = [(a.token, job)]
     for i in range(4):
-        status = call(RUNNERS[i % 2], "POST", "/api/run", a.token, run_body(slug, name), {"Idempotency-Key": uuid7()})[0]
-        if status != 200:
+        status, answer, _ = call(RUNNERS[i % 2], "POST", "/api/run", a.token, run_body(), {"Idempotency-Key": uuid7()})
+        made.append((a.token, job_id(answer)))
+        if status != 202:
             c.check("admission.quota.runs-admitted", False, f"run {i} status={status}")
-    # Two charged runs above, a replay and refusals that weren't, and four more.
+    # The first run, which its duplicate and the refusals didn't add to, and
+    # four more; each request's lease ended with its answer.
     used = usage(a.token)
-    c.check("admission.quota.one-count-across-replicas", used["requests"] == 6 and used["in_flight"] == 0,
+    c.check("admission.quota.one-count-across-replicas", used["requests"] == 5 and used["in_flight"] == 0,
             f"requests={used['requests']} in_flight={used['in_flight']}")
     rows = pb.listing("admission_counters", admin, {"filter": f"bucket = 'account' && account = '{a.user_id}'"})
     c.check("admission.quota.one-counter-row", rows.status == 200 and len(rows.body["items"]) == 1
-            and rows.body["items"][0]["requests"] == 6, f"status={rows.status}")
+            and rows.body["items"][0]["requests"] == 5, f"status={rows.status}")
 
     e = account(pb, "adm-e")
-    evaluate = {k: v for k, v in run_body(slug, name).items() if k != "input"}
-    evaluated = call(two, "POST", "/api/evaluate", e.token, evaluate, {"Idempotency-Key": uuid7()})
+    evaluated = call(two, "POST", "/api/evaluate", e.token, evaluate_body(), {"Idempotency-Key": uuid7()})
+    made.append((e.token, job_id(evaluated[1])))
     used = usage(e.token)
     c.check("admission.quota.evaluate-settles-on-its-cases",
-            evaluated[0] == 200 and used["requests"] == 1 and used["wall_seconds"] == evaluate_charge,
-            f"status={evaluated[0]} wall={used['wall_seconds']} expected={evaluate_charge}")
-
-    b = account(pb, "adm-b")
-    slow = [in_background(lambda r=r: call(r, "POST", "/api/run", b.token, run_body(slug, name, SLOW_S),
-                                           {"Idempotency-Key": uuid7()})) for r in RUNNERS]
-    busy = wait_in_flight(b.token, 2)
-    third = call(one, "POST", "/api/run", b.token, run_body(slug, name), {"Idempotency-Key": uuid7()})
-    c.check("admission.quota.in-flight-limit-across-replicas",
-            busy and third[0] == 429 and (third[1] or {}).get("code") == "quota_exceeded" and "retry-after" in third[2],
-            f"busy={busy} status={third[0]}")
-    for thread, _out in slow:
-        thread.join(timeout=30)
-    c.check("admission.quota.slow-runs-finished", all(out.get("result", (0,))[0] == 200 for _t, out in slow),
-            f"statuses={[out.get('result', (0,))[0] for _t, out in slow]}")
-    after = call(two, "POST", "/api/run", b.token, run_body(slug, name), {"Idempotency-Key": uuid7()})
-    c.check("admission.quota.leases-released", after[0] == 200 and usage(b.token)["in_flight"] == 0, f"status={after[0]}")
+            evaluated[0] == 202 and used["requests"] == 1 and used["wall_seconds"] == EVALUATE_CHARGE,
+            f"status={evaluated[0]} wall={used['wall_seconds']} expected={EVALUATE_CHARGE}")
+    c.check("admission.jobs.each-ended", all_ended(one, made), f"jobs={len(made)}")
 
     d = demo_account(pb, admin)
-    other_demo = demo_account(pb, admin)
-    held = in_background(lambda: call(one, "POST", "/api/run", d.token, run_body(slug, name, SLOW_S),
-                                      {"Idempotency-Key": uuid7()}))
-    busy = wait_in_flight(d.token, 1)
-    shared = call(two, "POST", "/api/run", other_demo.token, run_body(slug, name), {"Idempotency-Key": uuid7()})
-    c.check("admission.demo.shared-in-flight-limit-across-replicas",
-            busy and shared[0] == 429 and (shared[1] or {}).get("code") == "demo_limit_reached",
-            f"busy={busy} status={shared[0]}")
-    held[0].join(timeout=30)
     c.check("admission.demo.tier-from-the-record", usage(d.token)["tier"] == "demo" and usage(a.token)["tier"] == "standard",
             "tiers differ from is_demo")
 
     # 3. A step 8 denial stays retryable on either replica.
     missing_key = uuid7()
-    missing = {**run_body(slug, name), "question_slug": "harness-missing-question"}
+    missing = {**run_body(), "definition": {**TWO_SUM, "slug": "harness-no-such-item"}}
     denied = [call(r, "POST", "/api/run", a.token, missing, {"Idempotency-Key": missing_key})[0] for r in RUNNERS]
     rows = pb.listing("admission_commands", admin, {"filter": f"command_id = '{missing_key}'"})
     items = (rows.body or {}).get("items", [])
