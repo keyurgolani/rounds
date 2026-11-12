@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/program/leaf-program.schema.json",
+  "title": "Leaf program inputs",
+  "description": "Format of docs/program/leaf-program.json (ROUNDS-01-L03 S2): the base phase and milestone rules, the stage lists read from issue bodies, satisfiedBy, and edge corrections that scripts/program/dag.mjs combines with the issue export.",
+  "type": "object",
+  "required": ["description", "decision", "phases", "milestones", "stages", "satisfiedBy", "edges"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string", "minLength": 1 },
+    "decision": { "type": "string", "pattern": "^DR-\\d{4}@\\d+$" },
+    "phases": {
+      "type": "object",
+      "required": ["source", "titles", "rules"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "titles": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "items": {
+            "type": "object",
+            "required": ["phase", "title", "spec"],
+            "additionalProperties": false,
+            "properties": {
+              "phase": { "type": "integer", "minimum": 1, "maximum": 9 },
+              "title": { "type": "string", "minLength": 1 },
+              "spec": { "type": "string", "pattern": "^\\d+(-\\d+)?$" }
+            }
+          }
+        },
+        "rules": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/phaseRule" } }
+      }
+    },
+    "milestones": {
+      "type": "object",
+      "required": ["source", "titles", "rules"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "titles": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": ["milestone", "title", "spec"],
+            "additionalProperties": false,
+            "properties": {
+              "milestone": { "type": "integer", "minimum": 0, "maximum": 7 },
+              "title": { "type": "string", "minLength": 1 },
+              "spec": { "type": "string", "pattern": "^\\d+(-\\d+)?$" }
+            }
+          }
+        },
+        "rules": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/milestoneRule" } }
+      }
+    },
+    "stages": {
+      "description": "Leaf id to its stage list, as its issue body names the stage PRs. numbered: the PRs are labeled by number ([ROUNDS-00A-L03/1]). phrases: body wording that names one stage (\"corpus stage\"). aliases: a stage a body names that covers several.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["stages", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "stages": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/stageId" } },
+          "numbered": { "type": "boolean" },
+          "phrases": { "type": "object", "additionalProperties": { "$ref": "#/$defs/stageId" } },
+          "aliases": { "type": "object", "additionalProperties": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/stageId" } } },
+          "source": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "satisfiedBy": {
+      "description": "Leaf id to the stages a dependent of the whole leaf waits on, when not every stage.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["stages", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "stages": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/stageId" } },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "edges": {
+      "type": "object",
+      "required": ["drop", "add"],
+      "additionalProperties": false,
+      "properties": {
+        "drop": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["dependent", "prerequisite", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "dependent": { "$ref": "#/$defs/leafId" },
+              "prerequisite": { "$ref": "#/$defs/leafRef" },
+              "reason": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "add": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["dependent", "prerequisite", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "dependent": { "$ref": "#/$defs/leafId" },
+              "prerequisite": { "$ref": "#/$defs/leafRef" },
+              "forStages": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/stageId" } },
+              "reason": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "leafId": { "type": "string", "pattern": "^ROUNDS-\\d{2}[A-Z]?-L\\d{2}$" },
+    "leafRef": { "type": "string", "pattern": "^ROUNDS-\\d{2}[A-Z]?-L\\d{2}(/[A-Za-z0-9.]+)?$" },
+    "stageId": { "type": "string", "pattern": "^[A-Za-z0-9.]+$" },
+    "match": {
+      "description": "A leaf id, a capability, or \"<leaf> to <leaf>\" inside one capability.",
+      "type": "string",
+      "pattern": "^ROUNDS-\\d{2}[A-Z]?(-L\\d{2}( to ROUNDS-\\d{2}[A-Z]?-L\\d{2})?)?$"
+    },
+    "matchList": { "type": ["string", "array"], "pattern": "^ROUNDS-\\d{2}[A-Z]?(-L\\d{2}( to ROUNDS-\\d{2}[A-Z]?-L\\d{2})?)?$", "minItems": 1, "items": { "$ref": "#/$defs/match" } },
+    "phaseRule": {
+      "type": "object",
+      "required": ["match", "phase", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "match": { "$ref": "#/$defs/matchList" },
+        "phase": { "type": "integer", "minimum": 1, "maximum": 9 },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "milestoneRule": {
+      "type": "object",
+      "required": ["match", "milestone", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "match": { "$ref": "#/$defs/matchList" },
+        "milestone": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

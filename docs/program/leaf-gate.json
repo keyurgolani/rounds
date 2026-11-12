@@ -1,0 +1,6 @@
+{
+  "$schema": "./leaf-gate.schema.json",
+  "description": "Mode of the leaf prerequisite check that scripts/program/leaf-gate.mjs runs in the conformance job on every pull request (ROUNDS-01-L03, DR-0003 decision P12). report prints LEAF_GATE_BLOCKED and the missing prerequisites and passes; enforce fails the job. S4 sets enforce once the owner's main and next rulesets require the conformance check.",
+  "mode": "report",
+  "decision": "DR-0003@2"
+}
