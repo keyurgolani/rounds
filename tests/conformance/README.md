@@ -110,6 +110,20 @@ bait image from the commit, generates the run's canaries, brings up
 PocketBase and the runner, runs the corpus, writes
 `.receipts/containment-receipt.json`, and tears the stack down.
 
+Every code run is a durable job since `ROUNDS-00A-L03` PR 4, so the
+launcher also makes the job store's worker secret for each run, which
+PocketBase and the runner share and which goes with the env file at
+teardown, never printed or kept. The driver waits for the runner's
+`/ready`, and the runner client (`conformance/context.py`) sends a code
+run's `Idempotency-Key` when a fixture sends none and follows its job to
+its end, so a fixture gets the run's result as the route answered it in
+its request before. A job that ends without one reaches the fixture under
+its 202, with no result. The receipt lists each job read as
+`GET /api/execution/jobs/{job_id}`. The worker secret isn't a canary:
+`ROUNDS_EXECUTION_SECRET` stays `absent` in `canary-set/v1`, and EX-07
+names any variable outside the minimal environment that reaches a
+candidate.
+
 No take-home definition is active on this branch, so a take-home body
 would stop at the definition step. The launcher writes one only the
 corpus stack has (`python3 tests/conformance/conformance/overlay.py --out

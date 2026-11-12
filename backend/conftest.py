@@ -240,6 +240,19 @@ def admission_store(monkeypatch):
     return fake
 
 
+TEST_EXECUTION_SECRET = "test-execution-key-placeholder-0123456789"
+TEST_ADMISSION_SECRET = "test-admission-key-placeholder-0123456789"
+
+
+@pytest.fixture
+def job_secrets(monkeypatch):
+    """Both secrets an execution key's ``on`` needs on the runner
+    (ROUNDS-00A-L03 PR 4), as test placeholders, so a test's gates alone
+    decide the key."""
+    monkeypatch.setenv("ROUNDS_EXECUTION_SECRET", TEST_EXECUTION_SECRET)
+    monkeypatch.setenv("ROUNDS_ADMISSION_SECRET", TEST_ADMISSION_SECRET)
+
+
 @pytest.fixture
 def pocketbase(monkeypatch):
     """One fake PocketBase behind every admitted router's ``pb_get``, the

@@ -1,8 +1,13 @@
-"""Matchers through /api/evaluate (admission/v1, ROUNDS-00A-L01).
+"""Matchers through /api/evaluate's older request shape (admission/v1,
+ROUNDS-00A-L01).
 
-Expected values, validators included, come only from the stored
-question. Each request also runs anonymously as an expected-deny
-control: 401 ``unauthenticated``, no validator, nothing runs."""
+Expected values, validators included, came only from the stored question.
+Since ROUNDS-00A-L03 PR 4 the route runs definitions only, as jobs, and
+at the shipped gates the execution keys act as off: each older request,
+from anyone, answers 503 ``execution_disabled`` before the account check,
+and no matcher or validator runs. test_matchers.py covers the matchers
+themselves, and test_execution_scratch.py a definition's validators in a
+job."""
 import pytest
 
 TWO_SUM_REVERSED = (
@@ -109,38 +114,6 @@ def _evaluate(client, questions, headers, scenario):
     )
 
 
-def test_evaluate_unordered_accepts_reversed_order(client, signed_in, questions):
-    data = _evaluate(client, questions, signed_in, "unordered").json()
-    assert data["passed"] == 1 and data["failed"] == 0
-
-
-def test_evaluate_any_of_accepts_alternative_pair(client, signed_in, questions):
-    data = _evaluate(client, questions, signed_in, "any_of").json()
-    assert data["passed"] == 1
-
-
-def test_evaluate_validator_passes_for_valid_two_sum(client, signed_in, questions):
-    data = _evaluate(client, questions, signed_in, "validator").json()
-    assert data["passed"] == 1
-
-
-def test_evaluate_validator_error_propagates_to_case_error(client, signed_in, questions):
-    data = _evaluate(client, questions, signed_in, "validator_error").json()
-    assert data["passed"] == 0 and data["failed"] == 1
-    assert data["results"][0]["error"] is not None
-    assert "Validator error" in data["results"][0]["error"]
-
-
-def test_evaluate_runtime_error_skips_matcher_and_surfaces_execution_error(client, signed_in, questions):
-    # When user code raises, the matcher must not run — otherwise a derived
-    # validator failure could mask the real runtime cause.
-    data = _evaluate(client, questions, signed_in, "runtime_error").json()
-    assert data["failed"] == 1
-    err = data["results"][0]["error"] or ""
-    assert "boom" in err
-    assert "Validator error" not in err
-
-
 # ---- expected-deny controls (#8) ---------------------------------------------
 
 
@@ -161,10 +134,12 @@ def matched(monkeypatch):
 
 
 @pytest.mark.parametrize("scenario", sorted(SCENARIOS))
-def test_anonymous_evaluate_is_denied_before_any_matcher_runs(client, questions, matched, scenario):
-    res = _evaluate(client, questions, {}, scenario)
-    assert res.status_code == 401
-    assert res.json()["code"] == "unauthenticated"
+def test_an_older_evaluate_from_anyone_is_turned_off_before_any_matcher_runs(client, signed_in, questions, matched,
+                                                                             scenario):
+    for headers in ({}, signed_in):
+        res = _evaluate(client, questions, headers, scenario)
+        assert res.status_code == 503
+        assert res.json()["code"] == "execution_disabled"
     assert matched == []
     assert questions.calls == []
 
@@ -181,7 +156,7 @@ def test_a_caller_supplied_validator_is_refused_before_anything_runs(client, sig
         },
         headers=signed_in,
     )
-    assert res.status_code == 422
-    assert res.json()["code"] == "invalid_request"
+    assert res.status_code == 503
+    assert res.json()["code"] == "execution_disabled"
     assert matched == []
     assert questions.calls == []
