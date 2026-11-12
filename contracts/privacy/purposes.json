@@ -1,0 +1,255 @@
+{
+  "$schema": "./policy.schema.json",
+  "registry": "rounds-privacy-purposes",
+  "description": "Every purpose that calls an AI provider (ROUNDS-14-L01). An unregistered purpose, or a provider helper called from a function no purpose names, is denied and fails the check. The sixteen purposes below start legacy with legacy-implicit consent (register entry 9); ROUNDS-14-L02 passes them with an Intent and no preview, current purposes take per-request consent, and retired ones are refused.",
+  "providerHelpers": [
+    { "path": "backend/routers/ai.py", "function": "_call_complete" },
+    { "path": "backend/routers/ai.py", "function": "_call_stream" },
+    { "path": "backend/routers/ai.py", "function": "_fetch_models" },
+    { "path": "backend/routers/ai.py", "function": "_anthropic_complete" },
+    { "path": "backend/routers/ai.py", "function": "_openai_complete" },
+    { "path": "backend/routers/ai.py", "function": "_anthropic_stream" },
+    { "path": "backend/routers/ai.py", "function": "_openai_stream" },
+    { "path": "backend/routers/sd_practice.py", "function": "_anthropic_stream_with_tools" },
+    { "path": "backend/routers/sd_practice.py", "function": "_openai_stream_with_tools" }
+  ],
+  "roles": [
+    { "role": "text", "purposes": "every registered purpose" },
+    { "role": "vision", "purposes": "none", "note": "The stored vision role has no purpose, so a call through it is denied." }
+  ],
+  "purposes": [
+    {
+      "id": "provider.test", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": [],
+      "inputs": [], "credential": "pb:ai_providers.encrypted_key",
+      "outputScope": "A reachability answer shown in Settings; nothing saved.", "toolAuthority": "none", "flag": null,
+      "manualPath": "Save the provider without testing it.", "streaming": false,
+      "note": "A fixed prompt; once current its consent is none, since it sends no classed field as content.",
+      "callSites": [{ "path": "backend/routers/ai.py", "function": "test_provider" }]
+    },
+    {
+      "id": "provider.refresh_models", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": [],
+      "inputs": [], "credential": "pb:ai_providers.encrypted_key",
+      "outputScope": "pb:ai_providers.models_cache", "toolAuthority": "none", "flag": null,
+      "manualPath": "Type the model name by hand.", "streaming": false,
+      "note": "Lists models; once current its consent is none.",
+      "callSites": [{ "path": "backend/routers/ai.py", "function": "refresh_models" }]
+    },
+    {
+      "id": "resume.improve", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [
+        { "field": "pb:resumes.data" },
+        { "field": "pb:resumes.data#/personalInfo/email", "omit": true },
+        { "field": "pb:resumes.data#/personalInfo/phone", "omit": true },
+        { "field": "pb:resumes.data#/personalInfo/location", "omit": true },
+        { "field": "pb:resume_variants.data" },
+        { "field": "storage:rounds.resume.ats.*.cache.ai.v2" },
+        { "field": "request:resume.improve#/context" }
+      ],
+      "outputScope": "The one field being edited, shown as a suggestion.", "toolAuthority": "none", "flag": "PAPER_FETCH",
+      "manualPath": "Edit the field by hand.", "streaming": true,
+      "note": "The paper fetch stays off until ROUNDS-10-L03.",
+      "callSites": [{ "path": "backend/routers/ai.py", "function": "improve" }]
+    },
+    {
+      "id": "resume.guided_summary", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [
+        { "field": "pb:resumes.data" },
+        { "field": "pb:resumes.data#/personalInfo/email", "omit": true },
+        { "field": "pb:resumes.data#/personalInfo/phone", "omit": true },
+        { "field": "pb:resumes.data#/personalInfo/location", "omit": true },
+        { "field": "pb:resume_variants.data" },
+        { "field": "request:resume.improve#/context" }
+      ],
+      "outputScope": "pb:resumes.data#/personalInfo/summary, shown as a suggestion.", "toolAuthority": "none", "flag": null,
+      "manualPath": "Write the summary by hand.", "streaming": true,
+      "note": "The improve route with style guided-summary.",
+      "callSites": [{ "path": "backend/routers/ai.py", "function": "improve" }]
+    },
+    {
+      "id": "resume.tailor", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [
+        { "field": "pb:resumes.data" },
+        { "field": "pb:resumes.data#/personalInfo/email", "omit": true },
+        { "field": "pb:resumes.data#/personalInfo/phone", "omit": true },
+        { "field": "pb:resumes.data#/personalInfo/location", "omit": true },
+        { "field": "pb:resume_variants.data" },
+        { "field": "pb:resume_variants.job_description" },
+        { "field": "pb:resume_variants.target_company" },
+        { "field": "pb:resume_variants.job_title" },
+        { "field": "pb:resume_variants.tone" },
+        { "field": "pb:resume_variants.role_focus" },
+        { "field": "pb:applications.job_description" },
+        { "field": "storage:rounds.resume.tailor.*.jd" },
+        { "field": "storage:rounds.resume.tailor.*.roleFocus" },
+        { "field": "storage:rounds.resume.tailor.*.tone" }
+      ],
+      "outputScope": "Highlights, the summary, and skill order; the server reattaches every field outside that scope.", "toolAuthority": "none", "flag": null,
+      "manualPath": "Tailor the variant by hand.", "streaming": false,
+      "callSites": [{ "path": "backend/routers/ai.py", "function": "tailor_resume" }]
+    },
+    {
+      "id": "resume.cover_letter", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [
+        { "field": "pb:resumes.data" },
+        { "field": "pb:resumes.data#/personalInfo/email", "omit": true },
+        { "field": "pb:resumes.data#/personalInfo/phone", "omit": true },
+        { "field": "pb:resumes.data#/personalInfo/location", "omit": true },
+        { "field": "pb:resume_variants.data" },
+        { "field": "pb:resume_variants.job_description" },
+        { "field": "pb:resume_variants.target_company" },
+        { "field": "pb:resume_variants.job_title" },
+        { "field": "pb:resume_variants.tone" },
+        { "field": "pb:applications.job_description" },
+        { "field": "storage:rounds.resume.tailor.*.jd" }
+      ],
+      "outputScope": "A letter draft shown to the user; nothing saved.", "toolAuthority": "none", "flag": null,
+      "manualPath": "Write the letter by hand.", "streaming": true,
+      "callSites": [{ "path": "backend/routers/ai.py", "function": "cover_letter" }]
+    },
+    {
+      "id": "resume.import", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [{ "field": "request:resume.import#/text" }],
+      "outputScope": "A new resume the user reviews before it's saved (pb:resumes.data).", "toolAuthority": "none", "flag": null,
+      "manualPath": "Create the resume and fill its sections by hand.", "streaming": false,
+      "note": "Sends the whole pasted source.",
+      "callSites": [{ "path": "backend/routers/ai.py", "function": "import_resume" }]
+    },
+    {
+      "id": "experience.import", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [
+        { "field": "request:experience.import#/text" },
+        { "field": "pb:experience_jobs.company" },
+        { "field": "pb:experience_jobs.role" },
+        { "field": "pb:experience_jobs.start_date" },
+        { "field": "pb:experience_projects.title" },
+        { "field": "pb:experience_anecdotes.title" },
+        { "field": "pb:experience_bullets.title" }
+      ],
+      "outputScope": "New experience records and connections the user reviews before they're saved.", "toolAuthority": "none", "flag": null,
+      "manualPath": "Add the experience records by hand.", "streaming": false,
+      "note": "Sends the whole pasted source and the labels it matches against.",
+      "callSites": [{ "path": "backend/routers/ai.py", "function": "import_experience" }]
+    },
+    {
+      "id": "resume.ats_score", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [
+        { "field": "pb:resumes.data" },
+        { "field": "pb:resumes.data#/personalInfo/email", "omit": true },
+        { "field": "pb:resumes.data#/personalInfo/phone", "omit": true },
+        { "field": "pb:resumes.data#/personalInfo/location", "omit": true },
+        { "field": "pb:resume_variants.data" },
+        { "field": "pb:resume_variants.job_description" },
+        { "field": "pb:applications.job_description" },
+        { "field": "storage:rounds.resume.ats.*.jd" }
+      ],
+      "outputScope": "An AI ATS answer shown beside the rule-based one (storage:rounds.resume.ats.*.cache.ai.v2).", "toolAuthority": "none", "flag": null,
+      "manualPath": "The rule-based ATS check, which sends nothing.", "streaming": false,
+      "note": "An explicit trigger once current (Decision 2).",
+      "callSites": [{ "path": "backend/routers/ai.py", "function": "ats_ai" }]
+    },
+    {
+      "id": "github.enhance", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [{ "field": "request:github.enhance#/projects" }, { "field": "pb:resumes.data#/projects" }],
+      "outputScope": "Project descriptions and highlights the user reviews before they're saved.", "toolAuthority": "none", "flag": null,
+      "manualPath": "Import the projects without AI Enhancement.", "streaming": false, "batchMax": 25,
+      "note": "Also fetches the selected repositories from GitHub.",
+      "callSites": [{ "path": "backend/routers/ai.py", "function": "_summarize_doc" }, { "path": "backend/routers/ai.py", "function": "_aggregate_project" }]
+    },
+    {
+      "id": "ai_coding.chat", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [
+        { "field": "pb:ai_coding_attempts.ai_chats" },
+        { "field": "pb:ai_coding_drafts.contents" },
+        { "field": "pb:ai_coding_drafts.file_path" },
+        { "field": "pb:ai_coding_rounds.title" },
+        { "field": "pb:ai_coding_rounds.description" },
+        { "field": "pb:ai_coding_rounds.starter_files" },
+        { "field": "pb:ai_coding_rounds.checkpoints" }
+      ],
+      "outputScope": "A chat reply; nothing applies without the user.", "toolAuthority": "none", "flag": "ai_allowed",
+      "manualPath": "Work the checkpoint without the assistant.", "streaming": true,
+      "callSites": [{ "path": "backend/routers/ai_coding.py", "function": "chat" }]
+    },
+    {
+      "id": "ai_coding.edit", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [
+        { "field": "pb:ai_coding_attempts.ai_chats" },
+        { "field": "pb:ai_coding_drafts.contents" },
+        { "field": "pb:ai_coding_drafts.file_path" },
+        { "field": "pb:ai_coding_rounds.title" },
+        { "field": "pb:ai_coding_rounds.description" },
+        { "field": "pb:ai_coding_rounds.starter_files" },
+        { "field": "pb:ai_coding_rounds.checkpoints" }
+      ],
+      "outputScope": "Patches the user applies or discards.", "toolAuthority": "none", "flag": "ai_allowed",
+      "manualPath": "Edit the files by hand.", "streaming": true,
+      "callSites": [{ "path": "backend/routers/ai_coding.py", "function": "edit" }]
+    },
+    {
+      "id": "ai_coding.grade", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [
+        { "field": "pb:ai_coding_drafts.contents" },
+        { "field": "pb:ai_coding_drafts.file_path" },
+        { "field": "pb:ai_coding_attempts.test_results" },
+        { "field": "pb:ai_coding_rounds.rubric" },
+        { "field": "def:harness-revision#/rubric" }
+      ],
+      "outputScope": "pb:ai_coding_attempts.rubric_review", "toolAuthority": "none", "flag": null,
+      "manualPath": "The test results, which grade without a provider.", "streaming": false,
+      "note": "One of the two purposes that send the rubric (Decision 4).",
+      "callSites": [
+        { "path": "backend/routers/ai_coding.py", "function": "grade" },
+        { "path": "backend/routers/ai_coding.py", "function": "_grade_definition" },
+        { "path": "backend/execution/review.py", "function": "_call" }
+      ]
+    },
+    {
+      "id": "take_home.grade", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [
+        { "field": "pb:take_home_attempts.files" },
+        { "field": "pb:take_home_attempts.harness_output" },
+        { "field": "pb:take_home_assignments.rubric" },
+        { "field": "pb:take_home_assignments.prompt_md" },
+        { "field": "def:harness-revision#/rubric" }
+      ],
+      "outputScope": "pb:take_home_attempts.rubric_review", "toolAuthority": "none", "flag": null,
+      "manualPath": "The harness score, which grades without a provider.", "streaming": false,
+      "note": "One of the two purposes that send the rubric (Decision 4).",
+      "callSites": [
+        { "path": "backend/routers/take_home.py", "function": "submit_route" },
+        { "path": "backend/routers/take_home.py", "function": "_submit_definition" },
+        { "path": "backend/execution/review.py", "function": "_call" }
+      ]
+    },
+    {
+      "id": "take_home.chat", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [
+        { "field": "pb:take_home_attempts.ai_chats" },
+        { "field": "pb:take_home_attempts.files" },
+        { "field": "pb:take_home_drafts.contents" },
+        { "field": "pb:take_home_drafts.file_path" },
+        { "field": "pb:take_home_assignments.title" },
+        { "field": "pb:take_home_assignments.prompt_md" },
+        { "field": "pb:take_home_assignments.starter_files" }
+      ],
+      "outputScope": "A chat reply; nothing applies without the user.", "toolAuthority": "none", "flag": "ai_policy",
+      "manualPath": "Work the assignment without the assistant.", "streaming": true,
+      "callSites": [{ "path": "backend/routers/take_home.py", "function": "chat_route" }]
+    },
+    {
+      "id": "sd_practice.chat", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
+      "inputs": [
+        { "field": "request:sd_practice.chat#/messages" },
+        { "field": "request:sd_practice.chat#/canvas_elements" },
+        { "field": "pb:system_design_questions.title" },
+        { "field": "pb:system_design_questions.description" },
+        { "field": "pb:system_design_questions.requirements_functional" },
+        { "field": "pb:system_design_questions.requirements_nonfunctional" }
+      ],
+      "outputScope": "A chat reply and canvas changes, buffered into one change set the user applies or discards (ROUNDS-14-L03, ROUNDS-14-L04).", "toolAuthority": ["add_component", "add_connection", "update_component", "delete_element", "add_note", "draw_diagram", "read_canvas"], "flag": null,
+      "manualPath": "Draw the design by hand.", "streaming": true,
+      "note": "Tools apply mid-stream today; the staged result buffers them.",
+      "callSites": [{ "path": "backend/routers/sd_practice.py", "function": "chat" }]
+    }
+  ]
+}

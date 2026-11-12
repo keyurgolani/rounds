@@ -1,0 +1,258 @@
+{
+  "$schema": "./policy.schema.json",
+  "registry": "rounds-privacy-policy",
+  "description": "The privacy policy (ROUNDS-14-L01, DR-0005): data classes, sinks, the spec's matrix and lifecycle tables word for word with their machine rules, locations, the credential channel, consent, redaction, and the operator settings. Anything this file doesn't allow is denied. Packs, flags, operators, and users may only tighten it. A ratified version is never edited; a change supersedes it with a new version that names the changed constraint.",
+  "decisionRecord": "DR-0005",
+  "spec": {
+    "path": "docs/superpowers/specs/2026-10-18-rounds-review-board-design.md",
+    "failClosedLines": [2126, 2137],
+    "matrixLines": [2142, 2148],
+    "lifecycleLines": [2152, 2163],
+    "deletionLines": [2165, 2169],
+    "failClosed": ["AI transmission", "full-text indexing", "public sharing", "exports", "logs and traces", "local drafts", "backups", "analytics", "third-party contact data"],
+    "packRule": "A career pack may make a rule stricter but cannot relax it."
+  },
+  "versions": [
+    { "id": "privacy", "current": 1, "covers": "classes, sinks, the matrix, visibility rules, locations, and the credential channel", "revisions": [{ "revision": 1, "status": "ratified", "compatibleWith": [], "changedConstraint": null }] },
+    { "id": "retention", "current": 1, "covers": "the lifecycle rows, account deletion, and the operator retention settings", "revisions": [{ "revision": 1, "status": "ratified", "compatibleWith": [], "changedConstraint": null }] },
+    { "id": "redaction", "current": 1, "covers": "the redaction operators and each purpose's omitted fields", "revisions": [{ "revision": 1, "status": "ratified", "compatibleWith": [], "changedConstraint": null }] },
+    { "id": "consent", "current": 1, "covers": "the consent units and the batch cap", "revisions": [{ "revision": 1, "status": "ratified", "compatibleWith": [], "changedConstraint": null }] }
+  ],
+  "classes": [
+    { "name": "Private", "rank": 1, "default": true },
+    { "name": "Third-party personal", "rank": 2 },
+    { "name": "Sensitive", "rank": 3 },
+    { "name": "Secret", "rank": 4 },
+    { "name": "Share Projection", "rank": null, "copiesOf": ["Private"], "note": "Owner-reviewed copies only: a field may take this class when its row's floor is Private or Share Projection." }
+  ],
+  "visibilities": [
+    { "name": "public-ui", "rank": 1 },
+    { "name": "authed-readable", "rank": 2 },
+    { "name": "server-only", "rank": 3 }
+  ],
+  "kinds": [
+    { "name": "content", "meaning": "a value a person wrote or that describes them or their work" },
+    { "name": "metadata", "meaning": "a state, flag, count, time, or label the product sets" },
+    { "name": "opaque-id", "meaning": "a random record id or a reference to one" }
+  ],
+  "sinks": [
+    { "id": "remote-ai", "specColumn": "Remote AI", "families": ["class", "visibility"], "enforcingLeaf": "ROUNDS-14-L02" },
+    { "id": "index", "specColumn": "Account search/index", "families": ["class", "visibility"], "enforcingLeaf": "ROUNDS-31-L08" },
+    { "id": "logs", "specColumn": "Logs/traces", "families": ["class", "visibility"], "enforcingLeaf": "ROUNDS-34-L05" },
+    { "id": "share", "specColumn": "Public share", "families": ["class", "visibility"], "enforcingLeaf": "ROUNDS-00B-L03" },
+    { "id": "export", "specColumn": "Export/local draft/backup", "part": 1, "families": ["class", "visibility"], "enforcingLeaf": "ROUNDS-18-L03" },
+    { "id": "local-draft", "specColumn": "Export/local draft/backup", "part": 2, "families": ["class", "visibility"], "enforcingLeaf": "ROUNDS-08-L02" },
+    { "id": "backup", "specColumn": "Export/local draft/backup", "part": 3, "families": ["class", "visibility"], "enforcingLeaf": "ROUNDS-32-L03" },
+    { "id": "analytics", "specColumn": null, "failClosed": "analytics", "families": ["class", "visibility"], "enforcingLeaf": "ROUNDS-34-L05" },
+    { "id": "client-read", "specColumn": null, "families": ["visibility"], "enforcingLeaf": "ROUNDS-00A-L02", "note": "The API answer a signed-in browser reads. Account data's reads follow the account-scope policy; this sink rules platform content only." }
+  ],
+  "matrix": {
+    "columns": ["Privacy class", "Typical content", "Remote AI", "Account search/index", "Logs/traces", "Public share", "Export/local draft/backup"],
+    "rows": [
+      { "class": "Private", "cells": ["Private, the default", "profile facts, opportunities, actions, ordinary practice", "Per-request consent after payload preview", "Allowed inside the owning account", "Metadata and opaque IDs only", "Only through a separately reviewed Share Projection", "Account export allowed; account-namespaced local draft allowed; encrypted backup allowed"] },
+      { "class": "Sensitive", "cells": ["Sensitive", "compensation, immigration, accommodation, private feedback, protected demographics", "Off by default; separate field-level confirmation for one invocation", "Off by default or masked; explicit opt-in", "No field values or reversible identifiers", "Excluded by default; separate confirmation and scoped snapshot required", "Protected export only; encrypted local draft and backup"] },
+      { "class": "Third-party personal", "cells": ["Third-party personal", "recruiter/interviewer/contact identity, messages, notes about another person", "Off by default; purpose-specific confirmation", "Account-local only", "Minimized pseudonymous IDs", "Excluded unless that exact field is intentionally published", "Included in full account export with warning; encrypted local draft and backup"] },
+      { "class": "Secret", "cells": ["Secret", "provider credentials, reset/session tokens, share bearer material, encryption keys", "Never", "Never", "Never", "Never", "Excluded from normal export and browser storage; only explicit rewrapped secret export; encrypted backup with separate key custody"] },
+      { "class": "Share Projection", "cells": ["Share Projection", "owner-reviewed fields from one immutable Artifact Revision", "Never as part of resolution", "Not added to public indexing", "Aggregate view event only when enabled", "Allowed only through its scoped capability", "Exportable immutable bytes; no browser draft; encrypted backup of owner record"] }
+    ],
+    "cells": [
+      { "id": "private.remote-ai", "class": "Private", "sink": "remote-ai", "text": "Per-request consent after payload preview", "rule": { "decision": "allow-with-consent", "consent": "per-request", "obligations": ["consent:per-request", "preview:payload", "snapshot:provider-payload-snapshot"], "otherwise": "CONSENT_REQUIRED" } },
+      { "id": "private.index", "class": "Private", "sink": "index", "text": "Allowed inside the owning account", "rule": { "decision": "allow", "obligations": ["namespace:account"] } },
+      { "id": "private.logs", "class": "Private", "sink": "logs", "text": "Metadata and opaque IDs only", "rule": { "decision": "allow-if", "cases": [{ "when": { "kind": "metadata" }, "obligations": [] }, { "when": { "kind": "opaque-id" }, "obligations": [] }], "otherwise": "LOG_CONTENT_DENIED" } },
+      { "id": "private.share", "class": "Private", "sink": "share", "text": "Only through a separately reviewed Share Projection", "rule": { "decision": "allow-if", "cases": [{ "when": { "projection": "reviewed" }, "obligations": ["projection:reviewed"] }], "otherwise": "SHARE_NEEDS_PROJECTION" } },
+      { "id": "private.export", "class": "Private", "sink": "export", "text": "Account export allowed", "rule": { "decision": "allow", "obligations": ["namespace:account"] } },
+      { "id": "private.local-draft", "class": "Private", "sink": "local-draft", "text": "account-namespaced local draft allowed", "rule": { "decision": "allow", "obligations": ["namespace:account", "purge:sign-out"] } },
+      { "id": "private.backup", "class": "Private", "sink": "backup", "text": "encrypted backup allowed", "rule": { "decision": "allow", "obligations": ["encryption:backup"] } },
+      { "id": "private.analytics", "class": "Private", "sink": "analytics", "text": "fail closed", "rule": { "decision": "deny", "code": "ANALYTICS_DENIED" } },
+      { "id": "sensitive.remote-ai", "class": "Sensitive", "sink": "remote-ai", "text": "Off by default; separate field-level confirmation for one invocation", "rule": { "decision": "allow-with-consent", "consent": "field-level", "obligations": ["consent:field-level", "preview:payload", "snapshot:provider-payload-snapshot"], "otherwise": "OFF_BY_DEFAULT" } },
+      { "id": "sensitive.index", "class": "Sensitive", "sink": "index", "text": "Off by default or masked; explicit opt-in", "rule": { "decision": "allow-if", "cases": [{ "when": { "optIn": true }, "obligations": ["namespace:account"] }, { "when": { "redaction": "mask" }, "obligations": ["namespace:account", "redaction:mask"] }], "otherwise": "OFF_BY_DEFAULT" } },
+      { "id": "sensitive.logs", "class": "Sensitive", "sink": "logs", "text": "No field values or reversible identifiers", "rule": { "decision": "allow-if", "cases": [{ "when": { "kind": "opaque-id" }, "obligations": [] }], "otherwise": "LOG_VALUE_DENIED" } },
+      { "id": "sensitive.share", "class": "Sensitive", "sink": "share", "text": "Excluded by default; separate confirmation and scoped snapshot required", "rule": { "decision": "allow-if", "cases": [{ "when": { "confirmation": "separate", "snapshot": "scoped" }, "obligations": ["confirmation:separate", "projection:scoped-snapshot"] }], "otherwise": "EXCLUDED_BY_DEFAULT" } },
+      { "id": "sensitive.export", "class": "Sensitive", "sink": "export", "text": "Protected export only", "rule": { "decision": "allow-if", "cases": [{ "when": { "export": "protected" }, "obligations": ["export:protected"] }], "otherwise": "EXPORT_PROTECTED_ONLY" } },
+      { "id": "sensitive.local-draft", "class": "Sensitive", "sink": "local-draft", "text": "encrypted local draft and backup", "rule": { "decision": "allow", "obligations": ["encryption:local", "namespace:account", "purge:sign-out"] } },
+      { "id": "sensitive.backup", "class": "Sensitive", "sink": "backup", "text": "encrypted local draft and backup", "rule": { "decision": "allow", "obligations": ["encryption:backup"] } },
+      { "id": "sensitive.analytics", "class": "Sensitive", "sink": "analytics", "text": "fail closed", "rule": { "decision": "deny", "code": "ANALYTICS_DENIED" } },
+      { "id": "third-party.remote-ai", "class": "Third-party personal", "sink": "remote-ai", "text": "Off by default; purpose-specific confirmation", "rule": { "decision": "allow-with-consent", "consent": "purpose-specific", "obligations": ["consent:purpose-specific", "preview:payload", "snapshot:provider-payload-snapshot"], "otherwise": "OFF_BY_DEFAULT" } },
+      { "id": "third-party.index", "class": "Third-party personal", "sink": "index", "text": "Account-local only", "rule": { "decision": "allow", "obligations": ["namespace:account"] } },
+      { "id": "third-party.logs", "class": "Third-party personal", "sink": "logs", "text": "Minimized pseudonymous IDs", "rule": { "decision": "allow-if", "cases": [{ "when": { "kind": "opaque-id" }, "obligations": ["pseudonym:account-keyed"] }], "otherwise": "LOG_VALUE_DENIED" } },
+      { "id": "third-party.share", "class": "Third-party personal", "sink": "share", "text": "Excluded unless that exact field is intentionally published", "rule": { "decision": "allow-if", "cases": [{ "when": { "published": true }, "obligations": ["publish:exact-field"] }], "otherwise": "EXCLUDED_BY_DEFAULT" } },
+      { "id": "third-party.export", "class": "Third-party personal", "sink": "export", "text": "Included in full account export with warning", "rule": { "decision": "allow", "obligations": ["namespace:account", "export:warning"] } },
+      { "id": "third-party.local-draft", "class": "Third-party personal", "sink": "local-draft", "text": "encrypted local draft and backup", "rule": { "decision": "allow", "obligations": ["encryption:local", "namespace:account", "purge:sign-out"] } },
+      { "id": "third-party.backup", "class": "Third-party personal", "sink": "backup", "text": "encrypted local draft and backup", "rule": { "decision": "allow", "obligations": ["encryption:backup"] } },
+      { "id": "third-party.analytics", "class": "Third-party personal", "sink": "analytics", "text": "fail closed", "rule": { "decision": "deny", "code": "ANALYTICS_DENIED" } },
+      { "id": "secret.remote-ai", "class": "Secret", "sink": "remote-ai", "text": "Never", "rule": { "decision": "deny", "code": "SECRET_NEVER" } },
+      { "id": "secret.index", "class": "Secret", "sink": "index", "text": "Never", "rule": { "decision": "deny", "code": "SECRET_NEVER" } },
+      { "id": "secret.logs", "class": "Secret", "sink": "logs", "text": "Never", "rule": { "decision": "deny", "code": "SECRET_NEVER" } },
+      { "id": "secret.share", "class": "Secret", "sink": "share", "text": "Never", "rule": { "decision": "deny", "code": "SECRET_NEVER" } },
+      { "id": "secret.export", "class": "Secret", "sink": "export", "text": "Excluded from normal export and browser storage; only explicit rewrapped secret export", "rule": { "decision": "deny", "code": "SECRET_NEVER", "note": "v1 ships no rewrapped secret export (ROUNDS-18-L03), so a Secret never leaves in an export." } },
+      { "id": "secret.local-draft", "class": "Secret", "sink": "local-draft", "text": "Excluded from normal export and browser storage", "rule": { "decision": "deny", "code": "SECRET_NEVER" } },
+      { "id": "secret.backup", "class": "Secret", "sink": "backup", "text": "encrypted backup with separate key custody", "rule": { "decision": "allow", "obligations": ["encryption:backup", "key-custody:separate"] } },
+      { "id": "secret.analytics", "class": "Secret", "sink": "analytics", "text": "fail closed", "rule": { "decision": "deny", "code": "ANALYTICS_DENIED" } },
+      { "id": "share-projection.remote-ai", "class": "Share Projection", "sink": "remote-ai", "text": "Never as part of resolution", "rule": { "decision": "deny", "code": "PROJECTION_NEVER" } },
+      { "id": "share-projection.index", "class": "Share Projection", "sink": "index", "text": "Not added to public indexing", "rule": { "decision": "deny", "code": "PROJECTION_NEVER" } },
+      { "id": "share-projection.logs", "class": "Share Projection", "sink": "logs", "text": "Aggregate view event only when enabled", "rule": { "decision": "allow-if", "cases": [{ "when": { "telemetry": "enabled", "event": "aggregate-view" }, "obligations": ["telemetry:coarse"] }], "otherwise": "LOG_VALUE_DENIED" } },
+      { "id": "share-projection.share", "class": "Share Projection", "sink": "share", "text": "Allowed only through its scoped capability", "rule": { "decision": "allow-if", "cases": [{ "when": { "capability": "scoped" }, "obligations": ["capability:scoped"] }], "otherwise": "SHARE_NEEDS_CAPABILITY" } },
+      { "id": "share-projection.export", "class": "Share Projection", "sink": "export", "text": "Exportable immutable bytes", "rule": { "decision": "allow", "obligations": ["bytes:immutable"] } },
+      { "id": "share-projection.local-draft", "class": "Share Projection", "sink": "local-draft", "text": "no browser draft", "rule": { "decision": "deny", "code": "PROJECTION_NEVER" } },
+      { "id": "share-projection.backup", "class": "Share Projection", "sink": "backup", "text": "encrypted backup of owner record", "rule": { "decision": "allow", "obligations": ["encryption:backup"] } },
+      { "id": "share-projection.analytics", "class": "Share Projection", "sink": "analytics", "text": "fail closed", "rule": { "decision": "deny", "code": "ANALYTICS_DENIED" } }
+    ]
+  },
+  "visibilityRules": [
+    { "id": "public-ui.remote-ai", "visibility": "public-ui", "sink": "remote-ai", "rule": { "decision": "allow", "obligations": [] } },
+    { "id": "public-ui.index", "visibility": "public-ui", "sink": "index", "rule": { "decision": "allow", "obligations": [] } },
+    { "id": "public-ui.logs", "visibility": "public-ui", "sink": "logs", "rule": { "decision": "allow-if", "cases": [{ "when": { "kind": "metadata" }, "obligations": [] }, { "when": { "kind": "opaque-id" }, "obligations": [] }], "otherwise": "LOG_CONTENT_DENIED" } },
+    { "id": "public-ui.share", "visibility": "public-ui", "sink": "share", "rule": { "decision": "allow", "obligations": [] } },
+    { "id": "public-ui.export", "visibility": "public-ui", "sink": "export", "rule": { "decision": "allow", "obligations": [] } },
+    { "id": "public-ui.local-draft", "visibility": "public-ui", "sink": "local-draft", "rule": { "decision": "allow", "obligations": [] } },
+    { "id": "public-ui.backup", "visibility": "public-ui", "sink": "backup", "rule": { "decision": "allow", "obligations": ["encryption:backup"] } },
+    { "id": "public-ui.analytics", "visibility": "public-ui", "sink": "analytics", "rule": { "decision": "deny", "code": "ANALYTICS_DENIED" } },
+    { "id": "public-ui.client-read", "visibility": "public-ui", "sink": "client-read", "rule": { "decision": "allow", "obligations": [] } },
+    { "id": "authed-readable.remote-ai", "visibility": "authed-readable", "sink": "remote-ai", "rule": { "decision": "allow-if", "cases": [{ "when": { "purposeDeclares": true }, "obligations": [] }], "otherwise": "NOT_DECLARED" } },
+    { "id": "authed-readable.index", "visibility": "authed-readable", "sink": "index", "rule": { "decision": "allow", "obligations": ["namespace:account"] } },
+    { "id": "authed-readable.logs", "visibility": "authed-readable", "sink": "logs", "rule": { "decision": "allow-if", "cases": [{ "when": { "kind": "metadata" }, "obligations": [] }, { "when": { "kind": "opaque-id" }, "obligations": [] }], "otherwise": "LOG_CONTENT_DENIED" } },
+    { "id": "authed-readable.share", "visibility": "authed-readable", "sink": "share", "rule": { "decision": "deny", "code": "NOT_PUBLIC" } },
+    { "id": "authed-readable.export", "visibility": "authed-readable", "sink": "export", "rule": { "decision": "deny", "code": "NOT_ACCOUNT_DATA" } },
+    { "id": "authed-readable.local-draft", "visibility": "authed-readable", "sink": "local-draft", "rule": { "decision": "allow", "obligations": ["namespace:account"] } },
+    { "id": "authed-readable.backup", "visibility": "authed-readable", "sink": "backup", "rule": { "decision": "allow", "obligations": ["encryption:backup"] } },
+    { "id": "authed-readable.analytics", "visibility": "authed-readable", "sink": "analytics", "rule": { "decision": "deny", "code": "ANALYTICS_DENIED" } },
+    { "id": "authed-readable.client-read", "visibility": "authed-readable", "sink": "client-read", "rule": { "decision": "allow-if", "cases": [{ "when": { "signedIn": true }, "obligations": [] }], "otherwise": "SIGN_IN_REQUIRED" } },
+    { "id": "server-only.remote-ai", "visibility": "server-only", "sink": "remote-ai", "rule": { "decision": "deny", "code": "SERVER_ONLY" } },
+    { "id": "server-only.index", "visibility": "server-only", "sink": "index", "rule": { "decision": "deny", "code": "SERVER_ONLY" } },
+    { "id": "server-only.logs", "visibility": "server-only", "sink": "logs", "rule": { "decision": "allow-if", "cases": [{ "when": { "kind": "metadata" }, "obligations": [] }, { "when": { "kind": "opaque-id" }, "obligations": [] }], "otherwise": "SERVER_ONLY" } },
+    { "id": "server-only.share", "visibility": "server-only", "sink": "share", "rule": { "decision": "deny", "code": "SERVER_ONLY" } },
+    { "id": "server-only.export", "visibility": "server-only", "sink": "export", "rule": { "decision": "deny", "code": "SERVER_ONLY" } },
+    { "id": "server-only.local-draft", "visibility": "server-only", "sink": "local-draft", "rule": { "decision": "deny", "code": "SERVER_ONLY" } },
+    { "id": "server-only.backup", "visibility": "server-only", "sink": "backup", "rule": { "decision": "allow", "obligations": ["encryption:backup"] } },
+    { "id": "server-only.analytics", "visibility": "server-only", "sink": "analytics", "rule": { "decision": "deny", "code": "ANALYTICS_DENIED" } },
+    { "id": "server-only.client-read", "visibility": "server-only", "sink": "client-read", "rule": { "decision": "deny", "code": "SERVER_ONLY" } }
+  ],
+  "lifecycle": {
+    "columns": ["Data category", "Default", "User/operator override", "Purge and recovery rule"],
+    "rows": [
+      {
+        "id": "canonical", "cells": ["Canonical entities, accepted revisions, and immutable attempts", "Retain until explicit delete or account deletion", "User may delete subject to disclosed artifact/history dependencies", "Live authority and projections purge within 24 hours; minimized provenance tombstone may remain for 90 days"],
+        "retention": { "setBy": "user", "default": "until-delete", "choices": ["until-delete", "delete"] }, "purgeWithinHours": 24, "tombstoneDays": 90,
+        "enforcement": [{ "leaf": "ROUNDS-02-L04", "test": null }, { "leaf": "ROUNDS-14-L05", "test": null }]
+      },
+      {
+        "id": "raw-source-documents", "cells": ["Raw Source Documents", "365 days after the last accepted derived change", "30, 90, or 365 days, or explicitly pinned indefinite; Sensitive/Third-party sources require renewed confirmation every 365 days", "Content and derived search text purge within 24 hours after expiry; claims retain a content-redacted provenance tombstone"],
+        "retention": { "setBy": "user", "default": 365, "choices": [30, 90, 365, "pinned"], "anchor": "the last accepted derived change" }, "renewDays": { "Sensitive": 365, "Third-party personal": 365 }, "purgeWithinHours": 24,
+        "enforcement": [{ "leaf": "ROUNDS-10-L01", "test": null }]
+      },
+      {
+        "id": "capture-inbox", "cells": ["Uncommitted Capture Inbox sources", "30 days after last activity", "7, 30, or 90 days; explicit archive moves the source to the Source Document policy", "Purge within 24 hours; a warning begins seven days before expiry"],
+        "retention": { "setBy": "user", "default": 30, "choices": [7, 30, 90], "anchor": "the last activity" }, "warningDays": 7, "purgeWithinHours": 24,
+        "enforcement": [{ "leaf": "ROUNDS-09-L02", "test": null }]
+      },
+      {
+        "id": "failed-intermediates", "cells": ["Failed parser/OCR/model intermediate files", "7 days", "0 or 7 days; no indefinite option", "Purge within 24 hours while retaining failure class and digests"],
+        "retention": { "setBy": "user", "default": 7, "choices": [0, 7], "anchor": "the failure" }, "purgeWithinHours": 24,
+        "enforcement": [{ "leaf": "ROUNDS-10-L02", "test": null }]
+      },
+      {
+        "id": "provider-payload-snapshot", "cells": ["Provider Invocation protected payload snapshot", "7 days", "0, 1, 7, or 30 days; Secret data is never stored", "Digest/receipt metadata may remain 365 days; protected plaintext purges within 24 hours of deadline"],
+        "retention": { "setBy": "user", "default": 7, "choices": [0, 1, 7, 30], "anchor": "the invocation" }, "neverClasses": ["Secret"], "digestDays": 365, "purgeWithinHours": 24,
+        "enforcement": [{ "leaf": "ROUNDS-14-L02", "test": null }]
+      },
+      {
+        "id": "staged-provider-result", "cells": ["Normalized Staged Provider Result", "30 days after idempotent claim/proposal creation; retain while reconciliation is unresolved", "7, 30, or 90 days; Sensitive/Third-party result maximum 30 days", "Encrypted and account-scoped; purge within 24 hours after deadline once deterministic application proof exists"],
+        "retention": { "setBy": "user", "default": 30, "choices": [7, 30, 90], "anchor": "the idempotent claim or proposal creation" }, "maxDaysByClass": { "Sensitive": 30, "Third-party personal": 30 }, "heldWhile": "reconciliation is unresolved", "purgeWithinHours": 24,
+        "enforcement": [{ "leaf": "ROUNDS-14-L03", "test": null }]
+      },
+      {
+        "id": "logs-traces", "cells": ["Operational logs and traces", "14 days", "Operator may choose 1–30 days", "Secret and content fields are rejected before logging; deletion completes within 24 hours"],
+        "retention": { "setBy": "operator", "default": 14, "range": [1, 30], "setting": "ROUNDS_LOG_RETENTION_DAYS", "anchor": "the log line" }, "rejects": ["Secret", "content"], "purgeWithinHours": 24,
+        "enforcement": [{ "leaf": "ROUNDS-34-L05", "test": null }]
+      },
+      {
+        "id": "share-view-telemetry", "cells": ["Share-view telemetry", "Disabled by default", "7, 30, or 90 days after explicit owner enablement", "Store coarse time/referrer class only, never raw token, password, full IP, or viewer fingerprint; purge within 24 hours"],
+        "retention": { "setBy": "user", "default": "off", "choices": ["off", 7, 30, 90], "anchor": "the view" }, "stores": "coarse time and referrer class only", "purgeWithinHours": 24,
+        "enforcement": [{ "leaf": "ROUNDS-00B-L03", "test": null }]
+      },
+      {
+        "id": "superseded-local-drafts", "cells": ["Superseded local drafts", "30 days after supersession", "0, 7, or 30 days", "Purge on logout/account switch immediately when not actively synced; quota failure never deletes the only copy"],
+        "retention": { "setBy": "user", "default": 30, "choices": [0, 7, 30], "anchor": "the supersession" }, "purgeOn": ["sign-out", "account-switch"], "purgeWithinHours": 24,
+        "enforcement": [{ "leaf": "ROUNDS-08-L02", "test": null }, { "leaf": "ROUNDS-14-L05", "test": null }]
+      },
+      {
+        "id": "encrypted-backups", "cells": ["Encrypted backups", "Rolling 30 days", "Operator may choose 7–90 days and must publish the value", "Account deletion creates an immediate restore-suppression marker; all backup copies expire within the configured window"],
+        "retention": { "setBy": "operator", "default": 30, "range": [7, 90], "setting": "ROUNDS_BACKUP_RETENTION_DAYS", "published": true, "anchor": "the backup" }, "purgeWithinHours": 24,
+        "enforcement": [{ "leaf": "ROUNDS-32-L03", "test": null }]
+      }
+    ],
+    "decided": [
+      {
+        "id": "secrets", "category": "Secrets", "decision": "Secrets live until user or account deletion and are never stored for demo accounts.",
+        "retention": { "setBy": "user", "default": "until-delete", "choices": ["until-delete", "delete"] }, "neverFor": ["demo"], "purgeWithinHours": 24,
+        "enforcement": [{ "leaf": "ROUNDS-00B-L07", "test": null }, { "leaf": "ROUNDS-14-L05", "test": null }]
+      },
+      { "id": "browser-ai-caches", "category": "Browser AI caches", "decision": "Browser AI caches follow the superseded local drafts row.", "sameAs": "superseded-local-drafts", "enforcement": [{ "leaf": "ROUNDS-08-L02", "test": null }, { "leaf": "ROUNDS-14-L05", "test": null }] },
+      { "id": "chat-transcripts", "category": "Chat transcripts", "decision": "Chat transcripts follow the canonical attempt row.", "sameAs": "canonical", "enforcement": [{ "leaf": "ROUNDS-02-L04", "test": null }, { "leaf": "ROUNDS-14-L05", "test": null }] }
+    ]
+  },
+  "accountDeletion": {
+    "text": "Credential rotation invalidates prior key versions immediately for new use. Account deletion revokes sessions and shares immediately, suppresses restore immediately, purges live/search/projection data within 24 hours, and completes encrypted-backup expiry within the configured maximum of 90 days. Restore must reapply deletion and restore-suppression journals before serving data.",
+    "immediately": ["invalidate prior key versions on rotation", "revoke sessions", "revoke shares", "suppress restore"],
+    "purgeWithinHours": 24,
+    "backupExpiryMaxDays": 90,
+    "restoreReplaysJournals": true,
+    "enforcement": [{ "leaf": "ROUNDS-14-L05", "test": null }]
+  },
+  "locations": {
+    "decidedFrom": "the resolved address, not the base URL",
+    "classes": [
+      { "id": "this-server", "meaning": "in-process on the runner; none exists today" },
+      { "id": "operator-network", "meaning": "a private address when ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK is enabled and the address and port match a ROUNDS_AI_PRIVATE_ENDPOINTS entry" },
+      { "id": "third-party-hosted", "meaning": "a public address; an aggregator is marked subprocessors: undisclosed" }
+    ],
+    "never": {
+      "loopback": ["127.0.0.0/8", "::1/128"],
+      "linkLocal": ["169.254.0.0/16", "fe80::/10"],
+      "unspecified": ["0.0.0.0/32", "::/128"],
+      "metadata": ["169.254.169.254", "169.254.170.2", "169.254.170.23", "100.100.100.200", "168.63.129.16", "fd00:ec2::254", "fd00:ec2::23"],
+      "serviceNames": ["pocketbase", "pdf-renderer", "runner", "frontend", "materializer", "localhost"],
+      "serviceSuffixes": [".localhost", ".internal", ".svc", ".cluster.local"],
+      "singleLabelNames": true
+    },
+    "nonPublic": ["0.0.0.0/8", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4", "100::/64", "2001::/23", "2001:db8::/32", "fec0::/10", "ff00::/8"],
+    "privateNetworks": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "fc00::/7"],
+    "unwrap": ["::ffff:0:0/96", "2002::/16", "64:ff9b::/96"],
+    "privateNetworkGate": "ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK",
+    "allowlistSetting": "ROUNDS_AI_PRIVATE_ENDPOINTS",
+    "combination": "A private destination passes only when the gate is enabled and the resolved address and port match an allowlist entry; with the gate off every private address is refused whatever the list says, and with the gate on an empty list refuses every private address.",
+    "enforcement": [{ "leaf": "ROUNDS-14-L02", "test": null }, { "leaf": "ROUNDS-00A-L01", "test": null }]
+  },
+  "credentialChannel": {
+    "rule": "A Secret goes only as authentication to the endpoint it was registered for, never as content.",
+    "headers": ["authorization", "x-api-key"],
+    "match": "host and port",
+    "enforcement": [{ "leaf": "ROUNDS-14-L02", "test": null }]
+  },
+  "consent": {
+    "units": [
+      { "id": "per-request", "meaning": "One consent per provider request (a chat turn, a grade) after the payload preview; never standing." },
+      { "id": "field-level", "meaning": "A separate field-level confirmation for one invocation, naming each Sensitive field." },
+      { "id": "purpose-specific", "meaning": "A purpose-specific confirmation for one invocation, for Third-party personal fields." },
+      { "id": "legacy-implicit", "meaning": "What a legacy purpose does today: no preview and no per-request consent. Only the sixteen baseline purposes may use it (violation 9)." },
+      { "id": "none", "meaning": "The purpose sends no classed field as content." }
+    ],
+    "standing": false,
+    "batchMax": 25,
+    "enforcement": [{ "leaf": "ROUNDS-14-L04", "test": null }, { "leaf": "ROUNDS-14-L02", "test": null }]
+  },
+  "redaction": {
+    "operators": [
+      { "id": "omit", "meaning": "The field is left out of the payload." },
+      { "id": "mask", "meaning": "The value is replaced by a fixed mask that keeps no characters." },
+      { "id": "pseudonym", "meaning": "The value is replaced by a pseudonym keyed per account.", "keyedBy": "account", "owner": "ROUNDS-14-L02" }
+    ],
+    "enforcement": [{ "leaf": "ROUNDS-14-L02", "test": null }]
+  },
+  "operatorSettings": [
+    { "name": "ROUNDS_LOG_RETENTION_DAYS", "kind": "days", "row": "logs-traces", "readBy": "runner", "meaning": "How long operational logs and traces are kept." },
+    { "name": "ROUNDS_BACKUP_RETENTION_DAYS", "kind": "days", "row": "encrypted-backups", "readBy": "runner", "meaning": "How long encrypted backups are kept; the operator publishes the value." },
+    { "name": "ROUNDS_AI_PRIVATE_ENDPOINTS", "kind": "endpoints", "readBy": "runner", "default": "", "meaning": "The operator-network AI endpoints: comma-separated ip:port, [ipv6]:port, cidr:port, or [ipv6-cidr]:port entries inside the private networks.", "readAtDispatchBy": "ROUNDS-14-L02" }
+  ],
+  "relaxations": []
+}
