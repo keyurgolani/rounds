@@ -37,8 +37,9 @@ onRecordBeforeAuthWithPasswordRequest((e) => {
   });
 }, "users");
 
+// The demo account signs in with its password only, on or off.
 onRecordBeforeAuthWithOAuth2Request((e) => {
-  require(`${__hooks}/demo.js`).guardSignIn(e, {
+  require(`${__hooks}/demo.js`).guardOAuth2SignIn(e, {
     ROUNDS_GATE_DEMO: $os.getenv("ROUNDS_GATE_DEMO"),
     ROUNDS_ENABLE_DEMO: $os.getenv("ROUNDS_ENABLE_DEMO"),
   });
@@ -76,3 +77,22 @@ onModelBeforeCreate((e) => {
 onModelBeforeUpdate((e) => {
   require(`${__hooks}/demo.js`).guardContainedModel(e);
 }, "resume_share_links", "share_capabilities", "ai_providers", "ai_credentials", "ai_provider_models", "ai_settings");
+
+// 5. The demo's sign-out clears what the demo account holds, and puts its
+// seeded profile back. With the demo off it answers as a route that
+// doesn't exist, so it carries no auth middleware of its own.
+routerAdd("POST", "/api/rounds/demo/sessions/end", (c) => {
+  return require(`${__hooks}/demo.js`).handleEnd(c, {
+    ROUNDS_GATE_DEMO: $os.getenv("ROUNDS_GATE_DEMO"),
+    ROUNDS_ENABLE_DEMO: $os.getenv("ROUNDS_ENABLE_DEMO"),
+  });
+});
+
+// 6. Every 5 minutes with the demo on: the same reset for a demo account
+// that's been quiet for 2 hours, or whose oldest row is a day old.
+cronAdd("rounds_demo_reset", "*/5 * * * *", () => {
+  require(`${__hooks}/demo.js`).sweepNow({
+    ROUNDS_GATE_DEMO: $os.getenv("ROUNDS_GATE_DEMO"),
+    ROUNDS_ENABLE_DEMO: $os.getenv("ROUNDS_ENABLE_DEMO"),
+  });
+});

@@ -178,6 +178,8 @@ const results = program.steps.map((step) => {
     }
     case "purge":
       return execution.purge(store, step.now);
+    case "purgeAccount":
+      return execution.purgeAccount(store, step.account, step.limit || 500);
     // PR 3: a practice item's row, its removal, and a campaign's owner.
     case "seedItem":
       return store.seedItem(step.collection, step.slug);

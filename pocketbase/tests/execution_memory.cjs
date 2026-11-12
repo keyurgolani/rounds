@@ -193,14 +193,29 @@ function memoryStore(options) {
         .sort((a, b) => a.finished_at - b.finished_at || a.queued_at - b.queued_at)
         .slice(0, limit)
         .map(clone),
+    // The same filter and order as execution.js's.
+    accountJobs: (accountId, limit) =>
+      [...jobs.values()]
+        .filter((j) => j.account === accountId && !ACTIVE.includes(j.state))
+        .sort((a, b) => a.queued_at - b.queued_at)
+        .slice(0, limit)
+        .map(clone),
     deleteEnvelopes: (jobId) => {
-      for (const [id, e] of envelopes) if (e.job === jobId) envelopes.delete(id);
+      let removed = 0;
+      for (const [id, e] of envelopes) {
+        if (e.job === jobId) {
+          envelopes.delete(id);
+          removed += 1;
+        }
+      }
+      return removed;
     },
     deleteCommandOf: (row) => {
       const found = [...commands.values()].find((c) => c.account === row.account && c.command_id === row.command_id);
-      if (!found || found.job !== row.id) return;
+      if (!found || found.job !== row.id) return false;
       commands.delete(found.id);
       for (const [id, lease] of leases) if (lease.command === found.id) leases.delete(id);
+      return true;
     },
     // Its attempts cascade, as the relation's cascadeDelete does.
     deleteJob: (row) => {

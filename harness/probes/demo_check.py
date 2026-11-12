@@ -48,6 +48,20 @@ NOT_PERMITTED = {"code": "demo_not_permitted", "message": "Not available in the 
 LOCKED = "These account fields can't be changed."
 SEEDED_PROFILE = {"name": "Rounds Demo", "bio": "Disposable hosted demo account. Changes reset on logout.",
                   "target": "Explore Rounds"}
+# What the demo's sign-out clears: every collection a demo account writes
+# itself (pb_hooks/demo.js RESET; test_demo_hooks.py keeps the two equal).
+# The admission rows hold the limits and stay.
+DEMO_RESET = (
+    "exp_anecdote_bullets", "exp_project_bullets", "exp_project_anecdotes", "exp_job_bullets", "exp_job_anecdotes",
+    "exp_job_projects",
+    "experience_bullets", "experience_anecdotes", "experience_projects", "experience_jobs",
+    "resume_versions", "resume_variants", "resumes",
+    "ai_coding_attempts", "take_home_attempts", "ai_coding_drafts", "take_home_drafts", "question_timers",
+    "todos", "code_drafts", "offers", "interview_rounds", "user_progress", "user_preferences", "applications",
+    "campaigns",
+)
+KEPT = ("admission_commands", "admission_counters", "admission_leases")
+END_PATH = "/api/rounds/demo/sessions/end"
 
 
 def _wrong_password() -> str:
@@ -61,6 +75,68 @@ def _not_permitted(status: int, body) -> bool:
 def _count(pb: PBClient, admin: str, collection: str, user_id: str) -> int:
     resp = pb.listing(collection, admin, {"filter": f'user = "{user_id}"', "perPage": 1})
     return int((resp.body or {}).get("totalItems", -1)) if resp.status == 200 else -1
+
+
+def _account_fields(pb: PBClient, admin: str) -> list[tuple[str, str]]:
+    """Every (collection, field) in the live schema that names a users
+    record, the users collection itself aside."""
+    listed = (pb.collections_meta(admin).body or {}).get("items", [])
+    users = next((col["id"] for col in listed if col.get("name") == "users"), "")
+    return sorted(
+        (col["name"], field["name"])
+        for col in listed if col.get("name") != "users"
+        for field in col.get("schema", [])
+        if field.get("type") == "relation" and (field.get("options") or {}).get("collectionId") == users
+    )
+
+
+def _rows_of(pb: PBClient, admin: str, fields: list[tuple[str, str]], account: str) -> dict[tuple[str, str], int]:
+    out = {}
+    for name, field in fields:
+        resp = pb.listing(name, admin, {"filter": f'{field} = "{account}"', "perPage": 1})
+        out[(name, field)] = int((resp.body or {}).get("totalItems", -1)) if resp.status == 200 else -1
+    return out
+
+
+def _seeded(pb: PBClient, admin: str, acct: factory.Account, content: dict[str, str]) -> None:
+    """One row in every collection the account writes itself, with its own
+    token, and a superuser's code-run job with its envelope."""
+    factory.seed_account(pb, acct, content, admin,
+                         collections=frozenset(DEMO_RESET) | {"execution_jobs", "execution_envelopes"})
+
+
+def run_reset(c: Checks, pb: PBClient, admin: str, d: factory.Account) -> None:
+    """The demo's sign-out clears what the demo account holds, on the live
+    schema, and nothing a standard account holds."""
+    content = factory.ensure_content_fixtures(pb, admin)
+    _seeded(pb, admin, d, content)
+    w = _standard(pb, admin)
+    w.token = (pb.auth_password(w.email, w.password).body or {}).get("token", "")
+    _seeded(pb, admin, w, content)
+    fields = _account_fields(pb, admin)
+    before = _rows_of(pb, admin, fields, d.user_id)
+    standard_before = _rows_of(pb, admin, fields, w.user_id)
+
+    ended = call(POCKETBASE_URL, "POST", END_PATH, d.token, {})
+    after = _rows_of(pb, admin, fields, d.user_id)
+    profile = {k: (pb.view("users", d.user_id, admin).body or {}).get(k) for k in SEEDED_PROFILE}
+    seeded_everywhere = all(before.get((name, "user"), 0) >= 1 for name in DEMO_RESET)
+    left = sorted(f"{name}.{field}={n}" for (name, field), n in after.items() if n != 0 and name not in KEPT)
+    c.check("demo.on.ending-the-session-leaves-no-demo-row",
+            ended[0] == 204 and seeded_everywhere and before[("execution_jobs", "account")] >= 1
+            and left == [] and profile == SEEDED_PROFILE,
+            f"status={ended[0]} seeded={seeded_everywhere} left={left} profile={profile == SEEDED_PROFILE}")
+
+    # The SPA reaches it through the public proxy.
+    proxied = call(FRONTEND_URL, "POST", END_PATH, d.token, {})
+    c.check("demo.on.the-sign-out-route-is-reachable-through-nginx", proxied[0] == 204, f"status={proxied[0]}")
+
+    anonymous = call(POCKETBASE_URL, "POST", END_PATH, None, {})
+    standard = call(POCKETBASE_URL, "POST", END_PATH, w.token, {})
+    standard_after = _rows_of(pb, admin, fields, w.user_id)
+    c.check("demo.on.only-a-demo-caller-ends-a-demo-session",
+            anonymous[0] == 401 and standard[0] == 403 and standard_after == standard_before,
+            f"anonymous={anonymous[0]} standard={standard[0]} standard-rows-unchanged={standard_after == standard_before}")
 
 
 def _standard(pb: PBClient, admin: str) -> factory.Account:
@@ -167,6 +243,9 @@ def run_on(c: Checks, pb: PBClient, admin: str) -> None:
             and share[0] != 201 and "token" not in json.dumps(share[1] or {})
             and all(n == 0 for n in left.values()),
             f"share={share[0]} " + " ".join(f"{k}={v[0]}" for k, v in through.items()) + f" rows={left}")
+
+    # The demo's sign-out clears what the demo account holds.
+    run_reset(c, pb, admin, d)
 
     # The demo's code runs, at their default since phase 3c: the deployment
     # verifier's own check, through nginx as an operator runs it.

@@ -219,7 +219,9 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
     else:
         acct.share_fields = {"resume": resume, "token": secrets.token_urlsafe(16)}
         mk("resume_share_links", dict(acct.share_fields))
-    mk_admin("resume_share_views", {"link": ids["resume_share_links"]})
+    # A seed limited to collections without the link, such as a demo
+    # account's (ROUNDS-00B-L07), makes no view either.
+    mk_admin("resume_share_views", {"link": ids.get("resume_share_links", "")})
     # Only a PocketBase hook writes snapshots (ROUNDS-00A-L04), so the
     # fixture row, with its markup file, goes in with the admin token.
     if has("legacy_artifact_snapshots"):
