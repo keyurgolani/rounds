@@ -37,7 +37,8 @@ Three phases:
     isolation.share-public.resolver-identity).
 ``legacy-shares-scan``
   No fixture link value, viewer hash, or user agent is in any service log
-  or in that pb_data.
+  or in that pb_data, past the rows PocketBase's request log keeps for the
+  every-value check's own requests, which name themselves.
 
 The direct calls to a replica name a client of their own, as the share
 secrets phases do, and the calls through nginx stay under its backstop.
@@ -99,6 +100,10 @@ IP_MARK = "olderviewerhash"
 AGENT_MARK = "OlderFixtureAgent"
 # nginx's backstop takes a burst of 20 resolves, then 2 a second.
 NGINX_PACE_S = 0.6
+# The every-value check's own REST requests carry a fixture value in their
+# query, and PocketBase's request log keeps each request's address, so they
+# name themselves and the scan passes over exactly those log rows.
+PROBE_AGENT = "rounds-harness/legacy-shares-every-value"
 
 
 def rid(tag: str) -> str:
@@ -296,18 +301,19 @@ def check_uniform(c: Checks, writer: ReceiptWriter, pb: PBClient, state: dict, o
     if not uniform(resolved) or resolved[0][:2] != (404, NOT_FOUND):
         problems.append(f"resolver status={resolved[0][0]} uniform={uniform(resolved)}")
 
-    # PocketBase itself, not through nginx: these carry a fixture value in
-    # their query, nginx's own log keeps queries, and the scan reads it.
-    rest = PBClient(POCKETBASE_URL)
+    # PocketBase itself, not through nginx, whose own log keeps queries.
     for label, token in (("anonymous", None), ("owner", owner), ("other", other)):
-        by_filter = [rest.get(f"{LINKS_PATH}?filter=" + _q(f"token='{v}'"), token) for v in values]
-        by_param = [rest.get(f"{LINKS_PATH}?token=" + _q(v), token) for v in values]
+        by_filter = [_rest(f"{LINKS_PATH}?filter=" + _q(f"token='{v}'"), token) for v in values]
+        by_param = [_rest(f"{LINKS_PATH}?token=" + _q(v), token) for v in values]
         for kind, got in (("filter", by_filter), ("param", by_param)):
-            pairs = [(r.status, json.dumps(r.body, sort_keys=True)) for r in got]
-            if not uniform(pairs):
+            if not uniform(got):
                 problems.append(f"REST {kind} as {label} differs by value")
     c.check("legacy-shares.every-value.one-answer-per-path", not problems, "; ".join(problems))
     return not problems, "; ".join(problems)
+
+
+def _rest(path: str, token: str | None) -> tuple[int, bytes]:
+    return raw(POCKETBASE_URL, "GET", path, token, headers={"User-Agent": PROBE_AGENT})[:2]
 
 
 def _q(text: str) -> str:
@@ -507,7 +513,7 @@ def run_scan() -> int:
         if found:
             where.append(path.stem)
     c.check("legacy-shares.scan.logs-hold-no-fixture-value", hits == 0, f"{hits} found in {', '.join(where)}")
-    in_data = 0
+    in_data = own = 0
     tarball = SCAN_DIR / "pb_data.tar"
     if tarball.exists():
         work = Path(tempfile.mkdtemp(prefix="legacy-scan-"))
@@ -517,13 +523,50 @@ def run_scan() -> int:
             with tarfile.open(tarball) as tar:
                 tar.extractall(work, filter="data")
             for db in work.rglob("*.db"):
-                in_data += logscan.scan_sqlite(str(db), db.name, values).literals
+                found, passed = scan_db(db, values)
+                in_data += found
+                own += passed
         finally:
             shutil.rmtree(work, ignore_errors=True)
     c.check("legacy-shares.scan.pb-data-holds-no-fixture-value", tarball.exists() and in_data == 0,
-            f"tarball={tarball.exists()} found={in_data}")
+            f"tarball={tarball.exists()} found={in_data} own_requests_passed_over={own}")
     print(f"legacy-shares-scan: {c.passed} passed, {c.failed} failed")
     return 1 if c.failed else 0
+
+
+def _own_request(table: str, record: dict[str, Any]) -> bool:
+    """A request log row for one of the every-value check's own requests."""
+    if table != "_logs":
+        return False
+    try:
+        data = json.loads(record.get("data") or "{}")
+    except (TypeError, ValueError):
+        return False
+    return isinstance(data, dict) and data.get("userAgent") == PROBE_AGENT
+
+
+def scan_db(db: Path, values: tuple[str, ...]) -> tuple[int, int]:
+    """Every text value of every table in ``db``: the fixture values found,
+    and how many request log rows were the every-value check's own."""
+    found = passed = 0
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        tables = [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+        for table in tables:
+            cur = con.execute('SELECT * FROM "' + table.replace('"', '""') + '"')
+            cols = [d[0] for d in cur.description]
+            for row in cur:
+                if _own_request(table, dict(zip(cols, row))):
+                    passed += 1
+                    continue
+                for value in row:
+                    if isinstance(value, bytes):
+                        value = value.decode("utf-8", "replace")
+                    if isinstance(value, str):
+                        found += logscan.scan_text(value, f"{db.name}:{table}", values).literals
+    finally:
+        con.close()
+    return found, passed
 
 
 def main(phase: str, writer: ReceiptWriter | None = None) -> int:

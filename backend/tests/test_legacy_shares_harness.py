@@ -174,3 +174,29 @@ def test_the_stack_phase_writes_the_receipts_of_four_pass_rows():
         assert cases[cid]["status"] == "pass" and cases[cid]["evidence"] == [cid], cid
     assert cases["isolation.share-public.resolver-identity"]["guarantee"] == (
         "a public share request reaches PocketBase only as the share resolver's own service identity")
+
+
+def _request_log(tmp_path: Path, rows: list[tuple[str, str]]) -> Path:
+    import sqlite3
+
+    db = tmp_path / "logs.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE _logs (id TEXT, level INTEGER, message TEXT, data TEXT, created TEXT, updated TEXT)")
+    for n, (agent, url) in enumerate(rows):
+        con.execute("INSERT INTO _logs VALUES (?, 0, ?, ?, '', '')",
+                    (f"r{n}", f"GET {url}", json.dumps({"url": url, "userAgent": agent})))
+    con.commit()
+    con.close()
+    return db
+
+
+def test_the_scan_passes_over_only_the_every_value_checks_own_requests(tmp_path):
+    value = "FixtureLinkValue0123456"
+    own = (stack.PROBE_AGENT, f"{stack.LINKS_PATH}?token={value}")
+    db = _request_log(tmp_path, [own, own])
+    assert stack.scan_db(db, (value,)) == (0, 2)
+    for other in ("python-httpx/0.27.2", "Python-urllib/3.12", "", stack.PROBE_AGENT + "-x"):
+        db.unlink()
+        db = _request_log(tmp_path, [own, (other, f"{stack.LINKS_PATH}?filter={value}")])
+        found, passed = stack.scan_db(db, (value,))
+        assert passed == 1 and found == 2, other
