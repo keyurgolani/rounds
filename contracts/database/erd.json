@@ -1733,8 +1733,9 @@
       "required": true,
       "cascadeDelete": true,
       "onDelete": "cascade",
-      "merge": "none",
-      "authorization": "relation-endpoint"
+      "merge": "repoint",
+      "authorization": "relation-endpoint",
+      "note": "A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints)."
     },
     {
       "id": "exp_anecdote_bullets.parent",
@@ -1746,8 +1747,9 @@
       "required": true,
       "cascadeDelete": true,
       "onDelete": "cascade",
-      "merge": "none",
-      "authorization": "relation-endpoint"
+      "merge": "repoint",
+      "authorization": "relation-endpoint",
+      "note": "A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints)."
     },
     {
       "id": "exp_anecdote_bullets.user",
@@ -1772,8 +1774,9 @@
       "required": true,
       "cascadeDelete": true,
       "onDelete": "cascade",
-      "merge": "none",
-      "authorization": "relation-endpoint"
+      "merge": "repoint",
+      "authorization": "relation-endpoint",
+      "note": "A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints)."
     },
     {
       "id": "exp_job_anecdotes.parent",
@@ -1785,8 +1788,9 @@
       "required": true,
       "cascadeDelete": true,
       "onDelete": "cascade",
-      "merge": "none",
-      "authorization": "relation-endpoint"
+      "merge": "repoint",
+      "authorization": "relation-endpoint",
+      "note": "A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints)."
     },
     {
       "id": "exp_job_anecdotes.user",
@@ -1811,8 +1815,9 @@
       "required": true,
       "cascadeDelete": true,
       "onDelete": "cascade",
-      "merge": "none",
-      "authorization": "relation-endpoint"
+      "merge": "repoint",
+      "authorization": "relation-endpoint",
+      "note": "A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints)."
     },
     {
       "id": "exp_job_bullets.parent",
@@ -1824,8 +1829,9 @@
       "required": true,
       "cascadeDelete": true,
       "onDelete": "cascade",
-      "merge": "none",
-      "authorization": "relation-endpoint"
+      "merge": "repoint",
+      "authorization": "relation-endpoint",
+      "note": "A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints)."
     },
     {
       "id": "exp_job_bullets.user",
@@ -1850,8 +1856,9 @@
       "required": true,
       "cascadeDelete": true,
       "onDelete": "cascade",
-      "merge": "none",
-      "authorization": "relation-endpoint"
+      "merge": "repoint",
+      "authorization": "relation-endpoint",
+      "note": "A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints)."
     },
     {
       "id": "exp_job_projects.parent",
@@ -1863,8 +1870,9 @@
       "required": true,
       "cascadeDelete": true,
       "onDelete": "cascade",
-      "merge": "none",
-      "authorization": "relation-endpoint"
+      "merge": "repoint",
+      "authorization": "relation-endpoint",
+      "note": "A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints)."
     },
     {
       "id": "exp_job_projects.user",
@@ -1889,8 +1897,9 @@
       "required": true,
       "cascadeDelete": true,
       "onDelete": "cascade",
-      "merge": "none",
-      "authorization": "relation-endpoint"
+      "merge": "repoint",
+      "authorization": "relation-endpoint",
+      "note": "A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints)."
     },
     {
       "id": "exp_project_anecdotes.parent",
@@ -1902,8 +1911,9 @@
       "required": true,
       "cascadeDelete": true,
       "onDelete": "cascade",
-      "merge": "none",
-      "authorization": "relation-endpoint"
+      "merge": "repoint",
+      "authorization": "relation-endpoint",
+      "note": "A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints)."
     },
     {
       "id": "exp_project_anecdotes.user",
@@ -1928,8 +1938,9 @@
       "required": true,
       "cascadeDelete": true,
       "onDelete": "cascade",
-      "merge": "none",
-      "authorization": "relation-endpoint"
+      "merge": "repoint",
+      "authorization": "relation-endpoint",
+      "note": "A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints)."
     },
     {
       "id": "exp_project_bullets.parent",
@@ -1941,8 +1952,9 @@
       "required": true,
       "cascadeDelete": true,
       "onDelete": "cascade",
-      "merge": "none",
-      "authorization": "relation-endpoint"
+      "merge": "repoint",
+      "authorization": "relation-endpoint",
+      "note": "A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints)."
     },
     {
       "id": "exp_project_bullets.user",

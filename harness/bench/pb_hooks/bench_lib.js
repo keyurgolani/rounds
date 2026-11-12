@@ -315,7 +315,8 @@ function transferIn(store, ctx, account, afterId, limit) {
         payload: { type: r.round_type, legacy: r.id } });
       rows += 1;
     });
-    const offers = store.all("SELECT id FROM offers WHERE application = {:a}", { a: app.id }, { id: "" });
+    // (user, application) is the offers index; the user leads it.
+    const offers = store.all("SELECT id FROM offers WHERE user = {:u} AND application = {:a}", { u: account, a: app.id }, { id: "" });
     offers.forEach((o) => {
       store.insert("bench_records", { account_id: account, kind: "offer_t", version: 1, status: "", parent: opp, deleted: false,
         payload: { legacy: o.id } });
