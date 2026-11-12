@@ -225,6 +225,7 @@ def test_nothing_is_cached_between_requests(client, monkeypatch, lookup):
     ("available", "available", CAP_ID),
     ("switch-alias", "kill_switch", None),
     ("gate-default", "gate_closed", None),
+    ("gate-disabled", "gate_closed", None),
     ("extra-field", "not_found", None),
     ("unknown", "not_found", None),
     ("degraded", "degraded", None),
@@ -265,8 +266,12 @@ def test_the_not_found_matches_what_the_deployment_verifier_checks(client, monke
     assert share_capabilities.TOKEN_RE.fullmatch(unknown) is not None
 
 
-def test_both_resolvers_answer_with_one_set_of_headers():
-    from routers import share
+def test_nginx_answers_the_older_share_path_with_the_resolvers_own_body_and_headers():
+    # ROUNDS-00B-L06: nginx answers that path itself, with this not-found.
+    from tests.test_share_older_links import nginx_older_read
 
-    assert share.PUBLIC_HEADERS is share_capabilities.RESOLVER_HEADERS
-    assert share.NOT_FOUND_BODY is share_capabilities.NOT_FOUND_BODY
+    status, body, headers = nginx_older_read()
+    assert status == 404
+    assert json.loads(body) == share_capabilities.NOT_FOUND_BODY
+    assert body == json.dumps(share_capabilities.NOT_FOUND_BODY, separators=(",", ":"))
+    assert headers == share_capabilities.RESOLVER_HEADERS

@@ -3,9 +3,9 @@
 // user-controlled zoom so the resume can be inspected in detail
 // without the editor chrome competing for room.
 //
-// The zoomable scroll/scale machinery lives in `ZoomablePage`, which
-// is also reused by `pages/PublicResume` so the share-link viewer
-// looks and feels the same as the studio preview.
+// The zoomable scroll/scale machinery lives in `ZoomablePage`, whose
+// toolbar and zoom steps the share page reuses (share/SharedArtifactFrame),
+// so a shared link looks and feels the same as the studio preview.
 
 import { X } from 'lucide-react';
 import { useEffect } from 'react';

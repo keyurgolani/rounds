@@ -1,13 +1,10 @@
 // Reusable zoomable A4 page viewer. Owns the scroll container, the
 // CSS-transform scaler, and a toolbar with zoom (−/%/+) + Fit. Used by
-//
-//   - studio/PreviewDialog — full-screen preview modal in the editor
-//   - pages/PublicResume — read-only viewer for /r/:token share links
-//
-// so both views share zoom + fit + pagination behaviour. Callers own
-// the outer chrome (modal backdrop, page header, etc.); this component
-// stops at the scroll edge. share/SharedArtifactFrame uses its toolbar
-// and zoom steps around a frame instead of a rendered page.
+// studio/PreviewDialog, the full-screen preview modal in the editor.
+// Callers own the outer chrome (modal backdrop, page header, etc.); this
+// component stops at the scroll edge. share/SharedArtifactFrame uses its
+// toolbar and zoom steps around a frame instead of a rendered page, so a
+// shared link looks and feels like the studio preview.
 //
 // Zoom mechanics:
 //   • Buttons (−, %, +, Fit) and keyboard shortcuts (+/=, −, 0, F)

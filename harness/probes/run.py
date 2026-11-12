@@ -312,8 +312,6 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
             elif pid == families.RELATION_UPDATE_INDISTINGUISHABLE_FAMILY:
                 writer.write(families.update_relation_foreign_or_missing_indistinguishable(
                     pb, name, row.get("relation_endpoints", []), b, a, expected))
-            elif pid == families.SHARE_CREATE_SHAPE_FAMILY:
-                writer.write(families.share_create_shape_denied(pb, name, b, content, admin_token, expected))
             # hook-phase families run in run_hook, degraded ones in run_degraded
 
     _readback(pb, doc, admin_token, writer)
@@ -601,7 +599,8 @@ def main() -> int:
               "execution-migration|json-limits|demo-on|demo-off|demo-contain-migration|snapshot-create|"
               "snapshot-create-down|snapshot-create-retry|snapshot-scan|snapshot-create-off|snapshot-create-again|"
               "snapshot-render|snapshot-render-audit|snapshot-render-down|snapshot-recovery|share-capabilities|"
-              "share-secrets|share-secrets-down|share-secrets-scan}",
+              "share-secrets|share-secrets-down|share-secrets-scan|"
+              "legacy-shares-migration|legacy-shares-fixture|legacy-shares|legacy-shares-scan}",
               file=sys.stderr)
         return 2
     phase = sys.argv[1]
@@ -613,6 +612,15 @@ def main() -> int:
         import snapshot_store_check
 
         return snapshot_store_check.main()
+    if phase == "legacy-shares-migration":
+        # ROUNDS-00B-L06: the older share links' migration, offline.
+        import legacy_share_migration_check
+
+        return legacy_share_migration_check.main()
+    if phase in ("legacy-shares-fixture", "legacy-shares-scan"):
+        import legacy_share_check
+
+        return legacy_share_check.main(phase)
     # Every snapshot- phase but snapshot-store, above, is the snapshot
     # probe's (ROUNDS-00A-L04).
     if phase.startswith("snapshot-"):
@@ -688,6 +696,11 @@ def main() -> int:
             print(f"unknown phase {phase!r}", file=sys.stderr)
             return 2
         return share_secrets_check.main(phase, writer)
+    if phase == "legacy-shares":
+        # ROUNDS-00B-L06: its case rows' receipts, and an exit code for the rest.
+        import legacy_share_check
+
+        return legacy_share_check.main(phase, writer)
     if phase == "main":
         run_main(doc, writer)
     elif phase == "hook":

@@ -8,11 +8,12 @@ mis-sets `user`.
 
 Each test drives a real write endpoint with the PocketBase layer mocked to
 record the written payload, then asserts the invariant: a create names the
-caller, an update omits `user` or resends the caller's own id. The public
-share viewer writes no row at all since ROUNDS-00B-L03 stage 1, which is
-asserted separately. The two-account harness proves the live rules accept
-exactly these shapes.
+caller, an update omits `user` or resends the caller's own id. No runner
+module writes an older share link or its views since ROUNDS-00B-L06 stage
+1, which a static check below asserts. The two-account harness proves the
+live rules accept exactly these shapes.
 """
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -145,42 +146,29 @@ def test_put_settings_update_branch_resends_the_caller(client):
 
 
 # ---------------------------------------------------------------------------
-# resume_share_links (user token); the public read writes nothing
+# resume_share_links and resume_share_views: since ROUNDS-00B-L06 no client
+# writes either, the runner included. A new link is CreateShare, which
+# PocketBase's hook writes as the caller (tests/test_share_commands.py).
 # ---------------------------------------------------------------------------
 
-
-def test_create_share_link_names_the_caller(client):
-    rec = _Recorder()
-    with patch("routers.share.current_user", _fake_user), patch("routers.share.pb_post", rec.post):
-        res = client.post("/api/share", json={"resume_id": "r1"})
-    assert res.status_code == 200
-    _assert_create_names_caller(rec.writes)
+BACKEND = Path(__file__).resolve().parents[1]
 
 
-def test_public_read_writes_no_row(client):
-    # ROUNDS-00B-L03 stage 1: the public read writes nothing, so no
-    # resume_share_views row is inserted under any token.
-    link_owner = "owner-of-the-link"
-    writes = []
+def _runner_modules() -> list[Path]:
+    return sorted(path for path in BACKEND.rglob("*.py")
+                  if "tests" not in path.relative_to(BACKEND).parts and "__pycache__" not in path.parts)
 
-    async def fake_admin_get(path, params=None):
-        if "resume_share_links" in path:
-            return {"items": [{"id": "l1", "user": link_owner, "resume": "r1", "token": "AbCdEfGhIjKlMnOpQrStUv"}]}
-        if "resumes" in path:
-            return {"id": "r1", "user": link_owner, "data": {}, "template_id": "modern", "design": {}, "name": "R"}
-        return None
 
-    async def fake_write(*args, **kwargs):
-        writes.append(args)
-        return {"id": "v1"}
-
-    with patch("routers.share.pb_admin_get", fake_admin_get), \
-         patch("app.pb_auth.pb_admin_post", fake_write), \
-         patch("app.pb_auth.pb_post", fake_write), \
-         patch("routers.share.pb_post", fake_write):
-        res = client.get("/api/share/by-token/AbCdEfGhIjKlMnOpQrStUv")
-    assert res.status_code == 200
-    assert not writes
+def test_no_runner_module_writes_an_older_share_link_or_its_views():
+    named: dict[str, list[str]] = {}
+    for path in _runner_modules():
+        text = path.read_text()
+        for collection in ("resume_share_links", "resume_share_views"):
+            if collection in text:
+                named.setdefault(collection, []).append(path.relative_to(BACKEND).as_posix())
+    # The one module that names them only lists the caller's own older
+    # links (tests/test_share_older_links.py checks it makes no write).
+    assert named == {"resume_share_links": ["routers/share.py"]}
 
 
 # ---------------------------------------------------------------------------

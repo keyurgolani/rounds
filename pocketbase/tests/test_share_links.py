@@ -1,20 +1,21 @@
-"""A share link answers only its owner (ROUNDS-00B-L03 stage 1).
+"""Share link rows (ROUNDS-00B-L03 stage 1, ROUNDS-00B-L06 stage 1).
 
 Two halves, both static or pure so they run without a PocketBase:
 
-  * the create check in pb_hooks/share_links.js: screen() is pure, so it is
-    require()d into Node and driven the same way test_relation_endpoints_hooks.py
-    drives the relation predicate. A new link needs exactly one target, the
-    caller as owner, and a 22-character URL-safe token, and every denial
-    answers with the relation predicate's own create denial;
+  * the older links' guard in pb_hooks/share_links.js: screenUpdate() is
+    pure, so legacy_shares_runner.cjs require()s it into Node. Once
+    1700008500_legacy_share_migration.js has turned every link off, a row
+    changes only when "Get a new link" sets its replaced_by, from empty to a
+    capability, once; any other change by any writer the app's Dao runs is
+    refused;
   * 1700008100_share_link_owner_rules.js: list and view read only the owner,
-    no client updates a link, its down step restores nothing, and the
-    migration and docs/security/account-scope.v1.json agree.
+    no client updates a link, and its down step restores nothing.
+    1700008500 sets every rule again, and docs/security/account-scope.v1.json
+    names both.
 
-The live rules and the hook on PocketBase 0.22.22 are the two-account
-harness's (account-scope.share.owner-only.isolated,
-account-scope.share.create-shape.denied, account-scope.update.server-only.denied
-on resume_share_links, and the rule read-back).
+The live rules and the guard on PocketBase 0.22.22 are the two-account
+harness's (account-scope.share.owner-only.isolated and the server-only
+families on resume_share_links, the rule read-back) and phase 15's.
 """
 from __future__ import annotations
 
@@ -30,91 +31,81 @@ ROOT = Path(__file__).resolve().parents[2]
 HOOKS = ROOT / "pocketbase" / "pb_hooks"
 MIGRATIONS = ROOT / "pocketbase" / "pb_migrations"
 MIGRATION = MIGRATIONS / "1700008100_share_link_owner_rules.js"
+RUNNER = ROOT / "pocketbase" / "tests" / "legacy_shares_runner.cjs"
 POLICY = ROOT / "docs" / "security" / "account-scope.v1.json"
 
-HARNESS = r"""
-const path = require("path");
-const [hooksDir, argJson] = process.argv.slice(1);
-const mod = require(path.join(hooksDir, "share_links.js"));
-const out = JSON.parse(argJson).map((c) => mod.screen(c.fields, c.caller, c.admin));
-process.stdout.write(JSON.stringify(out));
-"""
-
-OWNER = "owner000000000a"
-GOOD = "AbCdEfGhIjKlMnOpQrSt_-"
+CAPABILITY = "capaaaaaaaaaaa1"
 
 
 def _screen(cases: list[dict]) -> list:
     node = shutil.which("node")
     assert node, "node is required for the share link hook checks; CI installs it"
-    res = subprocess.run(
-        [node, "-e", HARNESS, str(HOOKS), json.dumps(cases)],
-        capture_output=True, text=True, timeout=60, check=True,
-    )
-    return json.loads(res.stdout)
+    program = {"steps": [{"call": "screenUpdate", "cases": cases}]}
+    res = subprocess.run([node, str(RUNNER), str(HOOKS), str(MIGRATIONS)], input=json.dumps(program),
+                         capture_output=True, text=True, timeout=60, check=True)
+    return json.loads(res.stdout)["results"][0]
 
 
-def _case(caller=OWNER, admin=False, **fields):
-    base = {"user": OWNER, "resume": "res000000000001", "variant": "", "token": GOOD}
-    base.update(fields)
-    return {"fields": base, "caller": caller, "admin": admin}
+def _row(**over) -> dict:
+    row = {"user": "owner000000000a", "resume": "res000000000001", "variant": "", "legacy_status": "migrated",
+           "legacy_reason": "eligible", "turned_off_at": "2026-11-11 12:00:00.000Z", "manifest_id": "legacy-shares-v1",
+           "replaced_by": "", "created": "2026-01-02 03:04:05.000Z", "updated": "2026-11-11 12:00:00.000Z"}
+    row.update(over)
+    return row
 
 
 ACCEPTED = {
-    "resume": _case(),
-    "variant": _case(resume="", variant="var000000000001"),
-    "superuser": _case(caller="", admin=True),
+    "the-first-replacement": (_row(), _row(replaced_by=CAPABILITY)),
+    "a-save-that-changes-nothing": (_row(), _row()),
+    "a-save-that-changes-only-updated": (_row(), _row(updated="2026-11-12 00:00:00.000Z")),
+    "a-replaced-row-saved-again": (_row(replaced_by=CAPABILITY), _row(replaced_by=CAPABILITY)),
 }
-DENIED = {
-    "no-target": (_case(resume=""), "target"),
-    "both-targets": (_case(variant="var000000000001"), "target"),
-    "other-owner": (_case(user="other00000000b"), "owner"),
-    "anonymous": (_case(caller=""), "owner"),
-    "no-owner": (_case(user="", caller=""), "owner"),
-    "short-token": (_case(token=GOOD[:-1]), "token"),
-    "long-token": (_case(token=GOOD + "x"), "token"),
-    "token-quote": (_case(token='AbCdEfGhIjKlMnOpQrS"ab'), "token"),
-    "token-space": (_case(token="AbCdEfGhIjKl MnOpQrStU"), "token"),
-    "token-newline": (_case(token=GOOD[:21] + "\n"), "token"),
-    "empty-token": (_case(token=""), "token"),
-    "superuser-two-targets": (_case(caller="", admin=True, variant="var000000000001"), "target"),
-    "superuser-bad-token": (_case(caller="", admin=True, token="x"), "token"),
+REFUSED = {
+    "a-second-replacement": (_row(replaced_by=CAPABILITY), _row(replaced_by="capbbbbbbbbbbb2"), "replaced_by"),
+    "a-replacement-cleared": (_row(replaced_by=CAPABILITY), _row(), "replaced_by"),
+    "a-replacement-that-isnt-an-id": (_row(), _row(replaced_by="x"), "replaced_by"),
+    "the-status-turned-back-on": (_row(legacy_status="revoked_unverified"), _row(legacy_status="migrated"), "field"),
+    "the-status-cleared": (_row(), _row(legacy_status=""), "field"),
+    "the-reason-changed": (_row(), _row(legacy_reason="token_format"), "field"),
+    "the-owner-changed": (_row(), _row(user="other00000000b"), "field"),
+    "the-target-changed": (_row(), _row(resume="res000000000002"), "field"),
+    "a-variant-added": (_row(), _row(variant="var000000000001"), "field"),
+    "the-date-changed": (_row(), _row(turned_off_at=""), "field"),
+    "created-changed": (_row(), _row(created="2020-01-01 00:00:00.000Z"), "field"),
+    "a-field-added-back": (_row(), _row(token="AbCdEfGhIjKlMnOpQrSt_-"), "field"),
+    "a-replacement-and-another-change": (_row(), _row(replaced_by=CAPABILITY, legacy_status="revoked_demo"), "field"),
 }
 
 
-def test_a_well_formed_link_passes():
-    assert _screen(list(ACCEPTED.values())) == [None] * len(ACCEPTED)
+def test_a_link_takes_only_its_first_replacement():
+    assert _screen([{"before": b, "after": a} for b, a in ACCEPTED.values()]) == [None] * len(ACCEPTED)
 
 
-@pytest.mark.parametrize("name", sorted(DENIED))
-def test_a_link_without_one_target_its_owner_and_a_well_formed_token_is_denied(name):
-    case, reason = DENIED[name]
-    assert _screen([case]) == [reason]
+@pytest.mark.parametrize("name", sorted(REFUSED))
+def test_every_other_change_to_an_older_link_is_refused(name):
+    before, after, reason = REFUSED[name]
+    assert _screen([{"before": before, "after": after}]) == [reason]
 
 
-def test_the_hook_token_format_matches_the_runner_minted_token():
-    src = (HOOKS / "share_links.js").read_text()
-    assert "/^[A-Za-z0-9_-]{22}$/" in src
-    runner = (ROOT / "backend" / "routers" / "share.py").read_text()
-    assert "secrets.token_urlsafe(16)" in runner  # 16 bytes -> 22 characters
-
-
-def test_every_denial_is_the_relation_predicates_create_denial():
-    hook = (HOOKS / "share_links.js").read_text()
-    relation = (HOOKS / "relation_endpoints.js").read_text()
-    denial = 'throw new BadRequestError("Failed to create record.");'
-    assert denial in relation
-    assert hook.count("throw new ") == 1 and denial in hook
-
-
-def test_the_hook_is_wired_to_link_creates_and_logs_no_values():
+def test_the_guard_is_wired_to_every_save_of_a_link_and_logs_only_a_reason():
     wiring = (HOOKS / "share_links.pb.js").read_text()
-    assert re.search(r'onRecordBeforeCreateRequest\(\(e\) => \{\s*require\(`\$\{__hooks\}/share_links\.js`\)'
-                     r'\.checkCreate\(e\);\s*\}, "resume_share_links"\);', wiring)
+    assert re.search(r'onModelBeforeUpdate\(\(e\) => \{\s*require\(`\$\{__hooks\}/share_links\.js`\)'
+                     r'\.checkUpdate\(e\);\s*\}, "resume_share_links"\);', wiring)
+    assert "onRecordBeforeCreateRequest" not in wiring
     hook = (HOOKS / "share_links.js").read_text()
-    log = re.search(r"console\.log\((.*?)\);\n", hook, re.S).group(1)
-    for value in ("token", "user:", "resume:", "variant:", "caller,", "caller:"):
-        assert value not in log.replace("actor:", ""), value
+    (log,) = re.findall(r"console\.log\((.*?)\);\n", hook, re.S)
+    assert re.sub(r"\s+", " ", log) == ('JSON.stringify({ v: "obs/v1", event: "share_link_refused", service: '
+                                        '"pocketbase", reason })')
+    assert hook.count("throw new ") == 1
+
+
+def test_re_issue_is_the_one_writer_of_replaced_by():
+    # pb_hooks/share_secrets.js sets it inside the capability's transaction;
+    # nothing else in the hooks writes it.
+    writers = [p.name for p in HOOKS.glob("*.js") if '"replaced_by"' in p.read_text()]
+    assert sorted(writers) == ["share_links.js", "share_secrets.js"]
+    secrets = (HOOKS / "share_secrets.js").read_text()
+    assert secrets.count('link.set("replaced_by", capabilityId);') == 1
 
 
 # ---- the rule migration ------------------------------------------------------
@@ -154,24 +145,27 @@ def test_down_restores_nothing(src):
     assert "saveCollection" not in body and "Rule" not in body and "token" not in body
 
 
-def test_the_policy_row_matches_the_migration(policy):
+def test_the_policy_row_names_both_rule_migrations_and_only_server_only_writes(policy):
     row = policy["collections"]["resume_share_links"]
     rules = row["current_rules"]
-    assert rules["list"] == rules["view"] == "user = @request.auth.id"
-    assert rules["update"] is None
-    assert row["target_rules"]["update"] is None
-    assert row["rule_overrides"] == [{"migration": MIGRATION.name, "rules": ["list", "view", "update"]}]
+    assert rules["list"] == rules["view"] == 'legacy_status != "revoked_ownership" && user = @request.auth.id'
+    assert rules["create"] is rules["update"] is rules["delete"] is None
+    assert row["target_rules"] == {"create": None, "update": None}
+    assert row["rule_overrides"] == [
+        {"migration": MIGRATION.name, "rules": ["list", "view", "update"]},
+        {"migration": "1700008500_legacy_share_migration.js", "rules": ["list", "view", "create", "update", "delete"]},
+    ]
     assert row["hook"] == "pocketbase/pb_hooks/share_links.pb.js"
     assert not row.get("exceptions")
-    # A null update rule: no client update family that expects an accepted or
-    # not-found update applies; the server-only update family does.
+    # No client writes at all: only the server-only families apply to writes,
+    # and the superuser seeds the fixture.
     probes = set(row["probes"])
-    assert "account-scope.update.server-only.denied" in probes
-    assert "account-scope.share.owner-only.isolated" in probes
-    assert "account-scope.share.create-shape.denied" in probes
+    for kept in ("account-scope.create.server-only.denied", "account-scope.update.server-only.denied",
+                 "account-scope.delete.server-only.denied", "account-scope.create.superuser.accepted",
+                 "account-scope.create.relation-superuser.denied", "account-scope.share.owner-only.isolated"):
+        assert kept in probes, kept
     for gone in ("account-scope.update.own.accepted", "account-scope.update.reassign-owner.denied",
-                 "account-scope.update.cross-account.denied", "account-scope.update.anonymous.denied",
-                 "account-scope.update.foreign-or-missing.indistinguishable",
-                 "account-scope.update.relation-foreign.denied",
-                 "account-scope.update.relation-foreign-or-missing.indistinguishable"):
+                 "account-scope.create.foreign-owner.denied", "account-scope.create.anonymous.denied",
+                 "account-scope.delete.cross-account.denied", "account-scope.share.create-shape.denied",
+                 "account-scope.create.relation-foreign.denied"):
         assert gone not in probes, gone

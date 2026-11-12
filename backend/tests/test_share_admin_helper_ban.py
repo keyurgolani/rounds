@@ -1,12 +1,12 @@
-"""No share capability module reaches PocketBase as the superuser
-(ROUNDS-00B-L03 stage 2).
+"""No share module reaches PocketBase as the superuser (ROUNDS-00B-L03
+stage 2).
 
 The runner reads and changes a capability only with the owner's bearer,
 and from #12 with the resolver's own service identity. This parses every
 share module under app/ and routers/ and fails on any import, name,
 attribute, or string that would reach a superuser helper or credential.
-routers/share.py is stage 1's router, which #14 replaces; it isn't one of
-these modules.
+Since ROUNDS-00B-L06 stage 1 that includes routers/share.py, which lists
+an owner's older links with the owner's bearer.
 """
 from __future__ import annotations
 
@@ -16,14 +16,12 @@ from pathlib import Path
 import pytest
 
 BACKEND = Path(__file__).resolve().parents[1]
-STAGE_ONE_ROUTER = BACKEND / "routers" / "share.py"
 BANNED_NAMES = frozenset({"admin_token", "pb_admin_get", "pb_admin_post"})
 BANNED_TEXT = ("PB_ADMIN_", "/api/admins", "_superusers")
 
 
 def _modules() -> list[Path]:
-    found = sorted({*BACKEND.glob("app/share*.py"), *BACKEND.glob("routers/share*.py")})
-    return [path for path in found if path != STAGE_ONE_ROUTER]
+    return sorted({*BACKEND.glob("app/share*.py"), *BACKEND.glob("routers/share*.py")})
 
 
 def offences(source: str) -> list[str]:
@@ -45,7 +43,7 @@ def offences(source: str) -> list[str]:
 
 def test_the_check_covers_the_capability_modules():
     names = {path.relative_to(BACKEND).as_posix() for path in _modules()}
-    assert {"app/share_capabilities.py", "routers/share_capabilities.py"} <= names
+    assert {"app/share_capabilities.py", "routers/share_capabilities.py", "routers/share.py"} <= names
 
 
 @pytest.mark.parametrize("path", _modules(), ids=lambda p: p.relative_to(BACKEND).as_posix())

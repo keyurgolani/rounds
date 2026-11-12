@@ -77,7 +77,7 @@ describe('the SPA source', () => {
     });
   }
 
-  it("never opts a runner call out of the bearer except the two public share reads", () => {
+  it("never opts a runner call out of the bearer except the share resolver", () => {
     const optOuts: string[] = [];
     for (const file of sources(SRC)) {
       const text = readFileSync(file, 'utf8');
@@ -85,9 +85,9 @@ describe('the SPA source', () => {
         optOuts.push(`${relative(SRC, file)}:${match[1]}`);
       }
     }
-    // The public share read and the Share Capability resolver
-    // (ROUNDS-00B-L03 stage 2), both anonymous by design.
-    expect(optOuts).toEqual(['features/resume/share/client.ts:none', 'features/resume/share/client.ts:none']);
+    // The Share Capability resolver (ROUNDS-00B-L03 stage 2), anonymous by
+    // design, and since ROUNDS-00B-L06 the only one.
+    expect(optOuts).toEqual(['features/resume/share/client.ts:none']);
   });
 
   it('sends no runner request from a bare fetch', () => {

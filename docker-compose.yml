@@ -119,13 +119,14 @@ services:
       - ROUNDS_GATE_EXECUTION_GRADING=${ROUNDS_GATE_EXECUTION_GRADING:-}
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
       # Public shares (docs/operations.md, "Public shares"): PUBLIC_SHARES
-      # turns every public share read off, and capability resolution stays
-      # closed until the steps there are done. The SPA reads the same
-      # resolution value, so set it for both from this file.
+      # turns every share resolve off. Capability resolution is closed by
+      # default: no share link resolves and nobody can make one until the
+      # owner sets it enabled (ROUNDS-00B-L06). The SPA
+      # reads the same resolution value, so set it for both from this file.
       - ROUNDS_GATE_PUBLIC_SHARES=${ROUNDS_GATE_PUBLIC_SHARES:-}
       - ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=${ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION:-}
       # PUBLIC_SHARES's alias: anything but false, 0, no, off, or empty
-      # turns every public share read into the uniform not-found.
+      # turns every share resolve into the uniform not-found.
       - ROUNDS_DISABLE_PUBLIC_SHARES=${ROUNDS_DISABLE_PUBLIC_SHARES:-false}
     depends_on:
       - pdf-renderer

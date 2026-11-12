@@ -16,7 +16,6 @@ import type {
   ResumeData,
   ResumeVariant,
   ResumeVersion,
-  ShareLink,
   TemplateConfig,
 } from './types';
 import { emptyResumeData } from './types';
@@ -77,22 +76,12 @@ interface AISettingsRow extends RecordModel {
   key_iv?: string;
 }
 
-interface ShareLinkRow extends RecordModel {
-  user: string;
-  variant: string;
-  token: string;
-  is_password: boolean;
-  password_hash?: string;
-  expires_at?: string;
-}
-
 // ---- Typed collection accessors -------------------------------------
 
 const resumesCol = () => pb.collection<ResumeRow>('resumes');
 const variantsCol = () => pb.collection<VariantRow>('resume_variants');
 const versionsCol = () => pb.collection<VersionRow>('resume_versions');
 const aiSettingsCol = () => pb.collection<AISettingsRow>('ai_settings');
-const shareLinksCol = () => pb.collection<ShareLinkRow>('resume_share_links');
 
 function userId(): string {
   const id = pb.authStore.record?.id;
@@ -167,19 +156,6 @@ function adaptAISettings(r: AISettingsRow): AISettings {
     encrypted_key: r.encrypted_key,
     key_iv: r.key_iv,
     updated_at: r.updated,
-  };
-}
-
-function adaptShareLink(r: ShareLinkRow): ShareLink {
-  return {
-    id: r.id,
-    user_id: r.user,
-    variant_id: r.variant,
-    token: r.token ?? '',
-    is_password: Boolean(r.is_password),
-    password_hash: r.password_hash,
-    expires_at: r.expires_at,
-    created_at: r.created,
   };
 }
 
@@ -408,39 +384,4 @@ export async function upsertAISettings(input: {
   }
   const r = await aiSettingsCol().create(payload);
   return adaptAISettings(r);
-}
-
-// --- Share links ------------------------------------------------------
-
-export async function listShareLinks(variantId?: string): Promise<ShareLink[]> {
-  const me = userId();
-  const filters = [`user = "${me}"`];
-  if (variantId) filters.push(`variant = "${variantId}"`);
-  const items = await shareLinksCol().getFullList({
-    filter: filters.join(' && '),
-    sort: '-created',
-  });
-  return items.map(adaptShareLink);
-}
-
-export async function createShareLink(input: {
-  variantId: string;
-  token: string;
-  isPassword?: boolean;
-  passwordHash?: string;
-  expiresAt?: string;
-}): Promise<ShareLink> {
-  const r = await shareLinksCol().create({
-    user: userId(),
-    variant: input.variantId,
-    token: input.token,
-    is_password: input.isPassword ?? false,
-    password_hash: input.passwordHash ?? '',
-    expires_at: input.expiresAt ?? '',
-  });
-  return adaptShareLink(r);
-}
-
-export async function deleteShareLink(id: string): Promise<void> {
-  await shareLinksCol().delete(id);
 }

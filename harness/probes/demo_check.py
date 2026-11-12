@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 import factory
-from admission_check import Checks, admin_token, call
+from admission_check import Checks, admin_token, call, uuid7
 from pbclient import PBClient
 
 POCKETBASE_URL = os.environ.get("POCKETBASE_URL", "http://pocketbase:8090")
@@ -114,26 +114,35 @@ def run_on(c: Checks, pb: PBClient, admin: str) -> None:
     resume = pb.create("resumes", d.token, {"user": d.user_id, "name": "demo resume", "slug": "demo-" + secrets.token_hex(4)})
     resume_id = (resume.body or {}).get("id", "")
     direct = {
-        "resume_share_links": pb.create("resume_share_links", d.token, {"user": d.user_id, "resume": resume_id,
-                                                                        "token": secrets.token_urlsafe(16)}),
+        "resume_share_links": pb.create("resume_share_links", d.token, {"user": d.user_id, "resume": resume_id}),
         "ai_providers": pb.create("ai_providers", d.token, {"user": d.user_id, "kind": "openai", "label": "demo"}),
         "ai_settings": pb.create("ai_settings", d.token, {"user": d.user_id}),
     }
+    # Since ROUNDS-00B-L06 no client creates a share link row, so PocketBase
+    # refuses the demo account's before the demo hook sees it; the other two
+    # are the demo hook's own refusal.
+    link = direct.pop("resume_share_links")
     c.check("demo.on.no-share-link-provider-or-settings-row-through-pocketbase",
-            resume.status == 200 and all(_not_permitted(r.status, r.body) for r in direct.values()),
-            f"resume={resume.status} " + " ".join(f"{k}={r.status}" for k, r in direct.items()))
+            resume.status == 200 and link.status in (400, 403)
+            and all(_not_permitted(r.status, r.body) for r in direct.values()),
+            f"resume={resume.status} resume_share_links={link.status} "
+            + " ".join(f"{k}={r.status}" for k, r in direct.items()))
+    direct["resume_share_links"] = link
+    # A share link is CreateShare (ROUNDS-00B-L04), which makes none for a
+    # demo account, whatever it answers; the no-row counts below hold it.
+    share = call(RUNNER_URL, "POST", "/api/share", d.token, {"resume_id": resume_id}, {"Idempotency-Key": uuid7()})[:2]
     through = {
-        "share": call(RUNNER_URL, "POST", "/api/share", d.token, {"resume_id": resume_id})[:2],
         "provider": call(RUNNER_URL, "POST", "/api/ai/providers", d.token,
                          {"kind": "openai", "label": "demo", "key": "harness-key-not-a-secret"})[:2],
         "settings": call(RUNNER_URL, "PUT", "/api/ai/settings", d.token, {"text_model": "harness-model"})[:2],
     }
-    left = {name: _count(pb, admin, name, d.user_id) for name in direct}
+    left = {name: _count(pb, admin, name, d.user_id) for name in [*direct, "share_capabilities"]}
     # The runner passes PocketBase's refusal on, code included.
     c.check("demo.on.no-share-link-provider-or-settings-row-through-the-runner",
             all(status == 403 and NOT_PERMITTED["code"] in json.dumps(body) for status, body in through.values())
+            and share[0] != 201 and "token" not in json.dumps(share[1] or {})
             and all(n == 0 for n in left.values()),
-            " ".join(f"{k}={v[0]}" for k, v in through.items()) + f" rows={left}")
+            f"share={share[0]} " + " ".join(f"{k}={v[0]}" for k, v in through.items()) + f" rows={left}")
 
     # A standard account is held to none of it.
     s = _standard(pb, admin)

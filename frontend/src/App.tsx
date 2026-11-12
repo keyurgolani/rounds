@@ -25,7 +25,7 @@ import CampaignDetail from './pages/CampaignDetail';
 import Todos from './pages/Todos';
 import ResumesList from './pages/ResumesList';
 import ResumeStudio from './pages/ResumeStudio';
-import PublicResume from './pages/PublicResume';
+import OlderShareLink from './pages/OlderShareLink';
 import SharedArtifact from './pages/SharedArtifact';
 import ExperiencePage from './experience/ExperiencePage';
 import { CampaignProvider } from './campaign/CampaignContext';
@@ -37,9 +37,10 @@ export default function App() {
       <Route path="signup" element={<Signup />} />
       {/* Only the lowercase paths render the share pages, the ones nginx
           serves with the share headers (ROUNDS-00B-L03). /r reads its
-          token from the fragment (stage 2). */}
+          token from the fragment (stage 2). Any /r/<anything> is an older
+          link's address, which opens one fixed page (ROUNDS-00B-L06). */}
       <Route path="r" caseSensitive element={<SharedArtifact />} />
-      <Route path="r/:token" caseSensitive element={<PublicResume />} />
+      <Route path="r/*" caseSensitive element={<OlderShareLink />} />
 
       <Route
         element={

@@ -438,14 +438,16 @@ Only one AI-coding item, `hallucinated-http-client`, has an active compiled harn
 
 ### Public shares
 
-A share link answers only its owner, and the public share read answers only the resume's projection:
+Every share link made before `1700008500_legacy_share_migration.js` stops working when it deploys, for good. Owners make new ones in the share dialog: Share, then Get a new link under Older links. Sharing stays closed after the deploy: until you open it (below), no share link resolves, old or new, and nobody can make one. The migration has its own runbook, [Older share links](#older-share-links).
 
-- `1700008100_share_link_owner_rules.js` makes `resume_share_links` readable by its owner only and takes no client updates, so nobody can change a link once it exists. `pocketbase/pb_hooks/share_links.pb.js` rejects a link create without exactly one target, the caller as owner, and a 22-character URL-safe token, with the same body as a foreign or missing target. Its down step keeps the rules.
-- The public share read answers `{data, template_id, design}` with hidden sections emptied, only when the link's owner owns what it points at, or one 404 `{"detail":"Not found."}` for every failure, PocketBase being down included. Both carry `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow, noarchive`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. Nothing is written, so the share dialog no longer shows view counts.
-- nginx serves the share pages, in any letter case, with the same headers and the share page CSP.
-- The runner logs one `share.resolve` line per read with an outcome in `code`: `available`, `not_found`, `kill_switch`, `gate_closed` (the resolver only), or `degraded`. A run of `degraded` means the runner can't read PocketBase.
+A share link is a Share Capability, `/r#<secret>`, and only its owner manages it:
 
-To turn every public share answer off, the public share read and the resolver below, set `ROUNDS_GATE_PUBLIC_SHARES=disabled` on the runner and restart it (Compose passes it through; in Kubernetes set it in the `rounds-gates` ConfigMap, which the runner reads). Its older alias, `ROUNDS_DISABLE_PUBLIC_SHARES=true`, still works while the gate is empty, and it fails closed: any value other than empty, `false`, `0`, `no`, or `off` turns them off. A set gate wins over the alias. Owners keep their links. Turn answers back on with `ROUNDS_GATE_PUBLIC_SHARES=enabled`, or an empty gate and the alias `false`.
+- `1700008100_share_link_owner_rules.js` and `1700008500_legacy_share_migration.js` leave `resume_share_links`, the older links, readable only by their owner, and no client creates, changes, or deletes one. Nobody sees one that pointed at another account's resume. `pocketbase/pb_hooks/share_links.pb.js` refuses every change to an older link except the one Get a new link makes.
+- An older link's address, `/r/<anything>`, opens one fixed page, "This link no longer works", decided in the browser with no request. nginx answers the older read path itself, in any letter case, with the resolver's 404 and headers below, and the runner has no route there.
+- nginx serves the share pages, in any letter case, with the share headers and the share page CSP.
+- The runner logs one `share.resolve` line per resolve with an outcome in `code`: `available`, `not_found`, `kill_switch`, `gate_closed`, or `degraded`. A run of `degraded` means the runner can't read PocketBase.
+
+To turn every public share answer off, set `ROUNDS_GATE_PUBLIC_SHARES=disabled` on the runner and restart it (Compose passes it through; in Kubernetes set it in the `rounds-gates` ConfigMap, which the runner reads). Its older alias, `ROUNDS_DISABLE_PUBLIC_SHARES=true`, still works while the gate is empty, and it fails closed: any value other than empty, `false`, `0`, `no`, or `off` turns them off. A set gate wins over the alias. Owners keep their links. Turn answers back on with `ROUNDS_GATE_PUBLIC_SHARES=enabled`, or an empty gate and the alias `false`.
 
 **Share capabilities.** `1700008200_share_capabilities.js` adds `share_capabilities`, the store for Share Capabilities. Every rule is `null`, so no client lists, views, or writes a row; PocketBase's hooks and the runner's owner routes are the only way in. A row names one of its account's Legacy Artifact Snapshots and holds a keyed digest of its bearer, never the bearer. CreateShare makes rows while resolution is on (below).
 
@@ -460,25 +462,28 @@ To turn every public share answer off, the public share read and the resolver be
 | Gate | Default | Effect |
 | --- | --- | --- |
 | `ROUNDS_GATE_PUBLIC_SHARES` | `enabled` | `disabled` answers every public share request with the uniform not-found before any lookup |
-| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | `disabled` | `enabled` lets the resolver look a capability up and turns on CreateShare and rotation below. Leave it `disabled` until the steps under One-time links are done |
+| `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION` | `disabled` | `enabled` lets the resolver look a capability up and turns on CreateShare and rotation below. `disabled` answers every resolve with the uniform not-found before any lookup and `POST /api/share` with 503 `route_disabled`, so no share link resolves and nobody can make one, and the share dialog says sharing is turned off |
 
-The resolver answers `{"projection_version": 1, "markup"}`, or the public share read's 404 bytes and headers for every failure: a gate, a body that isn't a JSON object holding a `token` and at most a `password`, a token in another format, a capability that's unknown, expired, revoked, another account's, or whose source is gone, a missing or wrong password, and PocketBase being down. A throttled client gets 429 with `Retry-After` instead, whatever its token. The `/r` page shows resolved markup in a sandboxed frame that can't run scripts, under the share page CSP.
+The resolver answers `{"projection_version": 1, "markup"}`, or one 404 `{"detail":"Not found."}` for every failure, with the share response headers: `Cache-Control: no-store`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex, nofollow, noarchive`, and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The same 404 answers a closed gate, a body that isn't a JSON object holding a `token` and at most a `password`, a token in another format, a capability that's unknown, expired, revoked, another account's, or whose source is gone, a missing or wrong password, and PocketBase being down. A throttled client gets 429 with `Retry-After` instead, whatever its token. The `/r` page shows resolved markup in a sandboxed frame that can't run scripts, under the share page CSP.
 
-**One-time links.** While resolution is on, `POST /api/share` is CreateShare and the share dialog follows it (#12):
+**One-time links.** `POST /api/share` is CreateShare, and the share dialog follows it (#12):
 
 - A link is `/r#<secret>`; the secret rides the fragment, which no request carries. Rounds shows it once, in the response that makes it, and keeps only a keyed digest under `AI_KEY_SECRET`. A retry under the same `Idempotency-Key` answers `already-issued` with the same link and no secret. An owner who lost a link rotates it, `POST /api/share/capabilities/{id}/rotate` with the version from the list: one transaction swaps the digest, and the old link stops at once. A stale version is 409 `capability_version_conflict`; a revoked or expired link is 409 `capability_revoked` or `capability_expired`.
+- Get a new link is CreateShare naming an older link (`legacy_link_id`). The new link shares the same resume or variant the older one did, and the same transaction marks the older one replaced. A second press, a retry, and a link already replaced answer `already-issued` with the same link. Another account's link, one turned off for good, and a target that doesn't match the older link's get the one not-found.
 - A link may have a password, 8 to 128 characters, set when it's made and stored as an Argon2id verifier (profile `pw1`). Each submitted password costs one verify, at most two at once per runner, and an unknown link costs the same.
 - The resolver counts before it looks: 60 resolves a minute per client, 10 password tries on one link from one client in 15 minutes, and 100 resolves a day per link. Counters live in `share_throttle` as keys only the runner can make, so a row names neither an address nor a link, and each lookup removes up to 100 that are over a day old. nginx adds a backstop of 2 resolves a second per client on each frontend replica, with a burst of 20.
 - The runner resolves as `share-resolver`, a record in `share_resolvers` whose password follows `ROUNDS_SHARE_RESOLVER_PASSWORD`. It reaches only its lookup route; PocketBase refuses it everywhere else, and nginx and the Vite proxy answer `/api/collections/share_resolvers/` with 404.
 - Share pages and resolves leave no access-log line in nginx or the runner, and nginx keeps only critical error lines on its share locations, since its error lines name the client. The runner logs `share.resolve` with `throttled`, `password_required`, or `password_wrong` besides the codes above, and one `share.create` or `share.rotate` line per command with the account's pseudonym, the capability id once there is one, and `issued`, `already_issued`, `ineligible`, or the refusal's code. None holds a secret, a password, or an address.
 
-Before you set the gate to `enabled`:
+To open sharing, so owners can get new links:
 
 1. Set `ROUNDS_SHARE_RESOLVER_PASSWORD` on PocketBase and every runner, then restart PocketBase, then the runners.
-2. Turn on Legacy Artifact Snapshot creation with its signed scan and the materializer ([Legacy Artifact Snapshots](#legacy-artifact-snapshots)), and set `ROUNDS_ADMISSION_SECRET`: every link is made over a snapshot.
+2. Turn on Legacy Artifact Snapshot creation with its signed scan and the materializer ([Legacy Artifact Snapshots](#legacy-artifact-snapshots)), and set `ROUNDS_ADMISSION_SECRET`. Every link is made over a snapshot.
 3. Back up `AI_KEY_SECRET` ([Backups](#backups)).
 4. If anything sits in front of the frontend, a front proxy, a tunnel, or the k8s ingress controller, set `ROUNDS_FRONTEND_REAL_IP_FROM` on the frontend to the addresses it connects from, and have it send each client's address in `X-Forwarded-For`, the header the frontend reads. This holds for compose too: when nginx's port is published only to a local proxy, nginx sees that proxy for every client, and without the setting every client shares one count, so one client can throttle every link. `ROUNDS_TRUSTED_PROXY_CIDRS` is the runner's list of nginx addresses; its default covers nginx in the compose files and on k8s, so leave it unless nginx reaches the runner from elsewhere.
-5. Set the gate for the runner and the frontend together, so the dialog matches the create the runner serves.
+5. Set `ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=enabled` on every runner and the frontend, together, and restart them, so the dialog matches what the runner serves. Until then, no share link resolves, old or new, and nobody can make one.
+
+Opened without steps 1 and 2, the share dialog says it can't create a new link yet.
 
 Check a deployment with the gate on, signed in, from the public URL: make a link and open it; rotate it and check that the old link answers not-found and the new one opens; and resolve one unknown token 61 times within a minute, which answers 429 with `Retry-After` from the 61st on. Right after, resolve once from a second client on another network: it answers 404. A 429 there means every client shares one count; set `ROUNDS_FRONTEND_REAL_IP_FROM` (step 4).
 
@@ -490,9 +495,43 @@ curl -sI https://your-domain/r/x | grep -i -e '^cache-control' -e '^x-frame-opti
 curl -s -i -X POST https://your-domain/api/share/resolve -H 'Content-Type: application/json' -d '{"token":"x"}'
 ```
 
-Both pages answer `Cache-Control: no-store` with the share page CSP and `X-Frame-Options: DENY`, and the resolver answers 404 `{"detail":"Not found."}` with the same headers as the public share read.
+Both pages answer `Cache-Control: no-store` with the share page CSP and `X-Frame-Options: DENY`, and the resolver answers 404 `{"detail":"Not found."}` with its headers.
 
-[Deployment verification](#deployment-verification) checks these from the public URL: `deployment.proxy.share-page.headers` for the share pages, `deployment.proxy.share-read.uniform` for the public share read, `deployment.proxy.share-resolve.uniform` for the resolver, `deployment.proxy.share-hooks.denied` for the hook routes, and `deployment.proxy.share-resolvers.denied` for the share resolver record's routes, which nginx answers itself.
+[Deployment verification](#deployment-verification) checks these from the public URL: `deployment.proxy.share-page.headers` for the share pages, `deployment.proxy.share-read.uniform` for the older read path, `deployment.proxy.share-resolve.uniform` for the resolver, `deployment.proxy.share-hooks.denied` for the hook routes, and `deployment.proxy.share-resolvers.denied` for the share resolver record's routes, which nginx answers itself.
+
+### Older share links
+
+`1700008500_legacy_share_migration.js` turns off every share link made before it, at the first start of the release that adds it. It runs in one transaction, so a start that stops partway changes nothing and the next start runs it again. Its manifest is `pocketbase/migration-manifests/legacy-shares-v1.json`.
+
+- Each link gets one outcome, with a reason, in `legacy_share_migration`, one row per link under the link's own id, which no client reads: `migrated` (its owner can get a new link), `revoked_demo` (a demo account's), `revoked_unverified` (Rounds couldn't verify it: no owner, no target, a target that's gone, or a setting a new link doesn't carry), or `revoked_ownership` (it pointed at another account's resume, so nobody sees it). A `revoked_ownership` link that had views counts as an incident.
+- The journal keeps each link's view count and the first and last day it was viewed.
+- It drops the link fields only older links used, and does the same for older links in `relation_quarantine`.
+- Its `migrate down` keeps every link off. The journal, the rules, each link's status, and its new link stay; it removes the fields it added and adds the dropped ones back empty.
+
+**The dry run.** Run the new release's migration on a copy taken with PocketBase stopped, then read its receipt.
+
+```sh
+docker compose -f docker-compose.prod.yml stop pocketbase
+docker volume create rounds_pb_data_copy
+docker run --rm -v rounds_pb_data:/from:ro -v rounds_pb_data_copy:/to alpine cp -a /from/. /to/
+docker compose -f docker-compose.prod.yml start pocketbase
+docker run --rm -v rounds_pb_data_copy:/pb/pb_data keyurgolani/rounds-pocketbase:NEW_TAG \
+  /pb/pocketbase migrate up --dir=/pb/pb_data --migrationsDir=/pb/pb_migrations
+docker run --rm -v rounds_pb_data_copy:/pb/pb_data -v "$(pwd)":/out keyurgolani/rounds-pocketbase:NEW_TAG \
+  /pb/pocketbase legacy-share-receipt --dir=/pb/pb_data --hooksDir=/pb/pb_hooks \
+  --migrationsDir=/pb/pb_migrations --out /out/legacy-share-receipt.json --commit NEW_TAG
+docker compose -f docker-compose.prod.yml run --rm -T runner python -m app.legacy_receipt sign - \
+  < legacy-share-receipt.json > legacy-share-receipt.signed.json
+docker volume rm rounds_pb_data_copy
+```
+
+The receipt holds counts by outcome and by reason, incidents, how many links got a new one, what's left of what the migration removes (all zero), a checksum of the journal without its dates, and its own checksum. It holds no id. Read `reconciled`: `true` means every older link is in the journal once, under its own id, with the status the journal gives it, and nothing is left. `--scan`, with the materializer up, adds how many targets #4's checks can't snapshot, by reason; their owners will see "Can't create a new link" with that reason. The runner signs it as it signs the snapshot scan, under the HKDF label `rounds/legacy-share-receipt/v1`.
+
+**The deploy.** Deploy as in [Upgrades](#upgrades); sharing stays closed until you open it ([Public shares](#public-shares)). PocketBase logs one `legacy_share_batch` line per 500 links and one `legacy_share_migrated` line with the counts, or `legacy_share_failed` with the step that failed, and starts only once it has run. Then run `legacy-share-receipt` again, with `docker compose ... exec pocketbase`, and sign it. Links made between the dry run and the deploy add to the counts.
+
+**In the share dialog.** Older links shows the resume's older links with why each is off. "Turned off on <date>" offers Get a new link. "Can't create a new link yet." means the server can't make one right now (sharing off, no materializer, or no store). "Can't create a new link" with a reason is #4's ineligible reason, and the table in [Legacy Artifact Snapshots](#legacy-artifact-snapshots) says what fixes it.
+
+**Rolling back.** `migrate down 1` leaves every link off, as above. Restoring the pre-upgrade backup from [Upgrades](#upgrades) with the previous tag turns every older link back on, as it was before the release, so do that only to undo the release. Restored onto this release's image, the same backup runs the migration again before its first request.
 
 ## Smoke Test Checklist
 

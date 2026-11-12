@@ -39,7 +39,8 @@ ROOT = Path(__file__).resolve().parents[1].parent
 MIGRATION = ROOT / "pocketbase" / "pb_migrations" / "1700007000_relation_endpoint_authz.js"
 # Later migrations that add a typed relation, with its owner-equality
 # triggers, keep a FIELDS array in the same shape (ROUNDS-00B-L03 stage 2).
-LATER_MIGRATIONS = (ROOT / "pocketbase" / "pb_migrations" / "1700008200_share_capabilities.js",)
+LATER_MIGRATIONS = (ROOT / "pocketbase" / "pb_migrations" / "1700008200_share_capabilities.js",
+                    ROOT / "pocketbase" / "pb_migrations" / "1700008500_legacy_share_migration.js")
 TABLE = ROOT / "pocketbase" / "pb_hooks" / "relation_endpoints.v1.json"
 POLICY = ROOT / "docs" / "security" / "account-scope.v1.json"
 TOUCHED = ROOT / "pocketbase" / "migration-manifests" / "1700007000_relation_endpoint_authz.json"
@@ -113,9 +114,11 @@ def test_migration_fields_match_the_canonical_table(src, table):
     triples = _migration_fields(src)
     assert len(triples) == 34 and len(set(triples)) == 34
     # Each later migration adds its own, with the same triggers, and none
-    # repeats one: share_capabilities.snapshot (#11 stage 2).
+    # repeats one: share_capabilities.snapshot (#11 stage 2) and an older
+    # share link's replaced_by (#14 stage 1).
     later = [t for path in LATER_MIGRATIONS for t in _migration_fields(path.read_text())]
-    assert later == [("share_capabilities", "snapshot", "legacy_artifact_snapshots")]
+    assert later == [("share_capabilities", "snapshot", "legacy_artifact_snapshots"),
+                     ("resume_share_links", "replaced_by", "share_capabilities")]
     assert not set(later) & set(triples)
     assert sorted(triples + later) == sorted(_table_triples(table))
 

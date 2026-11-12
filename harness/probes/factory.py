@@ -209,8 +209,16 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
     resume = mk("resumes", {"name": f"{tag} resume", "slug": f"{tag}-resume"})
     variant = mk("resume_variants", {"resume": resume, "name": "variant"})
     mk("resume_versions", {"resume": resume, "data": {}})
-    acct.share_fields = {"resume": resume, "token": secrets.token_urlsafe(16)}
-    mk("resume_share_links", dict(acct.share_fields))
+    # Once 1700008500_legacy_share_migration.js has run (ROUNDS-00B-L06), no
+    # client creates a share link row, so the fixture goes in with the admin
+    # token, as the views' does. A database built on earlier migrations (the
+    # demo containment check) still takes the owner's create.
+    if has("legacy_share_migration"):
+        acct.share_fields = {"resume": resume}
+        mk_admin("resume_share_links", dict(acct.share_fields))
+    else:
+        acct.share_fields = {"resume": resume, "token": secrets.token_urlsafe(16)}
+        mk("resume_share_links", dict(acct.share_fields))
     mk_admin("resume_share_views", {"link": ids["resume_share_links"]})
     # Only a PocketBase hook writes snapshots (ROUNDS-00A-L04), so the
     # fixture row, with its markup file, goes in with the admin token.
@@ -318,9 +326,9 @@ def fresh_payload(
         "resumes": {"name": "probe", "slug": f"probe-{s}"},
         "resume_variants": {"resume": a.ids["resumes"], "name": "variant"},
         "resume_versions": {"resume": a.ids["resumes"]},
-        # 22 URL-safe characters, the format the link create hook requires
-        # (pocketbase/pb_hooks/share_links.js).
-        "resume_share_links": {"resume": a.ids["resumes"], "token": f"probe_tok-{s}"[:22].ljust(22, "0")},
+        # No client creates one (ROUNDS-00B-L06); the superuser probes create
+        # one over the owner's own resume, or point a relation elsewhere.
+        "resume_share_links": {"resume": a.ids["resumes"]},
         "resume_share_views": {"link": a.ids["resume_share_links"]},
         # No markup file: only the create probe uses it, and the null create
         # rule refuses the request before any field is read.

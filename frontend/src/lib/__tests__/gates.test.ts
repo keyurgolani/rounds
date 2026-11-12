@@ -62,6 +62,9 @@ describe('resolveGate', () => {
   it('share capability resolution defaults to disabled and fails closed', () => {
     expect(resolveGate('SHARE_CAPABILITY_RESOLUTION', {})).toEqual({ value: 'disabled', source: 'default' });
     expect(
+      resolveGate('SHARE_CAPABILITY_RESOLUTION', { ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION: 'disabled' }),
+    ).toEqual({ value: 'disabled', source: 'env' });
+    expect(
       resolveGate('SHARE_CAPABILITY_RESOLUTION', { ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION: 'Enabled' }),
     ).toEqual({ value: 'enabled', source: 'env' });
     expect(resolveGate('SHARE_CAPABILITY_RESOLUTION', { ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION: 'true' })).toEqual({

@@ -30,7 +30,7 @@ export type RunnerInit = {
   signal?: AbortSignal;
   /** Default `'required'` — throw if no PB token is present.
    *  `'optional'` includes the token when present, omits otherwise.
-   *  `'none'` never sends the token (e.g. anonymous /share/by-token). */
+   *  `'none'` never sends the token (e.g. the anonymous share resolver). */
   auth?: 'required' | 'optional' | 'none';
   /** Prefix on thrown error messages, e.g. `'AI'` → `"AI 503: …"`. */
   errorPrefix?: string;

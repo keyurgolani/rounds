@@ -689,7 +689,145 @@ def test_create_takes_only_its_own_fields_and_never_a_bearer_or_password(over):
 
 def test_a_well_formed_create_is_taken():
     (res,) = run({"call": "checkCreate", "input": CREATE_BODY})["results"]
-    assert res == CREATE_BODY
+    assert res == dict(CREATE_BODY, legacy_link=None)
+
+
+# ---- "Get a new link" for an older link (ROUNDS-00B-L06) -----------------------------
+
+LINK = "linkaaaaaaaaaa1"
+BEGIN_BODY = {"command_id": KEY, "operation": "share_create", "fingerprint": FP, "snapshot_command_id": SNAP_KEY}
+
+
+@pytest.mark.parametrize("over, ok", [
+    ({"legacy_link_id": LINK}, True),
+    ({"legacy_link_id": LINK, "target": {"kind": "resume", "id": "resumeaaaaaaaa1"}}, True),
+    ({"legacy_link_id": LINK, "target": {"kind": "variant", "id": "variantaaaaaaa1"}}, True),
+    ({"legacy_link_id": None}, True),
+    ({"legacy_link_id": "LINK"}, False),
+    ({"legacy_link_id": 5}, False),
+    ({"target": {"kind": "resume", "id": "resumeaaaaaaaa1"}}, False),
+    ({"legacy_link_id": LINK, "target": {"kind": "snapshot", "id": "resumeaaaaaaaa1"}}, False),
+    ({"legacy_link_id": LINK, "target": {"kind": "resume", "id": "resumeaaaaaaaa1", "token": "x"}}, False),
+    ({"legacy_link_id": LINK, "target": "resumeaaaaaaaa1"}, False),
+])
+def test_begin_takes_an_older_link_and_the_target_its_body_named_only_on_a_create(over, ok):
+    (res,) = run({"call": "checkBegin", "input": dict(BEGIN_BODY, **over)})["results"]
+    assert (res is not None) is ok
+    rotate = {"command_id": KEY, "operation": "share_rotate", "fingerprint": FP, "legacy_link_id": LINK}
+    assert run({"call": "checkBegin", "input": rotate})["results"] == [None]
+
+
+@pytest.mark.parametrize("value, ok", [(LINK, True), (None, True), ("LINK", False), ("", False), (7, False)])
+def test_create_takes_an_older_links_id(value, ok):
+    (res,) = run({"call": "checkCreate", "input": dict(CREATE_BODY, legacy_link_id=value)})["results"]
+    assert (res is not None) is ok
+    if ok:
+        assert res["legacy_link"] == value
+
+
+def older(**over) -> dict:
+    """A world with one of ACCOUNT's older links to its own resume."""
+    state = shared()
+    row = {"user": ACCOUNT, "legacy_status": "migrated", "replaced_by": "", "resume": "resumeaaaaaaaa1",
+           "variant": ""}
+    row.update(over)
+    state["legacyLinks"] = {LINK: row}
+    return state
+
+
+def reissue_begin(**over) -> dict:
+    data = dict(command_id=KEY, operation="share_create", fingerprint=FP, snapshot=SNAP_KEY, legacy_link=LINK,
+                target=None)
+    data.update(over)
+    return {"call": "begin", "input": data}
+
+
+def reissue(**over) -> dict:
+    step = create(legacy_link=LINK)
+    step["input"].update(over)
+    return step
+
+
+def test_begin_names_an_older_links_own_target():
+    out = run_with(older(), reissue_begin())
+    assert out["results"][0]["value"] == {"status": 200, "body": {
+        "v": V, "verdict": "new", "snapshot_command_id": SNAP_KEY,
+        "legacy_target": {"kind": "resume", "id": "resumeaaaaaaaa1"}}}
+    variant = run_with(older(variant="variantaaaaaaa1", resume="resumeaaaaaaaa1"), reissue_begin())
+    assert variant["results"][0]["value"]["body"]["legacy_target"] == {"kind": "variant", "id": "variantaaaaaaa1"}
+
+
+@pytest.mark.parametrize("state, step", [
+    (older(user=OTHER), reissue_begin()),
+    (older(legacy_status="revoked_unverified"), reissue_begin()),
+    (older(legacy_status="revoked_demo"), reissue_begin()),
+    (older(legacy_status="revoked_ownership"), reissue_begin()),
+    (older(legacy_status=""), reissue_begin()),
+    (older(), reissue_begin(legacy_link="linkmissingaaa1")),
+    (older(), reissue_begin(target={"kind": "resume", "id": "resumebbbbbbbb1"})),
+    (older(), reissue_begin(target={"kind": "variant", "id": "resumeaaaaaaaa1"})),
+    (older(resume=""), reissue_begin()),
+], ids=["another-accounts", "unverified", "demo", "ownership", "no-status", "missing", "other-target",
+        "other-kind", "no-target"])
+def test_any_other_link_is_the_one_not_found_and_records_no_command(state, step):
+    out = run_with(state, step)
+    assert out["results"][0]["value"] == {"status": 404, "body": {"v": V, "error": "not_found"}}
+    assert out["world"]["commands"] == []
+
+
+def test_a_replaced_link_answers_its_capability_as_a_replay_under_any_key():
+    state = with_capability()
+    state["legacyLinks"] = older(replaced_by=CAP)["legacyLinks"]
+    out = run_with(state, reissue_begin(), reissue_begin(command_id=KEY_2))
+    for res in out["results"]:
+        body = res["value"]["body"]
+        assert body["verdict"] == "replay" and body["result"]["body"]["capability_id"] == CAP
+        assert body["result"]["status"] == 201 and "setSnapshot" not in res["calls"]
+    assert {c["state"] for c in out["world"]["commands"]} == {"completed"}
+    assert len(out["world"]["capabilities"]) == 1
+
+
+def test_get_a_new_link_makes_one_capability_and_marks_the_link_in_the_same_write():
+    out = run_with(older(), reissue_begin(), reissue())
+    made = out["results"][1]["value"]
+    assert (made["status"], made["body"]["delivery"]) == (201, "issued")
+    (cap_id,) = out["world"]["capabilities"]
+    assert made["body"]["result"]["body"]["capability_id"] == cap_id
+    assert out["world"]["legacyLinks"][LINK]["replaced_by"] == cap_id
+    assert out["results"][1]["calls"].index("createCapability") < out["results"][1]["calls"].index("replaceLegacy")
+
+
+def test_a_second_press_with_a_new_key_answers_the_first_capability_and_makes_nothing():
+    out = run_with(older(), reissue_begin(), reissue(), reissue(command_id=KEY_2, bearer_digest=D2))
+    first, again = out["results"][1]["value"], out["results"][2]
+    assert again["value"]["status"] == 200 and again["value"]["body"]["delivery"] == "already_issued"
+    assert again["value"]["body"]["result"] == first["body"]["result"]
+    assert "createCapability" not in again["calls"]
+    assert len(out["world"]["capabilities"]) == 1
+
+
+def test_a_snapshot_of_anything_but_the_links_own_target_makes_nothing():
+    state = older()
+    state["snapshots"]["snapresumeaaaa2"] = {"user": ACCOUNT, "source_kind": "resume", "source_id": "resumeaaaaaaaa2"}
+    out = run_with(state, reissue_begin(), reissue(snapshot_id="snapresumeaaaa2"),
+                   reissue(snapshot_id="snapvariantaaa1"))
+    for res in out["results"][1:]:
+        assert res["value"] == {"status": 404, "body": {"v": V, "error": "not_found"}}
+        assert "createCapability" not in res["calls"]
+    assert out["world"]["capabilities"] == {} and out["world"]["legacyLinks"][LINK]["replaced_by"] == ""
+
+
+def test_a_link_that_stopped_being_reissuable_before_the_write_makes_nothing():
+    out = run_with(older(legacy_status="revoked_unverified"), reissue())
+    assert out["results"][0]["value"] == {"status": 404, "body": {"v": V, "error": "not_found"}}
+    assert out["world"]["commands"] == [] and out["world"]["capabilities"] == {}
+
+
+def test_a_failed_capability_write_leaves_the_link_as_it_was():
+    state = dict(older(), failCreate=True)
+    out = run_with(state, reissue())
+    assert "database is locked" in out["results"][0]["threw"]
+    assert out["world"]["legacyLinks"][LINK]["replaced_by"] == "" and out["world"]["commands"] == []
 
 
 ROTATE_BODY = {"command_id": KEY, "fingerprint": FP, "expected_capability_version": 1, "bearer_digest": D9,

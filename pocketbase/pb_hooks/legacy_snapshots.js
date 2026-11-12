@@ -882,6 +882,8 @@ module.exports = {
   canonical,
   scan,
   pbStore,
+  materializerUrl,
+  materializeOver,
   handle,
   scanCommand,
 };

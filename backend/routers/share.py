@@ -1,404 +1,154 @@
-"""Public share links for resumes and variants.
+"""Share links at the runner.
 
 Endpoints:
-  POST   /api/share                          create a link (authed); while
-                                             ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION
-                                             is enabled, CreateShare
-                                             (app/share_commands.py,
-                                             ROUNDS-00B-L04)
-  GET    /api/share                          list my links (authed)
-  DELETE /api/share/{id}                     delete a link (authed)
-  the public share read                      the link's projection, anonymous
+  POST /api/share   CreateShare (app/share_commands.py, ROUNDS-00B-L04) while
+                    ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION is enabled; 503
+                    route_disabled while it's closed, its default. With
+                    legacy_link_id it is "Get a new link" for one of the
+                    caller's older links (ROUNDS-00B-L06).
+  GET  /api/share   the caller's older links: every share link made before
+                    ROUNDS-00B-L06 stage 1, each one turned off for good.
 
-The owner routes go through PocketBase with the caller's own token, so the
-collection rules decide (``resume_share_links`` reads only its owner's rows
-and takes no updates, ROUNDS-00B-L03 stage 1).
+The list reads PocketBase with the caller's own bearer, so PocketBase's rules
+decide what it holds: an account's own older links, never one that pointed
+at another account's resume. Each entry says what the link was for, when it
+was made and turned off, and whether a new link replaced it, and never holds
+a secret. An older link never opens anything again. A caller PocketBase
+doesn't sign in gets unauthenticated, and a store that doesn't answer gets
+shares_unavailable, never PocketBase's own text.
 
-The public read answers only ``{data, template_id, design}``: hidden sections
-are emptied and every key the templates don't read is dropped, so it never
-carries the owner's resume name, the link's kind, a record id, or the owner.
-Every failure (kill switch, malformed token, unknown link, missing target,
-PocketBase down) is the same 404 with the same body and headers, and the read
-writes nothing.
-TODO(ROUNDS-00B-L06): legacy links move to share capabilities.
+A share capability's own routes are in routers/share_capabilities.py.
 """
 from __future__ import annotations
 
-import json
+import logging
 import re
-import secrets
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
-from fastapi.routing import APIRoute
-from pydantic import BaseModel
-
-from app import obs, share_capabilities, share_commands, share_secrets
-from app.errors import TypedError
-from app.pb_auth import (
-    current_user,
-    pb_admin_get,
-    pb_get,
-    pb_post,
-)
 import httpx
+from fastapi import APIRouter, Request
+from fastapi.responses import Response
+
+from app import admission, obs, share_capabilities, share_commands
+from app.errors import TypedError
 from app.pb_auth import POCKETBASE_URL
 
-
 router = APIRouter(prefix="/api/share", tags=["share"])
+_log = logging.getLogger(__name__)
 
-# The public read's kill switch is the PUBLIC_SHARES gate (app/gates.py),
-# which the capability resolver reads too. This is its alias, and it fails
-# closed: unset, empty, false, 0, no, or off (any case) leaves public reads
-# on, and any other value turns every public read into the uniform
-# not-found before any lookup. Read on each request.
-KILL_SWITCH_ENV = "ROUNDS_DISABLE_PUBLIC_SHARES"
-
-# What a share token may look like. Anything else is answered before any
-# lookup.
-PUBLIC_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{16,64}")
-
-# The headers and the not-found every public read answers with, the same as
-# the capability resolver's.
-PUBLIC_HEADERS: dict[str, str] = share_capabilities.RESOLVER_HEADERS
-NOT_FOUND_BODY = share_capabilities.NOT_FOUND_BODY
-
-
-class CreateShareRequest(BaseModel):
-    # Exactly one must be set.
-    resume_id: str | None = None
-    variant_id: str | None = None
+# The statuses an older link's owner sees. An empty or unknown one reads as
+# a link the server couldn't verify, and one that pointed at another
+# account's resume is never listed (PocketBase's rule hides it too).
+SHOWN = ("migrated", "revoked_demo", "revoked_unverified")
+UNVERIFIED = "revoked_unverified"
+HIDDEN = "revoked_ownership"
+PAGE = 200
+MAX_PAGES = 25
+LIST_PATH = "/api/collections/resume_share_links/records"
+TIMEOUT_S = 8
+_RECORD_ID = re.compile(r"[a-z0-9]{15}")
+# What the list asks PocketBase for, and nothing more.
+_FIELDS = ",".join((
+    "id", "created", "updated", "resume", "variant", "legacy_status", "legacy_reason", "turned_off_at",
+    "replaced_by", "expand.variant.resume", "expand.variant.name",
+))
 
 
-class ShareLinkOut(BaseModel):
-    id: str
-    token: str
-    resume_id: str | None
-    variant_id: str | None
-    created: str
+@router.post("")
+async def create_share(request: Request) -> Response:
+    """CreateShare, or 503 route_disabled while resolution is closed: there is
+    no other way to make a link."""
+    if not share_capabilities.resolution_open():
+        obs.emit("share.create", correlation_id=obs.current_correlation_id(), account=None, record=None,
+                 code="route_disabled")
+        raise TypedError("route_disabled")
+    return await share_commands.create(request)
 
 
-def _new_token() -> str:
-    # 22 chars of urlsafe entropy (~130 bits), the format the link hook
-    # requires (pocketbase/pb_hooks/share_links.js).
-    return secrets.token_urlsafe(16)
+def _id(value: Any) -> str:
+    return value if isinstance(value, str) and _RECORD_ID.fullmatch(value) else ""
 
 
-def _link_out(record: dict[str, Any]) -> ShareLinkOut:
-    return ShareLinkOut(
-        id=record["id"],
-        token=record["token"],
-        resume_id=record.get("resume") or None,
-        variant_id=record.get("variant") or None,
-        created=record.get("created") or "",
-    )
+def _text(value: Any) -> str:
+    return value if isinstance(value, str) else ""
 
 
-# ---------------------------------------------------------------------------
-#                              Authed endpoints
-# ---------------------------------------------------------------------------
-
-
-# The create below takes these fields and no others.
-_EARLIER_CREATE_FIELDS = frozenset({"resume_id", "variant_id"})
-
-
-async def _asks_for_more_than_the_earlier_create(request: Request) -> bool:
-    """Whether a JSON object body names a field the create below doesn't
-    take. Any other body is the create's own to answer."""
-    try:
-        doc = json.loads(await request.body())
-    except ValueError:
-        return False
-    return isinstance(doc, dict) and not set(doc) <= _EARLIER_CREATE_FIELDS
-
-
-class _CreateShareRoute(APIRoute):
-    """POST /api/share: CreateShare while the resolution gate is open, read
-    on each request, and the create below, as it was, while it's closed.
-
-    Closed, a body asking for anything the create below can't give, a
-    password or an expiry from a dialog that reads the gate as open, gets
-    CreateShare's fixed 400 and makes nothing, so a gate flip never makes a
-    link weaker than the one asked for."""
-
-    def get_route_handler(self):
-        closed = super().get_route_handler()
-
-        async def handler(request: Request) -> Response:
-            if share_capabilities.resolution_open():
-                return await share_commands.create(request)
-            if await _asks_for_more_than_the_earlier_create(request):
-                raise TypedError("invalid_request", status=400)
-            return await closed(request)
-
-        return handler
-
-
-async def create_link(request: Request, body: CreateShareRequest) -> ShareLinkOut:
-    user = await current_user(request)
-    if bool(body.resume_id) == bool(body.variant_id):
-        raise HTTPException(
-            status_code=400,
-            detail="Provide exactly one of resume_id or variant_id.",
-        )
-
-    payload: dict[str, Any] = {
-        "user": user["id"],
-        "token": _new_token(),
-        "is_password": False,
+def older_link(item: Any) -> dict[str, Any] | None:
+    """One older link as its owner sees it, or None for a row not shown."""
+    if not isinstance(item, dict) or not _id(item.get("id")):
+        return None
+    status = item.get("legacy_status")
+    if status == HIDDEN:
+        return None
+    if status not in SHOWN:
+        status = UNVERIFIED
+    resume_id, variant_id = _id(item.get("resume")), _id(item.get("variant"))
+    expand = item.get("expand") if isinstance(item.get("expand"), dict) else {}
+    variant = expand.get("variant") if variant_id and isinstance(expand.get("variant"), dict) else None
+    replaced_by = _id(item.get("replaced_by"))
+    return {
+        "id": item["id"],
+        "status": status,
+        "reason": _text(item.get("legacy_reason")),
+        "created": _text(item.get("created")),
+        "turned_off_at": _text(item.get("turned_off_at")),
+        "replaced_by": replaced_by,
+        "replaced_at": _text(item.get("updated")) if replaced_by else "",
+        "target": "variant" if variant_id else "resume",
+        "resume_id": resume_id,
+        "variant_id": variant_id,
+        "root_resume_id": _id(variant.get("resume")) if variant is not None else resume_id,
+        "variant_name": _text(variant.get("name")) if variant is not None else "",
     }
-    if body.resume_id:
-        payload["resume"] = body.resume_id
-    if body.variant_id:
-        payload["variant"] = body.variant_id
 
+
+async def _account(request: Request) -> dict[str, Any]:
+    token = admission.bearer_from(request.scope.get("headers") or [])
+    if token is None:
+        raise TypedError("unauthenticated")
+    account = await admission.authenticate(token)
+    if not _id(account.get("id")):
+        raise TypedError("unauthenticated")
+    return account
+
+
+async def _page(token: str, account_id: str, page: int) -> list[Any]:
+    """One page of the caller's older links, read with the caller's bearer."""
+    params = {
+        "filter": f'user = "{account_id}"',
+        "sort": "-created,-id",
+        "perPage": PAGE,
+        "page": page,
+        "skipTotal": 1,
+        "expand": "variant",
+        "fields": _FIELDS,
+    }
     try:
-        record = await pb_post(
-            user["token"], "/api/collections/resume_share_links/records", payload
-        )
-    except HTTPException as exc:
-        # PocketBase gives a target the caller doesn't own and one that
-        # doesn't exist the same 400 (ROUNDS-00B-L02's relation check); the
-        # runner answers both with one not-found and no PocketBase text.
-        # Other refusals, such as the demo account's 403, pass through.
-        if exc.status_code == 400:
-            raise TypedError("not_found") from None
-        raise
-    return _link_out(record)
-
-
-router.add_api_route("", create_link, methods=["POST"], response_model=ShareLinkOut,
-                     route_class_override=_CreateShareRoute)
+        async with httpx.AsyncClient(base_url=POCKETBASE_URL, timeout=TIMEOUT_S) as client:
+            resp = await client.get(LIST_PATH, params=params, headers={"Authorization": f"Bearer {token}"})
+    except httpx.HTTPError as err:
+        _log.warning("older share links: no answer from PocketBase (%s)", type(err).__name__)
+        raise TypedError("shares_unavailable") from None
+    if resp.status_code == 401:
+        raise TypedError("unauthenticated")
+    try:
+        body = resp.json() if resp.status_code == 200 else None
+    except ValueError:
+        body = None
+    items = body.get("items") if isinstance(body, dict) else None
+    if not isinstance(items, list):
+        _log.warning("older share links: PocketBase answered %s", resp.status_code)
+        raise TypedError("shares_unavailable")
+    return items
 
 
 @router.get("")
-async def list_my_links(request: Request) -> list[ShareLinkOut]:
-    user = await current_user(request)
-    links = await pb_get(
-        user["token"],
-        "/api/collections/resume_share_links/records",
-        params={
-            "filter": f'user = "{user["id"]}"',
-            "sort": "-created",
-            "perPage": 100,
-        },
-    )
-    items = (links or {}).get("items") or []
-    return [_link_out(it) for it in items]
-
-
-@router.delete("/{link_id}")
-async def delete_link(request: Request, link_id: str) -> dict[str, bool]:
-    user = await current_user(request)
-    async with httpx.AsyncClient(base_url=POCKETBASE_URL, timeout=8) as client:
-        resp = await client.delete(
-            f"/api/collections/resume_share_links/records/{link_id}",
-            headers={"Authorization": f"Bearer {user['token']}"},
-        )
-    if resp.status_code >= 400 and resp.status_code != 404:
-        raise HTTPException(status_code=resp.status_code, detail=resp.text)
-    return {"ok": True}
-
-
-# ---------------------------------------------------------------------------
-#                              Public viewer
-# ---------------------------------------------------------------------------
-
-
-class _NotFound(Exception):
-    """Any reason a public read answers the uniform not-found."""
-
-    def __init__(self, outcome: str, record: str | None = None) -> None:
-        super().__init__(outcome)
-        self.outcome = outcome
-        self.record = record
-
-
-def public_shares_disabled() -> bool:
-    return share_capabilities.public_shares_disabled()
-
-
-def _log_read(outcome: str, record: str | None) -> None:
-    # Only the link's record id and a coarse outcome: never the token, the
-    # caller's address or user agent, the owner, or any content.
-    obs.emit("share.resolve", correlation_id=obs.current_correlation_id(), record=record, code=outcome)
-
-
-def _public_response(status: int, body: dict[str, Any]) -> JSONResponse:
-    return JSONResponse(body, status_code=status, headers=dict(PUBLIC_HEADERS))
-
-
-@router.get("/by-token/{token}")
-async def public_read(token: str) -> JSONResponse:
-    """The link's projection, or the uniform not-found."""
-    try:
-        if public_shares_disabled():
-            raise _NotFound("kill_switch")
-        if PUBLIC_TOKEN_RE.fullmatch(token) is None:
-            raise _NotFound("not_found")
-        # A share capability's bearer resolves only through
-        # POST /api/share/resolve (ROUNDS-00B-L04).
-        if share_secrets.WELL_FORMED.fullmatch(token) is not None:
-            raise _NotFound("not_found")
-        out, record = await _resolve(token)
-    except _NotFound as nf:
-        _log_read(nf.outcome, nf.record)
-        return _public_response(404, NOT_FOUND_BODY)
-    except Exception:  # noqa: BLE001 - the store couldn't be read
-        _log_read("degraded", None)
-        return _public_response(404, NOT_FOUND_BODY)
-    _log_read("available", record)
-    return _public_response(200, out)
-
-
-async def _resolve(token: str) -> tuple[dict[str, Any], str]:
-    # Only a value that matched PUBLIC_TOKEN_RE gets here.
-    body = await pb_admin_get(
-        "/api/collections/resume_share_links/records",
-        params={"filter": f'token = "{token}"', "perPage": 1},
-    )
-    items = (body or {}).get("items") or []
-    if not items or not isinstance(items[0], dict):
-        raise _NotFound("not_found")
-    link = items[0]
-    link_id = link.get("id") if isinstance(link.get("id"), str) else None
-
-    variant_id, resume_id = link.get("variant"), link.get("resume")
-    if variant_id:
-        variant = await pb_admin_get(f"/api/collections/resume_variants/records/{variant_id}")
-        if not isinstance(variant, dict) or not variant.get("resume"):
-            raise _NotFound("not_found", link_id)
-        parent = await pb_admin_get(f"/api/collections/resumes/records/{variant['resume']}")
-        if not isinstance(parent, dict):
-            raise _NotFound("not_found", link_id)
-        source, look = variant, parent
-    elif resume_id:
-        resume = await pb_admin_get(f"/api/collections/resumes/records/{resume_id}")
-        if not isinstance(resume, dict):
-            raise _NotFound("not_found", link_id)
-        source, look = resume, resume
-    else:
-        raise _NotFound("not_found", link_id)
-
-    # The link's owner must own what it points at, the variant's parent
-    # resume included; anything else is the same not-found.
-    owner = link.get("user")
-    if not isinstance(owner, str) or not owner or any(r.get("user") != owner for r in (source, look)):
-        raise _NotFound("not_found", link_id)
-
-    return project(source.get("data"), look.get("template_id"), look.get("design")), link_id or ""
-
-
-# ---------------------------------------------------------------------------
-#                              The projection
-# ---------------------------------------------------------------------------
-#
-# Only what the templates read (frontend/src/features/resume/types.ts):
-# unknown keys at any level are dropped, values of the wrong type are dropped,
-# and a section the owner hid is emptied. hiddenSections itself is not sent.
-
-_PERSONAL = ("fullName", "email", "phone", "location", "website", "linkedin", "github",
-             "title", "subtitle", "summary")
-_SECTIONS: dict[str, dict[str, str]] = {
-    "experience": {"id": "str", "company": "str", "position": "str", "location": "str",
-                   "startDate": "str", "endDate": "str", "current": "bool",
-                   "description": "str", "highlights": "strs"},
-    "education": {"id": "str", "institution": "str", "degree": "str", "field": "str",
-                  "location": "str", "startDate": "str", "endDate": "str", "gpa": "str",
-                  "description": "str"},
-    "skills": {"id": "str", "category": "str", "items": "strs"},
-    "projects": {"id": "str", "name": "str", "description": "str", "technologies": "strs",
-                 "url": "str", "github": "str", "startDate": "str", "endDate": "str",
-                 "highlights": "strs"},
-    "publications": {"id": "str", "title": "str", "publisher": "str", "releaseDate": "str",
-                     "url": "str", "summary": "str"},
-    "profiles": {"id": "str", "network": "str", "username": "str", "url": "str"},
-}
-SECTION_KEYS = ("personal", *_SECTIONS)
-
-_DESIGN: dict[str, Any] = {
-    "layout": "str",
-    "colors": {k: "str" for k in ("primary", "secondary", "background", "text", "accent")},
-    "typography": {
-        "heading": {"family": "str", "weight": "num", "transform": "str", "size": "num"},
-        "body": {"family": "str", "size": "num", "lineHeight": "num"},
-    },
-    "spacing": {k: "num" for k in ("margin", "padding", "gap")},
-    "style": {"borderRadius": "num", "borderWidth": "num", "shadow": "str"},
-    "showPhoto": "bool",
-    "showIcons": "bool",
-    "divider": "str",
-    "bulletStyle": "str",
-}
-_TEMPLATE_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
-DEFAULT_TEMPLATE = "modern"
-
-
-def _value(kind: Any, value: Any) -> Any:
-    """``value`` if it has the type ``kind`` names, else a sentinel."""
-    if isinstance(kind, dict):
-        return _shape(kind, value) if isinstance(value, dict) else _DROP
-    if kind == "str":
-        return value if isinstance(value, str) else _DROP
-    if kind == "bool":
-        return value if isinstance(value, bool) else _DROP
-    if kind == "num":
-        ok = isinstance(value, (int, float)) and not isinstance(value, bool)
-        return value if ok else _DROP
-    if kind == "strs":
-        # The templates read these lists without a guard, so a missing or
-        # odd value is an empty list, never dropped.
-        return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
-    return _DROP
-
-
-_DROP = object()
-
-
-def _shape(spec: dict[str, Any], value: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    for key, kind in spec.items():
-        if kind == "strs":
-            out[key] = _value(kind, value.get(key))
-        elif key in value:
-            v = _value(kind, value[key])
-            if v is not _DROP:
-                out[key] = v
-    return out
-
-
-def project(data: Any, template_id: Any, design: Any) -> dict[str, Any]:
-    """The only shape a public read returns."""
-    data = data if isinstance(data, dict) else {}
-    hidden_raw = data.get("hiddenSections")
-    hidden = {k for k in hidden_raw if isinstance(k, str)} if isinstance(hidden_raw, list) else set()
-
-    personal = data.get("personalInfo")
-    if "personal" in hidden or not isinstance(personal, dict):
-        personal_out: dict[str, Any] = {"fullName": ""}
-    else:
-        personal_out = _shape({k: "str" for k in _PERSONAL}, personal)
-        personal_out.setdefault("fullName", "")
-
-    out_data: dict[str, Any] = {"personalInfo": personal_out}
-    for section, spec in _SECTIONS.items():
-        items = data.get(section)
-        if section in hidden or not isinstance(items, list):
-            out_data[section] = []
-        else:
-            out_data[section] = [_shape(spec, it) for it in items if isinstance(it, dict)]
-
-    order = data.get("sectionOrder")
-    if isinstance(order, list) and all(isinstance(k, str) for k in order):
-        # The templates read the order only when it names every section once.
-        if sorted(order) == sorted(SECTION_KEYS):
-            out_data["sectionOrder"] = list(order)
-
-    tid = template_id if isinstance(template_id, str) and _TEMPLATE_ID_RE.fullmatch(template_id) else DEFAULT_TEMPLATE
-    return {
-        "data": out_data,
-        "template_id": tid,
-        "design": _shape(_DESIGN, design) if isinstance(design, dict) else {},
-    }
+async def list_older_links(request: Request) -> dict[str, list[dict[str, Any]]]:
+    account = await _account(request)
+    entries: list[dict[str, Any]] = []
+    for page in range(1, MAX_PAGES + 1):
+        items = await _page(account["token"], account["id"], page)
+        entries.extend(entry for entry in (older_link(item) for item in items) if entry is not None)
+        if len(items) < PAGE:
+            break
+    return {"legacy": entries}

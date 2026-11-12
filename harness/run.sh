@@ -77,6 +77,15 @@
 #  3n. the scan: no share bearer or password in any service log or in
 #                     pb_data, and no client address for a share request,
 #                     from files kept out of the receipts
+#  3o. older share links - a pb_data shaped like 62d4eae, with older links,
+#                     views, and a link on another account's resume, made
+#                     offline in its own volume; PocketBase started on it
+#                     runs every later migration first; both runners reach it
+#                     through the recorder, with nginx up: every older link
+#                     value answers as an unknown one on every path, Get a
+#                     new link, revoke and delete, the not-found's one shape,
+#                     and the resolver's own identity; then the scan
+#                     (ROUNDS-00B-L06, harness/probes/legacy_share_check.py)
 #   4. recreate PocketBase with signups disabled; the named pb_data volume
 #      keeps the accounts and rows from phase 2 across the restart
 #   5. hook phase   - signup-disabled probe
@@ -122,6 +131,12 @@
 #                     Legacy Artifact Snapshot store, show its down step keeps
 #                     a non-empty store and drops an empty one, and reapply
 #                     (harness/probes/snapshot_store_check.py)
+#  15. older share links' migration - with the pinned binary and no network:
+#                     a dry run on a copy with its receipt, forward, killed at
+#                     its first batch and run again, reversed after a new
+#                     link, and forward again, on a fixture with every
+#                     outcome it decides and 10,000 more links
+#                     (harness/probes/legacy_share_migration_check.py)
 #
 # The stack is built and brought up with compose; the probe container runs
 # directly on the compose network so the flow is identical under Finch
@@ -155,6 +170,11 @@ PROBE_IMAGE="${IMAGE_PREFIX}-probes:test"
 BUILT_IMAGES="${IMAGE_PREFIX}-pocketbase:test ${IMAGE_PREFIX}-probes:test ${IMAGE_PREFIX}-runner:test ${IMAGE_PREFIX}-frontend:test ${IMAGE_PREFIX}-materializer:test ${IMAGE_PREFIX}-pdf-renderer:test"
 # The pinned PocketBase binary, copied out of its image for the migration check.
 PBBIN_VOLUME="${PROJECT}_pbbin"
+# Phase 3o's pb_data shaped like 62d4eae, and the recorder's log
+# (ROUNDS-00B-L06). compose.yml names both as external volumes, so they're
+# made before the stack starts and removed at teardown.
+LEGACY_VOLUME="${PROJECT}_pb_legacy"
+RECORDER_VOLUME="${PROJECT}_recorder"
 RUNNER_URLS="http://runner:8000,http://runner-b:8000"
 
 PB_ADMIN_EMAIL_V="${PB_ADMIN_EMAIL:-ops@harness.test}"
@@ -191,6 +211,8 @@ GIT_COMMIT="${GIT_COMMIT:-$(git -C "${ROOT}" rev-parse --short HEAD 2>/dev/null 
 # a test placeholder unique to the run, not the dev compose default, which
 # signs nothing.
 SCAN_SECRET_V="harness-scan-key-not-a-secret-${RUN_ID}-0123456789"
+# The recorder's pseudonym salt, new each run and never printed.
+RECORDER_SALT_V="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 
 # --env-file must be an absolute path and must come after -p/-f (nerdctl rejects
 # it before them); both finch and docker compose accept it here. --profile
@@ -211,7 +233,7 @@ cleanup() {
   rm -rf "${STATE_DIR}"
   rmdir "${HARNESS_DIR}/.state" 2>/dev/null || true
   compose down -v --remove-orphans >/dev/null 2>&1 || true
-  ${CONTAINER_BIN} volume rm "${PBBIN_VOLUME}" >/dev/null 2>&1 || true
+  ${CONTAINER_BIN} volume rm "${PBBIN_VOLUME}" "${LEGACY_VOLUME}" "${RECORDER_VOLUME}" >/dev/null 2>&1 || true
   ${CONTAINER_BIN} rmi ${BUILT_IMAGES} >/dev/null 2>&1 || true
   rm -f "${ENV_FILE}"
 }
@@ -237,11 +259,17 @@ SHARE_GATE=""
 SCRATCH_GATE=""
 DEFINITIONS_GATE=""
 GRADING_GATE=""
+# PB_DATA_V picks PocketBase's volume and RUNNER_PB_URL where both runners
+# reach it; phase 3o sets them to the legacy volume and the recorder
+# (ROUNDS-00B-L06).
+PB_DATA_V="pb_data"
+RUNNER_PB_URL="http://pocketbase:8090"
 set_signups() {
-  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\nROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=%s\nROUNDS_GATE_EXECUTION_SCRATCH=%s\nROUNDS_GATE_EXECUTION_DEFINITIONS=%s\nAI_KEY_SECRET=%s\nROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=%s\nROUNDS_SHARE_RESOLVER_PASSWORD=%s\nROUNDS_GATE_EXECUTION_GRADING=%s\n' \
+  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\nROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=%s\nROUNDS_GATE_EXECUTION_SCRATCH=%s\nROUNDS_GATE_EXECUTION_DEFINITIONS=%s\nAI_KEY_SECRET=%s\nROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=%s\nROUNDS_SHARE_RESOLVER_PASSWORD=%s\nROUNDS_GATE_EXECUTION_GRADING=%s\nPB_DATA_VOLUME=%s\nPB_LEGACY_VOLUME=%s\nRUNNER_POCKETBASE_URL=%s\nRECORDER_VOLUME=%s\nRECORDER_SALT=%s\n' \
     "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${DEMO_V}" \
     "${SNAPSHOT_GATE}" "${SCRATCH_GATE}" "${DEFINITIONS_GATE}" "${SCAN_SECRET_V}" "${SHARE_GATE}" \
-    "${SHARE_RESOLVER_SECRET_V}" "${GRADING_GATE}" > "${ENV_FILE}"
+    "${SHARE_RESOLVER_SECRET_V}" "${GRADING_GATE}" "${PB_DATA_V}" "${LEGACY_VOLUME}" "${RUNNER_PB_URL}" \
+    "${RECORDER_VOLUME}" "${RECORDER_SALT_V}" > "${ENV_FILE}"
 }
 
 # Waits until PocketBase answers its health route again.
@@ -410,8 +438,10 @@ check_materializer_reach() {
   [ "${fails}" -eq 0 ]
 }
 
+# Arguments after the phase go to the container run (ROUNDS-00B-L06's
+# phase adds the recorder's log and its state file).
 probe() {
-  local phase="$1"
+  local phase="$1"; shift
   ${CONTAINER_BIN} run --rm --network "${NETWORK}" \
     -e POCKETBASE_URL="http://pocketbase:8090" \
     -e FRONTEND_URL="http://frontend" \
@@ -435,6 +465,7 @@ probe() {
     -v "${ROOT}/tests/conformance/rd_02:/rd02:ro" \
     -v "${RECEIPTS_DIR}:/out" \
     -v "${STATE_DIR}:/state" \
+    "$@" \
     "${PROBE_IMAGE}" "${phase}"
 }
 
@@ -442,6 +473,8 @@ probe() {
 rm -rf "${RECEIPTS_DIR}" "${STATE_DIR}"
 mkdir -p "${RECEIPTS_DIR}"
 mkdir -p -m 700 "${STATE_DIR}"
+${CONTAINER_BIN} volume create "${LEGACY_VOLUME}" >/dev/null
+${CONTAINER_BIN} volume create "${RECORDER_VOLUME}" >/dev/null
 
 # With PocketBase stopped: the run's pb_data mounted read-only, no network.
 offline() {
@@ -691,6 +724,74 @@ compose stop runner runner-b frontend materializer
 compose rm -f runner runner-b frontend >/dev/null 2>&1 || true
 set -e
 
+# Older share links (ROUNDS-00B-L06). A pb_data shaped like 62d4eae is made
+# offline in its own volume; PocketBase started on it runs every later
+# migration, the older links' one included, before its first request. Both
+# runners reach it through the recorder, nginx is up, and snapshot creation
+# and the materializer are on, as the owner steps set them. The fixture's
+# values, every service log, and a pb_data tarball stay in the state folder,
+# never the receipts, and the recorder's log stays on its volume. PocketBase
+# goes back to the main volume at the end.
+echo "--- phase 3o: older share links (a 62d4eae pb_data upgraded on start, both replicas through the recorder, nginx) ---"
+legacy_shares_rc=0
+set +e
+compose stop pocketbase >/dev/null 2>&1
+${CONTAINER_BIN} volume create "${PBBIN_VOLUME}" >/dev/null
+${CONTAINER_BIN} run --rm -v "${PBBIN_VOLUME}:/out" "${IMAGE_PREFIX}-pocketbase:test" cp /pb/pocketbase /out/pocketbase \
+  || legacy_shares_rc=1
+${CONTAINER_BIN} run --rm --network none \
+  -e PB_BIN="/pbbin/pocketbase" \
+  -e PB_MIGRATIONS_DIR="/pb_migrations" \
+  -e PB_DATA_DIR="/pb_data" \
+  -e PB_ADMIN_EMAIL="${PB_ADMIN_EMAIL_V}" \
+  -e PB_ADMIN_PASSWORD="${PB_ADMIN_PASSWORD_V}" \
+  -e RD02_DIR="/rd02" \
+  -e LEGACY_SHARES_STATE="/state/legacy-shares.json" \
+  -v "${PBBIN_VOLUME}:/pbbin:ro" \
+  -v "${LEGACY_VOLUME}:/pb_data" \
+  -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+  -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
+  -v "${ROOT}/tests/conformance/rd_02:/rd02:ro" \
+  -v "${STATE_DIR}:/state" \
+  "${PROBE_IMAGE}" legacy-shares-fixture || legacy_shares_rc=1
+SNAPSHOT_GATE=enabled
+SHARE_GATE=enabled
+PB_DATA_V="pb_data_legacy"
+RUNNER_PB_URL="http://recorder:8090"
+set_signups false
+compose up -d materializer
+compose up -d --force-recreate pocketbase
+wait_pocketbase || legacy_shares_rc=1
+compose up -d --force-recreate recorder
+restart_runners
+wait_materializer || legacy_shares_rc=1
+probe legacy-shares \
+  -e LEGACY_SHARES_STATE="/state/legacy-shares.json" \
+  -e RECORDER_LOG="/var/lib/rounds-recorder/recorder.jsonl" \
+  -v "${RECORDER_VOLUME}:/var/lib/rounds-recorder:ro" || legacy_shares_rc=1
+SCAN_DIR="${STATE_DIR}/legacy-scan"
+mkdir -p -m 700 "${SCAN_DIR}"
+for svc in pocketbase runner runner-b frontend recorder; do
+  compose logs --no-color "${svc}" > "${SCAN_DIR}/${svc}.log" 2>&1 || legacy_shares_rc=1
+done
+compose exec -T pocketbase tar -C /pb -cf - pb_data > "${SCAN_DIR}/pb_data.tar" || legacy_shares_rc=1
+${CONTAINER_BIN} run --rm --network none \
+  -e LEGACY_SHARES_STATE="/state/legacy-shares.json" \
+  -e LEGACY_SHARES_SCAN_DIR="/state/legacy-scan" \
+  -v "${STATE_DIR}:/state" \
+  "${PROBE_IMAGE}" legacy-shares-scan || legacy_shares_rc=1
+rm -rf "${SCAN_DIR}"
+SNAPSHOT_GATE=""
+SHARE_GATE=""
+PB_DATA_V="pb_data"
+RUNNER_PB_URL="http://pocketbase:8090"
+set_signups false
+compose stop runner runner-b frontend materializer recorder
+compose rm -f runner runner-b frontend recorder >/dev/null 2>&1 || true
+compose up -d --force-recreate pocketbase
+wait_pocketbase || legacy_shares_rc=1
+set -e
+
 echo "--- phase 4: recreate PocketBase (signups disabled, the demo at its default) ---"
 DEMO_V=false
 set_signups true
@@ -827,10 +928,25 @@ ${CONTAINER_BIN} run --rm --network none \
 snapshot_rc=$?
 set -e
 
+echo "--- phase 15: older share links' migration: dry run, forward, resumed, reversed, forward again ---"
+set +e
+${CONTAINER_BIN} run --rm --network none \
+  -e PB_BIN="/pbbin/pocketbase" \
+  -e PB_MIGRATIONS_DIR="/pb_migrations" \
+  -e PB_HOOKS_DIR="/pb_hooks" \
+  -v "${PBBIN_VOLUME}:/pbbin:ro" \
+  -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+  -v "${ROOT}/pocketbase/pb_hooks:/pb_hooks:ro" \
+  -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
+  "${PROBE_IMAGE}" legacy-shares-migration
+legacy_migration_rc=$?
+set -e
+
 if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ] || [ "${admission_rc}" -ne 0 ] || [ "${migration_rc}" -ne 0 ] \
    || [ "${execution_rc}" -ne 0 ] || [ "${quarantine_rc}" -ne 0 ] || [ "${reach_rc}" -ne 0 ] \
    || [ "${snapshot_rc}" -ne 0 ] || [ "${demo_rc}" -ne 0 ] || [ "${legacy_rc}" -ne 0 ] \
-   || [ "${share_rc}" -ne 0 ] || [ "${share_secrets_rc}" -ne 0 ]; then
+   || [ "${share_rc}" -ne 0 ] || [ "${share_secrets_rc}" -ne 0 ] || [ "${legacy_shares_rc}" -ne 0 ] \
+   || [ "${legacy_migration_rc}" -ne 0 ]; then
   exit 1
 fi
 exit 0
