@@ -520,7 +520,7 @@ class Served:
         self.log = open(work / f"{name}.serve.log", "w")
         self.proc = subprocess.Popen(
             [str(PB_BIN), "serve", f"--http=127.0.0.1:{self.port}", f"--dir={data}",
-             f"--migrationsDir={migrations}", f"--hooksDir={HOOKS}"],
+             f"--migrationsDir={migrations}", f"--hooksDir={HOOKS}", "--hooksWatch=false"],
             stdout=self.log, stderr=subprocess.STDOUT, env=_env(),
         )
         self.pb = PBClient(f"http://127.0.0.1:{self.port}")

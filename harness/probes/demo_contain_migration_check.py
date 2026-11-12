@@ -59,7 +59,7 @@ class Unhooked:
         port = _free_port()
         self.proc = subprocess.Popen(
             [str(PB_BIN), "serve", f"--http=127.0.0.1:{port}", f"--dir={data}", f"--migrationsDir={migrations}",
-             f"--hooksDir={hooks}"], stdout=self.log, stderr=subprocess.STDOUT, env=_env())
+             f"--hooksDir={hooks}", "--hooksWatch=false"], stdout=self.log, stderr=subprocess.STDOUT, env=_env())
         self.pb = PBClient(f"http://127.0.0.1:{port}")
 
     def __enter__(self) -> PBClient:
