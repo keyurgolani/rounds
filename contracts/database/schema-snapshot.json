@@ -1,0 +1,5264 @@
+{
+  "$schema": "./schema-snapshot.schema.json",
+  "description": "PocketBase's own schema after every migration at the revision below, from `pocketbase migrate up` on an empty directory (harness/bench/schema_dump.py). Regenerate it with that script; never edit it by hand. The ERD (erd.json) is checked against it.",
+  "pocketbaseVersion": "0.22.22",
+  "revision": {
+    "commit": "42673ffd14a7f73164ea6356200ff0071710c3ef",
+    "migrationsClean": true
+  },
+  "migrations": [
+    {
+      "file": "1700000000_init_collections.js",
+      "sha256": "94b90e969af95d9fbf98547ab26c38a553159f6a20a07e4a1098305f885989c2"
+    },
+    {
+      "file": "1700000100_seed_data.js",
+      "sha256": "23163f506239e33b29390ec4712ade2f9379395686f6b8bda334d0bf8b493288"
+    },
+    {
+      "file": "1700000500_bootstrap_admin.js",
+      "sha256": "0633f0030ffbe8e10a91fb6259a37b39b7ec239c7640da69c8c6a75e13f75e02"
+    },
+    {
+      "file": "1700000600_demo_user.js",
+      "sha256": "0d6cf822f682d41d58355e53f4cd8f74419e0dc2e323334bfc15d40462adcd80"
+    },
+    {
+      "file": "1700000700_resume_studio.js",
+      "sha256": "254c021c50aad1b2aa4f3fc1cc99e23ae861927006851007f03747cd25551184"
+    },
+    {
+      "file": "1700000800_ai_providers.js",
+      "sha256": "a91649b5190e41d76cb51657b053b3b1c79bb998f35e2d1d38cb28dc240a4c6f"
+    },
+    {
+      "file": "1700000900_share_links_resume_rel.js",
+      "sha256": "079619d38b3542601bec9877c2991ff882e2c6c5da293328c5039f392a13414b"
+    },
+    {
+      "file": "1700001000_resume_share_public_read.js",
+      "sha256": "8711cb9e4be83a3d7bf9c185b59054f094409b634ba6e6690af6f95360e2f20d"
+    },
+    {
+      "file": "1700001100_ai_coding.js",
+      "sha256": "a7520dc303bfeecefcd7d8381977b9b2766f4daa5993a0a3b335d973a8871bca"
+    },
+    {
+      "file": "1700001200_ai_coding_seed.js",
+      "sha256": "a7c13e9a97ba41dfb530c9c18d7e6121afca8a0c1744e93e436e411cd2f8605c"
+    },
+    {
+      "file": "1700001300_experience_items.js",
+      "sha256": "a4a5e5d88f7cfc45acaab1ea67e4bed1d482d6ad6336d964906e767b37d9a795"
+    },
+    {
+      "file": "1700001300_take_home.js",
+      "sha256": "313cb65c1f4ce93df1efcc7172166aad0d6254c99bdae888bca6f9adaa5493dc"
+    },
+    {
+      "file": "1700001400_take_home_seed.js",
+      "sha256": "094f054af1de0211940f2380bdd17bd85fc05030fd19fb44606d7a8c45709995"
+    },
+    {
+      "file": "1700001500_question_timers.js",
+      "sha256": "b30aa0014cd1abd3eee10d909d3c477b0032dfcdcbe950d754ac5b7186786d1d"
+    },
+    {
+      "file": "1700001500_take_home_reseed_prompts.js",
+      "sha256": "e50836892a567ea4a03cc9bf5aecc2081070e856b299e1fdc41dcac690ed697e"
+    },
+    {
+      "file": "1700001600_interview_loops.js",
+      "sha256": "ec2f44d32189d6ac73ebbd4deacb3646431cd6dbf0335c1a0d6165482584d29e"
+    },
+    {
+      "file": "1700001700_round_duration.js",
+      "sha256": "c3d509d61b7b103e33ab20ff128edec072581e88b054036184247ff27e0a93d7"
+    },
+    {
+      "file": "1700001800_offer_chain.js",
+      "sha256": "eda266cf03f8a1831d45017a9d9efa3e7b9062f6fc2d8421bcd9ce45f00a2fbb"
+    },
+    {
+      "file": "1700001900_experience_items.js",
+      "sha256": "dbf7e5a61a46eb0457eacaf5fe5588839f8bb8c5fe6de75fc8c9382035b81bf6"
+    },
+    {
+      "file": "1700002000_experience_entities.js",
+      "sha256": "ebf32d8e2a5bf59f633d45867ec2343e2669ba94b982a3a11e95d3a49b879502"
+    },
+    {
+      "file": "1700003000_experience_connections.js",
+      "sha256": "7c448deec29b71fe03418e2f042d16c91a487f9dcd488eb3ba3adbad7c1055e1"
+    },
+    {
+      "file": "1700004000_anecdote_consolidation_fields.js",
+      "sha256": "1ee4ab031705ff10837c7610c525411041a8d224a9cb31d079ad4b10ef54b8b0"
+    },
+    {
+      "file": "1700004100_drop_legacy_anecdotes.js",
+      "sha256": "4cbca2c6edde739f553b46903fe78514dcb393e4e936de85aa1b38597855fd37"
+    },
+    {
+      "file": "1700005000_resume_links.js",
+      "sha256": "379195a14bd3ace60cbda09d74a394225df7e1e795d14ee422bc7c52e05394cb"
+    },
+    {
+      "file": "1700005100_drop_resume_bullets.js",
+      "sha256": "54a337266469bb36b86955270169f8c5f83d8108890ab1bb0dd228cc48b5f5bb"
+    },
+    {
+      "file": "1700006000_account_scope_rules.js",
+      "sha256": "06d5286ea21baa084adb3cfc74982a6bc23cc37fff50aa904e4f1a2cb5ff0df6"
+    },
+    {
+      "file": "1700006100_admission.js",
+      "sha256": "62e960ebcc063ed53ca4d5a628245464c693de7eb2251b7c2e80bfba1b07d65b"
+    },
+    {
+      "file": "1700006200_definitions_expand.js",
+      "sha256": "3d216da6bf583e9d34f0abc0c8978fca202e5627b61985feed6a83dad7e8234a"
+    },
+    {
+      "file": "1700006700_demo_contain.js",
+      "sha256": "b5fe69c335629cce6f9fc83cc6045ddd1861e0257e63c737c42c08f7594e0bbb"
+    },
+    {
+      "file": "1700007000_relation_endpoint_authz.js",
+      "sha256": "676972a8d249b9c763317ee2ec62bcca79e7879f08dc2f4e08f8e572ba3c41e4"
+    },
+    {
+      "file": "1700007100_execution_jobs.js",
+      "sha256": "d854e4560c397d03925443628d82e3483e33c94460803c05ee20311ac3513a2a"
+    },
+    {
+      "file": "1700008000_legacy_artifact_snapshots.js",
+      "sha256": "51cbc2711f02aa4a9b2e7d21db70a78b8bff84e34789e3b0df9a9de1d1d64a12"
+    },
+    {
+      "file": "1700008100_share_link_owner_rules.js",
+      "sha256": "dfe84f90c9d4d4f1327c38e0ef0af6233be82caa69e18e4c42be813ac9bd6f34"
+    },
+    {
+      "file": "1700008200_share_capabilities.js",
+      "sha256": "e850b650f02d39926e41b043d04418d59321bf42180e1c1062d3fddbf095efe2"
+    },
+    {
+      "file": "1700008300_share_secrets.js",
+      "sha256": "f21013143375507c7852ab3da67856e6ba7a362fd58f988495f378e4b4ba98d8"
+    },
+    {
+      "file": "1700008400_grading_review.js",
+      "sha256": "6b101c0485801e04aae98d4a2ced9b52f865ae05e2280a7c4b4b1e1d22899012"
+    },
+    {
+      "file": "1700008500_legacy_share_migration.js",
+      "sha256": "de98dd468521ded8c9989cc897b2cb4bf12cb6f9854e97890c247f5bafd5fedf"
+    },
+    {
+      "file": "1702134273_json_limits.js",
+      "sha256": "3455b96757a366e2fe04e74b6ac75f132c55021b59fd2bbfdbd6e26453e2ea69"
+    }
+  ],
+  "nativeRun": "1700000100_seed_data.js: /pb_seeds/ -> pocketbase/seeds/ (native run only)",
+  "collections": [
+    {
+      "name": "admission_commands",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "account",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "command_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "expires_at",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "fingerprint",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "job",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "execution_jobs",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "operation",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "result",
+          "type": "json",
+          "required": false,
+          "maxSize": 1048576
+        },
+        {
+          "name": "share_snapshot_command",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "state",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "wall_seconds",
+          "type": "number",
+          "required": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_admission_commands_expires",
+          "unique": false,
+          "columns": [
+            "admission_commands.expires_at"
+          ]
+        },
+        {
+          "name": "idx_admission_commands_key",
+          "unique": true,
+          "columns": [
+            "admission_commands.account",
+            "admission_commands.command_id"
+          ]
+        },
+        {
+          "name": "idx_admission_commands_state",
+          "unique": false,
+          "columns": [
+            "admission_commands.state"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "admission_counters",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "account",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "bucket",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "hour",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "requests",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "wall_seconds",
+          "type": "number",
+          "required": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_admission_counters_bucket",
+          "unique": true,
+          "columns": [
+            "admission_counters.bucket",
+            "admission_counters.account",
+            "admission_counters.hour"
+          ]
+        },
+        {
+          "name": "idx_admission_counters_hour",
+          "unique": false,
+          "columns": [
+            "admission_counters.hour"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "admission_leases",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "account",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "command",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "admission_commands",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "counted",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "demo",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "expires_at",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "hour",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "max_wall_seconds",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "operation",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "settled",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "token_hash",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "wall_seconds",
+          "type": "number",
+          "required": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_admission_leases_account",
+          "unique": false,
+          "columns": [
+            "admission_leases.account",
+            "admission_leases.expires_at"
+          ]
+        },
+        {
+          "name": "idx_admission_leases_command",
+          "unique": false,
+          "columns": [
+            "admission_leases.command"
+          ]
+        },
+        {
+          "name": "idx_admission_leases_expires",
+          "unique": false,
+          "columns": [
+            "admission_leases.expires_at"
+          ]
+        },
+        {
+          "name": "idx_admission_leases_token",
+          "unique": true,
+          "columns": [
+            "admission_leases.token_hash"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "ai_coding_attempts",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "ai_chats",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "campaign",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "campaigns",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "current_checkpoint",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "duration_ms",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "envelope",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "execution_envelopes",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "round",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "ai_coding_rounds",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "rubric_review",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "test_results",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ai_attempts_user_round",
+          "unique": false,
+          "columns": [
+            "ai_coding_attempts.user",
+            "ai_coding_attempts.round"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "ai_coding_drafts",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "campaign",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "campaigns",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "contents",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "file_path",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "round",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "ai_coding_rounds",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ai_drafts_unique",
+          "unique": true,
+          "columns": [
+            "ai_coding_drafts.user",
+            "ai_coding_drafts.campaign",
+            "ai_coding_drafts.round",
+            "ai_coding_drafts.file_path"
+          ]
+        },
+        {
+          "name": "idx_ai_drafts_user_round",
+          "unique": false,
+          "columns": [
+            "ai_coding_drafts.user",
+            "ai_coding_drafts.round"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "ai_coding_rounds",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "checkpoints",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "companies",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "definition_version",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "editor",
+          "required": false
+        },
+        {
+          "name": "difficulty",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "language",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "rubric",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "starter_files",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "topics",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ai_coding_rounds_slug",
+          "unique": true,
+          "columns": [
+            "ai_coding_rounds.slug"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "ai_providers",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "base_url",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "encrypted_key",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "key_iv",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "kind",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "models_cache",
+          "type": "json",
+          "required": false,
+          "maxSize": 262144
+        },
+        {
+          "name": "models_cached_at",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ai_providers_user",
+          "unique": false,
+          "columns": [
+            "ai_providers.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "ai_settings",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "text_model",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "text_provider",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "ai_providers",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "vision_model",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "vision_provider",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "ai_providers",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ai_settings_user",
+          "unique": true,
+          "columns": [
+            "ai_settings.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "applications",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "applied_date",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "campaign",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "campaigns",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "company",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "job_description",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "last_activity_at",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "resume_variant",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "url",
+          "type": "url",
+          "required": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_applications_user",
+          "unique": false,
+          "columns": [
+            "applications.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "behavioral_categories",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "color",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "icon",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_bc_name",
+          "unique": true,
+          "columns": [
+            "behavioral_categories.name"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "behavioral_guides",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "checklists",
+          "type": "json",
+          "required": false,
+          "maxSize": 4194304
+        },
+        {
+          "name": "description",
+          "type": "editor",
+          "required": true
+        },
+        {
+          "name": "resources",
+          "type": "json",
+          "required": false,
+          "maxSize": 4194304
+        },
+        {
+          "name": "sections",
+          "type": "json",
+          "required": false,
+          "maxSize": 4194304
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_behavioral_guides_slug",
+          "unique": true,
+          "columns": [
+            "behavioral_guides.slug"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "behavioral_questions",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "categories",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "behavioral_categories",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": null
+          }
+        },
+        {
+          "name": "common_pitfalls",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "follow_up_questions",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "question_text",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "sample_response",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "star_guide",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "tips",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "what_interviewers_look_for",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_bq_slug",
+          "unique": true,
+          "columns": [
+            "behavioral_questions.slug"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "campaigns",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "color",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "end_date",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "is_default",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "start_date",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false
+        },
+        {
+          "name": "target_companies",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "target_role_level",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_campaigns_user_slug",
+          "unique": true,
+          "columns": [
+            "campaigns.user",
+            "campaigns.slug"
+          ]
+        },
+        {
+          "name": "idx_campaigns_user_status",
+          "unique": false,
+          "columns": [
+            "campaigns.user",
+            "campaigns.status"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "code_drafts",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "campaign",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "campaigns",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "language",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "question",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_drafts_user_campaign_q_lang",
+          "unique": true,
+          "columns": [
+            "code_drafts.user",
+            "code_drafts.campaign",
+            "code_drafts.question",
+            "code_drafts.language"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "coding_guides",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "checklists",
+          "type": "json",
+          "required": false,
+          "maxSize": 4194304
+        },
+        {
+          "name": "description",
+          "type": "editor",
+          "required": true
+        },
+        {
+          "name": "resources",
+          "type": "json",
+          "required": false,
+          "maxSize": 4194304
+        },
+        {
+          "name": "sections",
+          "type": "json",
+          "required": false,
+          "maxSize": 4194304
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_coding_guides_slug",
+          "unique": true,
+          "columns": [
+            "coding_guides.slug"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "coding_questions",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "boilerplate_code",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "companies",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "constraints",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "definition_case_ids",
+          "type": "json",
+          "required": false,
+          "maxSize": 65536
+        },
+        {
+          "name": "definition_version",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "editor",
+          "required": true
+        },
+        {
+          "name": "difficulty",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "entry",
+          "type": "json",
+          "required": true,
+          "maxSize": 65536
+        },
+        {
+          "name": "hints",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "solutions",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "space_complexity",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "starter_code",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "test_cases",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "thought_process",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "time_complexity",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "tips",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "topics",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_cq_slug",
+          "unique": true,
+          "columns": [
+            "coding_questions.slug"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "definition_migration_journal",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "collection",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "definition_track",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "definition_version",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "disposition",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "migration",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "record",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "required": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_def_journal_migration",
+          "unique": false,
+          "columns": [
+            "definition_migration_journal.migration"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "execution_attempts",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "account",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "attempt_number",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "budget_s",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "cleanup",
+          "type": "select",
+          "required": false
+        },
+        {
+          "name": "deadline_at",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "finished_at",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "heartbeat_at",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "job",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "execution_jobs",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "lease_expires_at",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "leased_at",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "operator_view",
+          "type": "json",
+          "required": false,
+          "maxSize": 65536
+        },
+        {
+          "name": "outcome_class",
+          "type": "select",
+          "required": false
+        },
+        {
+          "name": "rejected_writes",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "started_at",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "state",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "token_hash",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "worker",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_execution_attempts_deadline",
+          "unique": false,
+          "columns": [
+            "execution_attempts.state",
+            "execution_attempts.deadline_at"
+          ]
+        },
+        {
+          "name": "idx_execution_attempts_lease",
+          "unique": false,
+          "columns": [
+            "execution_attempts.state",
+            "execution_attempts.lease_expires_at"
+          ]
+        },
+        {
+          "name": "idx_execution_attempts_number",
+          "unique": true,
+          "columns": [
+            "execution_attempts.job",
+            "execution_attempts.attempt_number"
+          ]
+        },
+        {
+          "name": "idx_execution_attempts_token",
+          "unique": true,
+          "columns": [
+            "execution_attempts.token_hash"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "execution_envelopes",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "attempt",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "authoritative",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "graded_collection",
+          "type": "select",
+          "required": false
+        },
+        {
+          "name": "graded_row",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "job",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "outcome_class",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "state",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user_view",
+          "type": "json",
+          "required": true,
+          "maxSize": 1048576
+        },
+        {
+          "name": "version",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_execution_envelopes_attempt",
+          "unique": true,
+          "columns": [
+            "execution_envelopes.attempt"
+          ]
+        },
+        {
+          "name": "idx_execution_envelopes_job",
+          "unique": false,
+          "columns": [
+            "execution_envelopes.job"
+          ]
+        },
+        {
+          "name": "idx_execution_envelopes_user",
+          "unique": false,
+          "columns": [
+            "execution_envelopes.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "execution_jobs",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "account",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "attempts",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "attempts_started",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "cancel_requested",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "cleanup",
+          "type": "select",
+          "required": false
+        },
+        {
+          "name": "command_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "definition",
+          "type": "json",
+          "required": true,
+          "maxSize": 1024
+        },
+        {
+          "name": "fingerprint",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "finished_at",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "input",
+          "type": "json",
+          "required": true,
+          "maxSize": 8388608
+        },
+        {
+          "name": "input_digest",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "kind",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "outcome_class",
+          "type": "select",
+          "required": false
+        },
+        {
+          "name": "purpose",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "queued_at",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "source_checksum",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "state",
+          "type": "select",
+          "required": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_execution_jobs_account_queue",
+          "unique": false,
+          "columns": [
+            "execution_jobs.account",
+            "execution_jobs.state",
+            "execution_jobs.queued_at"
+          ]
+        },
+        {
+          "name": "idx_execution_jobs_command",
+          "unique": true,
+          "columns": [
+            "execution_jobs.account",
+            "execution_jobs.command_id"
+          ]
+        },
+        {
+          "name": "idx_execution_jobs_queue",
+          "unique": false,
+          "columns": [
+            "execution_jobs.state",
+            "execution_jobs.queued_at"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "execution_service",
+      "type": "auth",
+      "system": false,
+      "fields": [],
+      "indexes": [],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "exp_anecdote_bullets",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "child",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "experience_bullets",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "parent",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "experience_anecdotes",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_exp_anecdote_bullets_pair",
+          "unique": true,
+          "columns": [
+            "exp_anecdote_bullets.parent",
+            "exp_anecdote_bullets.child"
+          ]
+        },
+        {
+          "name": "idx_exp_anecdote_bullets_user",
+          "unique": false,
+          "columns": [
+            "exp_anecdote_bullets.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "exp_job_anecdotes",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "child",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "experience_anecdotes",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "parent",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "experience_jobs",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_exp_job_anecdotes_pair",
+          "unique": true,
+          "columns": [
+            "exp_job_anecdotes.parent",
+            "exp_job_anecdotes.child"
+          ]
+        },
+        {
+          "name": "idx_exp_job_anecdotes_user",
+          "unique": false,
+          "columns": [
+            "exp_job_anecdotes.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "exp_job_bullets",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "child",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "experience_bullets",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "parent",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "experience_jobs",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_exp_job_bullets_pair",
+          "unique": true,
+          "columns": [
+            "exp_job_bullets.parent",
+            "exp_job_bullets.child"
+          ]
+        },
+        {
+          "name": "idx_exp_job_bullets_user",
+          "unique": false,
+          "columns": [
+            "exp_job_bullets.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "exp_job_projects",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "child",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "experience_projects",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "parent",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "experience_jobs",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_exp_job_projects_pair",
+          "unique": true,
+          "columns": [
+            "exp_job_projects.parent",
+            "exp_job_projects.child"
+          ]
+        },
+        {
+          "name": "idx_exp_job_projects_user",
+          "unique": false,
+          "columns": [
+            "exp_job_projects.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "exp_project_anecdotes",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "child",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "experience_anecdotes",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "parent",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "experience_projects",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_exp_project_anecdotes_pair",
+          "unique": true,
+          "columns": [
+            "exp_project_anecdotes.parent",
+            "exp_project_anecdotes.child"
+          ]
+        },
+        {
+          "name": "idx_exp_project_anecdotes_user",
+          "unique": false,
+          "columns": [
+            "exp_project_anecdotes.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "exp_project_bullets",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "child",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "experience_bullets",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "parent",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "experience_projects",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_exp_project_bullets_pair",
+          "unique": true,
+          "columns": [
+            "exp_project_bullets.parent",
+            "exp_project_bullets.child"
+          ]
+        },
+        {
+          "name": "idx_exp_project_bullets_user",
+          "unique": false,
+          "columns": [
+            "exp_project_bullets.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "experience_anecdotes",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "action",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "categories",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "behavioral_categories",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": null
+          }
+        },
+        {
+          "name": "company",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "date",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "impact",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "linked_questions",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "behavioral_questions",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": null
+          }
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "project",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "result",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "situation",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "task",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_exp_anecdotes_user",
+          "unique": false,
+          "columns": [
+            "experience_anecdotes.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "experience_bullets",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "category",
+          "type": "select",
+          "required": false
+        },
+        {
+          "name": "date",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "impact",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_exp_bullets_user",
+          "unique": false,
+          "columns": [
+            "experience_bullets.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "experience_jobs",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "company",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "employment_type",
+          "type": "select",
+          "required": false
+        },
+        {
+          "name": "end_date",
+          "type": "date",
+          "required": false
+        },
+        {
+          "name": "location",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "start_date",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_exp_jobs_user",
+          "unique": false,
+          "columns": [
+            "experience_jobs.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "experience_projects",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "company",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "end_date",
+          "type": "date",
+          "required": false
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "start_date",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "team_size",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "tech_stack",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_exp_projects_user",
+          "unique": false,
+          "columns": [
+            "experience_projects.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "interview_rounds",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "application",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "applications",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "campaign",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "campaigns",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "date",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "duration_minutes",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "interviewer",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "loop_label",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "preparation_notes",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "questions_asked",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "result",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "round_type",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "scheduled_status",
+          "type": "select",
+          "required": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_rounds_app",
+          "unique": false,
+          "columns": [
+            "interview_rounds.application"
+          ]
+        },
+        {
+          "name": "idx_rounds_user",
+          "unique": false,
+          "columns": [
+            "interview_rounds.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "legacy_artifact_snapshots",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "content_checksum",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "data",
+          "type": "json",
+          "required": true,
+          "maxSize": 2097152
+        },
+        {
+          "name": "design",
+          "type": "json",
+          "required": false,
+          "maxSize": 65536
+        },
+        {
+          "name": "font_families",
+          "type": "json",
+          "required": false,
+          "maxSize": 4096
+        },
+        {
+          "name": "markup",
+          "type": "file",
+          "required": true,
+          "file": {
+            "maxSelect": 1,
+            "maxSize": 2097152,
+            "protected": true
+          }
+        },
+        {
+          "name": "materializer_digest",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "parent_id",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "parent_updated",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "sanitizer_version",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "size_bytes",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "source_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "source_kind",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "source_updated",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "template_fallback",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "template_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_legacy_artifact_snapshots_reuse",
+          "unique": true,
+          "columns": [
+            "legacy_artifact_snapshots.user",
+            "legacy_artifact_snapshots.source_kind",
+            "legacy_artifact_snapshots.source_id",
+            "legacy_artifact_snapshots.content_checksum",
+            "legacy_artifact_snapshots.materializer_digest"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "legacy_share_migration",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "first_view_day",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "incident",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "last_view_day",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "link",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "manifest",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "origin",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "outcome",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "predicate_version",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "quarantine_entry",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "views",
+          "type": "number",
+          "required": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_legacy_share_migration_link",
+          "unique": true,
+          "columns": [
+            "legacy_share_migration.manifest",
+            "legacy_share_migration.link"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "offers",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "annual_bonus_target_pct",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "application",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "applications",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "base_salary",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "decision_deadline",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "equity_amount",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "equity_type",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "equity_vest_schedule",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "letter_url",
+          "type": "url",
+          "required": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "previous_offer",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "offers",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "pto",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "relocation",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "remote_policy",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "sign_on",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "trail",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "visa_sponsorship",
+          "type": "select",
+          "required": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_offers_status",
+          "unique": false,
+          "columns": [
+            "offers.status"
+          ]
+        },
+        {
+          "name": "idx_offers_user_application",
+          "unique": false,
+          "columns": [
+            "offers.user",
+            "offers.application"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "question_timers",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "accumulated_ms",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "question_slug",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "question_type",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "started_at",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_question_timers_unique",
+          "unique": true,
+          "columns": [
+            "question_timers.user",
+            "question_timers.question_type",
+            "question_timers.question_slug"
+          ]
+        },
+        {
+          "name": "idx_question_timers_user",
+          "unique": false,
+          "columns": [
+            "question_timers.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "relation_quarantine",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "action",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "field",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "kind",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "migration",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "owner",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "payload",
+          "type": "json",
+          "required": false,
+          "maxSize": 16777216
+        },
+        {
+          "name": "quarantined_at",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "report_checksum",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "source_collection",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "source_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "target_collection",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "target_id",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "target_owner",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "unique_fallback",
+          "type": "bool",
+          "required": false
+        }
+      ],
+      "indexes": [],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "relation_quarantine_reports",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "checksum",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "dry_run",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "expires_at",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "findings",
+          "type": "json",
+          "required": false,
+          "maxSize": 16777216
+        },
+        {
+          "name": "generated_at",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "outcomes",
+          "type": "json",
+          "required": false,
+          "maxSize": 16777216
+        },
+        {
+          "name": "relations",
+          "type": "json",
+          "required": false,
+          "maxSize": 16777216
+        },
+        {
+          "name": "report_kind",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "report_version",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "summary",
+          "type": "json",
+          "required": false,
+          "maxSize": 16777216
+        }
+      ],
+      "indexes": [],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "resume_share_links",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "legacy_reason",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "legacy_status",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "manifest_id",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "replaced_by",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "share_capabilities",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "resume",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "resumes",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "turned_off_at",
+          "type": "date",
+          "required": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "variant",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "resume_variants",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_share_links_user",
+          "unique": false,
+          "columns": [
+            "resume_share_links.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "resume_share_views",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "link",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "resume_share_links",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user_agent",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "viewed_at",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "viewer_ip_hash",
+          "type": "text",
+          "required": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_share_views_link",
+          "unique": false,
+          "columns": [
+            "resume_share_views.link"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "resume_variants",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "application",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "applications",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "ats_breakdown",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "ats_score",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "data",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "job_description",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "job_title",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "links",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "resume",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "resumes",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "role_focus",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "target_company",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "tone",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_variants_application",
+          "unique": false,
+          "columns": [
+            "resume_variants.application"
+          ]
+        },
+        {
+          "name": "idx_variants_resume",
+          "unique": false,
+          "columns": [
+            "resume_variants.resume"
+          ]
+        },
+        {
+          "name": "idx_variants_user",
+          "unique": false,
+          "columns": [
+            "resume_variants.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "resume_versions",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "data",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "is_auto",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "links",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "resume",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "resumes",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "variant",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "resume_variants",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_versions_resume",
+          "unique": false,
+          "columns": [
+            "resume_versions.resume"
+          ]
+        },
+        {
+          "name": "idx_versions_user",
+          "unique": false,
+          "columns": [
+            "resume_versions.user"
+          ]
+        },
+        {
+          "name": "idx_versions_variant",
+          "unique": false,
+          "columns": [
+            "resume_versions.variant"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "resumes",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "data",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "design",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "links",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "template_id",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_resumes_user",
+          "unique": false,
+          "columns": [
+            "resumes.user"
+          ]
+        },
+        {
+          "name": "idx_resumes_user_slug",
+          "unique": true,
+          "columns": [
+            "resumes.user",
+            "resumes.slug"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "share_capabilities",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "bearer_digest",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "capability_version",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "digest_key_version",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "expires_at",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "password_policy_ref",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "projection_version",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "purpose",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "revoked_at",
+          "type": "date",
+          "required": false
+        },
+        {
+          "name": "revoked_reason",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "snapshot",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "legacy_artifact_snapshots",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "target_checksum",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "target_kind",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "view_policy",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_share_capabilities_digest",
+          "unique": true,
+          "columns": [
+            "share_capabilities.bearer_digest"
+          ]
+        },
+        {
+          "name": "idx_share_capabilities_snapshot",
+          "unique": false,
+          "columns": [
+            "share_capabilities.snapshot",
+            "share_capabilities.status"
+          ]
+        },
+        {
+          "name": "idx_share_capabilities_user",
+          "unique": false,
+          "columns": [
+            "share_capabilities.user",
+            "share_capabilities.created"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "share_resolvers",
+      "type": "auth",
+      "system": false,
+      "fields": [],
+      "indexes": [],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "share_throttle",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "count",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "key",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "scope",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "window_start",
+          "type": "number",
+          "required": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_share_throttle_key",
+          "unique": true,
+          "columns": [
+            "share_throttle.key"
+          ]
+        },
+        {
+          "name": "idx_share_throttle_window",
+          "unique": false,
+          "columns": [
+            "share_throttle.window_start"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "system_design_guides",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "checklists",
+          "type": "json",
+          "required": false,
+          "maxSize": 4194304
+        },
+        {
+          "name": "description",
+          "type": "editor",
+          "required": true
+        },
+        {
+          "name": "resources",
+          "type": "json",
+          "required": false,
+          "maxSize": 4194304
+        },
+        {
+          "name": "sections",
+          "type": "json",
+          "required": false,
+          "maxSize": 4194304
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_system_design_guides_slug",
+          "unique": true,
+          "columns": [
+            "system_design_guides.slug"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "system_design_questions",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "api_design",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "architecture_diagram",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "constraints",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "database_schema",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "description",
+          "type": "editor",
+          "required": true
+        },
+        {
+          "name": "detailed_design",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "difficulty",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "er_diagram",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "estimation",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "high_level_design",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "hints",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "requirements_functional",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "requirements_nonfunctional",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "senior_topics",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "sequence_diagram",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "thought_flow",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "thought_process",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "tips",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "trade_offs",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "tradeoff_visual",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_sdq_slug",
+          "unique": true,
+          "columns": [
+            "system_design_questions.slug"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "take_home_assignments",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "ai_policy",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "companies",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "definition_version",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "difficulty",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "entrypoint",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "harness_files",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "language",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "prompt_md",
+          "type": "editor",
+          "required": false
+        },
+        {
+          "name": "rubric",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "starter_files",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "time_budget_min",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "topics",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_take_home_assignments_slug",
+          "unique": true,
+          "columns": [
+            "take_home_assignments.slug"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "take_home_attempts",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "ai_assist_used",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "ai_chats",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "assignment",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "take_home_assignments",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "campaign",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "campaigns",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "duration_ms",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "envelope",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "execution_envelopes",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "files",
+          "type": "json",
+          "required": false,
+          "maxSize": 8388608
+        },
+        {
+          "name": "harness_output",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "rubric_review",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "started_at",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "submitted_at",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_take_home_attempts_user_assignment",
+          "unique": false,
+          "columns": [
+            "take_home_attempts.user",
+            "take_home_attempts.assignment"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "take_home_drafts",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "assignment",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "take_home_assignments",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "campaign",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "campaigns",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "contents",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "file_path",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_take_home_drafts_unique",
+          "unique": true,
+          "columns": [
+            "take_home_drafts.user",
+            "take_home_drafts.campaign",
+            "take_home_drafts.assignment",
+            "take_home_drafts.file_path"
+          ]
+        },
+        {
+          "name": "idx_take_home_drafts_user_assignment",
+          "unique": false,
+          "columns": [
+            "take_home_drafts.user",
+            "take_home_drafts.assignment"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "todos",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "body",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "campaign",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "campaigns",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "completed_at",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "due_date",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "mentions",
+          "type": "json",
+          "required": false,
+          "maxSize": 2097152
+        },
+        {
+          "name": "priority",
+          "type": "select",
+          "required": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_todos_user_campaign",
+          "unique": false,
+          "columns": [
+            "todos.user",
+            "todos.campaign"
+          ]
+        },
+        {
+          "name": "idx_todos_user_due",
+          "unique": false,
+          "columns": [
+            "todos.user",
+            "todos.due_date"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "user_preferences",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "accent",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "app_background",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "card_accent",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "card_treatment",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "current_campaign",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "campaigns",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "density",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "glass_frost",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "glass_shadow",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "glass_transparency",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "nav_style",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "radius",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "sans_font",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "shadow",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "theme",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "type_variant",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_prefs_user",
+          "unique": true,
+          "columns": [
+            "user_preferences.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "user_progress",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "campaign",
+          "type": "relation",
+          "required": false,
+          "relation": {
+            "collection": "campaigns",
+            "cascadeDelete": false,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "completed_at",
+          "type": "date",
+          "required": false
+        },
+        {
+          "name": "confidence",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "question_slug",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "question_type",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_progress_user_campaign_question",
+          "unique": true,
+          "columns": [
+            "user_progress.user",
+            "user_progress.campaign",
+            "user_progress.question_type",
+            "user_progress.question_slug"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "expression",
+        "update": "expression",
+        "delete": "expression"
+      }
+    },
+    {
+      "name": "users",
+      "type": "auth",
+      "system": false,
+      "fields": [
+        {
+          "name": "avatar",
+          "type": "file",
+          "required": false,
+          "file": {
+            "maxSelect": 1,
+            "maxSize": 5242880,
+            "protected": false
+          }
+        },
+        {
+          "name": "bio",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "demo_evaluate_used",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "demo_run_used",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "is_demo",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "target",
+          "type": "text",
+          "required": false
+        }
+      ],
+      "indexes": [],
+      "rules": {
+        "list": "expression",
+        "view": "expression",
+        "create": "open",
+        "update": "expression",
+        "delete": "expression"
+      }
+    }
+  ],
+  "systemTables": [
+    "_admins",
+    "_collections",
+    "_externalAuths",
+    "_migrations",
+    "_params"
+  ],
+  "triggers": [
+    {
+      "name": "rel_authz_ai_coding_attempts_campaign_ins",
+      "table": "ai_coding_attempts"
+    },
+    {
+      "name": "rel_authz_ai_coding_attempts_campaign_tgt",
+      "table": "campaigns"
+    },
+    {
+      "name": "rel_authz_ai_coding_attempts_campaign_upd",
+      "table": "ai_coding_attempts"
+    },
+    {
+      "name": "rel_authz_ai_coding_drafts_campaign_ins",
+      "table": "ai_coding_drafts"
+    },
+    {
+      "name": "rel_authz_ai_coding_drafts_campaign_tgt",
+      "table": "campaigns"
+    },
+    {
+      "name": "rel_authz_ai_coding_drafts_campaign_upd",
+      "table": "ai_coding_drafts"
+    },
+    {
+      "name": "rel_authz_ai_settings_text_provider_ins",
+      "table": "ai_settings"
+    },
+    {
+      "name": "rel_authz_ai_settings_text_provider_tgt",
+      "table": "ai_providers"
+    },
+    {
+      "name": "rel_authz_ai_settings_text_provider_upd",
+      "table": "ai_settings"
+    },
+    {
+      "name": "rel_authz_ai_settings_vision_provider_ins",
+      "table": "ai_settings"
+    },
+    {
+      "name": "rel_authz_ai_settings_vision_provider_tgt",
+      "table": "ai_providers"
+    },
+    {
+      "name": "rel_authz_ai_settings_vision_provider_upd",
+      "table": "ai_settings"
+    },
+    {
+      "name": "rel_authz_applications_campaign_ins",
+      "table": "applications"
+    },
+    {
+      "name": "rel_authz_applications_campaign_tgt",
+      "table": "campaigns"
+    },
+    {
+      "name": "rel_authz_applications_campaign_upd",
+      "table": "applications"
+    },
+    {
+      "name": "rel_authz_code_drafts_campaign_ins",
+      "table": "code_drafts"
+    },
+    {
+      "name": "rel_authz_code_drafts_campaign_tgt",
+      "table": "campaigns"
+    },
+    {
+      "name": "rel_authz_code_drafts_campaign_upd",
+      "table": "code_drafts"
+    },
+    {
+      "name": "rel_authz_exp_anecdote_bullets_child_ins",
+      "table": "exp_anecdote_bullets"
+    },
+    {
+      "name": "rel_authz_exp_anecdote_bullets_child_tgt",
+      "table": "experience_bullets"
+    },
+    {
+      "name": "rel_authz_exp_anecdote_bullets_child_upd",
+      "table": "exp_anecdote_bullets"
+    },
+    {
+      "name": "rel_authz_exp_anecdote_bullets_parent_ins",
+      "table": "exp_anecdote_bullets"
+    },
+    {
+      "name": "rel_authz_exp_anecdote_bullets_parent_tgt",
+      "table": "experience_anecdotes"
+    },
+    {
+      "name": "rel_authz_exp_anecdote_bullets_parent_upd",
+      "table": "exp_anecdote_bullets"
+    },
+    {
+      "name": "rel_authz_exp_job_anecdotes_child_ins",
+      "table": "exp_job_anecdotes"
+    },
+    {
+      "name": "rel_authz_exp_job_anecdotes_child_tgt",
+      "table": "experience_anecdotes"
+    },
+    {
+      "name": "rel_authz_exp_job_anecdotes_child_upd",
+      "table": "exp_job_anecdotes"
+    },
+    {
+      "name": "rel_authz_exp_job_anecdotes_parent_ins",
+      "table": "exp_job_anecdotes"
+    },
+    {
+      "name": "rel_authz_exp_job_anecdotes_parent_tgt",
+      "table": "experience_jobs"
+    },
+    {
+      "name": "rel_authz_exp_job_anecdotes_parent_upd",
+      "table": "exp_job_anecdotes"
+    },
+    {
+      "name": "rel_authz_exp_job_bullets_child_ins",
+      "table": "exp_job_bullets"
+    },
+    {
+      "name": "rel_authz_exp_job_bullets_child_tgt",
+      "table": "experience_bullets"
+    },
+    {
+      "name": "rel_authz_exp_job_bullets_child_upd",
+      "table": "exp_job_bullets"
+    },
+    {
+      "name": "rel_authz_exp_job_bullets_parent_ins",
+      "table": "exp_job_bullets"
+    },
+    {
+      "name": "rel_authz_exp_job_bullets_parent_tgt",
+      "table": "experience_jobs"
+    },
+    {
+      "name": "rel_authz_exp_job_bullets_parent_upd",
+      "table": "exp_job_bullets"
+    },
+    {
+      "name": "rel_authz_exp_job_projects_child_ins",
+      "table": "exp_job_projects"
+    },
+    {
+      "name": "rel_authz_exp_job_projects_child_tgt",
+      "table": "experience_projects"
+    },
+    {
+      "name": "rel_authz_exp_job_projects_child_upd",
+      "table": "exp_job_projects"
+    },
+    {
+      "name": "rel_authz_exp_job_projects_parent_ins",
+      "table": "exp_job_projects"
+    },
+    {
+      "name": "rel_authz_exp_job_projects_parent_tgt",
+      "table": "experience_jobs"
+    },
+    {
+      "name": "rel_authz_exp_job_projects_parent_upd",
+      "table": "exp_job_projects"
+    },
+    {
+      "name": "rel_authz_exp_project_anecdotes_child_ins",
+      "table": "exp_project_anecdotes"
+    },
+    {
+      "name": "rel_authz_exp_project_anecdotes_child_tgt",
+      "table": "experience_anecdotes"
+    },
+    {
+      "name": "rel_authz_exp_project_anecdotes_child_upd",
+      "table": "exp_project_anecdotes"
+    },
+    {
+      "name": "rel_authz_exp_project_anecdotes_parent_ins",
+      "table": "exp_project_anecdotes"
+    },
+    {
+      "name": "rel_authz_exp_project_anecdotes_parent_tgt",
+      "table": "experience_projects"
+    },
+    {
+      "name": "rel_authz_exp_project_anecdotes_parent_upd",
+      "table": "exp_project_anecdotes"
+    },
+    {
+      "name": "rel_authz_exp_project_bullets_child_ins",
+      "table": "exp_project_bullets"
+    },
+    {
+      "name": "rel_authz_exp_project_bullets_child_tgt",
+      "table": "experience_bullets"
+    },
+    {
+      "name": "rel_authz_exp_project_bullets_child_upd",
+      "table": "exp_project_bullets"
+    },
+    {
+      "name": "rel_authz_exp_project_bullets_parent_ins",
+      "table": "exp_project_bullets"
+    },
+    {
+      "name": "rel_authz_exp_project_bullets_parent_tgt",
+      "table": "experience_projects"
+    },
+    {
+      "name": "rel_authz_exp_project_bullets_parent_upd",
+      "table": "exp_project_bullets"
+    },
+    {
+      "name": "rel_authz_interview_rounds_application_ins",
+      "table": "interview_rounds"
+    },
+    {
+      "name": "rel_authz_interview_rounds_application_tgt",
+      "table": "applications"
+    },
+    {
+      "name": "rel_authz_interview_rounds_application_upd",
+      "table": "interview_rounds"
+    },
+    {
+      "name": "rel_authz_interview_rounds_campaign_ins",
+      "table": "interview_rounds"
+    },
+    {
+      "name": "rel_authz_interview_rounds_campaign_tgt",
+      "table": "campaigns"
+    },
+    {
+      "name": "rel_authz_interview_rounds_campaign_upd",
+      "table": "interview_rounds"
+    },
+    {
+      "name": "rel_authz_offers_application_ins",
+      "table": "offers"
+    },
+    {
+      "name": "rel_authz_offers_application_tgt",
+      "table": "applications"
+    },
+    {
+      "name": "rel_authz_offers_application_upd",
+      "table": "offers"
+    },
+    {
+      "name": "rel_authz_offers_previous_offer_ins",
+      "table": "offers"
+    },
+    {
+      "name": "rel_authz_offers_previous_offer_tgt",
+      "table": "offers"
+    },
+    {
+      "name": "rel_authz_offers_previous_offer_upd",
+      "table": "offers"
+    },
+    {
+      "name": "rel_authz_resume_share_links_replaced_by_ins",
+      "table": "resume_share_links"
+    },
+    {
+      "name": "rel_authz_resume_share_links_replaced_by_tgt",
+      "table": "share_capabilities"
+    },
+    {
+      "name": "rel_authz_resume_share_links_replaced_by_upd",
+      "table": "resume_share_links"
+    },
+    {
+      "name": "rel_authz_resume_share_links_resume_ins",
+      "table": "resume_share_links"
+    },
+    {
+      "name": "rel_authz_resume_share_links_resume_tgt",
+      "table": "resumes"
+    },
+    {
+      "name": "rel_authz_resume_share_links_resume_upd",
+      "table": "resume_share_links"
+    },
+    {
+      "name": "rel_authz_resume_share_links_variant_ins",
+      "table": "resume_share_links"
+    },
+    {
+      "name": "rel_authz_resume_share_links_variant_tgt",
+      "table": "resume_variants"
+    },
+    {
+      "name": "rel_authz_resume_share_links_variant_upd",
+      "table": "resume_share_links"
+    },
+    {
+      "name": "rel_authz_resume_share_views_link_ins",
+      "table": "resume_share_views"
+    },
+    {
+      "name": "rel_authz_resume_share_views_link_tgt",
+      "table": "resume_share_links"
+    },
+    {
+      "name": "rel_authz_resume_share_views_link_upd",
+      "table": "resume_share_views"
+    },
+    {
+      "name": "rel_authz_resume_variants_application_ins",
+      "table": "resume_variants"
+    },
+    {
+      "name": "rel_authz_resume_variants_application_tgt",
+      "table": "applications"
+    },
+    {
+      "name": "rel_authz_resume_variants_application_upd",
+      "table": "resume_variants"
+    },
+    {
+      "name": "rel_authz_resume_variants_resume_ins",
+      "table": "resume_variants"
+    },
+    {
+      "name": "rel_authz_resume_variants_resume_tgt",
+      "table": "resumes"
+    },
+    {
+      "name": "rel_authz_resume_variants_resume_upd",
+      "table": "resume_variants"
+    },
+    {
+      "name": "rel_authz_resume_versions_resume_ins",
+      "table": "resume_versions"
+    },
+    {
+      "name": "rel_authz_resume_versions_resume_tgt",
+      "table": "resumes"
+    },
+    {
+      "name": "rel_authz_resume_versions_resume_upd",
+      "table": "resume_versions"
+    },
+    {
+      "name": "rel_authz_resume_versions_variant_ins",
+      "table": "resume_versions"
+    },
+    {
+      "name": "rel_authz_resume_versions_variant_tgt",
+      "table": "resume_variants"
+    },
+    {
+      "name": "rel_authz_resume_versions_variant_upd",
+      "table": "resume_versions"
+    },
+    {
+      "name": "rel_authz_share_capabilities_snapshot_ins",
+      "table": "share_capabilities"
+    },
+    {
+      "name": "rel_authz_share_capabilities_snapshot_tgt",
+      "table": "legacy_artifact_snapshots"
+    },
+    {
+      "name": "rel_authz_share_capabilities_snapshot_upd",
+      "table": "share_capabilities"
+    },
+    {
+      "name": "rel_authz_take_home_attempts_campaign_ins",
+      "table": "take_home_attempts"
+    },
+    {
+      "name": "rel_authz_take_home_attempts_campaign_tgt",
+      "table": "campaigns"
+    },
+    {
+      "name": "rel_authz_take_home_attempts_campaign_upd",
+      "table": "take_home_attempts"
+    },
+    {
+      "name": "rel_authz_take_home_drafts_campaign_ins",
+      "table": "take_home_drafts"
+    },
+    {
+      "name": "rel_authz_take_home_drafts_campaign_tgt",
+      "table": "campaigns"
+    },
+    {
+      "name": "rel_authz_take_home_drafts_campaign_upd",
+      "table": "take_home_drafts"
+    },
+    {
+      "name": "rel_authz_todos_campaign_ins",
+      "table": "todos"
+    },
+    {
+      "name": "rel_authz_todos_campaign_tgt",
+      "table": "campaigns"
+    },
+    {
+      "name": "rel_authz_todos_campaign_upd",
+      "table": "todos"
+    },
+    {
+      "name": "rel_authz_user_preferences_current_campaign_ins",
+      "table": "user_preferences"
+    },
+    {
+      "name": "rel_authz_user_preferences_current_campaign_tgt",
+      "table": "campaigns"
+    },
+    {
+      "name": "rel_authz_user_preferences_current_campaign_upd",
+      "table": "user_preferences"
+    },
+    {
+      "name": "rel_authz_user_progress_campaign_ins",
+      "table": "user_progress"
+    },
+    {
+      "name": "rel_authz_user_progress_campaign_tgt",
+      "table": "campaigns"
+    },
+    {
+      "name": "rel_authz_user_progress_campaign_upd",
+      "table": "user_progress"
+    }
+  ],
+  "appliedMigrations": [
+    "1640988000_init.go",
+    "1673167670_multi_match_migrate.go",
+    "1677152688_rename_authentik_to_oidc.go",
+    "1679943780_normalize_single_multiple_values.go",
+    "1679943781_add_indexes_column.go",
+    "1685164450_check_fk.go",
+    "1689579878_renormalize_single_multiple_values.go",
+    "1690319366_reset_null_values.go",
+    "1690454337_transform_relations_to_views.go",
+    "1691747913_resave_views.go",
+    "1692609521_copy_display_fields.go",
+    "1700000000_init_collections.js",
+    "1700000100_seed_data.js",
+    "1700000500_bootstrap_admin.js",
+    "1700000600_demo_user.js",
+    "1700000700_resume_studio.js",
+    "1700000800_ai_providers.js",
+    "1700000900_share_links_resume_rel.js",
+    "1700001000_resume_share_public_read.js",
+    "1700001100_ai_coding.js",
+    "1700001200_ai_coding_seed.js",
+    "1700001300_experience_items.js",
+    "1700001300_take_home.js",
+    "1700001400_take_home_seed.js",
+    "1700001500_question_timers.js",
+    "1700001500_take_home_reseed_prompts.js",
+    "1700001600_interview_loops.js",
+    "1700001700_round_duration.js",
+    "1700001800_offer_chain.js",
+    "1700001900_experience_items.js",
+    "1700002000_experience_entities.js",
+    "1700003000_experience_connections.js",
+    "1700004000_anecdote_consolidation_fields.js",
+    "1700004100_drop_legacy_anecdotes.js",
+    "1700005000_resume_links.js",
+    "1700005100_drop_resume_bullets.js",
+    "1700006000_account_scope_rules.js",
+    "1700006100_admission.js",
+    "1700006200_definitions_expand.js",
+    "1700006700_demo_contain.js",
+    "1700007000_relation_endpoint_authz.js",
+    "1700007100_execution_jobs.js",
+    "1700008000_legacy_artifact_snapshots.js",
+    "1700008100_share_link_owner_rules.js",
+    "1700008200_share_capabilities.js",
+    "1700008300_share_secrets.js",
+    "1700008400_grading_review.js",
+    "1700008500_legacy_share_migration.js",
+    "1701496825_allow_single_oauth2_provider_in_multiple_auth_collections.go",
+    "1702134272_set_default_json_max_size.go",
+    "1702134273_json_limits.js",
+    "1718706525_add_login_alert_column.go"
+  ]
+}
