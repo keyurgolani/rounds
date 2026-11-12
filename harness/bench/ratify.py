@@ -81,12 +81,14 @@ def set_dr2(pins: list[dict], approver: str, pr: int, date: str) -> None:
     d = json.loads(text)
     assert d["revision"] == 2, d["revision"]
     if d["status"] == "draft":
-        for a, b in [('  "status": "draft",\n', '  "status": "ratified",\n'), ('  "approver": "",\n', f'  "approver": {json.dumps(approver)},\n')]:
+        # The record's own fields sit at two spaces; S1's status is deeper.
+        for a, b in [('\n  "status": "draft",\n', '\n  "status": "ratified",\n'), ('\n  "approver": "",\n', f'\n  "approver": {json.dumps(approver)},\n')]:
             assert text.count(a) == 1, a
             text = text.replace(a, b, 1)
         ref = ",\n".join(f'      {{"path":{json.dumps(p["path"])},"sha256":"{p["sha256"]}"}}' for p in pins)
-        old = '  "approvalRef": null,\n'
+        old = '\n  "approvalRef": null,\n'
         assert text.count(old) == 1
+        old = old[1:]
         text = text.replace(old, f'  "approvalRef": {{\n    "pr": {pr},\n    "governedFiles": [\n{ref}\n    ]\n  }},\n  "ratifiedOn": "{date}",\n', 1)
         s1 = text.index('"id": "S1"')
         at = text.index('"status": "draft"', s1)
