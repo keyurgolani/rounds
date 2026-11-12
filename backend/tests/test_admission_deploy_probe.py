@@ -225,30 +225,97 @@ def two_replicas(monkeypatch):
 
 
 def _job_states(monkeypatch, *states):
-    seen = iter([{"job_id": JOB, "state": state} for state in states])
+    seen = iter([state if isinstance(state, dict) else {"job_id": JOB, "state": state} for state in states])
     monkeypatch.setattr(ac, "job_until", lambda *_args, **_kwargs: next(seen))
 
 
+def _posting(monkeypatch, health) -> list[str]:
+    """The event loop check's calls: each run it submits is a job, and each
+    /health read answers the next status in ``health``. Answers the keys
+    the runs went in under."""
+    keys, statuses = [], iter(health)
+
+    def fake_call(_base, method, _path, _token=None, _body=None, headers=None, timeout=30):
+        if method == "POST":
+            keys.append(headers["Idempotency-Key"])
+            return 202, {"job_id": JOB, "state": "queued"}, {}
+        return next(statuses), {}, {}
+
+    monkeypatch.setattr(ac, "call", fake_call)
+    return keys
+
+
+# Each case is how a read saw each run it submitted, then how the last run ended.
 @pytest.mark.parametrize(
-    "states, health, ok",
+    "seen, finished, health, ok",
     [
-        (("started", "completed"), [200] * 6, True),
-        (("started", "timed-out"), [200] * 6, True),
-        (("completed", "completed"), [200] * 6, False),
-        (("started", "completed"), [200, 503, 200, 200, 200, 200], False),
-        (("started", "failed"), [200] * 6, False),
+        (("started",), "completed", [200] * 6, True),
+        (("started",), "timed-out", [200] * 6, True),
+        (("completed",) * 3, "completed", [200] * 6, False),
+        (("started",), "completed", [200, 503, 200, 200, 200, 200], False),
+        (("started",), "failed", [200] * 6, False),
+        (("completed", "started"), "completed", [200] * 6, True),
     ],
-    ids=["free", "free-until-its-limit", "never-seen-running", "a-replica-unhealthy", "the-job-failed"],
+    ids=["free", "free-until-its-limit", "never-seen-running", "a-replica-unhealthy", "the-job-failed",
+         "seen-running-on-a-later-try"],
 )
-def test_the_event_loop_check(monkeypatch, two_replicas, states, health, ok):
-    _job_states(monkeypatch, *states)
-    answering(monkeypatch, (202, {"job_id": JOB, "state": "queued"}, {}), *[(s, {}, {}) for s in health])
+def test_the_event_loop_check(monkeypatch, two_replicas, seen, finished, health, ok):
+    _job_states(monkeypatch, *seen, finished)
+    keys = _posting(monkeypatch, health)
     w = Writer()
     ad.check_event_loop(w, "http://runner:8000", ACCT)
     ((row,),) = w.by_id().values()
     assert row.probe_id == "admission.closure.event-loop.free" and row.passed is ok
     # Each replica answered three times while the job ran.
     assert row.observed_status == (200 if 503 not in health else 503)
+    # One run for each read, each under a key of its own.
+    assert len(set(keys)) == len(keys) == len(seen)
+
+
+def test_each_run_sent_again_names_the_one_before_its_state_and_its_run_time(monkeypatch, two_replicas, capsys):
+    ended = [{"job_id": JOB, "state": "completed", "envelope": {"output": {"duration_ms": 2104 + i}}}
+             for i in range(3)]
+    _job_states(monkeypatch, *ended, "completed")
+    keys = _posting(monkeypatch, [200] * 6)
+    w = Writer()
+    ad.check_event_loop(w, "http://runner:8000", ACCT)
+    ((row,),) = w.by_id().values()
+    assert row.passed is False and row.detail.startswith("busy=False ") and row.detail.endswith(" tries=3")
+    out = capsys.readouterr().out
+    assert out.splitlines() == [
+        f"INFO admission.closure.event-loop.free: resubmitted, key={keys[0]} state=completed ran_ms=2104 (try 2 of 3)",
+        f"INFO admission.closure.event-loop.free: resubmitted, key={keys[1]} state=completed ran_ms=2105 (try 3 of 3)",
+    ]
+    assert ACCT.token not in out
+
+
+def test_a_wait_for_a_running_job_reads_it_as_it_is_and_a_wait_for_its_end_long_polls(monkeypatch):
+    paths, answers = [], iter([{"state": "leased"}, {"state": "started"}, {"state": "completed"}])
+
+    def fake_call(_base, _method, path, *_args, **_kwargs):
+        paths.append(path)
+        return 200, next(answers), {}
+
+    monkeypatch.setattr(ac, "call", fake_call)
+    running = ac.job_until("http://runner:8000", ACCT.token, JOB, lambda a: a.get("state") in ("started", *ac.ENDED))
+    assert running["state"] == "started"
+    assert ac.job_until("http://runner:8000", ACCT.token, JOB)["state"] == "completed"
+    assert paths == [f"{ac.JOBS}/{JOB}?wait=0", f"{ac.JOBS}/{JOB}?wait=0", f"{ac.JOBS}/{JOB}?wait=5"]
+
+
+@pytest.mark.parametrize(
+    "envelope, took",
+    [
+        ({"output": {"duration_ms": 2104}, "started_at": 100, "finished_at": 103}, 2104),
+        ({"output": None, "started_at": 100, "finished_at": 103}, 3000),
+        ({"output": None, "started_at": None, "finished_at": 103}, None),
+        ({"output": {"duration_ms": True}, "started_at": None, "finished_at": None}, None),
+        (None, None),
+    ],
+    ids=["its-output-timing", "start-to-end", "never-started", "no-timing", "not-ended"],
+)
+def test_a_jobs_run_time(envelope, took):
+    assert ac.ran_ms({"job_id": JOB, "envelope": envelope}) == took
 
 
 # ---- the store speaks admission/v1 and counts only what it admitted ------------
