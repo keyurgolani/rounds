@@ -132,11 +132,11 @@ export function renderAuthorityMd(A) {
 
   p('## Packages', '');
   const added = A.packageList.filter((x) => x.decision);
-  p(`One package per spec service (spec 1919-1935)${added.length ? `, plus ${added.map((x) => `${x.service} (DR-0002 ${x.decision})`).join(', ')}` : ''}. #18 (ROUNDS-02-L01) sets each \`target_path\`.`, '');
-  p('| Package | Service | Spec | Baseline locations |', '| --- | --- | --- | --- |');
+  p(`One package per spec service (spec 1919-1935)${added.length ? `, plus ${added.map((x) => `${x.service} (DR-0002 ${x.decision})`).join(', ')}` : ''}. #18 (ROUNDS-02-L01) sets each \`target_path\` from DR-0004.`, '');
+  p('| Package | Service | Spec | Baseline locations | Target path |', '| --- | --- | --- | --- | --- |');
   for (const pkg of A.packageList) {
     const locs = Array.isArray(pkg.baseline_locations) ? pkg.baseline_locations.map(code).join(', ') : code(pkg.baseline_locations);
-    p(`| ${code(pkg.id)} | ${cell(pkg.service)} | ${cell(pkg.spec)}${pkg.decision ? ` (DR-0002 ${pkg.decision})` : ''} | ${locs} |`);
+    p(`| ${code(pkg.id)} | ${cell(pkg.service)} | ${cell(pkg.spec)}${pkg.decision ? ` (DR-0002 ${pkg.decision})` : ''} | ${locs} | ${code(pkg.target_path)} |`);
   }
   p('');
 

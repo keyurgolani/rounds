@@ -217,28 +217,28 @@ Each spec read model (spec 1970-1980) has one projector. Every projection carrie
 
 ## Packages
 
-One package per spec service (spec 1919-1935), plus Provider Gateway (DR-0002 D8). #18 (ROUNDS-02-L01) sets each `target_path`.
+One package per spec service (spec 1919-1935), plus Provider Gateway (DR-0002 D8). #18 (ROUNDS-02-L01) sets each `target_path` from DR-0004.
 
-| Package | Service | Spec | Baseline locations |
-| --- | --- | --- | --- |
-| `command-gateway` | Transaction-owning Command Gateway | spec 1919 | `n/a:no command path at the audited revision; #19 (ROUNDS-02-L02) builds it` |
-| `account` | Account Service | spec 1920 | `frontend/src/auth/`, `frontend/src/pages/Profile.tsx`, `frontend/src/pages/Settings.tsx`, `frontend/src/theme/ThemeProvider.tsx`, `frontend/src/settings/DataSection.tsx`, `pocketbase/pb_hooks/main.pb.js`, `pocketbase/pb_migrations/1700000600_demo_user.js` |
-| `career-profile` | Career Profile Service | spec 1921 | `frontend/src/experience/`, `frontend/src/pages/Profile.tsx` |
-| `identity-directory` | Identity Directory for Organization and Person | spec 1922 | `n/a:organizations and people are free-text fields on other records at the audited revision` |
-| `opportunity-pursuit` | Opportunity and Pursuit Service | spec 1923 | `frontend/src/applications/api.ts`, `frontend/src/pages/Applications.tsx`, `frontend/src/pages/ApplicationDetail.tsx`, `frontend/src/campaign/` |
-| `interview-process` | Interview Process Service | spec 1924 | `frontend/src/applications/RoundCard.tsx`, `frontend/src/applications/interviewTypes.ts` |
-| `artifact` | Artifact Service | spec 1925 | `frontend/src/features/resume/`, `backend/routers/pdf.py` |
-| `practice` | Practice Service | spec 1926 | `frontend/src/pages/coding/`, `frontend/src/pages/ai-coding/`, `frontend/src/pages/take-home/`, `frontend/src/pages/sd-practice/`, `frontend/src/hooks/usePracticeStatus.ts`, `frontend/src/hooks/progressApi.ts`, `frontend/src/lib/codeDraftsApi.ts`, `backend/routers/take_home.py`, `backend/routers/ai_coding.py`, `backend/routers/sd_practice.py` |
-| `action` | Action Service | spec 1927 | `frontend/src/todos/`, `frontend/src/pages/Todos.tsx` |
-| `capture-ingestion` | Capture and Ingestion Service | spec 1928 | `frontend/src/experience/ImportReview.tsx`, `backend/routers/ai.py` |
-| `revision-audit` | Revision and Audit Service | spec 1929 | `n/a:no change sets, audit entries, or events at the audited revision` |
-| `search` | Search Service | spec 1930 | `n/a:search and filters run in the browser over loaded lists at the audited revision` |
-| `read-model` | Read Model and Recommendation Service | spec 1931 | `frontend/src/components/dashboard/` |
-| `career-pack-registry` | Career Pack Registry | spec 1932 | `frontend/src/content/api.ts`, `frontend/src/pages/guides/`, `pocketbase/seeds/`, `pocketbase/pb_migrations/1700000100_seed_data.js` |
-| `public-share` | Public Share Capability Service | spec 1933 | `backend/routers/share.py`, `frontend/src/features/resume/share/` |
-| `execution-control-plane` | Execution Control Plane | spec 1934 | `backend/main.py`, `backend/routers/runner.py`, `backend/app/` |
-| `execution-worker` | Ephemeral Execution Worker pool | spec 1935 | `backend/drivers/`, `backend/ai_coding/`, `backend/take_home/`, `backend/pdf_renderer/` |
-| `provider-gateway` | Provider Gateway | spec 808 (DR-0002 D8) | `backend/routers/ai.py`, `backend/app/crypto.py`, `frontend/src/settings/AISection.tsx`, `frontend/src/settings/aiProviderEndpoints.ts`, `pocketbase/pb_migrations/1700000800_ai_providers.js` |
+| Package | Service | Spec | Baseline locations | Target path |
+| --- | --- | --- | --- | --- |
+| `command-gateway` | Transaction-owning Command Gateway | spec 1919 | `n/a:no command path at the audited revision; #19 (ROUNDS-02-L02) builds it` | `pocketbase/pb_hooks/lib/command-gateway/` |
+| `account` | Account Service | spec 1920 | `frontend/src/auth/`, `frontend/src/pages/Profile.tsx`, `frontend/src/pages/Settings.tsx`, `frontend/src/theme/ThemeProvider.tsx`, `frontend/src/settings/DataSection.tsx`, `pocketbase/pb_hooks/main.pb.js`, `pocketbase/pb_migrations/1700000600_demo_user.js` | `pocketbase/pb_hooks/domain/account/` |
+| `career-profile` | Career Profile Service | spec 1921 | `frontend/src/experience/`, `frontend/src/pages/Profile.tsx` | `pocketbase/pb_hooks/domain/career-profile/` |
+| `identity-directory` | Identity Directory for Organization and Person | spec 1922 | `n/a:organizations and people are free-text fields on other records at the audited revision` | `pocketbase/pb_hooks/domain/identity-directory/` |
+| `opportunity-pursuit` | Opportunity and Pursuit Service | spec 1923 | `frontend/src/applications/api.ts`, `frontend/src/pages/Applications.tsx`, `frontend/src/pages/ApplicationDetail.tsx`, `frontend/src/campaign/` | `pocketbase/pb_hooks/domain/opportunity-pursuit/` |
+| `interview-process` | Interview Process Service | spec 1924 | `frontend/src/applications/RoundCard.tsx`, `frontend/src/applications/interviewTypes.ts` | `pocketbase/pb_hooks/domain/interview-process/` |
+| `artifact` | Artifact Service | spec 1925 | `frontend/src/features/resume/`, `backend/routers/pdf.py` | `pocketbase/pb_hooks/domain/artifact/` |
+| `practice` | Practice Service | spec 1926 | `frontend/src/pages/coding/`, `frontend/src/pages/ai-coding/`, `frontend/src/pages/take-home/`, `frontend/src/pages/sd-practice/`, `frontend/src/hooks/usePracticeStatus.ts`, `frontend/src/hooks/progressApi.ts`, `frontend/src/lib/codeDraftsApi.ts`, `backend/routers/take_home.py`, `backend/routers/ai_coding.py`, `backend/routers/sd_practice.py` | `pocketbase/pb_hooks/domain/practice/` |
+| `action` | Action Service | spec 1927 | `frontend/src/todos/`, `frontend/src/pages/Todos.tsx` | `pocketbase/pb_hooks/domain/action/` |
+| `capture-ingestion` | Capture and Ingestion Service | spec 1928 | `frontend/src/experience/ImportReview.tsx`, `backend/routers/ai.py` | `pocketbase/pb_hooks/domain/capture-ingestion/` |
+| `revision-audit` | Revision and Audit Service | spec 1929 | `n/a:no change sets, audit entries, or events at the audited revision` | `pocketbase/pb_hooks/lib/revision-audit/` |
+| `search` | Search Service | spec 1930 | `n/a:search and filters run in the browser over loaded lists at the audited revision` | `pocketbase/pb_hooks/domain/search/` |
+| `read-model` | Read Model and Recommendation Service | spec 1931 | `frontend/src/components/dashboard/` | `pocketbase/pb_hooks/domain/read-model/` |
+| `career-pack-registry` | Career Pack Registry | spec 1932 | `frontend/src/content/api.ts`, `frontend/src/pages/guides/`, `pocketbase/seeds/`, `pocketbase/pb_migrations/1700000100_seed_data.js` | `pocketbase/pb_hooks/domain/career-pack-registry/` |
+| `public-share` | Public Share Capability Service | spec 1933 | `backend/routers/share.py`, `frontend/src/features/resume/share/` | `pocketbase/pb_hooks/domain/public-share/` |
+| `execution-control-plane` | Execution Control Plane | spec 1934 | `backend/main.py`, `backend/routers/runner.py`, `backend/app/` | `pocketbase/pb_hooks/domain/execution-control-plane/` |
+| `execution-worker` | Ephemeral Execution Worker pool | spec 1935 | `backend/drivers/`, `backend/ai_coding/`, `backend/take_home/`, `backend/pdf_renderer/` | `backend/execution/` |
+| `provider-gateway` | Provider Gateway | spec 808 (DR-0002 D8) | `backend/routers/ai.py`, `backend/app/crypto.py`, `frontend/src/settings/AISection.tsx`, `frontend/src/settings/aiProviderEndpoints.ts`, `pocketbase/pb_migrations/1700000800_ai_providers.js` | `backend/app/provider_gateway/` |
 
 ## Owner Labels
 
