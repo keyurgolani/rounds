@@ -258,3 +258,29 @@ describe('focus', () => {
     disabled.remove();
   });
 });
+
+describe("RunnerDenialNotice when the demo's code runs are off (ROUNDS-00B-L07)", () => {
+  it.each([
+    ['run', 'Code runs are off in the demo. Nothing ran. Your code is still here.'],
+    ['tests', 'Code runs are off in the demo. No tests ran. Your code is still here.'],
+    ['grade', 'Code runs are off in the demo. Nothing was graded. Your files and notes are still here.'],
+  ] as const)('says so plainly for %s, with what was kept', (action, body) => {
+    renderNotice(
+      <RunnerDenialNotice
+        denial={denial('demo_off', { status: 503, code: 'demo_execution_disabled', correlationId: CID })}
+        action={action}
+      />,
+    );
+    const region = screen.getByRole('status');
+    expect(within(region).getByText('Off in the demo')).toBeInTheDocument();
+    expect(region).toHaveTextContent(body);
+    expect(region).toHaveTextContent('Reference 01234567');
+    expect(region.querySelector('[data-denial]')).toHaveAttribute('data-denial', 'demo_off');
+    for (const svg of region.querySelectorAll('svg')) {
+      expect(svg).toHaveAttribute('aria-hidden', 'true');
+    }
+    // Nothing to sign in to, reload, or print instead.
+    expect(within(region).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(region).queryByRole('link')).not.toBeInTheDocument();
+  });
+});

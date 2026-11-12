@@ -5,7 +5,9 @@
 // with a Reload button that saves the draft first when the page passes
 // `onReload` (a page whose save failed stays and says so, keeping the
 // button), and retired, not here, unsupported, and file not allowed. A
-// practice item the server can't grade (ROUNDS-00A-L03 PR 3) says so.
+// practice item the server can't grade (ROUNDS-00A-L03 PR 3) says so,
+// and so does a demo account's code run while the demo's code runs are
+// off (ROUNDS-00B-L07), with the draft kept.
 //
 // The live region is always in the DOM, so screen readers announce a
 // denial when it appears. The notice never takes focus. If the action
@@ -83,6 +85,7 @@ const ICONS: Record<RunnerDenialKind, LucideIcon> = {
   sign_in: LogIn,
   limit: Hourglass,
   turned_off: PowerOff,
+  demo_off: PowerOff,
   unavailable: CloudOff,
   too_large: Scaling,
   not_permitted: Lock,
@@ -111,6 +114,11 @@ function copyFor(denial: RunnerDenial, action: RunnerAction): { title: string; b
       return {
         title: 'Turned off',
         body: `${text.subject} is turned off on this server. ${text.kept}`,
+      };
+    case 'demo_off':
+      return {
+        title: 'Off in the demo',
+        body: `Code runs are off in the demo. ${text.none} ${text.kept}`,
       };
     case 'unavailable':
       return {
