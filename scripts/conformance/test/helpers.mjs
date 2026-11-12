@@ -10,7 +10,7 @@ import { createContext } from '../lib/context.mjs';
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
-const COPY_DIRS = ['contracts/vocabulary', 'contracts/authority', 'docs/decisions', 'docs/program', 'pocketbase/pb_migrations', 'backend/routers'];
+const COPY_DIRS = ['contracts/vocabulary', 'contracts/authority', 'contracts/privacy', 'docs/decisions', 'docs/program', 'pocketbase/pb_migrations', 'backend/routers'];
 const COPY_FILES = [
   'backend/main.py', 'frontend/src/App.tsx', 'frontend/src/components/Layout.tsx', 'frontend/src/command-center/registry.tsx',
   'frontend/src/applications/interviewTypes.ts', 'frontend/src/auth/AuthProvider.tsx', 'frontend/index.html',
@@ -67,6 +67,26 @@ export function fixture(mutate = () => {}) {
   fs.cpSync(baseFixtureDir(), dir, { recursive: true });
   mutate(dir);
   return dir;
+}
+
+// The privacy rule also reads every frontend and backend source it scans,
+// the definitions, its generated copies and docs, and the one seed file the
+// seed migration requires. Only a fixture that runs every rule needs them.
+const PRIVACY_INPUTS = [
+  'frontend/src', 'backend', 'contracts/definitions', 'pocketbase/seeds/content.json',
+  'pocketbase/seeds/behavioral_guides.json', 'pocketbase/seeds/coding_guides.json', 'pocketbase/seeds/system_design_guides.json',
+  'docs/privacy-retention.md', 'docs/configuration.md',
+];
+const SKIP_COPY = new Set(['node_modules', '__pycache__', '.pytest_cache']);
+
+export function everyRuleFixture(mutate = () => {}) {
+  return fixture((dir) => {
+    for (const rel of PRIVACY_INPUTS) {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.cpSync(path.join(REPO_ROOT, rel), path.join(dir, rel), { recursive: true, filter: (src) => !SKIP_COPY.has(path.basename(src)) });
+    }
+    mutate(dir);
+  });
 }
 
 export function readJson(dir, rel) {

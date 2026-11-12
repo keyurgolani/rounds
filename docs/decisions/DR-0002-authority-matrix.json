@@ -366,6 +366,20 @@
       "migrationImpact": "None until decided.",
       "rollbackImpact": "Deciding is additive for other rows.",
       "od": {"state":"blocked","default":"stays a #158 cache"}
+    },
+    {
+      "id": "F1",
+      "title": "Field maps from DR-0005",
+      "status": "draft",
+      "sources": ["DR-0005@1 decisions PRIV-1 and PRIV-9", "contracts/privacy/field-map.json"],
+      "decision": "Each row's field_map cell that revision 1 left pending on ROUNDS-14-L01 names contracts/privacy/field-map.json. There every field the row holds takes one class or visibility, no looser than the row's privacy_floor or visibility, and the privacy rule fails a field that is looser or unlisted. The ten rows that hold no account fields keep n/a, and the login streak stays blocked:OD-5.",
+      "alternatives": [
+        {"option":"List each row's field ids in its own cell","reason":"The matrix would copy the field map and drift from it; one file gives each field one answer."},
+        {"option":"Leave the cells pending until each row's transfer leaf","reason":"Each leaf would classify its own fields, and a field could reach a sink before anyone classed it."}
+      ],
+      "consequences": "A row's field classes are citable through DR-0002@2 and the field map's ids. A new field fails conformance until it has a class.",
+      "migrationImpact": "None. No stored data or code moves; the cells name where each field's class lives.",
+      "rollbackImpact": "Revert this unratified revision. Once ratified, a superseding revision changes a cell, additively when it fills or narrows one."
     }
   ],
   "corrections": [
