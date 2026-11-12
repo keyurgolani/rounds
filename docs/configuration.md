@@ -66,6 +66,7 @@ Use `*` only for local development. In production, set `CORS_ALLOW_ORIGINS` to y
 | `VITE_API_PROXY_TARGET` | `http://runner:8000` | Vite dev proxy target for runner endpoints. |
 | `VITE_POCKETBASE_PROXY_TARGET` | `http://pocketbase:8090` | Vite dev proxy target for PocketBase endpoints. |
 | `VITE_DEV_ALLOWED_HOSTS` | `localhost` | Comma-separated allowed hosts for Vite dev server. |
+| `VITE_DEV_HOST` | `127.0.0.1` | Address the Vite dev and preview servers listen on. Dev compose sets `0.0.0.0` inside the container and publishes its port on `127.0.0.1` only. |
 
 In production, the frontend should usually use same-origin PocketBase access. Leave `VITE_POCKETBASE_URL` blank unless you intentionally host PocketBase on a separate browser-visible origin.
 
