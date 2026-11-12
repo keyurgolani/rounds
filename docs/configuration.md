@@ -113,6 +113,7 @@ Setting both older flags to `true` still works. Frontend hiding is not a securit
 | --- | --- | --- | --- |
 | `ROUNDS_GATE_DEMO` | blank (`disabled`) | PocketBase hooks | `enabled` turns the demo account on. |
 | `ROUNDS_ENABLE_DEMO` | `false` | PocketBase hooks | Alias read while the gate is blank. `true` turns the demo account on. |
+| `ROUNDS_GATE_DEMO_EXECUTION` | blank (`disabled`) | runner | `enabled` gives the demo account its code runs. Disabled, a demo account's run, evaluate, run-project, grade, take-home run, and take-home submit answer 503 `demo_execution_disabled`. |
 
 Every install creates the demo account (`1700000600_demo_user.js`), and it stays off unless the operator turns it on, as the hosted demo does:
 
@@ -122,6 +123,8 @@ ROUNDS_ENABLE_DEMO=true
 
 Off, PocketBase refuses a demo account's sign-in with the answer a wrong password gets, and at each start gives every demo account a new random password and token key, so a session from before the restart ends, and any request a demo account's token authenticates gets 401. On or off, a demo account can change only its own name, bio, target, and avatar, can't delete itself or change its email, and can't own a share link, an AI provider, or AI settings: those writes get 403 `demo_not_permitted`, from a client or a server hook. Restart PocketBase after changing either variable.
 
+With the demo on, its code runs stay off until the operator opens them with `ROUNDS_GATE_DEMO_EXECUTION=enabled` on every runner replica, followed by a restart. Until then a demo account's code run answers 503 `demo_execution_disabled` before anything is charged or runs, and the coding, AI-coding, and take-home pages say code runs are off in the demo and keep the draft. Other accounts, and the demo's other pages, aren't affected.
+
 ## Gates
 
 Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads them from the root `.env`, and k8s reads them from the `rounds-gates` ConfigMap in `k8s/gates.yaml`. Three readers share the names: the runner (`backend/app/gates.py`), PocketBase (`pocketbase/pb_hooks/gates.js`), and the frontend through `runtime-config.js`, which publishes only the gates the SPA reads.
@@ -130,6 +133,7 @@ Gates are `ROUNDS_GATE_<NAME>` switches with written defaults. Compose reads the
 | --- | --- | --- | --- | --- |
 | `ROUNDS_GATE_SIGNUPS` | `enabled`, `disabled` | `enabled` | PocketBase, frontend | yes |
 | `ROUNDS_GATE_DEMO` | `enabled`, `disabled` | `disabled` | PocketBase | yes; disabled, no demo account signs in ([Demo Account](#demo-account)) |
+| `ROUNDS_GATE_DEMO_EXECUTION` | `enabled`, `disabled` | `disabled` | runner | yes; disabled, a demo account's request to the six code-run routes answers 503 `demo_execution_disabled` before anything is charged or runs, and other accounts are unchanged ([Demo Account](#demo-account)) |
 | `ROUNDS_GATE_RUN` | `enabled`, `disabled` | `enabled` | runner | yes; disabled, `/api/run` answers 503 `route_disabled` |
 | `ROUNDS_GATE_EVALUATE` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/evaluate` |
 | `ROUNDS_GATE_AI_CODING_RUN_PROJECT` | `enabled`, `disabled` | `enabled` | runner | yes; `/api/ai-coding/run-project` |

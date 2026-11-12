@@ -118,6 +118,8 @@ services:
       - ROUNDS_GATE_EXECUTION_SCRATCH=${ROUNDS_GATE_EXECUTION_SCRATCH:-}
       - ROUNDS_GATE_EXECUTION_GRADING=${ROUNDS_GATE_EXECUTION_GRADING:-}
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
+      # The demo account's code runs, off unless this is enabled.
+      - ROUNDS_GATE_DEMO_EXECUTION=${ROUNDS_GATE_DEMO_EXECUTION:-}
       # Public shares (docs/operations.md, "Public shares"): PUBLIC_SHARES
       # turns every share resolve off. Capability resolution is closed by
       # default: no share link resolves and nobody can make one until the

@@ -22,7 +22,9 @@ from fastapi import HTTPException
 
 from app import admission, gates, legacy_snapshots, obs
 from app.errors import TypedError
-from conftest import TEST_ACCOUNT_ID
+from conftest import TEST_ACCOUNT_ID, TEST_TOKEN
+from tests.test_execution_grading import grade_body, submit_body
+from tests.test_execution_scratch import SCRATCH_BODIES
 
 HEX32 = re.compile(r"[0-9a-f]{32}")
 KIB = 1024
@@ -434,6 +436,197 @@ def test_the_tier_comes_from_the_account_record(monkeypatch, client, tripwires, 
 def test_a_forged_tier_in_the_body_is_refused(client, signed_in, tripwires):
     res = _send(client, "ats_rule", signed_in, body={"data": {}, "tier": "standard"})
     _assert_typed(res, 422, "invalid_request")
+
+
+# ---- step 4: the demo tier's code runs (ROUNDS-00B-L07) ------------------------------
+
+CODE_RUNS = ("run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit")
+DEMO_OFF = "Code runs are off in the demo."
+# Every code-run route runs as a durable job.
+AS_JOBS = {
+    "ROUNDS_GATE_EXECUTION_SCRATCH": "on",
+    "ROUNDS_GATE_EXECUTION_GRADING": "on",
+    "ROUNDS_GATE_EXECUTION_STORE": "on",
+    "ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce",
+}
+# What each code run sends as a job: a definition and the candidate's code
+# or files, the bodies the job tests send.
+AS_JOB_BODIES = {
+    **{name: SCRATCH_BODIES[ROUTES[name][1]] for name in CODE_RUNS if ROUTES[name][1] in SCRATCH_BODIES},
+    "grade": grade_body(),
+    "take_home_submit": submit_body(),
+}
+REVIEW_JOB = "job000000000001"
+# The demo's routes that run no code, each with the gates that let it reach
+# its handler: ROUTES' own, PDF snapshot creation, and the two reviews.
+OTHER_ROUTES = {
+    **{name: (*ROUTES[name][:3], {}) for name in set(ROUTES) - set(CODE_RUNS)},
+    "snapshot_create": (
+        "POST",
+        "/api/pdf/snapshots",
+        {"source_kind": "resume", "source_id": SNAPSHOT_SOURCE, "expected_updated": "2026-10-20 10:00:00.000Z"},
+        {"ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE": "enabled"},
+    ),
+    "grade_review": ("POST", f"/api/ai-coding/grade/{REVIEW_JOB}/review", {"files": {}}, AS_JOBS),
+    "take_home_review": ("POST", f"/api/take-home/submit/{REVIEW_JOB}/review", {"files": {}}, AS_JOBS),
+}
+
+
+@pytest.fixture
+def queued(monkeypatch):
+    """The job path's first step, recorded and refused: the kind of each
+    job a request would have started."""
+    from execution import jobs
+
+    kinds: list[str] = []
+
+    async def begin(_request, kind, *_args, **_kwargs):
+        kinds.append(kind)
+        raise Tripped(f"job {kind}")
+
+    monkeypatch.setattr(jobs, "begin", begin)
+    return kinds
+
+
+def _tripped(name: str):
+    async def guarded(*_args, **_kwargs):
+        raise Tripped(name)
+
+    return guarded
+
+
+def _as_tier(monkeypatch, tier: str) -> dict[str, str]:
+    """Admits ``Authorization: Bearer <TEST_TOKEN>`` as account u1 in
+    ``tier``, the way ``signed_in`` admits it as a standard account.
+    Returns the headers to send."""
+
+    async def authenticate(token: str) -> dict:
+        if token != TEST_TOKEN:
+            raise TypedError("unauthenticated")
+        record = {"id": TEST_ACCOUNT_ID, "is_demo": tier == "demo"}
+        return {"id": TEST_ACCOUNT_ID, "token": token, "record": record}
+
+    monkeypatch.setattr(admission, "authenticate", authenticate)
+    return {"Authorization": f"Bearer {TEST_TOKEN}"}
+
+
+def _operation(name: str) -> str:
+    return admission.ROUTES[(ROUTES[name][0], ROUTES[name][1])].operation
+
+
+def _outcome(client, name: str, headers: dict[str, str]) -> tuple:
+    """Where one of OTHER_ROUTES' requests ended: ("ran", the tripwire)
+    once it reached its handler's work, otherwise its status and typed
+    code."""
+    method, path, body, _gates = OTHER_ROUTES[name]
+    try:
+        if body is None:
+            res = client.request(method, path, headers=headers)
+        else:
+            res = client.request(method, path, json=body, headers=headers)
+    except Tripped as tripped:
+        return ("ran", str(tripped))
+    body = res.json() if res.headers.get("content-type", "").startswith("application/json") else None
+    return (res.status_code, body.get("code") if isinstance(body, dict) else None)
+
+
+def test_the_closed_gate_refuses_the_demo_tier_exactly_the_six_code_runs(gate_env):
+    operations = {route.operation for route in admission.ROUTES.values()}
+    gate_env({})
+    refused = {operation for operation in operations if admission.refusal("demo", operation) is not None}
+    assert refused == {_operation(name) for name in CODE_RUNS} == admission.DEFINITION_OPERATIONS
+    assert {admission.refusal("demo", operation) for operation in refused} == {"demo_execution_disabled"}
+    assert all(admission.refusal("standard", operation) is None for operation in operations)
+    gate_env({"ROUNDS_GATE_DEMO_EXECUTION": "enabled"})
+    assert all(admission.refusal(tier, operation) is None for tier in admission.TIERS for operation in operations)
+
+
+@pytest.mark.parametrize("name", CODE_RUNS)
+def test_a_demo_accounts_code_run_is_503_before_anything_is_charged_or_runs(
+    client, monkeypatch, gate_env, seeded, tripwires, admission_store, capsys, name
+):
+    gate_env({})
+    assert gates.value("DEMO_EXECUTION") == "disabled"
+    demo = _as_tier(monkeypatch, "demo")
+    capsys.readouterr()
+    res = _send(client, name, demo)
+    _assert_typed(res, 503, "demo_execution_disabled")
+    assert res.json()["detail"] == DEMO_OFF
+    assert "retry-after" not in res.headers
+    (line,) = _decisions(capsys)
+    assert (line["tier"], line["status"], line["code"]) == ("demo", 503, "demo_execution_disabled")
+    assert (line["idempotency"], line["quota"]) == ("skipped", "skipped")
+    # Before the body is read: a malformed one gets the same answer.
+    _assert_typed(_send(client, name, demo, content=b"{not json"), 503, "demo_execution_disabled")
+    # Nothing ran, nothing was looked up, and the admission store never
+    # saw either request, so nothing was charged.
+    assert tripwires == [] and seeded.calls == [] and admission_store.calls == []
+
+
+@pytest.mark.parametrize("name", CODE_RUNS)
+def test_a_demo_accounts_code_run_is_refused_the_same_way_where_it_would_run_as_a_job(
+    client, monkeypatch, gate_env, tripwires, queued, pocketbase, admission_store, name
+):
+    gate_env(AS_JOBS)
+    assert gates.value("DEMO_EXECUTION") == "disabled"
+    res = _send(client, name, _as_tier(monkeypatch, "demo"), body=AS_JOB_BODIES[name])
+    _assert_typed(res, 503, "demo_execution_disabled")
+    assert queued == [] and tripwires == [] and pocketbase.calls == [] and admission_store.calls == []
+
+
+@pytest.mark.parametrize("name", CODE_RUNS)
+def test_a_standard_accounts_code_run_still_starts_its_job_while_the_demos_are_closed(
+    client, monkeypatch, gate_env, tripwires, queued, name
+):
+    gate_env(AS_JOBS)
+    assert gates.value("DEMO_EXECUTION") == "disabled"
+    with pytest.raises(Tripped):
+        _send(client, name, _as_tier(monkeypatch, "standard"), body=AS_JOB_BODIES[name])
+    assert queued == [name] and tripwires == []
+
+
+@pytest.mark.parametrize("name", CODE_RUNS)
+def test_a_standard_accounts_code_run_is_unchanged_while_the_demos_are_closed(
+    client, signed_in, gate_env, seeded, tripwires, admission_store, name
+):
+    gate_env({})
+    assert gates.value("DEMO_EXECUTION") == "disabled"
+    with pytest.raises(Tripped):
+        _send(client, name, signed_in)
+    assert tripwires
+    assert [call["operation"] for call in admission_store.called("admit")] == [_operation(name)]
+
+
+@pytest.mark.parametrize("name", CODE_RUNS)
+def test_the_open_gate_gives_a_demo_account_its_code_runs_back(
+    client, monkeypatch, gate_env, seeded, tripwires, admission_store, name
+):
+    gate_env({"ROUNDS_GATE_DEMO_EXECUTION": "enabled"})
+    assert gates.value("DEMO_EXECUTION") == "enabled"
+    with pytest.raises(Tripped):
+        _send(client, name, _as_tier(monkeypatch, "demo"))
+    assert tripwires
+    assert [call["operation"] for call in admission_store.called("admit")] == [_operation(name)]
+
+
+@pytest.mark.parametrize("name", sorted(OTHER_ROUTES))
+def test_the_demos_other_routes_answer_as_a_standard_accounts_do_while_its_code_runs_are_closed(
+    client, monkeypatch, gate_env, seeded, tripwires, name
+):
+    from execution import review
+    from routers import pdf
+
+    monkeypatch.setattr(pdf, "_sidecar_ok", lambda: True)
+    monkeypatch.setattr(legacy_snapshots, "create", _tripped("snapshot_create"))
+    monkeypatch.setattr(review, "review", _tripped("review"))
+    gate_env(OTHER_ROUTES[name][3])
+    assert gates.value("DEMO_EXECUTION") == "disabled"
+    standard = _outcome(client, name, _as_tier(monkeypatch, "standard"))
+    demo = _outcome(client, name, _as_tier(monkeypatch, "demo"))
+    assert demo == standard
+    assert "demo_execution_disabled" not in demo
+    # Past admission for both: served, or at its handler's work.
+    assert demo[0] in (200, "ran")
 
 
 # ---- step 5: fields ------------------------------------------------------------------

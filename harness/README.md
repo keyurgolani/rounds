@@ -298,7 +298,7 @@ directory all derive from the compose project name, so runs with different
 
 The account factory generates fresh credentials for every run and never uses
 the demo account password. Only the demo phases sign in with it, to check it
-works with the demo on and fails with it off.
+works with the demo on and fails with it off, and to try its code run.
 
 ## Demo account
 
@@ -312,7 +312,14 @@ runner up (`demo-on`) that:
 - a demo caller changes its profile but not its password, email, username, or
   verification, and can't delete itself or ask for an email change;
 - a demo caller can't create a share link, an AI provider, or AI settings,
-  through PocketBase or the runner, while a standard account still can.
+  through PocketBase or the runner, while a standard account still can;
+- the deployment verifier's demo check (`--demo`) passes through nginx: the
+  seeded demo account's code run answers 503 `demo_execution_disabled`.
+
+The demo's code runs are open only for the admission phase, whose demo accounts
+run code to check the shared demo tier (`ROUNDS_GATE_DEMO_EXECUTION=enabled` for
+phases 3 and 3b); from the emergency phases on, the runners run with the gate at
+its default, off, as a release ships it.
 
 The signup restart turns the demo off, and `demo-off` checks that both demo
 accounts' sign-ins get the answer a wrong password gets, as does a demo
