@@ -163,6 +163,7 @@ def _submitted_language(round_row: dict[str, Any], files: Dict[str, str]) -> str
 
 @router.post("/run-project", response_model=RunProjectResponse)
 async def run_project_route(request: Request) -> RunProjectResponse:
+    keys.require_on("run_project")
     req = await execution.parse(request, RunProjectRequest, DefinitionRunProjectRequest)
     if keys.scratch() == "on" and isinstance(req, DefinitionRunProjectRequest):
         return await _run_project_job(request, req)
@@ -469,6 +470,7 @@ def _grade_checkpoints(slug: str, checkpoints: Any, files: Dict[str, str], langu
 
 @router.post("/grade")
 async def grade(request: Request, user: dict = Depends(_auth_user)) -> Dict[str, Any]:
+    keys.require_on("grade")
     body = await execution.parse(request, GradeRequest, DefinitionGradeRequest)
     if keys.grading() == "on" and isinstance(body, DefinitionGradeRequest):
         return await _grade_job(request, body, user)

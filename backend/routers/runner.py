@@ -75,6 +75,7 @@ async def _load_question(request: Request, slug: str) -> tuple[dict, list[dict]]
 
 @router.post("/run", response_model=CodeRunResult)
 async def run_code(request: Request):
+    keys.require_on("run")
     req = await execution.parse(request, CodeRunRequest, DefinitionRunRequest)
     if keys.scratch() == "on" and isinstance(req, DefinitionRunRequest):
         return await _run_job(request, req)
@@ -170,6 +171,7 @@ def _evaluate(code, language, entry_dict, selected, slot) -> CodeEvaluateResult:
 
 @router.post("/evaluate", response_model=CodeEvaluateResult)
 async def evaluate_code(request: Request):
+    keys.require_on("evaluate")
     req = await execution.parse(request, CodeEvaluateRequest, DefinitionEvaluateRequest)
     if keys.scratch() == "on" and isinstance(req, DefinitionEvaluateRequest):
         return await _evaluate_job(request, req)

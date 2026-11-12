@@ -149,34 +149,55 @@ def review(client, node: Node, job_id: str, files: dict, account: str = A, key: 
 @pytest.mark.parametrize(
     "env, effective",
     [
-        ({}, "legacy"),
-        ({"ROUNDS_GATE_EXECUTION_GRADING": "off"}, "off"),
-        ({"ROUNDS_GATE_EXECUTION_GRADING": "on"}, "off"),
-        ({"ROUNDS_GATE_EXECUTION_GRADING": "on", "ROUNDS_GATE_EXECUTION_STORE": "on"}, "off"),
-        ({"ROUNDS_GATE_EXECUTION_GRADING": "on", "ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce"}, "off"),
+        # The defaults: the store and the key are on, definitions aren't
+        # enforced.
+        ({}, "off"),
+        ({"ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce"}, "on"),
+        ({"ROUNDS_GATE_EXECUTION_GRADING": "off", "ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce"}, "off"),
+        ({"ROUNDS_GATE_EXECUTION_STORE": "off", "ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce"}, "off"),
         (GRADING_ON, "on"),
-        ({**GRADING_ON, "ROUNDS_GATE_EXECUTION_GRADING": "legacy"}, "legacy"),
-        ({"ROUNDS_GATE_EXECUTION_GRADING": "yes"}, "off"),
+        # legacy graded in the request until PR 4; it acts as off.
+        ({**GRADING_ON, "ROUNDS_GATE_EXECUTION_GRADING": "legacy"}, "off"),
+        ({**GRADING_ON, "ROUNDS_GATE_EXECUTION_GRADING": "yes"}, "off"),
     ],
 )
-def test_the_grading_key_is_on_only_with_the_store_on_and_definitions_enforced(monkeypatch, env, effective):
+def test_the_grading_key_is_on_only_with_the_store_on_and_definitions_enforced(job_secrets, monkeypatch, env,
+                                                                                effective):
     monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
     assert keys.grading() == effective
     assert keys.for_operation("grade") == keys.for_operation("take_home_submit") == keys.for_operation("review")
     # The scratch key is a key of its own.
-    assert keys.scratch() == "legacy"
+    assert keys.scratch() == ("on" if env.get("ROUNDS_GATE_EXECUTION_DEFINITIONS") == "enforce"
+                              and env.get("ROUNDS_GATE_EXECUTION_STORE") != "off" else "off")
 
 
-def test_grading_on_without_what_it_needs_says_so_once_at_start(monkeypatch, capsys):
-    monkeypatch.setattr(gates, "_snapshot", gates.load({"ROUNDS_GATE_EXECUTION_GRADING": "on"}, gates.RUNNER))
+@pytest.mark.parametrize("unset", ["ROUNDS_EXECUTION_SECRET", "ROUNDS_ADMISSION_SECRET"])
+def test_the_grading_key_also_needs_both_secrets_on_this_runner(job_secrets, monkeypatch, unset):
+    monkeypatch.setattr(gates, "_snapshot", gates.load(GRADING_ON, gates.RUNNER))
+    monkeypatch.delenv(unset)
+    assert keys.grading() == "off" and keys.grading_needs() == [unset]
+
+
+def test_grading_on_without_what_it_needs_says_so_once_at_start(job_secrets, monkeypatch, capsys):
+    monkeypatch.setattr(gates, "_snapshot", gates.load({"ROUNDS_GATE_EXECUTION_STORE": "off"}, gates.RUNNER))
+    monkeypatch.delenv("ROUNDS_ADMISSION_SECRET")
     keys.log_startup()
-    (line,) = [l for l in obs_lines(capsys) if l["event"].startswith("execution.")]
+    (line,) = [l for l in obs_lines(capsys) if l["event"] == "execution.grading"]
     assert line == {"v": "obs/v1", "event": "execution.grading", "code": "acting_off",
-                    "needs": ["EXECUTION_STORE=on", "EXECUTION_DEFINITIONS=enforce"], "service": "runner"}
+                    "needs": ["EXECUTION_STORE=on", "EXECUTION_DEFINITIONS=enforce", "ROUNDS_ADMISSION_SECRET"],
+                    "service": "runner"}
+
+
+def test_grading_legacy_says_once_at_start_that_it_acts_as_off(job_secrets, monkeypatch, capsys):
+    monkeypatch.setattr(gates, "_snapshot", gates.load({**GRADING_ON, "ROUNDS_GATE_EXECUTION_GRADING": "legacy"},
+                                                       gates.RUNNER))
+    keys.log_startup()
+    (line,) = [l for l in obs_lines(capsys) if l["event"] == "execution.grading"]
+    assert line == {"v": "obs/v1", "event": "execution.grading", "code": "legacy_retired", "service": "runner"}
 
 
 @pytest.fixture
-def grading_on(monkeypatch):
+def grading_on(job_secrets, monkeypatch):
     monkeypatch.setattr(gates, "_snapshot", gates.load(GRADING_ON, gates.RUNNER))
     monkeypatch.setattr(definitions, "_store", definitions.Store().load())
 
@@ -187,7 +208,7 @@ class _Job:
 
 
 @pytest.mark.parametrize("value", ["legacy", "off"])
-def test_a_grading_job_claimed_while_its_key_isnt_on_is_withdrawn(monkeypatch, value):
+def test_a_grading_job_claimed_while_its_key_isnt_on_is_withdrawn(job_secrets, monkeypatch, value):
     monkeypatch.setattr(gates, "_snapshot", gates.load({**GRADING_ON, "ROUNDS_GATE_EXECUTION_GRADING": value},
                                                        gates.RUNNER))
     for kind in ("grade", "take_home_submit"):
@@ -270,23 +291,16 @@ def test_the_app_router_serves_exactly_the_paths_admission_matches():
 # ---- the routes' key values -----------------------------------------------------------
 
 
-def test_legacy_grades_in_the_request_and_makes_no_job(runner, node, provider):
-    client = runner({**GRADING_ON, "ROUNDS_GATE_EXECUTION_GRADING": "legacy"})
-    provider()
-    res = client.post("/api/ai-coding/grade", json=grade_body(), headers=headers(node, key=new_key()))
-    assert res.status_code == 200, res.text
-    assert res.json()["test_results"][0]["passed"] is True
-    assert node.dump()["jobs"] == []
-
-
+# legacy graded in the request until PR 4; now it answers as off.
+@pytest.mark.parametrize("value", ["off", "legacy"])
 @pytest.mark.parametrize("path, body", [
     ("/api/ai-coding/grade", grade_body()),
     ("/api/take-home/submit", submit_body()),
     ("/api/ai-coding/grade/job000000000001/review", {"files": {}}),
     ("/api/take-home/submit/job000000000001/review", {"files": {}}),
 ])
-def test_off_answers_503_before_anything_and_keeps_every_draft(runner, node, path, body):
-    client = runner({**GRADING_ON, "ROUNDS_GATE_EXECUTION_GRADING": "off"}, ready=False)
+def test_off_answers_503_before_anything_and_keeps_every_draft(runner, node, path, body, value):
+    client = runner({**GRADING_ON, "ROUNDS_GATE_EXECUTION_GRADING": value}, ready=False)
     # No bearer at all: the key answers before the account is looked up.
     res = client.post(path, json=body, headers={"Idempotency-Key": new_key()})
     typed(res, 503, "execution_disabled")
@@ -295,13 +309,36 @@ def test_off_answers_503_before_anything_and_keeps_every_draft(runner, node, pat
     assert dump["jobs"] == [] and dump["commands"] == [] and dump["counters"] == []
 
 
-@pytest.mark.parametrize("missing", ["ROUNDS_GATE_EXECUTION_STORE", "ROUNDS_GATE_EXECUTION_DEFINITIONS"])
-def test_on_without_what_it_needs_acts_as_off(runner, node, missing):
-    env = {k: v for k, v in GRADING_ON.items() if k != missing}
-    client = runner(env, ready=False)
-    typed(client.post("/api/ai-coding/grade", json=grade_body(), headers=headers(node, key=new_key())),
-          503, "execution_disabled")
-    assert node.dump()["jobs"] == []
+def test_the_defaults_grade_as_a_job_whose_row_the_server_writes(runner, node):
+    # Neither the store nor the key is set: both start on.
+    client = runner({"ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce", "ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "enforce",
+                     "ROUNDS_GATE_ENFORCE_QUOTA": "enforce"})
+    seed_round(node)
+    done = graded(client, node, grade_body())
+    assert (done["state"], done["outcome_class"]) == ("completed", "passed")
+    row = graded_row_of(node, done["job_id"])
+    assert row["status"] == "graded" and row["envelope"] == envelope_of(node, done["job_id"])["id"]
+
+
+@pytest.mark.parametrize(
+    "missing, start",
+    [
+        ("ROUNDS_GATE_EXECUTION_STORE", {"env": {k: v for k, v in GRADING_ON.items()
+                                                 if k != "ROUNDS_GATE_EXECUTION_STORE"} | {
+                                                     "ROUNDS_GATE_EXECUTION_STORE": "off"}}),
+        ("ROUNDS_GATE_EXECUTION_DEFINITIONS", {"env": {k: v for k, v in GRADING_ON.items()
+                                                       if k != "ROUNDS_GATE_EXECUTION_DEFINITIONS"}}),
+        ("ROUNDS_EXECUTION_SECRET", {"env": GRADING_ON, "secret": ""}),
+        ("ROUNDS_ADMISSION_SECRET", {"env": GRADING_ON, "runner_key": ""}),
+    ],
+)
+def test_on_without_what_it_needs_acts_as_off(runner, node, missing, start):
+    client = runner(ready=False, **start)
+    res = client.post("/api/ai-coding/grade", json=grade_body(), headers=headers(node, key=new_key()))
+    typed(res, 503, "execution_disabled")
+    assert "turned off" in res.json()["detail"]
+    dump = node.dump()
+    assert dump["jobs"] == [] and dump["commands"] == [] and dump["counters"] == []
 
 
 @pytest.mark.parametrize("path", ["/api/ai-coding/grade/{}/review", "/api/take-home/submit/{}/review"])

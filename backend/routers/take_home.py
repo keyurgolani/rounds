@@ -145,6 +145,7 @@ async def run_route(
     request: Request,
     user: dict = Depends(_auth_user),
 ) -> TakeHomeRunResponse:
+    keys.require_on("take_home_run")
     body = await execution.parse(request, TakeHomeRunRequest, DefinitionTakeHomeRunRequest)
     if keys.scratch() == "on" and isinstance(body, DefinitionTakeHomeRunRequest):
         return await _run_job(request, body)
@@ -222,6 +223,7 @@ async def submit_route(
     request: Request,
     user: dict = Depends(_auth_user),
 ) -> Dict[str, Any]:
+    keys.require_on("take_home_submit")
     body = await execution.parse(request, TakeHomeSubmitRequest, DefinitionTakeHomeSubmitRequest)
     if keys.grading() == "on" and isinstance(body, DefinitionTakeHomeSubmitRequest):
         return await _submit_job(request, body, user)

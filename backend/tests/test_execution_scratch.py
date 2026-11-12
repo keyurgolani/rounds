@@ -147,13 +147,18 @@ def runner(node, monkeypatch):
     monkeypatch.setattr(definitions, "_store", definitions._store)
     stack = contextlib.ExitStack()
 
-    def start(env: dict[str, str] = ON, secret: str = SECRET, ready: bool = True) -> TestClient:
+    def start(env: dict[str, str] = ON, secret: str = SECRET, ready: bool = True,
+              runner_key: str = RUNNER_KEY) -> TestClient:
         for name in [n for n in os.environ if n.startswith("ROUNDS_GATE_")]:
             monkeypatch.delenv(name)
         for name, value in env.items():
             monkeypatch.setenv(name, value)
-        monkeypatch.setenv("ROUNDS_EXECUTION_SECRET", secret)
-        monkeypatch.setenv("ROUNDS_ADMISSION_SECRET", RUNNER_KEY)
+        # An empty value starts the runner without that secret.
+        for name, value in (("ROUNDS_EXECUTION_SECRET", secret), ("ROUNDS_ADMISSION_SECRET", runner_key)):
+            if value:
+                monkeypatch.setenv(name, value)
+            else:
+                monkeypatch.delenv(name, raising=False)
         from main import app
 
         client = stack.enter_context(TestClient(app))
@@ -206,49 +211,94 @@ def obs_lines(capsys) -> list[dict]:
 # ---- the scratch key --------------------------------------------------------------
 
 
+ENFORCED = {"ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce"}
+
+
 @pytest.mark.parametrize(
     "env, effective, needs",
     [
-        ({}, "legacy", ["EXECUTION_STORE=on", "EXECUTION_DEFINITIONS=enforce"]),
-        ({"ROUNDS_GATE_EXECUTION_SCRATCH": "off"}, "off", ["EXECUTION_STORE=on", "EXECUTION_DEFINITIONS=enforce"]),
-        ({"ROUNDS_GATE_EXECUTION_SCRATCH": "on"}, "off", ["EXECUTION_STORE=on", "EXECUTION_DEFINITIONS=enforce"]),
-        ({"ROUNDS_GATE_EXECUTION_SCRATCH": "on", "ROUNDS_GATE_EXECUTION_STORE": "on"}, "off",
-         ["EXECUTION_DEFINITIONS=enforce"]),
-        ({"ROUNDS_GATE_EXECUTION_SCRATCH": "on", "ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce"}, "off",
-         ["EXECUTION_STORE=on"]),
-        ({"ROUNDS_GATE_EXECUTION_SCRATCH": "on", "ROUNDS_GATE_EXECUTION_STORE": "on",
-          "ROUNDS_GATE_EXECUTION_DEFINITIONS": "disabled"}, "off", ["EXECUTION_DEFINITIONS=enforce"]),
+        # The defaults: the store and the key are on, definitions aren't
+        # enforced.
+        ({}, "off", ["EXECUTION_DEFINITIONS=enforce"]),
+        (ENFORCED, "on", []),
+        ({"ROUNDS_GATE_EXECUTION_SCRATCH": "off"}, "off", ["EXECUTION_DEFINITIONS=enforce"]),
+        ({**ENFORCED, "ROUNDS_GATE_EXECUTION_SCRATCH": "off"}, "off", []),
+        ({**ENFORCED, "ROUNDS_GATE_EXECUTION_STORE": "off"}, "off", ["EXECUTION_STORE=on"]),
+        ({"ROUNDS_GATE_EXECUTION_STORE": "off"}, "off", ["EXECUTION_STORE=on", "EXECUTION_DEFINITIONS=enforce"]),
+        ({**ON, "ROUNDS_GATE_EXECUTION_DEFINITIONS": "disabled"}, "off", ["EXECUTION_DEFINITIONS=enforce"]),
         (ON, "on", []),
-        ({**ON, "ROUNDS_GATE_EXECUTION_SCRATCH": "legacy"}, "legacy", []),
+        # legacy ran each route in its request until PR 4; it acts as off.
+        ({**ON, "ROUNDS_GATE_EXECUTION_SCRATCH": "legacy"}, "off", []),
         # A value outside the list is the most restrictive one.
-        ({"ROUNDS_GATE_EXECUTION_SCRATCH": "yes"}, "off", ["EXECUTION_STORE=on", "EXECUTION_DEFINITIONS=enforce"]),
+        ({**ON, "ROUNDS_GATE_EXECUTION_SCRATCH": "yes"}, "off", []),
     ],
 )
-def test_the_scratch_key_is_on_only_with_the_store_on_and_definitions_enforced(monkeypatch, env, effective, needs):
+def test_the_scratch_key_is_on_only_with_the_store_on_and_definitions_enforced(job_secrets, monkeypatch, env,
+                                                                                effective, needs):
     monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
     assert keys.scratch() == effective
     assert keys.scratch_needs() == needs
 
 
-def test_on_without_what_it_needs_says_so_once_at_start_and_never_names_a_value(monkeypatch, capsys):
-    monkeypatch.setattr(gates, "_snapshot", gates.load({"ROUNDS_GATE_EXECUTION_SCRATCH": "on",
-                                                        "ROUNDS_GATE_EXECUTION_STORE": "on"}, gates.RUNNER))
+@pytest.mark.parametrize(
+    "unset, needs",
+    [
+        (("ROUNDS_EXECUTION_SECRET",), ["ROUNDS_EXECUTION_SECRET"]),
+        (("ROUNDS_ADMISSION_SECRET",), ["ROUNDS_ADMISSION_SECRET"]),
+        (("ROUNDS_EXECUTION_SECRET", "ROUNDS_ADMISSION_SECRET"), ["ROUNDS_EXECUTION_SECRET", "ROUNDS_ADMISSION_SECRET"]),
+    ],
+)
+def test_the_scratch_key_also_needs_both_secrets_on_this_runner(job_secrets, monkeypatch, unset, needs):
+    monkeypatch.setattr(gates, "_snapshot", gates.load(ON, gates.RUNNER))
+    for name in unset:
+        monkeypatch.delenv(name)
+    assert keys.scratch() == "off" and keys.scratch_needs() == needs
+    # One the runner can't use counts as missing, as the worker and the
+    # admission client read them.
+    for name in unset:
+        monkeypatch.setenv(name, "too-short")
+    assert keys.scratch() == "off" and keys.scratch_needs() == needs
+
+
+def test_on_without_what_it_needs_says_so_once_at_start_and_never_names_a_value(job_secrets, monkeypatch, capsys):
+    monkeypatch.setattr(gates, "_snapshot", gates.load({}, gates.RUNNER))
+    monkeypatch.delenv("ROUNDS_EXECUTION_SECRET")
     capsys.readouterr()
     keys.log_startup()
-    (line,) = obs_lines(capsys)
+    out = capsys.readouterr().out
+    lines = [json.loads(line) for line in out.splitlines() if line.startswith("{")]
+    (line,) = [x for x in lines if x["event"] == "execution.scratch"]
     assert {k: line[k] for k in ("event", "code", "needs", "service")} == {
-        "event": "execution.scratch", "code": "acting_off", "needs": ["EXECUTION_DEFINITIONS=enforce"],
-        "service": "runner"}
-    for env in ({}, ON, {"ROUNDS_GATE_EXECUTION_SCRATCH": "off"}):
+        "event": "execution.scratch", "code": "acting_off",
+        "needs": ["EXECUTION_DEFINITIONS=enforce", "ROUNDS_EXECUTION_SECRET"], "service": "runner"}
+    assert "test-admission-key-placeholder" not in out
+    for env in (ENFORCED, ON, {**ENFORCED, "ROUNDS_GATE_EXECUTION_SCRATCH": "off",
+                               "ROUNDS_GATE_EXECUTION_GRADING": "off"}):
+        monkeypatch.setenv("ROUNDS_EXECUTION_SECRET", SECRET)
         monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
         keys.log_startup()
-        assert obs_lines(capsys) == []
+        assert [x for x in obs_lines(capsys) if x["event"] == "execution.scratch"] == []
+
+
+def test_legacy_says_once_at_start_that_it_acts_as_off(job_secrets, monkeypatch, capsys):
+    monkeypatch.setattr(gates, "_snapshot", gates.load({**ON, "ROUNDS_GATE_EXECUTION_SCRATCH": "legacy"},
+                                                       gates.RUNNER))
+    capsys.readouterr()
+    keys.log_startup()
+    (line,) = [x for x in obs_lines(capsys) if x["event"] == "execution.scratch"]
+    assert {k: line[k] for k in ("event", "code", "service")} == {
+        "event": "execution.scratch", "code": "legacy_retired", "service": "runner"}
+    assert "needs" not in line
 
 
 def test_the_scratch_line_carries_only_the_settings_a_key_can_need():
-    assert {f"{name}={value}" for name, value in keys.SCRATCH_NEEDS} == obs.GATE_REQUIREMENTS
+    assert {f"{name}={value}" for name, value in keys.SCRATCH_NEEDS} | set(keys.SECRET_NEEDS) == \
+        obs.GATE_REQUIREMENTS
     line = obs.build("execution.scratch", code="acting_off", needs=["EXECUTION_STORE=on"], service="runner")
     assert line["needs"] == ["EXECUTION_STORE=on"]
+    # A secret by its name only: a line that would carry a value drops it.
+    line = obs.build("execution.scratch", code="acting_off", needs=["ROUNDS_EXECUTION_SECRET"], service="runner")
+    assert line["needs"] == ["ROUNDS_EXECUTION_SECRET"]
     for needs in (["ROUNDS_EXECUTION_SECRET=x"], ["EXECUTION_STORE=off"], [], "EXECUTION_STORE=on"):
         line = obs.build("execution.scratch", code="acting_off", needs=needs, service="runner")
         assert "needs" not in line and line["dropped"] == ["needs"]
@@ -302,13 +352,13 @@ class _Job:
 
 
 @pytest.fixture
-def scratch_on(monkeypatch):
+def scratch_on(job_secrets, monkeypatch):
     monkeypatch.setattr(gates, "_snapshot", gates.load(ON, gates.RUNNER))
     monkeypatch.setattr(definitions, "_store", definitions.Store().load())
 
 
 @pytest.mark.parametrize("value", ["legacy", "off"])
-def test_a_job_claimed_while_the_key_isnt_on_is_withdrawn(monkeypatch, value):
+def test_a_job_claimed_while_the_key_isnt_on_is_withdrawn(job_secrets, monkeypatch, value):
     monkeypatch.setattr(gates, "_snapshot", gates.load({**ON, "ROUNDS_GATE_EXECUTION_SCRATCH": value}, gates.RUNNER))
     with pytest.raises(Withdrawn):
         handlers.SCRATCH_HANDLERS["run"].prepare(_Job("run", TWO_SUM_REF, {"code": TWO_SUM, "input": {}}))
@@ -388,7 +438,7 @@ class FakeCaller:
 
 
 @pytest.fixture
-def jobs_on(monkeypatch, signed_in, admission_store):
+def jobs_on(job_secrets, monkeypatch, signed_in, admission_store):
     """The scratch key on, this replica taking jobs, and the store's
     caller routes faked. Answers (headers, the admission fake, the
     caller fake)."""
@@ -489,14 +539,6 @@ def test_a_definition_refusal_comes_before_any_job(client, jobs_on):
 # ---- the routes, end to end ----------------------------------------------------------
 
 
-def test_legacy_runs_in_the_request_and_makes_no_job(runner, node):
-    client = runner({**ON, "ROUNDS_GATE_EXECUTION_SCRATCH": ""})
-    res = client.post("/api/run", json=RUN, headers=headers(node, key=new_key()))
-    assert res.status_code == 200, res.text
-    assert res.json()["return_value"] == [0, 1]
-    assert node.dump()["jobs"] == []
-
-
 SCRATCH_BODIES = {
     "/api/run": RUN,
     "/api/evaluate": EVALUATE,
@@ -505,9 +547,11 @@ SCRATCH_BODIES = {
 }
 
 
+# legacy ran these in their request until PR 4; now it answers as off.
+@pytest.mark.parametrize("value", ["off", "legacy"])
 @pytest.mark.parametrize("path", sorted(SCRATCH_BODIES))
-def test_off_answers_503_before_anything_and_keeps_every_draft(runner, node, path):
-    client = runner({**ON, "ROUNDS_GATE_EXECUTION_SCRATCH": "off"})
+def test_off_answers_503_before_anything_and_keeps_every_draft(runner, node, path, value):
+    client = runner({**ON, "ROUNDS_GATE_EXECUTION_SCRATCH": value})
     out = typed(client.post(path, json=SCRATCH_BODIES[path], headers=headers(node, key=new_key())), 503,
                 "execution_disabled")
     assert out["detail"] == "Running practice code is turned off on this server."
@@ -517,15 +561,36 @@ def test_off_answers_503_before_anything_and_keeps_every_draft(runner, node, pat
     assert state["commands"] == [] and state["counters"] == [] and state["jobs"] == []
 
 
-@pytest.mark.parametrize("missing", [{"ROUNDS_GATE_EXECUTION_STORE": "off"},
-                                     {"ROUNDS_GATE_EXECUTION_DEFINITIONS": "legacy"}])
-def test_on_without_what_it_needs_acts_as_off(runner, node, capsys, missing):
-    client = runner({**ON, **missing}, ready=False)
+def test_the_defaults_run_each_scratch_route_as_a_job(runner, node):
+    # Neither the store nor the key is set: both start on.
+    client = runner({**ENFORCED, "ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "enforce", "ROUNDS_GATE_ENFORCE_QUOTA": "enforce"})
+    out = submitted(client.post("/api/run", json=RUN, headers=headers(node, key=new_key())))
+    assert settled(client, node, out["job_id"])["state"] == "completed"
+    assert len(node.dump()["jobs"]) == 1
+
+
+@pytest.mark.parametrize(
+    "missing, start",
+    [
+        ("EXECUTION_STORE=on", {"env": {**ON, "ROUNDS_GATE_EXECUTION_STORE": "off"}}),
+        ("EXECUTION_DEFINITIONS=enforce", {"env": {**ON, "ROUNDS_GATE_EXECUTION_DEFINITIONS": "legacy"}}),
+        ("ROUNDS_EXECUTION_SECRET", {"secret": ""}),
+        ("ROUNDS_ADMISSION_SECRET", {"runner_key": ""}),
+    ],
+)
+def test_on_without_what_it_needs_acts_as_off(runner, node, capsys, missing, start):
+    client = runner(ready=False, **start)
     lines = obs_lines(capsys)
     (line,) = [x for x in lines if x.get("event") == "execution.scratch"]
-    assert line["needs"] == keys.scratch_needs() and line["code"] == "acting_off"
-    typed(client.post("/api/run", json=RUN, headers=headers(node, key=new_key())), 503, "execution_disabled")
-    assert node.dump()["counters"] == []
+    assert line["needs"] == [missing] == keys.scratch_needs() and line["code"] == "acting_off"
+    out = typed(client.post("/api/run", json=RUN, headers=headers(node, key=new_key())), 503, "execution_disabled")
+    assert out["detail"] == "Running practice code is turned off on this server."
+    state = node.dump()
+    assert state["commands"] == [] and state["counters"] == [] and state["jobs"] == []
+    if missing == "ROUNDS_EXECUTION_SECRET":
+        # No worker starts, and the runner stays ready: only its code runs
+        # are off.
+        assert client.get("/ready").json() == {"status": "ok", "store": "unconfigured"}
 
 
 def test_a_run_is_a_job_answered_202_that_ends_with_its_envelope(runner, node, pocketbase, capsys):
