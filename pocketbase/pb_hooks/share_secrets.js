@@ -30,6 +30,12 @@
 //                       create_capability and rotate_bearer), and keeps the
 //                       result a retry replays. No bearer or password reaches
 //                       PocketBase, only a digest and a verifier.
+//                       CreateShare with legacy_link_id is "Get a new link"
+//                       for one of the caller's older links (ROUNDS-00B-L06):
+//                       only a migrated one, over its own target, and the
+//                       same transaction sets that link's replaced_by. A link
+//                       already replaced answers its capability, never a new
+//                       one.
 //
 // A handler requires this file itself, as with admission.js:
 //
@@ -62,6 +68,8 @@ const RECORD_ID = /^[a-z0-9]{15}$/;
 const SNAPSHOT_FIELD = "share_snapshot_command";
 const OPERATIONS = ["share_create", "share_rotate"];
 const TARGET_KIND = "legacy_artifact_snapshot";
+// The older links "Get a new link" replaces (ROUNDS-00B-L06).
+const LEGACY_LINKS = "resume_share_links";
 const PROJECTION_VERSION = 1;
 // Each scope's limit and window, in the order a resolve counts them. The
 // numbers are profile v1; a later revision may change them.
@@ -233,10 +241,44 @@ function textOrNull(value, max) {
   return typeof value === "string" && value.length <= max;
 }
 
+// An older link's id, null when none was named, or false for a bad one.
+function checkLegacyLink(value) {
+  if (value === undefined || value === null) return null;
+  return isId(value) ? value : false;
+}
+
+// The target a re-issue's body names, null when it names none, or false for
+// a bad one.
+function checkTarget(value) {
+  if (value === undefined || value === null) return null;
+  if (!only(value, ["kind", "id"]) || (value.kind !== "resume" && value.kind !== "variant") || !isId(value.id)) {
+    return false;
+  }
+  return { kind: value.kind, id: value.id };
+}
+
+// An older link's own target: its variant when it names one, else its
+// resume.
+function targetOf(link) {
+  return link.variant !== "" ? { kind: "variant", id: link.variant } : { kind: "resume", id: link.resume };
+}
+
+// Whether `link` is one of the account's older links that may get a new
+// link: its own, migrated, and over the target the body named, if it named
+// one. Anything else gets the one not-found.
+function reissuable(link, account, target) {
+  if (link === null || link.user !== account.id || link.status !== "migrated") return false;
+  const own = targetOf(link);
+  if (own.id === "") return false;
+  return target === null || (target.kind === own.kind && target.id === own.id);
+}
+
 // The checked begin, or null. A share_create names the key its snapshot
-// call runs under; a share_rotate names none.
+// call runs under; a share_rotate names none. A share_create may name one
+// of the caller's older links, and with it the target its body named.
 function checkBegin(data, commandPattern) {
-  if (!only(data, ["command_id", "operation", "fingerprint", "snapshot_command_id"])) return null;
+  const keys = ["command_id", "operation", "fingerprint", "snapshot_command_id", "legacy_link_id", "target"];
+  if (!only(data, keys)) return null;
   if (typeof data.command_id !== "string" || !commandPattern.test(data.command_id)) return null;
   if (OPERATIONS.indexOf(data.operation) < 0) return null;
   if (typeof data.fingerprint !== "string" || !HEX64.test(data.fingerprint)) return null;
@@ -246,38 +288,86 @@ function checkBegin(data, commandPattern) {
   } else if (snapshot !== null) {
     return null;
   }
-  return { command_id: data.command_id, operation: data.operation, fingerprint: data.fingerprint, snapshot };
+  const legacy = checkLegacyLink(data.legacy_link_id);
+  const target = checkTarget(data.target);
+  if (legacy === false || target === false) return null;
+  if (legacy !== null && data.operation !== "share_create") return null;
+  if (target !== null && legacy === null) return null;
+  return {
+    command_id: data.command_id,
+    operation: data.operation,
+    fingerprint: data.fingerprint,
+    snapshot,
+    legacy_link: legacy,
+    target,
+  };
+}
+
+// Completes `command` with the capability that already replaced an older
+// link, inside the caller's transaction, and answers it as already issued:
+// a replay of the first "Get a new link", or a press under a new key.
+function replacedAnswer(deps, tx, account, command, capabilityId) {
+  const found = tx.capabilityResult(capabilityId);
+  if (found === null || found.user !== account.id) return null;
+  if (!deps.admission.completeBegunCommand(tx.commands, command, found.result)) throw new Error("result not kept");
+  return found.result;
 }
 
 // Before any work: the account's command under this key. A completed one
 // answers its kept result before anything else happens; any other state
-// runs again, with the snapshot key its first attempt stored.
+// runs again, with the snapshot key its first attempt stored. With an older
+// link: one that may not get a new link is the not-found, and writes
+// nothing; one already replaced completes the command with that capability
+// and answers it as a replay; otherwise the answer names its target.
 // deps: admission, transaction(fn(tx)) where tx.commands is admission's
-//       store, with tx.snapshotOf(command) and tx.setSnapshot(command, key);
-//       now (seconds)
+//       store, with tx.snapshotOf(command), tx.setSnapshot(command, key),
+//       tx.legacyLink(id), and tx.capabilityResult(id); now (seconds)
 function begin(deps, account, input) {
   let out = null;
-  deps.transaction((tx) => {
-    const begun = deps.admission.beginCommand(tx.commands, account, input.command_id, input.operation,
-      input.fingerprint, deps.now);
-    if (begun.verdict === "mismatch") {
-      out = error(409, "idempotency_mismatch");
-      return;
-    }
-    if (begun.verdict === "replay") {
-      out = { status: 200, body: { v: VERSION, verdict: "replay", result: begun.result } };
-      return;
-    }
-    let snapshot = null;
-    if (input.operation === "share_create") {
-      snapshot = tx.snapshotOf(begun.command);
-      if (!snapshot) {
-        snapshot = input.snapshot;
-        tx.setSnapshot(begun.command, snapshot);
+  try {
+    deps.transaction((tx) => {
+      const begun = deps.admission.beginCommand(tx.commands, account, input.command_id, input.operation,
+        input.fingerprint, deps.now);
+      if (begun.verdict === "mismatch") {
+        out = error(409, "idempotency_mismatch");
+        return;
       }
-    }
-    out = { status: 200, body: { v: VERSION, verdict: begun.verdict, snapshot_command_id: snapshot } };
-  });
+      if (begun.verdict === "replay") {
+        out = { status: 200, body: { v: VERSION, verdict: "replay", result: begun.result } };
+        return;
+      }
+      let legacyTarget = null;
+      if (input.legacy_link) {
+        const link = tx.legacyLink(input.legacy_link);
+        if (!reissuable(link, account, input.target)) {
+          out = error(404, "not_found");
+          throw new Abort();
+        }
+        if (link.replaced_by !== "") {
+          const result = replacedAnswer(deps, tx, account, begun.command, link.replaced_by);
+          if (result === null) {
+            out = error(404, "not_found");
+            throw new Abort();
+          }
+          out = { status: 200, body: { v: VERSION, verdict: "replay", result } };
+          return;
+        }
+        legacyTarget = targetOf(link);
+      }
+      let snapshot = null;
+      if (input.operation === "share_create") {
+        snapshot = tx.snapshotOf(begun.command);
+        if (!snapshot) {
+          snapshot = input.snapshot;
+          tx.setSnapshot(begun.command, snapshot);
+        }
+      }
+      out = { status: 200, body: { v: VERSION, verdict: begun.verdict, snapshot_command_id: snapshot } };
+      if (legacyTarget !== null) out.body.legacy_target = legacyTarget;
+    });
+  } catch (err) {
+    if (!(err instanceof Abort)) throw err;
+  }
   return out;
 }
 
@@ -285,7 +375,7 @@ function begin(deps, account, input) {
 // again; this checks only the shape.
 function checkCreate(data, commandPattern) {
   const keys = ["command_id", "fingerprint", "snapshot_id", "purpose", "expires_at", "password_policy_ref",
-    "bearer_digest", "digest_key_version"];
+    "bearer_digest", "digest_key_version", "legacy_link_id"];
   if (!only(data, keys)) return null;
   if (typeof data.command_id !== "string" || !commandPattern.test(data.command_id)) return null;
   if (typeof data.fingerprint !== "string" || !HEX64.test(data.fingerprint)) return null;
@@ -294,6 +384,8 @@ function checkCreate(data, commandPattern) {
   if (typeof data.password_policy_ref !== "string" || data.password_policy_ref.length > 512) return null;
   if (typeof data.bearer_digest !== "string" || !HEX64.test(data.bearer_digest)) return null;
   if (!isWhole(data.digest_key_version, 1, 999)) return null;
+  const legacy = checkLegacyLink(data.legacy_link_id);
+  if (legacy === false) return null;
   return {
     command_id: data.command_id,
     fingerprint: data.fingerprint,
@@ -303,6 +395,7 @@ function checkCreate(data, commandPattern) {
     password_policy_ref: data.password_policy_ref,
     bearer_digest: data.bearer_digest,
     digest_key_version: data.digest_key_version,
+    legacy_link: legacy,
   };
 }
 
@@ -320,9 +413,15 @@ function scopeOf(source) {
 
 // CreateShare's write, in one transaction: the command row, the capability,
 // and the result a retry with the same key replays. PocketBase never sees
-// the bearer, so the kept result can't hold it.
+// the bearer, so the kept result can't hold it. With an older link, the
+// link must still be one that may get a new link, the snapshot must be of
+// its own target, and the same transaction sets its replaced_by; a link
+// another command replaced first answers that command's capability as
+// already issued and makes nothing.
 // deps: admission, transaction(fn(tx)): tx.commands, tx.createCapability(args)
-//       -> #11's answer, tx.snapshotSource(id) -> { kind, id } or null; now
+//       -> #11's answer, tx.snapshotSource(id) -> { kind, id } or null,
+//       tx.legacyLink(id), tx.capabilityResult(id), tx.replaceLegacy(id,
+//       capabilityId); now
 function createShare(deps, account, input) {
   let out = null;
   try {
@@ -336,6 +435,28 @@ function createShare(deps, account, input) {
       if (begun.verdict === "replay") {
         out = { status: 200, body: { v: VERSION, delivery: "already_issued", result: begun.result } };
         throw new Abort();
+      }
+      if (input.legacy_link) {
+        const link = tx.legacyLink(input.legacy_link);
+        if (!reissuable(link, account, null)) {
+          out = error(404, "not_found");
+          throw new Abort();
+        }
+        if (link.replaced_by !== "") {
+          const result = replacedAnswer(deps, tx, account, begun.command, link.replaced_by);
+          if (result === null) {
+            out = error(404, "not_found");
+            throw new Abort();
+          }
+          out = { status: 200, body: { v: VERSION, delivery: "already_issued", result } };
+          return;
+        }
+        const own = targetOf(link);
+        const from = tx.snapshotSource(input.snapshot_id);
+        if (from === null || from.kind !== own.kind || from.id !== own.id) {
+          out = error(404, "not_found");
+          throw new Abort();
+        }
       }
       const made = tx.createCapability({
         owner: account.id,
@@ -362,6 +483,7 @@ function createShare(deps, account, input) {
           capability_version: capability.capability_version,
         },
       };
+      if (input.legacy_link) tx.replaceLegacy(input.legacy_link, capability.id);
       if (!deps.admission.completeBegunCommand(tx.commands, begun.command, result)) throw new Error("result not kept");
       out = { status: 201, body: { v: VERSION, delivery: "issued", result } };
     });
@@ -626,6 +748,51 @@ function commandTx(admission, dao) {
     },
     rotateBearer: (a) => capabilities.rotate_bearer(dao, a.owner, a.id, a.expected_version, a.bearer_digest,
       a.digest_key_version),
+    // An older link as re-issue reads it (ROUNDS-00B-L06), or null.
+    legacyLink: (id) => {
+      try {
+        const link = dao.findRecordById(LEGACY_LINKS, id);
+        return {
+          id: link.id,
+          user: link.getString("user"),
+          status: link.getString("legacy_status"),
+          replaced_by: link.getString("replaced_by"),
+          resume: link.getString("resume"),
+          variant: link.getString("variant"),
+        };
+      } catch (_) {
+        return null;
+      }
+    },
+    // The kept result of the capability that replaced an older link, as
+    // CreateShare answers it, with its owner; or null.
+    capabilityResult: (id) => {
+      try {
+        const capability = dao.findRecordById("share_capabilities", id);
+        const snapshot = dao.findRecordById("legacy_artifact_snapshots", capability.getString("snapshot"));
+        return {
+          user: capability.getString("user"),
+          result: {
+            status: 201,
+            body: {
+              capability_id: capability.id,
+              scope: scopeOf({ kind: snapshot.getString("source_kind"), id: snapshot.getString("source_id") }),
+              state: capability.getString("status"),
+              expires_at: capability.getString("expires_at"),
+              capability_version: capability.getInt("capability_version"),
+            },
+          },
+        };
+      } catch (_) {
+        return null;
+      }
+    },
+    // The one change an older link takes: share_links.js holds it to this.
+    replaceLegacy: (id, capabilityId) => {
+      const link = dao.findRecordById(LEGACY_LINKS, id);
+      link.set("replaced_by", capabilityId);
+      dao.saveRecord(link);
+    },
   };
 }
 
@@ -716,6 +883,8 @@ module.exports = {
   begin,
   checkCreate,
   createShare,
+  reissuable,
+  targetOf,
   checkRotate,
   rotateShare,
   usableSecret,

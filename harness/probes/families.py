@@ -316,43 +316,6 @@ def share_owner_only_isolated(pb, collection, a, b, expected) -> Receipt:
                    expected, first.status, not problems, first.elapsed_ms, "; ".join(problems))
 
 
-def share_create_shape_denied(pb, collection, caller, content, admin_token, expected) -> Receipt:
-    # The owner creates its own link to its own resume, but with no target,
-    # with both a resume and a variant, or with a token that isn't 22 URL-safe
-    # characters. Each is rejected with the same body as the uniform relation
-    # create denial and leaves the owner's link count where it was.
-    import factory
-
-    def payload(**changes):
-        p = factory.fresh_payload(collection, caller.user_id, caller, caller, content, secrets.token_hex(6))
-        p.update(changes)
-        return p
-
-    shapes = {
-        "no-target": payload(resume=""),
-        "two-targets": payload(variant=caller.ids["resume_variants"]),
-        "short-token": payload(token="short"),
-        "odd-token": payload(token="probe tok with spaces!"),
-    }
-    before, before_status = _admin_owner_count(pb, collection, admin_token, caller.user_id)
-    problems: list[str] = []
-    bodies = []
-    first = None
-    for name, body in shapes.items():
-        resp = pb.create(collection, caller.token, body)
-        first = first or resp
-        bodies.append(resp.body)
-        if resp.status != expected:
-            problems.append(f"{name} status={resp.status}")
-    after, after_status = _admin_owner_count(pb, collection, admin_token, caller.user_id)
-    if any(x != bodies[0] for x in bodies) or not (isinstance(bodies[0], dict) and bodies[0].get("data") == {}):
-        problems.append("denial bodies differ or carry field errors")
-    if before is None or after != before:
-        problems.append(f"rows_before={before} rows_after={after} listing_status={after_status or before_status}")
-    return Receipt("account-scope.share.create-shape.denied", collection, "create", "authenticated-owner",
-                   expected, first.status, not problems, first.elapsed_ms, "; ".join(problems))
-
-
 # --------------------------------------------------------------------------
 # share capabilities answer only their owner (ROUNDS-00B-L03 stage 2)
 # --------------------------------------------------------------------------
@@ -742,7 +705,6 @@ MAIN_FAMILIES: dict[str, Callable] = {
 }
 # ROUNDS-00B-L03 stage 1: dispatched by run.py with the caller, the content
 # fixtures, and the superuser token.
-SHARE_CREATE_SHAPE_FAMILY = "account-scope.share.create-shape.denied"
 
 CREATE_ANON_FAMILY = "account-scope.create.anonymous.denied"
 OVERSIZED_FAMILY = "account-scope.oversized-input.rejected"
@@ -797,7 +759,6 @@ IMPLEMENTED_FAMILIES = (
         RELATION_SUPERUSER_CREATE_FAMILY,
         RELATION_UPDATE_FOREIGN_FAMILY,
         RELATION_UPDATE_INDISTINGUISHABLE_FAMILY,
-        SHARE_CREATE_SHAPE_FAMILY,
     }
     | set(HOOK_FAMILIES)
     | set(DEGRADED_FAMILIES)

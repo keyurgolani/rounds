@@ -30,9 +30,12 @@ const POCKETBASE_TARGET = process.env.VITE_POCKETBASE_PROXY_TARGET || 'http://po
 // proxied"). The collection paths and the execution, legacy snapshot,
 // and share hooks match in any case, as their nginx locations do (~*),
 // and a collection segment outside the name alphabet, which no
-// collection name or id uses, is refused too.
+// collection name or id uses, is refused too. So is the older share
+// read's path, which nginx answers itself with the resolver's not-found
+// (ROUNDS-00B-L06).
 const NEVER_PROXIED: RegExp[] = [
   /^\/_\//,
+  /^\/api\/share\/by-token(\/|$)/i,
   /^\/api\/rounds\/admission\//,
   /^\/api\/rounds\/execution\//i,
   /^\/api\/rounds\/legacy-snapshots/i,

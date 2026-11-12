@@ -1,24 +1,28 @@
 // Only the lowercase share paths render the share pages, the ones nginx
-// serves with the share headers (ROUNDS-00B-L03).
+// serves with the share headers (ROUNDS-00B-L03). /r#<token> is the share
+// page. Any /r/<anything> is an older link's address, which opens one
+// fixed page: no request, nothing read from the address, and the same
+// markup for every value (ROUNDS-00B-L06).
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../client')>();
-  return { ...actual, fetchPublicResume: vi.fn(), resolveSharedArtifact: vi.fn() };
+  return { ...actual, resolveSharedArtifact: vi.fn() };
 });
 
-import { fetchPublicResume, resolveSharedArtifact } from '../client';
+import { resolveSharedArtifact } from '../client';
 import App from '../../../../App';
 import { AuthProvider } from '../../../../auth/AuthProvider';
 import { ThemeProvider } from '../../../../theme/ThemeProvider';
-import { SHARE_NOT_FOUND_HEADING } from '../../../../pages/PublicResume';
+import { SHARE_GONE_HEADING, SHARE_GONE_MESSAGE, SHARE_NOT_FOUND_HEADING, SHARE_NOT_FOUND_MESSAGE } from '../ShareNotFound';
 
-const fetchMock = fetchPublicResume as unknown as ReturnType<typeof vi.fn>;
 const resolveMock = resolveSharedArtifact as unknown as ReturnType<typeof vi.fn>;
 const CAPABILITY_TOKEN = 'sd1_AbCdEfGhIjKlMnOpQrStUv';
+const OLDER = 'AbCdEfGhIjKlMnOpQrStUv';
+let network: ReturnType<typeof vi.fn>;
 
 function open(path: string) {
   return render(
@@ -32,39 +36,78 @@ function open(path: string) {
   );
 }
 
-describe('the share route', () => {
-  beforeEach(() => {
-    fetchMock.mockReset();
-    fetchMock.mockRejectedValue(new Error('x'));
-    resolveMock.mockReset();
-    resolveMock.mockRejectedValue(new Error('x'));
-  });
+// Give any route a moment to mount and ask for something.
+const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
 
-  it('renders the share page on the lowercase path', async () => {
-    open('/r/AbCdEfGhIjKlMnOpQrStUv');
-    expect(await screen.findByRole('heading', { name: SHARE_NOT_FOUND_HEADING })).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
+beforeEach(() => {
+  resolveMock.mockReset();
+  resolveMock.mockRejectedValue(new Error('x'));
+  network = vi.fn(async () => new Response('{}', { status: 404 }));
+  vi.stubGlobal('fetch', network);
+});
 
-  it.each(['/R/AbCdEfGhIjKlMnOpQrStUv', '/R/x'])('does not render the share page on %s', async (path) => {
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('an older link’s address', () => {
+  it.each([
+    `/r/${OLDER}`,
+    '/r/x',
+    `/r/${CAPABILITY_TOKEN}`,
+    '/r/a/b/c',
+    `/r/${OLDER}#${CAPABILITY_TOKEN}`,
+    `/r/${OLDER}?ref=placeholder`,
+    '/r/%E2%9C%93',
+  ])('opens the one fixed page on %s, with no request', async (path) => {
     open(path);
-    // Give any route a moment to mount and fetch.
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(screen.queryByRole('heading', { name: SHARE_NOT_FOUND_HEADING })).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await screen.findByRole('heading', { level: 1, name: SHARE_GONE_HEADING })).toBeInTheDocument();
+    expect(screen.getByText(SHARE_GONE_MESSAGE)).toBeInTheDocument();
+    await settle();
+    expect(resolveMock).not.toHaveBeenCalled();
+    expect(network).not.toHaveBeenCalled();
   });
 
-  it('renders the capability page on the lowercase path, with the token from the fragment', async () => {
+  it('is the same page for every value, and shows nothing from the address', async () => {
+    const first = open(`/r/${OLDER}`);
+    await screen.findByRole('heading', { name: SHARE_GONE_HEADING });
+    const markup = first.container.innerHTML;
+    first.unmount();
+    const second = open('/r/another0value0entirely');
+    await screen.findByRole('heading', { name: SHARE_GONE_HEADING });
+    expect(second.container.innerHTML).toBe(markup);
+    expect(markup).not.toContain(OLDER);
+    expect(screen.queryByText(SHARE_NOT_FOUND_HEADING)).toBeNull();
+  });
+
+  it('puts focus on its heading', async () => {
+    open(`/r/${OLDER}`);
+    const heading = await screen.findByRole('heading', { level: 1, name: SHARE_GONE_HEADING });
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(screen.getByRole('main')).toBeInTheDocument();
+  });
+
+  it.each([`/R/${OLDER}`, '/R/x'])('is not that page on %s', async (path) => {
+    open(path);
+    await settle();
+    expect(screen.queryByRole('heading', { name: SHARE_GONE_HEADING })).toBeNull();
+    expect(resolveMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('the share page', () => {
+  it('renders on the lowercase path, with the token from the fragment, and keeps its not-found', async () => {
     open(`/r#${CAPABILITY_TOKEN}`);
     expect(await screen.findByRole('heading', { name: SHARE_NOT_FOUND_HEADING })).toBeInTheDocument();
+    expect(screen.getByText(SHARE_NOT_FOUND_MESSAGE)).toBeInTheDocument();
     expect(resolveMock).toHaveBeenCalledTimes(1);
     expect(resolveMock).toHaveBeenCalledWith(CAPABILITY_TOKEN);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByText(SHARE_GONE_HEADING)).toBeNull();
   });
 
-  it.each([`/R#${CAPABILITY_TOKEN}`, '/R'])('does not render the capability page on %s', async (path) => {
+  it.each([`/R#${CAPABILITY_TOKEN}`, '/R'])('does not render on %s', async (path) => {
     open(path);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await settle();
     expect(screen.queryByRole('heading', { name: SHARE_NOT_FOUND_HEADING })).toBeNull();
     expect(resolveMock).not.toHaveBeenCalled();
   });

@@ -303,7 +303,7 @@ def test_a_share_page_case_variant_without_the_headers_fails():
 
 
 def test_the_share_page_headers_match_nginx():
-    # The runner side is backend/tests/test_share_public_read.py.
+    # The runner's share answers are backend/tests/test_share_resolve.py's.
     conf = (ROOT / "frontend" / "nginx.conf").read_text()
     for loc in ("location = /r {", "location ^~ /r/ {", "location ~* ^/r(/|$) {"):
         start = conf.index(loc)
@@ -325,9 +325,9 @@ SHARE_LOCATIONS = ("location = /r {", "location ^~ /r/ {", "location ~* ^/r(/|$)
 
 
 def test_share_requests_leave_no_nginx_access_line():
-    # The share pages, the resolver and the two answers it hands off to, and
-    # the public share read (ROUNDS-00B-L04); the runner's side is
-    # backend/tests/test_access_log.py.
+    # The share pages, the resolver and the two answers it hands off to
+    # (ROUNDS-00B-L04), and the older share path nginx answers itself
+    # (ROUNDS-00B-L06); the runner's side is backend/tests/test_access_log.py.
     conf = (ROOT / "frontend" / "nginx.conf").read_text()
     for loc in SHARE_LOCATIONS:
         assert "access_log off;" in _nginx_block(conf, loc), loc

@@ -76,7 +76,7 @@ describe('the bearer', () => {
   });
 
   it("is left off for 'none' and for 'optional' without a token", async () => {
-    await runnerFetch('/api/share/by-token/x', { auth: 'none' });
+    await runnerFetch('/api/share/resolve', { method: 'POST', body: {}, auth: 'none' });
     expect(sentHeaders(0).has('Authorization')).toBe(false);
     authStore.token = '';
     await runnerFetch('/api/x', { auth: 'optional' });

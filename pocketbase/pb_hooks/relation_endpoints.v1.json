@@ -316,6 +316,19 @@
    "redirect": null
   },
   {
+   "collection": "resume_share_links",
+   "field": "replaced_by",
+   "target": "share_capabilities",
+   "required": false,
+   "cascade": true,
+   "multiple": false,
+   "since": "v1",
+   "relationType": null,
+   "role": null,
+   "tombstone": null,
+   "redirect": null
+  },
+  {
    "collection": "resume_share_views",
    "field": "link",
    "target": "resume_share_links",

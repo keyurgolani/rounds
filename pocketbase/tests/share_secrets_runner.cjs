@@ -36,7 +36,8 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 
 // ---- the share commands' world -------------------------------------------------------
 
-const world = Object.assign({ commands: [], capabilities: {}, snapshots: {}, failCreate: false }, program.world || {});
+const world = Object.assign({ commands: [], capabilities: {}, snapshots: {}, legacyLinks: {}, failCreate: false },
+  program.world || {});
 let commandIds = world.commands.length;
 let capabilityIds = Object.keys(world.capabilities).length;
 
@@ -109,6 +110,40 @@ function commandTxOver(state, calls) {
         },
       }, a);
     },
+    // Older links (ROUNDS-00B-L06), as commandTx reads and marks them.
+    legacyLink: (id) => {
+      calls.push("legacyLink");
+      const link = state.legacyLinks[id];
+      if (!link) return null;
+      return { id, user: link.user, status: link.legacy_status, replaced_by: link.replaced_by, resume: link.resume,
+        variant: link.variant };
+    },
+    capabilityResult: (id) => {
+      calls.push("capabilityResult");
+      const capability = state.capabilities[id];
+      const snapshot = capability ? state.snapshots[capability.snapshot] : null;
+      if (!capability || !snapshot) return null;
+      const scope = { target_kind: "legacy_artifact_snapshot" };
+      scope[snapshot.source_kind === "resume" ? "resume_id" : "variant_id"] = snapshot.source_id;
+      scope.projection_version = 1;
+      return {
+        user: capability.user,
+        result: {
+          status: 201,
+          body: {
+            capability_id: id,
+            scope,
+            state: capability.status,
+            expires_at: capability.expires_at,
+            capability_version: capability.capability_version,
+          },
+        },
+      };
+    },
+    replaceLegacy: (id, capabilityId) => {
+      calls.push("replaceLegacy");
+      state.legacyLinks[id].replaced_by = capabilityId;
+    },
   };
 }
 
@@ -117,11 +152,13 @@ function commandDeps(step, calls) {
     admission,
     now: step.now || 1_800_000_000,
     transaction: (fn) => {
-      const copy = clone({ commands: world.commands, capabilities: world.capabilities, snapshots: world.snapshots });
+      const copy = clone({ commands: world.commands, capabilities: world.capabilities, snapshots: world.snapshots,
+        legacyLinks: world.legacyLinks });
       const out = fn(commandTxOver(copy, calls));
       world.commands = copy.commands;
       world.capabilities = copy.capabilities;
       world.snapshots = copy.snapshots;
+      world.legacyLinks = copy.legacyLinks;
       return out;
     },
   };

@@ -4,7 +4,13 @@
 // selectable; the secret is gone once the panel closes; one key per create
 // form and per Rotate click; rows show their state, and only live rows
 // can be rotated or revoked; the panel is the dialog, traps focus, and
-// gives it back; and a closed gate keeps the earlier dialog.
+// gives it back; and with the gate closed one line replaces the create.
+//
+// Older links (ROUNDS-00B-L06): only this resume's, each saying why it's
+// off; "Get a new link" only where one can be made, one key per press,
+// into the show-once panel; a resume that can't be shared says why until
+// the dialog closes; a server not ready says "yet"; and nothing in the
+// section opens, copies, or deletes a link.
 
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -23,13 +29,25 @@ import { UUID_V7_PATTERN } from '../../../../lib/idempotency';
 import ShareDialog from '../ShareDialog';
 import ShareLinksDialog, {
   ALREADY_ISSUED_TEXT,
+  ALREADY_REPLACED_TEXT,
   COPY_FAILED_TEXT,
+  OLDER_INTRO_OFF_TEXT,
+  OLDER_INTRO_TEXT,
+  REPLACE_LATER_TEXT,
   REVOKE_CONFIRM_TEXT,
   ROTATE_CONFIRM_TEXT,
   SAVED_LABEL,
+  SHARING_OFF_TEXT,
   SHOW_ONCE_TEXT,
 } from '../ShareLinksDialog';
-import { buildCapabilityUrl, capabilityState, expiryDay, type ShareCapability } from '../client';
+import {
+  buildCapabilityUrl,
+  capabilityState,
+  expiryDay,
+  olderLinkState,
+  type OlderLink,
+  type ShareCapability,
+} from '../client';
 
 const RESUME = 'resumeaaaaaaaa1';
 const TOKEN = 'sd1_AbCdEfGhIjKlMnOpQrStUv';
@@ -70,9 +88,30 @@ function issued(id: string, token: string | null, version = 1) {
 
 type Call = { url: string; method: string; body: unknown; key: string | null };
 
+function older(id: string, over: Partial<OlderLink> = {}): OlderLink {
+  return {
+    id,
+    status: 'migrated',
+    reason: 'eligible',
+    created: pbDate(Date.UTC(2024, 0, 2, 10)),
+    turned_off_at: pbDate(Date.UTC(2026, 10, 11, 12)),
+    replaced_by: '',
+    replaced_at: '',
+    target: 'resume',
+    resume_id: RESUME,
+    variant_id: '',
+    root_resume_id: RESUME,
+    variant_name: '',
+    ...over,
+  };
+}
+
 class FakeRunner {
   calls: Call[] = [];
   list: ShareCapability[] = [];
+  older: OlderLink[] = [];
+  // Answers for the older links' list, in turn; then `older`.
+  olderAnswers: Array<() => Response> = [];
   answers: Array<(call: Call) => Response> = [];
 
   fetch = vi.fn(async (url: string, init: RequestInit = {}) => {
@@ -85,6 +124,10 @@ class FakeRunner {
     };
     this.calls.push(call);
     if (call.method === 'GET' && url === '/api/share/capabilities') return json(200, this.list);
+    if (call.method === 'GET' && url === '/api/share') {
+      const next = this.olderAnswers.shift();
+      return next ? next() : json(200, { legacy: this.older });
+    }
     const next = this.answers.shift();
     if (!next) throw new Error(`no answer for ${call.method} ${url}`);
     return next(call);
@@ -399,12 +442,15 @@ describe('the dialog', () => {
     outside.remove();
   });
 
-  it('keeps the earlier dialog while the gate is closed', async () => {
+  it('says sharing is off and offers no create while the gate is closed', async () => {
     gate.value = 'disabled';
-    runner.fetch.mockImplementation(async () => json(200, []));
     render(<ShareDialog open onClose={vi.fn()} resumeId={RESUME} />);
-    expect(await screen.findByRole('button', { name: /Create share link/ })).toBeInTheDocument();
+    expect(screen.getByText(SHARING_OFF_TEXT)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create link' })).toBeNull();
+    expect(screen.queryByLabelText('Expires')).toBeNull();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus());
+    expect(await screen.findByText('No links yet.')).toBeInTheDocument();
+    expect(runner.writes()).toEqual([]);
   });
 
   it('shows the share links dialog while the gate is open', async () => {
@@ -415,29 +461,185 @@ describe('the dialog', () => {
 });
 
 describe('a gate flip', () => {
-  it('the earlier dialog refuses a share capability and shows or copies none of it', async () => {
-    // The SPA reads the gate as closed, and the runner as open.
-    gate.value = 'disabled';
+  it('a runner that reads the gate as closed refuses the create, and the dialog says sharing is off', async () => {
     const user = setupUser();
-    runner.fetch.mockImplementation(async (_url: string, init: RequestInit = {}) =>
-      (init.method ?? 'GET') === 'GET' ? json(200, []) : json(201, issued('capaaaaaaaaaaa1', TOKEN)),
-    );
-    render(<ShareDialog open onClose={vi.fn()} resumeId={RESUME} />);
-    await user.click(await screen.findByRole('button', { name: /Create share link/ }));
-    expect(await screen.findByText(/links can’t be made here right now/)).toBeInTheDocument();
-    expect(writeText).not.toHaveBeenCalled();
-    expect(document.body.innerHTML).not.toContain(TOKEN.slice(4));
-  });
-
-  it('a runner that reads the gate as closed refuses the share links dialog, which shows its own text', async () => {
-    const user = setupUser();
-    runner.answers.push(() => typed(400, 'invalid_request'));
+    runner.answers.push(() => typed(503, 'route_disabled'));
     openDialog();
     await user.click(await screen.findByRole('button', { name: 'Create link' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('This link can’t be made as set. Reload the page, then try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(SHARING_OFF_TEXT);
     expect(screen.queryByLabelText('Share link')).toBeNull();
     expect(document.body.textContent).not.toContain('Server detail');
     expect(writeText).not.toHaveBeenCalled();
+  });
+});
+
+describe('older links', () => {
+  const OTHER_RESUME = 'resumebbbbbbbb1';
+
+  function rows(): OlderLink[] {
+    return [
+      older('lnkturnedoffaa1'),
+      older('lnkdemoaaaaaaa1', { status: 'revoked_demo', reason: 'demo_account' }),
+      older('lnkunverified01', { status: 'revoked_unverified', reason: 'token_format' }),
+      older('lnkreplacedaaa1', { replaced_by: 'capnew000000009', replaced_at: pbDate(Date.UTC(2026, 10, 12, 9)) }),
+      older('lnkvariantaaaa1', {
+        target: 'variant', resume_id: '', variant_id: 'variantaaaaaaa1', variant_name: 'For Acme',
+      }),
+      older('lnkotherresume1', { resume_id: OTHER_RESUME, root_resume_id: OTHER_RESUME }),
+    ];
+  }
+
+  async function section(): Promise<HTMLElement> {
+    return (await screen.findByRole('heading', { name: 'Older links' })).closest('section') as HTMLElement;
+  }
+
+  function row(name: RegExp): HTMLElement {
+    return screen.getByRole('listitem', { name });
+  }
+
+  it('lists only this resume’s older links, each named by what it shared and why it’s off', async () => {
+    runner.older = rows();
+    openDialog();
+    const area = await section();
+    expect(within(area).getByText(OLDER_INTRO_TEXT)).toBeInTheDocument();
+    expect(within(area).getAllByRole('listitem')).toHaveLength(5);
+    expect(row(/^This resume Turned off on [A-Z][a-z]{2} \d{1,2}, \d{4}$/)).toBeInTheDocument();
+    expect(row(/^This resume Turned off: demo account$/)).toBeInTheDocument();
+    expect(row(/^This resume Turned off: couldn’t verify$/)).toBeInTheDocument();
+    expect(row(/^This resume Replaced on [A-Z][a-z]{2} \d{1,2}, \d{4}$/)).toBeInTheDocument();
+    expect(row(/^For Acme Turned off on /)).toBeInTheDocument();
+    expect(within(row(/^This resume Turned off on /)).getByText(/^Created [A-Z][a-z]{2} \d{1,2}, 2024$/)).toBeInTheDocument();
+  });
+
+  it('offers Get a new link only where one can be made, and nothing that opens, copies, or deletes a link', async () => {
+    runner.older = rows();
+    openDialog();
+    const area = await section();
+    for (const name of [/^This resume Turned off on /, /^For Acme Turned off on /]) {
+      expect(within(row(name)).getByRole('button', { name: 'Get a new link' })).toBeInTheDocument();
+    }
+    for (const name of [/Turned off: demo account$/, /Replaced on /, /Turned off: couldn’t verify$/]) {
+      expect(within(row(name)).queryByRole('button')).toBeNull();
+    }
+    expect(within(area).getAllByRole('button').map((b) => b.textContent)).toEqual(['Get a new link', 'Get a new link']);
+    expect(within(area).queryByRole('link')).toBeNull();
+    expect(area.textContent).not.toMatch(/\/r\/|Copy|Open|Delete/);
+  });
+
+  it('shows no section when this resume has no older links', async () => {
+    runner.older = [older('lnkotherresume1', { resume_id: OTHER_RESUME, root_resume_id: OTHER_RESUME })];
+    openDialog();
+    await screen.findByText(/No links yet/);
+    await waitFor(() => expect(runner.calls.some((c) => c.url === '/api/share')).toBe(true));
+    expect(screen.queryByRole('heading', { name: 'Older links' })).toBeNull();
+  });
+
+  it('gets a new link under a fresh key per press, shows it once with focus on it, and reads Replaced after', async () => {
+    const user = setupUser();
+    runner.older = [older('lnkturnedoffaa1')];
+    runner.answers.push(() => {
+      runner.older = [older('lnkturnedoffaa1', { replaced_by: 'capnew000000001', replaced_at: pbDate(Date.now()) })];
+      return json(201, issued('capnew000000001', TOKEN));
+    });
+    openDialog();
+    await section();
+    await user.click(within(row(/^This resume Turned off on /)).getByRole('button', { name: 'Get a new link' }));
+    const field = (await screen.findByLabelText('Share link')) as HTMLInputElement;
+    expect(field.value).toBe(`${window.location.origin}/r#${TOKEN}`);
+    await waitFor(() => expect(field).toHaveFocus());
+    expect(screen.getByRole('heading', { name: 'Copy your new link' })).toBeInTheDocument();
+    expect(screen.getByText(SHOW_ONCE_TEXT)).toBeInTheDocument();
+    const [press] = runner.writes();
+    expect(press.url).toBe('/api/share');
+    expect(press.body).toEqual({ legacy_link_id: 'lnkturnedoffaa1' });
+    expect(press.key).toMatch(UUID_V7_PATTERN);
+
+    await user.click(screen.getByRole('button', { name: SAVED_LABEL }));
+    expect(await screen.findByRole('listitem', { name: /^This resume Replaced on / })).toBeInTheDocument();
+    expect(within(await section()).queryByRole('button')).toBeNull();
+    expect(document.body.innerHTML).not.toContain(TOKEN);
+  });
+
+  it('a press after the link already has its new one points to Your links, under a new key', async () => {
+    const user = setupUser();
+    runner.older = [older('lnkturnedoffaa1')];
+    runner.answers.push(() => typed(503, 'shares_unavailable'), () => json(200, issued('capnew000000001', null)));
+    openDialog();
+    await section();
+    const press = () => user.click(within(row(/^This resume /)).getByRole('button', { name: 'Get a new link' }));
+    await press();
+    expect(await within(row(/^This resume /)).findByRole('alert')).toHaveTextContent(REPLACE_LATER_TEXT);
+    await press();
+    expect(await within(row(/^This resume /)).findByRole('status')).toHaveTextContent(ALREADY_REPLACED_TEXT);
+    const [first, second] = runner.writes();
+    expect(second.key).not.toBe(first.key);
+    expect(screen.queryByLabelText('Share link')).toBeNull();
+  });
+
+  it('says why this resume can’t get a new link, and keeps saying it until the dialog closes', async () => {
+    const user = setupUser();
+    runner.older = [older('lnkturnedoffaa1')];
+    runner.answers.push(() => json(200, { status: 'ineligible', reason: 'data_too_large' }));
+    const { unmount } = openDialog();
+    await section();
+    await user.click(within(row(/^This resume /)).getByRole('button', { name: 'Get a new link' }));
+    const alert = await within(row(/^This resume /)).findByRole('alert');
+    expect(alert).toHaveTextContent('Can’t create a new link. This resume is too large to share. Shorten it, then try again.');
+    expect(within(row(/^This resume /)).queryByRole('button')).toBeNull();
+    // The lists reload after the press; the reason stays.
+    await waitFor(() => expect(runner.calls.filter((c) => c.url === '/api/share' && c.method === 'GET').length).toBe(2));
+    expect(within(row(/^This resume /)).getByRole('alert')).toHaveTextContent('too large to share');
+    unmount();
+    openDialog();
+    await section();
+    expect(within(row(/^This resume /)).getByRole('button', { name: 'Get a new link' })).toBeInTheDocument();
+    expect(screen.queryByText(/too large to share/)).toBeNull();
+  });
+
+  it.each([
+    ['route_disabled', () => typed(503, 'route_disabled')],
+    ['materializer_unavailable', () => typed(503, 'materializer_unavailable')],
+    ['shares_unavailable', () => typed(503, 'shares_unavailable')],
+    ['a 5xx', () => json(502, { detail: 'Server detail that is never shown' })],
+  ])('says a new link can’t be made yet on %s, and leaves the press', async (_name, answer) => {
+    const user = setupUser();
+    runner.older = [older('lnkturnedoffaa1')];
+    runner.answers.push(answer);
+    openDialog();
+    await section();
+    await user.click(within(row(/^This resume /)).getByRole('button', { name: 'Get a new link' }));
+    expect(await within(row(/^This resume /)).findByRole('alert')).toHaveTextContent(REPLACE_LATER_TEXT);
+    expect(within(row(/^This resume /)).getByRole('button', { name: 'Get a new link' })).toBeEnabled();
+    expect(document.body.textContent).not.toContain('Server detail');
+  });
+
+  it('offers no Get a new link while sharing is off', async () => {
+    gate.value = 'disabled';
+    runner.older = rows();
+    openDialog();
+    const area = await section();
+    expect(within(area).getByText(OLDER_INTRO_OFF_TEXT)).toBeInTheDocument();
+    expect(within(area).queryByRole('button')).toBeNull();
+    expect(row(/^This resume Turned off on /)).toBeInTheDocument();
+  });
+
+  it('says when older links can’t be loaded, and tries again', async () => {
+    const user = setupUser();
+    runner.older = [older('lnkturnedoffaa1')];
+    runner.olderAnswers.push(() => typed(503, 'shares_unavailable'));
+    openDialog();
+    const area = await section();
+    expect(within(area).getByRole('alert')).toHaveTextContent('Your older links can’t be loaded right now.');
+    await user.click(within(area).getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('listitem', { name: /^This resume Turned off on / })).toBeInTheDocument();
+  });
+
+  it('reads each state from the listed fields', () => {
+    expect(olderLinkState(older('a')).kind).toBe('turned-off');
+    expect(olderLinkState(older('a', { status: 'revoked_demo' })).kind).toBe('demo');
+    expect(olderLinkState(older('a', { status: 'revoked_unverified' })).kind).toBe('unverified');
+    expect(olderLinkState(older('a', { replaced_by: 'capnew000000001' })).kind).toBe('replaced');
+    expect(olderLinkState(older('a', { turned_off_at: 'soon' }))).toEqual({ kind: 'turned-off', at: null });
   });
 });
 

@@ -1,5 +1,4 @@
-// The share links dialog while share capability resolution is on
-// (ROUNDS-00B-L04). A link's secret is shown once:
+// The share links dialog (ROUNDS-00B-L04). A link's secret is shown once:
 //
 //   - Create link makes one with an optional expiry and password, under
 //     one Idempotency-Key per form. A retry of the same form reuses the
@@ -11,12 +10,20 @@
 //   - Each live row can be rotated (a new link, one key per click; the
 //     old link stops working) or revoked. Expired, revoked, and source
 //     deleted rows only show their state.
+//   - Older links (ROUNDS-00B-L06), this resume's links from before every
+//     link became a share capability, show under the list with why each
+//     is off. One that can gets "Get a new link": CreateShare naming it,
+//     one key per press, into the same show-once panel. None opens, copies,
+//     or deletes anything.
+//   - With share capability resolution off, one line replaces the create
+//     form and every "Get a new link".
 //
 // The panel is the dialog: it traps focus, takes Escape and the backdrop
 // only while no secret shows, and gives focus back to what opened it.
 
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Check, Copy, KeyRound, Link2, X } from 'lucide-react';
+import { gateValue } from '../../../lib/gates';
 import { isRunnerError } from '../../../lib/runnerFetch';
 import { mintIdempotencyKey } from '../../../lib/idempotency';
 import {
@@ -25,11 +32,16 @@ import {
   createCapability,
   expiryDay,
   listCapabilities,
+  listOlderLinks,
+  olderLinkState,
   parseShareDate,
+  replaceOlderLink,
   revokeCapability,
   rotateCapability,
   type CapabilityState,
   type IssuedFields,
+  type OlderLink,
+  type OlderLinkState,
   type ShareCapability,
 } from './client';
 
@@ -55,6 +67,11 @@ export const ALREADY_ISSUED_TEXT = 'You already made this link, and Rounds shows
 export const ROTATE_CONFIRM_TEXT = 'The current link stops working, and Rounds makes a new one.';
 export const REVOKE_CONFIRM_TEXT = 'This link stops working for good. You can’t undo this.';
 export const COPY_FAILED_TEXT = 'Couldn’t copy. Select the link and copy it.';
+export const SHARING_OFF_TEXT = 'Sharing is turned off on this server.';
+export const OLDER_INTRO_TEXT = 'These links no longer open. Get a new link for any you still need, then send it again.';
+export const OLDER_INTRO_OFF_TEXT = 'These links no longer open.';
+export const REPLACE_LATER_TEXT = 'Can’t create a new link yet.';
+export const ALREADY_REPLACED_TEXT = 'This link already has a new one. It’s under Your links, where you can rotate it.';
 
 const INELIGIBLE: Record<string, string> = {
   demo_account: 'The demo account can’t share links.',
@@ -64,12 +81,15 @@ const INELIGIBLE: Record<string, string> = {
   parent_invalid: 'This variant’s resume isn’t available.',
 };
 
-type Reveal = { token: string; rotated: boolean; passwordSet: boolean };
+type Reveal = { token: string; kind: 'created' | 'rotated' | 'replaced'; passwordSet: boolean };
 type Notice =
   | { kind: 'already-issued'; fields: IssuedFields; passwordSet: boolean }
   | { kind: 'ineligible'; reason: string };
 type Command = { key: string; body: { resume_id: string; expires_at: string | null; password: string | null } };
 type RowAction = { id: string; kind: 'rotate' | 'revoke' };
+// What an older row says after "Get a new link". A sticky one stays until
+// the dialog closes, and its row offers no press.
+type OlderNote = { text: string; alert: boolean; sticky: boolean };
 
 function code(err: unknown): string | null {
   return isRunnerError(err) ? err.code : null;
@@ -88,9 +108,10 @@ function createErrorText(err: unknown): string {
     case 'not_found':
       return 'This resume can’t be shared. Reload the page, then try again.';
     case 'invalid_request':
-      // Also what a runner that reads the gate as closed answers this
-      // dialog during a flip.
       return 'This link can’t be made as set. Reload the page, then try again.';
+    case 'route_disabled':
+      // What a runner that reads the gate as closed answers.
+      return SHARING_OFF_TEXT;
     case 'snapshot_conflict':
       return 'This resume changed while the link was being made. Create it again.';
     case 'already_in_flight':
@@ -124,6 +145,32 @@ function rowErrorText(err: unknown, kind: 'rotate' | 'revoke'): string {
   }
 }
 
+// "Get a new link": anything that says the server isn't ready to make one
+// (sharing off there, no materializer, no store, or a 5xx) is "yet".
+function replaceErrorText(err: unknown): string {
+  switch (code(err)) {
+    case 'not_found':
+      return 'This link can’t get a new one. Reload the page, then try again.';
+    case 'unauthenticated':
+      return 'Sign in again to get a new link.';
+    case 'snapshot_conflict':
+      return 'This resume changed while the new link was being made. Try again.';
+    case 'already_in_flight':
+      return 'The new link is still being made. Try again in a moment.';
+    case 'snapshot_quota_exceeded':
+      return 'This account has reached its limit for saved snapshots.';
+    case 'quota_exceeded':
+    case 'demo_limit_reached':
+      return 'You’ve reached the limit for now. Try again later.';
+    default:
+      return REPLACE_LATER_TEXT;
+  }
+}
+
+function ineligibleText(reason: string): string {
+  return INELIGIBLE[reason] ?? 'This resume can’t be shared right now.';
+}
+
 function formatDay(at: Date): string {
   return at.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
@@ -140,6 +187,22 @@ export function stateLabel(state: CapabilityState): string {
       return 'Source deleted';
   }
 }
+
+export function olderStateLabel(state: OlderLinkState): string {
+  switch (state.kind) {
+    case 'turned-off':
+      return state.at ? `Turned off on ${formatDay(state.at)}` : 'Turned off';
+    case 'demo':
+      return 'Turned off: demo account';
+    case 'unverified':
+      return 'Turned off: couldn’t verify';
+    case 'replaced':
+      return state.at ? `Replaced on ${formatDay(state.at)}` : 'Replaced';
+  }
+}
+
+// Every older link is off, so each reads neutral; the words say why.
+const OLDER_TONE: React.CSSProperties = { background: 'var(--bg-sunken)', color: 'var(--text-2)' };
 
 // A live link reads forest, one that ran out ochre, and one its owner
 // revoked plum; one whose resume is gone stays neutral. The words carry
@@ -168,6 +231,7 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
   const firstFieldRef = useRef<HTMLSelectElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const urlRef = useRef<HTMLInputElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const opener = useRef<Element | null>(typeof document !== 'undefined' ? document.activeElement : null);
 
   const [rows, setRows] = useState<ShareCapability[] | null>(null);
@@ -185,6 +249,12 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
   const [rowAction, setRowAction] = useState<RowAction | null>(null);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
+  const [older, setOlder] = useState<OlderLink[] | null>(null);
+  const [olderFailed, setOlderFailed] = useState(false);
+  const [olderBusy, setOlderBusy] = useState<string | null>(null);
+  const [olderNotes, setOlderNotes] = useState<Record<string, OlderNote>>({});
+  // The runner reads the same gate, so this matches the create it serves.
+  const sharingOn = gateValue('SHARE_CAPABILITY_RESOLUTION') === 'enabled';
 
   const load = useCallback(async () => {
     setListFailed(false);
@@ -195,13 +265,24 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
     }
   }, []);
 
+  const loadOlder = useCallback(async () => {
+    setOlderFailed(false);
+    try {
+      setOlder(await listOlderLinks());
+    } catch {
+      setOlderFailed(true);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadOlder();
+  }, [load, loadOlder]);
 
-  // Focus the form when it opens, and give focus back when the dialog goes.
+  // Focus the form when it opens, or Close while sharing is off, and give
+  // focus back when the dialog goes.
   useEffect(() => {
-    firstFieldRef.current?.focus();
+    (firstFieldRef.current ?? closeRef.current)?.focus();
     const back = opener.current;
     return () => {
       if (back instanceof HTMLElement) back.focus();
@@ -251,9 +332,9 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
     setFormError(null);
   };
 
-  const showSecret = (token: string, rotated: boolean, passwordSet: boolean) => {
+  const showSecret = (token: string, kind: Reveal['kind'], passwordSet: boolean) => {
     setCopy('idle');
-    setReveal({ token, rotated, passwordSet });
+    setReveal({ token, kind, passwordSet });
   };
 
   async function onCreate(e: FormEvent) {
@@ -276,7 +357,7 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
       const outcome = await createCapability(next.body, next.key);
       setCommand(null);
       if (outcome.kind === 'issued') {
-        showSecret(outcome.token, false, next.body.password !== null);
+        showSecret(outcome.token, 'created', next.body.password !== null);
         setPassword('');
         setWantsPassword(false);
         setShowPassword(false);
@@ -303,7 +384,7 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
       const outcome = await rotateCapability(id, expectedVersion, mintIdempotencyKey());
       setRowAction(null);
       setNotice(null);
-      if (outcome.kind === 'issued') showSecret(outcome.token, true, passwordSet);
+      if (outcome.kind === 'issued') showSecret(outcome.token, 'rotated', passwordSet);
       else setRowError({ id, text: 'This link was already replaced, and its new one was shown once. Rotate it again.' });
     } catch (err) {
       setRowError({ id, text: rowErrorText(err, 'rotate') });
@@ -328,6 +409,33 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
     }
   }
 
+  // One key per press: a link that already has its new one answers
+  // already-issued under any key, so a second press never makes another.
+  async function onReplace(link: OlderLink) {
+    if (olderBusy !== null || creating || rowBusy !== null) return;
+    setOlderBusy(link.id);
+    setOlderNotes(({ [link.id]: _dropped, ...rest }) => rest);
+    try {
+      const outcome = await replaceOlderLink(link.id, mintIdempotencyKey());
+      if (outcome.kind === 'issued') {
+        setNotice(null);
+        showSecret(outcome.token, 'replaced', false);
+      } else {
+        const note: OlderNote =
+          outcome.kind === 'already-issued'
+            ? { text: ALREADY_REPLACED_TEXT, alert: false, sticky: false }
+            : { text: `Can’t create a new link. ${ineligibleText(outcome.reason)}`, alert: true, sticky: true };
+        setOlderNotes((prev) => ({ ...prev, [link.id]: note }));
+      }
+    } catch (err) {
+      setOlderNotes((prev) => ({ ...prev, [link.id]: { text: replaceErrorText(err), alert: true, sticky: false } }));
+    } finally {
+      setOlderBusy(null);
+      void loadOlder();
+      void load();
+    }
+  }
+
   async function onCopy() {
     if (!reveal) return;
     try {
@@ -344,9 +452,11 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
     setReveal(null);
     setCopy('idle');
     void load();
+    void loadOlder();
   }
 
   const alreadyIssued = notice?.kind === 'already-issued' ? notice : null;
+  const olderHere = (older ?? []).filter((link) => link.root_resume_id === resumeId);
 
   return (
     <div
@@ -390,10 +500,10 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
           }}
         >
           <h2 id={titleId} style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
-            {reveal ? (reveal.rotated ? 'Copy your new link' : 'Copy your link') : 'Share links'}
+            {reveal ? (reveal.kind === 'created' ? 'Copy your link' : 'Copy your new link') : 'Share links'}
           </h2>
           {!reveal && (
-            <button type="button" onClick={onClose} aria-label="Close" className="share-btn share-btn-icon">
+            <button type="button" ref={closeRef} onClick={onClose} aria-label="Close" className="share-btn share-btn-icon">
               <X size={16} strokeWidth={1.8} />
             </button>
           )}
@@ -428,7 +538,7 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
             </div>
             {reveal.passwordSet && (
               <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: 'var(--text-2)' }}>
-                {reveal.rotated
+                {reveal.kind === 'rotated'
                   ? 'The password stays the same.'
                   : 'Send the password separately from the link.'}
               </p>
@@ -441,126 +551,130 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
           </div>
         ) : (
           <div style={{ overflowY: 'auto', minHeight: 0 }}>
-            <form onSubmit={onCreate} noValidate style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-2)', maxWidth: '62ch' }}>
-                Anyone with a link can view this resume, read-only. You see each link once, when you make it.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label htmlFor={expiryId} style={labelStyle}>
-                  Expires
-                </label>
-                <select
-                  id={expiryId}
-                  ref={firstFieldRef}
-                  value={expiryDays}
-                  onChange={(e) => {
-                    setExpiryDays(Number(e.target.value));
-                    edited();
-                  }}
-                  className="share-input"
-                >
-                  {EXPIRY_CHOICES.map((c) => (
-                    <option key={c.days} value={c.days}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, fontSize: 14, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={wantsPassword}
-                  onChange={(e) => {
-                    setWantsPassword(e.target.checked);
-                    edited();
-                  }}
-                  style={{ width: 18, height: 18, accentColor: 'var(--accent)' }}
-                />
-                Require a password
-              </label>
-              {wantsPassword && (
+            {!sharingOn ? (
+              <p style={{ margin: 0, padding: 20, fontSize: 14, lineHeight: 1.55, color: 'var(--text)' }}>{SHARING_OFF_TEXT}</p>
+            ) : (
+              <form onSubmit={onCreate} noValidate style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-2)', maxWidth: '62ch' }}>
+                  Anyone with a link can view this resume, read-only. You see each link once, when you make it.
+                </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label htmlFor={passwordId} style={labelStyle}>
-                    Password
+                  <label htmlFor={expiryId} style={labelStyle}>
+                    Expires
                   </label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input
-                      id={passwordId}
-                      ref={passwordRef}
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        edited();
-                      }}
-                      autoComplete="new-password"
-                      maxLength={PASSWORD_MAX}
-                      aria-describedby={passwordHintId}
-                      className="share-input"
-                      style={{ flex: 1, minWidth: 0 }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      aria-pressed={showPassword}
-                      className="share-btn share-btn-quiet"
-                    >
-                      {showPassword ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                  <span id={passwordHintId} style={{ fontSize: 12.5, color: 'var(--text-2)' }}>
-                    {PASSWORD_MIN} to {PASSWORD_MAX} characters. Send it separately from the link.
-                  </span>
-                </div>
-              )}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <button type="submit" disabled={creating} className="share-btn share-btn-primary">
-                  <Link2 size={15} strokeWidth={1.8} />
-                  {creating ? 'Creating link…' : 'Create link'}
-                </button>
-              </div>
-              {formError && (
-                <p role="alert" style={{ margin: 0, fontSize: 13, color: 'var(--plum)' }}>
-                  {formError}
-                </p>
-              )}
-              {notice?.kind === 'ineligible' && (
-                <p role="alert" style={{ margin: 0, fontSize: 13, color: 'var(--plum)' }}>
-                  {INELIGIBLE[notice.reason] ?? 'This resume can’t be shared right now.'}
-                </p>
-              )}
-              {alreadyIssued && (
-                <div
-                  role="status"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 12,
-                    flexWrap: 'wrap',
-                    padding: '10px 12px',
-                    borderRadius: 'var(--radius)',
-                    background: 'var(--bg-sunken)',
-                  }}
-                >
-                  <span style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--text)' }}>{ALREADY_ISSUED_TEXT}</span>
-                  <button
-                    type="button"
-                    disabled={rowBusy === alreadyIssued.fields.capability_id}
-                    onClick={() =>
-                      onRotate(
-                        alreadyIssued.fields.capability_id,
-                        alreadyIssued.fields.capability_version,
-                        alreadyIssued.passwordSet,
-                      )
-                    }
-                    className="share-btn share-btn-quiet"
+                  <select
+                    id={expiryId}
+                    ref={firstFieldRef}
+                    value={expiryDays}
+                    onChange={(e) => {
+                      setExpiryDays(Number(e.target.value));
+                      edited();
+                    }}
+                    className="share-input"
                   >
-                    Rotate
+                    {EXPIRY_CHOICES.map((c) => (
+                      <option key={c.days} value={c.days}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, fontSize: 14, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={wantsPassword}
+                    onChange={(e) => {
+                      setWantsPassword(e.target.checked);
+                      edited();
+                    }}
+                    style={{ width: 18, height: 18, accentColor: 'var(--accent)' }}
+                  />
+                  Require a password
+                </label>
+                {wantsPassword && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label htmlFor={passwordId} style={labelStyle}>
+                      Password
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        id={passwordId}
+                        ref={passwordRef}
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          edited();
+                        }}
+                        autoComplete="new-password"
+                        maxLength={PASSWORD_MAX}
+                        aria-describedby={passwordHintId}
+                        className="share-input"
+                        style={{ flex: 1, minWidth: 0 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-pressed={showPassword}
+                        className="share-btn share-btn-quiet"
+                      >
+                        {showPassword ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    <span id={passwordHintId} style={{ fontSize: 12.5, color: 'var(--text-2)' }}>
+                      {PASSWORD_MIN} to {PASSWORD_MAX} characters. Send it separately from the link.
+                    </span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <button type="submit" disabled={creating} className="share-btn share-btn-primary">
+                    <Link2 size={15} strokeWidth={1.8} />
+                    {creating ? 'Creating link…' : 'Create link'}
                   </button>
                 </div>
-              )}
-            </form>
+                {formError && (
+                  <p role="alert" style={{ margin: 0, fontSize: 13, color: 'var(--plum)' }}>
+                    {formError}
+                  </p>
+                )}
+                {notice?.kind === 'ineligible' && (
+                  <p role="alert" style={{ margin: 0, fontSize: 13, color: 'var(--plum)' }}>
+                    {INELIGIBLE[notice.reason] ?? 'This resume can’t be shared right now.'}
+                  </p>
+                )}
+                {alreadyIssued && (
+                  <div
+                    role="status"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      flexWrap: 'wrap',
+                      padding: '10px 12px',
+                      borderRadius: 'var(--radius)',
+                      background: 'var(--bg-sunken)',
+                    }}
+                  >
+                    <span style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--text)' }}>{ALREADY_ISSUED_TEXT}</span>
+                    <button
+                      type="button"
+                      disabled={rowBusy === alreadyIssued.fields.capability_id}
+                      onClick={() =>
+                        onRotate(
+                          alreadyIssued.fields.capability_id,
+                          alreadyIssued.fields.capability_version,
+                          alreadyIssued.passwordSet,
+                        )
+                      }
+                      className="share-btn share-btn-quiet"
+                    >
+                      Rotate
+                    </button>
+                  </div>
+                )}
+              </form>
+            )}
 
             <section aria-labelledby={`${titleId}-list`} style={{ borderTop: '1px solid var(--border)', padding: '16px 20px 20px' }}>
               <h3 id={`${titleId}-list`} style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>
@@ -579,8 +693,30 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
                 }}
                 onRotate={onRotate}
                 onRevoke={onRevoke}
+                emptyText={
+                  sharingOn ? 'No links yet. Make one above and send it to anyone who should see this resume.' : 'No links yet.'
+                }
               />
             </section>
+
+            {(olderFailed || olderHere.length > 0) && (
+              <section aria-labelledby={`${titleId}-older`} style={{ borderTop: '1px solid var(--border)', padding: '16px 20px 20px' }}>
+                <h3 id={`${titleId}-older`} style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>
+                  Older links
+                </h3>
+                <OlderLinkList
+                  idBase={`${titleId}-older`}
+                  links={olderHere}
+                  failed={olderFailed}
+                  onRetry={loadOlder}
+                  sharingOn={sharingOn}
+                  busy={olderBusy}
+                  blocked={olderBusy !== null || creating || rowBusy !== null}
+                  notes={olderNotes}
+                  onReplace={onReplace}
+                />
+              </section>
+            )}
           </div>
         )}
       </div>
@@ -598,6 +734,7 @@ function LinkList({
   onAction,
   onRotate,
   onRevoke,
+  emptyText,
 }: {
   rows: ShareCapability[] | null;
   failed: boolean;
@@ -608,6 +745,7 @@ function LinkList({
   onAction: (next: RowAction | null) => void;
   onRotate: (id: string, expectedVersion: number, passwordSet: boolean) => void;
   onRevoke: (id: string) => void;
+  emptyText: string;
 }) {
   if (failed) {
     return (
@@ -630,9 +768,7 @@ function LinkList({
   }
   if (rows.length === 0) {
     return (
-      <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: 'var(--text-2)' }}>
-        No links yet. Make one above and send it to anyone who should see this resume.
-      </p>
+      <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: 'var(--text-2)' }}>{emptyText}</p>
     );
   }
   return (
@@ -705,9 +841,97 @@ function LinkList({
   );
 }
 
-function Badge({ children, style }: { children: ReactNode; style: React.CSSProperties }) {
+function OlderLinkList({
+  idBase,
+  links,
+  failed,
+  onRetry,
+  sharingOn,
+  busy,
+  blocked,
+  notes,
+  onReplace,
+}: {
+  idBase: string;
+  links: OlderLink[];
+  failed: boolean;
+  onRetry: () => void;
+  sharingOn: boolean;
+  busy: string | null;
+  blocked: boolean;
+  notes: Record<string, OlderNote>;
+  onReplace: (link: OlderLink) => void;
+}) {
+  if (failed) {
+    return (
+      <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
+        <span style={{ color: 'var(--text)' }}>Your older links can’t be loaded right now.</span>
+        <button type="button" onClick={onRetry} className="share-btn share-btn-quiet">
+          Try again
+        </button>
+      </div>
+    );
+  }
+  return (
+    <>
+      <p style={{ margin: '0 0 6px', fontSize: 13, lineHeight: 1.55, color: 'var(--text-2)', maxWidth: '62ch' }}>
+        {sharingOn ? OLDER_INTRO_TEXT : OLDER_INTRO_OFF_TEXT}
+      </p>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        {links.map((link) => {
+          const state = olderLinkState(link);
+          const created = parseShareDate(link.created);
+          const note = notes[link.id];
+          const id = `${idBase}-${link.id}`;
+          const canReplace = sharingOn && state.kind === 'turned-off' && !note?.sticky;
+          return (
+            <li key={link.id} aria-labelledby={`${id}-what ${id}-state`} style={{ padding: '12px 0', borderTop: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span id={`${id}-what`} style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', minWidth: 0, overflowWrap: 'anywhere' }}>
+                  {link.target === 'variant' ? link.variant_name || 'A variant of this resume' : 'This resume'}
+                </span>
+                <Badge id={`${id}-state`} style={OLDER_TONE}>
+                  {olderStateLabel(state)}
+                </Badge>
+              </div>
+              {created && (
+                <div id={`${id}-created`} style={{ marginTop: 2, fontSize: 12.5, color: 'var(--text-2)' }}>
+                  Created {formatDay(created)}
+                </div>
+              )}
+              {canReplace && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    disabled={blocked}
+                    onClick={() => onReplace(link)}
+                    aria-describedby={created ? `${id}-what ${id}-created` : `${id}-what`}
+                    className="share-btn share-btn-quiet"
+                  >
+                    {busy === link.id ? 'Getting a new link…' : 'Get a new link'}
+                  </button>
+                </div>
+              )}
+              {note && (
+                <p
+                  role={note.alert ? 'alert' : 'status'}
+                  style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.5, color: note.alert ? 'var(--plum)' : 'var(--text)' }}
+                >
+                  {note.text}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+function Badge({ children, style, id }: { children: ReactNode; style: React.CSSProperties; id?: string }) {
   return (
     <span
+      id={id}
       style={{
         display: 'inline-flex',
         alignItems: 'center',

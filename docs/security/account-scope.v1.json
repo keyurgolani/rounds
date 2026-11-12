@@ -417,14 +417,6 @@
       "guarantee": "a share link answers only its owner: another account and an anonymous caller read no link row",
       "resource": "resume_share_links"
     },
-    "account-scope.share.create-shape.denied": {
-      "operation": "create",
-      "actor": "authenticated-owner",
-      "status": "enforced",
-      "deny_key": "relation_create",
-      "guarantee": "a share link create without exactly one target or with a malformed token is rejected with the uniform create denial and writes nothing",
-      "resource": "resume_share_links"
-    },
     "account-scope.list.server-only.denied": {
       "operation": "list",
       "actor": "authenticated-owner",
@@ -464,13 +456,14 @@
       "actor": "authenticated-other",
       "variant": "foreign_owner",
       "expected": "uniform_reject",
-      "control": "none:resume_share_views create and update rules are null",
+      "control": "none:resume_share_views create, update, and delete rules are null",
       "owner_leaf": "ROUNDS-00B-L01",
       "status": "pass",
       "lane": "pr",
       "evidence": [
         "resume_share_views:account-scope.create.server-only.denied",
-        "resume_share_views:account-scope.update.server-only.denied"
+        "resume_share_views:account-scope.update.server-only.denied",
+        "resume_share_views:account-scope.delete.server-only.denied"
       ],
       "guarantee": "no client writes a share view row, for its own link or another account's"
     },
@@ -485,10 +478,11 @@
       "lane": "pr",
       "evidence": [
         "resume_share_links:account-scope.share.owner-only.isolated",
+        "resume_share_links:account-scope.create.server-only.denied",
         "resume_share_links:account-scope.update.server-only.denied",
-        "resume_share_links:account-scope.create.relation-foreign-or-missing.indistinguishable"
+        "resume_share_links:account-scope.delete.server-only.denied"
       ],
-      "guarantee": "a share link reads only for its owner, keeps its target once made, and points only at the owner's own resume or variant"
+      "guarantee": "an older share link reads only for its owner, and no client creates, changes, or deletes one"
     },
     "isolation.deploy.exposure.denied": {
       "surface": "nginx:admin",
@@ -625,8 +619,11 @@
       "expected": "uniform_not_found",
       "control": "an available capability resolves",
       "owner_leaf": "ROUNDS-00B-L03",
-      "status": "pending",
+      "status": "pass",
       "lane": "pr",
+      "evidence": [
+        "isolation.share-resolver.not-found.uniform"
+      ],
       "guarantee": "whatever stops a capability from resolving, the answer is one not-found carrying the share headers"
     },
     "isolation.share-resolver.password.uniform": {
@@ -692,8 +689,11 @@
       "expected": "uniform_not_found",
       "control": "the capability resolves before it is revoked",
       "owner_leaf": "ROUNDS-00B-L03",
-      "status": "pending",
+      "status": "pass",
       "lane": "pr",
+      "evidence": [
+        "isolation.share-chain.capability-revoked"
+      ],
       "guarantee": "once the owner revokes a capability, every path that served it answers as an unknown one"
     },
     "isolation.share-legacy.replaced": {
@@ -703,9 +703,25 @@
       "expected": "uniform_not_found",
       "control": "the owner's new link resolves",
       "owner_leaf": "ROUNDS-00B-L06",
-      "status": "pending",
+      "status": "pass",
       "lane": "pr",
+      "evidence": [
+        "isolation.share-legacy.replaced"
+      ],
       "guarantee": "once legacy share links are replaced, a legacy link answers as an unknown one on every path"
+    },
+    "isolation.share-public.resolver-identity": {
+      "surface": "share:upstream",
+      "actor": "anonymous",
+      "expected": "absent",
+      "control": "the recorder logs the resolver's own login on the same requests",
+      "owner_leaf": "ROUNDS-00B-L06",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "isolation.share-public.resolver-identity"
+      ],
+      "guarantee": "a public share request reaches PocketBase only as the share resolver's own service identity"
     },
     "isolation.demo.reset.zero-rows": {
       "surface": "pb:{collection}",
@@ -1414,14 +1430,14 @@
       "fixture": "resume_share_links",
       "owner_field": "user",
       "current_rules": {
-        "list": "user = @request.auth.id",
-        "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "list": "legacy_status != \"revoked_ownership\" && user = @request.auth.id",
+        "view": "legacy_status != \"revoked_ownership\" && user = @request.auth.id",
+        "create": null,
         "update": null,
-        "delete": "user = @request.auth.id"
+        "delete": null
       },
       "target_rules": {
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
+        "create": null,
         "update": null
       },
       "target_rule_migration": "1700006000_account_scope_rules.js",
@@ -1433,12 +1449,23 @@
             "view",
             "update"
           ]
+        },
+        {
+          "migration": "1700008500_legacy_share_migration.js",
+          "rules": [
+            "list",
+            "view",
+            "create",
+            "update",
+            "delete"
+          ]
         }
       ],
       "hook": "pocketbase/pb_hooks/share_links.pb.js",
       "relation_exceptions": [
         "variant",
-        "resume"
+        "resume",
+        "replaced_by"
       ],
       "relation_endpoints": [
         {
@@ -1448,6 +1475,10 @@
         {
           "field": "resume",
           "target": "resumes"
+        },
+        {
+          "field": "replaced_by",
+          "target": "share_capabilities"
         }
       ],
       "exceptions": [],
@@ -1456,21 +1487,14 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.delete.cross-account.denied",
-        "account-scope.delete.anonymous.denied",
         "account-scope.list.filter.isolated",
         "account-scope.view.foreign-or-missing.indistinguishable",
-        "account-scope.delete.foreign-or-missing.indistinguishable",
-        "account-scope.create.anonymous.denied",
-        "account-scope.create.foreign-owner.denied",
-        "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied",
-        "account-scope.create.relation-foreign.denied",
-        "account-scope.create.relation-foreign-or-missing.indistinguishable",
-        "account-scope.create.relation-superuser.denied",
+        "account-scope.create.server-only.denied",
         "account-scope.update.server-only.denied",
-        "account-scope.share.owner-only.isolated",
-        "account-scope.share.create-shape.denied"
+        "account-scope.delete.server-only.denied",
+        "account-scope.create.superuser.accepted",
+        "account-scope.create.relation-superuser.denied",
+        "account-scope.share.owner-only.isolated"
       ]
     },
     "resume_share_views": {
@@ -1478,11 +1502,11 @@
       "fixture": "resume_share_views",
       "owner_field": "user",
       "current_rules": {
-        "list": "user = @request.auth.id",
-        "view": "user = @request.auth.id",
+        "list": "link.legacy_status != \"revoked_ownership\" && user = @request.auth.id",
+        "view": "link.legacy_status != \"revoked_ownership\" && user = @request.auth.id",
         "create": null,
         "update": null,
-        "delete": "user = @request.auth.id"
+        "delete": null
       },
       "target_rules": {
         "create": null,
@@ -1505,15 +1529,25 @@
         "account-scope.list.anonymous.isolated",
         "account-scope.view.cross-account.denied",
         "account-scope.view.anonymous.denied",
-        "account-scope.delete.cross-account.denied",
-        "account-scope.delete.anonymous.denied",
         "account-scope.list.filter.isolated",
         "account-scope.view.foreign-or-missing.indistinguishable",
-        "account-scope.delete.foreign-or-missing.indistinguishable",
         "account-scope.create.server-only.denied",
         "account-scope.update.server-only.denied",
+        "account-scope.delete.server-only.denied",
         "account-scope.create.superuser.accepted",
         "account-scope.create.relation-superuser.denied"
+      ],
+      "rule_overrides": [
+        {
+          "migration": "1700008500_legacy_share_migration.js",
+          "rules": [
+            "list",
+            "view",
+            "create",
+            "update",
+            "delete"
+          ]
+        }
       ]
     },
     "ai_providers": {

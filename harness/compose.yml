@@ -23,9 +23,11 @@ services:
     image: ${IMAGE_PREFIX:-rounds-9s1}-pocketbase:test
     # Named volume like prod, so recreating the container with signups
     # disabled keeps the accounts and rows created in the main phase.
-    # `compose down -v` (the launcher's teardown) removes it.
+    # `compose down -v` (the launcher's teardown) removes it. Phase 3o
+    # (ROUNDS-00B-L06) starts PocketBase on pb_data_legacy instead, then
+    # back on this one.
     volumes:
-      - pb_data:/pb/pb_data
+      - ${PB_DATA_VOLUME:-pb_data}:/pb/pb_data
     environment:
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
@@ -107,7 +109,8 @@ services:
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment: &runner-environment
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-}
-      - POCKETBASE_URL=http://pocketbase:8090
+      # Phase 3o (ROUNDS-00B-L06) points both runners at the recorder.
+      - POCKETBASE_URL=${RUNNER_POCKETBASE_URL:-http://pocketbase:8090}
       - AI_KEY_SECRET=${AI_KEY_SECRET:-rounds-dev-key-DO-NOT-USE-IN-PROD}
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
@@ -160,6 +163,27 @@ services:
       - runner
     restart: "no"
 
+  # The recording proxy between the runners and PocketBase (ROUNDS-00B-L05),
+  # which phase 3o runs (ROUNDS-00B-L06): one line per call with its auth
+  # class, and never a header, token, query, or body. It listens on the
+  # stack's network only and publishes no port; its log is on a volume of
+  # its own, never the receipts.
+  recorder:
+    image: ${IMAGE_PREFIX:-rounds-9s1}-probes:test
+    entrypoint: ["python", "recorder.py"]
+    environment:
+      - RECORDER_UPSTREAM=http://pocketbase:8090
+      - RECORDER_HOST=0.0.0.0
+      - RECORDER_PORT=8090
+      - RECORDER_SALT=${RECORDER_SALT:-}
+      - RECORDER_LOG=/var/lib/rounds-recorder/recorder.jsonl
+    volumes:
+      - recorder_log:/var/lib/rounds-recorder
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+    restart: "no"
+
   probes:
     build:
       context: .
@@ -192,3 +216,12 @@ networks:
 
 volumes:
   pb_data:
+  # Both made by the launcher before the stack starts and removed at
+  # teardown (ROUNDS-00B-L06): phase 3o's pb_data shaped like 62d4eae, and
+  # the recorder's log.
+  pb_data_legacy:
+    external: true
+    name: ${PB_LEGACY_VOLUME:-rounds-9s1_pb_legacy}
+  recorder_log:
+    external: true
+    name: ${RECORDER_VOLUME:-rounds-9s1_recorder}

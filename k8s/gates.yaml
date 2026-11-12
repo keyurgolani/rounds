@@ -68,13 +68,13 @@ data:
   # restart both Deployments.
   ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE: ""
   # Public share reads, read by the runner: "enabled" or "disabled".
-  # Disabled answers every public share read with the uniform not-found.
+  # Disabled answers every share resolve with the uniform not-found.
   # Empty leaves ROUNDS_DISABLE_PUBLIC_SHARES in charge, which keeps reads
   # on unless it's set to anything but false, 0, no, or off.
   ROUNDS_GATE_PUBLIC_SHARES: ""
-  # Share capability resolution, read by the runner: "enabled" or
-  # "disabled". Empty is "disabled"; it stays closed until #12 lands and
-  # #13's share cases pass.
+  # Share capability resolution, read by the runner and the frontend:
+  # "enabled" or "disabled". Empty is "disabled": no share link resolves and
+  # nobody can make one until the owner sets it "enabled" (ROUNDS-00B-L06).
   ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION: ""
   # Signups, read by PocketBase and the frontend: "enabled" or "disabled".
   ROUNDS_GATE_SIGNUPS: ""

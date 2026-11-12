@@ -1,10 +1,10 @@
-// The one page every unavailable share gets, on both share pages
-// (pages/PublicResume and pages/SharedArtifact, ROUNDS-00B-L03). The server
-// answers one not-found for every reason, and nothing from a response is
-// shown. Focus lands on the heading so a screen reader announces it right
-// away. The share capability page puts its password field under the
-// message, and a throttled resolve gets the same page with its own words
-// (ROUNDS-00B-L04).
+// The one page every unavailable share gets on the share page
+// (pages/SharedArtifact, ROUNDS-00B-L03). The server answers one not-found
+// for every reason, and nothing from a response is shown. Focus lands on
+// the heading so a screen reader announces it right away. The share page
+// puts its password field under the message, and a throttled resolve gets
+// the same page with its own words (ROUNDS-00B-L04). An older link's
+// address gets ShareGone, in the same layout (ROUNDS-00B-L06).
 
 import { useEffect, useRef, type ReactNode } from 'react';
 
@@ -12,6 +12,8 @@ export const SHARE_NOT_FOUND_HEADING = 'This link isn’t available';
 export const SHARE_NOT_FOUND_MESSAGE =
   'It may have been turned off, or the address may be incomplete. Ask the person who shared it for a new link.';
 export const SHARE_THROTTLED_HEADING = 'Too many attempts';
+export const SHARE_GONE_HEADING = 'This link no longer works';
+export const SHARE_GONE_MESSAGE = 'Ask the person who shared it for a new one.';
 
 /** "Wait N minutes, then try again.", under the throttled page's heading. */
 export function throttledWait(minutes: number): string {
@@ -34,6 +36,11 @@ export function ShareNotFound({ children }: { children?: ReactNode }) {
 
 export function ShareThrottled({ minutes }: { minutes: number }) {
   return <ShareMessage heading={SHARE_THROTTLED_HEADING} message={throttledWait(minutes)} />;
+}
+
+/** What an older link's address opens: the same page for every one. */
+export function ShareGone() {
+  return <ShareMessage heading={SHARE_GONE_HEADING} message={SHARE_GONE_MESSAGE} />;
 }
 
 function ShareMessage({ heading: text, message, children }: { heading: string; message: string; children?: ReactNode }) {
@@ -90,7 +97,7 @@ function ShareMessage({ heading: text, message, children }: { heading: string; m
   );
 }
 
-// What both share pages show while their one request is out.
+// What the share page shows while its one request is out.
 export function ShareLoading() {
   return (
     <div
