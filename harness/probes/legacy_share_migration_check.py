@@ -241,8 +241,8 @@ def receipt(work: Path, data: Path, migrations: Path, name: str) -> tuple[dict, 
     """``pocketbase legacy-share-receipt`` on ``data``, written outside it."""
     out = work / f"receipt-{name}.json"
     run = subprocess.run(
-        [str(PB_BIN), "legacy-share-receipt", f"--dir={data}", f"--hooksDir={HOOKS}", f"--migrationsDir={migrations}",
-         "--out", str(out), "--commit", "harness"],
+        [str(PB_BIN), "legacy-share-receipt", f"--dir={data}", f"--hooksDir={HOOKS}", "--hooksWatch=false",
+         f"--migrationsDir={migrations}", "--out", str(out), "--commit", "harness"],
         capture_output=True, text=True, timeout=300, env=_env(),
     )
     log = run.stdout + run.stderr

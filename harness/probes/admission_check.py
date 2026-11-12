@@ -154,6 +154,10 @@ def evaluate_body() -> dict:
 
 JOBS = "/api/execution/jobs"
 ENDED = {"completed", "timed-out", "denied", "canceled", "failed"}
+# How often a wait for a state short of an end reads its job.
+READ_EVERY_S = 0.25
+# How many slow jobs a check that needs one running submits, at most.
+SLOW_TRIES = 3
 
 
 def job_id(answer: Any) -> str:
@@ -162,19 +166,56 @@ def job_id(answer: Any) -> str:
 
 def job_until(base: str, token: str, job: str, done=None, timeout_s: float = 120) -> dict:
     """The account's job once ``done`` holds of it, by default once it
-    ended, or as it last was when the time is up."""
+    ended, or as it last was when the time is up. A wait for an end
+    long-polls, since a read that begins after the end answers at once. A
+    wait for anything else reads the job as it is, every quarter second: a
+    long-poll answers only once the job leaves the state its read began
+    in, so one that began after the job started may not answer until the
+    job has ended."""
+    wait = 0 if done else 5
     done = done or (lambda answer: answer.get("state") in ENDED)
     deadline = time.monotonic() + timeout_s
     last: dict = {}
     while job and time.monotonic() < deadline:
-        status, answer, _ = call(base, "GET", f"{JOBS}/{job}?wait=5", token, timeout=20)
+        status, answer, _ = call(base, "GET", f"{JOBS}/{job}?wait={wait}", token, timeout=20)
         if status == 200 and isinstance(answer, dict):
             last = answer
             if done(answer):
                 return answer
+            if not wait:
+                time.sleep(READ_EVERY_S)
         else:
             time.sleep(1)
     return last
+
+
+def _whole(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def ran_ms(answer: dict) -> int | None:
+    """How long the job's run took: its output's own timing, or else the
+    whole seconds from its start to its end. None for a job that hasn't
+    ended or never started."""
+    view = answer.get("envelope")
+    if not isinstance(view, dict):
+        return None
+    output = view.get("output")
+    took = output.get("duration_ms") if isinstance(output, dict) else None
+    if _whole(took):
+        return took
+    began, ended = view.get("started_at"), view.get("finished_at")
+    if _whole(began) and _whole(ended) and ended >= began:
+        return (ended - began) * 1000
+    return None
+
+
+def resubmitted(check: str, key: str, answer: dict, tries: int) -> None:
+    """One line saying a slow job goes in again because the one before had
+    ended by the time a read saw it: that job's key, its state, and how
+    long it ran, never the account's token. ``tries`` counts the new one."""
+    print(f"INFO {check}: resubmitted, key={key} state={answer.get('state')} ran_ms={ran_ms(answer)} "
+          f"(try {tries} of {SLOW_TRIES})")
 
 
 def all_ended(base: str, made: list[tuple[str, str]], timeout_s: float = 120) -> bool:

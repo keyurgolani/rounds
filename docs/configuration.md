@@ -20,6 +20,7 @@ These variables control host-side ports.
 | `RUNNER_PORT` | `3099` | dev compose | Exposes FastAPI runner on `127.0.0.1`. |
 | `FRONTEND_PORT` | `3001` | dev compose | Exposes Vite dev server on `127.0.0.1`. |
 | `HTTP_PORT` | `80` | prod compose | Exposes the nginx-fronted frontend. |
+| `HTTP_BIND` | blank (every address) | prod compose | The host address `HTTP_PORT` is published on. Set `127.0.0.1` when a proxy or tunnel that runs on the host itself, or in a container on the host's network, sits in front. That's IPv4 loopback only, and `[::1]` does the same for IPv6. A loopback publish stays on this host only on Docker Engine 28.0 or newer; an older engine lets machines on the same local network reach it ([moby/moby#45610](https://github.com/moby/moby/issues/45610)). Compose refuses a value that isn't an IP address, such as `localhost`. |
 
 Dev compose publishes its three ports on `127.0.0.1` only, since its admin login is a development placeholder; reach them from another machine through an SSH tunnel (`ssh -L 3001:127.0.0.1:3001 host`). Production compose exposes only `HTTP_PORT`. PocketBase and runner stay on the private Docker network.
 
@@ -66,6 +67,7 @@ Use `*` only for local development. In production, set `CORS_ALLOW_ORIGINS` to y
 | `VITE_API_PROXY_TARGET` | `http://runner:8000` | Vite dev proxy target for runner endpoints. |
 | `VITE_POCKETBASE_PROXY_TARGET` | `http://pocketbase:8090` | Vite dev proxy target for PocketBase endpoints. |
 | `VITE_DEV_ALLOWED_HOSTS` | `localhost` | Comma-separated allowed hosts for Vite dev server. |
+| `VITE_DEV_HOST` | `127.0.0.1` | Address the Vite dev and preview servers listen on. Dev compose sets `0.0.0.0` inside the container and publishes its port on `127.0.0.1` only. |
 
 In production, the frontend should usually use same-origin PocketBase access. Leave `VITE_POCKETBASE_URL` blank unless you intentionally host PocketBase on a separate browser-visible origin.
 
@@ -199,6 +201,8 @@ VITE_OAUTH_GITHUB_ENABLED=false
 ```
 
 If TLS is terminated by a reverse proxy on the same host, `HTTP_PORT=80` is sufficient behind that proxy.
+
+Behind a proxy or tunnel that runs on the host itself, or in a container on the host's network, also set `HTTP_BIND=127.0.0.1`, as [Host Ports](#host-ports) describes.
 
 ## Configuration Timing
 

@@ -166,8 +166,10 @@ replica that:
 - stage 2's closures hold in the built image: a candidate process sees only
   the minimal environment and runs as a candidate uid that can't write
   `/app`, from its own 0700 scratch, each read from a run's job; a running
-  job doesn't hold up either replica's `/health`; the renderer health check
-  answers only its status; and
+  job doesn't hold up either replica's `/health` (a job that had ended
+  before a read saw it running goes in again under a new key, up to three
+  runs in all, with an `INFO` line for each one sent again); the renderer
+  health check answers only its status; and
   a render the renderer can't finish is the typed 503 without its text.
 
 Next the launcher restarts both replicas and nginx with
@@ -236,7 +238,11 @@ that replica and starts both again, and once both answer ready (a replica
 that refuses the connection while it starts reads as not ready yet, until
 a deadline) the job ends `worker-lost` once its lease runs out, and a
 same-key retry through nginx runs it to the end
-(`execution-scratch-retry`). The signup restart runs PocketBase with no worker
+(`execution-scratch-retry`). A long run that a read first sees already
+completed counts as started only if its output shows the slow test ran,
+and then a fresh one goes in under a new key, up to three runs in all;
+each one sent again prints an `INFO` line with the earlier run's key,
+state, and run time. The signup restart runs PocketBase with no worker
 secret, and the last one no longer logs in (`execution-disabled`); PocketBase
 gets it back before the runner and nginx start for the deploy phase. The deploy
 phase's verifier checks that nginx answers `/api/rounds/execution/` and the
