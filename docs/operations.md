@@ -65,6 +65,8 @@ docker compose -f docker-compose.prod.yml logs -f runner
 
 Use PocketBase logs for auth, migrations, hooks, and data-layer issues. Use runner logs for coding execution failures. Use frontend logs for nginx routing and static serving issues.
 
+A hook file that fails to load stops PocketBase from starting, and its log names the file in a `Failed to execute` line.
+
 ## Backups
 
 PocketBase stores SQLite data and uploads in the `pb_data` Docker volume. Back it up regularly, with PocketBase stopped. SQLite keeps recent writes in a separate WAL file while it runs, so a copy of a running database can be missing writes or fail to open. The stop lasts as long as the archive takes; the app shows errors until PocketBase is back.
