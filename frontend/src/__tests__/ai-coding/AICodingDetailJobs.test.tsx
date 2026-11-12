@@ -4,9 +4,15 @@
 // server caused offers Retry under the same command id, once per press,
 // and a run that failed without a result shows a fixed sentence, never
 // a FAIL it didn't earn.
+//
+// Grades as durable jobs (PR 3): the notice follows the grade, an
+// authoritative end opens the report from the row the server wrote and
+// asks for its review once, the page writes no row, mastery needs a
+// passed envelope, and a grade that failed without a result shows a
+// fixed sentence with no score.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
@@ -22,6 +28,8 @@ const drafts = vi.hoisted(() => {
   };
 });
 
+const practice = vi.hoisted(() => ({ set: vi.fn() }));
+
 vi.mock('../../lib/pocketbase', () => ({ pb: { authStore: { token: 'test-token-placeholder' } } }));
 vi.mock('../../pages/ai-coding/aiCodingApi', async (importOriginal) => ({
   ...((await importOriginal()) as Record<string, unknown>),
@@ -30,11 +38,13 @@ vi.mock('../../pages/ai-coding/aiCodingApi', async (importOriginal) => ({
   runProject: vi.fn(),
   gradeAttempt: vi.fn(),
   persistAttempt: vi.fn(),
+  getGradedAttempt: vi.fn(),
+  requestGradeReview: vi.fn(),
   upsertInProgressAttempt: vi.fn().mockResolvedValue(undefined),
   deleteInProgressAttempt: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../hooks/useAICodingDrafts', () => ({ useAICodingDrafts: () => drafts }));
-vi.mock('../../hooks/usePracticeStatus', () => ({ usePracticeStatus: () => [null, vi.fn()] }));
+vi.mock('../../hooks/usePracticeStatus', () => ({ usePracticeStatus: () => [null, practice.set] }));
 vi.mock('../../campaign/CampaignContext', () => ({ useCampaign: () => ({ currentId: null }) }));
 vi.mock('../../components/shell/AppHeader', () => ({ default: () => <header /> }));
 vi.mock('../../components/shell/StatusAction', () => ({ default: () => null }));
@@ -44,9 +54,20 @@ vi.mock('../../components/editor/MultiFileEditor', () => ({
 }));
 
 import AICodingDetail from '../../pages/ai-coding/AICodingDetail';
-import { getRound, runProject } from '../../pages/ai-coding/aiCodingApi';
+import {
+  getGradedAttempt,
+  getRound,
+  gradeAttempt,
+  persistAttempt,
+  requestGradeReview,
+  runProject,
+  type AttemptRow,
+  type CheckpointResult,
+} from '../../pages/ai-coding/aiCodingApi';
 import { RunnerError } from '../../lib/runnerFetch';
-import type { JobAnswer, JobEnvelope, OutcomeClass } from '../../lib/executionJobs';
+import { UUID_V7_PATTERN } from '../../lib/idempotency';
+import type { JobAnswer, JobEnvelope, JobLimit, OutcomeClass } from '../../lib/executionJobs';
+import type { ReviewAnswer } from '../../lib/gradedRows';
 
 const ROUND = {
   id: 'r1',
@@ -100,6 +121,11 @@ beforeEach(() => {
   answers = [];
   vi.mocked(getRound).mockResolvedValue(ROUND as never);
   vi.mocked(runProject).mockReset();
+  vi.mocked(gradeAttempt).mockReset();
+  vi.mocked(persistAttempt).mockReset();
+  vi.mocked(getGradedAttempt).mockReset();
+  vi.mocked(requestGradeReview).mockReset();
+  practice.set.mockReset();
   fetchMock.mockReset().mockImplementation(async (_url, init) => {
     while (answers.length === 0) {
       await new Promise((wake) => setTimeout(wake, 5));
@@ -183,5 +209,160 @@ describe('AICodingDetail jobs', () => {
     expect(await screen.findByText("The runner couldn't read this run. Reload the page and run it again.")).toBeInTheDocument();
     expect(screen.getByText('RUN ERROR')).toBeInTheDocument();
     expect(screen.queryByText(/Field required|FAIL|0 passed/)).not.toBeInTheDocument();
+  });
+});
+
+const CHECKPOINT: CheckpointResult = {
+  index: 0, label: 'Add', outcome_class: 'passed', limit: null, passed: true, score: 1, executed: 3,
+  passed_count: 3, failed_count: 0, outcomes: [{ id: 'r001', outcome: 'passed', reason: 'ok' }], error: null,
+};
+
+function gradedRow(results: CheckpointResult[], review: AttemptRow['rubric_review'] = null): AttemptRow {
+  return {
+    id: 'rowaaaaaaaaaaa1', user: 'useraaaaaaaaaa1', campaign: '', round: 'r1', status: 'graded',
+    test_results: results, rubric_review: review, envelope: 'envaaaaaaaaaaa1', updated: '',
+  };
+}
+
+function gradeEnd(state: JobAnswer['state'], outcome: OutcomeClass, limit: JobLimit | null = null,
+  extra: Partial<JobAnswer> = {}): JobAnswer {
+  const base = ended(state, outcome, null, extra);
+  const authoritative = ['passed', 'candidate-failure', 'resource-limit'].includes(outcome);
+  return { ...base, envelope: base.envelope && { ...base.envelope, limit, authoritative } };
+}
+
+function reviewAnswer(extra: Partial<ReviewAnswer>): ReviewAnswer {
+  return { job_id: 'jobaaaaaaaaaaa1', rubric_state: null, rubric_review: null, unavailable: null, ...extra };
+}
+
+const REVIEW = { items: [{ id: 'clarity', score: 0.9, evidence: 'Clear names.', suggestions: [] }], total: 0.9 };
+
+async function submit(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Submit' }));
+}
+
+describe('AICodingDetail grade jobs', () => {
+  it('follows a grade to the report the server wrote, and asks for its review once', async () => {
+    vi.mocked(gradeAttempt).mockResolvedValue(job('queued'));
+    vi.mocked(getGradedAttempt).mockResolvedValue(gradedRow([CHECKPOINT]));
+    vi.mocked(requestGradeReview).mockResolvedValue(reviewAnswer({ rubric_state: 'completed', rubric_review: REVIEW }));
+    const user = userEvent.setup();
+    renderPage();
+    await submit(user);
+    const region = screen.getByTestId('runner-denial');
+    await waitFor(() => expect(region).toHaveTextContent('Grading starts when a runner is free.'));
+    answers.push(job('started'));
+    await waitFor(() => expect(region).toHaveTextContent('Your checkpoints are being graded on the server.'));
+    answers.push(gradeEnd('completed', 'passed'));
+    const dialog = await screen.findByRole('dialog', { name: 'Submission · Cart totals' });
+    expect(within(dialog).getByText('1 of 1 checkpoints passed')).toBeInTheDocument();
+    expect(within(dialog).getByText('pass')).toBeInTheDocument();
+    await waitFor(() => expect(within(dialog).getAllByText('90 / 100').length).toBeGreaterThan(0));
+    expect(getGradedAttempt).toHaveBeenCalledWith('jobaaaaaaaaaaa1');
+    expect(requestGradeReview).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(requestGradeReview).mock.calls[0].slice(0, 2)).toEqual(['jobaaaaaaaaaaa1', drafts.files]);
+    // The server wrote the row; the page writes none.
+    expect(persistAttempt).not.toHaveBeenCalled();
+    expect(practice.set).toHaveBeenCalledWith('mastered');
+    const [req, init] = vi.mocked(gradeAttempt).mock.calls[0];
+    expect(req).toMatchObject({ round_slug: 'cart-totals', files: drafts.files, duration_ms: expect.any(Number) });
+    expect(init?.idempotencyKey).toMatch(UUID_V7_PATTERN);
+  });
+
+  it("names a checkpoint's limit in the report with no fail, and sets no mastery", async () => {
+    vi.mocked(gradeAttempt).mockResolvedValue(job('started'));
+    const timedOut: CheckpointResult = {
+      ...CHECKPOINT, outcome_class: 'resource-limit', limit: 'wall_time', passed: null, score: null, executed: 0,
+      passed_count: 0, failed_count: 0, outcomes: [], error: 'This checkpoint ran out of time.',
+    };
+    vi.mocked(getGradedAttempt).mockResolvedValue(gradedRow([timedOut]));
+    vi.mocked(requestGradeReview).mockResolvedValue(reviewAnswer({ unavailable: 'no_provider' }));
+    const user = userEvent.setup();
+    renderPage();
+    await submit(user);
+    answers.push(gradeEnd('timed-out', 'resource-limit', 'wall_time'));
+    const dialog = await screen.findByRole('dialog');
+    expect(screen.getByTestId('runner-denial')).toHaveTextContent('Time limit reached');
+    expect(within(dialog).getByText('Time limit reached')).toBeInTheDocument();
+    expect(within(dialog).getByText('0 of 1 checkpoints passed · 1 stopped at a limit')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/^fail$|0 passed · 0 failed/)).not.toBeInTheDocument();
+    await waitFor(() => expect(within(dialog).getByTestId('review-status')).toHaveTextContent('No AI provider set up'));
+    expect(practice.set).not.toHaveBeenCalledWith('mastered');
+  });
+
+  it('opens a missed grade\'s report and sets no mastery', async () => {
+    vi.mocked(gradeAttempt).mockResolvedValue(job('started'));
+    const missed: CheckpointResult = { ...CHECKPOINT, outcome_class: 'candidate-failure', passed: false, score: 0.33, passed_count: 1, failed_count: 2 };
+    vi.mocked(getGradedAttempt).mockResolvedValue(gradedRow([missed]));
+    vi.mocked(requestGradeReview).mockResolvedValue(reviewAnswer({ unavailable: 'files_changed' }));
+    const user = userEvent.setup();
+    renderPage();
+    await submit(user);
+    answers.push(gradeEnd('completed', 'candidate-failure'));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('fail')).toBeInTheDocument();
+    await waitFor(() => expect(within(dialog).getByTestId('review-status')).toHaveTextContent('Files changed'));
+    expect(practice.set).not.toHaveBeenCalledWith('mastered');
+  });
+
+  it("retries a grade the server couldn't finish under the same command id, with no report", async () => {
+    vi.mocked(gradeAttempt).mockResolvedValue(job('queued'));
+    const user = userEvent.setup();
+    renderPage();
+    await submit(user);
+    answers.push(gradeEnd('failed', 'infrastructure-degraded', null, { retryable: true }));
+    const region = screen.getByTestId('runner-denial');
+    await waitFor(() => expect(region).toHaveTextContent("Couldn't finish"));
+    expect(region).toHaveTextContent('Retry grades it again.');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(getGradedAttempt).not.toHaveBeenCalled();
+    await user.click(within(region).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(gradeAttempt).toHaveBeenCalledTimes(2));
+    const [first, second] = vi.mocked(gradeAttempt).mock.calls;
+    expect(second[1]?.idempotencyKey).toBe(first[1]?.idempotencyKey);
+  });
+
+  it("reads a round the server can't grade as a denial, with nothing graded", async () => {
+    vi.mocked(gradeAttempt).mockRejectedValue(
+      new RunnerError({ message: "grade 422: This practice item can't be graded on this server.", status: 422, code: 'definition_invalid' }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await submit(user);
+    const region = screen.getByTestId('runner-denial');
+    await waitFor(() => expect(region).toHaveTextContent("Can't grade here"));
+    expect(region).toHaveTextContent('Nothing was graded.');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(persistAttempt).not.toHaveBeenCalled();
+  });
+
+  it('says a grade that failed without a result in a fixed sentence, with no score or server text', async () => {
+    vi.mocked(gradeAttempt).mockRejectedValue(new RunnerError({ message: 'grade 409: Traceback: secret', status: 409 }));
+    const user = userEvent.setup();
+    renderPage();
+    await submit(user);
+    const dialog = await screen.findByRole('dialog');
+    const problem = within(dialog).getByTestId('report-problem');
+    expect(problem).toHaveTextContent("Grading didn't finish");
+    expect(problem).toHaveTextContent('Grading failed with status 409, so nothing was graded. Submit again.');
+    expect(dialog.textContent).not.toMatch(/Traceback|secret|\d+ ?\/ ?100|checkpoints passed/);
+    expect(persistAttempt).not.toHaveBeenCalled();
+  });
+
+  it("offers Try again when the report couldn't load, and opens it once it does", async () => {
+    vi.mocked(gradeAttempt).mockResolvedValue(job('started'));
+    vi.mocked(getGradedAttempt)
+      .mockRejectedValueOnce(Object.assign(new Error('x'), { status: 0 }))
+      .mockResolvedValueOnce(gradedRow([CHECKPOINT], REVIEW));
+    const user = userEvent.setup();
+    renderPage();
+    await submit(user);
+    answers.push(gradeEnd('completed', 'passed'));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByTestId('report-problem')).toHaveTextContent("Couldn't load the report");
+    await user.click(within(dialog).getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(within(dialog).getByText('pass')).toBeInTheDocument());
+    // The row already holds its review, so nothing asks for one.
+    expect(requestGradeReview).not.toHaveBeenCalled();
   });
 });

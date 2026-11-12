@@ -203,6 +203,32 @@ describe('the six execution calls', () => {
     expect(sent()).toEqual(ENFORCED[name]);
   });
 
+  // A grading job's row is the server's to write (ROUNDS-00A-L03 PR 3), so
+  // a grade at enforce names its campaign and session time; #1's shape
+  // never does.
+  it('a grade names its campaign and session time at enforce only', async () => {
+    const grade = () =>
+      gradeAttempt(
+        {
+          round_slug: 'hallucinated-http-client',
+          files: FILES,
+          ai_chats: CHATS,
+          language: 'python',
+          definition_version: 1,
+          campaign_id: 'abcdefghijklmno',
+          duration_ms: 1234.7,
+        },
+        { idempotencyKey: 'key-placeholder' },
+      );
+    await grade();
+    expect(sent()).toEqual(LEGACY.grade);
+    fetchMock.mockClear();
+    setGate('enforce');
+    await grade();
+    expect(sent()).toEqual({ ...ENFORCED.grade, campaign_id: 'abcdefghijklmno', duration_ms: 1234 });
+    expect(new Headers(fetchMock.mock.calls[0][1]!.headers).get('Idempotency-Key')).toBe('key-placeholder');
+  });
+
   it('an evaluate of everything sends no selection at enforce', async () => {
     setGate('enforce');
     await evaluateCode({ question_slug: 'two-sum', language: 'python', code: 'x' });

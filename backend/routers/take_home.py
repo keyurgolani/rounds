@@ -11,7 +11,10 @@ harness files at ``ROUNDS_GATE_EXECUTION_DEFINITIONS=legacy``, and at
 server's score, never the harness's output. Every seeded assignment is
 retired, so at enforce they answer 410 ``definition_retired``. With
 ``ROUNDS_GATE_EXECUTION_SCRATCH`` on (ROUNDS-00A-L03), run admits and
-enqueues a job and answers 202 (``execution.jobs``)."""
+enqueues a job and answers 202 (``execution.jobs``), and with
+``ROUNDS_GATE_EXECUTION_GRADING`` on so does submit, whose graded row the
+server writes with its result; ``POST /api/take-home/submit/{job}/review``
+then asks for its rubric review, once per result (``execution.review``)."""
 from __future__ import annotations
 
 import json
@@ -36,9 +39,10 @@ from app import admission, definitions, execution, limits
 from app.errors import TypedError
 from app.limits import StrictModel
 from app.pb_auth import current_user, pb_get, pb_post
-from execution import jobs, keys
+from execution import envelope, jobs, keys
+from execution import review as reviews
 from routers.ai import _active_text_config, _call_complete, _call_stream, _friendly_error, _request_id
-from routers.ai_coding import _resolve_text_cfg
+from routers.ai_coding import ReviewRequest, _resolve_text_cfg
 
 _log = logging.getLogger(__name__)
 
@@ -71,11 +75,7 @@ async def _admitted_assignment(user: dict, slug: str) -> tuple[dict[str, Any], s
 
 async def _own_campaign(user: dict, campaign_id: str) -> None:
     """Step 8: a campaign the caller doesn't own is not found."""
-    record = await admission.lookup(
-        pb_get, user["token"], f"/api/collections/campaigns/records/{campaign_id}"
-    )
-    if not isinstance(record, dict) or record.get("user") != user["id"]:
-        raise TypedError("not_found")
+    await admission.own_campaign(pb_get, user, campaign_id)
 
 
 async def _fetch_assignment(token: str, slug: str) -> dict[str, Any]:
@@ -223,6 +223,8 @@ async def submit_route(
     user: dict = Depends(_auth_user),
 ) -> Dict[str, Any]:
     body = await execution.parse(request, TakeHomeSubmitRequest, DefinitionTakeHomeSubmitRequest)
+    if keys.grading() == "on" and isinstance(body, DefinitionTakeHomeSubmitRequest):
+        return await _submit_job(request, body, user)
     if isinstance(body, DefinitionTakeHomeSubmitRequest):
         return await _submit_definition(request, body, user)
     # A replay answers here, so it saves no second attempt row.
@@ -375,6 +377,67 @@ async def _run_job(request: Request, body: DefinitionTakeHomeRunRequest):
     _graded_checkpoint(request, resolved)
     execution.check_paths(request, body.files, resolved)
     return await jobs.enqueue(request, submission, {"files": body.files})
+
+
+GRADE_LIMITED = "The grader stopped at a limit."
+
+
+def graded_harness_output(checkpoint: dict[str, Any], graded: execution.Graded, resolved: definitions.Resolved,
+                          parts: list[Any]) -> Dict[str, Any]:
+    """What a submission job's graded row keeps (ROUNDS-00A-L03 PR 3): the
+    run's answer, ``harness_output``, with its class and limit, and each
+    criterion's verdict from its own part. Only an end the run earned keeps
+    the score and the verdict; a limit names itself instead."""
+    out = harness_output(checkpoint, graded, resolved)
+    folded = envelope.aggregate(parts)
+    earned = folded.outcome_class in ("passed", "candidate-failure")
+    classes = {part.id: part.outcome_class for part in parts}
+    verdicts = {"passed": True, "candidate-failure": False}
+    if folded.limit is None:
+        error = None
+    elif folded.limit == "wall_time":
+        error = GRADE_TIMED_OUT
+    else:
+        error = GRADE_LIMITED
+    return {
+        **out,
+        "outcome_class": folded.outcome_class,
+        "limit": folded.limit,
+        "score": out["score"] if earned else None,
+        "passed": (folded.outcome_class == "passed") if earned else None,
+        "criteria": [{**c, "passed": verdicts.get(classes.get(c["id"], ""))} for c in out["criteria"]],
+        "error": error,
+    }
+
+
+async def _submit_job(request: Request, body: DefinitionTakeHomeSubmitRequest, user: dict):
+    """The submission as a job (ROUNDS-00A-L03 PR 3), graded as a take-home
+    run grades it, whose graded row the server writes with its result.
+    Every check the in-request submit runs comes before any job, and so do
+    the caller's campaign and the assignment's own row, which the graded
+    row points at."""
+    inputs = {"notes": body.notes, "ai_chats": body.ai_chats, "campaign_id": body.campaign_id}
+    submission = await jobs.begin(request, "take_home_submit", body.definition, body.files, inputs,
+                                  wall_seconds=SUBMIT_TIMEOUT_S)
+    if submission.answer is not None:
+        return submission.answer
+    resolved = execution.resolve(request, body.definition, "take-home")
+    _graded_checkpoint(request, resolved)
+    execution.check_paths(request, body.files, resolved)
+    if body.campaign_id:
+        await _own_campaign(user, body.campaign_id)
+    await admission.first_item(pb_get, user["token"], "take_home_assignments", resolved.identity.slug)
+    return await jobs.enqueue(request, submission, {
+        "files": body.files, "notes": body.notes, "ai_chats": body.ai_chats, "campaign_id": body.campaign_id,
+        "duration_ms": body.duration_ms,
+    })
+
+
+@router.post("/submit/{job}/review")
+async def submit_review(request: Request, job: str, body: ReviewRequest):
+    """The rubric review of a submission job's result, once per result
+    (``execution.review``)."""
+    return await reviews.review(request, job, body.files, "take_home_submit")
 
 
 async def _presentation_row(user: dict, slug: str) -> dict[str, Any] | None:

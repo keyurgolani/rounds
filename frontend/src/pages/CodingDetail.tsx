@@ -42,7 +42,7 @@ import {
 import { reloadPage, retrySuperseded } from '../lib/definitions';
 import { useRunnerJob } from '../hooks/useRunnerJob';
 import { earnedOutput, type JobAnswer } from '../lib/executionJobs';
-import type { RunnerJobAction, RunnerJobView } from '../components/runner/RunnerJobStatus';
+import type { RunnerJobView } from '../components/runner/RunnerJobStatus';
 import type { RunnerError } from '../lib/runnerFetch';
 
 interface CQ {
@@ -86,6 +86,9 @@ const LANGUAGES = [
 // viewport and the two side panels become bottom sheets that slide up
 // on demand. `null` = no sheet open (user is writing code).
 type MobileSheet = 'problem' | 'results' | null;
+
+// The runner actions this page's jobs are for.
+type ScratchAction = 'run' | 'tests';
 
 const EDITOR_FOCUS_STORAGE_KEY = 'rounds:editor-focus';
 
@@ -177,10 +180,10 @@ export default function CodingDetail() {
   // While ROUNDS_GATE_EXECUTION_SCRATCH is on, a run and a test run are
   // each a durable job (ROUNDS-00A-L03). The notice shows the last one
   // started, and Retry sends its same work again.
-  const [jobAction, setJobAction] = useState<RunnerJobAction>('run');
+  const [jobAction, setJobAction] = useState<ScratchAction>('run');
   const jobTriggerRef = useRef<HTMLElement | null>(null);
   const lastFilterRef = useRef<EvaluateFilter | undefined>(undefined);
-  const deniedJob = useCallback((action: RunnerJobAction, err: RunnerError) => {
+  const deniedJob = useCallback((action: ScratchAction, err: RunnerError) => {
     const denial = classifyRunnerError(err, jobTriggerRef.current);
     if (denial) setRunDenial({ action, denial });
   }, []);
@@ -512,7 +515,7 @@ export default function CodingDetail() {
   );
 
   // The job the notice shows: the one that has one, else the last started.
-  const shownAction: RunnerJobAction =
+  const shownAction: ScratchAction =
     testsJob.job && !runJob.job ? 'tests' : runJob.job && !testsJob.job ? 'run' : jobAction;
   const shownJob = shownAction === 'tests' ? testsJob : runJob;
   const jobView: RunnerJobView = {

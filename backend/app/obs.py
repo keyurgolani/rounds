@@ -206,10 +206,16 @@ def _gate_table(value: Any) -> bool:
 # already_issued, ineligible, or the refusal's error code.
 # execution.scratch (ROUNDS-00A-L03 PR 2) is the startup line that says
 # ROUNDS_GATE_EXECUTION_SCRATCH is on but acts as off, and names the gate
-# values it needs.
+# values it needs; execution.grading (PR 3) says the same of
+# ROUNDS_GATE_EXECUTION_GRADING. execution.review lines (PR 3) carry a
+# grading kind and a coarse outcome in `code` (requested, completed,
+# provider_failed, lost, in_flight, no_provider, files_changed,
+# not_reviewable, or a refusal's error code), never the prompt, the files,
+# or what the provider answered.
 EVENTS = frozenset({
     "decision", "gates", "definitions.loaded", "definition.resolved", "definition.rejected", "execution.job",
-    "execution.worker", "execution.scratch", "share.resolve", "share.revoke", "share.create", "share.rotate",
+    "execution.worker", "execution.scratch", "execution.grading", "execution.review", "share.resolve",
+    "share.revoke", "share.create", "share.rotate",
 })
 # The job metrics' names (ROUNDS-00A-L03). #54, #22, #154, and #174 reuse
 # the shape.
@@ -278,6 +284,8 @@ EVENT_FIELDS: dict[str, frozenset[str]] = {
                                 "service"}),
     "execution.worker": frozenset({"code", "service"}),
     "execution.scratch": frozenset({"code", "needs", "service"}),
+    "execution.grading": frozenset({"code", "needs", "service"}),
+    "execution.review": frozenset({"correlation_id", "kind", "code", "service"}),
     "share.resolve": frozenset({"correlation_id", "record", "code"}),
     "share.revoke": frozenset({"correlation_id", "account", "record", "code"}),
     "share.create": frozenset({"correlation_id", "account", "record", "code"}),

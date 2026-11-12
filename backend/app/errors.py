@@ -38,8 +38,8 @@ CODES: dict[str, int] = {
     "route_disabled": 503,
     # ROUNDS_GATE_EXECUTION_DEFINITIONS=disabled, with the route gates.
     "definitions_disabled": 503,
-    # ROUNDS_GATE_EXECUTION_SCRATCH off, or on without what it needs
-    # (ROUNDS-00A-L03 PR 2).
+    # ROUNDS_GATE_EXECUTION_SCRATCH or ROUNDS_GATE_EXECUTION_GRADING off,
+    # or on without what it needs (ROUNDS-00A-L03 PRs 2 and 3).
     "execution_disabled": 503,
     "unauthenticated": 401,
     "auth_unavailable": 503,
@@ -65,6 +65,10 @@ CODES: dict[str, int] = {
     "runtime_unsupported": 422,
     "path_not_allowed": 422,
     "case_unknown": 422,
+    # A practice item whose own definition can't be graded, such as a
+    # checkpoint with nothing to run (ROUNDS-00A-L03 PR 3). Refused before
+    # anything runs; its wall seconds are refunded.
+    "definition_invalid": 422,
     "definition_integrity_mismatch": 503,
     "worker_unavailable": 503,
     "render_timeout": 422,
@@ -110,6 +114,7 @@ DETAILS: dict[str, str] = {
     "runtime_unsupported": "This language isn't supported here.",
     "path_not_allowed": "A file in this submission can't be sent. Rename or remove it and try again.",
     "case_unknown": "Part of this request isn't in the current version. Reload to get it.",
+    "definition_invalid": "This practice item can't be graded on this server.",
     "definition_integrity_mismatch": "This practice item can't be checked right now. Try again shortly.",
     "worker_unavailable": "The runner is busy or unavailable. Try again shortly.",
     "render_timeout": "This document took too long to render. Simplify it and try again.",

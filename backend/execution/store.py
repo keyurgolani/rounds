@@ -141,6 +141,15 @@ class Beat:
     cancel_requested: bool
 
 
+@dataclass(frozen=True)
+class Completed:
+    envelope_id: str
+    # How the store ended the job: what the runner reported, except where
+    # the store couldn't keep that result (PR 3's graded row).
+    state: str | None
+    outcome_class: str | None
+
+
 def _int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
@@ -278,13 +287,23 @@ class ServiceClient:
             raise Refused
         raise Unavailable
 
-    async def complete(self, attempt_id: str, token: str, result: dict[str, Any]) -> str:
-        """Writes the envelope; answers its id."""
-        status, body = await self._post("complete", {"attempt_id": attempt_id, "token": token, "result": result})
+    async def complete(self, attempt_id: str, token: str, result: dict[str, Any],
+                       graded: dict[str, Any] | None = None) -> "Completed":
+        """Writes the envelope, and for an authoritative grading result its
+        graded row (``graded``, PR 3), in one transaction; answers the
+        envelope's id and how the store ended the job."""
+        payload: dict[str, Any] = {"attempt_id": attempt_id, "token": token, "result": result}
+        if graded is not None:
+            payload["graded"] = graded
+        status, body = await self._post("complete", payload)
         if not self._ours(body):
             raise Unavailable
         if status == 200 and _record_id(body.get("envelope_id")):
-            return body["envelope_id"]
+            job = body.get("job")
+            state = job.get("state") if isinstance(job, dict) else None
+            outcome_class = job.get("outcome_class") if isinstance(job, dict) else None
+            return Completed(body["envelope_id"], state if state in kinds.STATES else None,
+                             outcome_class if outcome_class in kinds.OUTCOME_CLASSES else None)
         if status in (404, 409) and body.get("error") in ("superseded", "not_found"):
             raise Superseded
         if 400 <= status < 500:
@@ -435,3 +454,82 @@ class Caller:
         if status != 200:
             raise Refused if 400 <= status < 500 else Unavailable
         return _view(body.get("job"))
+
+    async def review_start(self, job_id: str, source_checksum: str, command_id: str, lease_hash: str,
+                           quota: str) -> ReviewStarted | None:
+        """Marks the job's result's rubric requested, with its own
+        admission charge, before any provider call (PR 3); or answers how
+        far its review already got. None for another account's or an
+        unknown job."""
+        payload = {"job_id": job_id, "source_checksum": source_checksum, "command_id": command_id,
+                   "lease_hash": lease_hash, "quota": quota}
+        status, body = await self._post("review_start", payload)
+        if status == 404 and body.get("error") == "not_found":
+            return None
+        if status == 200 and body.get("state") in REVIEW_STATES:
+            material = body.get("material")
+            if body["state"] == "requested" and not _material(material):
+                raise Unavailable
+            return ReviewStarted(body["state"], material if body["state"] == "requested" else None)
+        if status == 409 and body.get("error") in REVIEW_REFUSALS:
+            raise ReviewRefused(body["error"])
+        if status == 429 and body.get("error") == "quota" and body.get("quota") in ("exceeded", "demo_limit"):
+            retry_after = body.get("retry_after")
+            raise ReviewOverQuota(body["quota"], retry_after if _int(retry_after) and retry_after >= 0 else 0)
+        raise Refused if 400 <= status < 500 else Unavailable
+
+    async def review_finish(self, job_id: str, lease: str, review: dict[str, Any]) -> str:
+        """Writes the review into the graded row and completes the rubric,
+        while the review's lease is live; answers the rubric's state. A
+        finish that came too late is ``Superseded``."""
+        status, body = await self._post("review_finish", {"job_id": job_id, "lease": lease, "review": review})
+        if status == 200 and body.get("state") == "completed":
+            return "completed"
+        if status in (404, 409) and body.get("error") in ("superseded", "not_found"):
+            raise Superseded
+        raise Refused if 400 <= status < 500 else Unavailable
+
+
+# ---------------------------------------------------------------------------
+# The review's answers (PR 3)
+# ---------------------------------------------------------------------------
+
+# requested: this call marked it and may call the provider; completed and
+# lost: as it already is.
+REVIEW_STATES = ("requested", "completed", "lost")
+REVIEW_REFUSALS = ("not_reviewable", "files_changed", "in_flight", "mismatch")
+
+
+class ReviewRefused(Refused):
+    """The store won't start this review: ``code`` says why."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+class ReviewOverQuota(Refused):
+    """The review's own charge doesn't fit the hour."""
+
+    def __init__(self, quota: str, retry_after: int) -> None:
+        super().__init__(quota)
+        self.quota = quota
+        self.retry_after = retry_after
+
+
+@dataclass(frozen=True)
+class ReviewStarted:
+    state: str
+    # With ``requested``: the job's kind and definition, and the graded
+    # row's results and chats, which the prompt is made of.
+    material: dict[str, Any] | None
+
+
+def _material(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and value.get("kind") in ("grade", "take_home_submit")
+        and isinstance(value.get("definition"), dict)
+        and isinstance(value.get("results"), (list, dict))
+        and isinstance(value.get("ai_chats"), list)
+    )

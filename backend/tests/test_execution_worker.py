@@ -743,11 +743,13 @@ def test_on_with_the_secret_is_ready_once_the_worker_reaches_the_store(server, m
     job_id = server.job(kind="grade")
     with TestClient(app) as client:
         assert _ready(client, 200) == {"status": "ok", "store": "on"}
-        # No kind has a handler yet, so the claimed job ends before it runs.
+        # The grading key isn't on, so the claimed job ends before it runs
+        # (PR 3 gave the grading kinds their handlers).
         deadline = time.monotonic() + 8
         while not _job(server.dump(), job_id)["finished_at"] and time.monotonic() < deadline:
             time.sleep(0.05)
-    assert _job(server.dump(), job_id)["outcome_class"] == "definition-invalid"
+    ended = _job(server.dump(), job_id)
+    assert (ended["outcome_class"], ended["attempts_started"]) == ("canceled", 0)
 
 
 def test_on_with_a_secret_the_store_rejects_is_unready(server, monkeypatch):

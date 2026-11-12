@@ -92,6 +92,9 @@ def test_written_defaults_keep_routes_on_and_outbound_reach_off():
         elif name == "EXECUTION_SCRATCH":
             # #3 PR 2 keeps the four scratch routes in their request.
             expected = "legacy"
+        elif name == "EXECUTION_GRADING":
+            # #3 PR 3 keeps grade and take-home submit in their request.
+            expected = "legacy"
         elif name == "SHARE_CAPABILITY_RESOLUTION":
             # Closed until the owner opens it: no share link resolves and
             # none is made (ROUNDS-00B-L06).

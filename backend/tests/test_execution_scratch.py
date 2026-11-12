@@ -261,11 +261,13 @@ def test_a_decision_line_keeps_a_jobs_idempotency_verdict(verdict):
 
 
 def test_the_four_scratch_kinds_agree_everywhere():
-    assert set(handlers.SCRATCH_HANDLERS) == keys.SCRATCH_OPERATIONS == set(jobs.ROUTES)
+    # PR 3 adds the two grading kinds' routes and handlers beside these.
+    scratch_routes = {kind for kind in jobs.ROUTES if kinds.KINDS[kind].purpose == "scratch"}
+    assert set(handlers.SCRATCH_HANDLERS) == keys.SCRATCH_OPERATIONS == scratch_routes
     for kind, path in jobs.ROUTES.items():
-        assert kinds.KINDS[kind].purpose == "scratch"
         assert admission.ROUTES[("POST", path)].operation == kind
-    assert runtime.default_handlers().keys() == handlers.SCRATCH_HANDLERS.keys()
+    assert set(jobs.ROUTES) - scratch_routes == set(handlers.GRADING_HANDLERS)
+    assert runtime.default_handlers().keys() == handlers.SCRATCH_HANDLERS.keys() | handlers.GRADING_HANDLERS.keys()
 
 
 # ---- the fingerprint --------------------------------------------------------------

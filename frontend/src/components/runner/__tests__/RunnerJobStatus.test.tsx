@@ -197,6 +197,85 @@ describe('RunnerJobStatus', () => {
   });
 });
 
+// A grade and a take-home submission (ROUNDS-00A-L03 PR 3) end in a
+// report, so their copy says grading, and a limit says what it stopped.
+describe('RunnerJobStatus for grading', () => {
+  it.each([
+    ['grade', 'Your checkpoints are being graded on the server.'],
+    ['submit', 'Your submission is being graded on the server.'],
+  ] as const)('shows a %s job queued, then grading, with Cancel', (action, running) => {
+    const { rerender } = renderJob(view(job('queued'), { action }));
+    const region = screen.getByRole('status');
+    expect(region).toHaveTextContent('Queued');
+    expect(region).toHaveTextContent('Grading starts when a runner is free.');
+    rerender(
+      <MemoryRouter>
+        <button type="button">Run</button>
+        <RunnerDenialNotice denial={null} action="grade" job={view(job('started'), { action, runningSince: Date.now() })} />
+      </MemoryRouter>,
+    );
+    expect(region).toHaveTextContent('Grading');
+    expect(region).toHaveTextContent(running);
+    expect(within(region).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+  });
+
+  it('says a graded job is ready to screen readers only, since the report opens', () => {
+    renderJob(view(ended('completed', 'candidate-failure'), { action: 'grade' }));
+    const region = screen.getByRole('status');
+    expect(region).toHaveTextContent('Graded. The report is ready.');
+    expect(region.firstElementChild).toHaveClass('sr-only');
+  });
+
+  it.each([
+    ['grade', 'wall_time', 'Time limit reached', 'A checkpoint reached its time limit, so it has no score. The report shows each checkpoint.'],
+    ['submit', 'memory', 'Memory limit reached', 'The grader reached its memory limit, so this submission has no score.'],
+  ] as const)('names a %s job\'s %s limit and what it stopped', (action, limit, title, body) => {
+    renderJob(view(ended(limit === 'wall_time' ? 'timed-out' : 'completed', 'resource-limit', {}, limit), { action }));
+    const region = screen.getByRole('status');
+    expect(region).toHaveTextContent(title);
+    expect(region).toHaveTextContent(body);
+  });
+
+  it.each([
+    [ended('failed', 'worker-lost', { retryable: true }), 'Interrupted', 'Retry grades it again.'],
+    [ended('failed', 'infrastructure-degraded', { retryable: true }), "Couldn't finish", "The server couldn't finish grading, so nothing was scored."],
+    [ended('denied', 'definition-invalid'), "Can't grade here", 'so nothing was graded. Your files are still here.'],
+    [ended('canceled', 'canceled'), 'Canceled', 'Grading was stopped. Your files are still here.'],
+  ])('says how a grade ended (%#)', (next, title, body) => {
+    renderJob(view(next, { action: 'grade' }));
+    const region = screen.getByRole('status');
+    expect(region).toHaveTextContent(title);
+    expect(region).toHaveTextContent(body);
+  });
+
+  it('keeps the notes when a submission ends, and names a submission the server lost', () => {
+    renderJob(view(ended('canceled', 'canceled'), { action: 'submit' }));
+    expect(screen.getByRole('status')).toHaveTextContent('Your files and notes are still here.');
+    expect(jobCopy(view(null, { gone: true, action: 'submit' }))?.title).toBe('Submission not found');
+    expect(jobCopy(view(null, { gone: true, action: 'grade' }))?.title).toBe('Grade not found');
+  });
+
+  it('never shows a score or a verdict for any end of a grade or a submission', () => {
+    const ends: JobAnswer[] = [
+      ended('completed', 'passed'),
+      ended('completed', 'candidate-failure'),
+      ended('timed-out', 'resource-limit', {}, 'wall_time'),
+      ended('completed', 'resource-limit', {}, 'output'),
+      ended('failed', 'worker-lost', { retryable: true }),
+      ended('failed', 'infrastructure-degraded', { retryable: false }),
+      ended('denied', 'definition-invalid'),
+      ended('denied', 'policy-violation'),
+      ended('canceled', 'canceled'),
+    ];
+    for (const action of ['grade', 'submit'] as const) {
+      for (const next of ends) {
+        const copy = jobCopy(view(next, { action }))!;
+        expect(`${copy.title} ${copy.body}`).not.toMatch(/\bscore[ds]? \d|\d+ ?\/ ?100|\bPASS\b|\bFAIL\b|\bfailed\b|\bpassed\b/);
+      }
+    }
+  });
+});
+
 describe('formatElapsed', () => {
   it('reads as seconds, then minutes and seconds', () => {
     expect(formatElapsed(0)).toBe('0 s');

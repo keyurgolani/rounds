@@ -1,14 +1,14 @@
 /// <reference path="../pb_data/types.d.ts" />
 
-// The execution job store's routes and hooks (ROUNDS-00A-L03 PRs 1 and
-// 2). The logic, and every write to execution_*, lives in execution.js.
+// The execution job store's routes and hooks (ROUNDS-00A-L03 PRs 1 to
+// 3). The logic, and every write to execution_*, lives in execution.js.
 //
 // The runner calls these at pocketbase:8090, and only while
 // ROUNDS_GATE_EXECUTION_STORE is on; off, each answers 503. nginx answers
 // /api/rounds/execution/ with 404, so a browser never reaches them.
 //
-//   enqueue, cancel, status          the caller's bearer, plus the runner
-//                                    key (ROUNDS_ADMISSION_SECRET)
+//   enqueue, cancel, status,         the caller's bearer, plus the runner
+//   review_start, review_finish      key (ROUNDS_ADMISSION_SECRET)
 //   claim, heartbeat, complete, reap the execution_service record
 //                                    (ROUNDS_EXECUTION_SECRET)
 
@@ -31,6 +31,23 @@ routerAdd(
   "POST",
   "/api/rounds/execution/status",
   (c) => require(`${__hooks}/execution.js`).handleCaller(c, "status"),
+  $apis.requireRecordAuth("users"),
+);
+
+// A grading result's rubric review (PR 3): marked requested, with its own
+// admission charge, before the runner calls a provider, then written into
+// the graded row. Once per result.
+routerAdd(
+  "POST",
+  "/api/rounds/execution/review_start",
+  (c) => require(`${__hooks}/execution.js`).handleCaller(c, "review_start"),
+  $apis.requireRecordAuth("users"),
+);
+
+routerAdd(
+  "POST",
+  "/api/rounds/execution/review_finish",
+  (c) => require(`${__hooks}/execution.js`).handleCaller(c, "review_finish"),
   $apis.requireRecordAuth("users"),
 );
 
@@ -88,7 +105,7 @@ onRecordBeforeAuthWithPasswordRequest((e) => {
 }, "execution_service");
 
 // No client sets or changes an attempt row's envelope. Only the server
-// sets it, when it writes the graded row (PR 3).
+// sets it, when complete writes the graded row (PR 3).
 onRecordBeforeCreateRequest((e) => {
   require(`${__hooks}/execution.js`).guardEnvelopeCreate(e);
 }, "ai_coding_attempts", "take_home_attempts");
