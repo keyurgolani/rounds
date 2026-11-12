@@ -567,6 +567,18 @@ The suite's helpers:
   harness passwords, and registered literals in text logs and in a SQLite
   log database opened read-only. It reports counts and sources only.
 
+## Database benchmark
+
+`harness/bench/` is DR-0004's SQLite analysis (`docs/decisions/DR-0004-canonical-database.md`). It never ships: the image copies only `pocketbase/pb_migrations`, `pb_hooks`, and `seeds`.
+
+```sh
+python harness/bench/bench.py --accounts 1,10 --out contracts/database/benchmark.json
+```
+
+It runs the pinned PocketBase binary natively on `127.0.0.1`, with the repository's migrations and hooks plus the bench's own (`harness/bench/pb_migrations`, `harness/bench/pb_hooks`, all under `/api/bench/`). It seeds synthetic accounts at the spec's scale floor and measures the single writer: lock queueing and hold, WAL growth, read-your-writes, relay lag, three backup methods under load with a verified restore of each, a kill -9, a write freeze around a context transfer, and a startup schema change. The receipt follows `contracts/database/benchmark.schema.json` and records pass or fail per target. A full run takes about half an hour and refuses to start with under 70 GB free; each phase's scratch moves to the Trash when it ends.
+
+The command route's failpoints (`before-commit`, the kill -9 after commit, and a relay that dies before its ack) are the interface #19 to #23 test against. `harness/bench/schema_dump.py` writes `contracts/database/schema-snapshot.json`, the native schema the ERD is checked against. The logic has its own tests on node's SQLite: `pocketbase/tests/test_bench_hooks.py` and `backend/tests/test_bench_harness.py`.
+
 ## Receipts
 
 Each probe appends one JSON line to `harness/.receipts/<project>/receipts.jsonl`
