@@ -372,9 +372,12 @@ def run_store(c: Checks) -> None:
         plain = pb.create("ai_coding_attempts", a.token, {"user": a.user_id, "round": round_id, "status": "in-progress"})
         relinked = pb.update("ai_coding_attempts", (plain.body or {}).get("id", ""),
                              {"envelope": envs[0]["id"] if envs else "x" * 15}, a.token)
+        # Since 1700008700 the attempt rules refuse the update (404) before
+        # the hook would (ROUNDS-00A-L03 PR 4).
+        unlinked = row(pb, admin, "ai_coding_attempts", (plain.body or {}).get("id", "")).get("envelope") == ""
         c.check("execution.attempt-rows.no-client-links-an-envelope",
-                linked.status == 400 and plain.status == 200 and relinked.status == 400,
-                f"create={linked.status} plain={plain.status} update={relinked.status}")
+                linked.status == 400 and plain.status == 200 and relinked.status == 404 and unlinked,
+                f"create={linked.status} plain={plain.status} update={relinked.status} unlinked={unlinked}")
         # The server links a row to its account's envelope, and the account
         # reads it through the row (D9).
         attempt_row_id = (plain.body or {}).get("id", "")

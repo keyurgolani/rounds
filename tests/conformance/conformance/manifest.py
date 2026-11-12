@@ -1,13 +1,16 @@
-"""Load and validate the corpus manifest and the skip ledger.
+"""Load and validate the corpus manifest, each fixture's spec, and the
+skip ledger.
 
-The manifest pins, per fixture, its id, spec reference, routes,
-languages, status, the leaf that closes it, the expected outcome per
-target, the named negative control, the ``destructive`` and
-``environment_sensitive`` flags, setup, teardown, and a reason where one
-is required (#8 acceptance criteria). It covers every row of the issue's
-fixture table; the validator fails if a row is missing, a contained row
-has no module, a pending row carries a module, or a not-applicable row
-has no reason.
+The manifest lists every fixture by id and family, and nothing else. A
+fixture's detail lives in its module under ``corpus/``, as the module's
+``SPEC``: the routes it must exercise, its sub-cases, the expected
+outcome per target, its languages, the named negative control, setup,
+teardown, and the ``destructive`` and ``environment_sensitive`` flags.
+The validator reads each ``SPEC`` as a literal, without importing the
+module, and fails if a row is missing, carries more than its id and
+family, or names the wrong family; if a module names no row; or if a
+spec is malformed (#8 acceptance criteria). A fixture without a module
+isn't run, and the receipt records it as ``not-run``.
 
 The skip ledger carries an owner and an expiry for every skip. An
 expired skip fails the lane, and a skip for an unknown fixture fails it
@@ -16,18 +19,23 @@ structure and its rules ship so a later skip lands with its disposition.
 """
 from __future__ import annotations
 
+import ast
 import datetime as _dt
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
-MANIFEST_SCHEMA = "containment-corpus-manifest/v1"
+from .outcomes import EXPECTATIONS, Outcome
+
+MANIFEST_SCHEMA = "containment-corpus-manifest/v2"
 SKIP_LEDGER_SCHEMA = "containment-corpus-skip-ledger/v1"
 
 TARGETS = ("ci", "compose", "k8s")
-STATUSES = ("contained", "pending", "not-applicable")
 KNOWN_LANGUAGES = ("python", "javascript", "typescript")
+# A fixture's family is its id's prefix.
+FAMILIES = {"EX": "execution", "FG": "grading", "RD": "render"}
 
 # Every row of the issue's fixture table. The validator requires the
 # manifest to carry exactly this set, so the corpus cannot silently drop
@@ -41,6 +49,23 @@ REQUIRED_IDS = (
     "RD-09",
 )
 
+# What the manifest may hold: framework settings at the top, and an id and
+# a family per row. Anything else about a fixture belongs in its module.
+MANIFEST_KEYS = frozenset({"schema", "corpus_version", "audited_revision", "targets", "defaults", "fixtures"})
+DEFAULT_KEYS = frozenset({"schemas", "contract_revisions", "environment", "retained_evidence"})
+ROW_KEYS = frozenset({"id", "family"})
+# What a module's SPEC holds. ``reason`` belongs only to a spec with no
+# sub-cases, which reports one outcome for the whole fixture.
+SPEC_KEYS = frozenset({
+    "routes", "subcases", "expected", "languages", "control", "setup", "teardown", "destructive",
+    "environment_sensitive",
+})
+
+_ID = re.compile(r"^(EX|FG|RD)-[0-9]{2}$")
+_SUBCASE_ID = re.compile(r"^(EX|FG|RD)-[0-9]{2}\.[a-z0-9-]+$")
+# A fixture module is named for its id: ex_01_anonymous.py is EX-01's.
+_MODULE = re.compile(r"^(ex|fg|rd)_([0-9]{2})(?:_[a-z0-9_]+)?$")
+
 _HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_MANIFEST = os.path.join(_HERE, "manifest.json")
 DEFAULT_SKIP_LEDGER = os.path.join(_HERE, "skip_ledger.json")
@@ -48,70 +73,34 @@ CORPUS_DIR = os.path.join(_HERE, "corpus")
 
 
 class ManifestError(ValueError):
-    """A malformed manifest or skip ledger. Fails the lane."""
-
-
-SUBCASE_STATUSES = ("contained", "pending")
-
-
-@dataclass(frozen=True)
-class Subcase:
-    id: str
-    status: str
-    closing_leaf: str
+    """A malformed manifest, fixture spec, or skip ledger. Fails the lane."""
 
 
 @dataclass
 class Fixture:
     id: str
-    attack: str
-    spec_ref: str
-    status: str
-    closing_leaf: str
-    routes: list[str]
-    languages: list[str]
-    control: str
-    destructive: bool
-    environment_sensitive: bool
-    setup: str
-    teardown: str
+    family: str
+    # The rest comes from the module's SPEC; a fixture without a module
+    # has none of it and isn't run.
     module: str | None = None
+    routes: list[str] = field(default_factory=list)
+    subcases: list[str] = field(default_factory=list)
     expected: dict[str, str] = field(default_factory=dict)
+    languages: list[str] = field(default_factory=list)
+    control: str = ""
+    setup: str = ""
+    teardown: str = ""
+    destructive: bool = False
+    environment_sensitive: bool = False
     reason: str = ""
-    guarantee: str = ""
-    subcases: list[Subcase] = field(default_factory=list)
 
     @property
     def runnable(self) -> bool:
-        return self.status in ("contained", "not-applicable") and self.module is not None
+        return self.module is not None
 
     def expectation(self, target: str) -> str:
-        return self.expected.get(target, self.status)
-
-    def contained_subcases(self) -> list[Subcase]:
-        return [s for s in self.subcases if s.status == "contained"]
-
-
-def _subcases(fid: str, status: str, raw: Any) -> list[Subcase]:
-    if raw is None:
-        _require(status != "contained", f"{fid}: a contained fixture lists its sub-cases")
-        return []
-    _require(isinstance(raw, list) and raw, f"{fid}: subcases must be a non-empty list")
-    out: list[Subcase] = []
-    for entry in raw:
-        _require(isinstance(entry, dict), f"{fid}: each sub-case is an object")
-        sid, sstatus, leaf = entry.get("id"), entry.get("status"), entry.get("closing_leaf")
-        _require(isinstance(sid, str) and sid.startswith(fid + "."), f"{fid}: sub-case ids start with {fid}.")
-        _require(sstatus in SUBCASE_STATUSES, f"{sid}: status must be one of {SUBCASE_STATUSES}")
-        _require(isinstance(leaf, str) and leaf.startswith("ROUNDS-"), f"{sid}: closing_leaf names a leaf")
-        out.append(Subcase(sid, sstatus, leaf))
-    ids = [s.id for s in out]
-    _require(len(ids) == len(set(ids)), f"{fid}: duplicate sub-case id")
-    if status == "contained":
-        _require(any(s.status == "contained" for s in out), f"{fid}: a contained fixture has a contained sub-case")
-    else:
-        _require(all(s.status == "pending" for s in out), f"{fid}: only a contained fixture has contained sub-cases")
-    return out
+        default = Outcome.CONTAINED.value if self.subcases else Outcome.NOT_APPLICABLE.value
+        return self.expected.get(target, default)
 
 
 @dataclass
@@ -127,14 +116,11 @@ class Manifest:
                 return f
         raise KeyError(fixture_id)
 
-    def contained(self) -> list[Fixture]:
-        return [f for f in self.fixtures if f.status == "contained"]
-
     def runnable(self) -> list[Fixture]:
         return [f for f in self.fixtures if f.runnable]
 
-    def pending(self) -> list[Fixture]:
-        return [f for f in self.fixtures if f.status == "pending"]
+    def not_run(self) -> list[Fixture]:
+        return [f for f in self.fixtures if not f.runnable]
 
 
 def _require(cond: bool, msg: str) -> None:
@@ -142,12 +128,112 @@ def _require(cond: bool, msg: str) -> None:
         raise ManifestError(msg)
 
 
-def _merge_defaults(row: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
-    merged = dict(row)
-    for key in ("languages", "control", "destructive", "environment_sensitive"):
-        if key not in merged and key in defaults:
-            merged[key] = defaults[key]
-    return merged
+def _rows(raw: Any) -> list[tuple[str, str]]:
+    """(id, family) per row. A row is its id and family and nothing else."""
+    _require(isinstance(raw, list) and raw, "fixtures must be a non-empty list")
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for row in raw:
+        _require(isinstance(row, dict), "each fixture row is an object")
+        fid = row.get("id")
+        _require(isinstance(fid, str) and bool(_ID.match(fid)), "every fixture row needs an id like EX-01")
+        extra = sorted(set(row) - ROW_KEYS)
+        _require(not extra, f"{fid}: a row carries only its id and family, not {extra}")
+        _require(fid not in seen, f"duplicate fixture id {fid}")
+        seen.add(fid)
+        family = FAMILIES[fid[:2]]
+        _require(row.get("family") == family, f"{fid}: family must be {family}")
+        out.append((fid, family))
+    return out
+
+
+def _modules(corpus_dir: str) -> dict[str, str]:
+    """Fixture id -> module name, for every fixture module in ``corpus_dir``."""
+    out: dict[str, str] = {}
+    for name in sorted(os.listdir(corpus_dir)):
+        stem, ext = os.path.splitext(name)
+        if ext != ".py" or stem.startswith("_"):
+            continue
+        match = _MODULE.match(stem)
+        _require(match is not None, f"{name} names no fixture: a fixture module is named for its id, as ex_01_*.py")
+        fid = f"{match.group(1).upper()}-{match.group(2)}"
+        _require(fid not in out, f"{fid} has two modules: {out.get(fid)}.py and {name}")
+        out[fid] = stem
+    return out
+
+
+def _read_spec(path: str, where: str) -> Any:
+    """The module's ``SPEC``, read as a literal; the module isn't imported."""
+    with open(path, encoding="utf-8") as fh:
+        tree = ast.parse(fh.read(), filename=path)
+    values = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "SPEC" for t in node.targets):
+            values.append(node.value)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "SPEC":
+            values.append(node.value)
+    _require(len(values) == 1 and values[0] is not None, f"{where}: the module sets SPEC once, at module level")
+    try:
+        return ast.literal_eval(values[0])
+    except (ValueError, TypeError, SyntaxError) as err:
+        raise ManifestError(f"{where}: SPEC must be a literal") from err
+
+
+def _fixture(fid: str, family: str, module: str, spec: Any) -> Fixture:
+    where = f"{fid} ({module}.py)"
+    _require(isinstance(spec, dict), f"{where}: SPEC must be a dict")
+    missing = sorted(SPEC_KEYS - set(spec))
+    unknown = sorted(set(spec) - SPEC_KEYS - {"reason"})
+    _require(not missing, f"{where}: SPEC is missing {missing}")
+    _require(not unknown, f"{where}: SPEC has unknown keys {unknown}")
+
+    routes = spec["routes"]
+    _require(isinstance(routes, list) and bool(routes) and all(isinstance(r, str) and r for r in routes),
+             f"{where}: routes must be a non-empty list")
+    subcases = spec["subcases"]
+    _require(isinstance(subcases, list), f"{where}: subcases must be a list")
+    for sid in subcases:
+        _require(isinstance(sid, str) and bool(_SUBCASE_ID.match(sid)) and sid.startswith(fid + "."),
+                 f"{where}: sub-case ids start with {fid}.")
+    _require(len(subcases) == len(set(subcases)), f"{where}: duplicate sub-case id")
+    expected = spec["expected"]
+    _require(isinstance(expected, dict) and set(expected) == set(TARGETS),
+             f"{where}: expected must cover targets {TARGETS}")
+    for target, value in expected.items():
+        _require(value in EXPECTATIONS, f"{where}: bad expected {value} for {target}")
+    languages = spec["languages"]
+    _require(isinstance(languages, list) and all(l in KNOWN_LANGUAGES for l in languages),
+             f"{where}: unknown language in {languages}")
+    for key in ("control", "setup", "teardown"):
+        _require(isinstance(spec[key], str) and bool(spec[key]), f"{where}: {key} is required")
+    for key in ("destructive", "environment_sensitive"):
+        _require(isinstance(spec[key], bool), f"{where}: {key} must be a bool")
+
+    if subcases:
+        _require("reason" not in spec, f"{where}: only a spec with no sub-cases gives a reason")
+    else:
+        # No sub-case: the fixture reports one outcome for the whole row, a
+        # surface this branch doesn't have yet, so it expects not-applicable.
+        _require(all(v == Outcome.NOT_APPLICABLE.value for v in expected.values()),
+                 f"{where}: a spec with no sub-cases expects not-applicable on every target")
+        _require(isinstance(spec.get("reason"), str) and bool(spec.get("reason")),
+                 f"{where}: a spec with no sub-cases needs a reason")
+
+    return Fixture(
+        id=fid,
+        family=family,
+        module=module,
+        routes=list(routes),
+        subcases=list(subcases),
+        expected=dict(expected),
+        languages=list(languages),
+        control=spec["control"],
+        setup=spec["setup"],
+        teardown=spec["teardown"],
+        destructive=spec["destructive"],
+        environment_sensitive=spec["environment_sensitive"],
+        reason=spec.get("reason", ""),
+    )
 
 
 def load_manifest(
@@ -158,75 +244,37 @@ def load_manifest(
 ) -> Manifest:
     with open(path) as fh:
         raw = json.load(fh)
+    _require(isinstance(raw, dict), "the manifest is an object")
     _require(raw.get("schema") == MANIFEST_SCHEMA, f"manifest schema must be {MANIFEST_SCHEMA}")
+    unknown = sorted(set(raw) - MANIFEST_KEYS)
+    _require(not unknown, f"manifest has unknown keys: {unknown}")
     _require(isinstance(raw.get("corpus_version"), str), "corpus_version must be a string")
     defaults = raw.get("defaults") or {}
-    rows = raw.get("fixtures")
-    _require(isinstance(rows, list) and rows, "fixtures must be a non-empty list")
+    _require(isinstance(defaults, dict), "defaults must be an object")
+    unknown = sorted(set(defaults) - DEFAULT_KEYS)
+    _require(not unknown, f"defaults hold framework settings only, not {unknown}")
 
-    fixtures: list[Fixture] = []
-    seen: set[str] = set()
-    for row in rows:
-        merged = _merge_defaults(row, defaults)
-        fid = merged.get("id")
-        _require(isinstance(fid, str) and fid, "every fixture needs an id")
-        _require(fid not in seen, f"duplicate fixture id {fid}")
-        seen.add(fid)
-        status = merged.get("status")
-        _require(status in STATUSES, f"{fid}: status must be one of {STATUSES}")
-        for key in ("attack", "spec_ref", "closing_leaf", "setup", "teardown"):
-            _require(isinstance(merged.get(key), str) and merged.get(key), f"{fid}: {key} is required")
-        routes = merged.get("routes")
-        _require(isinstance(routes, list) and routes, f"{fid}: routes must be a non-empty list")
-        languages = merged.get("languages") or []
-        _require(all(l in KNOWN_LANGUAGES for l in languages), f"{fid}: unknown language in {languages}")
-        _require(isinstance(merged.get("destructive"), bool), f"{fid}: destructive must be a bool")
-        _require(isinstance(merged.get("environment_sensitive"), bool), f"{fid}: environment_sensitive must be a bool")
-        _require(isinstance(merged.get("control"), str) and merged.get("control"), f"{fid}: control is required")
-
-        module = merged.get("module")
-        expected = merged.get("expected") or {}
-        if status == "contained":
-            _require(isinstance(module, str) and module, f"{fid}: a contained fixture needs a module")
-            mod_path = os.path.join(corpus_dir, module + ".py")
-            _require(os.path.exists(mod_path), f"{fid}: module {module}.py is missing from {corpus_dir}")
-            _require(set(expected) == set(TARGETS), f"{fid}: expected must cover targets {TARGETS}")
-            for target, value in expected.items():
-                _require(value in ("contained", "not-applicable"), f"{fid}: bad expected {value} for {target}")
-        elif status == "pending":
-            _require(not module, f"{fid}: a pending fixture must not carry a module (decision D4)")
-            _require(not expected, f"{fid}: a pending fixture has no expected outcomes")
-        else:  # not-applicable
-            _require(not module or isinstance(module, str), f"{fid}: bad module")
-            _require(isinstance(merged.get("reason"), str) and merged.get("reason"), f"{fid}: not-applicable needs a reason")
-
-        fixtures.append(
-            Fixture(
-                id=fid,
-                attack=merged["attack"],
-                spec_ref=merged["spec_ref"],
-                status=status,
-                closing_leaf=merged["closing_leaf"],
-                routes=list(routes),
-                languages=list(languages),
-                control=merged["control"],
-                destructive=bool(merged["destructive"]),
-                environment_sensitive=bool(merged["environment_sensitive"]),
-                setup=merged["setup"],
-                teardown=merged["teardown"],
-                module=module,
-                expected=dict(expected),
-                reason=merged.get("reason", ""),
-                guarantee=merged.get("guarantee", ""),
-                subcases=_subcases(fid, status, merged.get("subcases")),
-            )
-        )
-
+    rows = _rows(raw.get("fixtures"))
+    seen = {fid for fid, _ in rows}
     required = set(required_ids if required_ids is not None else REQUIRED_IDS)
     missing = required - seen
     extra = seen - required
     _require(not missing, f"manifest is missing fixture rows: {sorted(missing)}")
     _require(not extra, f"manifest has unknown fixture rows: {sorted(extra)}")
+
+    modules = _modules(corpus_dir)
+    orphans = sorted(f"{modules[fid]}.py" for fid in set(modules) - seen)
+    _require(not orphans, f"fixture modules without a manifest row: {orphans}")
+
+    fixtures: list[Fixture] = []
+    for fid, family in rows:
+        module = modules.get(fid)
+        if module is None:
+            fixtures.append(Fixture(id=fid, family=family))
+            continue
+        where = f"{fid} ({module}.py)"
+        spec = _read_spec(os.path.join(corpus_dir, module + ".py"), where)
+        fixtures.append(_fixture(fid, family, module, spec))
 
     return Manifest(
         corpus_version=raw["corpus_version"],

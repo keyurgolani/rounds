@@ -252,13 +252,29 @@ describe('CodingDetail jobs', () => {
     expect(screen.queryByText(/Field required|input\.nums/)).not.toBeInTheDocument();
   });
 
-  it('still shows a result the runner answered in its request', async () => {
+  it('shows an answer that is no job as unavailable, and none of what it held', async () => {
+    // Since ROUNDS-00A-L03 PR 4 every run is a job.
     vi.mocked(evaluateCode).mockResolvedValue(EVALUATED);
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run all (2)' }));
-    await waitFor(() => expect(screen.getByText('2 / 2 passed')).toBeInTheDocument());
-    expect(dockRegion()).toBeEmptyDOMElement();
+    await waitFor(() => expect(dockRegion()).toHaveTextContent('Unavailable right now'));
+    expect(screen.queryByText('2 / 2 passed')).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('shows a run that answers no job as unavailable, with none of its output, and keeps the code', async () => {
+    vi.mocked(runCode).mockResolvedValue({
+      stdout: 'printed-by-no-job', stderr: '', return_value: [0, 1], error: null, duration_ms: 1, truncated: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('tab', { name: 'Run' }));
+    await user.click(await screen.findByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(dockRegion()).toHaveTextContent('Unavailable right now'));
+    expect(dockRegion()).toHaveTextContent('Nothing ran. Your code is still here.');
+    expect(screen.queryByText(/printed-by-no-job/)).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Code' })).toHaveValue(QUESTION.starter_code.python);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

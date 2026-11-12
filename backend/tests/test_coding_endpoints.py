@@ -1,8 +1,14 @@
-"""/api/run and /api/evaluate (admission/v1, ROUNDS-00A-L01).
+"""/api/run and /api/evaluate with the request shapes they took before
+definitions (admission/v1, ROUNDS-00A-L01).
 
-Signed-in callers name a question by slug; the entry and test cases come
-from the stored question. Each request also runs anonymously as an
-expected-deny control: 401 ``unauthenticated``, and nothing runs."""
+A caller named a question by slug, and the entry and test cases came from
+the stored question. Since ROUNDS-00A-L03 PR 4 both routes run definitions
+only, as jobs, and the gates as shipped leave definitions at legacy, where
+the execution keys act as off. So each older request below, from anyone,
+answers 503 ``execution_disabled`` before the account check: no question
+is read and nothing runs. test_definitions_enforce.py sends these shapes
+at enforce, test_execution_scratch.py runs the jobs, and test_runner.py
+covers what a run does."""
 import pytest
 
 PYTHON_TWO_SUM = (
@@ -136,74 +142,6 @@ SCENARIOS = {
 }
 
 
-def _post(client, questions, headers, scenario):
-    question, path, body = SCENARIOS[scenario]
-    questions.add(**question)
-    return client.post(path, json=body, headers=headers)
-
-
-def test_run_returns_stdout_and_return_value(client, signed_in, questions):
-    res = _post(client, questions, signed_in, "run")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["stdout"].strip() == "hi"
-    assert data["return_value"] == 3
-    assert data["error"] is None
-
-
-def test_evaluate_no_filter_runs_all(client, signed_in, questions):
-    res = _post(client, questions, signed_in, "evaluate_all")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["passed"] == 2 and data["failed"] == 0
-
-
-def test_evaluate_filter_by_tag(client, signed_in, questions):
-    res = _post(client, questions, signed_in, "evaluate_by_tag")
-    assert [r["index"] for r in res.json()["results"]] == [1]
-
-
-def test_evaluate_filter_by_indices(client, signed_in, questions):
-    res = _post(client, questions, signed_in, "evaluate_by_index")
-    assert [r["index"] for r in res.json()["results"]] == [0]
-
-
-def test_evaluate_class_ops_counter(client, signed_in, questions):
-    res = _post(client, questions, signed_in, "evaluate_class_ops")
-    assert res.json()["passed"] == 1
-
-
-def test_evaluate_lru_with_helper_node_class_regression(client, signed_in, questions):
-    """Original LRU bug: Node helper class caused dispatch to misroute.
-    With explicit entry.class = LRUCache, helper classes are invisible
-    to dispatch."""
-    res = _post(client, questions, signed_in, "evaluate_lru")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["passed"] == 1, data["results"]
-
-
-def test_evaluate_records_failed_case(client, signed_in, questions):
-    res = _post(client, questions, signed_in, "evaluate_failed_case")
-    data = res.json()
-    assert data["passed"] == 0 and data["failed"] == 1
-    assert data["results"][0]["output"] == [0, 0]
-
-
-def test_evaluate_returns_400_on_unknown_kind(client, signed_in, questions):
-    # The stored entry's kind isn't one the runner knows, so nothing runs.
-    # (The name predates the check; the answer has always been 422.)
-    res = _post(client, questions, signed_in, "evaluate_unknown_kind")
-    assert res.status_code == 422
-    assert res.json()["code"] == "invalid_request"
-
-
-def test_run_returns_validate_error_on_missing_name(client, signed_in, questions):
-    res = _post(client, questions, signed_in, "run_missing_name")
-    data = res.json()
-    assert data["error"] and "missing 'name'" in data["error"]
-
-
 # ---- expected-deny controls (#8) ---------------------------------------------
 
 
@@ -223,27 +161,17 @@ def ran(monkeypatch):
     return calls
 
 
-@pytest.mark.parametrize("scenario", sorted(SCENARIOS))
-def test_anonymous_request_is_denied_before_anything_runs(client, questions, ran, scenario):
-    res = _post(client, questions, {}, scenario)
-    assert res.status_code == 401
-    assert res.json()["code"] == "unauthenticated"
-    assert ran == []
-    assert questions.calls == []
+CALLERS = {"anonymous": {}, "a bearer pocketbase rejects": {"Authorization": "Bearer someone-else"}}
 
 
 @pytest.mark.parametrize("scenario", sorted(SCENARIOS))
-def test_a_bearer_pocketbase_rejects_is_denied_before_anything_runs(client, signed_in, questions, ran, scenario):
-    res = _post(client, questions, {"Authorization": "Bearer someone-else"}, scenario)
-    assert res.status_code == 401
+def test_an_older_request_from_anyone_is_turned_off_before_anything_runs(client, signed_in, questions, ran,
+                                                                          scenario):
+    question, path, body = SCENARIOS[scenario]
+    questions.add(**question)
+    for headers in (*CALLERS.values(), signed_in):
+        res = client.post(path, json=body, headers=headers)
+        assert res.status_code == 503, res.text
+        assert res.json()["code"] == "execution_disabled"
     assert ran == []
     assert questions.calls == []
-
-
-def test_the_signed_in_run_reads_the_question_with_the_callers_token(client, signed_in, questions, ran):
-    res = _post(client, questions, signed_in, "run")
-    assert res.status_code == 200
-    ((token, path, params),) = questions.calls
-    assert token == signed_in["Authorization"].split(" ", 1)[1]
-    assert params == {"filter": "slug='add-one'", "perPage": 1}
-    assert len(ran) == 1

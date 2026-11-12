@@ -74,11 +74,14 @@ describe('program: repository', () => {
     }
   });
 
-  it('records the delivery order and the disabled leaf-gate rollout', () => {
+  it('records the delivery order and the read-only, report-first leaf-gate rollout', () => {
     const byId = Object.fromEntries(dr().decisions.map((d) => [d.id, d]));
     assert.ok(byId.P1.sources.includes('spec 3070-3097'));
     assert.match(byId.P1.decision, /nine phases of spec 3072-3092/);
-    assert.ok(byId.P12.decision.includes("vars.LEAF_GATE_ENABLED == 'true'"));
+    // Revision 2 runs the check in the conformance job instead of revision 1's disabled workflow pair.
+    assert.match(byId.P12.decision, /conformance job on pull_request, with contents: read and no pull_request_target, workflow_dispatch, or status write/);
+    assert.match(byId.P12.decision, /report prints the verdict and passes until S4 sets enforce/);
+    assert.equal(dr().supersedes, 'DR-0003@1');
     assert.equal(byId.P3.status, 'draft');
     assert.equal(byId.P5.status, 'draft');
   });
@@ -214,7 +217,8 @@ describe('program: repository', () => {
   it('keeps every program schema to the keyword subset the validator and #182 support', () => {
     const dir = path.join(REPO_ROOT, 'docs/program');
     const schemas = fs.readdirSync(dir).filter((f) => f.endsWith('.schema.json'));
-    assert.equal(schemas.length, 5);
+    // S1's five, and S2's issue export, leaf program, leaf DAG, and leaf gate.
+    assert.equal(schemas.length, 9);
     for (const f of schemas) {
       const text = fs.readFileSync(path.join(dir, f), 'utf8');
       for (const k of ['anyOf', 'oneOf', 'allOf', 'not', 'if', 'then', 'else']) assert.doesNotMatch(text, new RegExp(`"${k}"\\s*:`), `${f} uses ${k}`);

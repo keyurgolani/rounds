@@ -81,7 +81,8 @@ def test_boot_logs_every_pocketbase_gate_in_one_line():
         "event": "gates",
         "service": "pocketbase",
         "gates": {
-            "EXECUTION_STORE": {"value": "off", "source": "default"},
+            # On by default since ROUNDS-00A-L03 PR 4.
+            "EXECUTION_STORE": {"value": "on", "source": "default"},
             "LEGACY_SNAPSHOT_CREATE": {"value": "disabled", "source": "default"},
             "SIGNUPS": {"value": "disabled", "source": "alias"},
             "DEMO": {"value": "disabled", "source": "default"},

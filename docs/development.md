@@ -15,6 +15,8 @@ cp .env.example .env
 docker compose up -d
 ```
 
+Code runs need two values in `.env`: `ROUNDS_EXECUTION_SECRET`, 32 to 72 printable characters such as the output of `openssl rand -hex 32`, and `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`. Set them, then run `docker compose up -d` again. Without them, every code run says it's turned off and keeps your draft.
+
 Services:
 
 - Frontend: `http://localhost:3001`
@@ -149,7 +151,7 @@ It reads the coding seeds, the AI-coding rounds, and the take-home assignments a
 
 When a definition advances past version 1, `backend/ai_coding/build_seed.py` and `backend/take_home/build_seed.py` emit a new presentation-only upsert migration (never a delete) for the display rows; at version 1 the committed seed migrations already cover them, so the builders emit nothing. The rows carry display fields only, each at its own version; the test commands, hidden files, entrypoints, and harness files stay in the compiled revision. Each version bump gets its own file, numbered after every migration in `pocketbase/pb_migrations/`, and a builder never writes over a file that's already there, since it may have been applied.
 
-The runner verifies every shipped version's checksum at startup and serves them only at `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce` (see the [execution runbook](security/execution-runbook.md#compiled-definitions)); the default `legacy` keeps the PocketBase path.
+The runner verifies every shipped version's checksum at startup and serves them only at `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce` (see the [execution runbook](security/execution-runbook.md#compiled-definitions)). Code runs need that value: at the default `legacy` the execution keys act as off, so every code run answers 503 `execution_disabled` and keeps its draft.
 
 ## Adding Pages
 

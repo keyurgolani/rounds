@@ -1,8 +1,8 @@
 """Outcome vocabulary and comparison for the containment corpus.
 
 A fixture reports one outcome class for one (sub-case, target). The
-plugin compares it with the manifest's expectation and decides the
-verdict. Until #3's typed result classes land, the plugin classifies a
+plugin compares it with the expectation in the fixture's spec and decides
+the verdict. Until #3's typed result classes land, the plugin classifies a
 result from the HTTP status and the request timing and marks it
 ``legacy-classified``; the outcome vocabulary here is stable across that
 change.
@@ -18,17 +18,17 @@ Outcomes
                     fails the lane with its id and redacted artifacts.
 ``not-applicable``  the surface the sub-case targets does not exist on
                     this branch yet, so there is nothing to contain. Needs
-                    a manifest reason; never a skip. An outcome of its
-                    own: a not-applicable row (or target) passes only by
-                    answering not-applicable, and is recorded so. Runs as
-                    ``contained`` once its surface lands.
+                    a reason in the fixture's spec; never a skip. It is an
+                    outcome in its own right: a not-applicable fixture (or
+                    target) passes only by answering not-applicable, and
+                    is recorded so. When the surface lands, the spec
+                    expects ``contained`` instead.
 ``inconclusive``    the run could not decide: infrastructure degraded, a
                     worker was lost, a runtime was missing, nothing was
                     collected, or everything was skipped. Fails the lane.
 
-A ``pending`` manifest row carries no fixture and is never run, so it has
-no outcome; the plugin records it in the receipt as ``pending`` with the
-closing leaf.
+A fixture without a module is never run, so it has no outcome; the
+plugin records it in the receipt as ``not-run``.
 
 Verdict
 -------
@@ -50,7 +50,7 @@ class Outcome(str, Enum):
     INCONCLUSIVE = "inconclusive"
 
 
-# The expectation a manifest row can declare for a runnable fixture.
+# The expectation a fixture's spec can declare for a target.
 EXPECTATIONS = frozenset({Outcome.CONTAINED.value, Outcome.NOT_APPLICABLE.value})
 
 # Interactive routes allow the limit plus 2 s; take-home routes plus 5 s
@@ -80,7 +80,7 @@ def classify_denial(status: int) -> bool:
 
 
 def decide(observed: str, expected: str) -> Verdict:
-    """Compare an observed outcome with the manifest expectation.
+    """Compare an observed outcome with the spec's expectation.
 
     ``expected`` is ``contained`` or ``not-applicable``. The observed
     outcome is one of the :class:`Outcome` values. The result is the

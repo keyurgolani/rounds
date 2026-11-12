@@ -165,14 +165,25 @@ describe('CodingDetail denial states', () => {
   it('clears the denial when the next run is accepted', async () => {
     vi.mocked(evaluateCode)
       .mockRejectedValueOnce(new RunnerError({ message: 'x', status: 503, code: 'worker_unavailable' }))
-      .mockResolvedValueOnce({ passed: 2, failed: 0, results: [] });
+      .mockResolvedValueOnce({
+        job_id: 'jobaaaaaaaaaaa1', state: 'completed', outcome_class: 'passed', retryable: false,
+        cancel_requested: false,
+        envelope: {
+          version: 'rounds.execution-envelope/v1', job_id: 'jobaaaaaaaaaaa1', state: 'completed',
+          outcome_class: 'passed', authoritative: true, limit: null, parts: [], score: null, definition: null,
+          queued_at: 1, started_at: 2, finished_at: 3, cleanup: 'confirmed', rubric: null,
+          output: { passed: 2, failed: 0, results: [] },
+        },
+      } as never);
     const user = userEvent.setup();
     renderPage();
     const region = within(await screen.findByTestId('right-dock')).getByRole('status');
     await user.click(await screen.findByRole('button', { name: 'Run all (2)' }));
     await waitFor(() => expect(region).toHaveTextContent('Unavailable right now'));
     await user.click(screen.getByRole('button', { name: 'Run all (2)' }));
-    await waitFor(() => expect(region).toBeEmptyDOMElement());
+    // The job's end replaces the denial.
+    await waitFor(() => expect(region).toHaveTextContent('Finished. The results are ready.'));
+    expect(region).not.toHaveTextContent('Unavailable right now');
   });
 });
 

@@ -14,9 +14,9 @@
 //               "commits": [<commit message>, ...] (optional) }
 // Exits 0 with a report, 2 on bad arguments or unreadable input.
 //
-// TODO(ROUNDS-01-L03): from S2, read leaf stages and pending edges from
-// docs/program/leaf-dag.json, so a staged leaf counts as merged once every
-// stage PR merges, without the squash-message signal.
+// TODO(ROUNDS-01-L03): read leaf stages from docs/program/leaf-dag.json, as
+// scripts/program/leaf-gate.mjs does, so a staged leaf counts as merged once
+// every stage PR merges, without the squash-message signal.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';

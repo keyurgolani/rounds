@@ -1,9 +1,8 @@
 """RD-07: the render proxy and its health check repeat no renderer text.
 
-Guarantee (closed by ROUNDS-00A-L01; the renderer's own echo is a
-white-box pending row for ROUNDS-00A-L06): ``/api/pdf/health`` answers
-only its status, ``ok`` with 200 or ``unavailable`` with 503, and a render
-the renderer can't finish answers its typed status with that code's fixed
+Guarantee (closed by ROUNDS-00A-L01): ``/api/pdf/health`` answers only
+its status, ``ok`` with 200 or ``unavailable`` with 503, and a render the
+renderer can't finish answers its typed status with that code's fixed
 sentence, never the renderer's body or a transport error. The fixture
 compares the answer with exactly those, so any other text is a finding,
 whatever it says. The corpus stack runs no renderer at stage 1, so a
@@ -17,8 +16,21 @@ from corpus._base import code_of, result
 from corpus._requests import render_body
 from corpus._snapshots import owned_snapshot
 
-HEALTH = "RD-07.health-status-only"
-RENDER = "RD-07.render-failure-typed"
+# This fixture's spec; conformance/manifest.py reads it as a literal.
+SPEC = {
+    "routes": ["GET /api/pdf/health", "POST /api/pdf/render"],
+    "subcases": ["RD-07.health-status-only", "RD-07.render-failure-typed"],
+    "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
+    "languages": [],
+    "control": ("selftest/test_negative_controls.py: health answering more than its status or a status of its "
+                "own, and the renderer's text in a failed render"),
+    "setup": "one synthetic account; the stack runs no renderer at stage 1",
+    "teardown": "the account removed with the admin token",
+    "destructive": False,
+    "environment_sensitive": True,
+}
+
+HEALTH, RENDER = SPEC["subcases"]
 # What health may answer, and the HTTP status each comes with
 # (backend/routers/pdf.py).
 HEALTH_STATUSES = {"ok": 200, "unavailable": 503}

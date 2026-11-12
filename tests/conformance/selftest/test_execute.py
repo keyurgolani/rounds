@@ -21,14 +21,14 @@ from fakes import Target
 MANIFEST = m.load_manifest()
 EX07 = MANIFEST.by_id("EX-07")
 EX02 = MANIFEST.by_id("EX-02")
-# A runnable not-applicable row: a surface this branch doesn't have yet.
-# Its id is one no manifest row uses, so it can't be read as a real row.
+# A runnable not-applicable fixture: a spec with no sub-case, for a surface
+# this branch doesn't have yet. Its id is one no manifest row uses, so it
+# can't be read as a real row.
 NA_ID = "EX-99"
 NA = m.Fixture(
-    id=NA_ID, attack="a surface this branch doesn't have", spec_ref="selftest", status="not-applicable",
-    closing_leaf="ROUNDS-00A-L05", routes=["POST /api/run"], languages=[], control="selftest",
-    destructive=False, environment_sensitive=False, setup="none", teardown="none", module="selftest_only",
-    reason="the surface lands with ROUNDS-00A-L05",
+    id=NA_ID, family="execution", module="selftest_only", routes=["POST /api/run"], subcases=[],
+    expected={target: "not-applicable" for target in m.TARGETS}, languages=[], control="selftest",
+    setup="none", teardown="none", reason="a surface this branch doesn't have yet",
 )
 
 
@@ -46,7 +46,7 @@ def _exercise(ctx, *routes):
         ctx.runner.request(method, path, token="token-1", json_body={})
 
 
-def test_a_contained_result_passes_and_records_routes_and_pending_subcases():
+def test_a_contained_result_passes_and_records_routes_and_its_specs_subcases():
     def run(ctx):
         _exercise(ctx, ("POST", "/api/run"))
         return result({"EX-07.candidate-env-minimal": Outcome.CONTAINED.value}, "fine", evidence={"out": "ok"})
@@ -54,10 +54,9 @@ def test_a_contained_result_passes_and_records_routes_and_pending_subcases():
     ran, _ = _go(EX07, run)
     assert ran.passed, ran.message
     assert ran.receipt.routes == ["POST /api/run"]
-    statuses = {s["id"]: s["status"] for s in ran.receipt.subcases}
-    assert statuses == {"EX-07.candidate-env-minimal": "contained", "EX-07.other-process-env": "pending"}
-    pending = [s for s in ran.receipt.subcases if s["status"] == "pending"]
-    assert pending[0]["closing_leaf"] == "ROUNDS-00A-L05"
+    assert ran.receipt.subcases == [
+        {"id": "EX-07.candidate-env-minimal", "status": "contained", "outcome": "contained"},
+    ]
     assert ran.receipt.note == "fine" and ran.receipt.evidence == {"out": "ok"}
 
 

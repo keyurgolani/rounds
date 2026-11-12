@@ -4,14 +4,15 @@ Responsibilities:
 - put the framework (``conformance``) and the fixtures (``corpus``) on the
   import path, plus #9's account factory (``harness/probes``) when it is
   beside us, so a fixture reuses the synthetic-account factory;
-- load and validate the manifest and the skip ledger at session start, so
-  a malformed manifest, an expired skip, or a skip for an unknown fixture
-  fails the lane before any stack call;
+- load and validate the manifest, each fixture's spec, and the skip
+  ledger at session start, so a malformed manifest or spec, an expired
+  skip, or a skip for an unknown fixture fails the lane before any stack
+  call;
 - read the run's canaries, failing the run when one that has landed
   wasn't planted;
 - build the session (stack clients, canaries, the admin token), record
-  every row that doesn't run (pending, and not-applicable without a
-  module) in the receipt up front, and write the receipt at the end;
+  every fixture without a module as ``not-run`` in the receipt up front,
+  and write the receipt at the end;
 - fail the lane when nothing was collected or everything was skipped.
 
 The per-fixture run, its strict expected outcome, redaction, canary
@@ -66,17 +67,10 @@ class Session:
         self.totals = RunTotals()
 
     def record_rows_that_dont_run(self) -> None:
-        from conformance.receipts import FixtureReceipt
+        from conformance.receipts import not_run
 
-        for fx in self.manifest.fixtures:
-            if fx.status == "pending":
-                self.receipt.add(FixtureReceipt(id=fx.id, status="pending", closing_leaf=fx.closing_leaf,
-                                                note=f"pending: closes with {fx.closing_leaf}"))
-            elif fx.status == "not-applicable" and not fx.module:
-                self.receipt.add(FixtureReceipt(id=fx.id, status="ran", closing_leaf=fx.closing_leaf,
-                                                target=self.target, outcome="not-applicable",
-                                                expectation="not-applicable", verdict="pass",
-                                                note=f"not-applicable: {fx.reason}"))
+        for fx in self.manifest.not_run():
+            self.receipt.add(not_run(fx.id))
 
 
 def _image_refs() -> dict[str, str]:
