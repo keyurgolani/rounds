@@ -129,6 +129,10 @@ services:
       - ROUNDS_GATE_EXECUTION_GRADING=${ROUNDS_GATE_EXECUTION_GRADING:-}
       - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
+      # The admission phase opens the demo's code runs for its demo
+      # accounts; the later phases run with them at their default, off
+      # (ROUNDS-00B-L07).
+      - ROUNDS_GATE_DEMO_EXECUTION=${ROUNDS_GATE_DEMO_EXECUTION:-}
       # The share secrets phases open share capability resolution
       # (ROUNDS-00B-L04).
       - ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=${ROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION:-}

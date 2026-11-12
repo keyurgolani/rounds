@@ -55,6 +55,15 @@ describe('classifyRunnerError', () => {
     expect(classifyRunnerError(null)).toBeNull();
   });
 
+  it("reads the demo's code runs being off as its own state, not as unavailable or turned off", () => {
+    const denial = classifyRunnerError(
+      err(503, 'demo_execution_disabled', { correlationId: '0123456789abcdef0123456789abcdef' }),
+    );
+    expect(denial).toMatchObject({ kind: 'demo_off', status: 503, code: 'demo_execution_disabled' });
+    // The notice has its own sentence; the server's never reaches the page.
+    expect(denial?.detail).toBeNull();
+  });
+
   it('a route_disabled code wins over the status, and a typed 403 needs its code', () => {
     expect(classifyRunnerError(err(401, 'route_disabled'))?.kind).toBe('turned_off');
     expect(classifyRunnerError(err(403))).toBeNull();

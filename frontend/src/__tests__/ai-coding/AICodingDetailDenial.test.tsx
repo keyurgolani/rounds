@@ -41,7 +41,13 @@ vi.mock('../../components/editor/MultiFileEditor', () => ({
 }));
 
 import AICodingDetail from '../../pages/ai-coding/AICodingDetail';
-import { getRound, gradeAttempt, persistAttempt, runProject } from '../../pages/ai-coding/aiCodingApi';
+import {
+  deleteInProgressAttempt,
+  getRound,
+  gradeAttempt,
+  persistAttempt,
+  runProject,
+} from '../../pages/ai-coding/aiCodingApi';
 import { RunnerError } from '../../lib/runnerFetch';
 import { UUID_V7_PATTERN } from '../../lib/idempotency';
 
@@ -166,5 +172,46 @@ describe('AICodingDetail denial states', () => {
     // The server's own text never reaches the page.
     expect(screen.queryByText(/Field required/)).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
+});
+
+describe("AICodingDetail when the demo's code runs are off (ROUNDS-00B-L07)", () => {
+  const demoOff = () => new RunnerError({ message: 'x', status: 503, code: 'demo_execution_disabled' });
+
+  beforeEach(() => {
+    vi.mocked(deleteInProgressAttempt).mockClear();
+  });
+
+  it('says so above the console where Run answers, and keeps the files', async () => {
+    vi.mocked(runProject).mockImplementation(blurThenReject(demoOff()));
+    const user = userEvent.setup();
+    renderPage();
+    const run = await screen.findByRole('button', { name: 'Run' });
+    run.focus();
+    await user.keyboard('{Enter}');
+
+    const region = screen.getByRole('status');
+    await waitFor(() => expect(region).toHaveTextContent('Off in the demo'));
+    expect(region).toHaveTextContent('Code runs are off in the demo. Nothing ran. Your code is still here.');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Run' })).toHaveFocus());
+    expect(screen.queryByTestId('run-dock')).not.toBeInTheDocument();
+    expect(deleteInProgressAttempt).not.toHaveBeenCalled();
+  });
+
+  it('says so where Submit answers, opens no report, and keeps the files', async () => {
+    vi.mocked(gradeAttempt).mockImplementation(blurThenReject(demoOff()));
+    const user = userEvent.setup();
+    renderPage();
+    const submit = await screen.findByRole('button', { name: 'Submit' });
+    submit.focus();
+    await user.keyboard(' ');
+
+    const region = screen.getByRole('status');
+    await waitFor(() => expect(region).toHaveTextContent('Off in the demo'));
+    expect(region).toHaveTextContent('Code runs are off in the demo. Nothing was graded.');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toHaveFocus());
+    expect(persistAttempt).not.toHaveBeenCalled();
+    expect(deleteInProgressAttempt).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
   });
 });
