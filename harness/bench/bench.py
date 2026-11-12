@@ -12,7 +12,7 @@ consistency under load and restore, the freeze of a bounded-context
 transfer, and zero accepted writes lost. It writes a receipt per
 contracts/database/benchmark.schema.json with pass or fail per target.
 
-Run it only through the machine's heavy lock. It signals only the processes
+Run it on a quiet machine; a full run takes about half an hour. It signals only the processes
 it starts, and moves each phase's scratch to the Trash when the phase ends.
 Accounts, passwords, and data are generated per run and never printed.
 """
@@ -937,7 +937,7 @@ def profile(binary: Path) -> dict:
         "emulation": {"GOMAXPROCS": 1, "note": "macOS has no cgroups: the 500m CPU limit is approximated with one Go scheduler thread and the memory limit with GOMEMLIMIT; RSS is reported against 512Mi"},
         "revision": rev,
         "loadAverageAtStart": os.getloadavg(),
-        "sharedMachine": "an ordinary heavy-lock slot, not exclusive: other sessions may have run in the other slots",
+        "sharedMachine": "a shared machine, not an exclusive one: other workloads may have run during the measurement, so the load averages at start and end are recorded",
     }
 
 
