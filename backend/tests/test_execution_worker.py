@@ -951,7 +951,7 @@ def test_a_wake_ends_an_idle_pause_and_the_next_claim_comes_at_once(monkeypatch,
         claims = Claims([False] * 4, hold=0.4 if during == "claim" else 0)
         worker = Worker(claims, Slots(), {}, name="runner-x")
         claims.worker = worker
-        loop = asyncio.create_task(worker._claim_loop())
+        claiming = asyncio.create_task(worker._claim_loop())
         try:
             await _claimed(claims, 1)
             await asyncio.sleep(0.1 if during == "claim" else 0.3)
@@ -964,7 +964,7 @@ def test_a_wake_ends_an_idle_pause_and_the_next_claim_comes_at_once(monkeypatch,
             return claims.at[1] - woken
         finally:
             await worker.stop()
-            await asyncio.wait_for(loop, 2)
+            await asyncio.wait_for(claiming, 2)
 
     assert asyncio.run(scenario()) < 1
     # The pause after the claim the wake brought is the shortest again.
