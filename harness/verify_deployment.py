@@ -122,7 +122,7 @@ DEFAULT_PASSWORDS: tuple[str, ...] = tuple(dict.fromkeys(p for _, _, p in DEFAUL
 
 CREATE_IF_AUTHED = '@request.auth.id != ""'
 NGINX_BODY_CAP = 1024 * 1024  # client_max_body_size 1m in frontend/nginx.conf
-# PocketBase 0.22.22's answer to /api/oauth2-redirect without state and code.
+# PocketBase 0.22.57's answer to /api/oauth2-redirect without state and code.
 OAUTH_FAILURE_LOCATION = "../_/#/auth/oauth2-redirect-failure"
 
 # (check id, path, methods). nginx answers these itself (frontend/nginx.conf,
@@ -430,7 +430,7 @@ def check_open_routes(base_url: str, req: Callable[..., Response] = request,
                            isinstance(doc, dict) and "authProviders" in doc, 200,
                            "expected PocketBase's auth methods"))
 
-    # Without a provider's state and code, PocketBase 0.22.22 answers this route
+    # Without a provider's state and code, PocketBase 0.22.57 answers this route
     # with a bodyless 307 to its own failure page. Only PocketBase answers that
     # way, so it shows the route reaches PocketBase (the redirect is not
     # followed; its target is the admin UI path nginx denies).

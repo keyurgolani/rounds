@@ -6,7 +6,7 @@ the release that carries it. Its decisions run here under node
 rows, each under its own link's id. Static checks hold its order, its lint entry (pinned to
 the file and waiting on the owner's review), its manifest, and its down
 step to what the header says. Harness phase 15 runs it on real databases
-with PocketBase 0.22.22: a copy, a forward run, a run stopped part way and
+with PocketBase 0.22.57: a copy, a forward run, a run stopped part way and
 run again, the down step, and a second forward run.
 """
 from __future__ import annotations
