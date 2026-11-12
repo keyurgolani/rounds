@@ -97,3 +97,72 @@ export function ancestorOf(id, byId) {
   }
   return byId.get(base) || null;
 }
+
+const STORE = /^pb:[a-z_][a-z0-9_]*$/;
+
+// The entries below `id`, as [{ id, entry }] in map order, where `id` is
+// the descendant seen from `id` (a path read through `pathsFrom` keeps the
+// caller's column): a store's fields and their paths, a column's paths, or
+// the deeper paths under a pointer. A `*` on either side matches any one
+// segment. Matches the evaluators' `descendants`.
+export function descendantsOf(id, entries, byId) {
+  if (typeof id !== 'string' || id.startsWith('storage:')) return [];
+  const out = [];
+  const seen = new Set();
+  const add = (did, entry) => { if (!seen.has(did)) { seen.add(did); out.push({ id: did, entry }); } };
+  const aliasPaths = (column) => {
+    const alias = byId.get(column)?.pathsFrom;
+    if (!alias) return;
+    for (const e of entries) {
+      const [b, p] = split(e.id);
+      if (p !== null && b === alias) add(`${column}#${p}`, e);
+    }
+  };
+  const [base, pointer] = split(id);
+  if (pointer === null) {
+    if (STORE.test(base)) {
+      for (const e of entries) if (e.id.startsWith(`${base}.`)) add(e.id, e);
+      for (const e of entries) if (e.id.startsWith(`${base}.`) && !e.id.includes('#')) aliasPaths(e.id);
+      return out;
+    }
+    for (const e of entries) {
+      const [b, p] = split(e.id);
+      if (p !== null && b === base) add(e.id, e);
+    }
+    aliasPaths(base);
+    return out;
+  }
+  const segs = segments(pointer);
+  const below = (p) => {
+    const pattern = segments(p);
+    return pattern.length > segs.length && segs.every((s, i) => s === '*' || pattern[i] === '*' || pattern[i] === s);
+  };
+  const alias = byId.get(base)?.pathsFrom;
+  for (const e of entries) {
+    const [b, p] = split(e.id);
+    if (p === null || !below(p)) continue;
+    if (b === base) add(e.id, e);
+  }
+  if (alias) {
+    for (const e of entries) {
+      const [b, p] = split(e.id);
+      if (p !== null && b === alias && below(p)) add(`${base}#${p}`, e);
+    }
+  }
+  return out;
+}
+
+// True when `inner` is `outer` or sits below it, by the same rule.
+export function within(inner, outer) {
+  if (inner === outer) return true;
+  const [ob, op] = split(outer);
+  const [ib, ip] = split(inner);
+  if (op === null) {
+    if (STORE.test(ob)) return inner.startsWith(`${ob}.`);
+    return ib === ob && ip !== null;
+  }
+  if (ib !== ob || ip === null) return false;
+  const o = segments(op);
+  const n = segments(ip);
+  return n.length >= o.length && o.every((s, i) => s === '*' || n[i] === '*' || n[i] === s);
+}

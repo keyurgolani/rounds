@@ -1,17 +1,18 @@
 // The privacy rule's checks (ROUNDS-14-L01). Each pushes findings with a
 // code a reader can act on; analyze() runs them all once per context.
 
+import { BlockList, isIP } from 'node:net';
 import path from 'node:path';
 import { finding, jsonLine } from '../context.mjs';
 import { validate } from '../json-schema.mjs';
 import { leafResolver, loadLeafIds } from '../leaf-ids.mjs';
 import { extractBrowserKeys } from '../authority/browser-keys.mjs';
 import { AUTH_SYSTEM_FIELDS, extractSchema } from './schema-vm.mjs';
-import { ancestorOf, fieldResolver, familyCovers, idForm, pointerMatch, segments, split } from './fields.mjs';
+import { ancestorOf, descendantsOf, fieldResolver, familyCovers, idForm, pointerMatch, segments, split, within } from './fields.mjs';
 import { definedFunctions, scanProviderCalls } from './scan.mjs';
 import {
-  BASELINE_STORES_PATH, COPY_DIRS, DR_LEAF, FIELD_MAP_PATH, MATRIX_PATH, POLICY_PATH, PRIVACY_DIR, PURPOSES_PATH, REGISTRIES,
-  SCHEMA_PATH, SECRET_PATTERNS_PATH, VIOLATIONS_PATH, sourceFiles, staleCopies,
+  BASELINE_STORES_PATH, CONFIG_DOC_PATH, COPY_DIRS, DOC_PATH, DR_LEAF, FIELD_MAP_PATH, MATRIX_PATH, POLICY_PATH, PRIVACY_DIR,
+  PURPOSES_PATH, REGISTRIES, SCHEMA_PATH, SECRET_PATTERNS_PATH, VIOLATIONS_PATH, sourceFiles, staleCopies,
 } from './files.mjs';
 
 // The sixteen purposes that may be legacy (register entry 9). Pinned here,
@@ -33,6 +34,10 @@ export const JSON_COLUMNS = ['pb:resumes.data', 'pb:ai_coding_attempts.ai_chats'
 export const DEFINITIONS_DIR = 'backend/definitions';
 export const DEFINITION_SCHEMAS_DIR = 'contracts/definitions';
 export const LEGACY_PURPOSES_MIRROR = 'contracts/ai/legacy-purposes.json';
+// Column types whose values are free text, and a pattern that only bars
+// some characters (`^[^...]+$`), which leaves the column free text.
+const FREE_TEXT = new Set(['text', 'editor', 'json', 'email', 'url']);
+const NEGATED_ONLY = /^\^?\[\^[^\]]*\][+*]\$?$/;
 const PIN = /\b(privacy|retention|redaction|consent)@(\d+)\b/g;
 const PIN_FILES = /^(contracts|backend|frontend\/src|scripts|docs)\/.*\.(json|md|mjs|js|ts|tsx|py)$/;
 const SPLIT_SINK = { export: 0, 'local-draft': 1, backup: 2 };
@@ -296,14 +301,22 @@ function checkFieldMap(ctx, P, F, A) {
   });
   const R = fieldResolver(entries);
   A.resolver = R;
-  // Rows and floors.
+  // Rows and floors. An entry in a store the authority matrix maps keeps
+  // one of its rows, so the row's floor binds it.
+  const storeOf = (id) => {
+    const [base] = split(id);
+    if (base.startsWith('pb:')) return `collection:${base.slice(3).split('.')[0]}`;
+    return base.startsWith('storage:') ? `browser-key:${base.slice(8)}` : null;
+  };
+  entries.forEach((e, i) => {
+    const storeRows = e.row ? null : stores.get(storeOf(e.id));
+    if (storeRows && storeRows.length) push('PRIVACY_ROW_MISSING', i, `${e.id} names no row, but its store maps to ${storeRows.join(', ')}; name the row whose floor it keeps`, 'id');
+  });
   entries.forEach((e, i) => {
     if (!e.row) return;
     const row = rows.get(e.row);
     if (!row) { push('PRIVACY_UNKNOWN_REF', i, `${e.id} names row ${e.row}, which is not in ${MATRIX_PATH}`, 'row'); return; }
-    const [base] = split(e.id);
-    const store = base.startsWith('pb:') ? `collection:${base.slice(3).split('.')[0]}` : base.startsWith('storage:') ? `browser-key:${base.slice(8)}` : null;
-    const storeRows = store ? stores.get(store) : null;
+    const storeRows = stores.get(storeOf(e.id));
     if (storeRows && storeRows.length && !storeRows.includes(e.row) && !e.id.includes('#')) {
       push('PRIVACY_ROW_MISMATCH', i, `${e.id} names row ${e.row}, but ${BASELINE_STORES_PATH} maps its store to ${storeRows.join(', ')}`, 'row');
     }
@@ -332,6 +345,18 @@ function checkFieldMap(ctx, P, F, A) {
       if (!e.id.startsWith('pb:')) return;
       const [base] = split(e.id);
       if (!live.has(base)) push('PRIVACY_FIELD_STALE', i, `${e.id} names a field no migration leaves live`, 'id');
+    });
+    // A column that takes free text can hold anything, so it is content
+    // unless its migration constrains it. A pattern that only bars a few
+    // characters doesn't.
+    const columns = new Map();
+    for (const c of schema.collections) for (const f of c.fields) columns.set(`pb:${c.name}.${f.name}`, f);
+    const constrained = (f) => f.type === 'text' && Boolean(f.pattern) && !NEGATED_ONLY.test(f.pattern);
+    entries.forEach((e, i) => {
+      const f = e.kind === 'metadata' ? columns.get(e.id) : null;
+      if (f && FREE_TEXT.has(f.type) && !constrained(f)) {
+        push('PRIVACY_KIND_UNCONSTRAINED', i, `${e.id} is kinded metadata, but its ${f.type} column takes free text; class it content, or constrain it in a migration`, 'kind');
+      }
     });
   }
   // JSON columns: the four named columns declare their paths, and every
@@ -420,6 +445,13 @@ function checkPurposes(ctx, P, F, A, resolveLeaf) {
       if (e.class) classes.add(e.class);
       if (e.class === 'Secret') push('PRIVACY_SECRET_INPUT', [...parts, 'inputs', j], `${p.id} sends ${input.field}, a Secret, as content`);
       if (e.visibility === 'server-only') push('PRIVACY_SERVER_ONLY_INPUT', [...parts, 'inputs', j], `${p.id} sends ${input.field}, which is server-only`);
+      // An input sends everything below it too.
+      const below = descendantsOf(input.field, P.fieldMap.entries, R.byId);
+      for (const d of below) if (d.entry.class) classes.add(d.entry.class);
+      const secret = below.find((d) => d.entry.class === 'Secret');
+      if (secret) push('PRIVACY_SECRET_INPUT', [...parts, 'inputs', j], `${p.id} sends ${input.field}, which holds ${secret.id}, a Secret`);
+      const serverOnly = below.find((d) => d.entry.visibility === 'server-only');
+      if (serverOnly) push('PRIVACY_SERVER_ONLY_INPUT', [...parts, 'inputs', j], `${p.id} sends ${input.field}, which holds ${serverOnly.id}, a server-only field`);
       const rubric = /(^def:harness-revision#\/rubric$)|(^pb:[a-z_]+\.rubric$)/.test(input.field);
       if (rubric && !GRADE_PURPOSES.includes(p.id)) push('PRIVACY_RUBRIC_OUTSIDE_GRADE', [...parts, 'inputs', j], `${p.id} sends a rubric; only ${GRADE_PURPOSES.join(' and ')} may`);
     });
@@ -445,9 +477,10 @@ function checkPurposes(ctx, P, F, A, resolveLeaf) {
   for (const r of refs) {
     const key = `${r.path}::${r.function}`;
     if (r.kind === 'helper' && !allowed.has(key)) F.push(finding('PURPOSE_UNREGISTERED_CALL', r.path, r.line, `${r.name} is called from ${r.function || 'module level'}, which no purpose in ${PURPOSES_PATH} registers`));
+    if (r.kind === 'wrapper' && !allowed.has(key)) F.push(finding('PURPOSE_UNREGISTERED_CALL', r.path, r.line, `${r.function || 'module level'} calls ${r.name}, a registered call site that reaches a provider; register this caller in ${PURPOSES_PATH} too`));
     if (r.kind === 'vendor' && !inside.has(key)) F.push(finding('PURPOSE_UNREGISTERED_CALL', r.path, r.line, `a provider API is used in ${r.function || 'module level'}, outside the provider helpers ${PURPOSES_PATH} names`));
   }
-  const reached = new Set(refs.filter((r) => r.kind === 'helper').map((r) => `${r.path}::${r.function}`));
+  const reached = new Set(refs.filter((r) => r.kind === 'helper' || r.kind === 'wrapper').map((r) => `${r.path}::${r.function}`));
   reg.purposes.forEach((p, i) => p.callSites.forEach((s, j) => {
     if (siteExists(s) && !reached.has(`${s.path}::${s.function}`)) push('PURPOSE_STALE_SITE', ['purposes', i, 'callSites', j], `${p.id} call site ${s.path}::${s.function} calls no provider helper`);
   }));
@@ -602,28 +635,90 @@ function checkRecord(ctx, P, F, resolveLeaf) {
     const governed = new Set((record.approvalRef?.governedFiles || []).map((g) => g.path));
     for (const f of [POLICY_PATH, SCHEMA_PATH]) if (!governed.has(f)) push('PRIVACY_RECORD_INCOMPLETE', ['approvalRef'], `a ratified record pins ${f}`);
   }
+  // The policy's current revisions and the record are ratified together.
+  if (P.policy && record.status !== 'superseded') {
+    const want = record.status === 'ratified' ? 'ratified' : 'draft';
+    for (const v of P.policy.versions) {
+      const cur = v.revisions.find((r) => r.revision === v.current);
+      if (cur && cur.status !== want) push('PRIVACY_STATUS_MISMATCH', ['status'], `${POLICY_PATH} marks ${v.id}@${v.current} ${cur.status}, but the record is ${record.status}; they're ratified together`);
+    }
+  }
   return { record, file };
 }
 
 // Relaxing changes against the base branch need a relaxations entry with
 // a spec change and an approval reference (Decision 6).
+// Why head entry `h` is looser than base entry `b`, or null. Beyond the
+// class and visibility order, a kind change that a sink's rule lets through
+// where it stopped the old kind (logs take metadata or ids, never content)
+// is looser too.
+function looserEntry(h, b, policy) {
+  if (b.class && h.class && b.class !== h.class) {
+    const loosened = (b.class === 'Share Projection' || h.class === 'Share Projection') ? !(h.class === 'Secret') : CLASS_ORDER.indexOf(h.class) < CLASS_ORDER.indexOf(b.class);
+    return loosened ? `is ${h.class}, looser than ${b.class}` : null;
+  }
+  if (b.visibility && h.visibility && b.visibility !== h.visibility) {
+    return VISIBILITY_ORDER.indexOf(h.visibility) < VISIBILITY_ORDER.indexOf(b.visibility) ? `is ${h.visibility}, looser than ${b.visibility}` : null;
+  }
+  if (Boolean(b.class) !== Boolean(h.class)) return 'changed family';
+  if (b.kind === h.kind) return null;
+  if (b.kind === 'content') return `is ${h.kind}, where it was content`;
+  const { cells, visibility } = policyIndex(policy);
+  const sinks = h.class ? CLASS_SINKS : VISIBILITY_SINKS;
+  const takes = (rule, kind) => rule?.decision === 'allow-if' && rule.cases.some((c) => c.when.kind === kind);
+  const opened = sinks.filter((s) => {
+    const rule = (h.class ? cells.get(`${h.class}|${s}`) : visibility.get(`${h.visibility}|${s}`))?.rule;
+    return takes(rule, h.kind) && !takes(rule, b.kind);
+  });
+  return opened.length ? `is ${h.kind}, which ${opened.join(' and ')} take${opened.length === 1 ? 's' : ''} where ${b.kind} was stopped` : null;
+}
+
+const locationItems = (v) => [
+  ...(v.location?.fields || []), ...(v.location?.purposes || []), ...(v.location?.migrations || []),
+  ...(v.location?.anchors || []).map((a) => `${a.path}: ${a.text}`),
+];
+
 function relaxations(ctx, P) {
   const out = [];
   const baseMap = readBaseJson(ctx, FIELD_MAP_PATH);
-  if (baseMap && P.fieldMap) {
+  if (baseMap && P.fieldMap && P.policy) {
     const head = new Map(P.fieldMap.entries.map((e) => [e.id, e]));
+    const R = fieldResolver(P.fieldMap.entries);
     for (const b of baseMap.entries || []) {
       const h = head.get(b.id);
-      if (!h) continue;
-      if (b.class && h.class && b.class !== h.class) {
-        const loosened = (b.class === 'Share Projection' || h.class === 'Share Projection') ? !(h.class === 'Secret') : CLASS_ORDER.indexOf(h.class) < CLASS_ORDER.indexOf(b.class);
-        if (loosened) out.push({ target: b.id, what: `${b.id} moved from ${b.class} to ${h.class}` });
-      } else if (b.visibility && h.visibility && VISIBILITY_ORDER.indexOf(h.visibility) < VISIBILITY_ORDER.indexOf(b.visibility)) {
-        out.push({ target: b.id, what: `${b.id} moved from ${b.visibility} to ${h.visibility}` });
-      } else if (Boolean(b.class) !== Boolean(h.class)) {
-        out.push({ target: b.id, what: `${b.id} changed family` });
+      if (h) {
+        const why = looserEntry(h, b, P.policy);
+        if (why) out.push({ target: b.id, what: `${b.id} ${why}` });
+        continue;
       }
-      if (b.kind === 'content' && h.kind !== 'content') out.push({ target: b.id, what: `${b.id} moved from content to ${h.kind}` });
+      // A removed entry's id now takes whatever entry is left above it.
+      const r = R.resolve(b.id);
+      const why = r ? looserEntry(r, b, P.policy) : null;
+      if (why) out.push({ target: b.id, what: `${b.id} was removed, so it now resolves to ${r.id}, which ${why}` });
+    }
+  }
+  const baseRegister = readBaseJson(ctx, VIOLATIONS_PATH);
+  if (baseRegister && P.violations) {
+    const head = new Map(P.violations.entries.map((v) => [v.id, v]));
+    for (const b of baseRegister.entries || []) {
+      const h = head.get(b.id);
+      const target = `violation:${b.id}`;
+      if (!h) { out.push({ target, what: `register entry ${b.id} was removed; an entry is closed with its fixing PR, never deleted` }); continue; }
+      if (b.status !== 'open' || h.status !== 'open') continue;
+      if (h.owner !== b.owner) out.push({ target, what: `open register entry ${b.id} moved from ${b.owner} to ${h.owner}` });
+      if (b.detector && h.detector !== b.detector) out.push({ target, what: `open register entry ${b.id} dropped its ${b.detector} detector` });
+      const kept = new Set(locationItems(h));
+      const lost = locationItems(b).filter((x) => !kept.has(x));
+      if (lost.length) out.push({ target, what: `open register entry ${b.id} no longer names ${lost.join('; ')}` });
+    }
+  }
+  const basePatterns = readBaseJson(ctx, SECRET_PATTERNS_PATH);
+  if (basePatterns && P.secretPatterns) {
+    const head = new Map(P.secretPatterns.patterns.map((p) => [p.id, p]));
+    for (const b of basePatterns.patterns || []) {
+      const h = head.get(b.id);
+      if (!h) out.push({ target: `pattern:${b.id}`, what: `secret pattern ${b.id} was removed` });
+      else if (h.regex !== b.regex) out.push({ target: `pattern:${b.id}`, what: `secret pattern ${b.id} changed, so it may match less` });
     }
   }
   const basePolicy = readBaseJson(ctx, POLICY_PATH);
@@ -648,7 +743,11 @@ function relaxations(ctx, P) {
       const h = head.get(b.id);
       if (!h) continue;
       const bin = new Map(b.inputs.map((x) => [x.field, x]));
-      for (const x of h.inputs) if (!bin.has(x.field)) out.push({ target: b.id, what: `${b.id} sends ${x.field}, which it didn't` });
+      // An input under one the purpose already sent narrows it; that's no loosening.
+      for (const x of h.inputs) {
+        if (bin.has(x.field) || b.inputs.some((y) => !y.omit && within(x.field, y.field))) continue;
+        out.push({ target: b.id, what: `${b.id} sends ${x.field}, which it didn't` });
+      }
       for (const x of b.inputs) if (x.omit && !h.inputs.some((y) => y.field === x.field && y.omit)) out.push({ target: b.id, what: `${b.id} no longer omits ${x.field}` });
       if ((h.batchMax || 1) > (b.batchMax || 1)) out.push({ target: b.id, what: `${b.id} raised its batch cap` });
       if (b.consent === 'per-request' && h.consent === 'none') out.push({ target: b.id, what: `${b.id} dropped per-request consent` });
@@ -709,7 +808,8 @@ function checkSecrets(ctx, P, F, record) {
     F.push(finding('PRIVACY_SCHEMA_INVALID', SECRET_PATTERNS_PATH, 1, `a pattern doesn't compile: ${err.message}`));
     return;
   }
-  const files = [...Object.keys(P.texts), ...(record ? [record.file] : [])].filter((f, i, a) => a.indexOf(f) === i);
+  const docs = [DOC_PATH, CONFIG_DOC_PATH].filter((f) => ctx.exists(f));
+  const files = [...Object.keys(P.texts), ...(record ? [record.file] : []), ...docs].filter((f, i, a) => a.indexOf(f) === i);
   for (const f of files) {
     const text = P.texts[f] ?? ctx.read(f);
     text.split('\n').forEach((line, i) => {
@@ -718,6 +818,61 @@ function checkSecrets(ctx, P, F, record) {
         if (p.re.test(line)) F.push(finding('PRIVACY_SECRET_VALUE', f, i + 1, `holds something shaped like a ${p.id}; fixtures are synthetic and stored as parts`));
       }
     });
+  }
+}
+
+// ------------------------------------------------------------ vectors
+
+const rangeList = (ranges) => {
+  const list = new BlockList();
+  for (const r of ranges) {
+    const [a, prefix] = r.split('/');
+    const type = isIP(a) === 6 ? 'ipv6' : 'ipv4';
+    if (prefix) list.addSubnet(a, Number(prefix), type);
+    else list.addAddress(a, type);
+  }
+  return list;
+};
+const listed = (list, address) => {
+  const a = String(address).split('%')[0];
+  const v = isIP(a);
+  return v ? list.check(a, v === 6 ? 'ipv6' : 'ipv4') : false;
+};
+
+// The shared vectors cover every never destination, every lifecycle row
+// (its default, an allowed value, a value out of bounds, and a purge
+// deadline), and every secret pattern.
+function checkVectors(P, F) {
+  const policy = P.policy;
+  if (!policy || !P.vectors.length) return;
+  const cases = P.vectors.flatMap((v) => (v.data.cases || []).map((c) => ({ ...c, file: v.file })));
+  const where = (suite) => P.vectors.find((v) => v.data.suite === suite)?.file || `${PRIVACY_DIR}/vectors`;
+  const push = (suite, message) => F.push(finding('PRIVACY_VECTORS_INCOMPLETE', where(suite), 1, message));
+  const never = cases.filter((c) => c.expect?.code === 'DESTINATION_NEVER');
+  const hosts = (c) => [c.args?.host, c.args?.endpoint?.host].filter((h) => typeof h === 'string').map((h) => h.toLowerCase().replace(/^\[|\]$/g, ''));
+  const addresses = (c) => [...(c.args?.addresses || []), ...(c.args?.endpoint?.addresses || [])];
+  const n = policy.locations.never;
+  for (const range of [...n.loopback, ...n.linkLocal, ...n.unspecified, ...n.metadata]) {
+    const list = rangeList([range]);
+    if (!never.some((c) => addresses(c).some((a) => listed(list, a)))) push('destinations', `no vector answers DESTINATION_NEVER for an address in ${range}`);
+  }
+  for (const name of n.serviceNames) if (!never.some((c) => hosts(c).includes(name))) push('destinations', `no vector answers DESTINATION_NEVER for the service name ${name}`);
+  for (const suffix of n.serviceSuffixes) if (!never.some((c) => hosts(c).some((h) => h.endsWith(suffix)))) push('destinations', `no vector answers DESTINATION_NEVER for a name ending ${suffix}`);
+  const retention = cases.filter((c) => c.call === 'evaluate_retention');
+  for (const row of [...policy.lifecycle.rows, ...policy.lifecycle.decided]) {
+    const mine = retention.filter((c) => c.args?.row_id === row.id);
+    const unset = (c) => c.args.value === null || c.args.value === undefined;
+    if (!mine.some(unset)) push('retention', `lifecycle row ${row.id} has no default case`);
+    if (!mine.some((c) => !unset(c) && c.expect?.decision === 'allow')) push('retention', `lifecycle row ${row.id} has no allowed-value case`);
+    if (!mine.some((c) => c.expect?.code === 'OUT_OF_BOUNDS')) push('retention', `lifecycle row ${row.id} has no out-of-bound case`);
+    if (!mine.some((c) => c.expect && 'purge_by' in c.expect)) push('retention', `lifecycle row ${row.id} has no case that checks purge_by`);
+  }
+  const s = P.secretPatterns;
+  if (s) {
+    for (const p of s.patterns) {
+      if (!s.fixtures.some((x) => x.pattern === p.id)) push('secrets', `secret pattern ${p.id} has no fixture`);
+      if (!s.nearMisses.some((x) => x.pattern === p.id)) push('secrets', `secret pattern ${p.id} has no near miss`);
+    }
   }
 }
 
@@ -738,6 +893,7 @@ export function analyze(ctx) {
   checkRelaxations(ctx, P, F);
   checkAuthorityCells(ctx, F);
   checkSecrets(ctx, P, F, A.record);
+  checkVectors(P, F);
   for (const f of staleCopies(ctx)) F.push(finding('PRIVACY_COPY_STALE', f, 1, `copies a file ${PRIVACY_DIR} no longer has; delete the copy`));
   return { findings: F, A };
 }
