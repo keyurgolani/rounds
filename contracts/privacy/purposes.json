@@ -13,6 +13,9 @@
     { "path": "backend/routers/sd_practice.py", "function": "_anthropic_stream_with_tools" },
     { "path": "backend/routers/sd_practice.py", "function": "_openai_stream_with_tools" }
   ],
+  "providerSupport": [
+    { "path": "backend/routers/ai.py", "function": "_models_headers", "note": "Builds the model-list request headers for _fetch_models; calls nothing." }
+  ],
   "roles": [
     { "role": "text", "purposes": "every registered purpose" },
     { "role": "vision", "purposes": "none", "note": "The stored vision role has no purpose, so a call through it is denied." }

@@ -220,7 +220,7 @@
     "unwrap": ["::ffff:0:0/96", "2002::/16", "64:ff9b::/96"],
     "privateNetworkGate": "ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK",
     "allowlistSetting": "ROUNDS_AI_PRIVATE_ENDPOINTS",
-    "combination": "A private destination passes only when the gate is enabled and the resolved address and port match an allowlist entry; with the gate off every private address is refused whatever the list says, and with the gate on an empty list refuses every private address.",
+    "combination": "A private destination passes only when ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK is enabled and the resolved address and port match a ROUNDS_AI_PRIVATE_ENDPOINTS entry. With the gate off, every private address is refused whatever the list says; with the gate on, an empty list refuses every private address.",
     "enforcement": [{ "leaf": "ROUNDS-14-L02", "test": null }, { "leaf": "ROUNDS-00A-L01", "test": null }]
   },
   "credentialChannel": {

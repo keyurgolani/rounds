@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rounds:contracts:privacy:v1",
+  "title": "Rounds privacy policy files",
+  "description": "One definition per file in contracts/privacy/, chosen by the file's registry key (ROUNDS-14-L01). The privacy conformance rule validates each file against its definition and then checks what a schema can't: references, coverage, floors, and changes against the base branch.",
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "leaf": { "type": "string", "pattern": "^ROUNDS-\\d{2}[A-Z]?-L\\d{2}$" },
+    "className": { "enum": ["Private", "Sensitive", "Third-party personal", "Secret", "Share Projection"] },
+    "visibility": { "enum": ["public-ui", "authed-readable", "server-only"] },
+    "kind": { "enum": ["content", "metadata", "opaque-id"] },
+    "sinkId": { "enum": ["remote-ai", "index", "logs", "share", "export", "local-draft", "backup", "analytics", "client-read"] },
+    "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+    "obligation": { "type": "string", "pattern": "^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9-]*$" },
+    "enforcement": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["leaf", "test"], "additionalProperties": false,
+        "properties": { "leaf": { "$ref": "#/$defs/leaf" }, "test": { "type": ["string", "null"], "minLength": 1 } }
+      }
+    },
+    "case": {
+      "type": "object", "required": ["when", "obligations"], "additionalProperties": false,
+      "properties": {
+        "when": { "type": "object", "additionalProperties": { "type": ["string", "boolean"] } },
+        "obligations": { "type": "array", "items": { "$ref": "#/$defs/obligation" } }
+      }
+    },
+    "rule": {
+      "oneOf": [
+        {
+          "type": "object", "required": ["decision", "code"], "additionalProperties": false,
+          "properties": { "decision": { "const": "deny" }, "code": { "$ref": "#/$defs/code" }, "note": { "$ref": "#/$defs/text" } }
+        },
+        {
+          "type": "object", "required": ["decision", "obligations"], "additionalProperties": false,
+          "properties": { "decision": { "const": "allow" }, "obligations": { "type": "array", "items": { "$ref": "#/$defs/obligation" } } }
+        },
+        {
+          "type": "object", "required": ["decision", "cases", "otherwise"], "additionalProperties": false,
+          "properties": {
+            "decision": { "const": "allow-if" },
+            "cases": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/case" } },
+            "otherwise": { "$ref": "#/$defs/code" }
+          }
+        },
+        {
+          "type": "object", "required": ["decision", "consent", "obligations", "otherwise"], "additionalProperties": false,
+          "properties": {
+            "decision": { "const": "allow-with-consent" },
+            "consent": { "enum": ["per-request", "field-level", "purpose-specific"] },
+            "obligations": { "type": "array", "items": { "$ref": "#/$defs/obligation" } },
+            "otherwise": { "$ref": "#/$defs/code" }
+          }
+        }
+      ]
+    },
+    "retention": {
+      "type": "object", "required": ["setBy", "default"], "additionalProperties": false,
+      "properties": {
+        "setBy": { "enum": ["user", "operator"] },
+        "default": { "type": ["integer", "string"] },
+        "choices": { "type": "array", "minItems": 1, "items": { "type": ["integer", "string"] } },
+        "range": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": 0 } },
+        "setting": { "type": "string", "pattern": "^ROUNDS_[A-Z0-9_]+$" },
+        "published": { "type": "boolean" },
+        "anchor": { "$ref": "#/$defs/text" }
+      }
+    },
+    "lifecycleRow": {
+      "type": "object", "required": ["id", "cells", "retention", "purgeWithinHours", "enforcement"], "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "cells": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "$ref": "#/$defs/text" } },
+        "retention": { "$ref": "#/$defs/retention" },
+        "purgeWithinHours": { "type": "integer", "minimum": 0 },
+        "tombstoneDays": { "type": "integer", "minimum": 0 },
+        "renewDays": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } },
+        "warningDays": { "type": "integer", "minimum": 0 },
+        "neverClasses": { "type": "array", "items": { "$ref": "#/$defs/className" } },
+        "digestDays": { "type": "integer", "minimum": 0 },
+        "maxDaysByClass": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+        "heldWhile": { "$ref": "#/$defs/text" },
+        "rejects": { "type": "array", "items": { "type": "string" } },
+        "stores": { "$ref": "#/$defs/text" },
+        "purgeOn": { "type": "array", "items": { "type": "string" } },
+        "enforcement": { "$ref": "#/$defs/enforcement" }
+      }
+    },
+    "decidedRow": {
+      "type": "object", "required": ["id", "category", "decision", "enforcement"], "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "category": { "$ref": "#/$defs/text" },
+        "decision": { "$ref": "#/$defs/text" },
+        "retention": { "$ref": "#/$defs/retention" },
+        "neverFor": { "type": "array", "items": { "type": "string" } },
+        "purgeWithinHours": { "type": "integer", "minimum": 0 },
+        "sameAs": { "type": "string" },
+        "enforcement": { "$ref": "#/$defs/enforcement" }
+      }
+    },
+    "location": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } },
+        "anchors": {
+          "type": "array", "minItems": 1,
+          "items": { "type": "object", "required": ["path", "text"], "additionalProperties": false, "properties": { "path": { "$ref": "#/$defs/text" }, "text": { "$ref": "#/$defs/text" } } }
+        },
+        "purposes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } },
+        "migrations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "required": ["registry", "description", "decisionRecord", "spec", "versions", "classes", "visibilities", "kinds", "sinks", "matrix", "visibilityRules", "lifecycle", "accountDeletion", "locations", "credentialChannel", "consent", "redaction", "operatorSettings", "relaxations"],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": { "type": "string" },
+        "registry": { "const": "rounds-privacy-policy" },
+        "description": { "$ref": "#/$defs/text" },
+        "decisionRecord": { "type": "string", "pattern": "^DR-\\d{4}$" },
+        "spec": { "type": "object", "required": ["path", "failClosedLines", "matrixLines", "lifecycleLines", "deletionLines", "failClosed", "packRule"] },
+        "versions": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "items": {
+            "type": "object", "required": ["id", "current", "covers", "revisions"], "additionalProperties": false,
+            "properties": {
+              "id": { "enum": ["privacy", "retention", "redaction", "consent"] },
+              "current": { "type": "integer", "minimum": 1 },
+              "covers": { "$ref": "#/$defs/text" },
+              "revisions": {
+                "type": "array", "minItems": 1,
+                "items": {
+                  "type": "object", "required": ["revision", "status", "compatibleWith", "changedConstraint"], "additionalProperties": false,
+                  "properties": {
+                    "revision": { "type": "integer", "minimum": 1 },
+                    "status": { "enum": ["draft", "ratified", "superseded"] },
+                    "compatibleWith": { "type": "array", "items": { "type": "integer", "minimum": 1 } },
+                    "changedConstraint": { "type": ["string", "null"] }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "classes": { "type": "array", "minItems": 5, "maxItems": 5 },
+        "visibilities": { "type": "array", "minItems": 3, "maxItems": 3 },
+        "kinds": { "type": "array", "minItems": 3, "maxItems": 3 },
+        "sinks": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "required": ["id", "specColumn", "families", "enforcingLeaf"],
+            "properties": { "id": { "$ref": "#/$defs/sinkId" }, "enforcingLeaf": { "$ref": "#/$defs/leaf" }, "families": { "type": "array", "minItems": 1, "items": { "enum": ["class", "visibility"] } } }
+          }
+        },
+        "matrix": {
+          "type": "object", "required": ["columns", "rows", "cells"], "additionalProperties": false,
+          "properties": {
+            "columns": { "type": "array", "minItems": 7, "maxItems": 7, "items": { "$ref": "#/$defs/text" } },
+            "rows": {
+              "type": "array", "minItems": 5, "maxItems": 5,
+              "items": { "type": "object", "required": ["class", "cells"], "additionalProperties": false, "properties": { "class": { "$ref": "#/$defs/className" }, "cells": { "type": "array", "minItems": 7, "maxItems": 7, "items": { "$ref": "#/$defs/text" } } } }
+            },
+            "cells": {
+              "type": "array",
+              "items": {
+                "type": "object", "required": ["id", "class", "sink", "text", "rule"], "additionalProperties": false,
+                "properties": { "id": { "$ref": "#/$defs/text" }, "class": { "$ref": "#/$defs/className" }, "sink": { "$ref": "#/$defs/sinkId" }, "text": { "$ref": "#/$defs/text" }, "rule": { "$ref": "#/$defs/rule" } }
+              }
+            }
+          }
+        },
+        "visibilityRules": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["id", "visibility", "sink", "rule"], "additionalProperties": false,
+            "properties": { "id": { "$ref": "#/$defs/text" }, "visibility": { "$ref": "#/$defs/visibility" }, "sink": { "$ref": "#/$defs/sinkId" }, "rule": { "$ref": "#/$defs/rule" } }
+          }
+        },
+        "lifecycle": {
+          "type": "object", "required": ["columns", "rows", "decided"], "additionalProperties": false,
+          "properties": {
+            "columns": { "type": "array", "minItems": 4, "maxItems": 4 },
+            "rows": { "type": "array", "minItems": 10, "maxItems": 10, "items": { "$ref": "#/$defs/lifecycleRow" } },
+            "decided": { "type": "array", "items": { "$ref": "#/$defs/decidedRow" } }
+          }
+        },
+        "accountDeletion": { "type": "object", "required": ["text", "purgeWithinHours", "backupExpiryMaxDays", "restoreReplaysJournals", "enforcement"] },
+        "locations": { "type": "object", "required": ["classes", "never", "nonPublic", "privateNetworks", "privateNetworkGate", "allowlistSetting", "combination", "enforcement"] },
+        "credentialChannel": { "type": "object", "required": ["rule", "headers", "match", "enforcement"] },
+        "consent": { "type": "object", "required": ["units", "standing", "batchMax", "enforcement"], "properties": { "standing": { "const": false }, "batchMax": { "type": "integer", "minimum": 1 } } },
+        "redaction": { "type": "object", "required": ["operators", "enforcement"] },
+        "operatorSettings": {
+          "type": "array", "minItems": 3,
+          "items": {
+            "type": "object", "required": ["name", "kind", "readBy", "meaning"], "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "pattern": "^ROUNDS_[A-Z0-9_]+$" }, "kind": { "enum": ["days", "endpoints"] }, "row": { "type": "string" },
+              "readBy": { "const": "runner" }, "default": { "type": "string" }, "meaning": { "$ref": "#/$defs/text" }, "readAtDispatchBy": { "$ref": "#/$defs/leaf" }
+            }
+          }
+        },
+        "relaxations": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["target", "specChange", "approvalRef"], "additionalProperties": false,
+            "properties": { "target": { "$ref": "#/$defs/text" }, "specChange": { "$ref": "#/$defs/text" }, "approvalRef": { "type": "object", "required": ["pr"], "properties": { "pr": { "type": "integer", "minimum": 1 } } } }
+          }
+        }
+      }
+    },
+    "purposes": {
+      "type": "object", "required": ["registry", "description", "providerHelpers", "providerSupport", "roles", "purposes"], "additionalProperties": false,
+      "properties": {
+        "$schema": { "type": "string" },
+        "registry": { "const": "rounds-privacy-purposes" },
+        "description": { "$ref": "#/$defs/text" },
+        "providerHelpers": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/site" } },
+        "providerSupport": { "type": "array", "items": { "$ref": "#/$defs/site" } },
+        "roles": { "type": "array" },
+        "purposes": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "status", "consent", "owner", "classes", "inputs", "outputScope", "toolAuthority", "flag", "manualPath", "streaming", "callSites"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$" },
+              "status": { "enum": ["legacy", "current", "retired"] },
+              "consent": { "enum": ["per-request", "legacy-implicit", "none"] },
+              "owner": { "$ref": "#/$defs/leaf" },
+              "classes": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/className" } },
+              "inputs": {
+                "type": "array",
+                "items": { "type": "object", "required": ["field"], "additionalProperties": false, "properties": { "field": { "$ref": "#/$defs/text" }, "omit": { "type": "boolean" } } }
+              },
+              "credential": { "$ref": "#/$defs/text" },
+              "outputScope": { "$ref": "#/$defs/text" },
+              "toolAuthority": { "anyOf": [{ "const": "none" }, { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z_]*$" } }] },
+              "flag": { "type": ["string", "null"] },
+              "manualPath": { "$ref": "#/$defs/text" },
+              "streaming": { "type": "boolean" },
+              "batchMax": { "type": "integer", "minimum": 1 },
+              "note": { "$ref": "#/$defs/text" },
+              "callSites": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/site" } }
+            }
+          }
+        }
+      }
+    },
+    "site": {
+      "type": "object", "required": ["path", "function"], "additionalProperties": false,
+      "properties": { "path": { "type": "string", "pattern": "^backend/.+\\.py$" }, "function": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$" }, "note": { "$ref": "#/$defs/text" } }
+    },
+    "fieldMap": {
+      "type": "object", "required": ["registry", "description", "shapes", "entries"], "additionalProperties": false,
+      "properties": {
+        "$schema": { "type": "string" },
+        "registry": { "const": "rounds-privacy-field-map" },
+        "description": { "$ref": "#/$defs/text" },
+        "shapes": { "type": "object", "additionalProperties": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^(/[^/]+)+$" } } },
+        "entries": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^(pb:[a-z_][a-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*(#(/[^/#]+)+)?)?|storage:[^\\s]+|def:[a-z][a-z0-9-]*#(/[^/#]+)+|request:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*#(/[^/#]+)+|[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*)$" },
+              "class": { "$ref": "#/$defs/className" },
+              "visibility": { "$ref": "#/$defs/visibility" },
+              "kind": { "$ref": "#/$defs/kind" },
+              "row": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+              "pathsFrom": { "type": "string", "pattern": "^pb:[a-z_][a-z0-9_]*\\.[a-z_][a-z0-9_]*$" },
+              "note": { "$ref": "#/$defs/text" }
+            },
+            "oneOf": [{ "required": ["class"] }, { "required": ["visibility"] }]
+          }
+        }
+      }
+    },
+    "violations": {
+      "type": "object", "required": ["registry", "description", "entries"], "additionalProperties": false,
+      "properties": {
+        "$schema": { "type": "string" },
+        "registry": { "const": "rounds-privacy-violations" },
+        "description": { "$ref": "#/$defs/text" },
+        "entries": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "required": ["id", "status", "summary", "rule", "location", "owner", "exit", "history"], "additionalProperties": false,
+            "properties": {
+              "id": { "type": "integer", "minimum": 1 },
+              "status": { "enum": ["open", "closed"] },
+              "summary": { "$ref": "#/$defs/text" },
+              "rule": { "$ref": "#/$defs/text" },
+              "location": { "$ref": "#/$defs/location" },
+              "detector": { "enum": ["secret-storage", "server-only-readable", "legacy-consent"] },
+              "owner": { "$ref": "#/$defs/leaf" },
+              "exit": { "$ref": "#/$defs/text" },
+              "history": {
+                "type": "array",
+                "items": { "type": "object", "required": ["pr", "closed"], "additionalProperties": false, "properties": { "pr": { "type": "integer", "minimum": 1 }, "closed": { "$ref": "#/$defs/text" } } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "secretPatterns": {
+      "type": "object", "required": ["registry", "description", "patterns", "fixtures", "nearMisses"], "additionalProperties": false,
+      "properties": {
+        "$schema": { "type": "string" },
+        "registry": { "const": "rounds-privacy-secret-patterns" },
+        "description": { "$ref": "#/$defs/text" },
+        "patterns": {
+          "type": "array", "minItems": 1,
+          "items": { "type": "object", "required": ["id", "class", "regex"], "additionalProperties": false, "properties": { "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }, "class": { "$ref": "#/$defs/text" }, "regex": { "$ref": "#/$defs/text" } } }
+        },
+        "fixtures": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/secretSample" } },
+        "nearMisses": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/secretSample" } }
+      }
+    },
+    "secretSample": {
+      "type": "object", "required": ["pattern", "before", "parts", "after"], "additionalProperties": false,
+      "properties": { "pattern": { "type": "string" }, "before": { "type": "string" }, "parts": { "type": "array", "minItems": 2, "items": { "type": "string", "minLength": 1 } }, "after": { "type": "string" } }
+    },
+    "vectors": {
+      "type": "object", "required": ["registry", "suite", "description", "cases"], "additionalProperties": false,
+      "properties": {
+        "$schema": { "type": "string" },
+        "registry": { "const": "rounds-privacy-vectors" },
+        "suite": { "enum": ["matrix", "visibility", "egress", "destinations", "retention", "packs", "secrets", "settings"] },
+        "description": { "$ref": "#/$defs/text" },
+        "cases": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "required": ["id", "call", "args", "expect"], "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.:_-]*$" },
+              "call": { "enum": ["evaluate_sink", "evaluate_egress", "evaluate_retention", "classify_destination", "parse_private_endpoints", "detect_secret"] },
+              "args": { "type": "object" },
+              "registryPatch": { "type": "object" },
+              "expect": { "type": ["object", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

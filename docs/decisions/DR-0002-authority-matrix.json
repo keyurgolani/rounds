@@ -3,22 +3,14 @@
   "id": "DR-0002",
   "title": "Source-of-truth and package-boundary matrix",
   "leaf": "ROUNDS-01-L02",
-  "status": "ratified",
+  "status": "draft",
   "owner": "Product Architecture",
-  "approver": "keyurgolani",
-  "approvalRef": {
-    "pr": 194,
-    "governedFiles": [
-      {"path":"contracts/authority/matrix.json","sha256":"f0bf42b750e1097b03bae08c5b516cd7989ab6b23caf67b601e1d4b83881b4bc"},
-      {"path":"contracts/authority/packages.json","sha256":"10eb81e982e6d0461dd99a80b78f0b12d639819f771d1eee75a6c97ea2a9fbc7"},
-      {"path":"contracts/authority/owner-labels.json","sha256":"f260e1d2d3cc6572c9c9456bb0d4886483bf8b989c9ebaabe68d2e188e31d800"},
-      {"path":"contracts/authority/baseline-stores.json","sha256":"a04b3674b6ce1445ca5ec27609f1f1b237fecf43b2d7d5494d75b34ef0913f11"}
-    ]
-  },
-  "ratifiedOn": "2026-10-20",
+  "approver": "",
+  "approvalRef": null,
   "compatibility": "additive",
-  "revision": 1,
-  "supersedes": null,
+  "revision": 2,
+  "supersedes": "DR-0002@1",
+  "supersessionReason": "Revision 2 fills the field_map cells revision 1 left pending on ROUNDS-14-L01 with contracts/privacy/field-map.json, where each field takes one class or visibility no looser than its row's floor (DR-0005). It changes no owner, authority, floor, visibility, scope, or package, so it is additive, and revision 1 was ratified as PR #194.",
   "consumers": [
     "ROUNDS-00A-L01",
     "ROUNDS-00A-L02",

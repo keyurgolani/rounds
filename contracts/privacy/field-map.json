@@ -533,10 +533,10 @@
     {"id":"pb:execution_jobs.command_id","class":"Private","kind":"opaque-id","row":"execution-attempt"},
     {
       "id": "pb:execution_jobs.definition",
-      "visibility": "server-only",
-      "kind": "content",
-      "row": "test-definition",
-      "note": "The server-owned definition a job runs."
+      "class": "Private",
+      "kind": "metadata",
+      "row": "execution-attempt",
+      "note": "A reference to the definition a job runs, never its material."
     },
     {"id":"pb:execution_jobs.fingerprint","class":"Private","kind":"metadata","row":"execution-attempt"},
     {"id":"pb:execution_jobs.finished_at","class":"Private","kind":"metadata","row":"execution-attempt"},
@@ -1195,7 +1195,7 @@
       "id": "pb:users.passwordHash",
       "class": "Secret",
       "kind": "content",
-      "row": "account-session",
+      "row": "authentication-identity",
       "note": "PocketBase's own auth secret; never returned by the API."
     },
     {"id":"pb:users.target","class":"Private","kind":"content","row":"professional-identity"},
@@ -1203,7 +1203,7 @@
       "id": "pb:users.tokenKey",
       "class": "Secret",
       "kind": "content",
-      "row": "account-session",
+      "row": "authentication-identity",
       "note": "PocketBase's own auth secret; never returned by the API."
     },
     {"id":"pb:users.username","class":"Private","kind":"content","row":"authentication-identity"},

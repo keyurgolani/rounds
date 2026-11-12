@@ -1,0 +1,30 @@
+{
+  "$schema": "../policy.schema.json",
+  "registry": "rounds-privacy-vectors",
+  "suite": "settings",
+  "description": "parse_private_endpoints: ROUNDS_AI_PRIVATE_ENDPOINTS entries the runner accepts, and the entries it refuses to start with. An error case names a substring of the message, which names the entry.",
+  "cases": [
+    { "id": "empty", "call": "parse_private_endpoints", "args": { "value": "" }, "expect": { "entries": [] } },
+    { "id": "blank", "call": "parse_private_endpoints", "args": { "value": "   " }, "expect": { "entries": [] } },
+    { "id": "one-address", "call": "parse_private_endpoints", "args": { "value": "10.0.0.5:11434" }, "expect": { "entries": [{ "network": "10.0.0.5/32", "port": 11434 }] } },
+    { "id": "ranges-and-ipv6", "call": "parse_private_endpoints", "args": { "value": " 192.168.1.0/24:8000 , [fd12:3456::1]:1234,[fd12:3456::/64]:8000,100.64.1.0/24:80" }, "expect": { "entries": [{ "network": "192.168.1.0/24", "port": 8000 }, { "network": "fd12:3456::1/128", "port": 1234 }, { "network": "fd12:3456::/64", "port": 8000 }, { "network": "100.64.1.0/24", "port": 80 }] } },
+    { "id": "mapped-address", "call": "parse_private_endpoints", "args": { "value": "[::ffff:10.0.0.7]:8080" }, "expect": { "entries": [{ "network": "10.0.0.7/32", "port": 8080 }] } },
+    { "id": "refuse.runner-itself", "call": "parse_private_endpoints", "args": { "value": "localhost:8000" }, "expect": { "error": "'localhost:8000' names a host" } },
+    { "id": "refuse.pocketbase", "call": "parse_private_endpoints", "args": { "value": "pocketbase:8090" }, "expect": { "error": "'pocketbase:8090' names a host" } },
+    { "id": "refuse.pdf-renderer", "call": "parse_private_endpoints", "args": { "value": "10.0.0.5:11434,pdf-renderer:4000" }, "expect": { "error": "'pdf-renderer:4000' names a host" } },
+    { "id": "refuse.metadata", "call": "parse_private_endpoints", "args": { "value": "169.254.169.254:80" }, "expect": { "error": "'169.254.169.254:80' covers 169.254.0.0/16" } },
+    { "id": "refuse.loopback", "call": "parse_private_endpoints", "args": { "value": "127.0.0.1:11434" }, "expect": { "error": "'127.0.0.1:11434' covers 127.0.0.0/8" } },
+    { "id": "refuse.ipv6-loopback", "call": "parse_private_endpoints", "args": { "value": "[::1]:11434" }, "expect": { "error": "'[::1]:11434' covers ::1/128" } },
+    { "id": "refuse.range-covering-metadata", "call": "parse_private_endpoints", "args": { "value": "100.64.0.0/10:80" }, "expect": { "error": "'100.64.0.0/10:80' covers 100.100.100.200" } },
+    { "id": "refuse.ula-covering-metadata", "call": "parse_private_endpoints", "args": { "value": "[fd00::/8]:80" }, "expect": { "error": "'[fd00::/8]:80' covers fd00:ec2::254" } },
+    { "id": "refuse.public", "call": "parse_private_endpoints", "args": { "value": "8.8.8.8:443" }, "expect": { "error": "'8.8.8.8:443' isn't inside a private network" } },
+    { "id": "refuse.reaches-past-private", "call": "parse_private_endpoints", "args": { "value": "10.0.0.0/7:80" }, "expect": { "error": "'10.0.0.0/7:80' isn't inside a private network" } },
+    { "id": "refuse.no-port", "call": "parse_private_endpoints", "args": { "value": "10.0.0.5" }, "expect": { "error": "'10.0.0.5' isn't ip:port" } },
+    { "id": "refuse.port-zero", "call": "parse_private_endpoints", "args": { "value": "10.0.0.5:0" }, "expect": { "error": "has port 0" } },
+    { "id": "refuse.port-too-high", "call": "parse_private_endpoints", "args": { "value": "10.0.0.5:70000" }, "expect": { "error": "has port 70000" } },
+    { "id": "refuse.empty-entry", "call": "parse_private_endpoints", "args": { "value": "10.0.0.5:80,,10.0.0.6:80" }, "expect": { "error": "has an empty entry" } },
+    { "id": "refuse.host-bits", "call": "parse_private_endpoints", "args": { "value": "10.0.0.5/8:80" }, "expect": { "error": "'10.0.0.5/8:80' isn't a valid address or CIDR range" } },
+    { "id": "refuse.mapped-range", "call": "parse_private_endpoints", "args": { "value": "[::ffff:10.0.0.0/120]:80" }, "expect": { "error": "is an IPv4-mapped range" } },
+    { "id": "refuse.name", "call": "parse_private_endpoints", "args": { "value": "ollama.lan.example:11434" }, "expect": { "error": "names a host" } }
+  ]
+}

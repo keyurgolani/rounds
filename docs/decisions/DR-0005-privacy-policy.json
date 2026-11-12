@@ -1,0 +1,165 @@
+{
+  "$schema": "./decision-record.schema.json",
+  "id": "DR-0005",
+  "title": "Privacy classes, sink policy, and numeric retention",
+  "leaf": "ROUNDS-14-L01",
+  "status": "draft",
+  "owner": "AI Trust Platform",
+  "approver": "",
+  "approvalRef": null,
+  "compatibility": "additive",
+  "revision": 1,
+  "supersedes": null,
+  "consumers": [
+    "ROUNDS-00A-L01", "ROUNDS-00A-L02", "ROUNDS-00B-L03", "ROUNDS-00B-L07", "ROUNDS-02-L04", "ROUNDS-02-L05", "ROUNDS-03-L04",
+    "ROUNDS-08-L02", "ROUNDS-09-L02", "ROUNDS-10-L01", "ROUNDS-10-L02", "ROUNDS-11-L01", "ROUNDS-12-L02", "ROUNDS-13-L06",
+    "ROUNDS-14-L02", "ROUNDS-14-L03", "ROUNDS-14-L04", "ROUNDS-14-L05", "ROUNDS-14-L06", "ROUNDS-14-L07", "ROUNDS-18-L03",
+    "ROUNDS-31-L08", "ROUNDS-32-L01", "ROUNDS-32-L03", "ROUNDS-34-L03", "ROUNDS-34-L05", "ROUNDS-34-L08"
+  ],
+  "prerequisites": ["ROUNDS-00B-L01", "ROUNDS-01-L01", "ROUNDS-01-L02", "ROUNDS-02-L01"],
+  "authorityBoundary": "contracts/privacy/policy.json",
+  "affectedPackages": ["provider-gateway", "account", "capture-ingestion", "artifact", "practice", "search", "public-share", "revision-audit"],
+  "versioning": "The policy carries four version ids, privacy@1, retention@1, redaction@1, and consent@1, in contracts/privacy/policy.json; ROUNDS-14-L02's Provider Invocation Intent records them (spec 707), and every allow the evaluators answer names them. A consumer pins the ids it depends on. A new revision of one id lists the earlier revisions it stays compatible with, and the privacy rule fails only the pins a revision isn't compatible with (PRIVACY_PIN_INCOMPATIBLE) or that name no revision (PRIVACY_UNKNOWN_PIN). This record pins the SHA-256 of policy.json and policy.schema.json once ratified; purposes.json, field-map.json, violations.json, and secret-patterns.json change with ordinary work and are guarded by the rule instead: any change that loosens them against the base branch fails without a relaxations entry that names a spec change and an approval reference.",
+  "supersession": "A ratified version is never edited. A change supersedes it with the next revision of the affected id, which names the changed constraint; tightening takes effect at the next purge sweep, and loosening fails the check without a spec change and an approval reference (PRIVACY_RELAXED). Consumers of an incompatible revision re-pin. An unratified revision can be reverted, and reverting the merge removes files only.",
+  "context": "Issue #72 (ROUNDS-14-L01). Spec lines refer to rounds-review docs/superpowers/specs/2026-10-18-rounds-review-board-design.md. Code facts are at next 6c4a5a3. Ratified by the lane's review under the coordinator's delegation (scope decision 1): every default is a deny or the spec's own number, so no value here widens who can read, write, or receive anything.",
+  "securityConsequences": {
+    "account": "No runtime or privilege change beyond startup validation. Account data keeps the account-scope rules (ROUNDS-00B-L01); the policy adds per-field classes on top of them and never loosens a ROUNDS-01-L02 floor.",
+    "privacy": "Unregistered purposes, unclassified fields, and sinks without a rule are denied. Packs, flags, operators, and users may only tighten a rule. No server-only field reaches a provider, a log, the browser, or an export. Known breaches are registered with an owner and an exit, and an unregistered breach the rule can see fails CI.",
+    "secret": "A Secret goes only as authentication to the endpoint it was registered for, never as content, and never to an export, an index, a log, a share, or browser storage. detect_secret answers with offsets only. Fixtures are synthetic and stored as parts, so no file holds a contiguous key-shaped string.",
+    "publicBoundary": "Public share stays the Share Projection's scoped capability (ROUNDS-00B-L03). Loopback, link-local, metadata, and service names are never destinations and can't be allowlisted, and a private address needs both the private-network gate and an allowlist entry."
+  },
+  "decisions": [
+    {
+      "id": "PRIV-1", "title": "The matrix and the classes", "status": "draft",
+      "sources": ["spec 2126-2148", "#72 Matrix"],
+      "decision": "policy.json holds spec 2142-2148 word for word: five classes across remote AI, index, logs, share, export, local draft, and backup, the export column split in three, with analytics denied for every class (spec 2126-2137). Each of the 40 cells carries a machine rule: deny with a code, allow with obligations, allow only under named conditions, or allow with a consent unit. Platform content takes ROUNDS-01-L02's visibility instead of a class, with its own rules, including the browser read.",
+      "alternatives": [
+        { "option": "A literal Secret rule: deny Secrets everywhere and allow every other class", "reason": "The spec gives five classes different terms per sink; Sensitive and Third-party personal data would leave without the confirmations the spec requires." },
+        { "option": "Keep the matrix as prose for people to apply", "reason": "Not checkable, and two enforcers would read it two ways." }
+      ],
+      "consequences": "Every sink owner evaluates the same cell. A missing cell fails the check, so a new sink can't open by omission.",
+      "migrationImpact": "None: no data moves. The register lists where today's code breaks a cell.",
+      "rollbackImpact": "Superseding a cell re-pins its consumers; reverting the merge removes the files."
+    },
+    {
+      "id": "PRIV-2", "title": "The credential channel", "status": "draft",
+      "sources": ["#72 Decision 1"],
+      "decision": "A Secret goes only as authentication to the endpoint it was registered for, never as content. Authorization and x-api-key headers keep working; a key sent to any other host and port is denied.",
+      "alternatives": [
+        { "option": "Treat the provider key like every other Secret and never let it leave", "reason": "No provider call could authenticate." },
+        { "option": "Let a key go to any endpoint the account saves", "reason": "A key saved for one provider could be sent to another host." }
+      ],
+      "consequences": "ROUNDS-14-L02 attaches the key itself, matched by host and port; a purpose can't name the key as payload.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "Supersede privacy@1; nothing to undo in data."
+    },
+    {
+      "id": "PRIV-3", "title": "The consent unit", "status": "draft",
+      "sources": ["spec 2144", "#72 Decision 2"],
+      "decision": "One consent per provider request (a chat turn, a grade) after the payload preview, never standing. A batch preview may list up to 25 calls. Sensitive fields need a field-level confirmation and Third-party personal fields a purpose-specific one, each for one invocation. The sixteen baseline purposes start legacy with legacy-implicit consent (register entry 9); a purpose that sends no classed field as content takes none. ATS AI becomes an explicit trigger.",
+      "alternatives": [
+        { "option": "Standing consent per purpose", "reason": "The spec asks for per-request consent after a payload preview." },
+        { "option": "Consent per session", "reason": "A session spans many payloads the user never saw." }
+      ],
+      "consequences": "Per-turn consent adds a click to every chat turn, and the 25-call cap splits large GitHub imports. ROUNDS-14-L04 renders the consent.",
+      "migrationImpact": "None; legacy purposes keep working with an Intent and no preview until ROUNDS-14-L06 moves each.",
+      "rollbackImpact": "Supersede consent@1."
+    },
+    {
+      "id": "PRIV-4", "title": "Locations and the private-network allowlist", "status": "draft",
+      "sources": ["spec 2171-2173", "#72 Decision 3", "scope decision 4 (rounds lead, 2026-11-12)"],
+      "decision": "A destination's location comes from its resolved address: this-server, operator-network, or third-party-hosted. Loopback, link-local, unspecified, metadata addresses, single-label names, and the service names get no class and are never destinations. A private address passes only when ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK is enabled and the address and port match a ROUNDS_AI_PRIVATE_ENDPOINTS entry; with the gate off every private address is refused, and with the gate on an empty list refuses them too. Entries are addresses or CIDR ranges inside the private networks and can't name or cover a never destination.",
+      "alternatives": [
+        { "option": "Store a location label on each provider row", "reason": "A label drifts from where the address resolves." },
+        { "option": "The allowlist alone, without the gate", "reason": "Looser than R0's decision, which keeps LAN providers refused." },
+        { "option": "The gate alone, without the allowlist", "reason": "A blanket allow over every private address the deployment can reach." },
+        { "option": "Host names as allowlist entries", "reason": "A name can't be checked at startup and can resolve somewhere else later." }
+      ],
+      "consequences": "ROUNDS-14-L02 applies the stricter reading at dispatch, which narrows R0's gate for operators who enabled it; its docs tell them. ROUNDS-14-L04 shows never destinations as blocked.",
+      "migrationImpact": "None; nothing reads the allowlist before ROUNDS-14-L02.",
+      "rollbackImpact": "Supersede privacy@1; the runner then accepts the setting as before."
+    },
+    {
+      "id": "PRIV-5", "title": "Catalog content and server-only material", "status": "draft",
+      "sources": ["#72 Decision 4", "ROUNDS-01-L02 rule 10"],
+      "decision": "Catalog content takes its ROUNDS-01-L02 visibility. Harness Revisions and Test Definitions stay server-only, but a harness revision's rubric is authed-readable: the Rubric panels show it, and only ai_coding.grade and take_home.grade send it to a provider. No server-only field reaches a provider, a log, the browser, or an export.",
+      "alternatives": [
+        { "option": "Keep the rubric server-only", "reason": "The Rubric panels and the take-home self-review show it." },
+        { "option": "Make every harness field authed-readable", "reason": "Hidden grading material would reach candidates." }
+      ],
+      "consequences": "The purpose check refuses a rubric input outside the two grade purposes and a server-only input anywhere.",
+      "migrationImpact": "Register entry 5 records the grading material still readable today; ROUNDS-00A-L02 closes it.",
+      "rollbackImpact": "Supersede privacy@1."
+    },
+    {
+      "id": "PRIV-6", "title": "Redaction operators", "status": "draft",
+      "sources": ["#72 Decision 5"],
+      "decision": "Three operators: omit, mask, and pseudonym, keyed per account by ROUNDS-14-L02. Resume purposes omit personalInfo email, phone, and location unless the user adds one in the preview.",
+      "alternatives": [
+        { "option": "Free-form redaction functions per purpose", "reason": "Not checkable, and two purposes would redact the same field two ways." }
+      ],
+      "consequences": "A purpose's omitted inputs are denied unless the consent adds them.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "Supersede redaction@1."
+    },
+    {
+      "id": "PRIV-7", "title": "Versions and supersession", "status": "draft",
+      "sources": ["#72 Decision 6", "spec 707"],
+      "decision": "Four version ids, privacy@1, retention@1, redaction@1, and consent@1, go on ROUNDS-14-L02's Intent. Tightening applies at the next purge sweep; loosening fails the check without a spec change and an approval reference.",
+      "alternatives": [
+        { "option": "One version for the whole policy", "reason": "A consent change would force every retention consumer to re-pin." },
+        { "option": "Edit a ratified version in place", "reason": "Consumers couldn't tell what changed under them." }
+      ],
+      "consequences": "Consumers pin only what they read; supersession blocks only incompatible pins.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "A superseded version stays readable in the revisions list."
+    },
+    {
+      "id": "PRIV-8", "title": "Lifecycle numbers and the decided rows", "status": "draft",
+      "sources": ["spec 2150-2169", "#72 Lifecycle"],
+      "decision": "The ten spec rows with their numbers, each purge within 24 hours of its deadline, and account deletion as spec 2165-2169 says. Decided here: Secrets live until user or account deletion and are never stored for demo accounts; browser AI caches follow the superseded local drafts row; chat transcripts follow the canonical attempt row.",
+      "alternatives": [
+        { "option": "Give Secrets the canonical row's 90-day tombstone", "reason": "A credential needs no tombstone, and keeping one longer only widens exposure." },
+        { "option": "Treat chat transcripts as provider payload snapshots (7 days)", "reason": "The transcript is part of the user's own attempt record." }
+      ],
+      "consequences": "Each row names its enforcing leaf; the rule lists the rows whose tests don't read the policy value yet.",
+      "migrationImpact": "The register lists today's lifetimes that break a row; ROUNDS-14-L05 purges them.",
+      "rollbackImpact": "Supersede retention@1."
+    },
+    {
+      "id": "PRIV-9", "title": "The field map", "status": "draft",
+      "sources": ["#72 Field IDs", "ROUNDS-01-L02 floors"],
+      "decision": "One class or visibility per field, no looser than its ROUNDS-01-L02 floor, for every live collection field (read by running the migrations against an empty database and pinned against real PocketBase), the JSON paths in the named columns, every browser storage key family (ROUNDS-01-L02's extractor), and every stored definition property. Ids take the pb:, storage:, def:, and <entity>.<field> forms, plus request:<purpose>#<pointer> for a purpose's input that has no stored home yet.",
+      "alternatives": [
+        { "option": "Scan migrations as tokens", "reason": "Field specs come from helpers, constants, and loops a token scan would have to re-implement." },
+        { "option": "Classify by collection only", "reason": "One collection mixes classes: an interview round's outcome is Sensitive, its interviewer Third-party personal." }
+      ],
+      "consequences": "A new field, key, or definition property fails FIELD_UNCLASSIFIED until it's classified.",
+      "migrationImpact": "None.",
+      "rollbackImpact": "Supersede privacy@1."
+    },
+    {
+      "id": "PRIV-10", "title": "The violation register", "status": "draft",
+      "sources": ["#72 Violation register", "scope decision 2 (rounds lead, 2026-11-12)"],
+      "decision": "violations.json gives each known breach its rule, location, owner, and exit, and keeps closed entries with the PR that closed them. Detectors fail CI on a breach they can see that isn't registered, and an open entry whose breach is gone fails as stale.",
+      "alternatives": [
+        { "option": "Track breaches only in issues", "reason": "CI can't see an issue, so a new breach would land unnoticed." }
+      ],
+      "consequences": "Ten entries at merge: eight open, two closed.",
+      "migrationImpact": "This is the migration impact: each open entry's owner purges or stops what it lists.",
+      "rollbackImpact": "Entries stay; closing one names its fixing PR."
+    },
+    {
+      "id": "PRIV-11", "title": "Operator settings and startup validation", "status": "draft",
+      "sources": ["spec 2160", "spec 2163", "#72 Operator settings"],
+      "decision": "ROUNDS_LOG_RETENTION_DAYS (1 to 30, default 14), ROUNDS_BACKUP_RETENTION_DAYS (7 to 90, default 30), and ROUNDS_AI_PRIVATE_ENDPOINTS (default empty). The runner refuses to start on a bad value, naming the setting and the bound or the refused entry; unset or empty takes the default. The bounds come from the lifecycle rows in policy.json.",
+      "alternatives": [
+        { "option": "Fall back to defaults on a bad value, as the gates do", "reason": "A mistyped retention would silently change what's kept." },
+        { "option": "Per-account values here", "reason": "ROUNDS-03-L04 owns account settings." }
+      ],
+      "consequences": "A misconfigured runner fails at startup instead of at the first log purge or dispatch.",
+      "migrationImpact": "None; the settings are new, so an upgrade has none set.",
+      "rollbackImpact": "Reverting removes the startup check; the values were read by nothing else yet."
+    }
+  ]
+}
