@@ -20,7 +20,7 @@ Demo login on the hosted instance:
 - Email: `demo@rounds.keyurgolani.name`
 - Password: `RoundsDemo123!`
 
-Visitors share the demo account, and other visitors can see what you add while it lasts, so don't enter real personal details.
+Visitors share the demo account, and other visitors can see what you add while it lasts, so don't enter real personal details. Any sign-out, the 30-minute idle one included, clears what everyone added.
 
 The demo is off unless the operator sets `ROUNDS_ENABLE_DEMO=true` on PocketBase. Off is the default on every install, self-hosted ones included: PocketBase refuses the demo account's sign-in and gives it a new random password and token key at every start. With the demo on, the account runs under the demo tier's limits, can't change its profile, can't hold share links, AI providers, or AI settings, and can't run code unless the operator also sets `ROUNDS_GATE_DEMO_EXECUTION=enabled` on the runner.
 
