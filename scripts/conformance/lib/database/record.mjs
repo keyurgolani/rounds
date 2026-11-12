@@ -162,6 +162,21 @@ export function checkRecord(ctx, { record, text, resolveLeaf, erd, matrix, matri
   (packages?.packages || []).forEach((p, i) => {
     if (p.target_path === PENDING_HERE) findings.push(finding('DB_STORAGE_PENDING', PACKAGES_PATH, jsonLine(packagesText, ['packages', i, 'target_path']), `${p.id} target_path is still ${PENDING_HERE}; DR-0004 places the package`));
   });
+
+  // Every other DR-0004@<n>[:<id>] in docs/ and contracts/ cites a revision
+  // that exists and a decision, store, or entity this record and its ERD name.
+  const known = new Set([...decisions.map((d) => d.id), ...stores, ...entities]);
+  for (const file of ctx.files()) {
+    if (!/^(docs|contracts)\/.+\.(md|json)$/.test(file) || file === ADR_PATH || file === MATRIX_PATH) continue;
+    const body = ctx.read(file);
+    if (!body.includes('DR-0004@')) continue;
+    body.split('\n').forEach((line, i) => {
+      for (const m of line.matchAll(/DR-0004@(\d+)(?::([A-Za-z_][A-Za-z0-9_-]*))?/g)) {
+        if (Number(m[1]) < 1 || Number(m[1]) > record.revision) findings.push(finding('DB_VERSION_MISMATCH', file, i + 1, `${m[0]} cites a revision DR-0004 hasn't reached (it is at ${record.revision})`));
+        else if (m[2] && !known.has(m[2])) findings.push(finding('DB_UNKNOWN_REF', file, i + 1, `${m[0]} names ${m[2]}, which is no DR-0004 decision, store, or entity`));
+      }
+    });
+  }
   return findings;
 }
 

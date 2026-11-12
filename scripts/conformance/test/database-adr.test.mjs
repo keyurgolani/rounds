@@ -12,6 +12,7 @@ import { leafResolver, loadLeafIds } from '../lib/leaf-ids.mjs';
 import { CONCERNS, REJECTED } from '../lib/database/record.mjs';
 import { TARGET_IDS } from '../lib/database/benchmark.mjs';
 import * as db from '../rules/database-adr.mjs';
+import * as records from '../rules/decision-records.mjs';
 import { REPO_ROOT, cleanup, codes, ctxFor, editJson, editText, fixture, readJson } from './helpers.mjs';
 
 const RECORD = 'docs/decisions/DR-0004-canonical-database.json';
@@ -212,6 +213,10 @@ describe('database ADR: negative controls', () => {
     only(run(erd((e) => { e.relations[0].to = 'no_such_table'; })), 'DB_UNKNOWN_REF');
     only(run(erd((e) => { e.entities.find((x) => x.id === 'account_blobs').owningLeaf = 'ROUNDS-98-L01'; })), 'DB_UNKNOWN_REF');
     only(run(edit(MATRIX, (m) => { m.rows[0].storage = 'DR-0004@1:postgres'; })), 'DB_UNKNOWN_REF');
+    // A citation in the docs names a decision, store, or entity that exists.
+    const cite = (text) => fixture((d) => fs.writeFileSync(path.join(d, 'docs/example-db.md'), text));
+    assert.deepEqual(run(cite('Cite DR-0004@1:DB2, DR-0004@1:sqlite-data, and DR-0004@1:account_blobs.\n')), []);
+    only(run(cite('Cite DR-0004@1:DB99.\n')), 'DB_UNKNOWN_REF');
   });
 
   it('fails DB_VERSION_MISMATCH for a pin, an ERD, a receipt, a result, or a cell at another version', () => {
@@ -220,6 +225,7 @@ describe('database ADR: negative controls', () => {
     only(run(erd((e) => { e.snapshot.revision = '0'.repeat(40); })), 'DB_VERSION_MISMATCH');
     only(run(record((r) => { r.benchmark.result = r.benchmark.result === 'pass' ? 'fail' : 'pass'; })), 'DB_VERSION_MISMATCH');
     only(run(edit(MATRIX, (m) => { m.rows[0].storage = 'DR-0004@2:sqlite-data'; })), 'DB_VERSION_MISMATCH');
+    only(run(fixture((d) => fs.writeFileSync(path.join(d, 'docs/example-db.md'), 'Cite DR-0004@2:DB2.\n'))), 'DB_VERSION_MISMATCH');
     // A receipt off the pin's minor line, and one on it without the record's note.
     const ran = repo(RECEIPT).profile.pocketbase.version;
     includes(run(receipt((rc) => { rc.profile.pocketbase.version = '0.23.1'; rc.profile.pocketbase.dockerfilePin.PB_VERSION = '0.23.1'; })), 'DB_VERSION_MISMATCH');
@@ -288,5 +294,24 @@ describe('database ADR: negative controls', () => {
   it('fails DB_STORAGE_PENDING for a storage cell or a target path still pending this leaf', () => {
     only(run(edit(MATRIX, (m) => { m.rows[3].storage = 'pending:ROUNDS-02-L01'; })), 'DB_STORAGE_PENDING');
     only(run(edit(PACKAGES, (p) => { p.packages[0].target_path = 'pending:ROUNDS-02-L01'; })), 'DB_STORAGE_PENDING');
+  });
+});
+
+// #15's decision-records rule checks every record, DR-0004 included: its
+// owner, its packages, its leaves, and its supersession links.
+describe('database ADR: the record checks every decision record gets', () => {
+  const runRecords = (dir) => records.check(dir, ctxFor(dir));
+  const recordOnly = (findings, code) => assert.deepEqual(codes(findings), [code], JSON.stringify(findings, null, 2));
+
+  it('passes DR-0004 as committed', () => {
+    assert.deepEqual(runRecords(fixture()), []);
+  });
+
+  it('fails a missing owner, an unknown package or leaf, and a revision without its supersession link', () => {
+    recordOnly(runRecords(record((r) => { delete r.owner; })), 'DR_RECORD_INCOMPLETE');
+    recordOnly(runRecords(record((r) => { r.affectedPackages.push('no-such-package'); })), 'DR_UNKNOWN_PACKAGE');
+    recordOnly(runRecords(record((r) => { r.consumers.push('ROUNDS-99-L01'); })), 'VOCAB_UNRESOLVED_REF');
+    recordOnly(runRecords(record((r) => { r.revision = 2; })), 'DR_SUPERSEDES_INVALID');
+    recordOnly(runRecords(record((r) => { r.decisions[0].alternatives = []; })), 'DR_RECORD_INCOMPLETE');
   });
 });

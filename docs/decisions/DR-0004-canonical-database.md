@@ -124,7 +124,7 @@ Sources: spec 1206-1210; spec 1942-1951; frontend/nginx.conf; docs/security/serv
 
 ### DB4. Account authorization
 
-The account is the bearer's auth record, which the route reads inside its transaction; no command body names its account. Each record a command loads and each relation endpoint it writes is checked against that account in the same transaction with #10's predicate (pocketbase/pb_hooks/relation_endpoints.js), and #10's triggers stay as the backstop. Share capabilities keep #11's and #12's checks. #9's collection rules (docs/security/account-scope.v1.json) keep guarding legacy REST writes until each context transfers; the transfer leaf then sets that context's create, update, and delete rules to null, and #21's tables are born with null rules. #1's three writer kinds (Caller, Service, System) are ratified as they stand. Service identities are non-superuser auth collections with an exact-name login guard: execution_service and share_resolvers today, ai_gateway (#73) and dispatcher_service (#22) planned. The gateway never authenticates as the superuser.
+The account is the bearer's auth record, which the route reads inside its transaction; no command body names its account. Each record a command loads and each relation endpoint it writes is checked against that account in the same transaction with #10's predicate (pocketbase/pb_hooks/relation_endpoints.js), and #10's triggers stay as the backstop. Share capabilities keep #11's and #12's checks. #9's collection rules (docs/security/account-scope.v1.json) keep guarding legacy REST writes until each context transfers; the transfer leaf then sets that context's create, update, and delete rules to null, and #21's tables are born with null rules. #1's three writer kinds (Caller, Service, System) are ratified as they stand. Service identities are non-superuser auth collections whose login answers only under the collection's exact name: execution_service and share_resolvers today, ai_gateway (#73) and dispatcher_service (#22) planned. The gateway never authenticates as the superuser.
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
@@ -374,7 +374,7 @@ Pinned **0.22.22**. Decision: **retain the 0.22 line**. PocketBase stays, on the
 | dao-and-transactions | pocketbase/pb_hooks/*.js | 35 | https://pocketbase.io/v023upgrade/jsvm/ (the Dao is removed; $app.runInTransaction((txApp) => ...)) | $app.dao() 27 times in 9 files, and runInTransaction at 8 sites in 5 libraries. |
 | superuser-checks | admission.js, demo.js, execution.js, relation_endpoints.js | 5 | https://pocketbase.io/v023upgrade/jsvm/ (requestInfo's admin becomes a _superusers auth record) | 5 checks of requestInfo().admin in 4 libraries. |
 | after-delete-hook | pocketbase/pb_hooks/share_capabilities.pb.js | 1 | https://pocketbase.io/v023upgrade/jsvm/ (model hooks become record hooks with explicit after-success events) | #11's onModelAfterDelete revoke relies on 0.22's after-commit timing. |
-| login-guards | execution.pb.js, share_secrets.pb.js, demo.pb.js | 3 | https://pocketbase.io/v023upgrade/jsvm/ (auth request hooks change name and take e.next()) | The exact-name login guards of #3, #12, and #177. |
+| login-guards | execution.pb.js, share_secrets.pb.js, demo.pb.js | 3 | https://pocketbase.io/v023upgrade/jsvm/ (auth request hooks change name and take e.next()) | The sign-in guards of #3, #12, and #177 on PocketBase's password and OAuth2 hooks. |
 | system-migration-name | scripts/migration-lint (D10's 1702134273) | 1 | https://pocketbase.io/v023upgrade/jsvm/ (system migrations are squashed) | D10 names a migration that follows 0.22's own system migration. |
 | admins-denials | frontend/nginx.conf, harness/verify_deployment.py (deployment.admins.present) | 2 | https://pocketbase.io/v023upgrade/jsvm/ (/api/admins is gone) | The nginx refusal and the verifier's check both name /api/admins. |
 | verifier-shapes | harness/verify_deployment.py:123 and :431 | 2 | https://pocketbase.io/v023upgrade/jsvm/ (response shapes change) | The deployment verifier pins 0.22 answers. |
@@ -797,7 +797,7 @@ erDiagram
 | Credential | Holder | Disposition | Leaf |
 | --- | --- | --- | --- |
 | PocketBase superuser (PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD) | superuser | No runtime writer uses it. It keeps the bootstrap migration and operator use; #14 S3 removes the runner's unused admin helpers and PB_ADMIN_* from the runner. | ROUNDS-00B-L06 |
-| ROUNDS_EXECUTION_SECRET | execution_service | Kept: the execution worker's non-superuser identity with an exact-name login guard; #6 and #91 reuse it. | ROUNDS-00A-L03 |
+| ROUNDS_EXECUTION_SECRET | execution_service | Kept: the execution worker's non-superuser identity, whose login answers only under its collection's exact name; #6 and #91 reuse it. | ROUNDS-00A-L03 |
 | ROUNDS_SHARE_RESOLVER_PASSWORD | share_resolvers | Kept: the share resolver's non-superuser identity, at class level. | ROUNDS-00B-L04 |
 | ROUNDS_AI_GATEWAY_SECRET | ai_gateway | Planned: #73's provider gateway identity, which takes over the runner's 7 provider and settings writes. | ROUNDS-14-L02 |
 | ROUNDS_DISPATCHER_SECRET | dispatcher_service | Planned: #22's relay, job queue, and due-work identity. | ROUNDS-02-L05 |
@@ -834,7 +834,7 @@ This leaf produces the gate's first item, so the gate doesn't apply to its own m
 | --- | --- |
 | account | No runtime or privilege change here. DB2 and DB4 read the account from the bearer's auth record inside the command's transaction, so no command names its own account, and a record from another account answers like a missing one. Gateway-owned collections lose their REST write rules at each transfer. |
 | privacy | Rows keep the privacy floor DR-0002 gives them, and the ERD names each entity's partition column and what account deletion does to it. The byte store dedupes within one account only, so whether a file exists never shows across accounts (DB10). The benchmark seeds synthetic data and generates its accounts and passwords per run. |
-| secret | Credentials appear by name only. No runtime writer uses the superuser; it keeps the bootstrap migration and operator use. Each service identity is a non-superuser auth record with its own secret and an exact-name login guard. #73's keyring encrypts provider keys, and later the byte store's files. |
+| secret | Credentials appear by name only. No runtime writer uses the superuser; it keeps the bootstrap migration and operator use. Each service identity is a non-superuser auth record with its own secret, and its login answers only under its collection's exact name. #73's keyring encrypts provider keys, and later the byte store's files. |
 | publicBoundary | #19's command routes sit behind nginx's existing /api/ pass-through to PocketBase: no new port, hostname, or route outside /api/. Each route authorizes the account inside its transaction (DB4), and #19's own PR carries the exposure review. The hook routes only the runner calls stay refused at the public URL, as nginx already refuses the admission, execution, snapshot, and share routes. |
 
 ## Baseline facts

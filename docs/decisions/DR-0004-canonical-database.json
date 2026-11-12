@@ -78,7 +78,7 @@
   "securityConsequences": {
     "account": "No runtime or privilege change here. DB2 and DB4 read the account from the bearer's auth record inside the command's transaction, so no command names its own account, and a record from another account answers like a missing one. Gateway-owned collections lose their REST write rules at each transfer.",
     "privacy": "Rows keep the privacy floor DR-0002 gives them, and the ERD names each entity's partition column and what account deletion does to it. The byte store dedupes within one account only, so whether a file exists never shows across accounts (DB10). The benchmark seeds synthetic data and generates its accounts and passwords per run.",
-    "secret": "Credentials appear by name only. No runtime writer uses the superuser; it keeps the bootstrap migration and operator use. Each service identity is a non-superuser auth record with its own secret and an exact-name login guard. #73's keyring encrypts provider keys, and later the byte store's files.",
+    "secret": "Credentials appear by name only. No runtime writer uses the superuser; it keeps the bootstrap migration and operator use. Each service identity is a non-superuser auth record with its own secret, and its login answers only under its collection's exact name. #73's keyring encrypts provider keys, and later the byte store's files.",
     "publicBoundary": "#19's command routes sit behind nginx's existing /api/ pass-through to PocketBase: no new port, hostname, or route outside /api/. Each route authorizes the account inside its transaction (DB4), and #19's own PR carries the exposure review. The hook routes only the runner calls stay refused at the public URL, as nginx already refuses the admission, execution, snapshot, and share routes."
   },
   "decisions": [
@@ -200,7 +200,7 @@
       "store": "sqlite-data",
       "process": "the command's gateway hook route, inside its transaction",
       "owningLeaf": "ROUNDS-02-L02",
-      "decision": "The account is the bearer's auth record, which the route reads inside its transaction; no command body names its account. Each record a command loads and each relation endpoint it writes is checked against that account in the same transaction with #10's predicate (pocketbase/pb_hooks/relation_endpoints.js), and #10's triggers stay as the backstop. Share capabilities keep #11's and #12's checks. #9's collection rules (docs/security/account-scope.v1.json) keep guarding legacy REST writes until each context transfers; the transfer leaf then sets that context's create, update, and delete rules to null, and #21's tables are born with null rules. #1's three writer kinds (Caller, Service, System) are ratified as they stand. Service identities are non-superuser auth collections with an exact-name login guard: execution_service and share_resolvers today, ai_gateway (#73) and dispatcher_service (#22) planned. The gateway never authenticates as the superuser.",
+      "decision": "The account is the bearer's auth record, which the route reads inside its transaction; no command body names its account. Each record a command loads and each relation endpoint it writes is checked against that account in the same transaction with #10's predicate (pocketbase/pb_hooks/relation_endpoints.js), and #10's triggers stay as the backstop. Share capabilities keep #11's and #12's checks. #9's collection rules (docs/security/account-scope.v1.json) keep guarding legacy REST writes until each context transfers; the transfer leaf then sets that context's create, update, and delete rules to null, and #21's tables are born with null rules. #1's three writer kinds (Caller, Service, System) are ratified as they stand. Service identities are non-superuser auth collections whose login answers only under the collection's exact name: execution_service and share_resolvers today, ai_gateway (#73) and dispatcher_service (#22) planned. The gateway never authenticates as the superuser.",
       "alternatives": [
         {
           "option": "Keep #9's collection rules as the only check",
@@ -544,7 +544,7 @@
         "site": "execution.pb.js, share_secrets.pb.js, demo.pb.js",
         "count": 3,
         "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (auth request hooks change name and take e.next())",
-        "note": "The exact-name login guards of #3, #12, and #177."
+        "note": "The sign-in guards of #3, #12, and #177 on PocketBase's password and OAuth2 hooks."
       },
       {
         "id": "system-migration-name",
@@ -774,7 +774,7 @@
     {
       "credential": "ROUNDS_EXECUTION_SECRET",
       "holder": "execution_service",
-      "disposition": "Kept: the execution worker's non-superuser identity with an exact-name login guard; #6 and #91 reuse it.",
+      "disposition": "Kept: the execution worker's non-superuser identity, whose login answers only under its collection's exact name; #6 and #91 reuse it.",
       "leaf": "ROUNDS-00A-L03"
     },
     {
