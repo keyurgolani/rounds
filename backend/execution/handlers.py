@@ -137,8 +137,9 @@ class _Scratch:
     # -- the handler -------------------------------------------------------
 
     def key(self) -> str:
-        """The effective value of the key this kind runs under."""
-        return keys.scratch()
+        """The effective value of the key this kind runs under, as a
+        claimed job sees it."""
+        return keys.scratch(worker=True)
 
     def prepare(self, job: Any) -> None:
         if self.key() != "on":
@@ -326,7 +327,7 @@ class GradeHandler(_Scratch):
     kind, track, model = "grade", "ai-coding", ai_coding.DefinitionGradeRequest
 
     def key(self):
-        return keys.grading()
+        return keys.grading(worker=True)
 
     def check(self, request, resolved):
         checkpoints = resolved.document["checkpoints"]
@@ -379,7 +380,7 @@ class TakeHomeSubmitHandler(_Scratch):
     kind, track, model = "take_home_submit", "take-home", take_home.DefinitionTakeHomeSubmitRequest
 
     def key(self):
-        return keys.grading()
+        return keys.grading(worker=True)
 
     def check(self, request, resolved):
         if resolved.document.get("result_protocol") != "fd3":

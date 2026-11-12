@@ -66,6 +66,12 @@ const ASSIGNMENT = {
   definition_version: 1,
 };
 
+// A job that ended with nothing to show.
+const CANCELED = {
+  job_id: 'jobaaaaaaaaaaa1', state: 'canceled', outcome_class: 'canceled', retryable: false,
+  cancel_requested: true, envelope: null,
+} as never;
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/take-home/assignment/kv-store-py']}>
@@ -88,16 +94,9 @@ beforeEach(() => {
 
 describe('TakeHomeDetail definition requests', () => {
   it("names the assignment's language and definition version on a run", async () => {
-    vi.mocked(runProject).mockResolvedValue({
-      score: 1,
-      passed: true,
-      criteria: [{ id: 'adds_small', passed: true, weight: 1, logs: 'ok' }],
-      outcomes: [{ id: 'adds_small', outcome: 'passed', reason: 'ok' }],
-      stdout: '',
-      stderr: '',
-      error: null,
-      duration_ms: 1,
-    });
+    // A job, as every run is (ROUNDS-00A-L03 PR 4), here one that ended
+    // with nothing to show.
+    vi.mocked(runProject).mockResolvedValue(CANCELED);
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run' }));
@@ -117,10 +116,7 @@ describe('TakeHomeDetail definition requests', () => {
       .mockResolvedValue({ ...ASSIGNMENT, definition_version: 3 } as never);
     vi.mocked(submitAttempt)
       .mockRejectedValueOnce(new RunnerError({ message: 'x', status: 409, code: 'definition_superseded' }))
-      .mockResolvedValue({
-        harness: { score: 1, criteria: [], stdout: '', stderr: '', error: null, duration_ms: 1 },
-        rubric_review: { items: [], total: 0, skipped: true },
-      });
+      .mockResolvedValue(CANCELED);
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Submit' }));

@@ -9,7 +9,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const drafts = vi.hoisted(() => {
   const files = { 'kv.py': 'class KV:\n    pass\n' };
-  return { files, savedFiles: files, setFile: () => {}, hydrated: true, resetToStarter: () => {} };
+  return { files, savedFiles: files, setFile: () => {}, hydrated: true, resetToStarter: vi.fn() };
 });
 
 vi.mock('../../lib/pocketbase', () => ({ pb: { authStore: { token: 'test-token-placeholder' } } }));
@@ -145,6 +145,82 @@ describe('TakeHomeDetail denial states', () => {
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent('Your files are over the size limit, so nothing was graded.'),
     );
+  });
+});
+
+describe('TakeHomeDetail when an answer is no job, or code runs are turned off (ROUNDS-00A-L03 PR 4)', () => {
+  const NOTES = 'Kept in memory; one dict.';
+
+  beforeEach(() => {
+    vi.mocked(deleteInProgressTakeHomeAttempt).mockClear();
+    drafts.resetToStarter.mockClear();
+  });
+
+  async function writeNotes(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole('tab', { name: 'Notes' }));
+    await user.type(screen.getByRole('textbox', { name: 'Design notes for the reviewer' }), NOTES);
+  }
+
+  function expectFilesAndNotesKept() {
+    expect(screen.getByRole('textbox', { name: 'Design notes for the reviewer' })).toHaveValue(NOTES);
+    expect(drafts.resetToStarter).not.toHaveBeenCalled();
+    expect(deleteInProgressTakeHomeAttempt).not.toHaveBeenCalled();
+  }
+
+  it('shows a run that answers no job as unavailable, shows no score, and keeps the files and notes', async () => {
+    vi.mocked(runProject).mockResolvedValue({
+      score: 1, passed: true, criteria: [{ id: 'adds_small', passed: true, weight: 1, logs: 'ok' }],
+      outcomes: [], stdout: '', stderr: '', error: null, duration_ms: 1,
+    } as never);
+    const user = userEvent.setup();
+    renderPage();
+    await writeNotes(user);
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+    const region = screen.getByRole('status');
+    await waitFor(() => expect(region).toHaveTextContent('Unavailable right now'));
+    expect(region).toHaveTextContent('Nothing ran. Your code is still here.');
+    expect(screen.queryByText(/HARNESS/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('run-dock')).not.toBeInTheDocument();
+    expectFilesAndNotesKept();
+  });
+
+  it('shows a submission that answers no job as unavailable, opens no report, and keeps the files and notes',
+    async () => {
+      vi.mocked(submitAttempt).mockResolvedValue({
+        harness: { score: 1, criteria: [], stdout: '', stderr: '', error: null, duration_ms: 1 },
+        rubric_review: { items: [], total: 1 },
+      } as never);
+      const user = userEvent.setup();
+      renderPage();
+      await writeNotes(user);
+      await user.click(screen.getByRole('button', { name: 'Submit' }));
+      const region = screen.getByRole('status');
+      await waitFor(() => expect(region).toHaveTextContent('Unavailable right now'));
+      expect(region).toHaveTextContent('Nothing was graded. Your files and notes are still here.');
+      expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
+      expectFilesAndNotesKept();
+    });
+
+  it('says code runs are turned off where Run and Submit answer, and keeps the files and notes', async () => {
+    const off = new RunnerError({ message: 'x', status: 503, code: 'execution_disabled' });
+    vi.mocked(runProject).mockRejectedValue(off);
+    vi.mocked(submitAttempt).mockRejectedValue(off);
+    const user = userEvent.setup();
+    renderPage();
+    await writeNotes(user);
+    const region = screen.getByRole('status');
+
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(region).toHaveTextContent('Turned off'));
+    expect(region).toHaveTextContent('Running code is turned off on this server. Your code is still here.');
+    expect(screen.queryByTestId('run-dock')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await waitFor(() =>
+      expect(region).toHaveTextContent('Grading is turned off on this server. Your files and notes are still here.'),
+    );
+    expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
+    expectFilesAndNotesKept();
   });
 });
 

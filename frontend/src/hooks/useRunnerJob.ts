@@ -5,8 +5,9 @@
 // hands the route's answer to `follow`. A job is followed here: one
 // long-poll at a time, backing off while the server doesn't answer, and
 // stopped when the page leaves. The page hears of the end through
-// `onEnded`, with the envelope's output for its result views. Anything
-// else is the route's own body, which the page shows as before.
+// `onEnded`, with the envelope's output for its result views. Since PR 4
+// every code run is a job, so a page reports any other answer as a
+// failure (`notAJobAnswer`).
 //
 // The action is kept for the tab under `scope` (page, item, action): a
 // reload picks its job back up, and `begin(work, true)` after an end the

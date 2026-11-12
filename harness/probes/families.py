@@ -224,6 +224,127 @@ def update_own_accepted(pb, collection, record_id, owner_id, owner_token, expect
                    expected, partial.status, ok, partial.elapsed_ms, detail)
 
 
+def graded_create_forms(pb, collection, token, payload, envelope_id) -> list[tuple[str, object]]:
+    """A client create of a graded or enveloped row in each other form a
+    request can carry the status or the envelope in, so the guarantee holds
+    however PocketBase reads request data: (form, response) pairs.
+    ``payload`` is a complete in-progress row."""
+    fields = [(k, v) for k, v in payload.items() if k != "status"]
+    json_forms = [
+        ("list", {**payload, "status": ["graded"]}),
+        ("padded", {**payload, "status": " graded "}),
+        ("capitalized", {**payload, "status": "Graded"}),
+        ("status+", {**payload, "status+": "graded"}),
+        ("status-", {**payload, "status": ["in-progress", "graded"], "status-": "in-progress"}),
+        ("envelope+", {**payload, "envelope+": envelope_id}),
+    ]
+    out = [(form, pb.create(collection, token, body)) for form, body in json_forms]
+    out.append(("multipart", pb.create_form(collection, token, [*fields, ("status", "graded")])))
+    out.append(("multipart-repeated",
+                pb.create_form(collection, token, [*fields, ("status", "in-progress"), ("status", "graded")])))
+    out.append(("multipart-envelope",
+                pb.create_form(collection, token, [*fields, ("status", "in-progress"), ("envelope", envelope_id)])))
+    return out
+
+
+def graded_update_forms(pb, collection, token, graded_id, open_id, envelope_id) -> list[tuple[str, object]]:
+    """The same for updates: a graded row changed, and an open row graded
+    or given an envelope, in each other form. (form, response) pairs."""
+    tries = [
+        ("graded:status-", pb.update(collection, graded_id, {"status-": "graded"}, token=token)),
+        ("graded:status+", pb.update(collection, graded_id, {"status+": "in-progress"}, token=token)),
+        ("graded:multipart", pb.update_form(collection, graded_id, [("status", "in-progress")], token=token)),
+    ]
+    for form, body in (("list", {"status": ["graded"]}), ("padded", {"status": " graded "}),
+                       ("capitalized", {"status": "Graded"}), ("status+", {"status+": "graded"}),
+                       ("status-", {"status": ["in-progress", "graded"], "status-": "in-progress"}),
+                       ("envelope+", {"envelope+": envelope_id})):
+        tries.append((f"open:{form}", pb.update(collection, open_id, body, token=token)))
+    tries.append(("open:multipart", pb.update_form(collection, open_id, [("status", "graded")], token=token)))
+    tries.append(("open:multipart-repeated", pb.update_form(
+        collection, open_id, [("status", "in-progress"), ("status", "graded")], token=token)))
+    tries.append(("open:multipart-envelope", pb.update_form(collection, open_id, [("envelope", envelope_id)],
+                                                            token=token)))
+    return tries
+
+
+def graded_or_enveloped(pb, collection, admin_token, owner_id) -> int | None:
+    """How many of the owner's rows the superuser finds graded or with an
+    envelope; None when the listing fails."""
+    flt = f'user = "{owner_id}" && (status = "graded" || envelope != "")'
+    resp = pb.listing(collection, token=admin_token, params={"filter": flt})
+    total = resp.body.get("totalItems") if resp.status == 200 and isinstance(resp.body, dict) else None
+    return total if isinstance(total, int) else None
+
+
+def still_open(pb, collection, admin_token, row_id) -> bool:
+    """Whether the row reads back neither graded nor with an envelope."""
+    resp = pb.view(collection, row_id, token=admin_token)
+    body = resp.body if resp.status == 200 and isinstance(resp.body, dict) else {}
+    return bool(body) and body.get("status") != "graded" and body.get("envelope", "") == ""
+
+
+def _statuses(sent) -> str:
+    return " ".join(f"{form}={resp.status}" for form, resp in sent)
+
+
+def create_graded_denied(pb, collection, caller: Account, payload, forms_caller: Account, forms_payload,
+                         envelope_id, admin_token, expected) -> Receipt:
+    # The account creates rows of its own, complete and valid: one already
+    # graded, and one in progress that names an envelope (a real one, so
+    # validation passes). Only the server writes a graded attempt row
+    # (ROUNDS-00A-L03 PR 4), so the create rule refuses both, with the
+    # deny-contract status and empty `data` (a validation failure fills
+    # `data`), and the superuser then finds no row under the account, which
+    # owns none. A second no-rows account sends the same in every other
+    # form, and none leaves it a graded or enveloped row.
+    tries = [{**payload, "status": "graded"}, {**payload, "envelope": envelope_id}]
+    answers = [pb.create(collection, caller.token, body) for body in tries]
+    refused = [r.status == expected and isinstance(r.body, dict) and r.body.get("data") == {} for r in answers]
+    left, listing_status = _admin_owner_count(pb, collection, admin_token, caller.user_id)
+    sent = graded_create_forms(pb, collection, forms_caller.token, forms_payload, envelope_id)
+    landed = graded_or_enveloped(pb, collection, admin_token, forms_caller.user_id)
+    ok = all(refused) and left == 0 and landed == 0
+    detail = "" if ok else (f"graded={answers[0].status} envelope={answers[1].status} refused={refused} "
+                            f"{_owner_count_detail(left, listing_status)} forms_landed={landed} {_statuses(sent)}")
+    return Receipt(CREATE_GRADED_FAMILY, collection, "create", "authenticated-owner",
+                   expected, answers[0].status, ok, answers[0].elapsed_ms, detail)
+
+
+def update_graded_denied(pb, collection, owner: Account, graded_id, envelope_id, admin_token, expected) -> Receipt:
+    # The owner's graded row takes no update, not even an empty one, and its
+    # in-progress row can't become graded or take an envelope. Each update
+    # is not found under the update rule, and the superuser reads both rows
+    # back exactly as they were. Then the same in every other form: the
+    # graded row still reads back as it was, and the in-progress row is
+    # neither graded nor linked to an envelope.
+    in_progress = owner.ids[collection]
+    rows = (graded_id, in_progress)
+    before = {rid: pb.view(collection, rid, token=admin_token) for rid in rows}
+    tries = [(graded_id, {}), (graded_id, {"status": "in-progress"}), (graded_id, {"duration_ms": 1}),
+             (in_progress, {"status": "graded"}), (in_progress, {"envelope": envelope_id})]
+    answers = [pb.update(collection, rid, body, token=owner.token) for rid, body in tries]
+    after = {rid: pb.view(collection, rid, token=admin_token) for rid in rows}
+    unchanged = all(before[r].status == 200 and after[r].status == 200 and before[r].body == after[r].body
+                    for r in rows)
+    sent = graded_update_forms(pb, collection, owner.token, graded_id, in_progress, envelope_id)
+    kept = pb.view(collection, graded_id, token=admin_token)
+    forms_ok = kept.status == 200 and kept.body == before[graded_id].body and still_open(
+        pb, collection, admin_token, in_progress)
+    ok = all(r.status == expected for r in answers) and unchanged and forms_ok
+    detail = "" if ok else (f"statuses={[r.status for r in answers]} unchanged={unchanged} forms_ok={forms_ok} "
+                            f"{_statuses(sent)}")
+    return Receipt(UPDATE_GRADED_FAMILY, collection, "update", "authenticated-owner",
+                   expected, answers[0].status, ok, answers[0].elapsed_ms, detail)
+
+
+def graded_row(pb, collection, admin_token, payload) -> str:
+    """A graded row, written by the superuser as the server writes one;
+    its id, or "" when the write fails, which fails the probe that reads it."""
+    resp = pb.create(collection, admin_token, {**payload, "status": "graded"})
+    return resp.body.get("id", "") if resp.status == 200 and isinstance(resp.body, dict) else ""
+
+
 def create_server_only_denied(pb, collection, caller_token, payload, admin_token, owner_id, expected) -> Receipt:
     # A server-only collection (create rule null) rejects an authenticated
     # client create outright. An authenticated caller is the hardest to deny,
@@ -715,6 +836,9 @@ OVERSIZED_FAMILY = "account-scope.oversized-input.rejected"
 FOREIGN_OWNER_FAMILY = "account-scope.create.foreign-owner.denied"
 REASSIGN_FAMILY = "account-scope.update.reassign-owner.denied"
 UPDATE_OWN_FAMILY = "account-scope.update.own.accepted"
+# Only the server writes a graded attempt row (ROUNDS-00A-L03 PR 4).
+CREATE_GRADED_FAMILY = "account-scope.create.graded.denied"
+UPDATE_GRADED_FAMILY = "account-scope.update.graded.denied"
 SERVER_ONLY_CREATE_FAMILY = "account-scope.create.server-only.denied"
 SERVER_ONLY_UPDATE_FAMILY = "account-scope.update.server-only.denied"
 SERVER_ONLY_DELETE_FAMILY = "account-scope.delete.server-only.denied"
@@ -748,6 +872,8 @@ IMPLEMENTED_FAMILIES = (
         FOREIGN_OWNER_FAMILY,
         REASSIGN_FAMILY,
         UPDATE_OWN_FAMILY,
+        CREATE_GRADED_FAMILY,
+        UPDATE_GRADED_FAMILY,
         SERVER_ONLY_CREATE_FAMILY,
         SERVER_ONLY_UPDATE_FAMILY,
         SERVER_ONLY_DELETE_FAMILY,

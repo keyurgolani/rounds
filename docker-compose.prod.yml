@@ -43,8 +43,12 @@
 #   ROUNDS_EXECUTION_SECRET - 32 to 72 characters, the same on PocketBase
 #                          and the runner (`openssl rand -hex 32`): the
 #                          password the runner logs in with as
-#                          execution-worker. Set it before
-#                          ROUNDS_GATE_EXECUTION_STORE is `on`.
+#                          execution-worker. The job store and the
+#                          execution keys are on by default, so set it
+#                          before you upgrade: without it every code run
+#                          answers 503 execution_disabled and keeps its
+#                          draft. Code runs also need
+#                          ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce.
 #   ROUNDS_SHARE_RESOLVER_PASSWORD - 32 to 72 printable characters, the
 #                          same on PocketBase and the runner (`openssl rand
 #                          -hex 32`): the password the runner logs in with
@@ -149,7 +153,8 @@ services:
       # quota_unavailable in observe mode and denies with it in enforce.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-}
       # Same value as PocketBase's. Blank, the execution worker doesn't
-      # start. Candidate processes never get either secret.
+      # start and the execution keys act as off. Candidate processes never
+      # get either secret.
       - ROUNDS_EXECUTION_SECRET=${ROUNDS_EXECUTION_SECRET:-}
       # Same value as PocketBase's. Blank, every share link answers the
       # uniform not-found. Candidate processes never get it.

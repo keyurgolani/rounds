@@ -49,6 +49,14 @@
       "status": 200,
       "guarantee": "an account's update of its own row succeeds"
     },
+    "create_graded": {
+      "status": 400,
+      "guarantee": "an account's create of its own attempt row as graded, or with an envelope, is rejected"
+    },
+    "update_graded": {
+      "status": 404,
+      "guarantee": "an account's update of its graded attempt row, or one that would grade a row or give it an envelope, is not found under the owner rule"
+    },
     "superuser_create": {
       "status": 200,
       "guarantee": "a superuser insert on a server-only collection succeeds"
@@ -277,6 +285,20 @@
       "status": "enforced",
       "deny_key": "update_own",
       "guarantee": "an account's update of its own row (omitting user or resending its own) still succeeds"
+    },
+    "account-scope.create.graded.denied": {
+      "operation": "create",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "create_graded",
+      "guarantee": "an account can't create its own attempt row as graded, or with an envelope"
+    },
+    "account-scope.update.graded.denied": {
+      "operation": "update",
+      "actor": "authenticated-owner",
+      "status": "enforced",
+      "deny_key": "update_graded",
+      "guarantee": "an account can't change its graded attempt row, grade its own row, or give a row an envelope"
     },
     "account-scope.create.server-only.denied": {
       "operation": "create",
@@ -810,6 +832,36 @@
       "status": "slot",
       "lane": "pr",
       "guarantee": "a shared revision reads on its own, with no other record of the account"
+    },
+    "isolation.ai-coding-attempts.client-grade.denied": {
+      "surface": "pb:ai_coding_attempts",
+      "actor": "authenticated-owner",
+      "expected": "uniform_reject",
+      "control": "the account's in-progress row still saves",
+      "owner_leaf": "ROUNDS-00A-L03",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "ai_coding_attempts:account-scope.create.graded.denied",
+        "ai_coding_attempts:account-scope.update.graded.denied",
+        "ai_coding_attempts:account-scope.update.own.accepted"
+      ],
+      "guarantee": "only the server writes a graded attempt row: no client creates one, grades its own row, changes a graded row, or gives a row an envelope"
+    },
+    "isolation.take-home-attempts.client-grade.denied": {
+      "surface": "pb:take_home_attempts",
+      "actor": "authenticated-owner",
+      "expected": "uniform_reject",
+      "control": "the account's in-progress row still saves",
+      "owner_leaf": "ROUNDS-00A-L03",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "take_home_attempts:account-scope.create.graded.denied",
+        "take_home_attempts:account-scope.update.graded.denied",
+        "take_home_attempts:account-scope.update.own.accepted"
+      ],
+      "guarantee": "only the server writes a graded attempt row: no client creates one, grades its own row, changes a graded row, or gives a row an envelope"
     }
   },
   "collections": {
@@ -1714,15 +1766,24 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
+        "create": "@request.auth.id != \"\" && @request.data.envelope:isset = false && (@request.data.status = \"in-progress\" || @request.data.status = \"submitted\") && @request.auth.id = @request.data.user",
+        "update": "status != \"graded\" && user = @request.auth.id && @request.data.envelope:isset = false && (@request.data.status:isset = false || @request.data.status = \"in-progress\" || @request.data.status = \"submitted\") && (@request.data.user:isset = false || @request.auth.id = @request.data.user)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+        "create": "@request.auth.id != \"\" && @request.data.envelope:isset = false && (@request.data.status = \"in-progress\" || @request.data.status = \"submitted\") && @request.auth.id = @request.data.user",
+        "update": "status != \"graded\" && user = @request.auth.id && @request.data.envelope:isset = false && (@request.data.status:isset = false || @request.data.status = \"in-progress\" || @request.data.status = \"submitted\") && (@request.data.user:isset = false || @request.auth.id = @request.data.user)"
       },
       "target_rule_migration": "1700006000_account_scope_rules.js",
+      "rule_overrides": [
+        {
+          "migration": "1700008700_attempt_grade_rules.js",
+          "rules": [
+            "create",
+            "update"
+          ]
+        }
+      ],
       "hook": "pb_hooks/execution.pb.js",
       "relation_exceptions": [
         "campaign",
@@ -1735,13 +1796,7 @@
           "target": "campaigns"
         }
       ],
-      "exceptions": [
-        {
-          "id": "client-graded-status",
-          "closed_by": "ROUNDS-00A-L03",
-          "note": "client-written status:'graded' on attempts"
-        }
-      ],
+      "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
         "account-scope.list.anonymous.isolated",
@@ -1758,6 +1813,8 @@
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.create.graded.denied",
+        "account-scope.update.graded.denied",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
         "account-scope.create.nonexistent-owner.denied",
@@ -1834,15 +1891,24 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
+        "create": "@request.auth.id != \"\" && @request.data.envelope:isset = false && (@request.data.status = \"in-progress\" || @request.data.status = \"submitted\") && @request.auth.id = @request.data.user",
+        "update": "status != \"graded\" && user = @request.auth.id && @request.data.envelope:isset = false && (@request.data.status:isset = false || @request.data.status = \"in-progress\" || @request.data.status = \"submitted\") && (@request.data.user:isset = false || @request.auth.id = @request.data.user)",
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+        "create": "@request.auth.id != \"\" && @request.data.envelope:isset = false && (@request.data.status = \"in-progress\" || @request.data.status = \"submitted\") && @request.auth.id = @request.data.user",
+        "update": "status != \"graded\" && user = @request.auth.id && @request.data.envelope:isset = false && (@request.data.status:isset = false || @request.data.status = \"in-progress\" || @request.data.status = \"submitted\") && (@request.data.user:isset = false || @request.auth.id = @request.data.user)"
       },
       "target_rule_migration": "1700006000_account_scope_rules.js",
+      "rule_overrides": [
+        {
+          "migration": "1700008700_attempt_grade_rules.js",
+          "rules": [
+            "create",
+            "update"
+          ]
+        }
+      ],
       "hook": "pb_hooks/execution.pb.js",
       "relation_exceptions": [
         "campaign",
@@ -1855,13 +1921,7 @@
           "target": "campaigns"
         }
       ],
-      "exceptions": [
-        {
-          "id": "client-graded-status",
-          "closed_by": "ROUNDS-00A-L03",
-          "note": "client-written status:'graded' on attempts"
-        }
-      ],
+      "exceptions": [],
       "probes": [
         "account-scope.list.cross-account.isolated",
         "account-scope.list.anonymous.isolated",
@@ -1878,6 +1938,8 @@
         "account-scope.create.foreign-owner.denied",
         "account-scope.update.reassign-owner.denied",
         "account-scope.update.own.accepted",
+        "account-scope.create.graded.denied",
+        "account-scope.update.graded.denied",
         "account-scope.update.foreign-or-missing.indistinguishable",
         "account-scope.create.replayed-denied.denied",
         "account-scope.create.nonexistent-owner.denied",
