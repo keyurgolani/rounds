@@ -67,4 +67,25 @@ describe('MultiFileEditor actions', () => {
     expect(document.querySelector('[data-editor-actions="bar"]')).toBeNull();
     expect(screen.getByTestId('code')).toBeInTheDocument();
   });
+
+  it('keeps the same editor while the actions come and go', () => {
+    const editor = (bottomActions?: React.ReactNode) => (
+      <MultiFileEditor
+        files={{ 'cart.py': 'pass' }}
+        activePath="cart.py"
+        onActivePathChange={() => {}}
+        onFileChange={() => {}}
+        actionsBar
+        bottomActions={bottomActions}
+      />
+    );
+    const { rerender } = render(editor(<button type="button">Run</button>));
+    const code = screen.getByTestId('code');
+    rerender(editor(undefined));
+    expect(document.querySelector('[data-editor-actions="bar"]')).toBeNull();
+    expect(screen.getByTestId('code')).toBe(code);
+    rerender(editor(<button type="button">Run</button>));
+    expect(document.querySelector('[data-editor-actions="bar"]')).not.toBeNull();
+    expect(screen.getByTestId('code')).toBe(code);
+  });
 });

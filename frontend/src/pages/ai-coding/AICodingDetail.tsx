@@ -739,7 +739,8 @@ export default function AICodingDetail() {
         // no longer surfaced as a left-edge floating tab.
 
         // One live region for the page: in the center column, or on a
-        // phone at full width below the body.
+        // phone at full width below the body, where its buttons are 44 px
+        // touch targets.
         const runnerNotice = (
           <RunnerDenialNotice
             denial={runDenial?.denial ?? null}
@@ -748,6 +749,7 @@ export default function AICodingDetail() {
             className="flex-shrink-0"
             contentStyle={{ margin: '8px 12px' }}
             job={shownJob === 'grade' ? gradeView : jobView}
+            actionMinHeight={narrow ? 44 : undefined}
           />
         );
 

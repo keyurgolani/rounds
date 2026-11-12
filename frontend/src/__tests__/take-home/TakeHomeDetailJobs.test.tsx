@@ -313,6 +313,8 @@ describe('TakeHomeDetail jobs on a phone', () => {
     await waitFor(() => expect(notice()).toHaveTextContent('Queued'));
     expect(notice().closest('[data-take-home-pane="notice"]')).not.toBeNull();
     expect(notice().closest('[data-take-home-pane="center"]')).toBeNull();
+    // Its buttons are touch targets on a phone.
+    expect(within(notice()).getByRole('button', { name: 'Cancel' }).style.minHeight).toBe('44px');
 
     answers.push(ended('canceled', 'canceled', null));
     await waitFor(() => expect(notice()).toHaveTextContent('Canceled'));
@@ -330,5 +332,6 @@ describe('TakeHomeDetail jobs on a phone', () => {
     await waitFor(() => expect(notice()).toHaveTextContent('Queued'));
     expect(notice().closest('[data-take-home-pane="center"]')).not.toBeNull();
     expect(document.querySelector('[data-take-home-pane="notice"]')).toBeNull();
+    expect(within(notice()).getByRole('button', { name: 'Cancel' }).style.minHeight).toBe('32px');
   });
 });

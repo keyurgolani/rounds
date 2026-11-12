@@ -116,11 +116,11 @@ const MIN_CHAT_W = 260;
 // shrink as the chat grows; the user can drag back if it's too tight.
 const MAX_CHAT_W = 4000;
 
-/** The files and the code, side by side. Given a `bar`, the two sit
- *  above it in one column, and the AI chat stays full height beside
- *  them. */
-function FilesAndCode({ bar, children }: { bar: ReactNode; children: ReactNode }) {
-  if (!bar) return <>{children}</>;
+/** The files and the code, side by side. In a `column`, the two sit above
+ *  the `bar`, and the AI chat stays full height beside them. The column
+ *  stays while the bar comes and goes, so the editor isn't remounted. */
+function FilesAndCode({ column, bar, children }: { column: boolean; bar: ReactNode; children: ReactNode }) {
+  if (!column) return <>{children}</>;
   return (
     <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <div className="flex" style={{ flex: 1, minHeight: 0 }}>
@@ -314,7 +314,7 @@ export default function MultiFileEditor({
 
   return (
     <div className="flex" style={{ height, position: 'relative' }}>
-      <FilesAndCode bar={actionsBar && bottomActions ? <ActionsBar>{bottomActions}</ActionsBar> : null}>
+      <FilesAndCode column={actionsBar} bar={bottomActions ? <ActionsBar>{bottomActions}</ActionsBar> : null}>
       {/* File explorer (resizable). The column is removed entirely
           when collapsed — parent renders a floating tab elsewhere.
           Hidden entirely in single-file mode (`hideExplorer`). */}

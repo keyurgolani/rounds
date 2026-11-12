@@ -29,7 +29,11 @@ vi.mock('../../components/shell/AppHeader', () => ({ default: () => <header /> }
 vi.mock('../../components/shell/StatusAction', () => ({ default: () => null }));
 vi.mock('../../components/take-home/TakeHomeChatPanel', () => ({ default: () => null }));
 vi.mock('../../components/editor/MultiFileEditor', () => ({
-  default: (props: { bottomActions?: React.ReactNode }) => <div>{props.bottomActions}</div>,
+  default: (props: { bottomActions?: React.ReactNode; actionsBar?: boolean }) => (
+    <div data-testid="editor" data-actions-bar={String(Boolean(props.actionsBar))}>
+      {props.bottomActions}
+    </div>
+  ),
 }));
 
 import TakeHomeDetail from '../../pages/take-home/TakeHomeDetail';
@@ -85,6 +89,14 @@ beforeEach(() => {
 });
 
 describe('TakeHomeDetail denial states', () => {
+  it('keeps Run and Submit floating over the code, with no bar', async () => {
+    renderPage();
+    const editor = await screen.findByTestId('editor');
+    expect(editor).toHaveAttribute('data-actions-bar', 'false');
+    expect(editor).toContainElement(screen.getByRole('button', { name: 'Run' }));
+    expect(editor).toContainElement(screen.getByRole('button', { name: 'Submit' }));
+  });
+
   it('shows an unavailable run instead of a score of 0 and returns focus to Run', async () => {
     vi.mocked(runProject).mockImplementation(
       blurThenReject(new RunnerError({ message: 'take-home run 503: x', status: 503, code: 'worker_unavailable' })),

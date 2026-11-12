@@ -37,7 +37,11 @@ vi.mock('../../components/shell/AppHeader', () => ({ default: () => <header /> }
 vi.mock('../../components/shell/StatusAction', () => ({ default: () => null }));
 vi.mock('../../components/ai/AIChatPanel', () => ({ default: () => null }));
 vi.mock('../../components/editor/MultiFileEditor', () => ({
-  default: (props: { bottomActions?: React.ReactNode }) => <div>{props.bottomActions}</div>,
+  default: (props: { bottomActions?: React.ReactNode; actionsBar?: boolean }) => (
+    <div data-testid="editor" data-actions-bar={String(Boolean(props.actionsBar))}>
+      {props.bottomActions}
+    </div>
+  ),
 }));
 
 import AICodingDetail from '../../pages/ai-coding/AICodingDetail';
@@ -95,6 +99,14 @@ beforeEach(() => {
 });
 
 describe('AICodingDetail runner calls', () => {
+  it("puts Run and Submit in the editor's bar under the code, since the AI chat narrows it", async () => {
+    renderPage();
+    const editor = await screen.findByTestId('editor');
+    expect(editor).toHaveAttribute('data-actions-bar', 'true');
+    expect(editor).toContainElement(screen.getByRole('button', { name: 'Run' }));
+    expect(editor).toContainElement(screen.getByRole('button', { name: 'Submit' }));
+  });
+
   it('names the round and checkpoint and leaves the test command to the runner', async () => {
     vi.mocked(runProject).mockResolvedValue({
       passed: true,
