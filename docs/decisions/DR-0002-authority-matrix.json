@@ -3,10 +3,19 @@
   "id": "DR-0002",
   "title": "Source-of-truth and package-boundary matrix",
   "leaf": "ROUNDS-01-L02",
-  "status": "draft",
+  "status": "ratified",
   "owner": "Product Architecture",
-  "approver": "",
-  "approvalRef": null,
+  "approver": "rounds lane review (PR #222, r2), 2026-11-12",
+  "approvalRef": {
+    "pr": 222,
+    "governedFiles": [
+      {"path":"contracts/authority/matrix.json","sha256":"22fa5d701d7bb4e2881599530e236bdb77d489c208aa8c19deb5961756b970c9"},
+      {"path":"contracts/authority/packages.json","sha256":"11823361bf1a222ea1b9551ce962adb02aac04a87bc7cf949791b3cb5283ff99"},
+      {"path":"contracts/authority/owner-labels.json","sha256":"f260e1d2d3cc6572c9c9456bb0d4886483bf8b989c9ebaabe68d2e188e31d800"},
+      {"path":"contracts/authority/baseline-stores.json","sha256":"a04b3674b6ce1445ca5ec27609f1f1b237fecf43b2d7d5494d75b34ef0913f11"}
+    ]
+  },
+  "ratifiedOn": "2026-11-12",
   "compatibility": "additive",
   "revision": 2,
   "supersedes": "DR-0002@1",
@@ -370,7 +379,7 @@
     {
       "id": "S1",
       "title": "Storage and package placement from DR-0004",
-      "status": "draft",
+      "status": "ratified",
       "sources": ["DR-0004@1 decisions DB1, DB3, DB7, and DB10", "contracts/database/erd-decisions.json", "#5's body (the worker image's directory)"],
       "decision": "Each row's storage cell names the DR-0004 store that holds it as DR-0004@<revision>:<store>[+<store>]. Rows with bytes (account export and restore archives, Source Documents, Artifact Revisions, and Legacy Artifact Snapshots) name sqlite-data+files; every other server row names sqlite-data. Browser caches, device-local view state, and the shared status registry module keep no server store and say so with n/a, and the login streak stays blocked:OD-5. Each package's target_path is where its new code goes: the gateway and its change-set and audit package under pocketbase/pb_hooks/lib/<package-id>/, beside the one module that wraps PocketBase's API (DB9), each domain package under pocketbase/pb_hooks/domain/<package-id>/, the execution worker pool at backend/worker/, the separate image #5's body gives it, and the Provider Gateway at backend/app/provider_gateway/ in the runner, since provider calls are network I/O that no PocketBase transaction may hold. The containment modules that #1, #3, #4, #11, #12, and #14 built stay where they are, #3's control plane in backend/execution/ among them; DR-0004 ratifies them in place.",
       "alternatives": [

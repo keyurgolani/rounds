@@ -20,7 +20,7 @@ const DR = 'docs/decisions/DR-0002-authority-matrix.json';
 const AUDITED = '62d4eae';
 // DR-0002@2 is a draft until #222's r2 review passes; harness/bench/ratify.py
 // sets this to 'ratified' in the ratification commit.
-const DR_STATUS = 'draft';
+const DR_STATUS = 'ratified';
 // A rounds-review checkout, when one is named, for the verbatim checks.
 const ROUNDS_REVIEW = process.env.ROUNDS_REVIEW_ROOT || null;
 

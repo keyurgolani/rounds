@@ -35,7 +35,7 @@ const MIGRATIONS = 'pocketbase/pb_migrations';
 
 // DR-0004 is a draft until #222's r2 review passes; harness/bench/ratify.py
 // sets this to 'ratified' in the ratification commit.
-const STATUS = 'draft';
+const STATUS = 'ratified';
 // What a ratified DR-0004 pins (M4): the ERD's written part, the receipt,
 // their schemas, and the ADR. The snapshot and the generated ERD are not
 // governed; a migration change regenerates them.
