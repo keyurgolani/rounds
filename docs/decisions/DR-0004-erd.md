@@ -2,7 +2,7 @@
 
 <!-- Generated from contracts/database/erd.json by node scripts/conformance/run.mjs --write. Edit contracts/database/erd-decisions.json for the written fields, and regenerate contracts/database/schema-snapshot.json with harness/bench/schema_dump.py for the rest. -->
 
-Every collection at snapshot `42673ff` (PocketBase 0.22.22), 55 in all, the 5 system tables, the 11 planned or held tables DR-0004 places, and 86 relations. The written fields (group, scope, rows, writers, purge, a text partition, merge, notes, and the planned tables) are DR-0004's and change only with a revision of it; the rest comes from the snapshot, and the PR that changes a migration regenerates this file. Delete behavior is PocketBase's own, measured on the snapshot's native run: multi-optional-no-cascade unset, single-optional-cascade cascade, single-optional-no-cascade unset, single-required-cascade cascade, single-required-no-cascade restrict.
+Every collection at snapshot `988653c` (PocketBase 0.22.22), 55 in all, the 5 system tables, the 11 planned or held tables DR-0004 places, and 86 relations. The written fields (group, scope, rows, writers, purge, a text partition, merge, notes, and the planned tables) are DR-0004's and change only with a revision of it; the rest comes from the snapshot, and the PR that changes a migration regenerates this file. Delete behavior is PocketBase's own, measured on the snapshot's native run: multi-optional-no-cascade unset, single-optional-cascade cascade, single-optional-no-cascade unset, single-required-cascade cascade, single-required-no-cascade restrict.
 
 | Store | Kind | Location | Canonical | Backup |
 | --- | --- | --- | --- | --- |
@@ -28,7 +28,7 @@ erDiagram
 | ai_providers | live | account | user (relation, cascade) | 1, partition first | the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
 | ai_settings | live | account | user (relation, cascade) | 1, partition first | the SPA and the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
 | user_preferences | live | account | user (relation, cascade) | 1, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| users | live | account | id (self, pocketbase) | primary key | PocketBase's own auth routes under its rules; the signup, demo, and admission hooks guard what a client may set | PocketBase deletes the account; every relation to it cascades, unsets, or restricts as listed |
+| users | live | account | id (self, pocketbase) | primary key | PocketBase's own auth routes under its rules; the signup, demo, admission, and profile file hooks guard what a client may set | PocketBase deletes the account; every relation to it cascades, unsets, or restricts as listed |
 | account_system_state | planned (ROUNDS-00B-L07/S2) | account | user (relation, cascade) | 1, partition first | #177's state migration and its demo hooks | cascades with the account |
 
 ## Campaigns, applications, rounds, offers, and todos
@@ -159,7 +159,7 @@ erDiagram
 
 | Entity | Status | Scope | Partition | Indexed | Writers | On account delete |
 | --- | --- | --- | --- | --- | --- | --- |
-| ai_coding_attempts | live | account | user (relation, cascade) | 1, partition first | the SPA, under #9's rules; #3's PR 4 makes graded rows server-only | cascades with the account |
+| ai_coding_attempts | live | account | user (relation, cascade) | 1, partition first | the SPA for rows that aren't graded, under #9's rules and #3's grade rules; a graded row only through the execution store's completion (#3's PR 4) | cascades with the account |
 | ai_coding_drafts | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 | ai_coding_rounds | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
 | behavioral_categories | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
@@ -172,7 +172,7 @@ erDiagram
 | system_design_guides | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
 | system_design_questions | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
 | take_home_assignments | live | content | none | 1 | migrations at start (seed and definitions); no runtime writer | not account data |
-| take_home_attempts | live | account | user (relation, cascade) | 1, partition first | the SPA and the runner, under #9's rules; #3's PR 4 makes graded rows server-only | cascades with the account |
+| take_home_attempts | live | account | user (relation, cascade) | 1, partition first | the SPA for rows that aren't graded, under #9's rules and #3's grade rules; a graded row only through the execution store's completion (#3's PR 4), and the runner's own writes no longer run | cascades with the account |
 | take_home_drafts | live | account | user (relation, cascade) | 2, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 | user_progress | live | account | user (relation, cascade) | 1, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 

@@ -102,7 +102,7 @@
       "group": "practice",
       "scope": "account",
       "rows": ["practice-attempt","campaign-membership"],
-      "writers": "the SPA, under #9's rules; #3's PR 4 makes graded rows server-only",
+      "writers": "the SPA for rows that aren't graded, under #9's rules and #3's grade rules; a graded row only through the execution store's completion (#3's PR 4)",
       "purge": "cascades with the account"
     },
     {
@@ -474,7 +474,7 @@
       "group": "practice",
       "scope": "account",
       "rows": ["practice-attempt","campaign-membership"],
-      "writers": "the SPA and the runner, under #9's rules; #3's PR 4 makes graded rows server-only",
+      "writers": "the SPA for rows that aren't graded, under #9's rules and #3's grade rules; a graded row only through the execution store's completion (#3's PR 4), and the runner's own writes no longer run",
       "purge": "cascades with the account"
     },
     {
@@ -514,7 +514,7 @@
       "group": "account",
       "scope": "account",
       "rows": ["authentication-identity","professional-identity","demo-state"],
-      "writers": "PocketBase's own auth routes under its rules; the signup, demo, and admission hooks guard what a client may set",
+      "writers": "PocketBase's own auth routes under its rules; the signup, demo, admission, and profile file hooks guard what a client may set",
       "purge": "PocketBase deletes the account; every relation to it cascades, unsets, or restricts as listed"
     },
     {

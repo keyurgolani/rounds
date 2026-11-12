@@ -74,7 +74,7 @@
   ],
   "versioning": "This record, the ERD's written part (contracts/database/erd-decisions.json), and contracts/database/benchmark.json share one revision counter, so a decision is cited as DR-0004@<revision>:<decision-id> (for example DR-0004@1:DB2) and a store as DR-0004@<revision>:<store-id>. A revision is needed only when one of those changes. A change to a decision's store, owning process, or owning leaf, or to a written entity's store, partition, or delete behavior, is breaking; adding an entity, a planned table, an index, or a limit is additive. The schema snapshot and the generated ERD (contracts/database/erd.json and docs/decisions/DR-0004-erd.md) are not governed: a PR that adds or changes a migration regenerates them, or DB_ERD_STALE fails it, and needs no revision of this record unless it changes a written field. A new table or relation field needs its written fields, so it comes with an additive revision. A ratified revision pins the SHA-256 of the written part, the receipt, their schemas, and the generated ADR, so an unapproved edit fails DR_APPROVAL_STALE. PocketBase is ratified by its line: a patch on the 0.22 line is a pin change, and a port to another line supersedes this record first.",
   "supersession": "A ratified revision is never edited. A leaf that needs another store, transaction owner, or process supersedes this record first: the new revision names DR-0004@<n> in supersedes, gives supersessionReason, and lists per decision whether it is kept or changed. Leaves citing a changed decision go back to blocked until they re-cite; leaves citing an unchanged one keep their citation. An unratified revision can be reverted.",
-  "context": "Issue #18 (ROUNDS-02-L01). Spec lines cite rounds-review's docs/superpowers/specs/2026-10-18-rounds-review-board-design.md. A citation path@62d4eae:L<a>-L<b> is lines at the audited revision; facts about next were read at 6c4a5a3. Alternative A was the starting point because every store next added since R0 already works that way, and the SQLite benchmark (contracts/database/benchmark.json, synthetic data only) decides whether it holds.",
+  "context": "Issue #18 (ROUNDS-02-L01). Spec lines cite rounds-review's docs/superpowers/specs/2026-10-18-rounds-review-board-design.md. A citation path@62d4eae:L<a>-L<b> is lines at the audited revision; facts about next were read at fe01163. Alternative A was the starting point because every store next added since R0 already works that way, and the SQLite benchmark (contracts/database/benchmark.json, synthetic data only) decides whether it holds.",
   "securityConsequences": {
     "account": "No runtime or privilege change here. DB2 and DB4 read the account from the bearer's auth record inside the command's transaction, so no command names its own account, and a record from another account answers like a missing one. Gateway-owned collections lose their REST write rules at each transfer.",
     "privacy": "Rows keep the privacy floor DR-0002 gives them, and the ERD names each entity's partition column and what account deletion does to it. The byte store dedupes within one account only, so whether a file exists never shows across accounts, and its bytes are read only through a route that checks the account (DB10). The benchmark seeds synthetic data and generates its accounts and passwords per run.",
@@ -163,7 +163,7 @@
       "store": "sqlite-data",
       "process": "PocketBase hook routes; the runner is only ever a caller",
       "owningLeaf": "ROUNDS-02-L02",
-      "decision": "The command gateway is a set of PocketBase hook routes under /api/rounds/commands/, registered as Caller rows in docs/security/server-writes.md. The SPA reaches them through nginx's existing /api/ pass-through, under its 1m body cap; no port, hostname, or route outside /api/ is added. The runner reaches PocketBase only through hook routes, never a collection write. At 6c4a5a3 it still makes 9 direct collection writes, all with the caller's token: the 7 provider and settings writes in backend/routers/ai.py move behind #73's routes, and the 2 in backend/routers/take_home.py end with #3's PR 4, which makes graded rows server-only. Its share and execution calls already use hook routes. PocketBase 0.22 loads *.pb.js only from the top of pb_hooks (checked on the native binary: a nested file never ran), so each package registers its routes in one top-level <package-id>.pb.js and keeps its code at its DR-0002@2 target path.",
+      "decision": "The command gateway is a set of PocketBase hook routes under /api/rounds/commands/, registered as Caller rows in docs/security/server-writes.md. The SPA reaches them through nginx's existing /api/ pass-through, under its 1m body cap; no port, hostname, or route outside /api/ is added. The runner reaches PocketBase only through hook routes, never a collection write. At fe01163 its code holds 9 direct collection writes, all with the caller's token, and 7 of them run: the provider and settings writes in backend/routers/ai.py, which move behind #73's routes. The 2 in backend/routers/take_home.py can't run since #3's PR 4 turned the execution keys on and made graded rows server-only. Its share and execution calls already use hook routes. PocketBase 0.22 loads *.pb.js only from the top of pb_hooks (checked on the native binary: a nested file never ran), so each package registers its routes in one top-level <package-id>.pb.js and keeps its code at its DR-0002@2 target path.",
       "alternatives": [
         {
           "option": "Routes in the runner that call PocketBase's REST API",
@@ -177,7 +177,7 @@
       "failureModes": [
         "A route that doesn't register as a Caller row is an unrecorded writer; #19's registry check fails it.",
         "A gateway-owned collection that keeps a REST write rule is a path around the gateway; DB4 nulls it at each transfer.",
-        "Until #73 and #3's PR 4 land, the runner's 9 writes keep going around the gateway with the caller's token."
+        "Until #73 lands, the runner's 7 provider and settings writes keep going around the gateway with the caller's token."
       ],
       "limits": [
         "A command body up to nginx's 1m default under /api/.",
@@ -378,7 +378,7 @@
       "alternatives": [
         {
           "option": "Port to a newer line before #19",
-          "reason": "Rewrites all 38 migrations and every containment hook now, for no target the benchmark misses."
+          "reason": "Rewrites all 39 migrations and every containment hook now, for no target the benchmark misses."
         },
         {
           "option": "Replace PocketBase",
@@ -500,17 +500,17 @@
   },
   "pocketbase": {
     "line": "0.22",
-    "pinAtRatification": "0.22.22",
+    "pinAtRatification": "0.22.57",
     "decision": "retain the 0.22 line",
-    "countedAt": "6c4a5a345c8202ff29329ef01ed7ac14dfe5677c",
+    "countedAt": "fe0116313e77448c770fbb95e8dfe1fd488695da",
     "summary": "PocketBase stays, on the 0.22 line, which this record ratifies. P3 moves the pin to 0.22.57, the newest 0.22 release; the port to another line waits for a trigger, and new hook code goes through one module so the port stays bounded. The break sites below are what that port would touch.",
     "breakSites": [
       {
         "id": "migrations",
         "site": "pocketbase/pb_migrations/",
-        "count": 38,
+        "count": 39,
         "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (migrate((app)) replaces migrate((db)) and new Dao(db); a collection's schema becomes fields)",
-        "note": "All 38 call new Dao(, with the schema and options shapes, raw-SQL triggers in 3 files, and indexes in 20."
+        "note": "All 39 call new Dao(, with the schema and options shapes, raw-SQL triggers in 3 files, and indexes in 20."
       },
       {
         "id": "admin-bootstrap",
@@ -528,17 +528,17 @@
       },
       {
         "id": "request-data-rules",
-        "site": "1700006000_account_scope_rules.js",
-        "count": 1,
+        "site": "1700006000_account_scope_rules.js, 1700008700_attempt_grade_rules.js",
+        "count": 2,
         "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (@request.data becomes @request.body)",
-        "note": "The only file that uses it."
+        "note": "The files that use it."
       },
       {
         "id": "hook-registrations",
-        "site": "pocketbase/pb_hooks/*.pb.js (11 files)",
-        "count": 56,
+        "site": "pocketbase/pb_hooks/*.pb.js (12 files)",
+        "count": 61,
         "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (handlers call e.next(); onAfterBootstrap becomes onBootstrap; path params use {id}; requireRecordAuth becomes requireAuth)",
-        "note": "20 routes, 3 routerUse middlewares, 2 cronAdd jobs, 4 onAfterBootstrap hooks, 25 record and model hooks, and 2 CLI commands, listed in server-writes.md and account-scope.v1.json."
+        "note": "20 routes, 3 routerUse middlewares, 2 cronAdd jobs, 4 onAfterBootstrap hooks, 30 record and model hooks, and 2 CLI commands, listed in server-writes.md and account-scope.v1.json."
       },
       {
         "id": "dao-and-transactions",
@@ -549,10 +549,10 @@
       },
       {
         "id": "superuser-checks",
-        "site": "admission.js, demo.js, execution.js, relation_endpoints.js",
-        "count": 5,
+        "site": "admission.js, demo.js, execution.js, profile_files.js, relation_endpoints.js",
+        "count": 6,
         "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (requestInfo's admin becomes a _superusers auth record)",
-        "note": "5 checks of requestInfo().admin in 4 libraries."
+        "note": "6 checks of requestInfo().admin in 5 libraries."
       },
       {
         "id": "after-delete-hook",
@@ -563,10 +563,10 @@
       },
       {
         "id": "login-guards",
-        "site": "admission.pb.js, demo.pb.js, execution.pb.js, share_secrets.pb.js",
-        "count": 5,
+        "site": "admission.pb.js, demo.pb.js, execution.pb.js, profile_files.pb.js, share_secrets.pb.js",
+        "count": 6,
         "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (auth request hooks change name and take e.next())",
-        "note": "5 sign-in hooks in 4 files: the guards of #1, #3, #12, and #177 on PocketBase's password and OAuth2 hooks."
+        "note": "6 sign-in hooks in 5 files: the guards of #1, #3, #12, and #177 on PocketBase's password and OAuth2 hooks."
       },
       {
         "id": "system-migration-name",
@@ -618,7 +618,9 @@
       "Upstream publishes no further 0.22 release.",
       "A fix the deployment needs lands only on a newer line.",
       "A leaf needs a feature only a newer line has."
-    ]
+    ],
+    "benchmark": "The receipt ran on 0.22.22, before P3 moved the pin to 0.22.57. Both are on the 0.22 line; the numbers are 0.22.22's, and the port re-runs the benchmark.",
+    "snapshot": "At this revision, contracts/database/schema-snapshot.json comes from migrate up on the 0.22.22 binary, not 0.22.57: the 0.22 releases between them add no database migration, so the schema is the same. A PR that changes a migration regenerates it."
   },
   "identifiers": [
     {
@@ -893,29 +895,29 @@
     {
       "id": "runner-writes-ai",
       "citation": "backend/routers/ai.py@62d4eae:L367-L542",
-      "now": "7 provider and settings writes in ai.py at 6c4a5a3, all with the caller's token (DB3)."
+      "now": "7 provider and settings writes in ai.py at fe01163, all with the caller's token (DB3)."
     },
     {
       "id": "runner-writes-take-home",
       "citation": "backend/routers/take_home.py@62d4eae:L164-L167",
-      "now": "2 take-home writes in take_home.py at 6c4a5a3 with the caller's token, until #3's PR 4."
+      "now": "2 take-home writes in take_home.py at fe01163, which can't run since #3's PR 4 turned the execution keys on."
     },
     {
       "id": "runner-writes-share",
       "citation": "backend/routers/share.py@62d4eae:L1",
       "now": "3 share writes at the audited revision; on next every share write is a hook route."
     },
-    {"id": "pin", "citation": "pocketbase/Dockerfile@62d4eae:L3-L11", "now": "0.22.22 at 6c4a5a3, with SHA-256 checks for amd64 and arm64."},
+    {"id": "pin", "citation": "pocketbase/Dockerfile@62d4eae:L3-L11", "now": "0.22.57 at fe01163, with SHA-256 checks for amd64 and arm64."},
     {"id": "sdk", "citation": "frontend/package.json@62d4eae:L29", "now": "^0.26.8, resolved to 0.26.8."},
     {
       "id": "signup-hook",
       "citation": "pocketbase/pb_hooks/main.pb.js@62d4eae:L3-L9",
-      "now": "11 .pb.js files with 20 routes at 6c4a5a3; runInTransaction at 8 sites."
+      "now": "12 .pb.js files with 20 routes at fe01163; runInTransaction at 8 sites."
     },
     {
       "id": "admin-bootstrap",
       "citation": "pocketbase/pb_migrations/1700000500_bootstrap_admin.js@62d4eae:L33-L44",
-      "now": "Unchanged; 38 migrations at 6c4a5a3, all with new Dao(."
+      "now": "Unchanged; 39 migrations at fe01163, all with new Dao(."
     },
     {"id": "pb-data-mount", "citation": "docker-compose.prod.yml@62d4eae:L38-L39", "now": "Only pocketbase mounts pb_data."},
     {

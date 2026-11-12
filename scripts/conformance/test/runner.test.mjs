@@ -113,7 +113,7 @@ describe('runner', () => {
   it('exits 1 with path:line findings and 0 when clean', () => {
     const script = path.join(REPO_ROOT, 'scripts/conformance/run.mjs');
     const ok = execFileSync(process.execPath, [script, '--base', 'none'], { cwd: REPO_ROOT, encoding: 'utf8', env: { ...process.env, GITHUB_ACTIONS: '' } });
-    assert.match(ok, /conformance: 4 rule\(s\), 0 finding\(s\)/);
+    assert.match(ok, /conformance: 5 rule\(s\), 0 finding\(s\)/);
     const dir = fixture((d) => editText(d, 'README.md', (s) => s.replace(/^Rounds is a self-hostable career command center.*$/m, 'Rounds is a tool.')));
     let failed = null;
     try {

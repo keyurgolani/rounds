@@ -3,7 +3,7 @@
   "description": "PocketBase's own schema after every migration at the revision below, from `pocketbase migrate up` on an empty directory (harness/bench/schema_dump.py). Regenerate it with that script; never edit it by hand. The ERD (erd.json) is checked against it.",
   "pocketbaseVersion": "0.22.22",
   "revision": {
-    "commit": "42673ffd14a7f73164ea6356200ff0071710c3ef",
+    "commit": "988653cec5bc60fc06a862be1be308b03b890f64",
     "migrationsClean": true
   },
   "migrations": [
@@ -154,6 +154,10 @@
     {
       "file": "1700008500_legacy_share_migration.js",
       "sha256": "de98dd468521ded8c9989cc897b2cb4bf12cb6f9854e97890c247f5bafd5fedf"
+    },
+    {
+      "file": "1700008700_attempt_grade_rules.js",
+      "sha256": "963236d47713153900647d03d9440399abbb00a3f8d78486be1eabb28242c027"
     },
     {
       "file": "1702134273_json_limits.js",
@@ -5263,6 +5267,7 @@
     "1700008300_share_secrets.js",
     "1700008400_grading_review.js",
     "1700008500_legacy_share_migration.js",
+    "1700008700_attempt_grade_rules.js",
     "1701496825_allow_single_oauth2_provider_in_multiple_auth_collections.go",
     "1702134272_set_default_json_max_size.go",
     "1702134273_json_limits.js",

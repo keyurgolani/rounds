@@ -169,6 +169,7 @@ export function renderAdr(record, decisions, receipt) {
     list(pb.triggers || []),
     '',
     ...(pb.benchmark ? [`**Benchmarked version.** ${pb.benchmark}`, ''] : []),
+    ...(pb.snapshot ? [`**Schema snapshot.** ${pb.snapshot}`, ''] : []),
     '## ERD',
     '',
     writtenErd(decisions),

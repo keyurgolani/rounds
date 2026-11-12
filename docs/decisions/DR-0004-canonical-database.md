@@ -6,7 +6,7 @@
 | --- | --- | --- | --- | --- | --- |
 | DR-0004@1 | draft | Domain Platform | pending review | not ratified: not citable | ROUNDS-02-L01 |
 
-Issue #18 (ROUNDS-02-L01). Spec lines cite rounds-review's docs/superpowers/specs/2026-10-18-rounds-review-board-design.md. A citation path@62d4eae:L<a>-L<b> is lines at the audited revision; facts about next were read at 6c4a5a3. Alternative A was the starting point because every store next added since R0 already works that way, and the SQLite benchmark (contracts/database/benchmark.json, synthetic data only) decides whether it holds.
+Issue #18 (ROUNDS-02-L01). Spec lines cite rounds-review's docs/superpowers/specs/2026-10-18-rounds-review-board-design.md. A citation path@62d4eae:L<a>-L<b> is lines at the audited revision; facts about next were read at fe01163. Alternative A was the starting point because every store next added since R0 already works that way, and the SQLite benchmark (contracts/database/benchmark.json, synthetic data only) decides whether it holds.
 
 ## The ten decisions
 
@@ -99,7 +99,7 @@ Sources: spec 1942-1951; PocketBase 0.22's JSVM API: Dao.nonconcurrentDB(); cont
 
 ### DB3. Gateway placement
 
-The command gateway is a set of PocketBase hook routes under /api/rounds/commands/, registered as Caller rows in docs/security/server-writes.md. The SPA reaches them through nginx's existing /api/ pass-through, under its 1m body cap; no port, hostname, or route outside /api/ is added. The runner reaches PocketBase only through hook routes, never a collection write. At 6c4a5a3 it still makes 9 direct collection writes, all with the caller's token: the 7 provider and settings writes in backend/routers/ai.py move behind #73's routes, and the 2 in backend/routers/take_home.py end with #3's PR 4, which makes graded rows server-only. Its share and execution calls already use hook routes. PocketBase 0.22 loads *.pb.js only from the top of pb_hooks (checked on the native binary: a nested file never ran), so each package registers its routes in one top-level <package-id>.pb.js and keeps its code at its DR-0002@2 target path.
+The command gateway is a set of PocketBase hook routes under /api/rounds/commands/, registered as Caller rows in docs/security/server-writes.md. The SPA reaches them through nginx's existing /api/ pass-through, under its 1m body cap; no port, hostname, or route outside /api/ is added. The runner reaches PocketBase only through hook routes, never a collection write. At fe01163 its code holds 9 direct collection writes, all with the caller's token, and 7 of them run: the provider and settings writes in backend/routers/ai.py, which move behind #73's routes. The 2 in backend/routers/take_home.py can't run since #3's PR 4 turned the execution keys on and made graded rows server-only. Its share and execution calls already use hook routes. PocketBase 0.22 loads *.pb.js only from the top of pb_hooks (checked on the native binary: a nested file never ran), so each package registers its routes in one top-level <package-id>.pb.js and keeps its code at its DR-0002@2 target path.
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
@@ -114,7 +114,7 @@ The command gateway is a set of PocketBase hook routes under /api/rounds/command
 
 - A route that doesn't register as a Caller row is an unrecorded writer; #19's registry check fails it.
 - A gateway-owned collection that keeps a REST write rule is a path around the gateway; DB4 nulls it at each transfer.
-- Until #73 and #3's PR 4 land, the runner's 9 writes keep going around the gateway with the caller's token.
+- Until #73 lands, the runner's 7 provider and settings writes keep going around the gateway with the caller's token.
 
 **Limits**
 
@@ -295,7 +295,7 @@ Retain PocketBase and stay on its 0.22 line, which upstream patched through 0.22
 
 **Alternatives**
 
-- Port to a newer line before #19: Rewrites all 38 migrations and every containment hook now, for no target the benchmark misses.
+- Port to a newer line before #19: Rewrites all 39 migrations and every containment hook now, for no target the benchmark misses.
 - Replace PocketBase: PocketBase holds auth, files, and every containment store on next, and runs only on its embedded SQLite; replacing it means alternative C's two authorities or a rewrite of all of them (rejected options).
 
 **Failure modes**
@@ -406,21 +406,21 @@ Synthetic data only. Receipt `contracts/database/benchmark.json` (revision 1), 2
 
 ## PocketBase version
 
-Line **0.22**, pinned 0.22.22 at ratification. Decision: **retain the 0.22 line**. PocketBase stays, on the 0.22 line, which this record ratifies. P3 moves the pin to 0.22.57, the newest 0.22 release; the port to another line waits for a trigger, and new hook code goes through one module so the port stays bounded. The break sites below are what that port would touch.
+Line **0.22**, pinned 0.22.57 at ratification. Decision: **retain the 0.22 line**. PocketBase stays, on the 0.22 line, which this record ratifies. P3 moves the pin to 0.22.57, the newest 0.22 release; the port to another line waits for a trigger, and new hook code goes through one module so the port stays bounded. The break sites below are what that port would touch.
 
-The counts below are at `6c4a5a3`.
+The counts below are at `fe01163`.
 
 | Break site | Where | Count | Upstream | Note |
 | --- | --- | --- | --- | --- |
-| migrations | pocketbase/pb_migrations/ | 38 | https://pocketbase.io/v023upgrade/jsvm/ (migrate((app)) replaces migrate((db)) and new Dao(db); a collection's schema becomes fields) | All 38 call new Dao(, with the schema and options shapes, raw-SQL triggers in 3 files, and indexes in 20. |
+| migrations | pocketbase/pb_migrations/ | 39 | https://pocketbase.io/v023upgrade/jsvm/ (migrate((app)) replaces migrate((db)) and new Dao(db); a collection's schema becomes fields) | All 39 call new Dao(, with the schema and options shapes, raw-SQL triggers in 3 files, and indexes in 20. |
 | admin-bootstrap | pocketbase/pb_migrations/1700000500_bootstrap_admin.js | 1 | https://pocketbase.io/v023upgrade/jsvm/ (admins become _superusers records) | findAdminByEmail, new Admin(), and saveAdmin. |
 | runner-admin-login | backend/app/pb_auth.py | 1 | https://pocketbase.io/v023upgrade/jsvm/ (admin auth moves to the _superusers collection) | Unused helpers a test bans; #14 S3 removes them with PB_ADMIN_*. |
-| request-data-rules | 1700006000_account_scope_rules.js | 1 | https://pocketbase.io/v023upgrade/jsvm/ (@request.data becomes @request.body) | The only file that uses it. |
-| hook-registrations | pocketbase/pb_hooks/*.pb.js (11 files) | 56 | https://pocketbase.io/v023upgrade/jsvm/ (handlers call e.next(); onAfterBootstrap becomes onBootstrap; path params use {id}; requireRecordAuth becomes requireAuth) | 20 routes, 3 routerUse middlewares, 2 cronAdd jobs, 4 onAfterBootstrap hooks, 25 record and model hooks, and 2 CLI commands, listed in server-writes.md and account-scope.v1.json. |
+| request-data-rules | 1700006000_account_scope_rules.js, 1700008700_attempt_grade_rules.js | 2 | https://pocketbase.io/v023upgrade/jsvm/ (@request.data becomes @request.body) | The files that use it. |
+| hook-registrations | pocketbase/pb_hooks/*.pb.js (12 files) | 61 | https://pocketbase.io/v023upgrade/jsvm/ (handlers call e.next(); onAfterBootstrap becomes onBootstrap; path params use {id}; requireRecordAuth becomes requireAuth) | 20 routes, 3 routerUse middlewares, 2 cronAdd jobs, 4 onAfterBootstrap hooks, 30 record and model hooks, and 2 CLI commands, listed in server-writes.md and account-scope.v1.json. |
 | dao-and-transactions | pocketbase/pb_hooks/*.js | 35 | https://pocketbase.io/v023upgrade/jsvm/ (the Dao is removed; $app.runInTransaction((txApp) => ...)) | $app.dao() 27 times in 9 files, and runInTransaction at 8 sites in 5 libraries. |
-| superuser-checks | admission.js, demo.js, execution.js, relation_endpoints.js | 5 | https://pocketbase.io/v023upgrade/jsvm/ (requestInfo's admin becomes a _superusers auth record) | 5 checks of requestInfo().admin in 4 libraries. |
+| superuser-checks | admission.js, demo.js, execution.js, profile_files.js, relation_endpoints.js | 6 | https://pocketbase.io/v023upgrade/jsvm/ (requestInfo's admin becomes a _superusers auth record) | 6 checks of requestInfo().admin in 5 libraries. |
 | after-delete-hook | pocketbase/pb_hooks/share_capabilities.pb.js | 1 | https://pocketbase.io/v023upgrade/jsvm/ (model hooks become record hooks with explicit after-success events) | #11's onModelAfterDelete revoke relies on 0.22's after-commit timing. |
-| login-guards | admission.pb.js, demo.pb.js, execution.pb.js, share_secrets.pb.js | 5 | https://pocketbase.io/v023upgrade/jsvm/ (auth request hooks change name and take e.next()) | 5 sign-in hooks in 4 files: the guards of #1, #3, #12, and #177 on PocketBase's password and OAuth2 hooks. |
+| login-guards | admission.pb.js, demo.pb.js, execution.pb.js, profile_files.pb.js, share_secrets.pb.js | 6 | https://pocketbase.io/v023upgrade/jsvm/ (auth request hooks change name and take e.next()) | 6 sign-in hooks in 5 files: the guards of #1, #3, #12, and #177 on PocketBase's password and OAuth2 hooks. |
 | system-migration-name | scripts/lint_migrations.py and scripts/migration-lint-allowlist.json (D10's 1702134273) | 1 | https://pocketbase.io/v023upgrade/jsvm/ (system migrations are squashed) | D10 names a migration that follows 0.22's own system migration. |
 | admins-denials | frontend/nginx.conf, harness/verify_deployment.py (deployment.admins.present) | 2 | https://pocketbase.io/v023upgrade/jsvm/ (implied: admins become _superusers records, so /api/admins goes) | The nginx refusal and the verifier's check both name /api/admins. |
 | verifier-shapes | harness/verify_deployment.py:123 and :431 | 2 | https://pocketbase.io/v023upgrade/jsvm/ (response shapes change) | The deployment verifier pins 0.22 answers. |
@@ -439,6 +439,10 @@ The counts below are at `6c4a5a3`.
 - Upstream publishes no further 0.22 release.
 - A fix the deployment needs lands only on a newer line.
 - A leaf needs a feature only a newer line has.
+
+**Benchmarked version.** The receipt ran on 0.22.22, before P3 moved the pin to 0.22.57. Both are on the 0.22 line; the numbers are 0.22.22's, and the port re-runs the benchmark.
+
+**Schema snapshot.** At this revision, contracts/database/schema-snapshot.json comes from migrate up on the 0.22.22 binary, not 0.22.57: the 0.22 releases between them add no database migration, so the schema is the same. A PR that changes a migration regenerates it.
 
 ## ERD
 
@@ -495,7 +499,7 @@ The snapshot gives each live table its partition relation, indexes, and rules; t
 | ai_providers | account | ai-provider-credential | the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
 | ai_settings | account | ai-role-settings | the SPA and the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
 | user_preferences | account | appearance, current-campaign | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
-| users | account | authentication-identity, professional-identity, demo-state | PocketBase's own auth routes under its rules; the signup, demo, and admission hooks guard what a client may set | PocketBase deletes the account; every relation to it cascades, unsets, or restricts as listed |
+| users | account | authentication-identity, professional-identity, demo-state | PocketBase's own auth routes under its rules; the signup, demo, admission, and profile file hooks guard what a client may set | PocketBase deletes the account; every relation to it cascades, unsets, or restricts as listed |
 
 #### Campaigns, applications, rounds, offers, and todos
 
@@ -536,7 +540,7 @@ The snapshot gives each live table its partition relation, indexes, and rules; t
 
 | Table | Scope | Rows | Writers | Purge |
 | --- | --- | --- | --- | --- |
-| ai_coding_attempts | account | practice-attempt, campaign-membership | the SPA, under #9's rules; #3's PR 4 makes graded rows server-only | cascades with the account |
+| ai_coding_attempts | account | practice-attempt, campaign-membership | the SPA for rows that aren't graded, under #9's rules and #3's grade rules; a graded row only through the execution store's completion (#3's PR 4) | cascades with the account |
 | ai_coding_drafts | account | practice-draft, campaign-membership | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 | ai_coding_rounds | content | practice-item-content, test-definition | migrations at start (seed and definitions); no runtime writer | not account data |
 | behavioral_categories | content | practice-item-content | migrations at start (seed and definitions); no runtime writer | not account data |
@@ -549,7 +553,7 @@ The snapshot gives each live table its partition relation, indexes, and rules; t
 | system_design_guides | content | practice-guides | migrations at start (seed and definitions); no runtime writer | not account data |
 | system_design_questions | content | practice-item-content | migrations at start (seed and definitions); no runtime writer | not account data |
 | take_home_assignments | content | practice-item-content, harness-revision | migrations at start (seed and definitions); no runtime writer | not account data |
-| take_home_attempts | account | practice-attempt, campaign-membership | the SPA and the runner, under #9's rules; #3's PR 4 makes graded rows server-only | cascades with the account |
+| take_home_attempts | account | practice-attempt, campaign-membership | the SPA for rows that aren't graded, under #9's rules and #3's grade rules; a graded row only through the execution store's completion (#3's PR 4), and the runner's own writes no longer run | cascades with the account |
 | take_home_drafts | account | practice-draft, campaign-membership | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 | user_progress | account | practice-progress, campaign-membership | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 
@@ -684,13 +688,13 @@ This leaf produces the gate's first item, so the gate doesn't apply to its own m
 | Fact | At 62d4eae | On next |
 | --- | --- | --- |
 | spa-client | frontend/src/lib/pocketbase.ts@62d4eae:L14 | 11 SPA modules still write through the pb client on next. |
-| runner-writes-ai | backend/routers/ai.py@62d4eae:L367-L542 | 7 provider and settings writes in ai.py at 6c4a5a3, all with the caller's token (DB3). |
-| runner-writes-take-home | backend/routers/take_home.py@62d4eae:L164-L167 | 2 take-home writes in take_home.py at 6c4a5a3 with the caller's token, until #3's PR 4. |
+| runner-writes-ai | backend/routers/ai.py@62d4eae:L367-L542 | 7 provider and settings writes in ai.py at fe01163, all with the caller's token (DB3). |
+| runner-writes-take-home | backend/routers/take_home.py@62d4eae:L164-L167 | 2 take-home writes in take_home.py at fe01163, which can't run since #3's PR 4 turned the execution keys on. |
 | runner-writes-share | backend/routers/share.py@62d4eae:L1 | 3 share writes at the audited revision; on next every share write is a hook route. |
-| pin | pocketbase/Dockerfile@62d4eae:L3-L11 | 0.22.22 at 6c4a5a3, with SHA-256 checks for amd64 and arm64. |
+| pin | pocketbase/Dockerfile@62d4eae:L3-L11 | 0.22.57 at fe01163, with SHA-256 checks for amd64 and arm64. |
 | sdk | frontend/package.json@62d4eae:L29 | ^0.26.8, resolved to 0.26.8. |
-| signup-hook | pocketbase/pb_hooks/main.pb.js@62d4eae:L3-L9 | 11 .pb.js files with 20 routes at 6c4a5a3; runInTransaction at 8 sites. |
-| admin-bootstrap | pocketbase/pb_migrations/1700000500_bootstrap_admin.js@62d4eae:L33-L44 | Unchanged; 38 migrations at 6c4a5a3, all with new Dao(. |
+| signup-hook | pocketbase/pb_hooks/main.pb.js@62d4eae:L3-L9 | 12 .pb.js files with 20 routes at fe01163; runInTransaction at 8 sites. |
+| admin-bootstrap | pocketbase/pb_migrations/1700000500_bootstrap_admin.js@62d4eae:L33-L44 | Unchanged; 39 migrations at fe01163, all with new Dao(. |
 | pb-data-mount | docker-compose.prod.yml@62d4eae:L38-L39 | Only pocketbase mounts pb_data. |
 | k8s | k8s/pocketbase.yaml@62d4eae:L2-L68 | A 5Gi RWO PVC and one Recreate replica at 500m and 512Mi; this PR fixes the comment at lines 2 to 5. |
 | runner-replicas | k8s/runner.yaml@62d4eae:L30 | 2 runner replicas, so DB7 needs its lease. |

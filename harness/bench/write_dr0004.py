@@ -86,6 +86,12 @@ F = {
 }
 F["registrations"] = F["routes"] + F["routerUse"] + F["cron"] + F["boot"] + F["modelHooks"] + F["cli"]
 F["runnerWrites"] = sum(F["runner"].values())
+# #3's PR 4 checks the execution keys first in both take-home routes, so the
+# runner's in-request take-home writes can't run.
+_take_home = RUNNER["take_home.py"].read_text()
+TAKE_HOME_GATED = all(f'keys.require_on("{r}")' in _take_home for r in ("take_home_run", "take_home_submit"))
+# Which binary made the schema snapshot; the record says so (DB9).
+SNAP_VERSION = json.loads((ROOT / "contracts/database/schema-snapshot.json").read_text())["pocketbaseVersion"]
 if F["newDao"] != F["migrations"]:
     raise SystemExit(f"{F['migrations'] - F['newDao']} migrations don't call new Dao(; the version analysis assumes they all do")
 AT = COUNTED_AT[:7]
@@ -374,10 +380,15 @@ record["decisions"] = [
             "The command gateway is a set of PocketBase hook routes under /api/rounds/commands/, registered as Caller rows in "
             "docs/security/server-writes.md. The SPA reaches them through nginx's existing /api/ pass-through, under its 1m body cap; "
             "no port, hostname, or route outside /api/ is added. The runner reaches PocketBase only through hook routes, never a "
-            f"collection write. At {AT} it still makes {F['runnerWrites']} direct collection writes, all with the caller's token: the "
-            f"{F['runner']['ai.py']} provider and settings writes in backend/routers/ai.py move behind #73's routes, and the "
-            f"{F['runner']['take_home.py']} in backend/routers/take_home.py end with #3's PR 4, which makes graded rows server-only. Its "
-            "share and execution calls already use hook routes. PocketBase 0.22 loads *.pb.js only from the top of pb_hooks (checked on "
+            + (f"collection write. At {AT} its code holds {F['runnerWrites']} direct collection writes, all with the caller's token, and "
+               f"{F['runner']['ai.py']} of them run: the provider and settings writes in backend/routers/ai.py, which move behind #73's "
+               f"routes. The {F['runner']['take_home.py']} in backend/routers/take_home.py can't run since #3's PR 4 turned the execution "
+               "keys on and made graded rows server-only. Its "
+               if TAKE_HOME_GATED else
+               f"collection write. At {AT} it still makes {F['runnerWrites']} direct collection writes, all with the caller's token: the "
+               f"{F['runner']['ai.py']} provider and settings writes in backend/routers/ai.py move behind #73's routes, and the "
+               f"{F['runner']['take_home.py']} in backend/routers/take_home.py end with #3's PR 4, which makes graded rows server-only. Its ")
+            + "share and execution calls already use hook routes. PocketBase 0.22 loads *.pb.js only from the top of pb_hooks (checked on "
             "the native binary: a nested file never ran), so each package registers its routes in one top-level <package-id>.pb.js and "
             "keeps its code at its DR-0002@2 target path."
         ),
@@ -388,7 +399,9 @@ record["decisions"] = [
         "failureModes": [
             "A route that doesn't register as a Caller row is an unrecorded writer; #19's registry check fails it.",
             "A gateway-owned collection that keeps a REST write rule is a path around the gateway; DB4 nulls it at each transfer.",
-            f"Until #73 and #3's PR 4 land, the runner's {F['runnerWrites']} writes keep going around the gateway with the caller's token.",
+            (f"Until #73 lands, the runner's {F['runner']['ai.py']} provider and settings writes keep going around the gateway with the caller's token."
+             if TAKE_HOME_GATED else
+             f"Until #73 and #3's PR 4 land, the runner's {F['runnerWrites']} writes keep going around the gateway with the caller's token."),
         ],
         "limits": [
             "A command body up to nginx's 1m default under /api/.",
@@ -708,7 +721,7 @@ record["benchmark"] = {
 }
 
 GUIDE = "https://pocketbase.io/v023upgrade/jsvm/"
-GUARD_LEAVES = {"admission.pb.js": "#1", "execution.pb.js": "#3", "share_secrets.pb.js": "#12", "demo.pb.js": "#177"}
+GUARD_LEAVES = {"admission.pb.js": "#1", "execution.pb.js": "#3", "share_secrets.pb.js": "#12", "demo.pb.js": "#177", "profile_files.pb.js": "#177"}
 guard_files = F["guards"][1]
 _unknown = [g for g in guard_files if g not in GUARD_LEAVES]
 if _unknown:
@@ -788,6 +801,14 @@ if BENCH_VERSION not in ("pending", PIN):
         f"The receipt ran on {BENCH_VERSION}, before P3 moved the pin to {PIN}. Both are on the {LINE} line; the numbers are "
         f"{BENCH_VERSION}'s, and the port re-runs the benchmark."
     )
+record["pocketbase"]["snapshot"] = (
+    (f"At this revision, contracts/database/schema-snapshot.json comes from migrate up on the {SNAP_VERSION} binary, not {PIN}: "
+     f"the {LINE} releases between them add no database migration, so the schema is the same. A PR that changes a migration "
+     "regenerates it.")
+    if SNAP_VERSION != PIN else
+    (f"At this revision, contracts/database/schema-snapshot.json comes from migrate up on the pinned {PIN} binary. A PR that "
+     "changes a migration regenerates it.")
+)
 
 record["identifiers"] = [
     {"id": "partition-columns", "owner": "ROUNDS-02-L01",
@@ -947,7 +968,8 @@ record["baselineFacts"] = [
     {"id": "runner-writes-ai", "citation": "backend/routers/ai.py@62d4eae:L367-L542",
      "now": f"{F['runner']['ai.py']} provider and settings writes in ai.py at {AT}, all with the caller's token (DB3)."},
     {"id": "runner-writes-take-home", "citation": "backend/routers/take_home.py@62d4eae:L164-L167",
-     "now": f"{F['runner']['take_home.py']} take-home writes in take_home.py at {AT} with the caller's token, until #3's PR 4."},
+     "now": (f"{F['runner']['take_home.py']} take-home writes in take_home.py at {AT}, which can't run since #3's PR 4 turned the execution keys on."
+             if TAKE_HOME_GATED else f"{F['runner']['take_home.py']} take-home writes in take_home.py at {AT} with the caller's token, until #3's PR 4.")},
     {"id": "runner-writes-share", "citation": "backend/routers/share.py@62d4eae:L1",
      "now": "3 share writes at the audited revision; on next every share write is a hook route."},
     {"id": "pin", "citation": "pocketbase/Dockerfile@62d4eae:L3-L11",

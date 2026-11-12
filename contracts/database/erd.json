@@ -7,7 +7,7 @@
   "decisions": "contracts/database/erd-decisions.json",
   "snapshot": {
     "path": "contracts/database/schema-snapshot.json",
-    "revision": "42673ffd14a7f73164ea6356200ff0071710c3ef",
+    "revision": "988653cec5bc60fc06a862be1be308b03b890f64",
     "pocketbaseVersion": "0.22.22"
   },
   "semantics": {
@@ -214,7 +214,7 @@
       "indexes": [{"name":"idx_ai_attempts_user_round","unique":false,"columns":["ai_coding_attempts.user","ai_coding_attempts.round"]}],
       "rules": {"list":"expression","view":"expression","create":"expression","update":"expression","delete":"expression"},
       "rows": ["practice-attempt","campaign-membership"],
-      "writers": "the SPA, under #9's rules; #3's PR 4 makes graded rows server-only",
+      "writers": "the SPA for rows that aren't graded, under #9's rules and #3's grade rules; a graded row only through the execution store's completion (#3's PR 4)",
       "purge": "cascades with the account"
     },
     {
@@ -1147,7 +1147,7 @@
       ],
       "rules": {"list":"expression","view":"expression","create":"expression","update":"expression","delete":"expression"},
       "rows": ["practice-attempt","campaign-membership"],
-      "writers": "the SPA and the runner, under #9's rules; #3's PR 4 makes graded rows server-only",
+      "writers": "the SPA for rows that aren't graded, under #9's rules and #3's grade rules; a graded row only through the execution store's completion (#3's PR 4), and the runner's own writes no longer run",
       "purge": "cascades with the account"
     },
     {
@@ -1253,7 +1253,7 @@
       "indexes": [],
       "rules": {"list":"expression","view":"expression","create":"open","update":"expression","delete":"expression"},
       "rows": ["authentication-identity","professional-identity","demo-state"],
-      "writers": "PocketBase's own auth routes under its rules; the signup, demo, and admission hooks guard what a client may set",
+      "writers": "PocketBase's own auth routes under its rules; the signup, demo, admission, and profile file hooks guard what a client may set",
       "purge": "PocketBase deletes the account; every relation to it cascades, unsets, or restricts as listed"
     },
     {
