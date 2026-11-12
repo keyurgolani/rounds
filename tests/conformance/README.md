@@ -14,11 +14,11 @@ CI job. Later stages add the required gate and promote-by-digest.
 
 | Path | What it is |
 | --- | --- |
-| `manifest.json` | One row per fixture in the issue's table: id, routes, languages, status, the leaf that closes it, the expected outcome per target, the named control, the `destructive` and `environment_sensitive` flags, setup, teardown. |
-| `manifest.schema.json` | The manifest shape. `conformance/manifest.py` is the authoritative validator. |
+| `manifest.json` | Every fixture in the issue's table, by id and family (`execution`, `grading`, or `render`), and nothing else. |
+| `manifest.schema.json` | The manifest shape. `conformance/manifest.py` is the authoritative validator, and it checks each module's `SPEC` too. |
 | `skip_ledger.json` | Skips, each with an owner, an expiry, and a reason. An expired skip, or one for an unknown fixture, fails the lane. Empty at stage 1. |
-| `conformance/` | The framework: manifest and ledger loader, the outcome vocabulary, canaries, artifact redaction, the probe budget and deadline, the counting clients, the per-fixture rules (`execute.py`), the receipt serializer, and the corpus stack's take-home definition (`overlay.py`). |
-| `corpus/` | One module per `contained` fixture, plus the well-formed request bodies they share (`_requests.py`), each naming an active definition. A `pending` row has no module. |
+| `conformance/` | The framework: manifest, spec, and ledger loader, the outcome vocabulary, canaries, artifact redaction, the probe budget and deadline, the counting clients, the per-fixture rules (`execute.py`), the receipt serializer, and the corpus stack's take-home definition (`overlay.py`). |
+| `corpus/` | One module per committed fixture, named for its id (`ex_01_*.py` is EX-01's) and carrying the fixture's `SPEC`, plus the well-formed request bodies they share (`_requests.py`), each naming an active definition. |
 | `selftest/` | The framework's own unit tests and every fixture's negative control; no stack needed. |
 | `conftest.py`, `test_corpus.py` | The pytest plugin and the live run. |
 | `compose.yml` | Overlay on `harness/compose.yml`: the enforced runner, the bait network, and the `corpus` driver. |
@@ -26,27 +26,25 @@ CI job. Later stages add the required gate and promote-by-digest.
 
 ## What is committed, and what is not
 
-A fixture module is committed only for a guarantee the branch already
-enforces (anonymous execution denied, oversized input refused,
-caller-supplied tests or validators refused, the demo flag immutable,
-cross-account result reads denied, no runner secret in the candidate
-environment, the render proxy echoing no sidecar text, no render of
-another account's snapshot). Every other row
-in `manifest.json` is a `pending` row that names the leaf which closes it
-and carries no fixture code: a runnable probe for a gap still open on
-`next` would publish working exploit code before the fix (orchestrator
-decision D4). The probe for a pending row lands in the pull request that
-closes the gap, and that pull request proves its negative control locally.
-A fixture can also list sub-cases that are still open (EX-02's quota
-sub-cases, for one); those are `pending` sub-cases with their closing
-leaf, and the receipt records them as pending.
+`manifest.json` lists every fixture by id and family, and nothing else.
+A fixture's detail lives in its module, as the module's `SPEC`: the
+routes it must exercise, its sub-cases, the expected outcome per target,
+its languages, its negative control, setup, teardown, and the
+`destructive` and `environment_sensitive` flags. A module is committed
+only for a guarantee the branch already enforces. A fixture without a
+module isn't run, and its receipt entry says `not-run` and nothing more.
+
+A probe lands with the fix that makes it pass, in the same pull request,
+and that pull request proves its negative control locally: a runnable
+probe committed before its fix would publish working exploit code
+(orchestrator decision D4).
 
 Each committed fixture has a negative control in
 `selftest/test_negative_controls.py`: the fixture runs through the same
 rules the live run applies, against a fake target where its guarantee
 holds (it must report `contained`) and against one where that guarantee
 is switched off (it must report `detected`). The fakes model answers
-only; they run nothing. The manifest's `control` field names each one.
+only; they run nothing. The spec's `control` field names each one.
 
 The corpus keeps no committed receipt that shows a sub-case exploitable,
 and pulls no `sha-62d4eae` image.
@@ -55,13 +53,14 @@ and pulls no `sha-62d4eae` image.
 
 `conformance/execute.py` applies these to every fixture:
 
-- every contained sub-case the manifest lists needs an outcome, and the
-  fixture's outcome is its worst one; a `not-applicable` row reports one
-  outcome for the whole row and passes only as `not-applicable`;
+- every sub-case the fixture's spec lists needs an outcome, an outcome
+  for one it doesn't list fails, and the fixture's outcome is its worst
+  one; a spec with no sub-case reports one outcome for the whole fixture
+  and passes only as `not-applicable`;
 - a canary anywhere in what the fixture saw fails it, and a canary that
   has landed but wasn't planted for the run fails the whole run;
-- every route the manifest lists for a fixture must be one it exercised,
-  and the receipt records the routes it did exercise;
+- every route the spec lists for a fixture must be one it exercised, and
+  the receipt records the routes it did exercise;
 - every request goes through the counting clients, so the budget sees all
   of them; a fixture past its request or wall-second cap, or past its
   deadline, fails;
@@ -71,9 +70,10 @@ and pulls no `sha-62d4eae` image.
 - whatever a fixture hands back is read as text, so a result in the wrong
   shape fails with its receipt entry, and any problem turns a met outcome
   `inconclusive`;
-- the verdict is the strict comparison with the manifest's expectation,
-  and a failure reports the fixture's own note and its redacted evidence;
-- every manifest row gets a receipt entry (ran, quarantined, or pending),
+- the verdict is the strict comparison with the spec's expectation, and a
+  failure reports the fixture's own message alone: its id, the reason,
+  its note, and its redacted evidence;
+- every manifest row gets a receipt entry (ran, quarantined, or not-run),
   and the last case fails the run if one is missing. That case doesn't
   count as a fixture: a run in which no fixture passed or failed fails the
   lane, every fixture quarantined included.
@@ -161,13 +161,13 @@ Each run writes one `rounds-containment-receipt/v1` file (git-ignored,
 uploaded as a CI artifact): the commit, corpus version, target, image
 references, the contract versions, the canary-set id, and the run's total
 probe spend, plus one entry for every manifest row. A fixture that ran
-records its outcome, expectation, verdict, each sub-case's status (and
-outcome when contained), the routes it exercised, its redacted evidence
-and checksums, a canary-hit boolean per canary, its spend, the reason for
-its verdict, and its note. A quarantined fixture records the skip
-ledger's owner and expiry; a pending row records its closing leaf. A field
-a later leaf introduces reads `absent`. A passing run's receipt states
-`contained`, `not-applicable`, `pending`, or `quarantined` only.
+records its outcome, expectation, verdict, each sub-case's outcome, the
+routes it exercised, its redacted evidence and checksums, a canary-hit
+boolean per canary, its spend, the reason for its verdict, and its note.
+A quarantined fixture records the skip ledger's owner and expiry; a
+fixture without a module records `not-run` and nothing else. A field a
+later leaf introduces reads `absent`. A passing run's receipt states
+`contained`, `not-applicable`, `not-run`, or `quarantined` only.
 
 ## Canaries
 

@@ -1,15 +1,14 @@
 """EX-07: candidate code does not see the runner's secrets in its
 environment.
 
-Guarantee (the part ROUNDS-00A-L01 stage 2 closes; reading another
-process's environment or command line is a pending row for
-ROUNDS-00A-L05 and ROUNDS-00A-L07): a candidate process runs with a
-minimal environment, so none of the runner's secrets reach it. The corpus
-gives the runner the run's canaries as those secrets; the fixture runs an
-ordinary program that prints its own environment, checks that no canary
-appears in what comes back, and that every variable it sees is one the
-minimal environment names. A variable outside it is a finding too, since
-a regression could forward a runner secret the corpus never planted.
+Guarantee (closed by ROUNDS-00A-L01 stage 2): a candidate process runs
+with a minimal environment, so none of the runner's secrets reach it.
+The corpus gives the runner the run's canaries as those secrets; the
+fixture runs an ordinary program that prints its own environment, checks
+that no canary appears in what comes back, and that every variable it
+sees is one the minimal environment names. A variable outside it is a
+finding too, since a regression could forward a runner secret the corpus
+never planted.
 
 The output itself is never kept: a regression would put the runner's
 whole environment in it. The receipt keeps its SHA-256 and the names of
@@ -25,7 +24,20 @@ from conformance.outcomes import Outcome
 from corpus._base import inconclusive, result
 from corpus._requests import CODING
 
-SUBCASE = "EX-07.candidate-env-minimal"
+# This fixture's spec; conformance/manifest.py reads it as a literal.
+SPEC = {
+    "routes": ["POST /api/run"],
+    "subcases": ["EX-07.candidate-env-minimal"],
+    "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
+    "languages": ["python"],
+    "control": "selftest/test_negative_controls.py: the candidate given the runner's environment",
+    "setup": "one synthetic account; the runner given the run's canaries as its environment",
+    "teardown": "the account removed with the admin token",
+    "destructive": False,
+    "environment_sensitive": True,
+}
+
+SUBCASE = SPEC["subcases"][0]
 PROGRAM = (
     "import json, os\n"
     "print('ENV:' + json.dumps(sorted(os.environ.items())))\n"

@@ -14,7 +14,7 @@ Guarantee (closed by ROUNDS-00A-L01, with ROUNDS-00A-L02):
 - a well-formed request that also names its own time limit is refused
   422 ``legacy_request_rejected`` before anything runs.
 
-Both routes the manifest lists get both checks.
+Both routes the spec lists get both checks.
 """
 from __future__ import annotations
 
@@ -23,8 +23,21 @@ from conformance.outcomes import Outcome
 from corpus._base import code_of, result
 from corpus._requests import bodies
 
-CAP = "EX-04.body-cap"
-LIMITS = "EX-04.caller-limits-refused"
+# This fixture's spec; conformance/manifest.py reads it as a literal.
+SPEC = {
+    "routes": ["POST /api/run", "POST /api/evaluate"],
+    "subcases": ["EX-04.body-cap", "EX-04.caller-limits-refused"],
+    "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
+    "languages": ["python", "javascript"],
+    "control": "selftest/test_negative_controls.py: the byte cap waiting for the body, and caller fields accepted",
+    "setup": ("one synthetic account (#9's factory) for the caller-limit requests; the body-cap requests declare "
+              "their size in the headers and send no body"),
+    "teardown": "the plugin removes the account; a failed removal fails the fixture",
+    "destructive": False,
+    "environment_sensitive": True,
+}
+
+CAP, LIMITS = SPEC["subcases"]
 # The /api/run and /api/evaluate admission cap (backend/app/admission.py).
 CAP_BYTES = 512 * 1024
 ROUTES = (("POST", "/api/run"), ("POST", "/api/evaluate"))

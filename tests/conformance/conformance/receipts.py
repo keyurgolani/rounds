@@ -5,15 +5,14 @@ wrapper). It carries the run context (commit, corpus version, target,
 image references, the contract versions, the canary-set id, and the
 run's total probe spend) and one entry for every manifest row:
 
-- a fixture that ran records its outcome and verdict, one status per
-  sub-case (``contained`` with the outcome it reached, or ``pending``
-  with the leaf that closes it), the routes it actually exercised, the
+- a fixture that ran records its outcome and verdict, the outcome each
+  of its spec's sub-cases reached, the routes it actually exercised, the
   redacted evidence and its checksums, a canary-hit boolean per canary,
   its budget spend, the reason for its verdict, and its own note;
 - a quarantined fixture records the skip ledger's owner and expiry;
-- a pending row records the leaf that closes it.
+- a fixture without a module records ``not-run`` and nothing else.
 
-Receipts state ``contained``, ``not-applicable``, ``pending``, or
+Receipts state ``contained``, ``not-applicable``, ``not-run``, or
 ``quarantined`` only on a passing run (orchestrator decision D4): a
 ``detected`` or ``inconclusive`` entry exists only in a failing run's
 receipt, which is a CI artifact, never committed. Unlanded context
@@ -31,6 +30,11 @@ from . import RECEIPT_SCHEMA
 
 # The most redacted evidence one fixture keeps in the receipt.
 EVIDENCE_MAX_CHARS = 256 * 1024
+
+# What an entry records about its fixture.
+RAN = "ran"
+QUARANTINED = "quarantined"
+NOT_RUN = "not-run"
 
 
 def checksum(text: str) -> str:
@@ -58,8 +62,7 @@ def cap_evidence(evidence: dict[str, str]) -> dict[str, str]:
 @dataclass
 class FixtureReceipt:
     id: str
-    status: str  # "ran", "quarantined", or "pending"
-    closing_leaf: str
+    status: str  # RAN, QUARANTINED, or NOT_RUN
     target: str = ""
     outcome: str = ""
     expectation: str = ""
@@ -74,6 +77,17 @@ class FixtureReceipt:
     reason: str = ""
     note: str = ""
     quarantine: dict[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        if self.status == NOT_RUN:
+            # A fixture without a module has nothing to record beyond that.
+            return {"id": self.id, "status": NOT_RUN}
+        return asdict(self)
+
+
+def not_run(fixture_id: str) -> FixtureReceipt:
+    """The entry for a fixture without a module."""
+    return FixtureReceipt(id=fixture_id, status=NOT_RUN)
 
 
 @dataclass
@@ -103,7 +117,9 @@ class RunReceipt:
         return {"missing": sorted(want - have), "unknown": sorted(have - want)}
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        out = asdict(self)
+        out["fixtures"] = [f.to_dict() for f in self.fixtures]
+        return out
 
     def write(self, path: str) -> None:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)

@@ -1,10 +1,9 @@
 """EX-02: one account cannot read another account's result row.
 
-Guarantee (the result-read sub-cases close with ROUNDS-00B-L01's account
-scope; the quota and in-flight sub-cases close with ROUNDS-00A-L03 and
-are pending rows in the manifest): a signed-in account cannot read
-another account's execution result by id or find it under a filter, and
-reading a foreign id answers exactly as reading one that doesn't exist.
+Guarantee (closed by ROUNDS-00B-L01's account scope): a signed-in account
+cannot read another account's execution result by id or find it under a
+filter, and reading a foreign id answers exactly as reading one that
+doesn't exist.
 
 The fixture makes two synthetic accounts, has A create one result row,
 and has B view it by id, list it under a filter naming its id, and view
@@ -15,8 +14,25 @@ from __future__ import annotations
 from conformance.outcomes import Outcome
 from corpus._base import inconclusive, result
 
-READ = "EX-02.result-read-denied"
-SAME = "EX-02.foreign-reads-as-missing"
+# This fixture's spec; conformance/manifest.py reads it as a literal.
+SPEC = {
+    "routes": [
+        "POST /api/collections/take_home_attempts/records",
+        "GET /api/collections/take_home_attempts/records/:id",
+        "GET /api/collections/take_home_attempts/records",
+    ],
+    "subcases": ["EX-02.result-read-denied", "EX-02.foreign-reads-as-missing"],
+    "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
+    "languages": [],
+    "control": ("selftest/test_negative_controls.py: another account's rows readable, and a foreign id answering "
+                "unlike a missing one"),
+    "setup": "two synthetic accounts; account A creates one result row",
+    "teardown": "both accounts removed with the admin token",
+    "destructive": False,
+    "environment_sensitive": True,
+}
+
+READ, SAME = SPEC["subcases"]
 COLLECTION = "take_home_attempts"
 MISSING_ID = "zzzzzzzzzzzzzzz"
 
