@@ -34,7 +34,17 @@ from app.errors import TypedError
 from execution import handlers, jobs, keys, kinds, runtime, store
 from execution import worker as worker_mod
 from execution.worker import InvalidJob, Withdrawn
-from tests.test_definitions_enforce import _store, _take_home_document, starter, visible_tests
+from tests.test_definitions_enforce import (
+    FORGERIES,
+    HIDDEN_MARKER,
+    JS_SEARCH,
+    LEAKING,
+    PYTHON_SEARCH,
+    _store,
+    _take_home_document,
+    starter,
+    visible_tests,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVER = ROOT / "pocketbase" / "tests" / "execution_server.cjs"
@@ -825,6 +835,94 @@ def test_a_take_home_run_is_a_job_scored_from_its_channel(runner, node, tmp_path
     job_id = submitted(client.post("/api/take-home/run", json=wrong, headers=headers(node, key=new_key())))["job_id"]
     done = settled(client, node, job_id)
     assert (done["state"], done["outcome_class"]) == ("completed", "candidate-failure")
+
+
+# ---- what the routes answered in their request until PR 4, as jobs ------------------
+
+
+def _job(client: TestClient, node: Node, path: str, body: dict) -> dict:
+    job_id = submitted(client.post(path, json=body, headers=headers(node, key=new_key())))["job_id"]
+    return settled(client, node, job_id)
+
+
+def _take_home_job(client: TestClient, node: Node, monkeypatch, tmp_path, solution: str, **extra: str) -> dict:
+    entry = {"kind": "harness-revision", "track": "take-home", "slug": "add-numbers-py", "variant": "python",
+             "content_version": 1}
+    monkeypatch.setattr(definitions, "_store", _store(tmp_path, [(entry, _take_home_document(), "active")]))
+    files = {"solution.py": solution, **extra}
+    return _job(client, node, "/api/take-home/run", {"definition": TAKE_HOME_REF, "files": files})
+
+
+def test_an_evaluate_job_runs_every_case_on_its_validators(runner, node):
+    client = runner()
+    done = _job(client, node, "/api/evaluate", {"definition": TWO_SUM_REF, "code": TWO_SUM})
+    document = definitions.store().resolve("coding", "two-sum", "python", 1).document
+    assert (done["state"], done["outcome_class"]) == ("completed", "passed")
+    assert [p["id"] for p in done["envelope"]["parts"]] == [c["case_id"] for c in document["cases"]]
+    out = done["envelope"]["output"]
+    assert (out["passed"], out["failed"]) == (len(document["cases"]), 0)
+    assert all(r["expected"] == {"$match": "validator"} for r in out["results"])
+
+
+def test_an_evaluate_job_takes_case_ids_and_tags(runner, node):
+    client = runner()
+    base = {"definition": {**TWO_SUM_REF, "slug": "binary-search"}, "code": PYTHON_SEARCH}
+    by_id = _job(client, node, "/api/evaluate", {**base, "case_ids": ["c001", "c000"]})
+    assert [p["id"] for p in by_id["envelope"]["parts"]] == ["c000", "c001"]
+    document = definitions.store().resolve("coding", "binary-search", "python", 1).document
+    tagged = [c["case_id"] for c in document["cases"] if "basic" in c["tags"]]
+    by_tag = _job(client, node, "/api/evaluate", {**base, "tags": ["basic"]})
+    assert [p["id"] for p in by_tag["envelope"]["parts"]] == tagged
+    assert by_tag["envelope"]["output"]["results"][0]["expected"] == document["cases"][0]["expected"]["literal"]
+
+
+def test_the_javascript_variant_runs_its_own_definition_as_a_job(runner, node):
+    client = runner()
+    body = {"definition": {**TWO_SUM_REF, "slug": "binary-search", "variant": "javascript"}, "code": JS_SEARCH}
+    done = _job(client, node, "/api/evaluate", body)
+    assert (done["state"], done["outcome_class"]) == ("completed", "passed")
+    assert done["envelope"]["output"]["definition"]["variant"] == "javascript"
+
+
+# The class each criterion's outcome in a graded run's answer ends a part with.
+PART_CLASS = {"passed": "passed", "failed": "candidate-failure", "not-run": "infrastructure-degraded"}
+
+
+@pytest.mark.parametrize("name", sorted(FORGERIES))
+def test_a_forged_take_home_result_fails_closed_as_a_job(runner, node, monkeypatch, tmp_path, name):
+    client = runner()
+    solution, expected = FORGERIES[name]
+    done = _take_home_job(client, node, monkeypatch, tmp_path, solution)
+    assert [(p["id"], p["outcome_class"]) for p in done["envelope"]["parts"]] == [
+        (criterion, PART_CLASS[outcome]) for criterion, outcome, _reason in expected]
+    assert done["outcome_class"] != "passed"
+    out = done["envelope"]["output"]
+    # A run whose grader reported nothing keeps no answer at all.
+    if out is not None:
+        assert [(o["id"], o["outcome"], o["reason"]) for o in out["outcomes"]] == expected
+        assert out["passed"] is False and 0.0 <= out["score"] <= 1.0
+
+
+def test_a_take_home_jobs_score_is_the_servers_weighting(runner, node, monkeypatch, tmp_path):
+    client = runner()
+    done = _take_home_job(client, node, monkeypatch, tmp_path, FORGERIES["out-of-range-score"][0])
+    assert done["envelope"]["output"]["score"] == 0.5
+
+
+def test_an_edited_visible_test_doesnt_change_a_take_home_jobs_grade(runner, node, monkeypatch, tmp_path):
+    client = runner()
+    done = _take_home_job(client, node, monkeypatch, tmp_path, "def add(a, b):\n    return 0\n",
+                          **{"tests/test_solution.py": "def test_passes():\n    assert True\n"})
+    assert (done["state"], done["outcome_class"]) == ("completed", "candidate-failure")
+    assert done["envelope"]["output"]["passed"] is False
+
+
+def test_a_take_home_job_that_prints_hidden_files_gets_none_back(runner, node, monkeypatch, tmp_path):
+    client = runner()
+    done = _take_home_job(client, node, monkeypatch, tmp_path, LEAKING)
+    assert done["state"] == "completed"
+    answer = json.dumps(done)
+    assert HIDDEN_MARKER not in answer and "rounds_harness" not in answer
 
 
 def test_nothing_the_candidate_wrote_or_printed_reaches_a_log(runner, node, capsys):

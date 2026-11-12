@@ -12,6 +12,7 @@ are tested without that server.
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 
 import httpx
@@ -21,7 +22,19 @@ from fastapi import HTTPException
 from app import admission, definitions, execution as definition_runs, gates, harness_results
 from execution import envelope, handlers, keys, kinds
 from execution.worker import InvalidJob, Withdrawn
-from tests.test_definitions_enforce import FIXED_CLIENT, FORGING_CLIENT, _project, _store, _take_home_document
+from tests.test_definitions_enforce import (
+    FIXED_CLIENT,
+    FIXED_TS_CLIENT,
+    FORGING_CLIENT,
+    HIDDEN_MARKER,
+    LEAKING,
+    TS_REF,
+    _project,
+    _store,
+    _take_home_document,
+    starter,
+    visible_tests,
+)
 from tests.test_execution_scratch import (  # noqa: F401  (node and runner are fixtures)
     ROOT,
     A,
@@ -385,8 +398,63 @@ def test_a_failing_solution_is_an_authoritative_failure_with_its_row(runner, nod
     assert done["envelope"]["score"] == 0.0
     (checkpoint,) = graded_row_of(node, done["job_id"])["test_results"]
     assert (checkpoint["passed"], checkpoint["score"]) == (False, 0.0)
+    # Only the driver's own line arrived: no forged pass, no duplicate.
+    assert checkpoint["outcomes"] == [{"id": "fetch_user_against_real_server", "outcome": "failed",
+                                       "reason": "assertion"}]
     # Nothing the forged client printed or read reaches the row.
-    assert "ThreadingHTTPServer" not in json.dumps(graded_rows(node))
+    rows = json.dumps(graded_rows(node))
+    assert "ThreadingHTTPServer" not in rows and "users service" not in rows
+
+
+# The rest of what the grade route answered in its request until PR 4,
+# graded as jobs.
+
+
+def test_an_edited_visible_test_doesnt_change_a_grade_job(runner, node):
+    client = runner(GRADING_ON)
+    seed_round(node)
+    files = _project()
+    files["tests/checkpoint_0/test_visible.py"] = "def test_everything():\n    assert True\n"
+    done = graded(client, node, {**grade_body(), "files": files})
+    assert (done["state"], done["outcome_class"]) == ("completed", "candidate-failure")
+    (checkpoint,) = graded_row_of(node, done["job_id"])["test_results"]
+    assert checkpoint["passed"] is False
+
+
+@pytest.mark.skipif(shutil.which("tsx") is None, reason="tsx not on PATH")
+def test_the_typescript_variant_runs_and_grades_as_jobs_through_its_python_driver(runner, node):
+    client = runner(GRADING_ON)
+    seed_round(node)
+    project = {**starter("typescript"), **visible_tests("typescript")}
+    body = {"definition": TS_REF, "checkpoint": 0, "files": project}
+    job_id = submitted(client.post("/api/ai-coding/run-project", json=body,
+                                   headers=headers(node, key=new_key())))["job_id"]
+    out = settled(client, node, job_id, timeout=90)["envelope"]["output"]
+    assert out["passed_count"] + out["failed_count"] >= 1
+    ended = {}
+    for name, files in (("starter", project), ("fixed", {**project, "client.ts": FIXED_TS_CLIENT})):
+        done = graded(client, node, {"definition": TS_REF, "files": files, "ai_chats": []})
+        (checkpoint,) = graded_row_of(node, done["job_id"])["test_results"]
+        ended[name] = (done["outcome_class"], checkpoint["outcomes"][0]["outcome"])
+    assert ended == {"starter": ("candidate-failure", "failed"), "fixed": ("passed", "passed")}
+
+
+@pytest.mark.parametrize("route", ["run-project", "grade"])
+def test_a_write_the_worker_cant_make_ends_its_job_on_the_infrastructure(runner, node, monkeypatch, route):
+    client = runner(GRADING_ON)
+    seed_round(node)
+
+    def full_disk(*_args, **_kwargs):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(definition_runs, "_write", full_disk)
+    body = grade_body() if route == "grade" else {"definition": GRADE_REF, "checkpoint": 0,
+                                                  "files": _project(FIXED_CLIENT)}
+    path = f"/api/ai-coding/{route}"
+    job_id = submitted(client.post(path, json=body, headers=headers(node, key=new_key())))["job_id"]
+    done = settled(client, node, job_id, timeout=90)
+    assert (done["state"], done["outcome_class"]) == ("failed", "infrastructure-degraded")
+    assert graded_rows(node) == []
 
 
 def test_a_grade_out_of_time_is_a_limit_with_no_score_and_keeps_its_charge(runner, node, monkeypatch):
@@ -625,6 +693,16 @@ def test_a_wrong_submission_is_a_failure_and_a_limited_one_scores_nothing(runner
     out = graded_row_of(node, done["job_id"])["harness_output"]
     assert (out["limit"], out["score"], out["passed"]) == ("memory", None, None)
     assert [c["passed"] for c in out["criteria"]] == [None, None]
+
+
+def test_a_submission_that_prints_hidden_files_keeps_none_of_them(runner, node, take_home_store):
+    client = runner(GRADING_ON)
+    take_home_store()
+    seed_assignment(node)
+    done = graded(client, node, submit_body(LEAKING), path="/api/take-home/submit")
+    assert done["state"] == "completed"
+    for text in (json.dumps(done), json.dumps(graded_rows(node, "take_home_attempts"))):
+        assert HIDDEN_MARKER not in text and "rounds_harness" not in text
 
 
 def test_a_retired_take_home_answers_before_any_job(runner, node):
