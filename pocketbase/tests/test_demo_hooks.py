@@ -595,7 +595,10 @@ def test_every_contained_collection_names_its_owner_in_its_schema():
 # OAuth2 links. `failOn` makes deletes in one collection throw.
 RESET_RUNNER = r"""
 const path = require("path");
-const [hooksDir, raw] = process.argv.slice(1);
+const [hooksDir] = process.argv.slice(1);
+// The step comes on stdin: a big table is over Linux's limit for one
+// command-line argument.
+const raw = require("fs").readFileSync(0, "utf8");
 globalThis.__hooks = hooksDir;
 class ApiError extends Error {
   constructor(status, message, data) { super(message); this.status = status; this.data = data; }
@@ -731,8 +734,8 @@ def stamp(seconds: int) -> str:
 def reset_run(step: dict) -> dict:
     node = shutil.which("node")
     assert node, "node is required for the PocketBase hook checks; CI installs it"
-    res = subprocess.run([node, "-e", RESET_RUNNER, str(HOOKS), json.dumps(step)], capture_output=True, text=True,
-                         timeout=60)
+    res = subprocess.run([node, "-e", RESET_RUNNER, str(HOOKS)], input=json.dumps(step), capture_output=True,
+                         text=True, timeout=60)
     assert res.returncode == 0, res.stderr
     return json.loads(res.stdout)
 
