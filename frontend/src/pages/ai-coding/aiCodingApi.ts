@@ -478,31 +478,6 @@ export async function deleteInProgressAttempt(
   }
 }
 
-export async function persistAttempt(input: {
-  roundId: string;
-  campaignId?: string;
-  currentCheckpoint: number;
-  files: Record<string, string>;
-  test_results: GradeResponse['test_results'];
-  rubric_review: GradeResponse['rubric_review'];
-  ai_chats: AIChatLogEntry[];
-  duration_ms: number;
-}): Promise<void> {
-  const userId = pb.authStore.model?.id;
-  if (!userId) throw new Error('Not authenticated');
-  await pb.collection('ai_coding_attempts').create({
-    user: userId,
-    round: input.roundId,
-    campaign: input.campaignId ?? '',
-    current_checkpoint: input.currentCheckpoint,
-    ai_chats: input.ai_chats,
-    test_results: input.test_results,
-    rubric_review: input.rubric_review,
-    status: 'graded',
-    duration_ms: input.duration_ms,
-  });
-}
-
 export type AICodingModel = {
   provider_id: string;
   provider_label: string;

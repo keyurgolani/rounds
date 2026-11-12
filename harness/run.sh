@@ -140,6 +140,12 @@
 #                     link, and forward again, on a fixture with every
 #                     outcome it decides and 10,000 more links
 #                     (harness/probes/legacy_share_migration_check.py)
+#  16. attempt grade rules - with the pinned binary and no network: the
+#                     census of both attempt collections before and after the
+#                     rule migration on a seeded copy (the reconciliation
+#                     report), the client writes the rules refuse on a served
+#                     copy with no hooks, and its down step
+#                     (harness/probes/grade_rules_migration_check.py)
 #
 # The stack is built and brought up with compose; the probe container runs
 # directly on the compose network so the flow is identical under Finch
@@ -952,11 +958,26 @@ ${CONTAINER_BIN} run --rm --network none \
 legacy_migration_rc=$?
 set -e
 
+echo "--- phase 16: attempt grade rules: census before and after on a seeded copy, served writes, down ---"
+set +e
+${CONTAINER_BIN} run --rm --network none \
+  -e PB_BIN="/pbbin/pocketbase" \
+  -e PB_MIGRATIONS_DIR="/pb_migrations" \
+  -e PB_MANIFESTS_DIR="/pb_manifests" \
+  -v "${PBBIN_VOLUME}:/pbbin:ro" \
+  -v "${ROOT}/pocketbase/pb_migrations:/pb_migrations:ro" \
+  -v "${ROOT}/pocketbase/migration-manifests:/pb_manifests:ro" \
+  -v "${ROOT}/docs/security:/policy:ro" \
+  -v "${ROOT}/pocketbase/seeds:/pb_seeds:ro" \
+  "${PROBE_IMAGE}" grade-rules-migration
+grade_rules_rc=$?
+set -e
+
 if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ] || [ "${admission_rc}" -ne 0 ] || [ "${migration_rc}" -ne 0 ] \
    || [ "${execution_rc}" -ne 0 ] || [ "${quarantine_rc}" -ne 0 ] || [ "${reach_rc}" -ne 0 ] \
    || [ "${snapshot_rc}" -ne 0 ] || [ "${demo_rc}" -ne 0 ] || [ "${legacy_rc}" -ne 0 ] \
    || [ "${share_rc}" -ne 0 ] || [ "${share_secrets_rc}" -ne 0 ] || [ "${legacy_shares_rc}" -ne 0 ] \
-   || [ "${legacy_migration_rc}" -ne 0 ]; then
+   || [ "${legacy_migration_rc}" -ne 0 ] || [ "${grade_rules_rc}" -ne 0 ]; then
   exit 1
 fi
 exit 0

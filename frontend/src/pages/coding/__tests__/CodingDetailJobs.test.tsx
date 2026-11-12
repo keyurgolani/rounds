@@ -252,13 +252,14 @@ describe('CodingDetail jobs', () => {
     expect(screen.queryByText(/Field required|input\.nums/)).not.toBeInTheDocument();
   });
 
-  it('still shows a result the runner answered in its request', async () => {
+  it('shows an answer that is no job as unavailable, and none of what it held', async () => {
+    // Since ROUNDS-00A-L03 PR 4 every run is a job.
     vi.mocked(evaluateCode).mockResolvedValue(EVALUATED);
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run all (2)' }));
-    await waitFor(() => expect(screen.getByText('2 / 2 passed')).toBeInTheDocument());
-    expect(dockRegion()).toBeEmptyDOMElement();
+    await waitFor(() => expect(dockRegion()).toHaveTextContent('Unavailable right now'));
+    expect(screen.queryByText('2 / 2 passed')).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

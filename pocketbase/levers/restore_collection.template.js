@@ -12,10 +12,21 @@
 // Do NOT use this to re-open resume_share_views: that collection is
 // superuser-only by design (only the share viewer's admin-token insert writes
 // it), so leave it locked.
+//
+// The two attempt collections are refused: their rules are
+// 1700008700_attempt_grade_rules.js's, which keep graded rows the server's
+// (ROUNDS-00A-L03 PR 4), and the rules below would let clients write those
+// again. A forward fix for either sets that migration's rules.
+const KEEPS_ITS_OWN_RULES = ["ai_coding_attempts", "take_home_attempts"];
+
 migrate(
   (db) => {
     const dao = new Dao(db);
-    const collection = dao.findCollectionByNameOrId("__COLLECTION__");
+    const name = "__COLLECTION__";
+    if (KEEPS_ITS_OWN_RULES.indexOf(name) >= 0) {
+      throw new Error("restore_collection: " + name + " takes 1700008700_attempt_grade_rules.js's rules, not these");
+    }
+    const collection = dao.findCollectionByNameOrId(name);
     collection.createRule = '@request.auth.id != "" && @request.data.user = @request.auth.id';
     collection.updateRule =
       'user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)';

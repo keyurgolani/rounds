@@ -33,7 +33,6 @@ import {
   upsertInProgressTakeHomeAttempt,
   type HarnessOutput,
   type RunResult,
-  type SubmitResponse,
   type TakeHomeAssignment,
   type TakeHomeChatEntry,
 } from './takeHomeApi';
@@ -56,7 +55,7 @@ import {
 } from '../../lib/runnerDenial';
 import { useRunnerJob } from '../../hooks/useRunnerJob';
 import { useRubricReview, type ReviewStatus } from '../../hooks/useRubricReview';
-import { earnedOutput, isJobAnswer, type JobAnswer } from '../../lib/executionJobs';
+import { earnedOutput, isJobAnswer, notAJobAnswer, type JobAnswer } from '../../lib/executionJobs';
 import { envelopeJob, rubricState, type RubricReview, type RubricState } from '../../lib/gradedRows';
 import { limitTitle, type RunnerJobView } from '../../components/runner/RunnerJobStatus';
 import { RunErrorOutput } from '../../components/runner/RunErrorOutput';
@@ -405,11 +404,9 @@ export default function TakeHomeDetail() {
       );
       if (reqId !== runReqIdRef.current) return;
       // A job: the notice follows it, and its end shows the result.
-      if (runJob.follow(r)) {
-        setDockOpen(false);
-        return;
-      }
-      setRunResult(r as RunResult);
+      // Anything else is a failure.
+      if (!runJob.follow(r)) throw notAJobAnswer();
+      setDockOpen(false);
     } catch (e) {
       if (reqId !== runReqIdRef.current) return;
       const denial = classifyRunnerError(e, trigger);
@@ -462,20 +459,9 @@ export default function TakeHomeDetail() {
         rereadDefinitionVersion,
       );
       // A job: the notice follows it, and an authoritative end opens the
-      // report from the row the server wrote.
+      // report from the row the server wrote. Anything else is a failure.
       if (isJobAnswer(answer)) gradedRef.current = { jobId: answer.job_id, files: sent };
-      if (submitJob.follow(answer)) return;
-      // TODO(ROUNDS-00A-L03): PR 4 retires the in-request submission.
-      const result = answer as SubmitResponse;
-      setReport({ harness: result.harness, rubric_review: result.rubric_review });
-      showReview(result.rubric_review);
-      setReportOpen(true);
-      if (
-        result.harness.criteria.length > 0 &&
-        result.harness.criteria.every((c) => c.passed)
-      ) {
-        setPracticeStatus('mastered');
-      }
+      if (!submitJob.follow(answer)) throw notAJobAnswer();
     } catch (e) {
       // A denied submission isn't graded, so no report opens.
       const denial = classifyRunnerError(e, trigger);

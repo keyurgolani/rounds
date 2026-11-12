@@ -225,6 +225,7 @@ Deploying the release that carries it:
 6. Run [deployment verification](#deployment-verification) and clear every `FAIL`.
 
 If a rule turns out too tight and a legitimate flow starts getting denied, fix it forward with a new migration that corrects that collection's rule. If a rule is too loose and a probe or the scan finds a foreign write, lock that collection with `pocketbase/levers/lock_collection.template.js` until the fix ships; it sets create and update to `null` so only the superuser can write. Lift the lock with the corrected rule, or with `pocketbase/levers/restore_collection.template.js` when the rules themselves were right.
+That lever refuses the two attempt collections: their create and update rules are `1700008700_attempt_grade_rules.js`'s (see [Graded attempt rows](#graded-attempt-rows)), so lift a lock on either with those rules.
 
 After the release, review each account's `ai_providers.base_url` and any `encrypted_key`/`key_iv` pair shared across accounts. Users are not forced to re-confirm their providers.
 

@@ -72,6 +72,11 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
   execution-migration
             apply and reverse the execution job store's migration with the
             pinned binary; see execution_migration_check.py.
+  grade-rules-migration
+            the attempt grade rules' dry run on a seeded copy with the pinned
+            binary: the census before and after, the client writes the rules
+            refuse on a served copy, and the down step (ROUNDS-00A-L03 PR 4);
+            see grade_rules_migration_check.py.
   json-limits
             every JSON field's declared limit on fresh and upgraded databases
             with the pinned binary, and the registry migration's down step
@@ -610,7 +615,8 @@ def main() -> int:
               "admission-deploy|emergency-disable|emergency-enable|relation-quarantine|snapshot-store|"
               "execution-store|execution-runners|execution-unready|execution-ready-again|execution-disabled|"
               "execution-scratch|execution-scratch-start|execution-scratch-retry|execution-grading|"
-              "execution-migration|json-limits|demo-on|demo-off|demo-contain-migration|snapshot-create|"
+              "execution-migration|grade-rules-migration|json-limits|demo-on|demo-off|demo-contain-migration|"
+              "snapshot-create|"
               "snapshot-create-down|snapshot-create-retry|snapshot-scan|snapshot-create-off|snapshot-create-again|"
               "snapshot-render|snapshot-render-audit|snapshot-render-down|snapshot-recovery|share-capabilities|"
               "share-secrets|share-secrets-down|share-secrets-scan|"
@@ -664,6 +670,10 @@ def main() -> int:
         import execution_migration_check
 
         return execution_migration_check.main()
+    if phase == "grade-rules-migration":
+        import grade_rules_migration_check
+
+        return grade_rules_migration_check.main()
     if phase == "json-limits":
         import json_limits_check
 

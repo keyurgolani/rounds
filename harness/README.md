@@ -115,8 +115,8 @@ and that it has no route out, stops PocketBase for the degraded probe, runs
 the verifier's checks and the cross-owner scan on the run's `pb_data`, prints
 the verdict (pass / expected-fail / fail counts), runs the admission
 migration, execution migration, JSON limits, demo containment migration,
-relation quarantine, snapshot store, and older share links' migration checks,
-and tears the stack down, removing the images and the volumes it made.
+relation quarantine, snapshot store, older share links' migration, and attempt
+grade rules checks, and tears the stack down, removing the images and the volumes it made.
 Its exit code is non-zero on any failed or missing result.
 
 ## Admission state across two replicas
@@ -246,6 +246,19 @@ with envelopes that link into no service-only collection and a down step
 that keeps a store holding a job and, on an empty one, puts back the
 `files` limit it found, also on a `pb_data` where PocketBase's reset ran
 first and `files` held 2 MiB.
+[`probes/grade_rules_migration_check.py`](probes/grade_rules_migration_check.py)
+is the dry run of `1700008700_attempt_grade_rules.js` (`ROUNDS-00A-L03` PR 4)
+on a `pb_data` built from every other migration, with in-progress rows and
+both kinds of graded row planted for two accounts. It takes each attempt
+collection's census from the manifest
+(`pocketbase/migration-manifests/attempt-grade-rules-v1.json`) before and after
+the migration and prints them as one reconciliation line, counts and
+checksums only, which must match; the rules must be the policy's and the
+`_params` record the rules they replaced, with nothing else changed. On the
+copy, served with no hooks so only the rules decide, every client write to a
+graded row, or one that would grade a row or give it an envelope, is refused,
+and in-progress rows still save. `migrate down 1` keeps the rules and the
+record, and applying it again changes neither.
 [`probes/json_limits_check.py`](probes/json_limits_check.py) holds every JSON
 field's maxSize to the limit its migrations declare (D10). PocketBase's own
 `1702134272_set_default_json_max_size` resets them all to 2,000,000 bytes and
