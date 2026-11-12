@@ -47,9 +47,26 @@ const [migrationPath, before] = process.argv.slice(2);
 let up, down;
 globalThis.migrate = (u, d) => { up = u; down = d; };
 const db = { collections: {}, saves: [], params: {} };
+// With REFS=1 a collection hands out its rules as PocketBase 0.22's JS VM
+// does: an object that reads the collection's own value, which an
+// assignment writes through, and that serializes to that value.
+function asVm(stored) {
+  const values = { ...stored };
+  const out = { name: stored.name };
+  for (const key of ["listRule", "viewRule", "createRule", "updateRule", "deleteRule"]) {
+    Object.defineProperty(out, key, {
+      enumerable: true,
+      get: () => (values[key] === null ? null
+        : { toString: () => values[key], valueOf: () => values[key], toJSON: () => values[key] }),
+      set: (v) => { values[key] = v === null ? null : String(v); },
+    });
+  }
+  return out;
+}
 for (const [name, rules] of Object.entries(JSON.parse(before))) {
   if (process.env.MISSING === name) continue;
-  db.collections[name] = { name, listRule: "list", viewRule: "view", deleteRule: "delete", ...rules };
+  const stored = { name, listRule: "list", viewRule: "view", deleteRule: "delete", ...rules };
+  db.collections[name] = process.env.REFS === "1" ? asVm(stored) : stored;
 }
 function Dao(d) {
   this.findCollectionByNameOrId = (n) => {
@@ -80,7 +97,7 @@ process.stdout.write(JSON.stringify({ upError, up: afterUp, saves, params, down:
 """
 
 
-def _run(tmp_path_factory, missing: str = "") -> dict:
+def _run(tmp_path_factory, missing: str = "", refs: bool = False) -> dict:
     node = shutil.which("node")
     assert node, "node is required for the PocketBase migration checks; CI installs it"
     harness = tmp_path_factory.mktemp("grade-rules") / "harness.cjs"
@@ -88,7 +105,7 @@ def _run(tmp_path_factory, missing: str = "") -> dict:
     before = {name: {"createRule": _ownership_rule("CREATE_RULE"), "updateRule": _ownership_rule("UPDATE_RULE")}
               for name in COLLECTIONS}
     res = subprocess.run([node, str(harness), str(MIGRATION), json.dumps(before)], capture_output=True, text=True,
-                         timeout=60, env={"PATH": "", "MISSING": missing})
+                         timeout=60, env={"PATH": "", "MISSING": missing, "REFS": "1" if refs else ""})
     assert res.returncode == 0, res.stderr
     return json.loads(res.stdout)
 
@@ -96,6 +113,11 @@ def _run(tmp_path_factory, missing: str = "") -> dict:
 @pytest.fixture(scope="module")
 def run(tmp_path_factory) -> dict:
     return _run(tmp_path_factory)
+
+
+@pytest.fixture(scope="module")
+def run_as_the_vm(tmp_path_factory) -> dict:
+    return _run(tmp_path_factory, refs=True)
 
 
 def test_the_file_is_a_migration_that_sorts_after_the_rules_and_the_link_it_builds_on(src):
@@ -138,6 +160,15 @@ def test_up_records_the_rules_it_replaced_once(run):
     assert run["down"] == run["up"]
     assert run["twice"]["saves"] == [] and run["twice"]["collections"] == run["up"]
     assert run["twice"]["params"][MIGRATION.name] == record
+
+
+def test_with_rules_handed_out_as_the_vm_does_the_record_keeps_the_replaced_rules(run, run_as_the_vm):
+    # The JS VM's rule is a live reference: the record copies its text
+    # before the rules change, and a second run finds both current.
+    assert run_as_the_vm["upError"] is None and run_as_the_vm["saves"] == COLLECTIONS
+    assert run_as_the_vm["params"] == run["params"]
+    assert run_as_the_vm["up"] == run["up"]
+    assert run_as_the_vm["twice"]["saves"] == [] and run_as_the_vm["twice"]["params"] == run["params"]
 
 
 @pytest.mark.parametrize("missing", COLLECTIONS)

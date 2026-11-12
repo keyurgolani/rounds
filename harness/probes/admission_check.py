@@ -326,15 +326,20 @@ def main() -> int:
     c.check("admission.idempotency.key-required",
             keyless[0] == 400 and (keyless[1] or {}).get("code") == "idempotency_key_required", f"status={keyless[0]}")
 
-    # 2. One count across replicas.
+    # 2. One count across replicas. A run's lease holds until its job
+    # starts, so each run waits for its job to end before the next, as one
+    # person's runs do.
     made = [(a.token, job)]
+    all_ended(one, made)
     for i in range(4):
         status, answer, _ = call(RUNNERS[i % 2], "POST", "/api/run", a.token, run_body(), {"Idempotency-Key": uuid7()})
-        made.append((a.token, job_id(answer)))
         if status != 202:
             c.check("admission.quota.runs-admitted", False, f"run {i} status={status}")
+            continue
+        made.append((a.token, job_id(answer)))
+        all_ended(RUNNERS[i % 2], made[-1:])
     # The first run, which its duplicate and the refusals didn't add to, and
-    # four more; each request's lease ended with its answer.
+    # four more; each job's start dropped its run's lease.
     used = usage(a.token)
     c.check("admission.quota.one-count-across-replicas", used["requests"] == 5 and used["in_flight"] == 0,
             f"requests={used['requests']} in_flight={used['in_flight']}")

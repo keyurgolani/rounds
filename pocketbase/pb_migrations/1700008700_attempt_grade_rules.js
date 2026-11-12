@@ -48,14 +48,24 @@ const UPDATE_RULE = [
   "(@request.data.user:isset = false || " + CALLER_OWNS + ")",
 ].join(" && ");
 
+// A collection's rule as a plain string, or null. PocketBase's JS VM hands a
+// rule out as a reference to the collection's own value, which an assignment
+// writes through, so a rule is copied before the collection changes and
+// compared as text.
+const rule = (value) => (value === null || value === undefined ? null : String(value));
+
 migrate(
   (db) => {
     const dao = new Dao(db);
     // Both first, so a missing one changes neither.
     const collections = COLLECTIONS.map((name) => dao.findCollectionByNameOrId(name));
-    const current = (c) => c.createRule === CREATE_RULE && c.updateRule === UPDATE_RULE;
+    const current = (c) => rule(c.createRule) === CREATE_RULE && rule(c.updateRule) === UPDATE_RULE;
     if (collections.every(current)) return;
-    const replaced = collections.map((c) => ({ collection: c.name, create: c.createRule, update: c.updateRule }));
+    const replaced = collections.map((c) => ({
+      collection: c.name,
+      create: rule(c.createRule),
+      update: rule(c.updateRule),
+    }));
     collections.forEach((collection) => {
       collection.createRule = CREATE_RULE;
       collection.updateRule = UPDATE_RULE;
