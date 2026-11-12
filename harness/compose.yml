@@ -83,6 +83,19 @@ services:
       - materialize
     restart: "no"
 
+  # The PDF renderer, built from this commit and run as
+  # docker-compose.prod.yml runs it: on the app network, where only the
+  # runners call it, with no host port (ROUNDS-00A-L04). It sits behind the
+  # `renderer` profile, and run.sh starts it only for the snapshot render
+  # phases, so every other phase sees a runner with no renderer to reach.
+  # TODO(ROUNDS-00A-L06): #6's render workers replace this sidecar.
+  pdf-renderer:
+    profiles: ["renderer"]
+    build:
+      context: ../backend/pdf_renderer
+    image: ${IMAGE_PREFIX:-rounds-9s1}-pdf-renderer:test
+    restart: "no"
+
   # Shaped like prod: the runner, plus runner-b, a second replica of the same
   # image on the same PocketBase, as k8s/runner.yaml runs two. The launcher
   # starts both for the admission phase (ROUNDS-00A-L01 stage 3), and the

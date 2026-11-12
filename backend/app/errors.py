@@ -73,6 +73,9 @@ CODES: dict[str, int] = {
     "snapshot_conflict": 409,
     "snapshot_quota_exceeded": 429,
     "materializer_unavailable": 503,
+    # A render naming a snapshot whose checksum isn't the one it expects
+    # (ROUNDS-00A-L04).
+    "checksum_mismatch": 409,
     # The owner's share capability routes (ROUNDS-00B-L03).
     "shares_unavailable": 503,
     # RotateShareBearer (ROUNDS-00B-L04).
@@ -114,6 +117,7 @@ DETAILS: dict[str, str] = {
     "snapshot_conflict": "This resume changed in another tab. Reload, then export again.",
     "snapshot_quota_exceeded": "This account has reached its limit for saved snapshots.",
     "materializer_unavailable": "Server PDF can't be prepared right now. Try again shortly.",
+    "checksum_mismatch": "The saved copy doesn't match this request. Export again.",
     "shares_unavailable": "Share links can't be loaded right now. Try again shortly.",
     "capability_version_conflict": "This link changed since the list loaded. Reload it to continue.",
     "capability_revoked": "This link was revoked.",

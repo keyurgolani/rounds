@@ -1,7 +1,8 @@
-"""Harness checks for Legacy Artifact Snapshot creation (ROUNDS-00A-L04
-PR 2), on the real PocketBase, both runner replicas, nginx, and the
-materializer built from this commit. Every account is generated for the
-run; between phases the probe keeps only account emails and record ids
+"""Harness checks for Legacy Artifact Snapshots (ROUNDS-00A-L04): creation
+(PR 2) and server PDF on snapshot ids (PR 3), on the real PocketBase, both
+runner replicas, nginx, the materializer, and the PDF renderer built from
+this commit. Every account is generated for the run; between phases the
+probe keeps only account emails, record ids, and correlation ids
 (``/state/snapshot.json``, which never goes up with the receipts), and
 signs back in with a password it derives from the run's test runner key.
 
@@ -18,8 +19,23 @@ Phases, in the order harness/run.sh runs them:
   and nobody but the owner reads a snapshot or its file; a variant whose
   parent belongs to another account and the demo account get no
   snapshot.
+- ``snapshot-render``, the renderer up: the owner gets a PDF of each of
+  its snapshots through nginx; another account's snapshot answers exactly
+  like a missing one, and so does a snapshot whose source was deleted; a
+  checksum the snapshot doesn't hold, the request shape from before
+  snapshots, and an anonymous caller are refused; a completed render's
+  key doesn't run again, and another account's key on its own request is
+  its own command. The isolation check writes its receipts for the case
+  table (``RENDER_CASE``).
+- ``snapshot-render-audit``, over the runners' decision lines run.sh
+  saved: each refused render ended at its refusal before a slot ran, and
+  the replicas answered exactly as many renders as the owner made, so no
+  render ran without an owner-readable snapshot.
+- ``snapshot-render-down``, the renderer stopped: a render is the typed
+  503 with the renderer sentence and none of its text.
 - ``snapshot-create-down``, the materializer stopped: creation answers
-  503 ``materializer_unavailable`` and writes nothing.
+  503 ``materializer_unavailable`` and writes nothing, and a snapshot that
+  exists still renders.
 - ``snapshot-create-retry``, the materializer back: the same key runs
   again and makes exactly one snapshot.
 - ``snapshot-scan``, over the reports run.sh saved: the scan is complete,
@@ -27,11 +43,15 @@ Phases, in the order harness/run.sh runs them:
   materializer build the snapshots record, the signed copy carries the
   scan's signature, and a rescan with the gate off gives the same report.
 - ``snapshot-create-off``, gate off: creation answers 503
-  ``route_disabled``, and every snapshot still reads back, owner only,
-  with its checksum.
+  ``route_disabled``, and every snapshot still reads back and renders,
+  owner only, with its checksum.
 - ``snapshot-create-again``, gate on again: every snapshot's source gives
   ``reused`` with the same checksum; no resume, variant, or version row
   changed through any of it; deleting an account deletes its snapshots.
+- ``snapshot-recovery``, after run.sh restored a ``pb_data`` backup taken
+  with PocketBase stopped, its ``storage/`` included: every snapshot still
+  renders for its owner with its checksum, and another account gets the
+  404.
 
 Prints one PASS/FAIL line per check and exits non-zero on any failure.
 """
@@ -52,6 +72,7 @@ from typing import Any
 import factory
 from admission_check import Checks, admin_token, call, uuid7
 from pbclient import PBClient
+from receipts import Receipt
 
 POCKETBASE_URL = os.environ.get("POCKETBASE_URL", "http://pocketbase:8090")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://frontend").rstrip("/")
@@ -60,12 +81,23 @@ RUN_ID = os.environ.get("RUN_ID", "local")
 RD02_DIR = Path(os.environ.get("RD02_DIR", "/rd02"))
 OUT = Path(os.environ.get("SNAPSHOT_OUT", "/out"))
 STATE = Path(os.environ.get("SNAPSHOT_STATE_PATH", "/state/snapshot.json"))
+# The runners' decision lines for the render route, saved by run.sh.
+DECISIONS = Path(os.environ.get("SNAPSHOT_DECISIONS_PATH", "/state/render-decisions.jsonl"))
+RECEIPTS_PATH = os.environ.get("RECEIPTS_PATH", "/out/receipts.jsonl")
 ROUTE = "/api/pdf/snapshots"
+RENDER = "/api/pdf/render"
 SNAPSHOTS = "legacy_artifact_snapshots"
 STALE = "2000-01-01 00:00:00.000Z"
 MISSING_ID = "zzzzzzzzzzzzzz9"
 SCAN_SCHEMA = "legacy-snapshot-scan/v1"
 SCAN_LABEL = "rounds/legacy-snapshot-scan/v1"
+# The case table's row this phase proves (docs/security/account-scope.v1.json).
+RENDER_CASE = "isolation.render.snapshot.uniform-not-found"
+# The runner's fixed sentences (backend/routers/pdf.py, backend/app/errors.py).
+RENDERER_FAILED = "The PDF renderer couldn't finish this document. Try again shortly."
+OUT_OF_DATE = "This page is out of date. Reload it to continue."
+ENVELOPE = {"detail", "code", "correlation_id"}
+RENDERER_TEXT = ("pdf-renderer", "Errno", "Traceback", "urlopen", "Connection refused", "puppeteer", "Chromium")
 
 
 # ---- accounts ---------------------------------------------------------------
@@ -111,6 +143,79 @@ def create(token: str, kind: str, source_id: str, updated: str, key: str | None 
     return status, body
 
 
+def render_body(snapshot_id: str, checksum: str, key: str) -> dict[str, Any]:
+    return {"snapshot_id": snapshot_id, "expected_checksum": checksum, "idempotency_id": key, "format": "pdf",
+            "locale": "en", "page_size": "A4", "margin_mm": 0}
+
+
+class Rendered:
+    """One answer from the render route through nginx."""
+
+    def __init__(self, status: int, raw: bytes, headers: dict[str, str]) -> None:
+        self.status = status
+        self.raw = raw
+        self.headers = headers
+        try:
+            self.body: Any = json.loads(raw) if raw[:1] == b"{" else None
+        except ValueError:
+            self.body = None
+
+    @property
+    def pdf(self) -> bool:
+        return (self.status == 200 and self.raw.startswith(b"%PDF-")
+                and self.headers.get("content-type", "").startswith("application/pdf"))
+
+    @property
+    def code(self) -> str | None:
+        return code_of(self.body)
+
+    @property
+    def correlation_id(self) -> str:
+        return self.headers.get("x-correlation-id", "")
+
+    def refusal(self) -> tuple[int, Any, Any]:
+        return refusal(self.status, self.body)
+
+    def typed(self) -> bool:
+        """The typed envelope with nothing of the renderer's in it."""
+        text = self.raw.decode("utf-8", "replace")
+        return (isinstance(self.body, dict) and set(self.body) == ENVELOPE
+                and not any(t in text for t in RENDERER_TEXT))
+
+
+def render(token: str | None, snapshot_id: str, checksum: str, key: str | None = None,
+           body: Any = None) -> Rendered:
+    """POST /api/pdf/render through nginx; ``key`` goes as the
+    Idempotency-Key and, unless ``body`` is given, as idempotency_id."""
+    key = key or uuid7()
+    payload = render_body(snapshot_id, checksum, key) if body is None else body
+    headers = {"Content-Type": "application/json", "Idempotency-Key": key}
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    req = urllib.request.Request(FRONTEND_URL + RENDER, data=json.dumps(payload).encode(), method="POST",
+                                 headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return Rendered(resp.status, resp.read(), {k.lower(): v for k, v in resp.headers.items()})
+    except urllib.error.HTTPError as err:
+        return Rendered(err.code, err.read(), {k.lower(): v for k, v in (err.headers or {}).items()})
+
+
+def record_render(state: dict, kind: str, answer: Rendered, expected_status: int, expected_code: str | None) -> None:
+    """Notes a render's correlation id for snapshot-render-audit."""
+    state.setdefault("renders", []).append({"kind": kind, "cid": answer.correlation_id,
+                                            "status": expected_status, "code": expected_code})
+
+
+def case_receipt(passed: bool, observed: int, detail: str) -> None:
+    """One receipt for the case table's render row: no id, token, or body."""
+    import run  # the probe runner's writer, with the run's context and redactor
+
+    run.new_writer(RECEIPTS_PATH, "snapshot-render").write(
+        Receipt(RENDER_CASE, "runner:render", "render", "authenticated-other", 404, observed, passed, 0,
+                "" if passed else detail))
+
+
 def code_of(body: Any) -> str | None:
     return body.get("code") if isinstance(body, dict) else None
 
@@ -130,6 +235,12 @@ def rows(pb: PBClient, token: str, collection: str, flt: str = "") -> list[dict]
 def snapshots_of(pb: PBClient, admin: str, user: str, source_id: str | None = None) -> list[dict]:
     flt = f"user = '{user}'" + (f" && source_id = '{source_id}'" if source_id else "")
     return rows(pb, admin, SNAPSHOTS, flt)
+
+
+def recorded_rows(state: dict) -> int:
+    """Every snapshot row the run made for account a: the ones it reads back
+    and renders, and the ones kept after their source was deleted."""
+    return len(state["snapshots"]) + len(state.get("kept_without_source", []))
 
 
 def file_bytes(record: dict, token: str | None) -> tuple[int, bytes]:
@@ -376,6 +487,157 @@ def run_create(c: Checks) -> None:
     save_state(state)
 
 
+def renders_for_owner(state: dict, token: str, other: str | None = None) -> tuple[list[str], list[str]]:
+    """Every recorded snapshot rendered by its owner, and by ``other`` when
+    given: the ids that didn't give the owner a PDF, and the ids another
+    account got anything but the 404 from."""
+    failed, leaked = [], []
+    for snap_id, want in state["snapshots"].items():
+        mine = render(token, snap_id, want["checksum"])
+        if mine.pdf:
+            record_render(state, "owner", mine, 200, None)
+        else:
+            failed.append(snap_id)
+        if other is not None:
+            theirs = render(other, snap_id, want["checksum"])
+            record_render(state, "foreign", theirs, 404, "not_found")
+            if (theirs.status, theirs.code) != (404, "not_found"):
+                leaked.append(snap_id)
+    return failed, leaked
+
+
+def run_render(c: Checks) -> None:
+    pb = PBClient(POCKETBASE_URL, timeout=30)
+    admin = admin_token(pb)
+    wait_frontend()
+    state = load_state()
+    state["renders"] = []
+    tokens = {tag: sign_in(pb, tag, state["accounts"][tag]) for tag in ("a", "b")}
+    a, b = tokens["a"], tokens["b"]
+
+    # The owner gets a PDF of each of its snapshots, the variant's included.
+    failed, _ = renders_for_owner(state, a)
+    c.check("render.owner.pdf-of-each-snapshot", not failed and bool(state["snapshots"]), f"failed={len(failed)}")
+
+    # Another account's snapshot, named with its own checksum, answers
+    # exactly like a missing one, and neither renders.
+    snap_id, want = next(iter(state["snapshots"].items()))
+    foreign = render(b, snap_id, want["checksum"])
+    missing = render(b, MISSING_ID, want["checksum"])
+    record_render(state, "foreign", foreign, 404, "not_found")
+    record_render(state, "missing", missing, 404, "not_found")
+    same = foreign.refusal() == missing.refusal() and (foreign.status, foreign.code) == (404, "not_found")
+    c.check("render.another-accounts-snapshot-is-indistinguishable-from-missing",
+            same and not foreign.pdf and not missing.pdf, f"foreign={foreign.refusal()} missing={missing.refusal()}")
+    case_receipt(same and not foreign.pdf, foreign.status, f"foreign={foreign.status}/{foreign.code}")
+
+    # A checksum the snapshot doesn't hold is refused before any render.
+    wrong = render(a, snap_id, "sha256:" + "0" * 64)
+    record_render(state, "checksum", wrong, 409, "checksum_mismatch")
+    c.check("render.another-checksum-is-refused", (wrong.status, wrong.code) == (409, "checksum_mismatch")
+            and wrong.typed(), f"status={wrong.status} code={wrong.code}")
+
+    # The request shape from before snapshots asks the page to reload, and
+    # nothing renders.
+    for name, old in (("markup", {"html": "<p>harness</p>"}), ("markup-and-margin", {"html": "<p>x</p>", "margin_mm": 5})):
+        stale = render(a, snap_id, want["checksum"], body=old)
+        record_render(state, "legacy", stale, 422, "legacy_request_rejected")
+        c.check(f"render.older-request-shape.{name}.reload",
+                (stale.status, stale.code) == (422, "legacy_request_rejected") and stale.typed()
+                and isinstance(stale.body, dict) and stale.body.get("detail") == OUT_OF_DATE,
+                f"status={stale.status} code={stale.code}")
+
+    # Anonymous: refused before anything is read.
+    anonymous = render(None, snap_id, want["checksum"])
+    c.check("render.anonymous.unauthenticated", (anonymous.status, anonymous.code) == (401, "unauthenticated"),
+            f"status={anonymous.status}")
+
+    # A completed render's key doesn't render again; another account's
+    # key on its own request is that account's own command.
+    key = uuid7()
+    first = render(a, snap_id, want["checksum"], key=key)
+    again = render(a, snap_id, want["checksum"], key=key)
+    reused = render(b, snap_id, want["checksum"], key=key)
+    if first.pdf:
+        record_render(state, "owner", first, 200, None)
+    record_render(state, "replay", again, 409, "already_completed")
+    record_render(state, "foreign", reused, 404, "not_found")
+    c.check("render.replay.completed-render-runs-once",
+            first.pdf and (again.status, again.code) == (409, "already_completed"), f"statuses={first.status}/{again.status}")
+    c.check("render.replay.another-accounts-key-is-its-own-command",
+            (reused.status, reused.code) == (404, "not_found") and not reused.pdf, f"status={reused.status}")
+
+    # A snapshot whose source was deleted answers the same 404.
+    acct_id = state["ids"]["a"]
+    content = {"personalInfo": {"fullName": "Render check"}, "experience": [], "education": [], "skills": [],
+               "projects": [], "publications": [], "profiles": []}
+    gone = resume_from(pb, factory.Account(tag="a", email=state["accounts"]["a"], password="", user_id=acct_id,
+                                           token=a),
+                       "render-gone", {"template_id": "modern", "design": {}, "data": content})
+    status, body = create(a, "resume", gone["id"], gone["updated"])
+    if status == 201 and isinstance(body, dict):
+        # Its row stays after the source goes, as the spec keeps such rows,
+        # so the later row counts include it.
+        state.setdefault("kept_without_source", []).append(body["snapshot_id"])
+        deleted = pb.delete("resumes", gone["id"], a)
+        after = render(a, body["snapshot_id"], body["content_checksum"])
+        record_render(state, "source-gone", after, 404, "not_found")
+        c.check("render.source-deleted.not-found", deleted.status == 204 and (after.status, after.code) == (404, "not_found")
+                and snapshots_of(pb, admin, acct_id, gone["id"]) != [], f"delete={deleted.status} render={after.status}")
+    else:
+        c.check("render.source-deleted.not-found", False, f"snapshot create status={status}")
+    save_state(state)
+
+
+def run_render_audit(c: Checks) -> None:
+    """The decision lines both replicas wrote for the render route since
+    they started: each refusal ended there, before a slot ran, and only the
+    owner's renders answered 200."""
+    state = load_state()
+    lines = []
+    for raw in DECISIONS.read_text().splitlines() if DECISIONS.exists() else []:
+        try:
+            line = json.loads(raw)
+        except ValueError:
+            continue
+        if line.get("event") == "decision" and line.get("route") == RENDER:
+            lines.append(line)
+    by_cid = {line.get("correlation_id"): line for line in lines}
+    missing, wrong = [], []
+    for made in state.get("renders", []):
+        line = by_cid.get(made["cid"])
+        if line is None:
+            missing.append(made["kind"])
+            continue
+        if made["status"] == 200:
+            ok = line.get("status") == 200
+        else:
+            # Refused at step 5 (no charge) or step 8 (refunded): never a slot.
+            ok = (line.get("status"), line.get("code")) == (made["status"], made["code"]) and \
+                line.get("quota") in ("skipped", "refunded")
+        if not ok:
+            wrong.append(made["kind"])
+    c.check("render.audit.every-refusal-ended-before-a-slot", bool(lines) and not missing and not wrong,
+            f"lines={len(lines)} missing={missing} wrong={wrong}")
+    owner = sum(1 for made in state.get("renders", []) if made["status"] == 200)
+    rendered = sum(1 for line in lines if line.get("status") == 200)
+    c.check("render.audit.no-render-without-an-owner-readable-snapshot", owner > 0 and rendered == owner,
+            f"owner_renders={owner} answered_200={rendered}")
+
+
+def run_render_down(c: Checks) -> None:
+    pb = PBClient(POCKETBASE_URL, timeout=30)
+    wait_frontend()
+    state = load_state()
+    token = sign_in(pb, "a", state["accounts"]["a"])
+    snap_id, want = next(iter(state["snapshots"].items()))
+    down = render(token, snap_id, want["checksum"])
+    c.check("render.renderer-down.typed-503-without-its-text",
+            (down.status, down.code) == (503, "worker_unavailable") and down.typed()
+            and isinstance(down.body, dict) and down.body.get("detail") == RENDERER_FAILED,
+            f"status={down.status} code={down.code}")
+
+
 def count(pb: PBClient, admin: str, collection: str) -> int:
     resp = pb.listing(collection, admin, {"perPage": 1})
     return int((resp.body or {}).get("totalItems", -1)) if resp.status == 200 else -1
@@ -391,6 +653,10 @@ def run_down(c: Checks) -> None:
     c.check("snapshot.outage.materializer-down-is-typed-and-writes-nothing",
             status == 503 and code_of(body) == "materializer_unavailable"
             and not snapshots_of(pb, admin, state["ids"]["a"], p["source"]), f"status={status} code={code_of(body)}")
+    # A snapshot that exists renders without the materializer.
+    snap_id, want = next(iter(state["snapshots"].items()))
+    c.check("render.outage.materializer-down-still-renders", render(token, snap_id, want["checksum"]).pdf,
+            "no PDF")
 
 
 def run_retry(c: Checks) -> None:
@@ -469,11 +735,16 @@ def run_off(c: Checks) -> None:
         if own.status != 200 or sha256(raw) != want["checksum"] or pb.view(SNAPSHOTS, snap_id, tokens["b"]).status != 404:
             unreadable.append(snap_id)
     c.check("snapshot.gate-off.snapshots-still-read-back-owner-only", not unreadable, f"failed={len(unreadable)}")
+    # Creation off doesn't stop server PDF for snapshots that exist: each
+    # still renders for its owner, and only for its owner.
+    failed, leaked = renders_for_owner(state, tokens["a"], tokens["b"])
+    c.check("render.gate-off.snapshots-still-render-owner-only", not failed and not leaked,
+            f"failed={len(failed)} leaked={len(leaked)}")
     c.check("snapshot.gate-off.no-source-row-changed",
             fingerprint(pb, tokens["a"]) == state["fingerprints"]["a"]
             and fingerprint(pb, tokens["b"]) == state["fingerprints"]["b"], "a source row changed")
     c.check("snapshot.gate-off.nothing-written",
-            len(snapshots_of(pb, admin, state["ids"]["a"])) == len(state["snapshots"]), "row count changed")
+            len(snapshots_of(pb, admin, state["ids"]["a"])) == recorded_rows(state), "row count changed")
 
 
 def run_again(c: Checks) -> None:
@@ -507,13 +778,38 @@ def run_again(c: Checks) -> None:
             deleted.status == 204 and not snapshots_of(pb, admin, gone), f"status={deleted.status}")
 
 
+def run_recovery(c: Checks) -> None:
+    """After run.sh restored the backup it took with PocketBase stopped:
+    every snapshot reads back and renders for its owner with the checksum
+    it had, its file hashes to it, and another account gets the 404."""
+    pb = PBClient(POCKETBASE_URL, timeout=30)
+    wait_frontend()
+    state = load_state()
+    tokens = {tag: sign_in(pb, tag, state["accounts"][tag]) for tag in ("a", "b")}
+    changed = []
+    for snap_id, want in state["snapshots"].items():
+        own = pb.view(SNAPSHOTS, snap_id, tokens["a"])
+        raw = file_bytes(own.body or {}, tokens["a"])[1] if own.status == 200 else b""
+        if own.status != 200 or (own.body or {}).get("content_checksum") != want["checksum"] or sha256(raw) != want["checksum"]:
+            changed.append(snap_id)
+    c.check("recovery.snapshots-restored-with-their-checksums", not changed and bool(state["snapshots"]),
+            f"changed={len(changed)}")
+    failed, leaked = renders_for_owner(state, tokens["a"], tokens["b"])
+    c.check("recovery.snapshots-render-for-their-owner-only", not failed and not leaked,
+            f"failed={len(failed)} leaked={len(leaked)}")
+
+
 PHASES = {
     "snapshot-create": run_create,
+    "snapshot-render": run_render,
+    "snapshot-render-audit": run_render_audit,
+    "snapshot-render-down": run_render_down,
     "snapshot-create-down": run_down,
     "snapshot-create-retry": run_retry,
     "snapshot-scan": run_scan,
     "snapshot-create-off": run_off,
     "snapshot-create-again": run_again,
+    "snapshot-recovery": run_recovery,
 }
 
 

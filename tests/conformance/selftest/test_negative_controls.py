@@ -34,6 +34,7 @@ CONTROLS = {
     "EX-05": ["caller-fields"],
     "EX-06": ["caller-fields"],
     "EX-07": ["minimal-env"],
+    "RD-01": ["snapshot-owner"],
     "RD-07": ["health-status-only", "health-status-value", "typed-render-failure"],
 }
 
@@ -281,6 +282,29 @@ def test_rd07_takes_a_render_timeout_with_its_sentence(monkeypatch):
     _answer_pdf(monkeypatch, "/api/pdf/render", status, envelope("render_timeout", sentence))
     ran, _ = _run_on("RD-07", set())
     assert ran.passed, ran.message
+
+
+def test_rd01_is_inconclusive_when_even_the_owners_render_is_refused(monkeypatch):
+    # A route that refuses every render would also refuse another
+    # account's, which proves nothing about the owner check.
+    _answer_pdf(monkeypatch, "/api/pdf/render", 404, envelope("not_found", "Not found."))
+    ran, _ = _run_on("RD-01", set())
+    assert not ran.passed
+    assert ran.receipt.outcome == "inconclusive"
+
+
+def test_rd01_reads_a_snapshot_with_the_wrong_checksum_as_refused_by_the_route(monkeypatch):
+    # Only the caller's own snapshot with its checksum reaches the renderer.
+    real = FakeRunner._answer
+
+    def answer(self, method, path, token, body):
+        if path == "/api/pdf/render":
+            body = {**body, "expected_checksum": "sha256:" + "f" * 64}
+        return real(self, method, path, token, body)
+
+    monkeypatch.setattr(FakeRunner, "_answer", answer)
+    ran, _ = _run_on("RD-01", set())
+    assert ran.receipt.outcome == "inconclusive"
 
 
 def test_rd07_sentences_are_the_backends():

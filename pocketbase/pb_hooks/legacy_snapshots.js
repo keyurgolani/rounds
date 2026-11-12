@@ -744,6 +744,69 @@ function reportPathError(out, dataDir, cwd) {
   return null;
 }
 
+// An absolute path's directory and last name, "." and ".." resolved.
+function splitPath(path) {
+  const clean = cleanPath(path);
+  const cut = clean.lastIndexOf("/");
+  return { dir: cut <= 0 ? "/" : clean.slice(0, cut), name: clean.slice(cut + 1) };
+}
+
+// Why the report can't take the name `out`, or null. Anything already
+// there is refused, whatever it is: a file, a link (one to nothing
+// included), a FIFO, a device, or a directory. `listDir(dir)` returns the
+// entry names in `dir` without opening or following any of them, so
+// nothing at `out` is ever read. A directory that can't be listed is
+// refused too, since then nothing can be ruled out.
+function reportTargetProblem(out, listDir) {
+  const { dir, name } = splitPath(out);
+  if (name === "" || name === "." || name === "..") return "--out must name a file";
+  let names;
+  try {
+    names = listDir(dir);
+  } catch (err) {
+    return "--out's directory can't be listed";
+  }
+  if (names.indexOf(name) >= 0) return "--out names something that exists; give a new path";
+  return null;
+}
+
+// Writes the report under a fresh random name in `out`'s directory (mode
+// 0600), checks once more that nothing took `out` meanwhile, and renames
+// it into place. A rename replaces a directory entry and never writes
+// through one, so the report never lands through a link or into a FIFO,
+// and never changes another file's bytes. The name it renames onto is the
+// cleaned path it checked, so the report lands exactly where the check
+// looked. The temporary file goes on any failure, a failed write's
+// included. `fsops` is { listDir, writeFile, rename, remove, random }.
+function writeReportFile(out, text, fsops) {
+  const { dir, name } = splitPath(out);
+  const base = dir === "/" ? "" : dir;
+  const target = base + "/" + name;
+  const temp = base + "/." + name + "." + fsops.random() + ".tmp";
+  try {
+    fsops.writeFile(temp, text, 0o600);
+    const taken = reportTargetProblem(target, fsops.listDir);
+    if (taken !== null) throw new Error("legacy-snapshot-scan: " + taken);
+    fsops.rename(temp, target);
+  } catch (err) {
+    try {
+      fsops.remove(temp);
+    } catch (_) {
+      // Already gone.
+    }
+    throw err;
+  }
+}
+
+// The names in a directory, from $os.readDir, which lists entries without
+// opening or following them.
+function listDirNames(dir) {
+  const entries = $os.readDir(dir);
+  const names = [];
+  for (let i = 0; i < entries.length; i += 1) names.push(entries[i].name());
+  return names;
+}
+
 // pocketbase legacy-snapshot-scan --out PATH [--commit SHA]
 //
 // The operator's dry run before turning LEGACY_SNAPSHOT_CREATE on: writes
@@ -767,17 +830,10 @@ function scanCommand(args) {
   } catch (err) {
     cwd = "/";
   }
-  const refused = reportPathError(out, $app.dataDir(), cwd);
+  // A new name only, so the report never replaces a file, lands through a
+  // link to one, or opens something that isn't a file.
+  const refused = reportPathError(out, $app.dataDir(), cwd) || reportTargetProblem(out, listDirNames);
   if (refused !== null) throw new Error("legacy-snapshot-scan: " + refused);
-  let exists = true;
-  try {
-    $os.readFile(out);
-  } catch (err) {
-    exists = false;
-  }
-  // A new file only, so the report never replaces one, or lands through a
-  // link to one, that a backup already carries.
-  if (exists) throw new Error("legacy-snapshot-scan: --out names a file that exists; give a new path");
   if (commit !== "" && !/^[0-9A-Za-z._-]{1,64}$/.test(commit)) {
     throw new Error("legacy-snapshot-scan: --commit takes a commit or tag name");
   }
@@ -787,7 +843,13 @@ function scanCommand(args) {
     sha256: (text) => $security.sha256(text),
     commit,
   });
-  $os.writeFile(out, JSON.stringify(report, null, 2) + "\n", 0o600);
+  writeReportFile(out, JSON.stringify(report, null, 2) + "\n", {
+    listDir: listDirNames,
+    writeFile: (path, text, mode) => $os.writeFile(path, text, mode),
+    rename: (from, to) => $os.rename(from, to),
+    remove: (path) => $os.remove(path),
+    random: () => $security.randomStringWithAlphabet(16, "abcdefghijklmnopqrstuvwxyz0123456789"),
+  });
   console.log(JSON.stringify({
     v: "obs/v1",
     event: "legacy_snapshot_scan",
@@ -811,6 +873,8 @@ module.exports = {
   checkCreate,
   fingerprintOf,
   reportPathError,
+  reportTargetProblem,
+  writeReportFile,
   utf8Length,
   readMaterialized,
   materializerInput,

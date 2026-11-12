@@ -1,80 +1,230 @@
-// Server PDF export denial state (ROUNDS-00A-L01): a refused or failed
-// render reads as a denial with a browser-print fallback, and focus
-// stays on the Download button.
+// The Export tab (ROUNDS-00A-L01, ROUNDS-00A-L04): server PDF saves
+// pending edits, then renders the server's snapshot of the saved resume;
+// each outcome reads as a state with its next step, never raw error text,
+// and the six other formats export what's on screen whatever server PDF
+// says.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../../../../lib/pocketbase', () => ({ pb: { authStore: { token: 'test-token-placeholder' } } }));
-vi.mock('../../../export/pdf', () => ({
+vi.mock('../../../export/pdf', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../export/pdf')>()),
   exportPdfServer: vi.fn(),
   exportPdfPrint: vi.fn(),
 }));
 vi.mock('../../../export/docx', () => ({ exportDocx: vi.fn() }));
 vi.mock('../../../export/markdown', () => ({ exportMarkdown: vi.fn() }));
+vi.mock('../../../../../lib/definitions', () => ({ reloadPage: vi.fn() }));
 
 import ExportTab from '../ExportTab';
-import { exportPdfPrint, exportPdfServer } from '../../../export/pdf';
+import { exportPdfPrint, exportPdfServer, SnapshotIneligible } from '../../../export/pdf';
 import { exportDocx } from '../../../export/docx';
 import { exportMarkdown } from '../../../export/markdown';
+import { reloadPage } from '../../../../../lib/definitions';
 import { RunnerError } from '../../../../../lib/runnerFetch';
 import type { Resume, ResumeData } from '../../../types';
 
-const resume = { id: 'r1', slug: 'jane-doe', name: 'Jane Doe' } as unknown as Resume;
+const SAVED = '2026-11-11 08:00:00.000Z';
+const resume = { id: 'resumeaaaaaaaa1', slug: 'jane-doe', name: 'Jane Doe', updated_at: SAVED } as unknown as Resume;
 const data = { personalInfo: { fullName: 'Jane Doe' } } as unknown as ResumeData;
 
-function renderTab(onBeforeExport = vi.fn().mockResolvedValue('2026-11-11 08:00:00.000Z')) {
-  render(
+function ui(onBeforeExport: () => Promise<string>, current: Resume = resume) {
+  return (
     <MemoryRouter>
-      <ExportTab resume={resume} data={data} onBeforeExport={onBeforeExport} />
-    </MemoryRouter>,
+      <ExportTab resume={current} data={data} onBeforeExport={onBeforeExport} />
+    </MemoryRouter>
   );
-  return { onBeforeExport };
+}
+
+function renderTab(onBeforeExport = vi.fn().mockResolvedValue(SAVED)) {
+  const view = render(ui(onBeforeExport));
+  return { onBeforeExport, view };
 }
 
 function pdfDownload() {
   return screen.getAllByRole('button', { name: /download/i })[0];
 }
 
+function pdfStatus() {
+  return screen.getByTestId('server-pdf-status');
+}
+
+const refused = (code: string, status: number, extra: Partial<ConstructorParameters<typeof RunnerError>[0]> = {}) =>
+  new RunnerError({ message: `Server PDF failed ${status}: x`, status, code, ...extra });
+
 beforeEach(() => {
   vi.mocked(exportPdfServer).mockReset();
   vi.mocked(exportPdfPrint).mockReset();
   vi.mocked(exportDocx).mockReset();
   vi.mocked(exportMarkdown).mockReset();
+  vi.mocked(reloadPage).mockReset();
 });
 
 describe('ExportTab server PDF', () => {
-  it('announces a turned-off renderer and offers browser printing by keyboard', async () => {
-    vi.mocked(exportPdfServer).mockImplementation(async () => {
-      // Browsers drop focus from a button that turns disabled mid-action.
-      (document.activeElement as HTMLElement | null)?.blur();
-      throw new RunnerError({ message: 'PDF render failed 503: Off.', status: 503, code: 'route_disabled' });
+  it('saves first, then renders the saved resume by id and announces each step', async () => {
+    let saved: (updated: string) => void = () => undefined;
+    const onBeforeExport = vi.fn(() => new Promise<string>((resolve) => (saved = resolve)));
+    let rendered: () => void = () => undefined;
+    vi.mocked(exportPdfServer).mockImplementation(async ({ onPhase }) => {
+      onPhase?.('preparing');
+      onPhase?.('rendering');
+      await new Promise<void>((resolve) => (rendered = resolve));
     });
     const user = userEvent.setup();
+    renderTab(onBeforeExport);
+    await user.click(pdfDownload());
+
+    expect(pdfStatus()).toHaveTextContent('Saving your latest edits…');
+    expect(exportPdfServer).not.toHaveBeenCalled();
+    await act(async () => saved('2026-11-11 08:00:05.000Z'));
+    expect(exportPdfServer).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceId: 'resumeaaaaaaaa1', expectedUpdated: '2026-11-11 08:00:05.000Z', filenameBase: 'jane-doe' }),
+    );
+    expect(pdfStatus()).toHaveTextContent('Rendering the PDF…');
+    await act(async () => rendered());
+    expect(pdfStatus()).toHaveTextContent('PDF downloaded.');
+  });
+
+  it('pauses after a failed save, asks the server nothing, and keeps the other formats working', async () => {
+    const onBeforeExport = vi.fn().mockRejectedValue(new Error('offline'));
+    const user = userEvent.setup();
+    renderTab(onBeforeExport);
+    await user.click(pdfDownload());
+    expect(await within(pdfStatus()).findByText('Waiting on your edits')).toBeInTheDocument();
+    expect(exportPdfServer).not.toHaveBeenCalled();
+    expect(screen.queryByText('offline')).not.toBeInTheDocument();
+
+    const [, docx, , markdown] = screen.getAllByRole('button', { name: /download/i });
+    await user.click(docx);
+    await waitFor(() => expect(exportDocx).toHaveBeenCalledWith(data, 'jane-doe'));
+    await user.click(markdown);
+    await waitFor(() => expect(exportMarkdown).toHaveBeenCalledWith(data, 'jane-doe'));
+  });
+
+  it('offers a reload when the resume changed elsewhere', async () => {
+    vi.mocked(exportPdfServer).mockRejectedValue(refused('snapshot_conflict', 409));
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(pdfDownload());
+    const status = pdfStatus();
+    expect(await within(status).findByText('Changed somewhere else')).toBeInTheDocument();
+    await user.click(within(status).getByRole('button', { name: 'Reload' }));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+    expect(pdfDownload()).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('names a design reason, points to the Design tab, and turns the button off', async () => {
+    vi.mocked(exportPdfServer).mockRejectedValue(new SnapshotIneligible('design_out_of_domain'));
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(pdfDownload());
+    const status = pdfStatus();
+    expect(await within(status).findByText('No server PDF for this resume')).toBeInTheDocument();
+    expect(status).toHaveTextContent('outside what the templates render');
+    expect(status).toHaveTextContent('Design tab');
+    expect(status).toHaveTextContent('browser print still work');
+    expect(pdfDownload()).toHaveAttribute('aria-disabled', 'true');
+
+    await user.click(pdfDownload());
+    expect(exportPdfServer).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['data_malformed', 'shape the templates can read'],
+    ['data_too_large', 'too large'],
+    ['markup_unsafe', 'safety checks'],
+    ['demo_account', 'demo account'],
+  ])('says why for %s, with no design hint', async (reason, words) => {
+    vi.mocked(exportPdfServer).mockRejectedValue(new SnapshotIneligible(reason));
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(pdfDownload());
+    const status = pdfStatus();
+    await waitFor(() => expect(status).toHaveTextContent(words));
+    expect(status).not.toHaveTextContent('Design tab');
+  });
+
+  it('a newer save lifts an answer about the old one', async () => {
+    vi.mocked(exportPdfServer).mockRejectedValueOnce(new SnapshotIneligible('design_out_of_domain'));
+    const user = userEvent.setup();
+    const onBeforeExport = vi.fn().mockResolvedValue(SAVED);
+    const { view } = renderTab(onBeforeExport);
+    await user.click(pdfDownload());
+    await waitFor(() => expect(pdfDownload()).toHaveAttribute('aria-disabled', 'true'));
+    view.rerender(ui(onBeforeExport, { ...resume, updated_at: '2026-11-11 08:10:00.000Z' } as Resume));
+    expect(pdfDownload()).not.toHaveAttribute('aria-disabled');
+    expect(pdfStatus()).toBeEmptyDOMElement();
+  });
+
+  it('says the account is at its snapshot limit and turns the button off', async () => {
+    vi.mocked(exportPdfServer).mockRejectedValue(refused('snapshot_quota_exceeded', 429));
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(pdfDownload());
+    expect(await within(pdfStatus()).findByText('Server copy limit reached')).toBeInTheDocument();
+    expect(pdfDownload()).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('reads a resume the server no longer has as not on the server', async () => {
+    vi.mocked(exportPdfServer).mockRejectedValue(refused('not_found', 404));
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(pdfDownload());
+    expect(await within(pdfStatus()).findByText('Not on the server')).toBeInTheDocument();
+  });
+
+  it('announces a turned-off server PDF, offers browser printing, and turns the button off', async () => {
+    vi.mocked(exportPdfServer).mockRejectedValue(refused('route_disabled', 503));
+    const user = userEvent.setup();
     const { onBeforeExport } = renderTab();
-    const download = pdfDownload();
-    download.focus();
-    await user.keyboard('{Enter}');
-
-    const region = await screen.findByText('Turned off');
-    const status = region.closest('[role="status"]') as HTMLElement;
-    expect(status).toHaveAttribute('aria-live', 'polite');
-    expect(status).toHaveTextContent('Server PDF export is turned off on this server. Your resume is unchanged.');
-    await waitFor(() => expect(download).toHaveFocus());
-
-    const print = within(status).getByRole('button', { name: 'Print to PDF instead' });
-    print.focus();
-    await user.keyboard('{Enter}');
+    await user.click(pdfDownload());
+    const notice = (await screen.findByText('Turned off')).closest('[role="status"]') as HTMLElement;
+    expect(notice).toHaveTextContent('Server PDF export is turned off on this server. Your resume is unchanged.');
+    expect(pdfDownload()).toHaveAttribute('aria-disabled', 'true');
+    await user.click(within(notice).getByRole('button', { name: 'Print to PDF instead' }));
     await waitFor(() => expect(exportPdfPrint).toHaveBeenCalledTimes(1));
     expect(onBeforeExport).toHaveBeenCalledTimes(2);
   });
 
-  it('reads a renderer outage as unavailable, not as raw error text', async () => {
-    vi.mocked(exportPdfServer).mockRejectedValue(
-      new RunnerError({ message: 'PDF render failed 502: chromium crashed at 0x1', status: 502 }),
-    );
+  it('lifts a limit once its wait is over', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(exportPdfServer).mockRejectedValue(refused('quota_exceeded', 429, { retryAfterSeconds: 30 }));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderTab();
+      await user.click(pdfDownload());
+      expect(await screen.findByText('Limit reached')).toBeInTheDocument();
+      expect(pdfDownload()).toHaveAttribute('aria-disabled', 'true');
+      await act(async () => vi.advanceTimersByTime(30_000));
+      expect(pdfDownload()).not.toHaveAttribute('aria-disabled');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ['materializer_unavailable', 503],
+    ['worker_unavailable', 503],
+    ['checksum_mismatch', 409],
+    ['invalid_request', 422],
+  ])('reads %s as unavailable for now, with the button still live', async (code, status) => {
+    vi.mocked(exportPdfServer).mockRejectedValue(refused(code, status));
+    const user = userEvent.setup();
+    renderTab();
+    await user.click(pdfDownload());
+    const notice = (await screen.findByText('Unavailable right now')).closest('[role="status"]') as HTMLElement;
+    expect(within(notice).getByRole('button', { name: 'Print to PDF instead' })).toBeInTheDocument();
+    expect(pdfDownload()).not.toHaveAttribute('aria-disabled');
+  });
+
+  it.each([
+    ['a runner error with no code', () => new RunnerError({ message: 'PDF render failed 502: chromium crashed at 0x1', status: 502 })],
+    ['an error from outside the runner', () => new Error('chromium crashed at 0x1')],
+  ])('reads %s as unavailable, never as its raw text', async (_kind, failure) => {
+    vi.mocked(exportPdfServer).mockRejectedValue(failure());
     const user = userEvent.setup();
     renderTab();
     await user.click(pdfDownload());
@@ -82,10 +232,8 @@ describe('ExportTab server PDF', () => {
     expect(screen.queryByText(/chromium crashed/)).not.toBeInTheDocument();
   });
 
-  it('asks the user to sign in again when the bearer is missing', async () => {
-    vi.mocked(exportPdfServer).mockRejectedValue(
-      new RunnerError({ message: 'Not authenticated.', status: 0, code: 'unauthenticated' }),
-    );
+  it('asks the user to sign in again when the session ended', async () => {
+    vi.mocked(exportPdfServer).mockRejectedValue(refused('unauthenticated', 401));
     const user = userEvent.setup();
     renderTab();
     await user.click(pdfDownload());
@@ -93,68 +241,16 @@ describe('ExportTab server PDF', () => {
     expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
   });
 
-  it('keeps showing other failures inline as before', async () => {
-    vi.mocked(exportPdfServer).mockRejectedValue(new Error('No resume preview is currently rendered.'));
-    const user = userEvent.setup();
-    renderTab();
-    await user.click(pdfDownload());
-    expect(await screen.findByText('No resume preview is currently rendered.')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toBeEmptyDOMElement();
-  });
-
-  it('clears the denial when the next export succeeds', async () => {
+  it('clears the last answer when the next export succeeds', async () => {
     vi.mocked(exportPdfServer)
-      .mockRejectedValueOnce(new RunnerError({ message: 'x', status: 503, code: 'route_disabled' }))
+      .mockRejectedValueOnce(refused('worker_unavailable', 503))
       .mockResolvedValueOnce(undefined);
     const user = userEvent.setup();
     renderTab();
     await user.click(pdfDownload());
-    expect(await screen.findByText('Turned off')).toBeInTheDocument();
+    expect(await screen.findByText('Unavailable right now')).toBeInTheDocument();
     await user.click(pdfDownload());
-    await waitFor(() => expect(screen.getByRole('status')).toBeEmptyDOMElement());
-  });
-});
-
-// ROUNDS-00A-L04: a failed save stops only server PDF; the client formats
-// export what is on screen.
-describe('ExportTab after a failed save', () => {
-  const failing = () => vi.fn().mockRejectedValue(new Error('offline'));
-
-  it('pauses server PDF with the reason and keeps focus on its button', async () => {
-    const user = userEvent.setup();
-    renderTab(failing());
-    const download = pdfDownload();
-    download.focus();
-    await user.keyboard('{Enter}');
-    expect(
-      await screen.findByText("Your latest edits didn't save, so server PDF is paused."),
-    ).toBeInTheDocument();
-    expect(exportPdfServer).not.toHaveBeenCalled();
-    expect(screen.queryByText('offline')).not.toBeInTheDocument();
-    await waitFor(() => expect(download).toHaveFocus());
-  });
-
-  it('still exports Word and Markdown from what is on screen', async () => {
-    const user = userEvent.setup();
-    const onBeforeExport = failing();
-    renderTab(onBeforeExport);
-    const [, docx, , markdown] = screen.getAllByRole('button', { name: /download/i });
-    await user.click(docx);
-    await waitFor(() => expect(exportDocx).toHaveBeenCalledWith(data, 'jane-doe'));
-    await user.click(markdown);
-    await waitFor(() => expect(exportMarkdown).toHaveBeenCalledWith(data, 'jane-doe'));
-    expect(onBeforeExport).toHaveBeenCalledTimes(2);
-    expect(screen.queryByText(/didn't save/)).not.toBeInTheDocument();
-  });
-
-  it('waits for the save before server PDF renders', async () => {
-    let finish: (updated: string) => void = () => undefined;
-    const onBeforeExport = vi.fn(() => new Promise<string>((resolve) => (finish = resolve)));
-    const user = userEvent.setup();
-    renderTab(onBeforeExport);
-    await user.click(pdfDownload());
-    expect(exportPdfServer).not.toHaveBeenCalled();
-    finish('2026-11-11 08:00:01.000Z');
-    await waitFor(() => expect(exportPdfServer).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(pdfStatus()).toHaveTextContent('PDF downloaded.'));
+    expect(screen.queryByText('Unavailable right now')).not.toBeInTheDocument();
   });
 });

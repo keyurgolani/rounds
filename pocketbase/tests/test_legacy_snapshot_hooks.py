@@ -441,6 +441,122 @@ def test_the_scan_writes_its_report_only_outside_the_data_directory(out, data_di
     assert (json.loads(res.stdout) is not None) is refused
 
 
+def _node(script: str, *args: str):
+    res = subprocess.run([shutil.which("node"), "-e", script, str(HOOKS / "legacy_snapshots.js"), *args],
+                         capture_output=True, text=True, timeout=60, check=True)
+    return json.loads(res.stdout)
+
+
+# The fake filesystem a scan writes its report through: `listings` maps a
+# directory to its entry names, `fail` names an operation that throws, and
+# `appear` is a name that shows up in a directory once the report is
+# written. Every call is recorded in order.
+FAKE_FS = """
+const s = require(process.argv[1]);
+const cfg = JSON.parse(process.argv[2]);
+const calls = [];
+const listings = cfg.listings;
+const fsops = {
+  listDir: (dir) => {
+    calls.push(["listDir", dir]);
+    if (cfg.fail === "listDir" || !(dir in listings)) throw new Error("no such directory");
+    return listings[dir].slice();
+  },
+  writeFile: (path, text, mode) => {
+    calls.push(["writeFile", path, mode]);
+    if (cfg.fail === "writeFile") throw new Error("disk full");
+    if (cfg.appear) listings[cfg.appear[0]].push(cfg.appear[1]);
+  },
+  rename: (from, to) => { calls.push(["rename", from, to]); if (cfg.fail === "rename") throw new Error("busy"); },
+  remove: (path) => { calls.push(["remove", path]); },
+  random: () => "r4nd0m",
+};
+"""
+
+
+@pytest.mark.parametrize("out,listing,refused", [
+    ("/srv/reports/scan.json", [], False),
+    ("/srv/reports/scan.json", ["other.json"], False),
+    # A file, a link (to nothing, too), a FIFO, a device, or a directory
+    # all show up as one more name in the listing.
+    ("/srv/reports/scan.json", ["scan.json"], True),
+    ("/srv/reports/./scan.json", ["scan.json"], True),
+    ("/srv/reports/sub/../scan.json", ["scan.json"], True),
+    # A trailing slash names the directory itself, which exists.
+    ("/srv/reports/", ["reports"], True),
+    ("/", [], True),
+])
+def test_the_scan_refuses_any_name_that_exists_without_opening_it(out, listing, refused):
+    script = FAKE_FS + (
+        "const problem = s.reportTargetProblem(cfg.out, fsops.listDir);"
+        "process.stdout.write(JSON.stringify({problem, calls}));")
+    dir_ = "/srv" if out == "/srv/reports/" else "/srv/reports"
+    got = _node(script, json.dumps({"out": out, "listings": {dir_: listing, "/": []}}))
+    assert (got["problem"] is not None) is refused
+    # Only the directory listing was read; nothing at the name was opened.
+    assert all(call[0] == "listDir" for call in got["calls"])
+
+
+def test_the_scan_refuses_a_directory_it_cant_list():
+    script = FAKE_FS + "process.stdout.write(JSON.stringify(s.reportTargetProblem(cfg.out, fsops.listDir)));"
+    assert _node(script, json.dumps({"out": "/missing/scan.json", "listings": {}})) is not None
+
+
+def _write(cfg: dict) -> dict:
+    script = FAKE_FS + (
+        "let error = null;"
+        "try { s.writeReportFile(cfg.out, '{}\\n', fsops); } catch (e) { error = e.message; }"
+        "process.stdout.write(JSON.stringify({error, calls}));")
+    return _node(script, json.dumps(cfg))
+
+
+def test_the_report_is_written_beside_its_name_and_renamed_into_place():
+    got = _write({"out": "/srv/reports/scan.json", "listings": {"/srv/reports": []}})
+    assert got["error"] is None
+    assert got["calls"] == [
+        ["writeFile", "/srv/reports/.scan.json.r4nd0m.tmp", 0o600],
+        ["listDir", "/srv/reports"],
+        ["rename", "/srv/reports/.scan.json.r4nd0m.tmp", "/srv/reports/scan.json"],
+    ]
+
+
+def test_the_report_lands_on_the_cleaned_name_it_checked():
+    got = _write({"out": "/srv/reports/sub/../scan.json", "listings": {"/srv/reports": []}})
+    assert got["error"] is None
+    assert got["calls"] == [
+        ["writeFile", "/srv/reports/.scan.json.r4nd0m.tmp", 0o600],
+        ["listDir", "/srv/reports"],
+        ["rename", "/srv/reports/.scan.json.r4nd0m.tmp", "/srv/reports/scan.json"],
+    ]
+
+
+def test_a_name_taken_while_the_scan_ran_is_refused_and_the_temporary_file_removed():
+    got = _write({"out": "/srv/reports/scan.json", "listings": {"/srv/reports": []},
+                  "appear": ["/srv/reports", "scan.json"]})
+    assert "exists" in got["error"]
+    assert [c[0] for c in got["calls"]] == ["writeFile", "listDir", "remove"]
+    assert ["rename"] not in [c[:1] for c in got["calls"]]
+
+
+@pytest.mark.parametrize("fail,expected", [
+    ("rename", ["writeFile", "listDir", "rename", "remove"]),
+    # A write that fails partway (a full disk) can leave part of the file.
+    ("writeFile", ["writeFile", "remove"]),
+])
+def test_a_failed_write_leaves_neither_the_report_nor_its_temporary_file(fail, expected):
+    got = _write({"out": "/srv/reports/scan.json", "listings": {"/srv/reports": []}, "fail": fail})
+    assert got["error"]
+    assert [c[0] for c in got["calls"]] == expected
+
+
+def test_the_scan_command_never_reads_the_file_at_its_output_name():
+    source = (HOOKS / "legacy_snapshots.js").read_text()
+    start = source.index("function scanCommand(")
+    body = source[start:source.index("\nmodule.exports", start)]
+    assert "$os.readFile" not in body and "$os.writeFile(out" not in body
+    assert "reportTargetProblem(out, listDirNames)" in body and "writeReportFile(out," in body
+
+
 def test_the_scan_report_carries_its_own_checksum_and_repeats_exactly():
     first = scan(base_state(), [OK])["report"]
     second = scan(base_state(), [OK])["report"]
