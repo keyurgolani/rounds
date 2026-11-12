@@ -2,7 +2,7 @@
   "$schema": "./matrix.schema.json",
   "registry": "rounds-authority-matrix",
   "description": "Source-of-truth and package-boundary matrix (ROUNDS-01-L02, DR-0002). One row per durable concept or relation: its command owner, target authority, read projection, privacy floor or visibility, package, disposition, and transfer. Cells hold a value, pending:<leaf-id>, n/a:<reason>, or blocked:OD-<n>. Citations are lines at the audited revision.",
-  "revision": 2,
+  "revision": 3,
   "compatibility": "additive",
   "decisionRecord": "DR-0002",
   "auditedRevision": "62d4eae",
@@ -313,7 +313,7 @@
   "rows": [
     {
       "id": "authentication-identity",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 781,
@@ -346,7 +346,7 @@
         }
       ],
       "target_authority": {"record":"Account identity","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-01",
       "conflicts": ["C2"],
@@ -376,7 +376,7 @@
     },
     {
       "id": "account-session",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Sign-in session",
@@ -408,7 +408,7 @@
         }
       ],
       "target_authority": {"record":"Account session","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Secret",
       "disposition": "CUR-01",
       "conflicts": ["C13"],
@@ -435,7 +435,7 @@
     },
     {
       "id": "appearance",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Appearance and shell preferences",
@@ -484,7 +484,7 @@
         }
       ],
       "target_authority": {"record":"Account preference (appearance)","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-03",
       "conflicts": ["C5","C16"],
@@ -512,7 +512,7 @@
     },
     {
       "id": "current-campaign",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 802,
@@ -543,7 +543,7 @@
         }
       ],
       "target_authority": {"record":"Account preference (current campaign lens)","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-16",
       "conflicts": ["C3"],
@@ -572,7 +572,7 @@
     },
     {
       "id": "demo-state",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Hosted demo account state and quotas",
@@ -623,7 +623,7 @@
         }
       ],
       "target_authority": {"record":"Account demo state","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-24",
       "conflicts": ["C10","C16"],
@@ -650,7 +650,7 @@
     },
     {
       "id": "ai-provider-credential",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 808,
@@ -691,7 +691,7 @@
         }
       ],
       "target_authority": {"record":"Account secret store key (Key Version)","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Secret",
       "disposition": "CUR-04",
       "conflicts": [],
@@ -718,7 +718,7 @@
     },
     {
       "id": "ai-role-settings",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "AI provider and model choice per role",
@@ -750,7 +750,7 @@
         }
       ],
       "target_authority": {"record":"AI role settings","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-04",
       "conflicts": ["C14"],
@@ -779,7 +779,7 @@
     },
     {
       "id": "account-export",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Account export request, job, and archive",
@@ -794,7 +794,7 @@
       "commands": "pending:ROUNDS-18-L03",
       "baseline_writers": [],
       "target_authority": {"record":"Account export job and archive","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data+files",
       "privacy_floor": "Sensitive",
       "disposition": "CUR-05",
       "conflicts": [],
@@ -815,7 +815,7 @@
     },
     {
       "id": "account-restore",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Account restore into a fresh deployment",
@@ -830,7 +830,7 @@
       "commands": "pending:ROUNDS-18-L04",
       "baseline_writers": [],
       "target_authority": {"record":"Account restore journal","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data+files",
       "privacy_floor": "Sensitive",
       "disposition": "CUR-05",
       "conflicts": [],
@@ -848,7 +848,7 @@
     },
     {
       "id": "idempotency-record",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Command idempotency record",
@@ -863,7 +863,7 @@
       "commands": "pending:ROUNDS-02-L03",
       "baseline_writers": [],
       "target_authority": {"record":"Idempotency record","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "new-platform-concept:INT-03",
       "conflicts": [],
@@ -881,7 +881,7 @@
     },
     {
       "id": "audit-entry-change-set",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Transaction change sets, revisions, and audit entries",
@@ -896,7 +896,7 @@
       "commands": "pending:ROUNDS-02-L04",
       "baseline_writers": [],
       "target_authority": {"record":"Transaction Change Set and Audit Entry","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "new-platform-concept:INT-03",
       "conflicts": [],
@@ -919,7 +919,7 @@
     },
     {
       "id": "domain-event",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Domain events in the transactional outbox",
@@ -934,7 +934,7 @@
       "commands": "pending:ROUNDS-02-L05",
       "baseline_writers": [],
       "target_authority": {"record":"Domain Event outbox","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "new-platform-concept:INT-03",
       "conflicts": [],
@@ -952,7 +952,7 @@
     },
     {
       "id": "typed-relation",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Typed relations between records",
@@ -976,7 +976,7 @@
         }
       ],
       "target_authority": {"record":"Typed relation","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-11",
       "conflicts": [],
@@ -1005,7 +1005,7 @@
     },
     {
       "id": "professional-identity",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 782,
@@ -1039,7 +1039,7 @@
         }
       ],
       "target_authority": {"record":"Career Profile professional identity","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-02",
       "conflicts": ["C2"],
@@ -1070,7 +1070,7 @@
     },
     {
       "id": "profile-contact-point",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 782,
@@ -1096,7 +1096,7 @@
         }
       ],
       "target_authority": {"record":"Career Profile contact point","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-18",
       "conflicts": [],
@@ -1125,7 +1125,7 @@
     },
     {
       "id": "person-contact-point",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 782,
@@ -1142,7 +1142,7 @@
       "commands": "pending:ROUNDS-04-L01",
       "baseline_writers": [],
       "target_authority": {"record":"Person contact point","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Third-party personal",
       "disposition": "new-platform-concept:INT-02",
       "conflicts": [],
@@ -1171,7 +1171,7 @@
     },
     {
       "id": "employment-facts",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 783,
@@ -1207,7 +1207,7 @@
         }
       ],
       "target_authority": {"record":"Career Profile Engagement","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-11",
       "conflicts": ["C6"],
@@ -1239,7 +1239,7 @@
     },
     {
       "id": "project-facts",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 783,
@@ -1275,7 +1275,7 @@
         }
       ],
       "target_authority": {"record":"Career Profile Project","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-11",
       "conflicts": ["C6"],
@@ -1307,7 +1307,7 @@
     },
     {
       "id": "education",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Education history",
@@ -1331,7 +1331,7 @@
         }
       ],
       "target_authority": {"record":"Career Profile Education","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-18",
       "conflicts": [],
@@ -1363,7 +1363,7 @@
     },
     {
       "id": "publication",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Publications",
@@ -1387,7 +1387,7 @@
         }
       ],
       "target_authority": {"record":"Career Profile Publication","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-18",
       "conflicts": [],
@@ -1419,7 +1419,7 @@
     },
     {
       "id": "achievement",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Achievements and evidence statements",
@@ -1463,7 +1463,7 @@
         }
       ],
       "target_authority": {"record":"Career Profile Achievement","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-11",
       "conflicts": ["C6"],
@@ -1495,7 +1495,7 @@
     },
     {
       "id": "story",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Professional stories and behavioral evidence",
@@ -1528,7 +1528,7 @@
         }
       ],
       "target_authority": {"record":"Career Profile Narrative","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-10",
       "conflicts": ["C16"],
@@ -1560,7 +1560,7 @@
     },
     {
       "id": "skill",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Skills",
@@ -1584,7 +1584,7 @@
         }
       ],
       "target_authority": {"record":"Career Profile Skill","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-18",
       "conflicts": [],
@@ -1616,7 +1616,7 @@
     },
     {
       "id": "link",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Professional links and external profiles",
@@ -1640,7 +1640,7 @@
         }
       ],
       "target_authority": {"record":"Career Profile External Profile","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-18",
       "conflicts": [],
@@ -1672,7 +1672,7 @@
     },
     {
       "id": "organization",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 784,
@@ -1688,7 +1688,7 @@
       "commands": "pending:ROUNDS-04-L01",
       "baseline_writers": [],
       "target_authority": {"record":"Organization","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "new-platform-concept:INT-02",
       "conflicts": [],
@@ -1718,7 +1718,7 @@
     },
     {
       "id": "person",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 785,
@@ -1734,7 +1734,7 @@
       "commands": "pending:ROUNDS-04-L01",
       "baseline_writers": [],
       "target_authority": {"record":"Person","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Third-party personal",
       "disposition": "new-platform-concept:INT-02",
       "conflicts": [],
@@ -1764,7 +1764,7 @@
     },
     {
       "id": "person-role",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Contextual person roles and relationship history",
@@ -1779,7 +1779,7 @@
       "commands": "pending:ROUNDS-23-L01",
       "baseline_writers": [],
       "target_authority": {"record":"Person role","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Third-party personal",
       "disposition": "new-platform-concept:INT-02",
       "conflicts": [],
@@ -1801,7 +1801,7 @@
     },
     {
       "id": "opportunity",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 786,
@@ -1836,7 +1836,7 @@
         }
       ],
       "target_authority": {"record":"Opportunity and Opportunity Revision","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-13",
       "conflicts": ["C16"],
@@ -1868,7 +1868,7 @@
     },
     {
       "id": "pursuit",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 787,
@@ -1903,7 +1903,7 @@
         }
       ],
       "target_authority": {"record":"Pursuit","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-13",
       "conflicts": ["C1","C16"],
@@ -1935,7 +1935,7 @@
     },
     {
       "id": "pursuit-stage-registry",
-      "revision": 1,
+      "revision": 2,
       "compatibility": "additive",
       "summary": {
         "information": "Pursuit stages, transitions, and reasons",
@@ -1987,7 +1987,7 @@
         }
       ],
       "target_authority": {"record":"Pursuit stage registry","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "visibility": "public-ui",
       "disposition": "CUR-13",
       "conflicts": ["C17"],
@@ -2015,7 +2015,7 @@
     },
     {
       "id": "campaign-definition",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 792,
@@ -2049,7 +2049,7 @@
         }
       ],
       "target_authority": {"record":"Campaign/Goal","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-16",
       "conflicts": ["C16"],
@@ -2078,7 +2078,7 @@
     },
     {
       "id": "campaign-membership",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 793,
@@ -2153,7 +2153,7 @@
         }
       ],
       "target_authority": {"record":"Pursuit-to-Campaign relation","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-16",
       "conflicts": ["C3"],
@@ -2182,7 +2182,7 @@
     },
     {
       "id": "offer",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 791,
@@ -2216,7 +2216,7 @@
         }
       ],
       "target_authority": {"record":"Offer and Offer Revision","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Sensitive",
       "disposition": "CUR-15",
       "conflicts": ["C16"],
@@ -2247,7 +2247,7 @@
     },
     {
       "id": "referral",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Referrals",
@@ -2262,7 +2262,7 @@
       "commands": "pending:ROUNDS-23-L03",
       "baseline_writers": [],
       "target_authority": {"record":"Referral","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Third-party personal",
       "disposition": "CUR-13",
       "conflicts": [],
@@ -2284,7 +2284,7 @@
     },
     {
       "id": "interview-process",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 788,
@@ -2309,7 +2309,7 @@
         }
       ],
       "target_authority": {"record":"Interview Process","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-14",
       "conflicts": [],
@@ -2339,7 +2339,7 @@
     },
     {
       "id": "career-activity-schedule",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 789,
@@ -2374,7 +2374,7 @@
         }
       ],
       "target_authority": {"record":"Career Activity","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-14",
       "conflicts": ["C16"],
@@ -2408,7 +2408,7 @@
     },
     {
       "id": "career-activity-outcome",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 790,
@@ -2433,7 +2433,7 @@
         }
       ],
       "target_authority": {"record":"Completed Career Activity revision","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Sensitive",
       "disposition": "CUR-14",
       "conflicts": [],
@@ -2463,7 +2463,7 @@
     },
     {
       "id": "career-activity-kinds",
-      "revision": 1,
+      "revision": 2,
       "compatibility": "additive",
       "summary": {
         "information": "Core interview types as Career Activity kinds",
@@ -2487,7 +2487,7 @@
         }
       ],
       "target_authority": {"record":"Career Activity kind registry","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "visibility": "public-ui",
       "disposition": "CUR-14",
       "conflicts": [],
@@ -2515,7 +2515,7 @@
     },
     {
       "id": "artifact-edition",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 794,
@@ -2548,7 +2548,7 @@
         }
       ],
       "target_authority": {"record":"Artifact Edition","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-18",
       "conflicts": ["C1"],
@@ -2579,7 +2579,7 @@
     },
     {
       "id": "resume-autosave",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Resume editor working copy and autosave",
@@ -2605,7 +2605,7 @@
         }
       ],
       "target_authority": {"record":"Artifact Edition draft","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-18",
       "conflicts": ["C7"],
@@ -2633,7 +2633,7 @@
     },
     {
       "id": "artifact-revision",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 795,
@@ -2657,7 +2657,7 @@
         }
       ],
       "target_authority": {"record":"Artifact Revision","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data+files",
       "privacy_floor": "Private",
       "disposition": "CUR-18",
       "conflicts": [],
@@ -2686,7 +2686,7 @@
     },
     {
       "id": "legacy-artifact-snapshot",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 796,
@@ -2702,7 +2702,7 @@
       "commands": "pending:ROUNDS-00A-L04",
       "baseline_writers": [],
       "target_authority": {"record":"Legacy Artifact Snapshot","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data+files",
       "privacy_floor": "Private",
       "disposition": "CUR-25",
       "conflicts": [],
@@ -2731,7 +2731,7 @@
     },
     {
       "id": "artifact-renderer-contract",
-      "revision": 1,
+      "revision": 2,
       "compatibility": "additive",
       "summary": {
         "information": "Artifact Renderer Contracts",
@@ -2755,7 +2755,7 @@
         }
       ],
       "target_authority": {"record":"Artifact Renderer Contract","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "visibility": "server-only",
       "disposition": "CUR-25",
       "conflicts": [],
@@ -2783,7 +2783,7 @@
     },
     {
       "id": "ats-analysis",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "ATS analysis runs and results",
@@ -2815,7 +2815,7 @@
         }
       ],
       "target_authority": {"record":"Artifact analysis run","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-18",
       "conflicts": [],
@@ -2845,7 +2845,7 @@
     },
     {
       "id": "practice-draft",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 798,
@@ -2902,7 +2902,7 @@
         }
       ],
       "target_authority": {"record":"Practice Draft","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-22",
       "conflicts": ["C4","C16"],
@@ -2931,7 +2931,7 @@
     },
     {
       "id": "practice-attempt",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 799,
@@ -2971,7 +2971,7 @@
         }
       ],
       "target_authority": {"record":"Practice Attempt","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-22",
       "conflicts": ["C8"],
@@ -3000,7 +3000,7 @@
     },
     {
       "id": "practice-progress",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Practice progress status and timers",
@@ -3049,7 +3049,7 @@
         }
       ],
       "target_authority": {"record":"Practice progress and session timer","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-22",
       "conflicts": ["C4","C16"],
@@ -3078,7 +3078,7 @@
     },
     {
       "id": "draft-caches",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Browser draft journal for practice drafts",
@@ -3094,7 +3094,7 @@
       "baseline_writers": [],
       "target_authority": "n/a:a cache has no authority of its own; yields_to names the row it copies",
       "yields_to": "practice-draft",
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "n/a:a browser cache keeps no server store; it yields to practice-draft",
       "privacy_floor": "Private",
       "disposition": "CUR-22",
       "conflicts": [],
@@ -3115,7 +3115,7 @@
     },
     {
       "id": "job-description-cache",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Pasted job descriptions cached by the ATS and Tailor tabs",
@@ -3148,7 +3148,7 @@
       ],
       "target_authority": "n/a:a cache has no authority of its own; yields_to names the row it copies",
       "yields_to": "opportunity",
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "n/a:a browser cache keeps no server store; it yields to opportunity",
       "privacy_floor": "Private",
       "disposition": "CUR-13",
       "conflicts": [],
@@ -3177,7 +3177,7 @@
     },
     {
       "id": "view-state",
-      "revision": 1,
+      "revision": 2,
       "compatibility": "additive",
       "summary": {
         "information": "Browser view state: sort, filter, panel, width, and focus choices",
@@ -3208,7 +3208,7 @@
         }
       ],
       "target_authority": "n/a:interface state is not product data; browser storage may keep it account-namespaced (spec 2005-2007)",
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "n/a:device-local interface state keeps no server store (spec 2005-2007)",
       "privacy_floor": "Private",
       "disposition": "CUR-26",
       "conflicts": [],
@@ -3235,7 +3235,7 @@
     },
     {
       "id": "login-streak",
-      "revision": 1,
+      "revision": 2,
       "compatibility": "additive",
       "summary": {
         "information": "Login streak",
@@ -3259,7 +3259,7 @@
         }
       ],
       "target_authority": "blocked:OD-5",
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "blocked:OD-5",
       "privacy_floor": "Private",
       "disposition": "CUR-20",
       "conflicts": ["C11"],
@@ -3286,7 +3286,7 @@
     },
     {
       "id": "practice-item-content",
-      "revision": 1,
+      "revision": 2,
       "compatibility": "additive",
       "summary": {
         "information": "Practice Item content",
@@ -3324,7 +3324,7 @@
         }
       ],
       "target_authority": {"record":"Pack-owned Practice Item","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "visibility": "authed-readable",
       "disposition": "CUR-06",
       "conflicts": [],
@@ -3353,7 +3353,7 @@
     },
     {
       "id": "practice-guides",
-      "revision": 1,
+      "revision": 2,
       "compatibility": "additive",
       "summary": {
         "information": "Practice guides",
@@ -3385,7 +3385,7 @@
         }
       ],
       "target_authority": {"record":"Pack-owned guide content","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "visibility": "public-ui",
       "disposition": "CUR-06",
       "conflicts": ["C9"],
@@ -3413,7 +3413,7 @@
     },
     {
       "id": "pack-round-types",
-      "revision": 1,
+      "revision": 2,
       "compatibility": "additive",
       "summary": {
         "information": "Pack round types, signals, and result keys",
@@ -3437,7 +3437,7 @@
         }
       ],
       "target_authority": {"record":"Pack round type registry","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "visibility": "public-ui",
       "disposition": "CUR-14",
       "conflicts": [],
@@ -3465,7 +3465,7 @@
     },
     {
       "id": "test-definition",
-      "revision": 1,
+      "revision": 2,
       "compatibility": "additive",
       "summary": {
         "information": "Test Definitions",
@@ -3497,7 +3497,7 @@
         }
       ],
       "target_authority": {"record":"Test Definition","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "visibility": "server-only",
       "disposition": "CUR-28",
       "conflicts": ["C12"],
@@ -3524,7 +3524,7 @@
     },
     {
       "id": "harness-revision",
-      "revision": 1,
+      "revision": 2,
       "compatibility": "additive",
       "summary": {
         "information": "Harness Revisions",
@@ -3558,7 +3558,7 @@
         }
       ],
       "target_authority": {"record":"Harness Revision","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "visibility": "server-only",
       "disposition": "CUR-28",
       "conflicts": ["C12"],
@@ -3585,7 +3585,7 @@
     },
     {
       "id": "pack-activation",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 809,
@@ -3601,7 +3601,7 @@
       "commands": "pending:ROUNDS-07-L02",
       "baseline_writers": [],
       "target_authority": {"record":"Pack Activation: deployment installation plus per-account enablement","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "INT-06",
       "conflicts": [],
@@ -3623,7 +3623,7 @@
     },
     {
       "id": "status-registries",
-      "revision": 1,
+      "revision": 2,
       "compatibility": "additive",
       "summary": {
         "information": "Status registries (round, practice, priority, and other statuses)",
@@ -3653,7 +3653,7 @@
         }
       ],
       "target_authority": {"record":"Shared status registry module","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "n/a:a shared code module, not stored data; records store its keys",
       "visibility": "public-ui",
       "disposition": "new-platform-concept:INT-03",
       "conflicts": [],
@@ -3680,7 +3680,7 @@
     },
     {
       "id": "action",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 797,
@@ -3714,7 +3714,7 @@
         }
       ],
       "target_authority": {"record":"Action","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-17",
       "conflicts": ["C16"],
@@ -3745,7 +3745,7 @@
     },
     {
       "id": "action-mention",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Action references to other records",
@@ -3769,7 +3769,7 @@
         }
       ],
       "target_authority": {"record":"Action reference","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-17",
       "conflicts": [],
@@ -3798,7 +3798,7 @@
     },
     {
       "id": "capture-item",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Capture Inbox items",
@@ -3813,7 +3813,7 @@
       "commands": "pending:ROUNDS-09-L02",
       "baseline_writers": [],
       "target_authority": {"record":"Capture Item","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "INT-04",
       "conflicts": [],
@@ -3835,7 +3835,7 @@
     },
     {
       "id": "source-document",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 803,
@@ -3851,7 +3851,7 @@
       "commands": "pending:ROUNDS-10-L01",
       "baseline_writers": [],
       "target_authority": {"record":"Source Document","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data+files",
       "privacy_floor": "Private",
       "disposition": "CUR-12",
       "conflicts": [],
@@ -3874,7 +3874,7 @@
     },
     {
       "id": "processing-attempt",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Processing jobs and attempts",
@@ -3889,7 +3889,7 @@
       "commands": "pending:ROUNDS-10-L02",
       "baseline_writers": [],
       "target_authority": {"record":"Processing Attempt","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-12",
       "conflicts": [],
@@ -3911,7 +3911,7 @@
     },
     {
       "id": "extracted-claim",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 804,
@@ -3927,7 +3927,7 @@
       "commands": "pending:ROUNDS-11-L01",
       "baseline_writers": [],
       "target_authority": {"record":"Extracted Claim","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-12",
       "conflicts": [],
@@ -3949,7 +3949,7 @@
     },
     {
       "id": "generation-proposal",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 805,
@@ -3965,7 +3965,7 @@
       "commands": "pending:ROUNDS-14-L07",
       "baseline_writers": [],
       "target_authority": {"record":"Generation Proposal","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-19",
       "conflicts": [],
@@ -3987,7 +3987,7 @@
     },
     {
       "id": "staged-provider-result",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 806,
@@ -4003,7 +4003,7 @@
       "commands": "pending:ROUNDS-14-L03",
       "baseline_writers": [],
       "target_authority": {"record":"Staged Provider Result","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "INT-05",
       "conflicts": [],
@@ -4024,7 +4024,7 @@
     },
     {
       "id": "provider-invocation-receipt",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 807,
@@ -4040,7 +4040,7 @@
       "commands": "pending:ROUNDS-14-L02",
       "baseline_writers": [],
       "target_authority": {"record":"Provider Invocation Receipt with its Intent and Outcome","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "INT-05",
       "conflicts": [],
@@ -4063,7 +4063,7 @@
     },
     {
       "id": "share-capability-metadata",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 810,
@@ -4105,7 +4105,7 @@
         }
       ],
       "target_authority": {"record":"Share Capability","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-23",
       "conflicts": ["C15"],
@@ -4133,7 +4133,7 @@
     },
     {
       "id": "share-bearer-digest",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 810,
@@ -4159,7 +4159,7 @@
         }
       ],
       "target_authority": {"record":"Share bearer digest","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Secret",
       "disposition": "CUR-23",
       "conflicts": [],
@@ -4187,7 +4187,7 @@
     },
     {
       "id": "share-projection",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 810,
@@ -4204,7 +4204,7 @@
       "commands": "pending:ROUNDS-18-L05",
       "baseline_writers": [],
       "target_authority": {"record":"Share Projection of one Artifact Revision","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Share Projection",
       "disposition": "CUR-23",
       "conflicts": [],
@@ -4225,7 +4225,7 @@
     },
     {
       "id": "share-view",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Share view events",
@@ -4249,7 +4249,7 @@
         }
       ],
       "target_authority": {"record":"Share view event","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Third-party personal",
       "disposition": "CUR-23",
       "conflicts": [],
@@ -4278,7 +4278,7 @@
     },
     {
       "id": "execution-admission",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Execution and render admission, quotas, and idempotency keys",
@@ -4293,7 +4293,7 @@
       "commands": "pending:ROUNDS-00A-L01",
       "baseline_writers": [],
       "target_authority": {"record":"Admission record","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-28",
       "conflicts": [],
@@ -4315,7 +4315,7 @@
     },
     {
       "id": "execution-attempt",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Execution attempts and result envelopes",
@@ -4330,7 +4330,7 @@
       "commands": "pending:ROUNDS-00A-L03",
       "baseline_writers": [],
       "target_authority": {"record":"Execution Attempt","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-28",
       "conflicts": [],
@@ -4352,7 +4352,7 @@
     },
     {
       "id": "recommendation",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 801,
@@ -4368,7 +4368,7 @@
       "commands": "pending:ROUNDS-29-L03",
       "baseline_writers": [],
       "target_authority": {"record":"Recommendation","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-20",
       "conflicts": [],
@@ -4391,7 +4391,7 @@
     },
     {
       "id": "evidence-gap-map",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Opportunity-to-evidence gap maps",
@@ -4406,7 +4406,7 @@
       "commands": "pending:ROUNDS-29-L02",
       "baseline_writers": [],
       "target_authority": {"record":"Evidence gap map","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "INT-01",
       "conflicts": [],
@@ -4429,7 +4429,7 @@
     },
     {
       "id": "today-item-state",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Today hides and reminder acknowledgments",
@@ -4444,7 +4444,7 @@
       "commands": "pending:ROUNDS-30-L03",
       "baseline_writers": [],
       "target_authority": {"record":"Today hide and reminder acknowledgment","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-20",
       "conflicts": [],
@@ -4466,7 +4466,7 @@
     },
     {
       "id": "today-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Today",
@@ -4481,7 +4481,7 @@
       "commands": "n/a:projections take no commands; only the projector writes (spec 1993-1996)",
       "baseline_writers": [],
       "target_authority": {"record":"Today projection","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-20",
       "conflicts": [],
@@ -4510,7 +4510,7 @@
     },
     {
       "id": "career-profile-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Career Profile overview",
@@ -4525,7 +4525,7 @@
       "commands": "n/a:projections take no commands; only the projector writes (spec 1993-1996)",
       "baseline_writers": [],
       "target_authority": {"record":"Career Profile projection","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-11",
       "conflicts": [],
@@ -4566,7 +4566,7 @@
     },
     {
       "id": "pipeline-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Pipeline",
@@ -4581,7 +4581,7 @@
       "commands": "n/a:projections take no commands; only the projector writes (spec 1993-1996)",
       "baseline_writers": [],
       "target_authority": {"record":"Pipeline projection","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-13",
       "conflicts": [],
@@ -4610,7 +4610,7 @@
     },
     {
       "id": "opportunity-workspace-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Opportunity Workspace",
@@ -4625,7 +4625,7 @@
       "commands": "n/a:projections take no commands; only the projector writes (spec 1993-1996)",
       "baseline_writers": [],
       "target_authority": {"record":"Opportunity Workspace projection","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-13",
       "conflicts": [],
@@ -4668,7 +4668,7 @@
     },
     {
       "id": "material-use-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Material-use graph",
@@ -4683,7 +4683,7 @@
       "commands": "n/a:projections take no commands; only the projector writes (spec 1993-1996)",
       "baseline_writers": [],
       "target_authority": {"record":"Material-use projection","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-18",
       "conflicts": [],
@@ -4727,7 +4727,7 @@
     },
     {
       "id": "readiness",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 800,
@@ -4743,7 +4743,7 @@
       "commands": "n/a:only the projector writes snapshots (spec 800)",
       "baseline_writers": [],
       "target_authority": {"record":"Readiness Snapshot","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-20",
       "conflicts": [],
@@ -4773,7 +4773,7 @@
     },
     {
       "id": "preparation-plan-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Preparation plan",
@@ -4788,7 +4788,7 @@
       "commands": "n/a:projections take no commands; only the projector writes (spec 1993-1996)",
       "baseline_writers": [],
       "target_authority": {"record":"Preparation plan projection","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-20",
       "conflicts": [],
@@ -4817,7 +4817,7 @@
     },
     {
       "id": "search-index",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 811,
@@ -4833,7 +4833,7 @@
       "commands": "n/a:no user command; only the projector writes (spec 1993-1996)",
       "baseline_writers": [],
       "target_authority": {"record":"Account-scoped search index","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "CUR-26",
       "conflicts": [],
@@ -4879,7 +4879,7 @@
     },
     {
       "id": "data-health-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Data Health",
@@ -4894,7 +4894,7 @@
       "commands": "n/a:projections take no commands; only the projector writes (spec 1993-1996)",
       "baseline_writers": [],
       "target_authority": {"record":"Data Health projection","location":"server"},
-      "storage": "pending:ROUNDS-02-L01",
+      "storage": "DR-0004@1:sqlite-data",
       "privacy_floor": "Private",
       "disposition": "INT-01",
       "conflicts": [],

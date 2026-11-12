@@ -20,7 +20,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app import admission, gates, legacy_snapshots, obs
+from app import admission, execution, gates, legacy_snapshots, obs
 from app.errors import TypedError
 from conftest import TEST_ACCOUNT_ID, TEST_TOKEN
 from tests.test_execution_grading import grade_body, submit_body
@@ -55,43 +55,48 @@ class Tripped(Exception):
     """A guarded call ran."""
 
 
+# The definitions the six code-run routes name. Since ROUNDS-00A-L03 PR 4
+# they take definition requests only and run them as jobs (keys_on below).
+CODING_REF = {"track": "coding", "slug": "two-sum", "variant": "python", "version": 1}
+AI_CODING_REF = {"track": "ai-coding", "slug": "hallucinated-http-client", "variant": "python", "version": 1}
+TAKE_HOME_REF = {"track": "take-home", "slug": "add-numbers-py", "variant": "python", "version": 1}
 # (method, path, a valid body, the body's step 5 over-limit variant)
 ROUTES = {
     "run": (
         "POST",
         "/api/run",
-        {"question_slug": "q-1", "language": "python", "code": "def f(): pass", "input": {}},
-        {"question_slug": "q-1", "language": "python", "code": "x" * (256 * KIB + 1), "input": {}},
+        {"definition": CODING_REF, "code": "def f(): pass", "input": {}},
+        {"definition": CODING_REF, "code": "x" * (256 * KIB + 1), "input": {}},
     ),
     "evaluate": (
         "POST",
         "/api/evaluate",
-        {"question_slug": "q-1", "language": "python", "code": "def f(): pass"},
-        {"question_slug": "q-1", "language": "python", "code": "x" * (256 * KIB + 1)},
+        {"definition": CODING_REF, "code": "def f(): pass"},
+        {"definition": CODING_REF, "code": "x" * (256 * KIB + 1)},
     ),
     "run_project": (
         "POST",
         "/api/ai-coding/run-project",
-        {"round_slug": "r-1", "checkpoint_index": 0, "files": {"a.py": "pass"}},
-        {"round_slug": "r-1", "checkpoint_index": 0, "files": {f"f{i}.py": "" for i in range(201)}},
+        {"definition": AI_CODING_REF, "checkpoint": 0, "files": {"a.py": "pass"}},
+        {"definition": AI_CODING_REF, "checkpoint": 0, "files": {f"f{i}.py": "" for i in range(201)}},
     ),
     "grade": (
         "POST",
         "/api/ai-coding/grade",
-        {"round_slug": "r-1", "files": {"a.py": "pass"}, "ai_chats": []},
-        {"round_slug": "r-1", "files": {}, "ai_chats": [{"role": "user", "content": "x" * (512 * KIB)}]},
+        {"definition": AI_CODING_REF, "files": {"a.py": "pass"}, "ai_chats": []},
+        {"definition": AI_CODING_REF, "files": {}, "ai_chats": [{"role": "user", "content": "x" * (512 * KIB)}]},
     ),
     "take_home_run": (
         "POST",
         "/api/take-home/run",
-        {"assignment_slug": "a-1", "files": {"a.py": "pass"}},
-        {"assignment_slug": "a-1", "files": {f"f{i}.py": "" for i in range(201)}},
+        {"definition": TAKE_HOME_REF, "files": {"a.py": "pass"}},
+        {"definition": TAKE_HOME_REF, "files": {f"f{i}.py": "" for i in range(201)}},
     ),
     "take_home_submit": (
         "POST",
         "/api/take-home/submit",
-        {"assignment_slug": "a-1", "files": {"a.py": "pass"}},
-        {"assignment_slug": "a-1", "files": {}, "notes": "x" * (64 * KIB + 1)},
+        {"definition": TAKE_HOME_REF, "files": {"a.py": "pass"}},
+        {"definition": TAKE_HOME_REF, "files": {}, "notes": "x" * (64 * KIB + 1)},
     ),
     "pdf_render": ("POST", "/api/pdf/render", RENDER_BODY, None),
     "pdf_health": ("GET", "/api/pdf/health", None, None),
@@ -196,10 +201,24 @@ def seeded(pocketbase, monkeypatch):
     return pocketbase
 
 
+# The gates every test here starts from: the shipped defaults with
+# definitions enforced, which, with keys_on's secrets, is what the
+# execution keys' on needs (ROUNDS-00A-L03 PR 4).
+KEYS_ON = {"ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce"}
+
+
+@pytest.fixture(autouse=True)
+def keys_on(job_secrets, monkeypatch):
+    """The execution keys on, as they ship once definitions are enforced
+    and both secrets are set, so each step below reaches the six code-run
+    routes as it does in a deployment."""
+    monkeypatch.setattr(gates, "_snapshot", gates.load(KEYS_ON, gates.RUNNER))
+
+
 @pytest.fixture
 def gate_env(monkeypatch):
     def set_env(env):
-        monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
+        monkeypatch.setattr(gates, "_snapshot", gates.load({**KEYS_ON, **env}, gates.RUNNER))
 
     return set_env
 
@@ -220,10 +239,15 @@ def busy(monkeypatch):
 
 
 @pytest.mark.parametrize("name", ALLOCATING)
-def test_an_admitted_request_reaches_execution(client, signed_in, seeded, tripwires, name):
+def test_an_admitted_request_reaches_execution(client, signed_in, seeded, tripwires, queued, name):
+    # A code run's execution starts with its job (ROUNDS-00A-L03 PR 4);
+    # the render still runs in its request.
     with pytest.raises(Tripped):
         _send(client, name, signed_in)
-    assert tripwires
+    if name in CODE_RUNS:
+        assert queued == [name] and tripwires == []
+    else:
+        assert tripwires
 
 
 # ---- step 1: byte cap -----------------------------------------------------------
@@ -586,27 +610,14 @@ def test_a_standard_accounts_code_run_still_starts_its_job_while_the_demos_are_c
 
 
 @pytest.mark.parametrize("name", CODE_RUNS)
-def test_a_standard_accounts_code_run_is_unchanged_while_the_demos_are_closed(
-    client, signed_in, gate_env, seeded, tripwires, admission_store, name
-):
-    gate_env({})
-    assert gates.value("DEMO_EXECUTION") == "disabled"
-    with pytest.raises(Tripped):
-        _send(client, name, signed_in)
-    assert tripwires
-    assert [call["operation"] for call in admission_store.called("admit")] == [_operation(name)]
-
-
-@pytest.mark.parametrize("name", CODE_RUNS)
 def test_the_open_gate_gives_a_demo_account_its_code_runs_back(
-    client, monkeypatch, gate_env, seeded, tripwires, admission_store, name
+    client, monkeypatch, gate_env, tripwires, queued, name
 ):
-    gate_env({"ROUNDS_GATE_DEMO_EXECUTION": "enabled"})
+    gate_env({**AS_JOBS, "ROUNDS_GATE_DEMO_EXECUTION": "enabled"})
     assert gates.value("DEMO_EXECUTION") == "enabled"
     with pytest.raises(Tripped):
-        _send(client, name, _as_tier(monkeypatch, "demo"))
-    assert tripwires
-    assert [call["operation"] for call in admission_store.called("admit")] == [_operation(name)]
+        _send(client, name, _as_tier(monkeypatch, "demo"), body=AS_JOB_BODIES[name])
+    assert queued == [name] and tripwires == []
 
 
 @pytest.mark.parametrize("name", sorted(OTHER_ROUTES))
@@ -632,8 +643,15 @@ def test_the_demos_other_routes_answer_as_a_standard_accounts_do_while_its_code_
 # ---- step 5: fields ------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", WITH_BODY)
-@pytest.mark.parametrize("extra", [{"account_id": "u2"}, {"timeout_s": 600}, {"entry": {"kind": "custom"}}])
+UNKNOWN_FIELDS = [{"account_id": "u2"}, {"timeout_s": 600}, {"entry": {"kind": "custom"}}]
+
+
+# A code run names an older request shape's field instead, which answers
+# legacy_request_rejected (test_definitions_enforce.py).
+@pytest.mark.parametrize("name, extra", [
+    (name, extra) for name in WITH_BODY for extra in UNKNOWN_FIELDS
+    if name not in CODE_RUNS or not set(extra) & execution.LEGACY_FIELDS
+])
 def test_an_unknown_field_is_422_before_any_lookup(client, signed_in, tripwires, pocketbase, name, extra):
     res = _send(client, name, signed_in, body={**ROUTES[name][2], **extra})
     _assert_typed(res, 422, "invalid_request")
@@ -659,14 +677,14 @@ def test_malformed_json_is_422(client, signed_in, tripwires, pocketbase, name):
     ["../escape.py", "/etc/passwd", "a/../../b.py", "a\\b.py", "", "a//b.py", "./a.py"],
 )
 def test_a_file_path_outside_the_project_is_422(client, signed_in, tripwires, pocketbase, path):
-    res = _send(client, "take_home_run", signed_in, body={"assignment_slug": "a-1", "files": {path: "x"}})
+    res = _send(client, "take_home_run", signed_in, body={"definition": TAKE_HOME_REF, "files": {path: "x"}})
     _assert_typed(res, 422, "invalid_request")
     assert tripwires == [] and pocketbase.calls == []
 
 
 @pytest.mark.parametrize("slug", ["Q1", "q 1", "q'1", "q\"1", "x" * 129])
 def test_a_slug_outside_the_pattern_is_422(client, signed_in, tripwires, pocketbase, slug):
-    body = {**ROUTES["run"][2], "question_slug": slug}
+    body = {**ROUTES["run"][2], "definition": {**CODING_REF, "slug": slug}}
     _assert_typed(_send(client, "run", signed_in, body=body), 422, "invalid_request")
     assert pocketbase.calls == []
 
@@ -678,30 +696,10 @@ def test_a_campaign_id_that_isnt_a_record_id_is_422(client, signed_in, tripwires
     assert pocketbase.calls == []
 
 
-def test_more_than_32_selected_cases_is_413(client, signed_in, pocketbase, tripwires):
-    pocketbase.add(
-        "coding_questions",
-        slug="many",
-        entry={"kind": "function", "name": "f"},
-        test_cases=[{"input": {}, "expected": None} for _ in range(33)],
-    )
-    res = _send(client, "evaluate", signed_in, body={"question_slug": "many", "language": "python", "code": "x"})
-    _assert_typed(res, 413, "limit_exceeded")
-    assert tripwires == []
-    # 32 selected cases run.
-    with pytest.raises(Tripped):
-        _send(
-            client,
-            "evaluate",
-            signed_in,
-            body={"question_slug": "many", "language": "python", "code": "x", "filter": {"indices": list(range(32))}},
-        )
-    assert tripwires == ["run_one"]
-
-
-@pytest.mark.parametrize("field, entries", [("tags", [f"t{i}" for i in range(33)]), ("indices", list(range(33)))])
+@pytest.mark.parametrize("field, entries", [("tags", [f"t{i}" for i in range(33)]),
+                                           ("case_ids", [f"c{i:03d}" for i in range(33)])])
 def test_more_than_32_filter_entries_is_413_before_any_lookup(client, signed_in, tripwires, pocketbase, field, entries):
-    body = {**ROUTES["evaluate"][2], "filter": {field: entries}}
+    body = {**ROUTES["evaluate"][2], field: entries}
     _assert_typed(_send(client, "evaluate", signed_in, body=body), 413, "limit_exceeded")
     assert tripwires == [] and pocketbase.calls == []
 
@@ -709,46 +707,14 @@ def test_more_than_32_filter_entries_is_413_before_any_lookup(client, signed_in,
 # ---- step 8: lookups with the caller's token ------------------------------------------
 
 
-@pytest.mark.parametrize("name", WITH_LOOKUPS)
+# A code run's definition comes from the runner's image; its lookups with
+# the caller's token run on its job's path (test_execution_grading.py).
+@pytest.mark.parametrize("name", [name for name in WITH_LOOKUPS if name not in CODE_RUNS])
 def test_a_missing_record_is_404_before_execution(client, signed_in, pocketbase, tripwires, name):
     res = _send(client, name, signed_in)
     _assert_typed(res, 404, "not_found")
     assert tripwires == []
     assert all(token == signed_in["Authorization"].split(" ", 1)[1] for token, _p, _q in pocketbase.calls)
-
-
-def test_a_foreign_campaign_is_404_before_execution(client, signed_in, seeded, tripwires):
-    foreign = seeded.add("campaigns", user="u2", hidden=True)
-    res = _send(client, "take_home_submit", signed_in, body={**ROUTES["take_home_submit"][2], "campaign_id": foreign["id"]})
-    _assert_typed(res, 404, "not_found")
-    assert tripwires == []
-
-
-def test_a_campaign_owned_by_someone_else_is_404_even_if_visible(client, signed_in, seeded, tripwires):
-    visible = seeded.add("campaigns", user="u2")
-    res = _send(client, "take_home_submit", signed_in, body={**ROUTES["take_home_submit"][2], "campaign_id": visible["id"]})
-    _assert_typed(res, 404, "not_found")
-    assert tripwires == []
-
-
-def test_the_callers_own_campaign_is_admitted(client, signed_in, seeded, tripwires):
-    own = seeded.add("campaigns", user="u1")
-    with pytest.raises(Tripped):
-        _send(client, "take_home_submit", signed_in, body={**ROUTES["take_home_submit"][2], "campaign_id": own["id"]})
-    assert tripwires == ["run_assignment"]
-
-
-def test_a_stored_custom_entry_is_422_before_execution(client, signed_in, pocketbase, tripwires):
-    pocketbase.add("coding_questions", slug="custom-q", entry={"kind": "custom", "driver": "print(1)"}, test_cases=[])
-    res = _send(client, "run", signed_in, body={**ROUTES["run"][2], "question_slug": "custom-q"})
-    _assert_typed(res, 422, "invalid_request")
-    assert tripwires == []
-
-
-def test_a_stored_take_home_without_an_entrypoint_is_422(client, signed_in, pocketbase, tripwires):
-    pocketbase.add("take_home_assignments", slug="a-1", entrypoint="", harness_files=[])
-    _assert_typed(_send(client, "take_home_run", signed_in), 422, "invalid_request")
-    assert tripwires == []
 
 
 @pytest.mark.parametrize(
@@ -761,13 +727,13 @@ def test_a_stored_take_home_without_an_entrypoint_is_422(client, signed_in, pock
     ],
 )
 def test_lookup_failures_are_typed_and_never_echo_pocketbase(client, signed_in, monkeypatch, tripwires, error, status, code):
-    from routers import runner
-
     async def failing(*_args, **_kwargs):
         raise error
 
-    monkeypatch.setattr(runner, "pb_get", failing)
-    res = _send(client, "run", signed_in)
+    # The render's snapshot read, the step 8 lookup a request still makes
+    # in place (ROUNDS-00A-L03 PR 4).
+    monkeypatch.setattr(legacy_snapshots, "pb_get", failing)
+    res = _send(client, "pdf_render", signed_in)
     _assert_typed(res, status, code)
     assert "PocketBase error text" not in res.text
     assert tripwires == []
@@ -776,7 +742,8 @@ def test_lookup_failures_are_typed_and_never_echo_pocketbase(client, signed_in, 
 # ---- step 9: the replica's in-flight cap ---------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ALLOCATING)
+# A code run holds no request slot: its job waits for a worker's.
+@pytest.mark.parametrize("name", [name for name in ALLOCATING if name not in CODE_RUNS])
 def test_a_full_replica_is_503_before_execution(client, signed_in, seeded, tripwires, busy, name):
     res = _send(client, name, signed_in)
     _assert_typed(res, 503, "worker_unavailable")
@@ -794,7 +761,7 @@ def test_rule_scoring_and_health_skip_the_in_flight_cap(client, signed_in, busy,
 def test_a_slot_is_released_after_the_run(client, signed_in, seeded, tripwires):
     before = admission.pool().in_use()
     with pytest.raises(Tripped):
-        _send(client, "run", signed_in)
+        _send(client, "pdf_render", signed_in)
     assert admission.pool().in_use() == before
 
 

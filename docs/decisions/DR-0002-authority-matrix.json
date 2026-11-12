@@ -8,9 +8,9 @@
   "approver": "",
   "approvalRef": null,
   "compatibility": "additive",
-  "revision": 2,
-  "supersedes": "DR-0002@1",
-  "supersessionReason": "Revision 2 fills the field_map cells revision 1 left pending on ROUNDS-14-L01 with contracts/privacy/field-map.json, where each field takes one class or visibility no looser than its row's floor (DR-0005). It changes no owner, authority, floor, visibility, scope, or package, so it is additive, and revision 1 was ratified as PR #194.",
+  "revision": 3,
+  "supersedes": "DR-0002@2",
+  "supersessionReason": "Revision 3 fills the field_map cells revision 1 left pending on ROUNDS-14-L01 with contracts/privacy/field-map.json, where each field takes one class or visibility no looser than its row's floor (DR-0005). It changes no owner, authority, floor, visibility, scope, storage, or package, so it is additive, and revision 2 was ratified as PR #222.",
   "consumers": [
     "ROUNDS-00A-L01",
     "ROUNDS-00A-L02",
@@ -368,6 +368,26 @@
       "od": {"state":"blocked","default":"stays a #158 cache"}
     },
     {
+      "id": "S1",
+      "title": "Storage and package placement from DR-0004",
+      "status": "ratified",
+      "sources": ["DR-0004@1 decisions DB1, DB3, DB7, and DB10", "contracts/database/erd-decisions.json", "#5's body (the worker image's directory)"],
+      "decision": "Each row's storage cell names the DR-0004 store that holds it as DR-0004@<revision>:<store>[+<store>]. Rows with bytes (account export and restore archives, Source Documents, Artifact Revisions, and Legacy Artifact Snapshots) name sqlite-data+files; every other server row names sqlite-data. Browser caches, device-local view state, and the shared status registry module keep no server store and say so with n/a, and the login streak stays blocked:OD-5. Each package's target_path is where its new code goes: the gateway and its change-set and audit package under pocketbase/pb_hooks/lib/<package-id>/, beside the one module that wraps PocketBase's API (DB9), each domain package under pocketbase/pb_hooks/domain/<package-id>/, the execution worker pool at backend/worker/, the separate image #5's body gives it, and the Provider Gateway at backend/app/provider_gateway/ in the runner, since provider calls are network I/O that no PocketBase transaction may hold. The containment modules that #1, #3, #4, #11, #12, and #14 built stay where they are, #3's control plane in backend/execution/ among them; DR-0004 ratifies them in place.",
+      "alternatives": [
+        {
+          "option": "Leave the cells pending until each row's transfer leaf",
+          "reason": "Every R2 leaf would pick its own store and path, which is what DR-0004 exists to stop."
+        },
+        {
+          "option": "Move the built containment modules under domain/",
+          "reason": "Churn in shipped share and execution code for no change in who writes what."
+        }
+      ],
+      "consequences": "A row's storage and a package's path are citable as DR-0002@2. #19 (ROUNDS-02-L02) and each domain leaf build in the named directory.",
+      "migrationImpact": "None. No stored data or code moves; the cells name where future work goes.",
+      "rollbackImpact": "Revert this unratified revision. Once ratified, a superseding revision changes a cell, additively when it fills or narrows one."
+    },
+    {
       "id": "F1",
       "title": "Field maps from DR-0005",
       "status": "draft",
@@ -377,7 +397,7 @@
         {"option":"List each row's field ids in its own cell","reason":"The matrix would copy the field map and drift from it; one file gives each field one answer."},
         {"option":"Leave the cells pending until each row's transfer leaf","reason":"Each leaf would classify its own fields, and a field could reach a sink before anyone classed it."}
       ],
-      "consequences": "A row's field classes are citable through DR-0002@2 and the field map's ids. A new field fails conformance until it has a class.",
+      "consequences": "A row's field classes are citable through DR-0002@3 and the field map's ids. A new field fails conformance until it has a class.",
       "migrationImpact": "None. No stored data or code moves; the cells name where each field's class lives.",
       "rollbackImpact": "Revert this unratified revision. Once ratified, a superseding revision changes a cell, additively when it fills or narrows one."
     }

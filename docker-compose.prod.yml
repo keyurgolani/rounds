@@ -43,8 +43,12 @@
 #   ROUNDS_EXECUTION_SECRET - 32 to 72 characters, the same on PocketBase
 #                          and the runner (`openssl rand -hex 32`): the
 #                          password the runner logs in with as
-#                          execution-worker. Set it before
-#                          ROUNDS_GATE_EXECUTION_STORE is `on`.
+#                          execution-worker. The job store and the
+#                          execution keys are on by default, so set it
+#                          before you upgrade: without it every code run
+#                          answers 503 execution_disabled and keeps its
+#                          draft. Code runs also need
+#                          ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce.
 #   ROUNDS_SHARE_RESOLVER_PASSWORD - 32 to 72 printable characters, the
 #                          same on PocketBase and the runner (`openssl rand
 #                          -hex 32`): the password the runner logs in with
@@ -157,7 +161,8 @@ services:
       # quota_unavailable in observe mode and denies with it in enforce.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-}
       # Same value as PocketBase's. Blank, the execution worker doesn't
-      # start. Candidate processes never get either secret.
+      # start and the execution keys act as off. Candidate processes never
+      # get either secret.
       - ROUNDS_EXECUTION_SECRET=${ROUNDS_EXECUTION_SECRET:-}
       # Same value as PocketBase's. Blank, every share link answers the
       # uniform not-found. Candidate processes never get it.
@@ -225,7 +230,12 @@ services:
       # (frontend/docker-entrypoint.d).
       - ROUNDS_FRONTEND_REAL_IP_FROM=${ROUNDS_FRONTEND_REAL_IP_FROM:-}
     ports:
-      - "${HTTP_PORT:-80}:80"
+      # HTTP_BIND is the host address. Unset or blank, it's left empty, and
+      # Compose reads the entry as it reads a bare "80:80": every IPv4 and
+      # IPv6 address. 127.0.0.1 or [::1] publishes on loopback only, which
+      # keeps the port to this host on Docker Engine 28.0 or newer, and a
+      # value that isn't an IP address stops Compose (docs/configuration.md).
+      - "${HTTP_BIND:-}:${HTTP_PORT:-80}:80"
     depends_on:
       - pocketbase
       - runner

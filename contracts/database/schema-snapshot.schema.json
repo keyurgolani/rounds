@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/database/schema-snapshot.schema.json",
+  "title": "PocketBase schema snapshot",
+  "description": "PocketBase's own schema after every migration at one revision, written by harness/bench/schema_dump.py from a native `migrate up`. The ERD (erd.json) is checked against it by scripts/conformance/rules/database-adr.mjs. Never edited by hand.",
+  "type": "object",
+  "required": ["$schema", "description", "pocketbaseVersion", "revision", "migrations", "nativeRun", "collections", "systemTables", "triggers", "appliedMigrations"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string" },
+    "pocketbaseVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "revision": {
+      "type": "object",
+      "required": ["commit", "migrationsClean"],
+      "properties": { "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" }, "migrationsClean": { "const": true } }
+    },
+    "migrations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["file", "sha256"],
+        "additionalProperties": false,
+        "properties": { "file": { "type": "string", "pattern": "^\\d+_[a-z0-9_]+\\.js$" }, "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+      }
+    },
+    "nativeRun": { "type": "string" },
+    "collections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "system", "fields", "indexes", "rules"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z_]+$" },
+          "type": { "enum": ["base", "auth", "view"] },
+          "system": { "type": "boolean" },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "type", "required"],
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" },
+                "required": { "type": "boolean" },
+                "relation": {
+                  "type": "object",
+                  "required": ["collection", "cascadeDelete", "maxSelect"],
+                  "properties": { "collection": { "type": "string" }, "cascadeDelete": { "type": "boolean" } }
+                }
+              }
+            }
+          },
+          "indexes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "unique", "columns"],
+              "properties": { "name": { "type": "string" }, "unique": { "type": "boolean" }, "columns": { "type": "array", "minItems": 1, "items": { "type": "string" } } }
+            }
+          },
+          "rules": {
+            "type": "object",
+            "required": ["list", "view", "create", "update", "delete"],
+            "additionalProperties": { "enum": ["null", "open", "expression"] }
+          }
+        }
+      }
+    },
+    "systemTables": { "type": "array", "items": { "type": "string" } },
+    "triggers": {
+      "type": "array",
+      "items": { "type": "object", "required": ["name", "table"], "properties": { "name": { "type": "string" }, "table": { "type": "string" } } }
+    },
+    "appliedMigrations": { "type": "array", "items": { "type": "string" } }
+  }
+}

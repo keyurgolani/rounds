@@ -86,15 +86,10 @@ def test_written_defaults_keep_routes_on_and_outbound_reach_off():
         elif name == "EXECUTION_DEFINITIONS":
             # #2 step 1 keeps stage 2's server-loaded path.
             expected = "legacy"
-        elif name == "EXECUTION_STORE":
-            # #3 PR 1 ships the job store off.
-            expected = "off"
-        elif name == "EXECUTION_SCRATCH":
-            # #3 PR 2 keeps the four scratch routes in their request.
-            expected = "legacy"
-        elif name == "EXECUTION_GRADING":
-            # #3 PR 3 keeps grade and take-home submit in their request.
-            expected = "legacy"
+        elif name in ("EXECUTION_STORE", "EXECUTION_SCRATCH", "EXECUTION_GRADING"):
+            # #3 PR 4: the job store and both keys start on, so nothing
+            # runs in a request by default (execution/keys.py).
+            expected = "on"
         elif name == "SHARE_CAPABILITY_RESOLUTION":
             # Closed until the owner opens it: no share link resolves and
             # none is made (ROUNDS-00B-L06).

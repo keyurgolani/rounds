@@ -24,10 +24,11 @@
 #
 #      Restart PocketBase and the runners after creating or rotating it.
 #
-#   4. Before turning ROUNDS_GATE_EXECUTION_STORE on (gates.yaml), add the
-#      password the runner logs in to the execution job store with. It
-#      goes in the step 1 secret, which PocketBase reads one key of
-#      (pocketbase.yaml):
+#   4. Before you upgrade, add the password the runner logs in to the
+#      execution job store with. The store and the execution keys are on
+#      by default (gates.yaml), and without it every code run answers 503
+#      execution_disabled and keeps its draft. It goes in the step 1
+#      secret, which PocketBase reads one key of (pocketbase.yaml):
 #
 #      kubectl -n rounds patch secret rounds-runner-secrets --type merge \
 #        -p "{\"stringData\":{\"ROUNDS_EXECUTION_SECRET\":\"$(openssl rand -hex 32)\"}}"
@@ -122,8 +123,8 @@ spec:
                 name: rounds-gates
                 optional: true
           # /ready checks the execution job store only while
-          # ROUNDS_GATE_EXECUTION_STORE is on and the secret is set;
-          # /health stays liveness.
+          # ROUNDS_GATE_EXECUTION_STORE is on, its default, and the secret
+          # is set; /health stays liveness.
           readinessProbe:
             httpGet:
               path: /ready

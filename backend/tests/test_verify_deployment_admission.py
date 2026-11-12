@@ -536,25 +536,58 @@ def test_a_wrong_gates_line_fails(overrides, check):
 
 
 @pytest.mark.parametrize(
-    "overrides, needs",
+    "overrides, needs, stopped",
     [
-        ({"EXECUTION_STORE": {"value": "off", "source": "default"}}, "EXECUTION_STORE=on"),
-        ({"EXECUTION_DEFINITIONS": {"value": "legacy", "source": "default"}}, "EXECUTION_DEFINITIONS=enforce"),
-        ({"EXECUTION_STORE": None}, "EXECUTION_STORE=on"),
+        ({"EXECUTION_DEFINITIONS": {"value": "legacy", "source": "default"}}, "EXECUTION_DEFINITIONS=enforce", False),
+        ({"EXECUTION_STORE": None}, "EXECUTION_STORE=on", False),
+        # An operator's stop holds it off (ROUNDS-00A-L03 PR 4 turned both
+        # keys on by default): the stop is working, so only a named
+        # EXECUTION_SCRATCH=on fails.
+        ({"EXECUTION_STORE": {"value": "off", "source": "env"}}, "EXECUTION_STORE=on", True),
+        ({"EXECUTION_DEFINITIONS": {"value": "disabled", "source": "env"}}, "EXECUTION_DEFINITIONS=enforce", True),
     ],
-    ids=["store-off", "definitions-legacy", "store-not-logged"],
+    ids=["definitions-legacy", "store-not-logged", "store-stopped", "definitions-stopped"],
 )
-def test_scratch_on_without_what_it_needs_is_reported_as_acting_off(overrides, needs):
+def test_scratch_on_without_what_it_needs_is_reported_as_acting_off(overrides, needs, stopped):
     on = {"EXECUTION_SCRATCH": {"value": "on", "source": "env"}, "EXECUTION_STORE": {"value": "on", "source": "env"},
           "EXECUTION_DEFINITIONS": {"value": "enforce", "source": "env"}}
     text = gates_line(**{**on, **overrides})
     results = {r.check_id: r for r in vd.check_gates_log(text, {"EXECUTION_SCRATCH": "on"})}
-    for check in ("deployment.gates.valid", "deployment.gates.expected"):
+    assert results["deployment.gates.valid"].passed is stopped
+    checks = ("deployment.gates.expected",) if stopped else ("deployment.gates.valid", "deployment.gates.expected")
+    for check in checks:
         assert not results[check].passed
         assert "acts as if it were off" in results[check].detail and needs in results[check].detail
     assert results["deployment.gates.logged"].passed
     clean = {r.check_id: r for r in vd.check_gates_log(gates_line(**on), {"EXECUTION_SCRATCH": "on"})}
     assert all(r.passed for r in clean.values()), [r.detail for r in clean.values()]
+
+
+@pytest.mark.parametrize("key", ["EXECUTION_SCRATCH", "EXECUTION_GRADING"])
+def test_a_key_at_legacy_is_reported_as_acting_off(key):
+    on = {"EXECUTION_STORE": {"value": "on", "source": "env"},
+          "EXECUTION_DEFINITIONS": {"value": "enforce", "source": "env"}}
+    text = gates_line(**{**on, key: {"value": "legacy", "source": "env"}})
+    results = {r.check_id: r for r in vd.check_gates_log(text, {key: "legacy"})}
+    for check in ("deployment.gates.valid", "deployment.gates.expected"):
+        assert not results[check].passed and f"{key} is legacy" in results[check].detail
+
+
+def _start_line(event: str, needs: list[str]) -> str:
+    line = {"code": "acting_off", "event": event, "needs": needs, "service": "runner", "v": "obs/v1"}
+    return f"runner-1  | {json.dumps(line, separators=(',', ':'), sort_keys=True)}\n"
+
+
+def test_a_secret_the_start_says_a_key_lacks_fails_until_a_start_without_it():
+    on = {"EXECUTION_SCRATCH": {"value": "on", "source": "env"}, "EXECUTION_STORE": {"value": "on", "source": "env"},
+          "EXECUTION_DEFINITIONS": {"value": "enforce", "source": "env"}}
+    lacking = gates_line(**on) + _start_line("execution.scratch", ["ROUNDS_EXECUTION_SECRET"])
+    results = {r.check_id: r for r in vd.check_gates_log(lacking, {"EXECUTION_SCRATCH": "on"})}
+    for check in ("deployment.gates.valid", "deployment.gates.expected"):
+        assert not results[check].passed and "ROUNDS_EXECUTION_SECRET" in results[check].detail
+    # The last start is the one that counts.
+    restarted = lacking + gates_line(**on)
+    assert failed(vd.check_gates_log(restarted, {"EXECUTION_SCRATCH": "on"})) == []
 
 
 @pytest.mark.parametrize("name, value", [("EXECUTION_SCRATCH", "yes"), ("EXECUTION_STORE", "enabled"),
@@ -590,15 +623,39 @@ def test_a_log_without_a_gates_line_fails_both():
     assert not results["deployment.gates.expected"].passed
 
 
-def test_the_runners_own_startup_line_passes(capsys, monkeypatch):
+def test_the_runners_own_startup_line_passes(capsys, monkeypatch, job_secrets):
     from app import gates
+    from execution import keys
 
     monkeypatch.setattr(gates, "_snapshot", None)
-    gates.init({"ROUNDS_GATE_RUN": "disabled"})
+    gates.init({"ROUNDS_GATE_RUN": "disabled", "ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce"})
+    keys.log_startup()
     out = capsys.readouterr().out
     results = {r.check_id: r for r in vd.check_gates_log(out, {"RUN": "disabled"})}
     assert all(r.passed for r in results.values()), [r.detail for r in results.values()]
     monkeypatch.setattr(gates, "_snapshot", None)
+
+
+def test_the_runners_own_start_at_the_shipped_gates_names_what_its_keys_need(capsys, monkeypatch):
+    # Both keys start on (ROUNDS-00A-L03 PR 4), and act as off until
+    # definitions are enforced and both secrets are set.
+    from app import admission_state, gates
+    from execution import keys, store
+
+    for name in (store.SECRET_ENV, admission_state.RUNNER_KEY_ENV):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(gates, "_snapshot", None)
+    gates.init({})
+    keys.log_startup()
+    out = capsys.readouterr().out
+    monkeypatch.setattr(gates, "_snapshot", None)
+    results = {r.check_id: r for r in vd.check_gates_log(out)}
+    detail = results["deployment.gates.valid"].detail
+    assert not results["deployment.gates.valid"].passed
+    for key in ("EXECUTION_SCRATCH", "EXECUTION_GRADING"):
+        assert f"{key} is on but the runner acts as if it were off" in detail
+    for need in ("EXECUTION_DEFINITIONS=enforce", store.SECRET_ENV, admission_state.RUNNER_KEY_ENV):
+        assert need in detail
 
 
 def test_the_runbooks_definitions_stop_confirmation_passes(tmp_path, capsys, monkeypatch):
@@ -631,14 +688,27 @@ def test_expected_gates_take_either_spelling():
 # ---- the runner's own denials pass the shape check ----------------------------
 
 
+def _keys_ready(monkeypatch):
+    """Both secrets the execution keys' on needs (ROUNDS-00A-L03 PR 4)."""
+    from conftest import TEST_ADMISSION_SECRET, TEST_EXECUTION_SECRET
+
+    monkeypatch.setenv("ROUNDS_EXECUTION_SECRET", TEST_EXECUTION_SECRET)
+    monkeypatch.setenv("ROUNDS_ADMISSION_SECRET", TEST_ADMISSION_SECRET)
+
+
+# Definitions enforced, which with both secrets turns the keys on.
+KEYS_ON = {"ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce"}
+
+
 def _every_route_on(monkeypatch):
     from app import gates
 
     env = {f"{gates.PREFIX}{gate}": "enabled" for _m, _p, gate, _r, _e in vd.ADMITTED_ROUTES}
-    # The review routes serve only while grading runs as jobs, which needs
-    # the store on and definitions enforced (ROUNDS-00A-L03 PR 3).
-    env.update({"ROUNDS_GATE_EXECUTION_GRADING": "on", "ROUNDS_GATE_EXECUTION_STORE": "on",
-                "ROUNDS_GATE_EXECUTION_DEFINITIONS": "enforce"})
+    # The six code-run routes and the review routes serve while both keys
+    # are on, which needs the store on, definitions enforced, and both
+    # secrets (ROUNDS-00A-L03 PRs 3 and 4).
+    env.update({"ROUNDS_GATE_EXECUTION_GRADING": "on", "ROUNDS_GATE_EXECUTION_STORE": "on", **KEYS_ON})
+    _keys_ready(monkeypatch)
     monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
 
 
@@ -655,11 +725,12 @@ def test_the_runners_anonymous_denials_are_the_safe_shape(client, monkeypatch, s
         headers = {k.lower(): v for k, v in res.headers.items()}
         assert vd.envelope_problem(res.status_code, res.content, headers) == "", path
         # A route whose gate ships off answers its stop before the account,
-        # and so does a review route while grading isn't on.
+        # and so do the six code-run routes and the review routes while the
+        # keys act as off, as they ship until definitions are enforced.
         want = "unauthenticated"
         if shipped and path in vd.SHIPS_OFF:
             want = "route_disabled"
-        elif shipped and path in vd.SERVED_WHILE_GRADING:
+        elif shipped and path in vd.SERVED_WHILE_GRADING | vd.DEFINITION_ROUTES:
             want = "execution_disabled"
         assert res.json()["code"] == want, path
 
@@ -723,7 +794,9 @@ def test_a_review_routes_request_fills_its_job_id_and_names_its_template():
 def test_the_runners_grading_stop_is_the_one_the_verifier_expects(client, monkeypatch):
     from app import gates
 
-    for env in ({"ROUNDS_GATE_EXECUTION_GRADING": "off"}, {"ROUNDS_GATE_EXECUTION_GRADING": "on"}):
+    _keys_ready(monkeypatch)
+    for env in ({**KEYS_ON, "ROUNDS_GATE_EXECUTION_GRADING": "off"},
+                {**KEYS_ON, "ROUNDS_GATE_EXECUTION_GRADING": "legacy"}):
         monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
         req = _in_process(client)
         named = [f"{path}=execution_disabled" for path in sorted(vd.GRADING_ROUTES)]
@@ -747,25 +820,32 @@ def test_a_review_route_passes_off_or_on_until_it_is_named():
 
 @pytest.mark.parametrize("missing", ["EXECUTION_STORE", "EXECUTION_DEFINITIONS"])
 def test_a_gates_log_with_grading_on_without_what_it_needs_fails_and_says_why(missing):
+    # The store's off is its stop, which a named EXECUTION_GRADING=on still
+    # catches; definitions at legacy is a need not met.
     table = {gate: {"value": "enabled", "source": "default"} for _m, _p, gate, _r, _e in vd.ADMITTED_ROUTES}
     table.update({name: {"value": "observe", "source": "default"} for name in vd.ENFORCEMENT_GATES})
     table.update({"EXECUTION_STORE": {"value": "on", "source": "env"},
                   "EXECUTION_DEFINITIONS": {"value": "enforce", "source": "env"},
                   "EXECUTION_GRADING": {"value": "on", "source": "env"}})
     table[missing] = {"value": {"EXECUTION_STORE": "off", "EXECUTION_DEFINITIONS": "legacy"}[missing],
-                      "source": "default"}
+                      "source": "env" if missing == "EXECUTION_STORE" else "default"}
     log = json.dumps({"v": "obs/v1", "event": "gates", "service": "runner", "gates": table})
     results = vd.check_gates_log(log, {"EXECUTION_GRADING": "on"})
     bad = {r.check_id: r.detail for r in results if not r.passed}
     want = "EXECUTION_STORE=on" if missing == "EXECUTION_STORE" else "EXECUTION_DEFINITIONS=enforce"
-    assert set(bad) == {"deployment.gates.valid", "deployment.gates.expected"}
+    if missing == "EXECUTION_STORE":
+        assert set(bad) == {"deployment.gates.expected"}
+    else:
+        assert set(bad) == {"deployment.gates.valid", "deployment.gates.expected"}
     assert all("EXECUTION_GRADING is on" in why and want in why for why in bad.values())
 
 
 def test_the_runners_scratch_stop_is_the_one_the_verifier_expects(client, monkeypatch):
     from app import gates
 
-    for env in ({"ROUNDS_GATE_EXECUTION_SCRATCH": "off"}, {"ROUNDS_GATE_EXECUTION_SCRATCH": "on"}):
+    _keys_ready(monkeypatch)
+    for env in ({**KEYS_ON, "ROUNDS_GATE_EXECUTION_SCRATCH": "off"},
+                {**KEYS_ON, "ROUNDS_GATE_EXECUTION_SCRATCH": "legacy"}):
         monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
         req = _in_process(client)
         named = [f"{path}=execution_disabled" for path in sorted(vd.SCRATCH_ROUTES)]
@@ -965,9 +1045,21 @@ def test_the_runners_demo_refusal_passes_the_demo_check_and_charges_nothing(clie
                                                                               runs):
     from app import gates
 
-    monkeypatch.setattr(gates, "_snapshot", gates.load({}, gates.RUNNER))
+    _keys_ready(monkeypatch)
+    monkeypatch.setattr(gates, "_snapshot", gates.load(KEYS_ON, gates.RUNNER))
     result = vd.check_demo_code_runs("http://runner", _demo_in_process(client, monkeypatch))
     assert result.passed, result.detail
+    assert admission_store.calls == [] and runs == []
+
+
+def test_while_the_keys_act_as_off_the_demo_check_fails_naming_that_stop(client, monkeypatch, admission_store, runs):
+    # The keys answer before the account, so the demo's own gate can't be
+    # seen; the check says why.
+    from app import gates
+
+    monkeypatch.setattr(gates, "_snapshot", gates.load({}, gates.RUNNER))
+    result = vd.check_demo_code_runs("http://runner", _demo_in_process(client, monkeypatch))
+    assert not result.passed and result.observed_status == 503 and "execution_disabled" in result.detail
     assert admission_store.calls == [] and runs == []
 
 
@@ -977,7 +1069,8 @@ def test_where_the_demos_code_runs_are_open_the_check_fails_and_nothing_runs_or_
     from app import gates
 
     env = {"ROUNDS_GATE_DEMO_EXECUTION": "enabled", "ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "enforce",
-           "ROUNDS_GATE_ENFORCE_QUOTA": "enforce"}
+           "ROUNDS_GATE_ENFORCE_QUOTA": "enforce", **KEYS_ON}
+    _keys_ready(monkeypatch)
     monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
     result = vd.check_demo_code_runs("http://runner", _demo_in_process(client, monkeypatch))
     assert not result.passed and result.observed_status == 422

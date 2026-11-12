@@ -21,8 +21,10 @@ Phases, in the order harness/run.sh runs them:
     kept.
 - ``execution-scratch-start``, with only ``runner`` up: a project run that
   takes a while starts, and its account token, key, body, and job wait in
-  the state directory. The launcher then kills that replica and starts
-  both again.
+  the state directory. A run that had already completed when a read saw
+  it proves the start only if its output shows the slow test ran, and
+  then a fresh one goes in under a new key, up to three runs in all. The
+  launcher then kills that replica and starts both again.
 - ``execution-scratch-retry``: the job the killed replica held ends
   ``worker-lost``, and a same-key retry through nginx runs it again to
   the end.
@@ -40,7 +42,7 @@ from typing import Any
 
 import factory
 import verify_deployment as vd
-from admission_check import Checks, call, usage, uuid7
+from admission_check import READ_EVERY_S, SLOW_TRIES, Checks, call, ran_ms, resubmitted, usage, uuid7
 from admission_deploy import gates_log, verifier_receipts
 from pbclient import PBClient
 from receipts import Receipt, ReceiptWriter
@@ -70,9 +72,10 @@ SPINNER = "def two_sum(nums, target):\n    while True:\n        pass\n"
 PROJECT = {"track": "ai-coding", "slug": "hallucinated-http-client", "variant": "python", "version": 1}
 # A visible test that takes eight of the run step's ten seconds, so the
 # launcher can kill the replica running it.
+SLOW_S = 8
 SLOW_PROJECT = {
     "client.py": "def fetch_user(user_id):\n    return {'id': user_id}\n",
-    "tests/checkpoint_0/test_visible.py": "import time\n\n\ndef test_takes_a_while():\n    time.sleep(8)\n",
+    "tests/checkpoint_0/test_visible.py": f"import time\n\n\ndef test_takes_a_while():\n    time.sleep({SLOW_S})\n",
 }
 
 
@@ -93,16 +96,21 @@ def read(token: str, job_id: str, wait: int = 0) -> tuple[int, Any, int]:
 
 
 def settle(token: str, job_id: str, timeout_s: float = 120, until=None) -> dict:
-    """The job once ``until`` holds, by default once it ended."""
+    """The job once ``until`` holds, by default once it ended. Only a wait
+    for an end long-polls; a wait for ``until`` reads the job as it is, as
+    admission_check.job_until does and for the same reason."""
+    wait = 0 if until else 20
     done = until or (lambda job: job.get("state") in ENDED)
     deadline = time.monotonic() + timeout_s
     last: dict = {}
     while time.monotonic() < deadline:
-        status, parsed, _ = read(token, job_id, 20)
+        status, parsed, _ = read(token, job_id, wait)
         if status == 200 and isinstance(parsed, dict):
             last = parsed
             if done(parsed):
                 return parsed
+            if not wait:
+                time.sleep(READ_EVERY_S)
         else:
             time.sleep(1)
     return last
@@ -110,6 +118,20 @@ def settle(token: str, job_id: str, timeout_s: float = 120, until=None) -> dict:
 
 def started(job: dict) -> bool:
     return job.get("state") == "started" or job.get("state") in ENDED
+
+
+def long_run(job: dict) -> str:
+    """What the start phase makes of its slow run as a read saw it:
+    ``running`` while it runs; ``ran`` once it completed after its slow
+    test, which proves it started but leaves the launcher nothing to kill;
+    ``failed`` otherwise: it never started, it ended too soon for the slow
+    test to have run, or it ended some other way."""
+    if job.get("state") == "started":
+        return "running"
+    took = ran_ms(job)
+    if job.get("state") == "completed" and took is not None and took >= SLOW_S * 1000:
+        return "ran"
+    return "failed"
 
 
 def ready(runner: str) -> bool:
@@ -233,13 +255,19 @@ def run_start(c: Checks, writer: ReceiptWriter) -> None:
     pb = PBClient(POCKETBASE_URL)
     pb.wait_healthy()
     (acct,) = accounts(pb, writer, "scr-kill")
-    key = uuid7()
     body = {"definition": PROJECT, "checkpoint": 0, "files": SLOW_PROJECT}
-    status, first = submit(acct.token, "/api/ai-coding/run-project", key, body)
-    job_id = (first or {}).get("job_id", "")
-    running = settle(acct.token, job_id, 60, started) if status == 202 else {}
-    ok = running.get("state") == "started"
-    c.check("execution.scratch.long-run.started", ok, f"status={status} state={running.get('state')}")
+    for tries in range(1, SLOW_TRIES + 1):
+        key = uuid7()
+        status, first = submit(acct.token, "/api/ai-coding/run-project", key, body)
+        job_id = (first or {}).get("job_id", "")
+        seen = settle(acct.token, job_id, 60, started) if status == 202 else {}
+        seen_as = long_run(seen)
+        if seen_as != "ran" or tries == SLOW_TRIES:
+            break
+        resubmitted("execution.scratch.long-run.started", key, seen, tries + 1)
+    ok = seen_as == "running"
+    c.check("execution.scratch.long-run.started", ok,
+            f"status={status} state={seen.get('state')} ran_ms={ran_ms(seen)} tries={tries}")
     if ok:
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps({"token": acct.token, "key": key, "body": body, "job_id": job_id}))

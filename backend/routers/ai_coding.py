@@ -14,7 +14,13 @@ grade, whose graded row the server writes with its result;
 ``POST /api/ai-coding/grade/{job}/review`` then asks for its rubric
 review, once per result (``execution.review``). A grade's answer carries
 only visible output, and a round with a checkpoint that has nothing to run
-is refused before anything runs; its wall seconds are refunded."""
+is refused before anything runs; its wall seconds are refunded.
+
+Since PR 4 both keys are on by default and no value runs code or grades
+here: below ``on`` (``legacy`` included) admission answers 503
+``execution_disabled`` before the account, and ``keys.require_on`` checks
+it again first in each route, so the in-request paths below never run and
+never write an attempt row."""
 from __future__ import annotations
 
 import json
@@ -163,6 +169,7 @@ def _submitted_language(round_row: dict[str, Any], files: Dict[str, str]) -> str
 
 @router.post("/run-project", response_model=RunProjectResponse)
 async def run_project_route(request: Request) -> RunProjectResponse:
+    keys.require_on("run_project")
     req = await execution.parse(request, RunProjectRequest, DefinitionRunProjectRequest)
     if keys.scratch() == "on" and isinstance(req, DefinitionRunProjectRequest):
         return await _run_project_job(request, req)
@@ -469,6 +476,7 @@ def _grade_checkpoints(slug: str, checkpoints: Any, files: Dict[str, str], langu
 
 @router.post("/grade")
 async def grade(request: Request, user: dict = Depends(_auth_user)) -> Dict[str, Any]:
+    keys.require_on("grade")
     body = await execution.parse(request, GradeRequest, DefinitionGradeRequest)
     if keys.grading() == "on" and isinstance(body, DefinitionGradeRequest):
         return await _grade_job(request, body, user)

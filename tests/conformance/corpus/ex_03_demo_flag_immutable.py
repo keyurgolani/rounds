@@ -12,7 +12,23 @@ from __future__ import annotations
 from conformance.outcomes import Outcome
 from corpus._base import inconclusive, result
 
-SUBCASE = "EX-03.demo-flags-server-owned"
+# This fixture's spec; conformance/manifest.py reads it as a literal.
+SPEC = {
+    "routes": [
+        "PATCH /api/collections/users/records/:id",
+        "GET /api/collections/users/records/:id",
+    ],
+    "subcases": ["EX-03.demo-flags-server-owned"],
+    "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
+    "languages": [],
+    "control": "selftest/test_negative_controls.py: client writes to the demo flags accepted",
+    "setup": "one synthetic account",
+    "teardown": "the account removed with the admin token",
+    "destructive": False,
+    "environment_sensitive": True,
+}
+
+SUBCASE = SPEC["subcases"][0]
 
 
 def run(ctx):

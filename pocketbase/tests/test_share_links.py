@@ -13,7 +13,7 @@ Two halves, both static or pure so they run without a PocketBase:
     1700008500 sets every rule again, and docs/security/account-scope.v1.json
     names both.
 
-The live rules and the guard on PocketBase 0.22.22 are the two-account
+The live rules and the guard on PocketBase 0.22.57 are the two-account
 harness's (account-scope.share.owner-only.isolated and the server-only
 families on resume_share_links, the rule read-back) and phase 15's.
 """

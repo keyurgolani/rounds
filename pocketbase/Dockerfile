@@ -1,6 +1,6 @@
 FROM alpine:3.20
 
-ARG PB_VERSION=0.22.22
+ARG PB_VERSION=0.22.57
 # SHA-256 of the pinned release zips, published in the PocketBase release's
 # checksums.txt. The download is verified against the digest for the build's
 # target architecture so a tampered or truncated archive fails the build
@@ -8,8 +8,8 @@ ARG PB_VERSION=0.22.22
 # arm64 digest only exists so the security harness can build and run the same
 # pinned version natively on an arm64 developer machine. Update both in
 # lockstep whenever PB_VERSION changes.
-ARG PB_SHA256=330714769484fcc77306ab9f14c25e9f4d9b4ffd8b5b16385a70199db4206978
-ARG PB_SHA256_ARM64=a1c99caa1099de61968b66a4be536f7d85969d01ea4f8ae7e21c85194dbcc79f
+ARG PB_SHA256=c1192ffbb40f8c82e5cbab42d9f6385be149870a1cf185c7585bf9b3d648d1d8
+ARG PB_SHA256_ARM64=ce47836d979c75e9f2616b94607a43fe38b77812786ff41dcd63e7b9dadbb5c9
 # Injected automatically by BuildKit as the build's target architecture.
 # Declared without a default so BuildKit's value is not shadowed; the RUN
 # falls back to amd64 (prod/CI) when a non-BuildKit builder leaves it empty.
@@ -41,4 +41,8 @@ COPY seeds /pb_seeds
 
 EXPOSE 8090
 
-CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8090", "--dir=/pb/pb_data", "--migrationsDir=/pb/pb_migrations", "--hooksDir=/pb/pb_hooks"]
+# With --hooksWatch=false, a hook file that fails to load stops PocketBase at
+# start, and its log names the file. Watch mode, upstream's default, would
+# log the error and serve without that file. The hooks ship in the image, so
+# nothing needs watch mode's live reload.
+CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8090", "--dir=/pb/pb_data", "--migrationsDir=/pb/pb_migrations", "--hooksDir=/pb/pb_hooks", "--hooksWatch=false"]

@@ -10,11 +10,13 @@ import { createContext } from '../lib/context.mjs';
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
-const COPY_DIRS = ['contracts/vocabulary', 'contracts/authority', 'contracts/privacy', 'docs/decisions', 'docs/program', 'pocketbase/pb_migrations', 'backend/routers'];
+const COPY_DIRS = ['contracts/vocabulary', 'contracts/authority', 'contracts/database', 'contracts/privacy', 'docs/decisions', 'docs/program', 'pocketbase/pb_migrations', 'backend/routers'];
 const COPY_FILES = [
   'backend/main.py', 'frontend/src/App.tsx', 'frontend/src/components/Layout.tsx', 'frontend/src/command-center/registry.tsx',
   'frontend/src/applications/interviewTypes.ts', 'frontend/src/auth/AuthProvider.tsx', 'frontend/index.html',
   'frontend/src/pages/Login.tsx', 'README.md', 'docs/architecture.md', 'SHOWCASE.md',
+  // What the database-adr rule reads beyond the directories above.
+  'pocketbase/Dockerfile', 'pocketbase/pb_hooks/relation_endpoints.v1.json',
   // Generated outputs, for drift checks.
   'docs/vocabulary.md', 'frontend/src/vocabulary/labels.ts', 'docs/authority.md',
 ];
@@ -53,10 +55,17 @@ function copyInto(target, rel) {
   fs.cpSync(from, to, { recursive: true });
 }
 
+// Every file a DR-0003 gate artifact row says it lives at, so the program
+// rule's path check holds on a fixture copy.
+function gateArtifactFiles() {
+  const dr = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'docs/decisions/DR-0003-transformation-program.json'), 'utf8'));
+  return [...new Set((dr.gateArtifacts || []).flatMap((a) => a.paths || []))].filter((rel) => fs.existsSync(path.join(REPO_ROOT, rel)));
+}
+
 export function baseFixtureDir() {
   if (baseFixture) return baseFixture;
   const dir = tempDir('rounds-conformance-base-');
-  for (const rel of [...COPY_DIRS, ...COPY_FILES, ...appHeaderFiles()]) copyInto(dir, rel);
+  for (const rel of [...COPY_DIRS, ...COPY_FILES, ...appHeaderFiles(), ...gateArtifactFiles()]) copyInto(dir, rel);
   baseFixture = dir;
   return dir;
 }

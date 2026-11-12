@@ -1,132 +1,38 @@
 from unittest.mock import patch
 
 
-def test_run_route_404s_when_assignment_missing(client, signed_in):
-    async def fake_user(_):
-        return {"id": "u1", "token": "t"}
-
-    async def fake_pb_get(_token, _path, params=None):
-        return {"items": []}
-
-    with patch("routers.take_home.current_user", fake_user), \
-         patch("routers.take_home.pb_get", fake_pb_get):
-        res = client.post("/api/take-home/run", headers=signed_in, json={
-            "assignment_slug": "missing",
-            "files": {"a.py": "pass"},
-        })
-    assert res.status_code == 404
+# The run and submit shapes from before definitions. Since ROUNDS-00A-L03
+# PR 4 both routes run definitions only, as jobs (test_execution_scratch.py
+# and test_execution_grading.py), and at the shipped gates the execution
+# keys act as off: each answers 503 before the account check, reads no
+# assignment, runs nothing, and saves no attempt.
+OLDER_REQUESTS = {
+    "/api/take-home/run": {"assignment_slug": "tinytest", "files": {"main.py": "# user file"}},
+    "/api/take-home/submit": {"assignment_slug": "tinytest", "files": {"main.py": "# user file"},
+                              "notes": "design notes", "ai_chats": [], "duration_ms": 12345},
+}
 
 
-def test_run_route_executes_harness_and_returns_score(client, signed_in):
-    """Real subprocess. The 'harness' embedded in this test is just a
-    Python one-liner that prints the canonical {criteria, score} JSON."""
-    async def fake_user(_):
-        return {"id": "u1", "token": "t"}
+def test_the_older_run_and_submit_requests_are_turned_off_before_anything_runs(client, signed_in):
+    touched = []
 
-    async def fake_pb_get(_token, _path, params=None):
-        return {
-            "items": [
-                {
-                    "id": "a1",
-                    "slug": "tinytest",
-                    "entrypoint": "python3 harness.py",
-                    "harness_files": [
-                        {
-                            "path": "harness.py",
-                            "contents": (
-                                "import json\n"
-                                "print(json.dumps({"
-                                "\"criteria\":[{\"id\":\"a\",\"passed\":True,\"weight\":1.0,\"logs\":\"\"}],"
-                                "\"score\":1.0,\"duration_ms\":1"
-                                "}))\n"
-                            ),
-                        }
-                    ],
-                }
-            ]
-        }
+    async def tripped(*_args, **_kwargs):
+        touched.append("pocketbase")
+        raise AssertionError("nothing is read or saved")
 
-    with patch("routers.take_home.current_user", fake_user), \
-         patch("routers.take_home.pb_get", fake_pb_get):
-        res = client.post("/api/take-home/run", headers=signed_in, json={
-            "assignment_slug": "tinytest",
-            "files": {"main.py": "# user file"},
-        })
-    assert res.status_code == 200
-    body = res.json()
-    assert body["score"] == 1.0
-    assert body["criteria"][0]["id"] == "a"
-    assert body["error"] is None
+    def ran(*_args, **_kwargs):
+        touched.append("run")
+        raise AssertionError("nothing runs")
 
-
-def test_run_route_rejects_invalid_slug_pattern(client, signed_in):
-    async def fake_user(_):
-        return {"id": "u1", "token": "t"}
-
-    with patch("routers.take_home.current_user", fake_user):
-        res = client.post("/api/take-home/run", headers=signed_in, json={
-            "assignment_slug": "BAD SLUG",
-            "files": {},
-        })
-    assert res.status_code == 422
-
-
-def test_submit_route_persists_attempt_and_returns_combined(client, signed_in):
-    captured_attempt: dict = {}
-
-    async def fake_user(_):
-        return {"id": "u1", "token": "t"}
-
-    async def fake_pb_get(_token, _path, params=None):
-        return {
-            "items": [
-                {
-                    "id": "a1",
-                    "slug": "tinytest",
-                    "entrypoint": "python3 harness.py",
-                    "harness_files": [
-                        {
-                            "path": "harness.py",
-                            "contents": (
-                                "import json\n"
-                                "print(json.dumps({"
-                                "\"criteria\":[{\"id\":\"a\",\"passed\":True,\"weight\":1.0,\"logs\":\"\"}],"
-                                "\"score\":1.0,\"duration_ms\":1"
-                                "}))\n"
-                            ),
-                        }
-                    ],
-                    "rubric": {"items": []},
-                }
-            ]
-        }
-
-    async def fake_pb_post(_token, _path, body):
-        captured_attempt.update(body)
-        return {"id": "att1"}
-
-    async def fake_cfg(_):
-        # Force rubric AI to be skipped (no provider).
-        raise Exception("no provider")
-
-    with patch("routers.take_home.current_user", fake_user), \
-         patch("routers.take_home.pb_get", fake_pb_get), \
-         patch("routers.take_home.pb_post", fake_pb_post), \
-         patch("routers.take_home._active_text_config", fake_cfg):
-        res = client.post("/api/take-home/submit", headers=signed_in, json={
-            "assignment_slug": "tinytest",
-            "files": {"main.py": "# user file"},
-            "notes": "design notes",
-            "ai_chats": [],
-            "duration_ms": 12345,
-        })
-    assert res.status_code == 200
-    body = res.json()
-    assert body["harness"]["score"] == 1.0
-    assert body["rubric_review"]["skipped"] is True
-    assert captured_attempt["status"] == "graded"
-    assert captured_attempt["assignment"] == "a1"
-    assert captured_attempt["notes"] == "design notes"
+    with patch("routers.take_home.pb_get", tripped), \
+         patch("routers.take_home.pb_post", tripped), \
+         patch("routers.take_home.run_assignment", ran):
+        for path, body in OLDER_REQUESTS.items():
+            for headers in ({}, signed_in):
+                res = client.post(path, headers=headers, json=body)
+                assert res.status_code == 503, res.text
+                assert res.json()["code"] == "execution_disabled"
+    assert touched == []
 
 
 def test_chat_route_404s_when_assignment_missing(client):

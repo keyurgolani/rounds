@@ -4,7 +4,7 @@ Guarantee (closed by ROUNDS-00A-L01 and ROUNDS-00A-L02): with
 server-owned definitions enforced, a well-formed request that also names
 its own ``test_command`` is refused 422 ``legacy_request_rejected``
 before anything runs; what runs comes only from the resolved definition.
-Every route the manifest lists gets the check. Accepting the field, or
+Every route the spec lists gets the check. Accepting the field, or
 refusing it for any other reason, is a finding.
 
 On the take-home run route the fixture also sends the same body without
@@ -21,7 +21,22 @@ from conformance.outcomes import Outcome
 from corpus._base import code_of, result
 from corpus._requests import TAKE_HOME, bodies
 
-SUBCASE = "EX-05.caller-command-refused"
+# This fixture's spec; conformance/manifest.py reads it as a literal.
+SPEC = {
+    "routes": ["POST /api/run", "POST /api/ai-coding/run-project", "POST /api/take-home/run"],
+    "subcases": ["EX-05.caller-command-refused"],
+    "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
+    "languages": ["python", "javascript", "typescript"],
+    "control": "selftest/test_negative_controls.py: caller fields accepted",
+    "setup": ("one synthetic account; the enforced execution-definitions gate; the corpus stack's take-home "
+              "definition (conformance/overlay.py), which the take-home run must run when the body carries no "
+              "caller field"),
+    "teardown": "the account removed with the admin token",
+    "destructive": False,
+    "environment_sensitive": False,
+}
+
+SUBCASE = SPEC["subcases"][0]
 TAKE_HOME_RUN = ("POST", "/api/take-home/run")
 ROUTES = (("POST", "/api/run"), ("POST", "/api/ai-coding/run-project"), TAKE_HOME_RUN)
 

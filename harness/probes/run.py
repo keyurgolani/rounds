@@ -72,6 +72,11 @@ Phases (run in order by the launcher, sharing one receipts file and run id):
   execution-migration
             apply and reverse the execution job store's migration with the
             pinned binary; see execution_migration_check.py.
+  grade-rules-migration
+            the attempt grade rules' dry run on a seeded copy with the pinned
+            binary: the census before and after, the client writes the rules
+            refuse on a served copy, and the down step (ROUNDS-00A-L03 PR 4);
+            see grade_rules_migration_check.py.
   json-limits
             every JSON field's declared limit on fresh and upgraded databases
             with the pinned binary, and the registry migration's down step
@@ -238,7 +243,12 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
     # because the account is not allowed to create it.
     c = make_account("c")
     register(pb, c)
-    for acct in (a, b, c):
+    # A fourth, also with no rows, that only the graded create's other
+    # request forms use, so whatever PocketBase makes of them stays out of
+    # c's counts.
+    d = make_account("d")
+    register(pb, d)
+    for acct in (a, b, c, d):
         _register_account(writer, acct)
     writer.register_secret(admin_token, "token:superuser")
 
@@ -278,6 +288,21 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
                 writer.write(families.update_reassign_denied(pb, name, a.ids[name], b.user_id, a.token, admin_token, a.user_id, expected))
             elif pid == families.UPDATE_OWN_FAMILY:
                 writer.write(families.update_own_accepted(pb, name, b.ids[name], b.user_id, b.token, expected))
+            elif pid == families.CREATE_GRADED_FAMILY:
+                # The no-rows account c creates rows of its own, so a row a
+                # refused create left behind shows in its count; the envelope
+                # it names is account a's seeded one.
+                payload = factory.fresh_payload(name, c.user_id, a, b, content, secrets.token_hex(6))
+                forms = factory.fresh_payload(name, d.user_id, a, b, content, secrets.token_hex(6))
+                writer.write(families.create_graded_denied(pb, name, c, payload, d, forms,
+                                                           a.ids["execution_envelopes"], admin_token, expected))
+            elif pid == families.UPDATE_GRADED_FAMILY:
+                # Account a's graded row, which the superuser writes as the
+                # server does, and a's seeded in-progress row.
+                payload = factory.fresh_payload(name, a.user_id, a, b, content, secrets.token_hex(6))
+                graded = families.graded_row(pb, name, admin_token, payload)
+                writer.write(families.update_graded_denied(pb, name, a, graded, a.ids["execution_envelopes"],
+                                                           admin_token, expected))
             elif pid == families.SERVER_ONLY_CREATE_FAMILY:
                 payload = factory.fresh_payload(name, c.user_id, a, b, content, secrets.token_hex(6))
                 writer.write(families.create_server_only_denied(pb, name, b.token, payload, admin_token, c.user_id, expected))
@@ -596,7 +621,8 @@ def main() -> int:
               "admission-deploy|emergency-disable|emergency-enable|relation-quarantine|snapshot-store|"
               "execution-store|execution-runners|execution-unready|execution-ready-again|execution-disabled|"
               "execution-scratch|execution-scratch-start|execution-scratch-retry|execution-grading|"
-              "execution-migration|json-limits|demo-on|demo-off|demo-contain-migration|snapshot-create|"
+              "execution-migration|grade-rules-migration|json-limits|demo-on|demo-off|demo-contain-migration|"
+              "snapshot-create|"
               "snapshot-create-down|snapshot-create-retry|snapshot-scan|snapshot-create-off|snapshot-create-again|"
               "snapshot-render|snapshot-render-audit|snapshot-render-down|snapshot-recovery|share-capabilities|"
               "share-secrets|share-secrets-down|share-secrets-scan|"
@@ -650,6 +676,10 @@ def main() -> int:
         import execution_migration_check
 
         return execution_migration_check.main()
+    if phase == "grade-rules-migration":
+        import grade_rules_migration_check
+
+        return grade_rules_migration_check.main()
     if phase == "json-limits":
         import json_limits_check
 

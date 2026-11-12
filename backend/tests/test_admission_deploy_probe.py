@@ -46,6 +46,18 @@ ACCT.token = "token-placeholder"
 CID = "0123456789abcdef0123456789abcdef"
 GOOD = {"env": ["HOME", "LANG", "LC_ALL", "LOGNAME", "PATH", "PYTHONDONTWRITEBYTECODE", "TMPDIR", "USER"],
         "uid": 10002, "app_writable": False, "home_mode": 0o700, "home_owned": True, "tmpdir_is_home": True}
+JOB = "jobaaaaaaaaaaa1"
+# two-sum's entry, which every harness run names (admission_check.TWO_SUM).
+TWO_SUM_ENTRY = {"kind": "function", "name": "two_sum",
+                 "params": [{"name": "nums", "type": "int[]"}, {"name": "target", "type": "int"}], "returns": "int[]"}
+
+
+def reported(facts) -> list[tuple[int, dict, dict]]:
+    """A run's job answer, then the job ended with ``facts`` as its return
+    value."""
+    ended = {"job_id": JOB, "state": "completed", "outcome_class": "passed", "retryable": False,
+             "cancel_requested": False, "envelope": {"output": {"return_value": facts}}}
+    return [(202, {"job_id": JOB, "state": "queued"}, {}), (200, ended, {})]
 
 
 def answering(monkeypatch, *answers):
@@ -78,9 +90,9 @@ def raw_answering(monkeypatch, answer):
 
 
 def test_a_clean_report_passes_every_closure(monkeypatch):
-    answering(monkeypatch, (200, {"return_value": GOOD}, {}))
+    answering(monkeypatch, *reported(GOOD))
     w = Writer()
-    ad.check_closures(w, "http://runner:8000", ACCT, "q", "f")
+    ad.check_closures(w, "http://runner:8000", ACCT)
     assert [(r.probe_id, r.passed) for r in w.rows] == [
         ("admission.closure.child-env.minimal", True),
         ("admission.closure.candidate.unprivileged", True),
@@ -100,16 +112,16 @@ def test_a_clean_report_passes_every_closure(monkeypatch):
     ids=["runner-setting", "root", "writable-app", "open-home", "shared-tmp"],
 )
 def test_a_report_that_breaks_a_closure_fails_only_it(monkeypatch, change, failing):
-    answering(monkeypatch, (200, {"return_value": {**GOOD, **change}}, {}))
+    answering(monkeypatch, *reported({**GOOD, **change}))
     w = Writer()
-    ad.check_closures(w, "http://runner:8000", ACCT, "q", "f")
+    ad.check_closures(w, "http://runner:8000", ACCT)
     assert {r.probe_id for r in w.rows if not r.passed} == {failing}
 
 
 def test_a_report_names_variables_never_values(monkeypatch):
-    answering(monkeypatch, (200, {"return_value": {**GOOD, "env": GOOD["env"] + ["PB_ADMIN_PASSWORD"]}}, {}))
+    answering(monkeypatch, *reported({**GOOD, "env": GOOD["env"] + ["PB_ADMIN_PASSWORD"]}))
     w = Writer()
-    ad.check_closures(w, "http://runner:8000", ACCT, "q", "f")
+    ad.check_closures(w, "http://runner:8000", ACCT)
     (env,) = w.by_id()["admission.closure.child-env.minimal"]
     assert env.detail == "unexpected variables: PB_ADMIN_PASSWORD"
 
@@ -117,8 +129,17 @@ def test_a_report_names_variables_never_values(monkeypatch):
 def test_no_report_fails_all_three(monkeypatch):
     answering(monkeypatch, (503, {"code": "worker_unavailable"}, {}))
     w = Writer()
-    ad.check_closures(w, "http://runner:8000", ACCT, "q", "f")
+    ad.check_closures(w, "http://runner:8000", ACCT)
     assert len(w.rows) == 3 and not any(r.passed for r in w.rows)
+
+
+def test_a_job_that_ended_without_output_fails_all_three(monkeypatch):
+    canceled = {"job_id": JOB, "state": "canceled", "outcome_class": "canceled", "envelope": None}
+    answering(monkeypatch, (202, {"job_id": JOB, "state": "queued"}, {}), (200, canceled, {}))
+    w = Writer()
+    ad.check_closures(w, "http://runner:8000", ACCT)
+    assert len(w.rows) == 3 and not any(r.passed for r in w.rows)
+    assert all("ended=canceled/canceled" in r.detail for r in w.rows)
 
 
 def test_the_closure_report_runs_through_the_real_runner():
@@ -126,8 +147,7 @@ def test_the_closure_report_runs_through_the_real_runner():
     # candidate's here; the environment and scratch are the runner's own.
     from runner import run_one
 
-    entry = {"kind": "function", "name": "report", "params": []}
-    outcome = run_one(ad.CLOSURE_CODE.format(name="report"), "python", entry, {}, timeout_s=10)
+    outcome = run_one(ad.CLOSURE_CODE, "python", TWO_SUM_ENTRY, ac.run_body()["input"], timeout_s=10)
     assert outcome.error is None, outcome.error
     facts = outcome.return_value
     # macOS adds its own text-encoding variable to every process; the image is Linux.
@@ -144,7 +164,7 @@ def test_fields_then_key_then_lookup_passes(monkeypatch):
     sent = raw_answering(monkeypatch, (422, typed("invalid_request"), {"x-correlation-id": CID}))
     answering(monkeypatch, (400, {"code": "idempotency_key_required"}, {}))
     w = Writer()
-    ad.check_order(w, "http://runner:8000", ACCT, "q", "f")
+    ad.check_order(w, "http://runner:8000", ACCT)
     assert [(r.probe_id, r.passed) for r in w.rows] == [
         ("admission.policy.fields-before-idempotency", True),
         ("admission.error-shape.no-echo", True),
@@ -152,14 +172,14 @@ def test_fields_then_key_then_lookup_passes(monkeypatch):
     ]
     # The first request carries no key, so only its fields can refuse it.
     ((body, keyed),) = sent
-    assert keyed is False and "test_cases" in body
+    assert keyed is False and any(name.startswith("s4echo") for name in body)
 
 
 def test_a_lookup_before_the_key_fails(monkeypatch):
     raw_answering(monkeypatch, (422, typed("invalid_request"), {"x-correlation-id": CID}))
-    answering(monkeypatch, (404, {"code": "not_found"}, {}))
+    answering(monkeypatch, (404, {"code": "definition_not_found"}, {}))
     w = Writer()
-    ad.check_order(w, "http://runner:8000", ACCT, "q", "f")
+    ad.check_order(w, "http://runner:8000", ACCT)
     assert [r.probe_id for r in w.rows if not r.passed] == ["admission.policy.idempotency-before-lookup"]
 
 
@@ -180,7 +200,7 @@ def test_a_refusal_that_isnt_the_safe_shape_fails_only_no_echo(monkeypatch, answ
     raw_answering(monkeypatch, answer)
     answering(monkeypatch, (400, {"code": "idempotency_key_required"}, {}))
     w = Writer()
-    ad.check_order(w, "http://runner:8000", ACCT, "q", "f")
+    ad.check_order(w, "http://runner:8000", ACCT)
     failing = {r.probe_id for r in w.rows if not r.passed}
     assert "admission.error-shape.no-echo" in failing
     assert "admission.policy.idempotency-before-lookup" not in failing
@@ -190,10 +210,112 @@ def test_a_no_echo_receipt_never_carries_the_marker(monkeypatch):
     sent = raw_answering(monkeypatch, _echoing)
     answering(monkeypatch, (400, {"code": "idempotency_key_required"}, {}))
     w = Writer()
-    ad.check_order(w, "http://runner:8000", ACCT, "q", "f")
+    ad.check_order(w, "http://runner:8000", ACCT)
     ((body, _keyed),) = sent
     marker = next(k for k in body if k.startswith("s4echo"))
     assert all(marker not in r.detail for r in w.rows)
+
+
+# ---- the event loop while a job runs ---------------------------------------------
+
+
+@pytest.fixture
+def two_replicas(monkeypatch):
+    monkeypatch.setattr(ac, "RUNNERS", ["http://runner:8000", "http://runner-b:8000"])
+
+
+def _job_states(monkeypatch, *states):
+    seen = iter([state if isinstance(state, dict) else {"job_id": JOB, "state": state} for state in states])
+    monkeypatch.setattr(ac, "job_until", lambda *_args, **_kwargs: next(seen))
+
+
+def _posting(monkeypatch, health) -> list[str]:
+    """The event loop check's calls: each run it submits is a job, and each
+    /health read answers the next status in ``health``. Answers the keys
+    the runs went in under."""
+    keys, statuses = [], iter(health)
+
+    def fake_call(_base, method, _path, _token=None, _body=None, headers=None, timeout=30):
+        if method == "POST":
+            keys.append(headers["Idempotency-Key"])
+            return 202, {"job_id": JOB, "state": "queued"}, {}
+        return next(statuses), {}, {}
+
+    monkeypatch.setattr(ac, "call", fake_call)
+    return keys
+
+
+# Each case is how a read saw each run it submitted, then how the last run ended.
+@pytest.mark.parametrize(
+    "seen, finished, health, ok",
+    [
+        (("started",), "completed", [200] * 6, True),
+        (("started",), "timed-out", [200] * 6, True),
+        (("completed",) * 3, "completed", [200] * 6, False),
+        (("started",), "completed", [200, 503, 200, 200, 200, 200], False),
+        (("started",), "failed", [200] * 6, False),
+        (("completed", "started"), "completed", [200] * 6, True),
+    ],
+    ids=["free", "free-until-its-limit", "never-seen-running", "a-replica-unhealthy", "the-job-failed",
+         "seen-running-on-a-later-try"],
+)
+def test_the_event_loop_check(monkeypatch, two_replicas, seen, finished, health, ok):
+    _job_states(monkeypatch, *seen, finished)
+    keys = _posting(monkeypatch, health)
+    w = Writer()
+    ad.check_event_loop(w, "http://runner:8000", ACCT)
+    ((row,),) = w.by_id().values()
+    assert row.probe_id == "admission.closure.event-loop.free" and row.passed is ok
+    # Each replica answered three times while the job ran.
+    assert row.observed_status == (200 if 503 not in health else 503)
+    # One run for each read, each under a key of its own.
+    assert len(set(keys)) == len(keys) == len(seen)
+
+
+def test_each_run_sent_again_names_the_one_before_its_state_and_its_run_time(monkeypatch, two_replicas, capsys):
+    ended = [{"job_id": JOB, "state": "completed", "envelope": {"output": {"duration_ms": 2104 + i}}}
+             for i in range(3)]
+    _job_states(monkeypatch, *ended, "completed")
+    keys = _posting(monkeypatch, [200] * 6)
+    w = Writer()
+    ad.check_event_loop(w, "http://runner:8000", ACCT)
+    ((row,),) = w.by_id().values()
+    assert row.passed is False and row.detail.startswith("busy=False ") and row.detail.endswith(" tries=3")
+    out = capsys.readouterr().out
+    assert out.splitlines() == [
+        f"INFO admission.closure.event-loop.free: resubmitted, key={keys[0]} state=completed ran_ms=2104 (try 2 of 3)",
+        f"INFO admission.closure.event-loop.free: resubmitted, key={keys[1]} state=completed ran_ms=2105 (try 3 of 3)",
+    ]
+    assert ACCT.token not in out
+
+
+def test_a_wait_for_a_running_job_reads_it_as_it_is_and_a_wait_for_its_end_long_polls(monkeypatch):
+    paths, answers = [], iter([{"state": "leased"}, {"state": "started"}, {"state": "completed"}])
+
+    def fake_call(_base, _method, path, *_args, **_kwargs):
+        paths.append(path)
+        return 200, next(answers), {}
+
+    monkeypatch.setattr(ac, "call", fake_call)
+    running = ac.job_until("http://runner:8000", ACCT.token, JOB, lambda a: a.get("state") in ("started", *ac.ENDED))
+    assert running["state"] == "started"
+    assert ac.job_until("http://runner:8000", ACCT.token, JOB)["state"] == "completed"
+    assert paths == [f"{ac.JOBS}/{JOB}?wait=0", f"{ac.JOBS}/{JOB}?wait=0", f"{ac.JOBS}/{JOB}?wait=5"]
+
+
+@pytest.mark.parametrize(
+    "envelope, took",
+    [
+        ({"output": {"duration_ms": 2104}, "started_at": 100, "finished_at": 103}, 2104),
+        ({"output": None, "started_at": 100, "finished_at": 103}, 3000),
+        ({"output": None, "started_at": None, "finished_at": 103}, None),
+        ({"output": {"duration_ms": True}, "started_at": None, "finished_at": None}, None),
+        (None, None),
+    ],
+    ids=["its-output-timing", "start-to-end", "never-started", "no-timing", "not-ended"],
+)
+def test_a_jobs_run_time(envelope, took):
+    assert ac.ran_ms({"job_id": JOB, "envelope": envelope}) == took
 
 
 # ---- the store speaks admission/v1 and counts only what it admitted ------------

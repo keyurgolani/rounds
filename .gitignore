@@ -82,5 +82,8 @@ harness/.env.*
 # account-scope migration-check scratch (generated per run)
 harness/.migcheck/
 
+# the database benchmark's scratch (generated per run, moved to the Trash after each phase)
+harness/bench/.scratch/
+
 # the harness demo phases' state (generated per run, removed at teardown)
 harness/.state/

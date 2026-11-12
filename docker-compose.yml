@@ -25,9 +25,11 @@ services:
       # The key the runner sends with each admission store write; the
       # runner gets the same value. The default is dev-only.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-rounds-dev-admission-key-DO-NOT-USE-IN-PROD}
-      # The execution job store (ROUNDS-00A-L03): its gate, and the
-      # execution-worker password the runner logs in with. No default,
-      # since a known password would log in; set both in .env to try it.
+      # The execution job store (ROUNDS-00A-L03): its gate, on by
+      # default, and the execution-worker password the runner logs in with.
+      # No default, since a known password would log in. Code runs need it
+      # in .env, with ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce; without
+      # either they answer 503 execution_disabled and keep the draft.
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
       - ROUNDS_EXECUTION_SECRET=${ROUNDS_EXECUTION_SECRET:-}
       # The share resolver's password (ROUNDS-00B-L04), the same on the
@@ -90,7 +92,7 @@ services:
       # Same value as PocketBase's; candidate processes never get it.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-rounds-dev-admission-key-DO-NOT-USE-IN-PROD}
       # Same value as PocketBase's, with no default; candidate processes
-      # never get it either.
+      # never get it either. Without it the execution keys act as off.
       - ROUNDS_EXECUTION_SECRET=${ROUNDS_EXECUTION_SECRET:-}
       # The share resolver's password, the same value as PocketBase's, with
       # no default; candidate processes never get it (ROUNDS-00B-L04).
@@ -159,14 +161,17 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
+      # Vite listens on 127.0.0.1 unless this says otherwise. In here it has
+      # to listen beyond the container's own loopback; the port above is
+      # published on the host's 127.0.0.1 only.
+      - VITE_DEV_HOST=0.0.0.0
       # Same-origin /api/* is proxied to the backend service via
       # frontend/devProxy.ts. Override VITE_API_PROXY_TARGET only when
       # pointing the dev server at a backend on a different host.
       # Runner is reached through the /api/run etc. proxy; PB via /api/*.
       - VITE_API_PROXY_TARGET=${VITE_API_PROXY_TARGET:-http://runner:8000}
       - VITE_POCKETBASE_PROXY_TARGET=${VITE_POCKETBASE_PROXY_TARGET:-http://pocketbase:8090}
-      # Leave VITE_POCKETBASE_URL empty so the browser uses same-origin
-      # — works from the host *and* from any device on the LAN.
+      # Leave VITE_POCKETBASE_URL empty so the browser uses same-origin.
       - VITE_POCKETBASE_URL=${VITE_POCKETBASE_URL:-}
       - VITE_OAUTH_GOOGLE_ENABLED=${VITE_OAUTH_GOOGLE_ENABLED:-false}
       - VITE_OAUTH_GITHUB_ENABLED=${VITE_OAUTH_GITHUB_ENABLED:-false}
