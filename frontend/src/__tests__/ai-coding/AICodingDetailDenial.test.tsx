@@ -105,16 +105,12 @@ describe('AICodingDetail runner calls', () => {
   });
 
   it('names the round and checkpoint and leaves the test command to the runner', async () => {
+    // A job, as every run is (ROUNDS-00A-L03 PR 4), here one that ended
+    // with nothing to show.
     vi.mocked(runProject).mockResolvedValue({
-      passed: true,
-      passed_count: 1,
-      failed_count: 0,
-      stdout: '',
-      stderr: '',
-      error: null,
-      duration_ms: 1,
-      truncated: false,
-    });
+      job_id: 'jobaaaaaaaaaaa1', state: 'canceled', outcome_class: 'canceled', retryable: false,
+      cancel_requested: true, envelope: null,
+    } as never);
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run' }));
