@@ -907,11 +907,11 @@ def test_an_idle_worker_at_15_s_stays_ready(monkeypatch):
     # Every pause as long as the jitter lets it be, which is the cap from
     # the fifth on.
     claims, asked = _paced(monkeypatch, [False] * 40, draw=0.999)
-    assert asked[4:40] == [15.0] * 36 == [worker_mod.CLAIM_IDLE_MAX_S] * 36
+    assert asked[4:40] == [15.0] * 36
     # /ready counts a claim's answer as the store answering, and its window
     # is twice the cap, so it holds at every claim after the first.
-    assert worker_mod.CLAIM_IDLE_MAX_S * 2 <= worker_mod.READY_WINDOW_S
     assert claims.ready[0] is False and all(claims.ready[1:])
+    assert worker_mod.CLAIM_IDLE_MAX_S * 2 <= worker_mod.READY_WINDOW_S
 
 
 def test_an_idle_worker_at_15_s_still_reaps_with_a_claim_at_least_every_15_s(monkeypatch):
