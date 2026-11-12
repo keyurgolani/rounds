@@ -993,11 +993,11 @@ def test_a_stop_ends_an_idle_worker_at_once(monkeypatch):
 
 def test_a_run_that_ends_has_its_replica_claim_at_once(server, monkeypatch):
     """The account's third job waits for one of its 2 running to end,
-    and the end has the worker claim at once instead of after the 5 to
-    15 s idle pause the third job's empty claim began."""
-    monkeypatch.setattr(worker_mod, "CLAIM_IDLE_S", 10.0)
+    and the end has the worker claim at once instead of after the idle
+    pause, 10 s or more here, that the third job's empty claim began."""
+    monkeypatch.setattr(worker_mod, "CLAIM_IDLE_S", 20.0)
     jobs = [server.job() for _ in range(3)]
     handler = PythonHandler({"case-1": "import time; time.sleep(0.3)"})
     state, _ = asyncio.run(_run(server, {"run": handler}, lambda s: all(_ended(j)(s) for j in jobs), slots=4,
-                                timeout=4))
+                                timeout=8))
     assert [_job(state, j)["outcome_class"] for j in jobs] == ["passed"] * 3
