@@ -229,6 +229,12 @@ def test_seeding_takes_only_named_tables_and_columns():
     assert [o["body"]["error"] for o in out] == ["table_not_seedable", "invalid_columns", "invalid_rows"]
 
 
+def test_seeding_takes_column_names_with_digits():
+    out = run([{"op": "seed", "table": "bench_blobs", "columns": ["id", "account_id", "sha256", "size", "privacy_class", "retain_until", "file"],
+                "rows": [["blobaaaaaaaaaaa", A, "ab" * 32, 2097152, "Private", 0, "blob_ab.bin"]]}, count("bench_blobs")])
+    assert out[0] == {"status": 200, "body": {"rows": 1}} and out[1][0]["n"] == 1
+
+
 def test_commands_need_a_v7_id_and_a_known_type():
     out = run([{"op": "checkCommand", "body": {"command_id": "not-an-id", "type": "update"}},
                {"op": "checkCommand", "body": {"command_id": cid(1), "type": "drop"}},

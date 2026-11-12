@@ -123,6 +123,26 @@ def dump(db_path: Path) -> dict:
             "triggers": triggers, "appliedMigrations": applied}
 
 
+def relation_semantics(binary: Path) -> dict:
+    """What PocketBase does to a reference when its target goes, read from
+    a probe migration in a throwaway directory of its own."""
+    root = pbnative.run_dir("relation-probe")
+    try:
+        dirs = pbnative.Dirs(root=root, migrations=root / "pb_migrations", hooks=root / "pb_hooks", data=root / "pb_data")
+        for d in (dirs.migrations, dirs.hooks, dirs.data):
+            d.mkdir()
+        probe = Path(__file__).resolve().parent / "pb_migrations_probe" / "1900000000_relation_delete_probe.js"
+        (dirs.migrations / probe.name).write_text(probe.read_text())
+        pbnative.migrate_up(binary, dirs)
+        con = sqlite3.connect(f"file:{dirs.data / 'data.db'}?mode=ro", uri=True)
+        try:
+            return dict(con.execute("SELECT \"case\", outcome FROM probe_results ORDER BY \"case\"").fetchall())
+        finally:
+            con.close()
+    finally:
+        pbnative.to_trash(root, "relation-probe")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     ap.add_argument("--pocketbase", default=None)
@@ -144,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
         "revision": git_head(),
         "migrations": [{"file": f, "sha256": pbnative.sha256_file(pbnative.REPO_MIGRATIONS / f)} for f in repo_files],
         "nativeRun": note["seedPathRewrite"],
+        "relationDeleteSemantics": relation_semantics(binary),
         **snap,
     }
     missing = sorted(set(repo_files) - set(doc["appliedMigrations"]))

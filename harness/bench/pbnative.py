@@ -186,7 +186,7 @@ class Server:
         deadline = t0 + timeout
         while time.monotonic() < deadline:
             if self.proc.poll() is not None:
-                raise RuntimeError(f"PocketBase exited with {self.proc.returncode}; see {self.log_path}")
+                raise RuntimeError(f"PocketBase exited with {self.proc.returncode}; its log ends:\n{self.tail()}")
             try:
                 with urllib.request.urlopen(f"{self.url}/api/health", timeout=2) as r:
                     if r.status == 200:
@@ -197,7 +197,13 @@ class Server:
                 pass
             time.sleep(0.05)
         self.stop()
-        raise TimeoutError(f"PocketBase not healthy after {timeout}s; see {self.log_path}")
+        raise TimeoutError(f"PocketBase not healthy after {timeout}s; its log ends:\n{self.tail()}")
+
+    def tail(self, lines: int = 40) -> str:
+        """The end of this server's log, for a failure report (the scratch dir moves to the Trash after)."""
+        if not self.log_path or not self.log_path.exists():
+            return ""
+        return "\n".join(self.log_path.read_text(errors="replace").splitlines()[-lines:])
 
     @property
     def pid(self) -> int | None:
@@ -236,4 +242,5 @@ def to_trash(path: Path, label: str) -> Path | None:
     trash = Path.home() / ".Trash"
     target = trash / f"rounds-18-bench-{label}-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}"
     shutil.move(str(path), str(target))
+    print(f"moved {path} to {target}", flush=True)
     return target

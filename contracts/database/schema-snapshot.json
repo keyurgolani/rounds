@@ -161,6 +161,13 @@
     }
   ],
   "nativeRun": "1700000100_seed_data.js: /pb_seeds/ -> pocketbase/seeds/ (native run only)",
+  "relationDeleteSemantics": {
+    "multi-optional-no-cascade": "unset",
+    "single-optional-cascade": "cascade",
+    "single-optional-no-cascade": "unset",
+    "single-required-cascade": "cascade",
+    "single-required-no-cascade": "restrict"
+  },
   "collections": [
     {
       "name": "admission_commands",

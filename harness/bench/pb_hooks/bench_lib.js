@@ -24,7 +24,7 @@ const RELAY_LEASE = "outbox-relay";
 const RELAY_CURSOR = "relay";
 const SEED_TABLES = ["bench_records", "bench_change_sets", "bench_audit", "bench_idempotency", "bench_outbox",
   "bench_projection", "bench_blobs", "bench_checkpoints", "campaigns", "applications", "interview_rounds", "offers", "todos"];
-const NAME = /^[a-z_]+$/;
+const NAME = /^[a-z_][a-z0-9_]*$/;
 const RECORD_ID = /^[a-z0-9]{15}$/;
 
 // Errors carry plain markers, not just a class, because the route reads

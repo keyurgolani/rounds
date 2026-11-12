@@ -73,7 +73,7 @@ function signedIn(c) {
 function command(c) {
   const { info, record } = signedIn(c);
   if (!record) return c.json(401, { error: "unauthorized" });
-  if ($app.cache().get("bench_freeze") === true) return c.json(503, { error: "frozen" });
+  if ($app.store().get("bench_freeze") === true) return c.json(503, { error: "frozen" });
   const body = info.data || {};
   const failpoint = $os.getenv("BENCH_FAILPOINTS") === "1" ? body.failpoint : undefined;
   const out = inTransaction((store, now) =>
@@ -127,7 +127,7 @@ function ack(c) {
 
 function freeze(c) {
   return keyed(c, (d) => {
-    $app.cache().set("bench_freeze", d.on === true);
+    $app.store().set("bench_freeze", d.on === true);
     return { status: 200, body: { frozen: d.on === true } };
   });
 }

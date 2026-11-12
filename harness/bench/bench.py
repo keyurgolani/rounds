@@ -120,10 +120,10 @@ def signup(conn: Conn, tag: str) -> tuple[str, str]:
     password = benchlib.generated_password()
     s, doc, _ = conn.post("/api/collections/users/records", {"email": email, "password": password, "passwordConfirm": password, "name": f"Bench {tag}"})
     if s != 200:
-        raise Bench(f"signup refused ({s})")
+        raise Bench(f"signup refused ({s}): {doc}")
     s, doc, _ = conn.post("/api/collections/users/auth-with-password", {"identity": email, "password": password})
     if s != 200 or not doc.get("token"):
-        raise Bench(f"sign-in refused ({s})")
+        raise Bench(f"sign-in refused ({s}): {doc.get('message', '')}")
     return doc["record"]["id"], doc["token"]
 
 
@@ -210,7 +210,7 @@ def seed_blobs(conn: Conn, key: str, dirs: pbnative.Dirs, acct: Account, total_b
         s, doc, _ = conn.post("/api/bench/seed", {"table": "bench_blobs", "columns": ["id", "account_id", "sha256", "size", "privacy_class", "retain_until", "file"],
                                                  "rows": rows[i:i + 500]}, key=key)
         if s != 200:
-            raise Bench(f"seed blobs failed ({s})")
+            raise Bench(f"seed blobs failed ({s}): {doc}")
     return {"blobs": count, "bytes": count * benchlib.BLOB_SIZE, "seconds": round(time.monotonic() - t0, 2)}
 
 
@@ -287,11 +287,13 @@ class Relay(threading.Thread):
 
 
 class Sampler(threading.Thread):
-    """WAL file size every 100 ms and the server's RSS every second."""
+    """WAL file size every 100 ms and the server's RSS every second. It reads
+    the server's pid each time, so a restart (the crash, the stop-and-tar, the
+    schema change) keeps the RSS samples coming."""
 
-    def __init__(self, dirs: pbnative.Dirs, pid: int):
+    def __init__(self, dirs: pbnative.Dirs, server: pbnative.Server):
         super().__init__(daemon=True, name="sampler")
-        self.dirs, self.pid = dirs, pid
+        self.dirs, self.server = dirs, server
         self.wal: list[tuple[float, int]] = []
         self.rss: list[int] = []
         self.stop = threading.Event()
@@ -304,8 +306,9 @@ class Sampler(threading.Thread):
                 self.wal.append((time.time(), wal.stat().st_size))
             except FileNotFoundError:
                 self.wal.append((time.time(), 0))
-            if tick % 10 == 0:
-                out = subprocess.run(["ps", "-o", "rss=", "-p", str(self.pid)], capture_output=True, text=True).stdout.strip()
+            pid = self.server.pid
+            if tick % 10 == 0 and pid:
+                out = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
                 if out.isdigit():
                     self.rss.append(int(out) * 1024)
             tick += 1
@@ -560,9 +563,9 @@ def run_scale(args, binary: Path, n_accounts: int) -> dict:
         # on a command line).
         admin_email = f"bench-admin-{os.urandom(4).hex()}@bench.invalid"
         admin_password = benchlib.generated_password()
-        s, _, _ = conn.post("/api/admins", {"email": admin_email, "password": admin_password, "passwordConfirm": admin_password})
+        s, doc, _ = conn.post("/api/admins", {"email": admin_email, "password": admin_password, "passwordConfirm": admin_password})
         if s != 200:
-            raise Bench(f"could not make the bench admin ({s})")
+            raise Bench(f"could not make the bench admin ({s}): {doc.get('message', '')}")
         s, pragmas, _ = conn.post("/api/bench/pragmas", {}, key=key)
         out["pragmas"] = pragmas
         accounts = []
@@ -585,7 +588,7 @@ def run_scale(args, binary: Path, n_accounts: int) -> dict:
         relays = [Relay(server.port, key, "relay-a"), Relay(server.port, key, "relay-b")]
         for r in relays:
             r.start()
-        sampler = Sampler(dirs, server.pid)
+        sampler = Sampler(dirs, server)
         sampler.start()
         load = Load(server.port, accounts, rng.randint(0, 10**9))
 
@@ -816,6 +819,13 @@ def run_scale(args, binary: Path, n_accounts: int) -> dict:
         out["samplers"] = sampler.summary()
         out["relays"] = [{"holder": r.holder, "applied": r.applied, "skipped": r.skipped, "gaps": r.gaps, "fenced": r.fenced, "errors": r.errors} for r in relays]
         out["unknownOutcomes"] = load.unknown
+    except Exception as err:
+        # What the scale got through, and the server's own last words, go
+        # into the partial results before the scratch dir moves to the Trash.
+        out["error"] = str(err)
+        out["pocketbaseLogTail"] = server.tail() if server else ""
+        err.partial = out  # type: ignore[attr-defined]
+        raise
     finally:
         for r in relays or []:
             r.stop.set()
@@ -1035,7 +1045,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except Exception as err:  # noqa: BLE001
         partial = Path(args.out).with_suffix(".partial.json")
-        partial.write_text(json.dumps({"error": str(err), "trace": traceback.format_exc()[-4000:], "scales": scales}, indent=2, default=str) + "\n")
+        partial.write_text(json.dumps({"error": str(err), "trace": traceback.format_exc()[-4000:], "scales": scales,
+                                       "failedScale": getattr(err, "partial", None)}, indent=2, default=str) + "\n")
         print(f"failed: {err}; partial results in {partial}", file=sys.stderr, flush=True)
         return 1
 
