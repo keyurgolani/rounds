@@ -3,7 +3,8 @@ and decisions: pocketbase/tests/execution_server.cjs serves
 pb_hooks/execution.js over HTTP on an in-memory store with a clock the
 tests move. Jobs run through the legacy executor with test handlers,
 since no kind has one until PR 2. The harness runs the same worker
-against a real PocketBase."""
+against a real PocketBase. The claim loop's pauses are also tested on a
+scripted store, some on a clock only those pauses move."""
 from __future__ import annotations
 
 import asyncio
@@ -15,12 +16,13 @@ import sys
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
 
 from app import sandbox
-from execution import store, worker as worker_mod
+from execution import runtime, store, worker as worker_mod
 from execution.envelope import Part
 from execution.executor import LegacyExecutor, RunSpec, Starved
 from execution.worker import Result, Worker
@@ -778,3 +780,224 @@ def test_on_with_the_store_down_is_unready(monkeypatch):
     with TestClient(app) as client:
         time.sleep(0.3)
         assert _ready(client, 503)["status"] == "unready"
+
+
+# ---- the claim loop's pauses ---------------------------------------------------------
+
+# The cadence as it ships, which the quick fixture scales down for the
+# tests above.
+SHIPPED = {name: getattr(worker_mod, name) for name in ("CLAIM_IDLE_S", "REAP_EVERY_S")}
+
+
+class Clock:
+    """The worker's clock where only its pauses move it, at once."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def time(self) -> float:
+        return self.now
+
+
+class Slots:
+    """An executor that always has a slot free."""
+
+    kind = "legacy-in-process"
+
+    def free_slots(self) -> int:
+        return 4
+
+    def healthy(self) -> bool:
+        return True
+
+
+NOTHING_REAPED = {"requeued": 0, "worker_lost": 0, "over_budget": 0}
+CLAIMED = store.Claim(
+    store.Job("job000000000001", A, "run", "scratch", {}, "a" * 64, "c" * 64, "d" * 64, {}, 0),
+    store.Attempt("att000000000001", 1, 0), "test-token-placeholder", NOTHING_REAPED)
+
+
+class Claims:
+    """The store's claims as a script: True answers a job and False
+    nothing queued, and once the script is used up the worker stops.
+    ``at`` keeps each claim's time on ``clock`` and ``ready`` what /ready
+    said just before it. The first claim takes ``hold`` seconds."""
+
+    logged_in = True
+
+    def __init__(self, script: list[bool], clock=time, hold: float = 0) -> None:
+        self.script = list(script)
+        self.clock = clock
+        self.hold = hold
+        self.at: list[float] = []
+        self.ready: list[bool] = []
+        self.worker: Worker | None = None
+
+    async def claim(self, name: str):
+        self.at.append(self.clock.monotonic())
+        self.ready.append(runtime.readiness()["ready"])
+        await asyncio.sleep(self.hold if len(self.at) == 1 else 0)
+        if not self.script:
+            self.worker._stopping.set()
+            return None
+        return CLAIMED if self.script.pop(0) else None
+
+    async def reap(self):
+        return dict(NOTHING_REAPED)
+
+
+def _paced(monkeypatch, script: list[bool], draw: float | None = None) -> tuple[Claims, list[float]]:
+    """Runs the claim loop alone over ``script`` at the shipped cadence,
+    with the jitter's draw fixed at ``draw`` when one is given, on a clock
+    each pause moves on at once by what it asked for. A claimed job ends
+    at once. Answers the claims and each pause the loop asked for."""
+    for name, value in SHIPPED.items():
+        monkeypatch.setattr(worker_mod, name, value)
+    clock, asked = Clock(), []
+
+    async def pause(self, seconds, wakes=False):
+        asked.append(seconds)
+        clock.now += seconds
+        await asyncio.sleep(0)
+        return False
+
+    async def process(self, claim):
+        self._claimed -= 1
+
+    monkeypatch.setattr(worker_mod, "time", clock)
+    monkeypatch.setattr(Worker, "_pause", pause)
+    monkeypatch.setattr(Worker, "_process", process)
+    if draw is not None:
+        monkeypatch.setattr(worker_mod, "random", SimpleNamespace(random=lambda: draw))
+    claims = Claims(script, clock)
+
+    async def scenario():
+        worker = Worker(claims, Slots(), {}, name="runner-x")
+        claims.worker = worker
+        monkeypatch.setattr(runtime._runtime, "mode", "on")
+        monkeypatch.setattr(runtime._runtime, "worker", worker)
+        await asyncio.wait_for(worker._claim_loop(), 10)
+
+    asyncio.run(scenario())
+    return claims, asked
+
+
+@pytest.mark.parametrize(
+    "draw, pauses",
+    [(0.5, [1.0, 2.0, 4.0, 8.0, 15.0, 15.0]),
+     (0.0, [0.5, 1.0, 2.0, 4.0, 7.5, 7.5]),
+     (0.999, [1.499, 2.998, 5.996, 11.992, 15.0, 15.0])],
+    ids=["middle", "shortest", "longest"],
+)
+def test_an_idle_worker_backs_off_to_15_s_and_a_claimed_job_starts_it_over(monkeypatch, draw, pauses):
+    claims, asked = _paced(monkeypatch, [False] * 6 + [True] + [False] * 2, draw)
+    # Each claim that finds nothing doubles the pause, from about 1 s up to
+    # 15 s, with a jitter of half either way that never passes 15 s.
+    assert asked[:6] == pytest.approx(pauses)
+    # A claim that gets a job asks again at once, and the pauses after it
+    # start over from the shortest.
+    assert claims.at[7] == claims.at[6]
+    assert asked[6:8] == pytest.approx(pauses[:2])
+
+
+def test_an_idle_worker_at_15_s_stays_ready(monkeypatch):
+    # Every pause as long as the jitter lets it be, which is the cap from
+    # the fifth on.
+    claims, asked = _paced(monkeypatch, [False] * 40, draw=0.999)
+    assert asked[4:40] == [15.0] * 36
+    # /ready counts a claim's answer as the store answering, and its window
+    # is twice the cap, so it holds at every claim after the first.
+    assert claims.ready[0] is False and all(claims.ready[1:])
+    assert worker_mod.CLAIM_IDLE_MAX_S * 2 <= worker_mod.READY_WINDOW_S
+
+
+def test_an_idle_worker_at_15_s_still_reaps_with_a_claim_at_least_every_15_s(monkeypatch):
+    claims, asked = _paced(monkeypatch, [False] * 40, draw=0.999)
+    assert asked[4:40] == [15.0] * 36
+    # Each claim reaps first, so without the reap loop's own call, the jobs
+    # a replica that died held still go back to the queue that often.
+    gaps = [later - earlier for earlier, later in zip(claims.at, claims.at[1:])]
+    assert max(gaps) <= worker_mod.REAP_EVERY_S + 1e-9 and worker_mod.REAP_EVERY_S == 15.0
+
+
+async def _claimed(claims: Claims, count: int, timeout: float = 5) -> None:
+    deadline = time.monotonic() + timeout
+    while len(claims.at) < count:
+        assert time.monotonic() < deadline, f"{len(claims.at)} claims, not {count}"
+        await asyncio.sleep(0.01)
+
+
+@pytest.mark.parametrize("during, caller", [("pause", "loop"), ("pause", "thread"), ("claim", "loop")],
+                         ids=["pause", "pause-from-a-thread", "claim-in-flight"])
+def test_a_wake_ends_an_idle_pause_and_the_next_claim_comes_at_once(monkeypatch, during, caller):
+    # The pause after a claim that finds nothing is 10 s here.
+    monkeypatch.setattr(worker_mod, "CLAIM_IDLE_S", 10.0)
+    monkeypatch.setattr(worker_mod, "random", SimpleNamespace(random=lambda: 0.5))
+    asked = []
+    pause = Worker._pause
+
+    async def recorded(self, seconds, *args, **kwargs):
+        asked.append(seconds)
+        return await pause(self, seconds, *args, **kwargs)
+
+    monkeypatch.setattr(Worker, "_pause", recorded)
+
+    async def scenario() -> float:
+        # In flight, the first claim takes long enough for the wake to come
+        # before it answers.
+        claims = Claims([False] * 4, hold=0.4 if during == "claim" else 0)
+        worker = Worker(claims, Slots(), {}, name="runner-x")
+        claims.worker = worker
+        claiming = asyncio.create_task(worker._claim_loop())
+        try:
+            await _claimed(claims, 1)
+            await asyncio.sleep(0.1 if during == "claim" else 0.3)
+            woken = time.monotonic()
+            if caller == "thread":
+                await asyncio.to_thread(worker.wake)
+            else:
+                worker.wake()
+            await _claimed(claims, 2, timeout=3)
+            return claims.at[1] - woken
+        finally:
+            await worker.stop()
+            await asyncio.wait_for(claiming, 2)
+
+    assert asyncio.run(scenario()) < 1
+    # The pause after the claim the wake brought is the shortest again.
+    assert asked[:2] == [10.0, 10.0]
+
+
+def test_a_stop_ends_an_idle_worker_at_once(monkeypatch):
+    # A long idle pause, and a reap loop that waits as long.
+    monkeypatch.setattr(worker_mod, "CLAIM_IDLE_S", 10.0)
+    monkeypatch.setattr(worker_mod, "REAP_EVERY_S", 10.0)
+
+    async def scenario() -> float:
+        claims = Claims([False] * 4)
+        worker = Worker(claims, Slots(), {}, name="runner-x")
+        claims.worker = worker
+        running = asyncio.create_task(worker.run())
+        await _claimed(claims, 1)
+        await asyncio.sleep(0.3)
+        began = time.monotonic()
+        await worker.stop()
+        await asyncio.wait_for(running, 2)
+        return time.monotonic() - began
+
+    assert asyncio.run(scenario()) < 1
+
+
+def test_a_run_that_ends_has_its_replica_claim_at_once(server, monkeypatch):
+    """The account's third job waits for one of its 2 running to end,
+    and the end has the worker claim at once instead of after the idle
+    pause, 10 s or more here, that the third job's empty claim began."""
+    monkeypatch.setattr(worker_mod, "CLAIM_IDLE_S", 20.0)
+    jobs = [server.job() for _ in range(3)]
+    handler = PythonHandler({"case-1": "import time; time.sleep(0.3)"})
+    state, _ = asyncio.run(_run(server, {"run": handler}, lambda s: all(_ended(j)(s) for j in jobs), slots=4,
+                                timeout=8))
+    assert [_job(state, j)["outcome_class"] for j in jobs] == ["passed"] * 3
