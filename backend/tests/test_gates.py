@@ -98,6 +98,9 @@ def test_written_defaults_keep_routes_on_and_outbound_reach_off():
         elif name == "SHARE_CAPABILITY_RESOLUTION":
             # #11 stage 2 ships capability resolution closed until #12.
             expected = "disabled"
+        elif name == "DEMO_EXECUTION":
+            # #177: the demo account's code runs ship off.
+            expected = "disabled"
         else:
             expected = "enabled"
         assert r.value == expected, name
@@ -181,6 +184,32 @@ def test_only_pocketbase_reads_the_demo_gate():
     assert gates.BY_NAME["DEMO"].readers == frozenset({gates.POCKETBASE})
     assert "DEMO" not in gates.load({"ROUNDS_GATE_DEMO": "enabled"}, gates.RUNNER)
     assert "DEMO" not in gates.load({"ROUNDS_GATE_DEMO": "enabled"}, gates.FRONTEND)
+
+
+# ---- the demo account's code runs (ROUNDS-00B-L07) -----------------------
+
+
+def test_the_demos_code_runs_ship_closed_and_only_the_runner_reads_the_gate():
+    gate = gates.BY_NAME["DEMO_EXECUTION"]
+    assert gate.env == "ROUNDS_GATE_DEMO_EXECUTION"
+    assert (gate.values, gate.default, gate.closed, gate.aliases) == (gates.ROUTE_VALUES, "disabled", "disabled", ())
+    assert gate.readers == frozenset({gates.RUNNER})
+    assert gates.load({}, gates.RUNNER)["DEMO_EXECUTION"] == gates.Resolved("disabled", "default")
+    for reader in (gates.POCKETBASE, gates.FRONTEND):
+        assert "DEMO_EXECUTION" not in gates.load({"ROUNDS_GATE_DEMO_EXECUTION": "enabled"}, reader)
+
+
+@pytest.mark.parametrize("env, want", [
+    ({"ROUNDS_GATE_DEMO_EXECUTION": "enabled"}, gates.Resolved("enabled", "env")),
+    ({"ROUNDS_GATE_DEMO_EXECUTION": " Enabled "}, gates.Resolved("enabled", "env")),
+    ({"ROUNDS_GATE_DEMO_EXECUTION": "disabled"}, gates.Resolved("disabled", "env")),
+    ({"ROUNDS_GATE_DEMO_EXECUTION": "on"}, gates.Resolved("disabled", "invalid")),
+    ({"ROUNDS_GATE_DEMO_EXECUTION": "true"}, gates.Resolved("disabled", "invalid")),
+    # The demo's own switch doesn't open its code runs.
+    ({"ROUNDS_GATE_DEMO": "enabled", "ROUNDS_ENABLE_DEMO": "true"}, gates.Resolved("disabled", "default")),
+])
+def test_only_enabled_opens_the_demos_code_runs(env, want):
+    assert gates.load(env, gates.RUNNER)["DEMO_EXECUTION"] == want
 
 
 # ---- the public share gates (ROUNDS-00B-L03) -----------------------------

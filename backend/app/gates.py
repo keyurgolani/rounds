@@ -26,8 +26,9 @@ Resolution, the same in all three readers:
    (``false``, ``0``, ``no``, ``off``, or empty) applies it.
 4. Otherwise the written default applies.
 
-Admission (``app/admission.py``) enforces the route gates and
-``EXECUTION_DEFINITIONS`` and runs steps 6 and 7 as
+Admission (``app/admission.py``) enforces the route gates,
+``EXECUTION_DEFINITIONS``, and at step 4 ``DEMO_EXECUTION`` (the demo
+account's code runs, closed by default), and runs steps 6 and 7 as
 ``ENFORCE_IDEMPOTENCY`` and ``ENFORCE_QUOTA`` say, the AI router reads
 ``PAPER_FETCH`` and ``PROVIDER_PRIVATE_NETWORK``, PocketBase and the
 SPA read ``SIGNUPS``, and PocketBase reads ``DEMO``. ``EXECUTION_STORE``
@@ -293,6 +294,20 @@ REGISTRY: tuple[Gate, ...] = (
             "random password and a new token key at every start."
         ),
         aliases=(Alias(env="ROUNDS_ENABLE_DEMO", value="enabled", reader=POCKETBASE),),
+    ),
+    # ROUNDS-00B-L07: the demo account's code runs stay off until an
+    # operator opens them. Admission step 4 reads it.
+    Gate(
+        name="DEMO_EXECUTION",
+        values=ROUTE_VALUES,
+        default="disabled",
+        closed="disabled",
+        readers=frozenset({RUNNER}),
+        description=(
+            "The demo account's code runs: run, evaluate, run-project, grade, take-home run, and take-home "
+            "submit. Disabled, each answers a demo account 503 demo_execution_disabled before anything is "
+            "charged or runs; other accounts and the demo's other routes are unchanged."
+        ),
     ),
 )
 

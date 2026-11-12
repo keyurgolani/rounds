@@ -13,7 +13,10 @@ subprocess, sidecar, or provider call, in this order:
    routes serve only while that key is ``on``.
 3. Account from the bearer through PocketBase's auth-refresh: 401
    ``unauthenticated``; PocketBase down or 5xx: 503 ``auth_unavailable``.
-4. ``(tier, operation)`` table: 403 ``not_permitted``.
+4. ``(tier, operation)`` table: 403 ``not_permitted``. While
+   ``ROUNDS_GATE_DEMO_EXECUTION`` is closed, its default, the demo tier's
+   six code-run operations are 503 ``demo_execution_disabled``
+   (ROUNDS-00B-L07).
 5. Fields, from the parsed body only: 413 ``limit_exceeded``, 422
    ``invalid_request`` (request models, ``app.limits``, ``app.errors``).
 6. Idempotency, keyed on the ``Idempotency-Key`` (the command id) and a
@@ -165,10 +168,25 @@ GRADING_OFF = "Grading practice code is turned off on this server."
 
 TIERS = ("standard", "demo")
 # (tier, operation) -> permitted. Every pair is permitted, as #1 starts;
-# the demo tier's limits are its quota bucket in pb_hooks/admission.js.
+# the demo tier's limits are its quota bucket in pb_hooks/admission.js,
+# and its code runs are DEMO_EXECUTION's (refusal below).
 PERMITS: dict[tuple[str, str], bool] = {
     (tier, route.operation): True for tier in TIERS for route in ROUTES.values()
 }
+
+
+def refusal(tier: str, operation: str) -> str | None:
+    """Step 4: the code a tier is refused an operation with, or None.
+
+    While ``ROUNDS_GATE_DEMO_EXECUTION`` is closed, the demo tier isn't
+    permitted the six code-run operations, and each answers 503
+    ``demo_execution_disabled`` (ROUNDS-00B-L07); open, the demo tier
+    has them as before. Every other pair is the table's."""
+    if tier == "demo" and operation in DEFINITION_OPERATIONS and not gates.route_enabled("DEMO_EXECUTION"):
+        return "demo_execution_disabled"
+    if not PERMITS.get((tier, operation), False):
+        return "not_permitted"
+    return None
 
 
 @dataclass
@@ -370,9 +388,11 @@ class AdmissionMiddleware:
         user = await authenticate(token)
         admitted.account = user
         admitted.tier = tier_of(user.get("record") or {})
-        # 4. Tier and operation.
-        if not PERMITS.get((admitted.tier, route.operation), False):
-            raise TypedError("not_permitted")
+        # 4. Tier and operation, before the body is read, so a refusal
+        # charges and runs nothing.
+        refused = refusal(admitted.tier, route.operation)
+        if refused is not None:
+            raise TypedError(refused)
         # 5 to 9 run in the route: FastAPI parses the body, then the
         # route calls begin().
 

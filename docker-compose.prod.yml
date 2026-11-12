@@ -175,6 +175,8 @@ services:
       - ROUNDS_GATE_EXECUTION_SCRATCH=${ROUNDS_GATE_EXECUTION_SCRATCH:-}
       - ROUNDS_GATE_EXECUTION_GRADING=${ROUNDS_GATE_EXECUTION_GRADING:-}
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
+      # The demo account's code runs, off unless this is enabled.
+      - ROUNDS_GATE_DEMO_EXECUTION=${ROUNDS_GATE_DEMO_EXECUTION:-}
       # Public shares (docs/operations.md, "Public shares"): PUBLIC_SHARES
       # turns every public share read off, and capability resolution stays
       # closed until the steps there are done. The frontend reads the same

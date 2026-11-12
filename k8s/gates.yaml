@@ -82,3 +82,8 @@ data:
   # leaves ROUNDS_ENABLE_DEMO in pocketbase.yaml in charge, which keeps it
   # off.
   ROUNDS_GATE_DEMO: ""
+  # The demo account's code runs, read by the runner: "enabled" or
+  # "disabled". Empty is "disabled": a demo account's run, evaluate,
+  # run-project, grade, take-home run, and take-home submit answer 503
+  # demo_execution_disabled. Restart the runner after a change.
+  ROUNDS_GATE_DEMO_EXECUTION: ""
