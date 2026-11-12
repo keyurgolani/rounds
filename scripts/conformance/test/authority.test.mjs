@@ -209,8 +209,7 @@ describe('authority: matrix content', () => {
     assert.equal(new Set(c.entries.map((e) => e.issue)).size, 101);
     // The corrected sentences cite DR-0002@1; an additive revision keeps
     // them valid, so the corrections may trail the matrix.
-    assert.equal(c.matrixRevision, 1);
-    assert.ok(m.revision >= c.matrixRevision);
+    assert.ok(c.matrixRevision >= 1 && c.matrixRevision <= m.revision, `corrections cite matrix revision ${c.matrixRevision}`);
   });
 
   it('lists one package per spec service, plus D8\'s Provider Gateway, with target paths pending #18', () => {

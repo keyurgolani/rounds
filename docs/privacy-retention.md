@@ -23,8 +23,8 @@ What the evaluators decide for each class and sink:
 | Class | remote-ai | index | logs | share | export | local-draft | backup | analytics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Private | allow with per-request consent (consent:per-request, preview:payload, snapshot:provider-payload-snapshot), else CONSENT_REQUIRED | allow (namespace:account) | allow if kind metadata; or kind opaque-id, else LOG_CONTENT_DENIED | allow if projection reviewed (projection:reviewed), else SHARE_NEEDS_PROJECTION | allow (namespace:account) | allow (namespace:account, purge:sign-out) | allow (encryption:backup) | deny ANALYTICS_DENIED |
-| Third-party personal | allow with purpose-specific consent (consent:purpose-specific, preview:payload, snapshot:provider-payload-snapshot), else OFF_BY_DEFAULT | allow (namespace:account) | allow if kind opaque-id (pseudonym:account-keyed), else LOG_VALUE_DENIED | allow if published true (publish:exact-field), else EXCLUDED_BY_DEFAULT | allow (namespace:account, export:warning) | allow (encryption:local, namespace:account, purge:sign-out) | allow (encryption:backup) | deny ANALYTICS_DENIED |
-| Sensitive | allow with field-level consent (consent:field-level, preview:payload, snapshot:provider-payload-snapshot), else OFF_BY_DEFAULT | allow if optIn true (namespace:account); or redaction mask (namespace:account, redaction:mask), else OFF_BY_DEFAULT | allow if kind opaque-id, else LOG_VALUE_DENIED | allow if confirmation separate and snapshot scoped (confirmation:separate, projection:scoped-snapshot), else EXCLUDED_BY_DEFAULT | allow if export protected (export:protected), else EXPORT_PROTECTED_ONLY | allow (encryption:local, namespace:account, purge:sign-out) | allow (encryption:backup) | deny ANALYTICS_DENIED |
+| Third-party personal | allow with purpose-specific consent (consent:purpose-specific, preview:payload, snapshot:provider-payload-snapshot), else OFF_BY_DEFAULT | allow (namespace:account) | allow if kind opaque-id (pseudonym:account-keyed), else LOG_VALUE_DENIED | allow if published true (publish:exact-field), else EXCLUDED_BY_DEFAULT | allow if exportScope full-account (namespace:account, export:warning), else EXPORT_FULL_ACCOUNT_ONLY | allow (encryption:local, namespace:account, purge:sign-out) | allow (encryption:backup) | deny ANALYTICS_DENIED |
+| Sensitive | allow with field-level consent (consent:field-level, preview:payload, snapshot:provider-payload-snapshot), else OFF_BY_DEFAULT | allow if optIn true (namespace:account); or redaction mask (namespace:account, redaction:mask), else OFF_BY_DEFAULT | allow if kind opaque-id (pseudonym:account-keyed), else LOG_VALUE_DENIED | allow if confirmation separate and snapshot scoped (confirmation:separate, projection:scoped-snapshot), else EXCLUDED_BY_DEFAULT | allow if export protected (export:protected), else EXPORT_PROTECTED_ONLY | allow (encryption:local, namespace:account, purge:sign-out) | allow (encryption:backup) | deny ANALYTICS_DENIED |
 | Secret | deny SECRET_NEVER | deny SECRET_NEVER | deny SECRET_NEVER | deny SECRET_NEVER | deny SECRET_NEVER | deny SECRET_NEVER | allow (encryption:backup, key-custody:separate) | deny ANALYTICS_DENIED |
 | Share Projection | deny PROJECTION_NEVER | deny PROJECTION_NEVER | allow if telemetry enabled and event aggregate-view (telemetry:coarse), else LOG_VALUE_DENIED | allow if capability scoped (capability:scoped), else SHARE_NEEDS_CAPABILITY | allow (bytes:immutable) | deny PROJECTION_NEVER | allow (encryption:backup) | deny ANALYTICS_DENIED |
 
@@ -34,7 +34,7 @@ Platform content takes a visibility instead of a class:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | public-ui | allow | allow | allow if kind metadata; or kind opaque-id, else LOG_CONTENT_DENIED | allow | allow | allow | allow (encryption:backup) | deny ANALYTICS_DENIED | allow |
 | authed-readable | allow if purposeDeclares true, else NOT_DECLARED | allow (namespace:account) | allow if kind metadata; or kind opaque-id, else LOG_CONTENT_DENIED | deny NOT_PUBLIC | deny NOT_ACCOUNT_DATA | allow (namespace:account) | allow (encryption:backup) | deny ANALYTICS_DENIED | allow if signedIn true, else SIGN_IN_REQUIRED |
-| server-only | deny SERVER_ONLY | deny SERVER_ONLY | allow if kind metadata; or kind opaque-id, else SERVER_ONLY | deny SERVER_ONLY | deny SERVER_ONLY | deny SERVER_ONLY | allow (encryption:backup) | deny ANALYTICS_DENIED | deny SERVER_ONLY |
+| server-only | deny SERVER_ONLY | deny SERVER_ONLY | deny SERVER_ONLY | deny SERVER_ONLY | deny SERVER_ONLY | deny SERVER_ONLY | allow (encryption:backup) | deny ANALYTICS_DENIED | deny SERVER_ONLY |
 
 Each sink's enforcing leaf:
 
@@ -103,6 +103,10 @@ A destination's location comes from the resolved address, not the base URL.
 
 Never destinations, which get no location class: loopback (127.0.0.0/8, ::1/128), link-local (fe80::/10, 169.254.0.0/16), unspecified (0.0.0.0/32, ::/128), the metadata addresses (169.254.169.254, 169.254.170.2, 169.254.170.23, 100.100.100.200, 168.63.129.16, fd00:ec2::254, fd00:ec2::23), single-label host names, the service names `pocketbase`, `pdf-renderer`, `runner`, `frontend`, `materializer`, `localhost`, and names ending `.localhost`, `.internal`, `.svc`, `.cluster.local`.
 
+Other non-public ranges, which get no location class either: 0.0.0.0/8, 192.0.0.0/24, 192.0.2.0/24, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 240.0.0.0/4, ::/96, ::ffff:0:0:0/96, 64:ff9b:1::/48, 100::/64, 2001::/23, 2001:db8::/32, 3fff::/20, fec0::/10, ff00::/8.
+
+An IPv6 address inside ::ffff:0:0/96, 2002::/16, 64:ff9b::/96 is judged as the IPv4 address that follows the prefix.
+
 Private networks: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, fc00::/7. A private destination passes only when ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK is enabled and the resolved address and port match a ROUNDS_AI_PRIVATE_ENDPOINTS entry. With the gate off, every private address is refused whatever the list says; with the gate on, an empty list refuses every private address.
 
 ## Credential channel
@@ -160,7 +164,7 @@ Every purpose that calls an AI provider. The scan fails CI on a provider call fr
 
 ## Violation register
 
-8 open, 2 closed.
+9 open, 2 closed.
 
 | Entry | Status | Breach | Owner | Exit |
 | --- | --- | --- | --- | --- |
@@ -172,8 +176,9 @@ Every purpose that calls an AI provider. The scan fails CI on a provider call fr
 | 6 | closed (#203) | Data the shared demo account saved outlived its reset. | ROUNDS-00B-L07 | Demo containment: the demo account keeps no secrets, as the decided secrets row says. |
 | 7 | open | While turned on, ATS AI calls a provider again 1.5 seconds after each edit, with no request of its own. | ROUNDS-14-L06 | ROUNDS-14-L06 makes ATS AI an explicit trigger and ROUNDS-14-L04 shows its consent. |
 | 8 | open | The "local" provider presets name localhost, one of them the runner's own port. | ROUNDS-14-L04 | ROUNDS-14-L04 blocks saved destinations with no location class and turns the presets into LAN templates. |
-| 9 | open | The sixteen legacy purposes send without per-request consent. | ROUNDS-14-L06 | ROUNDS-14-L06 moves each purpose to current, with per-request consent, or retires it. |
-| 10 | open | Browser drafts and caches stay after a standard account signs out; only the demo reset clears some. | ROUNDS-08-L02 | ROUNDS-08-L02's draft store purges on sign-out and account switch unless a draft is synced, and ROUNDS-14-L05 enforces the schedule. |
+| 9 | open | The sixteen legacy purposes send without per-request consent, and the resume purposes send the contact fields their entries omit. | ROUNDS-14-L06 | ROUNDS-14-L06 moves each purpose to current, with per-request consent, or retires it. |
+| 10 | open | Browser drafts and caches stay after a standard account signs out. That includes the ATS AI cache, whose own lifetime is entry 3. | ROUNDS-08-L02 | ROUNDS-08-L02's draft store purges on sign-out and account switch unless a draft is synced, and ROUNDS-14-L05 enforces the schedule. |
+| 11 | open | Visible test cases are shown to the account by design, but the field map can't tell them from hidden ones, so it classes every stored case server-only. | ROUNDS-00A-L02 | ROUNDS-00A-L02 gives a case's visibility a form the field map can name, so a visible case is authed-readable and a hidden one stays server-only. |
 
 ## Enforcement still pending
 
@@ -198,4 +203,4 @@ Each row owner's tests read the policy value; until a test cites its row, the ro
 - consent: ROUNDS-14-L04, ROUNDS-14-L02
 - redaction: ROUNDS-14-L02
 
-The field map classifies 755 ids.
+The field map classifies 761 ids.

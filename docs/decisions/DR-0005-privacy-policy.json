@@ -19,12 +19,12 @@
   "prerequisites": ["ROUNDS-00B-L01", "ROUNDS-01-L01", "ROUNDS-01-L02", "ROUNDS-02-L01"],
   "authorityBoundary": "contracts/privacy/policy.json",
   "affectedPackages": ["provider-gateway", "account", "capture-ingestion", "artifact", "practice", "search", "public-share", "revision-audit"],
-  "versioning": "The policy carries four version ids, privacy@1, retention@1, redaction@1, and consent@1, in contracts/privacy/policy.json; ROUNDS-14-L02's Provider Invocation Intent records them (spec 707), and every allow the evaluators answer names them. A consumer pins the ids it depends on. A new revision of one id lists the earlier revisions it stays compatible with, and the privacy rule fails only the pins a revision isn't compatible with (PRIVACY_PIN_INCOMPATIBLE) or that name no revision (PRIVACY_UNKNOWN_PIN). This record pins the SHA-256 of policy.json and policy.schema.json once ratified; purposes.json, field-map.json, violations.json, and secret-patterns.json change with ordinary work and are guarded by the rule instead: any change that loosens them against the base branch fails without a relaxations entry that names a spec change and an approval reference.",
+  "versioning": "The policy carries four version ids, privacy@1, retention@1, redaction@1, and consent@1, in contracts/privacy/policy.json; ROUNDS-14-L02's Provider Invocation Intent records them (spec 707), and every allow the evaluators answer names them. A consumer pins the ids it depends on. A new revision of one id lists the earlier revisions it stays compatible with, and the privacy rule fails only the pins a revision isn't compatible with (PRIVACY_PIN_INCOMPATIBLE) or that name no revision (PRIVACY_UNKNOWN_PIN). The policy's current revisions and this record are ratified together (PRIVACY_STATUS_MISMATCH). This record pins the SHA-256 of policy.json and policy.schema.json once ratified; purposes.json, field-map.json, violations.json, and secret-patterns.json change with ordinary work and are guarded by the rule instead. Against the base branch it fails each of these without a relaxations entry that names a spec change and an approval reference: a field-map entry moved to a looser class or visibility, to a kind a sink's rule lets through where it stopped the old one, or removed so that its id resolves to a looser entry; a purpose that sends a field no base input covered, stops omitting one, raises its batch cap, or drops per-request consent; a register entry removed, or an open one given another owner, stripped of its detector, or no longer naming a location it named; and a secret pattern removed or changed.",
   "supersession": "A ratified version is never edited. A change supersedes it with the next revision of the affected id, which names the changed constraint; tightening takes effect at the next purge sweep, and loosening fails the check without a spec change and an approval reference (PRIVACY_RELAXED). Consumers of an incompatible revision re-pin. An unratified revision can be reverted, and reverting the merge removes files only.",
-  "context": "Issue #72 (ROUNDS-14-L01). Spec lines refer to rounds-review docs/superpowers/specs/2026-10-18-rounds-review-board-design.md. Code facts are at next 6c4a5a3. Ratified by the lane's review under the coordinator's delegation (scope decision 1): every default is a deny or the spec's own number, so no value here widens who can read, write, or receive anything.",
+  "context": "Issue #72 (ROUNDS-14-L01). Spec lines refer to rounds-review docs/superpowers/specs/2026-10-18-rounds-review-board-design.md. Code facts are at next 6c4a5a3. Ratified by the lane's review under the coordinator's delegation (scope decision 1): every default is a deny or the spec's own number, verifiers and digests are Secret, and free text is content, so no value here widens who can read, write, or receive anything.",
   "securityConsequences": {
     "account": "No runtime or privilege change beyond startup validation. Account data keeps the account-scope rules (ROUNDS-00B-L01); the policy adds per-field classes on top of them and never loosens a ROUNDS-01-L02 floor.",
-    "privacy": "Unregistered purposes, unclassified fields, and sinks without a rule are denied. Packs, flags, operators, and users may only tighten a rule. No server-only field reaches a provider, a log, the browser, or an export. Known breaches are registered with an owner and an exit, and an unregistered breach the rule can see fails CI.",
+    "privacy": "Unregistered purposes, unclassified fields, and sinks without a rule are denied. Packs, flags, operators, and users may only tighten a rule. No server-only field reaches a provider, a log, the browser, or an export, whether it's named itself or carried under a parent id. Known breaches are registered with an owner and an exit, and an unregistered breach the rule can see fails CI.",
     "secret": "A Secret goes only as authentication to the endpoint it was registered for, never as content, and never to an export, an index, a log, a share, or browser storage. detect_secret answers with offsets only. Fixtures are synthetic and stored as parts, so no file holds a contiguous key-shaped string.",
     "publicBoundary": "Public share stays the Share Projection's scoped capability (ROUNDS-00B-L03). Loopback, link-local, metadata, and service names are never destinations and can't be allowlisted, and a private address needs both the private-network gate and an allowlist entry."
   },
@@ -68,37 +68,37 @@
     {
       "id": "PRIV-4", "title": "Locations and the private-network allowlist", "status": "draft",
       "sources": ["spec 2171-2173", "#72 Decision 3", "scope decision 4 (rounds lead, 2026-11-12)"],
-      "decision": "A destination's location comes from its resolved address: this-server, operator-network, or third-party-hosted. Loopback, link-local, unspecified, metadata addresses, single-label names, and the service names get no class and are never destinations. A private address passes only when ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK is enabled and the address and port match a ROUNDS_AI_PRIVATE_ENDPOINTS entry; with the gate off every private address is refused, and with the gate on an empty list refuses them too. Entries are addresses or CIDR ranges inside the private networks and can't name or cover a never destination.",
+      "decision": "A destination's location comes from its resolved address: this-server, operator-network, or third-party-hosted. Loopback, link-local, unspecified, metadata addresses, single-label names, and the service names get no class and are never destinations; the policy's other non-public ranges get no class either, so they're refused. An IPv6 address inside the IPv4-mapped, 6to4, or well-known NAT64 prefix is judged as the IPv4 address it carries; the local-use NAT64 range and the IPv4-compatible and IPv4-translated ranges are refused outright. A private address passes only when ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK is enabled and the address and port match a ROUNDS_AI_PRIVATE_ENDPOINTS entry; with the gate off every private address is refused, and with the gate on an empty list refuses them too. Entries are addresses or CIDR ranges inside the private networks and can't name or cover a never destination. An endpoint with no host or no resolved address is refused unless it's this-server, and an IP literal host must match every address it resolves to.",
       "alternatives": [
         { "option": "Store a location label on each provider row", "reason": "A label drifts from where the address resolves." },
         { "option": "The allowlist alone, without the gate", "reason": "Looser than R0's decision, which keeps LAN providers refused." },
         { "option": "The gate alone, without the allowlist", "reason": "A blanket allow over every private address the deployment can reach." },
         { "option": "Host names as allowlist entries", "reason": "A name can't be checked at startup and can resolve somewhere else later." }
       ],
-      "consequences": "ROUNDS-14-L02 applies the stricter reading at dispatch, which narrows R0's gate for operators who enabled it; its docs tell them. ROUNDS-14-L04 shows never destinations as blocked.",
+      "consequences": "ROUNDS-14-L02 applies the stricter reading at dispatch, which narrows R0's gate for operators who enabled it; its docs tell them. A test holds the policy's lists against R0's check in both directions: every address the policy allows, R0 allows, and every address the policy refuses, R0 refuses, outside the ranges it names where the policy is stricter. ROUNDS-14-L04 shows never destinations as blocked.",
       "migrationImpact": "None; nothing reads the allowlist before ROUNDS-14-L02.",
       "rollbackImpact": "Supersede privacy@1; the runner then accepts the setting as before."
     },
     {
       "id": "PRIV-5", "title": "Catalog content and server-only material", "status": "draft",
       "sources": ["#72 Decision 4", "ROUNDS-01-L02 rule 10"],
-      "decision": "Catalog content takes its ROUNDS-01-L02 visibility. Harness Revisions and Test Definitions stay server-only, but a harness revision's rubric is authed-readable: the Rubric panels show it, and only ai_coding.grade and take_home.grade send it to a provider. No server-only field reaches a provider, a log, the browser, or an export.",
+      "decision": "Catalog content takes its ROUNDS-01-L02 visibility. Harness Revisions and Test Definitions stay server-only, but a harness revision's rubric is authed-readable: the Rubric panels show it, and only ai_coding.grade and take_home.grade send it to a provider. No server-only field reaches a provider, a log, the browser, or an export: the policy denies server-only data at each of those sinks, and an id answers allow only when every entry below it does, so a parent id can't carry server-only material out. Visible test cases are shown to the account by design; until ROUNDS-00A-L02 gives a case's visibility a form the field map can name, the map classes every stored case server-only (register entry 11).",
       "alternatives": [
         { "option": "Keep the rubric server-only", "reason": "The Rubric panels and the take-home self-review show it." },
         { "option": "Make every harness field authed-readable", "reason": "Hidden grading material would reach candidates." }
       ],
-      "consequences": "The purpose check refuses a rubric input outside the two grade purposes and a server-only input anywhere.",
+      "consequences": "The purpose check refuses a rubric input outside the two grade purposes, and anywhere refuses an input that is, or holds below it, a server-only or Secret entry.",
       "migrationImpact": "Register entry 5 records the grading material still readable today; ROUNDS-00A-L02 closes it.",
       "rollbackImpact": "Supersede privacy@1."
     },
     {
       "id": "PRIV-6", "title": "Redaction operators", "status": "draft",
       "sources": ["#72 Decision 5"],
-      "decision": "Three operators: omit, mask, and pseudonym, keyed per account by ROUNDS-14-L02. Resume purposes omit personalInfo email, phone, and location unless the user adds one in the preview.",
+      "decision": "Three operators: omit, mask, and pseudonym, keyed per account by ROUNDS-14-L02. Resume purposes omit personalInfo email, phone, and location unless the user adds one in the preview. Logs take an id in a Sensitive or Third-party personal field only as its account-keyed pseudonym, and no other value of either class.",
       "alternatives": [
         { "option": "Free-form redaction functions per purpose", "reason": "Not checkable, and two purposes would redact the same field two ways." }
       ],
-      "consequences": "A purpose's omitted inputs are denied unless the consent adds them.",
+      "consequences": "A purpose's omitted inputs are denied unless the consent adds them, whether the request names the omitted path or a field above it, such as the whole resume.",
       "migrationImpact": "None.",
       "rollbackImpact": "Supersede redaction@1."
     },
@@ -145,14 +145,14 @@
       "alternatives": [
         { "option": "Track breaches only in issues", "reason": "CI can't see an issue, so a new breach would land unnoticed." }
       ],
-      "consequences": "Ten entries at merge: eight open, two closed.",
+      "consequences": "Eleven entries at merge: nine open, two closed.",
       "migrationImpact": "This is the migration impact: each open entry's owner purges or stops what it lists.",
       "rollbackImpact": "Entries stay; closing one names its fixing PR."
     },
     {
       "id": "PRIV-11", "title": "Operator settings and startup validation", "status": "draft",
       "sources": ["spec 2160", "spec 2163", "#72 Operator settings"],
-      "decision": "ROUNDS_LOG_RETENTION_DAYS (1 to 30, default 14), ROUNDS_BACKUP_RETENTION_DAYS (7 to 90, default 30), and ROUNDS_AI_PRIVATE_ENDPOINTS (default empty). The runner refuses to start on a bad value, naming the setting and the bound or the refused entry; unset or empty takes the default. The bounds come from the lifecycle rows in policy.json.",
+      "decision": "ROUNDS_LOG_RETENTION_DAYS (1 to 30, default 14), ROUNDS_BACKUP_RETENTION_DAYS (7 to 90, default 30), and ROUNDS_AI_PRIVATE_ENDPOINTS (default empty). The runner refuses to start on a bad value, naming the setting and its bounds, or the refused entry by its position; the message never repeats a day count, and shows an entry's network only once it has parsed as one. Unset or empty takes the default. The bounds come from the lifecycle rows in policy.json.",
       "alternatives": [
         { "option": "Fall back to defaults on a bad value, as the gates do", "reason": "A mistyped retention would silently change what's kept." },
         { "option": "Per-account values here", "reason": "ROUNDS-03-L04 owns account settings." }

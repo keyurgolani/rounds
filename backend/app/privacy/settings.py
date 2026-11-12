@@ -8,7 +8,9 @@ Their bounds and defaults come from the lifecycle rows in ``policy.json``,
 so the startup check, the evaluators, and the docs read one number. The
 runner calls ``init`` once at startup; a bad value raises
 ``SettingsError``, which stops the runner with one line naming the
-setting and the bound or the entry it refuses. Unset or empty takes the
+setting and its bounds, or the position of the entry it refuses. The
+line never repeats a day count, and shows an entry's network only once
+it has parsed as one. Unset or empty takes the
 default. Nothing else reads these yet: ROUNDS-34-L05 applies the log
 window, ROUNDS-32-L03 the backup window, and ROUNDS-14-L02 reads the
 allowlist at dispatch, where a private address needs both it and
@@ -53,7 +55,7 @@ def _days(env: Mapping[str, str], name: str) -> int:
         raise SettingsError(f"{name} must be a whole number of days from {lo} to {hi} (unset takes {default})")
     value = int(raw)
     if not lo <= value <= hi:
-        raise SettingsError(f"{name} is {value} days; it must be from {lo} to {hi} (unset takes {default})")
+        raise SettingsError(f"{name} is outside its bounds; it must be from {lo} to {hi} days (unset takes {default})")
     return value
 
 

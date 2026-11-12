@@ -67,6 +67,8 @@ export function renderPrivacyDoc(P, extra = {}) {
   for (const c of policy.locations.classes) out.push(`- ${code(c.id)}: ${c.meaning}.`);
   const never = policy.locations.never;
   out.push('', `Never destinations, which get no location class: loopback (${never.loopback.join(', ')}), link-local (${never.linkLocal.join(', ')}), unspecified (${never.unspecified.join(', ')}), the metadata addresses (${never.metadata.join(', ')}), single-label host names, the service names ${never.serviceNames.map(code).join(', ')}, and names ending ${never.serviceSuffixes.map(code).join(', ')}.`, '');
+  out.push(`Other non-public ranges, which get no location class either: ${policy.locations.nonPublic.join(', ')}.`, '');
+  out.push(`An IPv6 address inside ${policy.locations.unwrap.join(', ')} is judged as the IPv4 address that follows the prefix.`, '');
   out.push(`Private networks: ${policy.locations.privateNetworks.join(', ')}. ${policy.locations.combination}`, '');
   out.push('## Credential channel', '', `${policy.credentialChannel.rule} It goes in the ${policy.credentialChannel.headers.map(code).join(' or ')} header, matched by ${policy.credentialChannel.match}.`, '');
   out.push('## Consent', '');
@@ -109,7 +111,7 @@ export function pendingEnforcement(policy) {
 export function renderConfigSection(P, settings) {
   const policy = P.policy;
   const out = [CONFIG_BEGIN, '## Privacy And Retention Settings', ''];
-  out.push(`The runner reads these once at startup and refuses to start on a bad value, naming the setting and the bound or the entry it refuses. Unset or empty takes the default. The bounds come from ${code('contracts/privacy/policy.json')}; see [privacy and retention](${DOC_PATH.replace('docs/', '')}).`, '');
+  out.push(`The runner reads these once at startup and refuses to start on a bad value, naming the setting and its bounds, or the position of the entry it refuses. The message never repeats a day count, and shows an entry's network only once it has parsed as one. Unset or empty takes the default. On Kubernetes, set them in the ${code('rounds-runner-secrets')} Secret: the runner's manifest leaves them out of ${code('env')}, where a value would hide the Secret's. The bounds come from ${code('contracts/privacy/policy.json')}; see [privacy and retention](${DOC_PATH.replace('docs/', '')}).`, '');
   out.push(row(['Variable', 'Allowed', 'Default', 'What it sets']), sep(4));
   for (const s of settings) out.push(row([code(s.name), s.allowed, s.default, s.meaning]));
   out.push('');

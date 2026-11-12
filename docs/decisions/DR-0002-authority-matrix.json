@@ -372,7 +372,7 @@
       "title": "Field maps from DR-0005",
       "status": "draft",
       "sources": ["DR-0005@1 decisions PRIV-1 and PRIV-9", "contracts/privacy/field-map.json"],
-      "decision": "Each row's field_map cell that revision 1 left pending on ROUNDS-14-L01 names contracts/privacy/field-map.json. There every field the row holds takes one class or visibility, no looser than the row's privacy_floor or visibility, and the privacy rule fails a field that is looser or unlisted. The ten rows that hold no account fields keep n/a, and the login streak stays blocked:OD-5.",
+      "decision": "Each row's field_map cell that revision 1 left pending on ROUNDS-14-L01 names contracts/privacy/field-map.json. There every field the row holds takes one class or visibility, no looser than the row's privacy_floor or visibility, and the privacy rule fails a field that is looser or unlisted. Some of these rows are planned and hold no field yet; their fields join the map when their stores land. The ten rows that hold no account fields keep n/a, and the login streak stays blocked:OD-5.",
       "alternatives": [
         {"option":"List each row's field ids in its own cell","reason":"The matrix would copy the field map and drift from it; one file gives each field one answer."},
         {"option":"Leave the cells pending until each row's transfer leaf","reason":"Each leaf would classify its own fields, and a field could reach a sink before anyone classed it."}

@@ -36,11 +36,12 @@
       "summary": "Provider output and fetched URLs reach the logs, and a provider's error text is kept in a rubric review.",
       "rule": "logs-traces",
       "location": {
-        "fields": ["pb:take_home_attempts.rubric_review#/reason"],
+        "fields": ["pb:take_home_attempts.rubric_review#/reason", "pb:ai_coding_attempts.rubric_review#/reason"],
         "anchors": [
           { "path": "backend/routers/ai.py", "text": "_log.warning(\"ATS AI response had no usable scores: %r\", text[:400])" },
           { "path": "backend/routers/ai.py", "text": "_log.exception(\"paper fetch failed for %s\", url)" },
-          { "path": "backend/routers/take_home.py", "text": "\"reason\": str(e)[:300]" }
+          { "path": "backend/routers/take_home.py", "text": "\"reason\": str(e)[:300]" },
+          { "path": "backend/routers/ai_coding.py", "text": "\"reason\": str(e)[:300]" }
         ]
       },
       "owner": "ROUNDS-14-L06",
@@ -86,7 +87,7 @@
     },
     {
       "id": 9, "status": "open",
-      "summary": "The sixteen legacy purposes send without per-request consent.",
+      "summary": "The sixteen legacy purposes send without per-request consent, and the resume purposes send the contact fields their entries omit.",
       "rule": "consent.legacy-implicit",
       "location": { "purposes": ["provider.test", "provider.refresh_models", "resume.improve", "resume.guided_summary", "resume.tailor", "resume.cover_letter", "resume.import", "experience.import", "resume.ats_score", "github.enhance", "ai_coding.chat", "ai_coding.edit", "ai_coding.grade", "take_home.grade", "take_home.chat", "sd_practice.chat"] },
       "detector": "legacy-consent",
@@ -96,11 +97,23 @@
     },
     {
       "id": 10, "status": "open",
-      "summary": "Browser drafts and caches stay after a standard account signs out; only the demo reset clears some.",
+      "summary": "Browser drafts and caches stay after a standard account signs out. That includes the ATS AI cache, whose own lifetime is entry 3.",
       "rule": "superseded-local-drafts",
       "location": { "anchors": [{ "path": "frontend/src/auth/AuthProvider.tsx", "text": "const logout = useCallback(async () => {" }] },
       "owner": "ROUNDS-08-L02",
       "exit": "ROUNDS-08-L02's draft store purges on sign-out and account switch unless a draft is synced, and ROUNDS-14-L05 enforces the schedule.",
+      "history": []
+    },
+    {
+      "id": 11, "status": "open",
+      "summary": "Visible test cases are shown to the account by design, but the field map can't tell them from hidden ones, so it classes every stored case server-only.",
+      "rule": "server-only.client-read",
+      "location": {
+        "fields": ["def:test-definition#/cases"],
+        "anchors": [{ "path": "backend/routers/runner.py", "text": "visible = case.get(\"visibility\") == \"visible\"" }]
+      },
+      "owner": "ROUNDS-00A-L02",
+      "exit": "ROUNDS-00A-L02 gives a case's visibility a form the field map can name, so a visible case is authed-readable and a hidden one stays server-only.",
       "history": []
     }
   ]

@@ -156,18 +156,19 @@
       "outputScope": "Project descriptions and highlights the user reviews before they're saved.", "toolAuthority": "none", "flag": null,
       "manualPath": "Import the projects without AI Enhancement.", "streaming": false, "batchMax": 25,
       "note": "Also fetches the selected repositories from GitHub.",
-      "callSites": [{ "path": "backend/routers/ai.py", "function": "_summarize_doc" }, { "path": "backend/routers/ai.py", "function": "_aggregate_project" }]
+      "callSites": [
+        { "path": "backend/routers/ai.py", "function": "enhance_projects" },
+        { "path": "backend/routers/ai.py", "function": "_enhance_one" },
+        { "path": "backend/routers/ai.py", "function": "_summarize_doc" },
+        { "path": "backend/routers/ai.py", "function": "_aggregate_project" }
+      ]
     },
     {
       "id": "ai_coding.chat", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
       "inputs": [
-        { "field": "pb:ai_coding_attempts.ai_chats" },
-        { "field": "pb:ai_coding_drafts.contents" },
-        { "field": "pb:ai_coding_drafts.file_path" },
-        { "field": "pb:ai_coding_rounds.title" },
-        { "field": "pb:ai_coding_rounds.description" },
-        { "field": "pb:ai_coding_rounds.starter_files" },
-        { "field": "pb:ai_coding_rounds.checkpoints" }
+        { "field": "request:ai_coding.chat#/checkpoint_prompt" },
+        { "field": "request:ai_coding.chat#/files" },
+        { "field": "request:ai_coding.chat#/messages" }
       ],
       "outputScope": "A chat reply; nothing applies without the user.", "toolAuthority": "none", "flag": "ai_allowed",
       "manualPath": "Work the checkpoint without the assistant.", "streaming": true,
@@ -176,13 +177,9 @@
     {
       "id": "ai_coding.edit", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": ["Private"],
       "inputs": [
-        { "field": "pb:ai_coding_attempts.ai_chats" },
-        { "field": "pb:ai_coding_drafts.contents" },
-        { "field": "pb:ai_coding_drafts.file_path" },
-        { "field": "pb:ai_coding_rounds.title" },
-        { "field": "pb:ai_coding_rounds.description" },
-        { "field": "pb:ai_coding_rounds.starter_files" },
-        { "field": "pb:ai_coding_rounds.checkpoints" }
+        { "field": "request:ai_coding.edit#/checkpoint_prompt" },
+        { "field": "request:ai_coding.edit#/files" },
+        { "field": "request:ai_coding.edit#/messages" }
       ],
       "outputScope": "Patches the user applies or discards.", "toolAuthority": "none", "flag": "ai_allowed",
       "manualPath": "Edit the files by hand.", "streaming": true,
@@ -194,6 +191,7 @@
         { "field": "pb:ai_coding_drafts.contents" },
         { "field": "pb:ai_coding_drafts.file_path" },
         { "field": "pb:ai_coding_attempts.test_results" },
+        { "field": "pb:ai_coding_attempts.ai_chats" },
         { "field": "pb:ai_coding_rounds.rubric" },
         { "field": "def:harness-revision#/rubric" }
       ],
@@ -203,6 +201,8 @@
       "callSites": [
         { "path": "backend/routers/ai_coding.py", "function": "grade" },
         { "path": "backend/routers/ai_coding.py", "function": "_grade_definition" },
+        { "path": "backend/routers/ai_coding.py", "function": "grade_review" },
+        { "path": "backend/execution/review.py", "function": "review" },
         { "path": "backend/execution/review.py", "function": "_call" }
       ]
     },
@@ -211,6 +211,7 @@
       "inputs": [
         { "field": "pb:take_home_attempts.files" },
         { "field": "pb:take_home_attempts.harness_output" },
+        { "field": "pb:take_home_attempts.ai_chats" },
         { "field": "pb:take_home_assignments.rubric" },
         { "field": "pb:take_home_assignments.prompt_md" },
         { "field": "def:harness-revision#/rubric" }
@@ -221,6 +222,8 @@
       "callSites": [
         { "path": "backend/routers/take_home.py", "function": "submit_route" },
         { "path": "backend/routers/take_home.py", "function": "_submit_definition" },
+        { "path": "backend/routers/take_home.py", "function": "submit_review" },
+        { "path": "backend/execution/review.py", "function": "review" },
         { "path": "backend/execution/review.py", "function": "_call" }
       ]
     },

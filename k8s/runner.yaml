@@ -95,15 +95,12 @@ spec:
               value: "http://pdf-renderer:4000"
             - name: CORS_ALLOW_ORIGINS
               value: ""
-            # Privacy settings (docs/configuration.md#privacy-and-retention-settings).
-            # Empty takes each default; a bad value stops the runner at
-            # startup, naming the setting.
-            - name: ROUNDS_LOG_RETENTION_DAYS
-              value: ""
-            - name: ROUNDS_BACKUP_RETENTION_DAYS
-              value: ""
-            - name: ROUNDS_AI_PRIVATE_ENDPOINTS
-              value: ""
+            # The privacy settings ROUNDS_LOG_RETENTION_DAYS,
+            # ROUNDS_BACKUP_RETENTION_DAYS, and ROUNDS_AI_PRIVATE_ENDPOINTS
+            # (docs/configuration.md#privacy-and-retention-settings) stay
+            # out of env: a value here would hide the one in
+            # rounds-runner-secrets. Set them in that Secret; unset takes
+            # each default, and a bad value stops the runner at startup.
           envFrom:
             # AI_KEY_SECRET, PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD live here,
             # ROUNDS_EXECUTION_SECRET once step 4 adds it, and

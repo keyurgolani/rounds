@@ -35,9 +35,10 @@ def test_log_retention_inside_its_bounds(value):
 
 
 @pytest.mark.parametrize("value", ["0", "31", "45"])
-def test_log_retention_outside_its_bounds_names_them(value):
-    with pytest.raises(settings.SettingsError, match=rf"{settings.LOG_RETENTION} is {value} days; it must be from 1 to 30"):
+def test_log_retention_outside_its_bounds_names_them_not_the_value(value):
+    with pytest.raises(settings.SettingsError) as raised:
         settings.load({settings.LOG_RETENTION: value})
+    assert str(raised.value) == f"{settings.LOG_RETENTION} is outside its bounds; it must be from 1 to 30 days (unset takes 14)"
 
 
 @pytest.mark.parametrize("value", ["fourteen", "14.5", "-3", "1e2"])
@@ -51,14 +52,32 @@ def test_backup_retention_bounds(value, ok):
     if ok:
         assert settings.load({settings.BACKUP_RETENTION: value}).backup_retention_days == int(value)
     else:
-        with pytest.raises(settings.SettingsError, match=rf"{settings.BACKUP_RETENTION} is {value} days; it must be from 7 to 90"):
+        with pytest.raises(settings.SettingsError) as raised:
             settings.load({settings.BACKUP_RETENTION: value})
+        assert str(raised.value) == f"{settings.BACKUP_RETENTION} is outside its bounds; it must be from 7 to 90 days (unset takes 30)"
 
 
 @pytest.mark.parametrize("entry", ["localhost:8000", "pocketbase:8090", "pdf-renderer:4000", "169.254.169.254:80"])
-def test_never_destinations_are_refused_as_entries(entry):
-    with pytest.raises(settings.SettingsError, match=entry.replace(".", r"\.")):
+def test_never_destinations_are_refused_as_entries_by_position(entry):
+    with pytest.raises(settings.SettingsError) as raised:
         settings.load({settings.PRIVATE_ENDPOINTS: f"10.0.0.5:11434,{entry}"})
+    assert str(raised.value).startswith(f"{settings.PRIVATE_ENDPOINTS} entry 2 ")
+    assert entry not in str(raised.value)
+
+
+@pytest.mark.parametrize("value", [
+    "https://user:example@10.0.0.1:443",
+    "10.0.0.5:11434,user:example@10.0.0.1:443",
+    "Bearer EXAMPLEexampleEXAMPLE:443",
+    "[fd12::1%eth0]:8000",
+])
+def test_a_refused_entry_never_appears_in_the_message(value):
+    with pytest.raises(settings.SettingsError) as raised:
+        settings.load({settings.PRIVATE_ENDPOINTS: value})
+    for item in value.split(","):
+        assert item.strip() not in str(raised.value)
+    for piece in ("user", "example", "EXAMPLE", "eth0"):
+        assert piece not in str(raised.value)
 
 
 def test_entries_are_parsed():
@@ -75,20 +94,24 @@ def test_entries_with_the_gate_off_start_and_say_so(monkeypatch, caplog):
 
 
 @pytest.mark.parametrize("name,value,message", [
-    (settings.LOG_RETENTION, "45", "ROUNDS_LOG_RETENTION_DAYS is 45 days; it must be from 1 to 30"),
-    (settings.BACKUP_RETENTION, "120", "ROUNDS_BACKUP_RETENTION_DAYS is 120 days; it must be from 7 to 90"),
-    (settings.PRIVATE_ENDPOINTS, "pocketbase:8090", "'pocketbase:8090' names a host"),
+    (settings.LOG_RETENTION, "45", "ROUNDS_LOG_RETENTION_DAYS is outside its bounds; it must be from 1 to 30 days"),
+    (settings.BACKUP_RETENTION, "120", "ROUNDS_BACKUP_RETENTION_DAYS is outside its bounds; it must be from 7 to 90 days"),
+    (settings.PRIVATE_ENDPOINTS, "pocketbase:8090", "ROUNDS_AI_PRIVATE_ENDPOINTS entry 1 names a host"),
+    (settings.PRIVATE_ENDPOINTS, "https://user:example@10.0.0.1:443", "ROUNDS_AI_PRIVATE_ENDPOINTS entry 1 isn't ip:port"),
 ])
-def test_the_runner_refuses_to_start_on_a_bad_value(monkeypatch, name, value, message):
+def test_the_runner_refuses_to_start_on_a_bad_value(monkeypatch, caplog, name, value, message):
     from main import app
 
     for other in ENV:
         monkeypatch.delenv(other, raising=False)
     monkeypatch.setenv(name, value)
-    with pytest.raises(settings.SettingsError) as raised:
-        with TestClient(app):
-            pass
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(settings.SettingsError) as raised:
+            with TestClient(app):
+                pass
     assert message in str(raised.value)
+    assert value not in str(raised.value)
+    assert value not in caplog.text
 
 
 @pytest.mark.parametrize("compose_file", ["docker-compose.yml", "docker-compose.prod.yml"])
@@ -99,12 +122,14 @@ def test_compose_passes_each_setting_to_the_runner_empty_by_default(compose_file
         assert f"{name}=${{{name}:-}}" in env, (compose_file, name)
 
 
-def test_the_k8s_runner_sets_each_setting_empty():
+def test_the_k8s_runner_leaves_each_setting_to_its_secret():
+    """A value under env would hide the one in rounds-runner-secrets, which
+    the runner reads through envFrom."""
     docs = [d for d in yaml.safe_load_all((ROOT / "k8s" / "runner.yaml").read_text(encoding="utf-8")) if d]
     (deployment,) = [d for d in docs if d["kind"] == "Deployment"]
     (container,) = deployment["spec"]["template"]["spec"]["containers"]
-    env = {e["name"]: e.get("value") for e in container["env"]}
-    assert {name: env.get(name) for name in ENV} == {name: "" for name in ENV}
+    assert not {e["name"] for e in container["env"]} & set(ENV)
+    assert {"secretRef": {"name": "rounds-runner-secrets"}} in container["envFrom"]
 
 
 def test_the_example_env_lists_each_setting_empty():

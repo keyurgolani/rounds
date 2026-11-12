@@ -346,16 +346,16 @@ function checkFieldMap(ctx, P, F, A) {
       const [base] = split(e.id);
       if (!live.has(base)) push('PRIVACY_FIELD_STALE', i, `${e.id} names a field no migration leaves live`, 'id');
     });
-    // A column that takes free text can hold anything, so it is content
-    // unless its migration constrains it. A pattern that only bars a few
-    // characters doesn't.
+    // A column that takes free text can hold anything, so it is content,
+    // never metadata or an opaque id, unless its migration constrains it.
+    // A pattern that only bars a few characters doesn't.
     const columns = new Map();
     for (const c of schema.collections) for (const f of c.fields) columns.set(`pb:${c.name}.${f.name}`, f);
     const constrained = (f) => f.type === 'text' && Boolean(f.pattern) && !NEGATED_ONLY.test(f.pattern);
     entries.forEach((e, i) => {
-      const f = e.kind === 'metadata' ? columns.get(e.id) : null;
+      const f = e.kind !== 'content' ? columns.get(e.id) : null;
       if (f && FREE_TEXT.has(f.type) && !constrained(f)) {
-        push('PRIVACY_KIND_UNCONSTRAINED', i, `${e.id} is kinded metadata, but its ${f.type} column takes free text; class it content, or constrain it in a migration`, 'kind');
+        push('PRIVACY_KIND_UNCONSTRAINED', i, `${e.id} is kinded ${e.kind}, but its ${f.type} column takes free text; class it content, or constrain it in a migration`, 'kind');
       }
     });
   }

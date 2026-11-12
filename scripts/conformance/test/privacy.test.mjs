@@ -118,7 +118,11 @@ describe('privacy: the live schema', () => {
     const got = extractSchema(tree, { only: pin.migrations });
     assert.deepEqual(got.errors, []);
     assert.equal(got.files.length, 38);
-    const byName = (cs) => [...cs].sort((a, b) => (a.name < b.name ? -1 : 1)).map((c) => ({ name: c.name, type: c.type, listRule: c.listRule, viewRule: c.viewRule, fields: c.fields }));
+    // The pin holds each field's name and type; the reader also keeps a
+    // text field's pattern, for the free-text kind check.
+    const byName = (cs) => [...cs].sort((a, b) => (a.name < b.name ? -1 : 1)).map((c) => ({
+      name: c.name, type: c.type, listRule: c.listRule, viewRule: c.viewRule, fields: c.fields.map((f) => ({ name: f.name, type: f.type })),
+    }));
     assert.deepEqual(byName(got.collections), byName(pin.collections));
     assert.equal(pin.collections.length, 55);
     assert.equal(pin.collections.reduce((n, c) => n + c.fields.length, 0), 495);
@@ -203,6 +207,18 @@ describe('privacy: the field map', () => {
     assert.ok(findings.filter((f) => f.code === 'PRIVACY_DESCENDANT_LOOSER').every((f) => /^pb:resumes\.data#\//.test(f.message)));
   });
 
+  it('fails an entry that names no row when its store maps to rows', () => {
+    only(check({ files: edit(FIELD_MAP, (m) => { delete entry(m, 'pb:applications.company').row; }) }), 'PRIVACY_ROW_MISSING');
+  });
+
+  it('kinds free text as content: metadata needs a text column its migration constrains', () => {
+    only(check({ files: edit(FIELD_MAP, (m) => { entry(m, 'pb:experience_anecdotes.action').kind = 'metadata'; }) }), 'PRIVACY_KIND_UNCONSTRAINED');
+    only(check({ files: edit(FIELD_MAP, (m) => { entry(m, 'pb:applications.status').kind = 'opaque-id'; }) }), 'PRIVACY_KIND_UNCONSTRAINED');
+    // A pattern that only bars some characters still leaves free text.
+    only(check({ files: edit(FIELD_MAP, (m) => { entry(m, 'pb:share_capabilities.purpose').kind = 'metadata'; }) }), 'PRIVACY_KIND_UNCONSTRAINED');
+    clean(check({ files: edit(FIELD_MAP, (m) => { entry(m, 'pb:experience_anecdotes.action').kind = 'content'; }) }));
+  });
+
   it('fails a field_map cell still pending on this leaf', () => {
     only(check({ files: edit(MATRIX, (m) => { m.rows.find((r) => r.field_map === 'contracts/privacy/field-map.json').field_map = 'pending:ROUNDS-14-L01'; }) }), 'PRIVACY_FIELD_MAP_CELL');
   });
@@ -255,6 +271,31 @@ describe('privacy: the policy', () => {
   it('holds no secret-shaped value; fixtures are stored as parts', () => {
     const key = ['sk-ant-', 'api03-', 'Q'.repeat(24)].join('');
     only(check({ files: edit(PURPOSES, (r) => { purpose(r, 'resume.improve').note = `example ${key}`; }) }), 'PRIVACY_SECRET_VALUE');
+    // The docs the rule writes are scanned too.
+    const doc = `${real.read(DOC_PATH)}\nexample ${key}\n`;
+    includes(check({ files: { [DOC_PATH]: doc } }), 'PRIVACY_SECRET_VALUE');
+  });
+});
+
+describe('privacy: the vectors', () => {
+  const VECTORS = 'contracts/privacy/vectors';
+  const drop = (suite, id) => edit(`${VECTORS}/${suite}.json`, (v) => { v.cases = v.cases.filter((c) => c.id !== id); });
+
+  it('needs a never-destination case for every range, service name, and suffix', () => {
+    only(check({ files: drop('destinations', 'never.wire-server') }), 'PRIVACY_VECTORS_INCOMPLETE');
+    only(check({ files: drop('destinations', 'never.materializer') }), 'PRIVACY_VECTORS_INCOMPLETE');
+    only(check({ files: drop('destinations', 'never.cluster-suffix') }), 'PRIVACY_VECTORS_INCOMPLETE');
+  });
+
+  it('needs each lifecycle row\'s default, an allowed value, an out-of-bound value, and purge_by', () => {
+    const findings = check({ files: drop('retention', 'secrets.out-of-bounds') });
+    only(findings, 'PRIVACY_VECTORS_INCOMPLETE');
+    assert.match(findings[0].message, /secrets has no out-of-bound case/);
+    only(check({ files: drop('retention', 'browser-ai-caches.seven') }), 'PRIVACY_VECTORS_INCOMPLETE');
+  });
+
+  it('needs a fixture and a near miss for every secret pattern', () => {
+    only(check({ files: edit('contracts/privacy/secret-patterns.json', (s) => { s.nearMisses = s.nearMisses.filter((x) => x.pattern !== 'jwt'); }) }), 'PRIVACY_VECTORS_INCOMPLETE');
   });
 });
 
@@ -275,13 +316,26 @@ describe('privacy: the decision record', () => {
     only(check({ files: edit(RECORD, (r) => { r.authorityBoundary = 'contracts/privacy/purposes.json'; }) }), 'PRIVACY_RECORD_INCOMPLETE');
   });
 
+  // The policy with every current revision marked `status`.
+  const policyMarked = (status) => edit(POLICY, (p) => { for (const v of p.versions) v.revisions.find((r) => r.revision === v.current).status = status; });
+
   it('pins the policy and its schema once ratified', () => {
-    const sha = (rel) => createHash('sha256').update(real.read(rel)).digest('hex');
-    const ratify = (pins) => edit(RECORD, (r) => {
+    const policy = policyMarked('ratified');
+    const sha = (rel) => createHash('sha256').update(own(policy, rel) ? policy[rel] : real.read(rel)).digest('hex');
+    const ratify = (pins) => ({ ...policy, ...edit(RECORD, (r) => {
       Object.assign(r, { status: 'ratified', approver: 'a reviewer', approvalRef: { pr: 1, governedFiles: pins.map((p) => ({ path: p, sha256: sha(p) })) } });
-    });
+    }) });
     clean(check({ files: ratify([POLICY, SCHEMA]) }));
     only(check({ files: ratify([POLICY]) }), 'PRIVACY_RECORD_INCOMPLETE');
+  });
+
+  it('ratifies the record and the policy\'s current revisions together', () => {
+    only(check({ files: policyMarked('ratified') }), 'PRIVACY_STATUS_MISMATCH');
+    const sha = (rel) => createHash('sha256').update(real.read(rel)).digest('hex');
+    const record = edit(RECORD, (r) => {
+      Object.assign(r, { status: 'ratified', approver: 'a reviewer', approvalRef: { pr: 1, governedFiles: [POLICY, SCHEMA].map((p) => ({ path: p, sha256: sha(p) })) } });
+    });
+    only(check({ files: record }), 'PRIVACY_STATUS_MISMATCH');
   });
 
   it('fails when no record names the leaf', () => {
@@ -306,8 +360,42 @@ describe('privacy: purposes and the provider-call scan', () => {
     }
   });
 
-  it('fails a vendor SDK call outside the provider helpers', () => {
-    only(check({ files: caller(['from openai import AsyncOpenAI', '', '', 'def overlay_client(key):', '    return AsyncOpenAI(api_key=key)']) }), 'PURPOSE_UNREGISTERED_CALL');
+  it('fails a vendor SDK call or API marker outside the provider helpers', () => {
+    for (const body of [
+      ['from openai import AsyncOpenAI', '', '', 'def overlay_client(key):', '    return AsyncOpenAI(api_key=key)'],
+      ['from openai import OpenAI', '', '', 'def overlay_client(key):', '    return OpenAI(api_key=key)'],
+      ['def overlay_url(base):', '    return f"{base}/chat/completions"'],
+      ['def overlay_headers(key):', '    return {"x-api-key": key}'],
+    ]) only(check({ files: caller(body) }), 'PURPOSE_UNREGISTERED_CALL');
+  });
+
+  it('fails a new caller of a registered call site, in its module or through an import', () => {
+    for (const body of [
+      ['from execution.review import review', '', '', 'async def overlay_grade(attempt):', '    return await review(attempt)'],
+      ['from execution import review as reviews', '', '', 'async def overlay_grade(attempt):', '    return await reviews.review(attempt)'],
+      ['import execution.review as rv', '', '', 'async def overlay_grade(attempt):', '    return await rv._call(attempt)'],
+      ['from routers.ai import _summarize_doc', '', '', 'async def overlay_doc(doc):', '    return await _summarize_doc(doc)'],
+    ]) {
+      const findings = check({ files: caller(body) });
+      only(findings, 'PURPOSE_UNREGISTERED_CALL');
+      assert.match(findings[0].message, /a registered call site that reaches a provider/);
+    }
+    const review = 'backend/execution/review.py';
+    const extended = `${real.read(review)}\n\nasync def overlay_again(prompt):\n    return await _call(prompt)\n`;
+    only(check({ files: { [review]: extended } }), 'PURPOSE_UNREGISTERED_CALL');
+  });
+
+  it('reads a wrapper\'s name as a call only in code, not in a string or as another object\'s attribute', () => {
+    clean(check({ files: caller([
+      'from execution.review import review', '', '', 'def overlay_text(attempt):', '    label = "review(attempt)"', '    return label, attempt.review',
+    ]) }));
+  });
+
+  it('reads past a comment or triple-quote mark inside an ordinary string', () => {
+    for (const body of [
+      ['from routers.ai import _call_complete', '', '', 'async def overlay_hash(text):', '    tag = "#"; return await _call_complete(text)'],
+      ['from routers.ai import _call_complete', '', '', 'async def overlay_quote(text):', '    mark = \'"""\'', '    return await _call_complete(text)'],
+    ]) only(check({ files: caller(body) }), 'PURPOSE_UNREGISTERED_CALL');
   });
 
   it('passes a helper call its purpose registers, and fails a call site that is gone', () => {
@@ -336,6 +424,16 @@ describe('privacy: purposes and the provider-call scan', () => {
     only(check({ files: add('def:harness-revision#/checkpoints') }), 'PRIVACY_SERVER_ONLY_INPUT');
     only(check({ files: add('def:harness-revision#/rubric') }), 'PRIVACY_RUBRIC_OUTSIDE_GRADE');
     only(check({ files: add('pb:offers.annual_bonus_target_pct') }), 'PRIVACY_PURPOSE_CLASSES');
+  });
+
+  it('reads an input\'s whole subtree: a parent holding a Secret or server-only entry fails', () => {
+    const add = (field) => edit(PURPOSES, (r) => { purpose(r, 'resume.improve').inputs.push({ field }); });
+    const secret = check({ files: add('pb:share_capabilities') });
+    includes(secret, 'PRIVACY_SECRET_INPUT');
+    assert.ok(secret.some((f) => /bearer_digest, a Secret/.test(f.message)), JSON.stringify(secret, null, 2));
+    const serverOnly = check({ files: add('pb:ai_coding_rounds.checkpoints') });
+    includes(serverOnly, 'PRIVACY_SERVER_ONLY_INPUT');
+    assert.ok(serverOnly.every((f) => f.code === 'PRIVACY_SERVER_ONLY_INPUT'), JSON.stringify(serverOnly, null, 2));
   });
 });
 
@@ -381,6 +479,45 @@ describe('privacy: loosening against the base branch', () => {
     only(check({ base: edit(POLICY, (p) => { p.matrix.cells.find((c) => c.id === 'private.remote-ai').rule = { decision: 'deny', code: 'EXAMPLE' }; }) }), 'PRIVACY_RELAXED');
     only(check({ base: edit(POLICY, (p) => { p.lifecycle.rows.find((r) => r.id === 'logs-traces').retention.range = [1, 14]; }) }), 'PRIVACY_RELAXED');
     only(check({ base: edit(PURPOSES, (r) => { const p = purpose(r, 'resume.improve'); p.inputs = p.inputs.filter((i) => i.field !== 'pb:resume_variants.data'); }) }), 'PRIVACY_RELAXED');
+  });
+
+  it('passes a new input that an input already on the base covers', () => {
+    clean(check({
+      base: { [PURPOSES]: real.read(PURPOSES) },
+      files: edit(PURPOSES, (r) => { purpose(r, 'resume.improve').inputs.push({ field: 'pb:resumes.data#/experience' }); }),
+    }));
+  });
+
+  it('fails a deleted entry whose id resolves looser on head', () => {
+    const findings = check({
+      base: { [FIELD_MAP]: real.read(FIELD_MAP) },
+      files: edit(FIELD_MAP, (m) => { m.entries = m.entries.filter((e) => !e.id.startsWith('pb:ai_coding_rounds.checkpoints#')); }),
+    });
+    includes(findings, 'PRIVACY_RELAXED');
+    assert.ok(findings.some((f) => f.code === 'PRIVACY_RELAXED' && /hidden_files/.test(f.message)), JSON.stringify(findings, null, 2));
+  });
+
+  it('fails a kind change that opens a log case', () => {
+    only(check({ base: baseMap((m) => { entry(m, 'pb:offers.user').kind = 'metadata'; }) }), 'PRIVACY_RELAXED');
+    only(check({ base: baseMap((m) => { entry(m, 'pb:offers.user').kind = 'content'; }) }), 'PRIVACY_RELAXED');
+  });
+
+  it('fails a register entry removed, given a new owner, or moved off its location while open', () => {
+    const base = { [VIOLATIONS]: real.read(VIOLATIONS) };
+    only(check({ base, files: edit(VIOLATIONS, (r) => { r.entries = r.entries.filter((v) => v.id !== 3); }) }), 'PRIVACY_RELAXED');
+    only(check({ base, files: edit(VIOLATIONS, (r) => { violation(r, 3).owner = 'ROUNDS-08-L02'; }) }), 'PRIVACY_RELAXED');
+    only(check({ base, files: edit(VIOLATIONS, (r) => { violation(r, 4).location.fields = violation(r, 4).location.fields.slice(1); }) }), 'PRIVACY_RELAXED');
+  });
+
+  it('fails a secret pattern removed or changed', () => {
+    const PATTERNS = 'contracts/privacy/secret-patterns.json';
+    const base = { [PATTERNS]: real.read(PATTERNS) };
+    includes(check({ base, files: edit(PATTERNS, (s) => { s.patterns.find((p) => p.id === 'groq-key').regex = 'gsk_[A-Za-z0-9]{40,}'; }) }), 'PRIVACY_RELAXED');
+    includes(check({ base, files: edit(PATTERNS, (s) => {
+      s.patterns = s.patterns.filter((p) => p.id !== 'groq-key');
+      s.fixtures = s.fixtures.filter((x) => x.pattern !== 'groq-key');
+      s.nearMisses = s.nearMisses.filter((x) => x.pattern !== 'groq-key');
+    }) }), 'PRIVACY_RELAXED');
   });
 });
 
