@@ -38,6 +38,10 @@ services:
       - ROUNDS_GATE_ENFORCE_QUOTA=${ROUNDS_GATE_ENFORCE_QUOTA:-off}
       - ROUNDS_GATE_RUN=${ROUNDS_GATE_RUN:-}
       - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-enforce}
+      # The job store's worker secret, the same as PocketBase's, which the
+      # launcher makes for each run: every code run is a job since
+      # ROUNDS-00A-L03 PR 4.
+      - ROUNDS_EXECUTION_SECRET=${RUNNER_EXECUTION_SECRET:-}
       # No renderer runs at stage 1, so the render proxy sees a failed
       # render; RD-07 checks the failure is typed and echoes no sidecar text.
       - PDF_RENDERER_URL=${PDF_RENDERER_URL:-http://pdf-renderer-absent.corpus.invalid:4000}
