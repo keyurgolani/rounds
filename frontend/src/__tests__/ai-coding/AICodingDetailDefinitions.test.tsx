@@ -162,7 +162,7 @@ describe('AICodingDetail definition requests', () => {
     await user.click(await screen.findByRole('button', { name: 'Submit' }));
     const region = screen.getByRole('status');
     await waitFor(() => expect(region).toHaveTextContent('File not allowed'));
-    expect(region).toHaveTextContent(`${detail} Nothing was graded. Your files and notes are still here.`);
+    expect(region).toHaveTextContent(`${detail} Nothing was graded. Your files are still here.`);
     expect(persistAttempt).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
   });

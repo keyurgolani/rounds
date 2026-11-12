@@ -37,7 +37,11 @@ vi.mock('../../components/shell/AppHeader', () => ({ default: () => <header /> }
 vi.mock('../../components/shell/StatusAction', () => ({ default: () => null }));
 vi.mock('../../components/ai/AIChatPanel', () => ({ default: () => null }));
 vi.mock('../../components/editor/MultiFileEditor', () => ({
-  default: (props: { bottomActions?: React.ReactNode }) => <div>{props.bottomActions}</div>,
+  default: (props: { bottomActions?: React.ReactNode; actionsBar?: boolean }) => (
+    <div data-testid="editor" data-actions-bar={String(Boolean(props.actionsBar))}>
+      {props.bottomActions}
+    </div>
+  ),
 }));
 
 import AICodingDetail from '../../pages/ai-coding/AICodingDetail';
@@ -50,6 +54,10 @@ import {
 } from '../../pages/ai-coding/aiCodingApi';
 import { RunnerError } from '../../lib/runnerFetch';
 import { UUID_V7_PATTERN } from '../../lib/idempotency';
+import { phoneWidth } from '../../test/media';
+
+// The setup's matchMedia, which matches nothing: a wide screen.
+const unmatched = window.matchMedia;
 
 const ROUND = {
   id: 'r1',
@@ -91,6 +99,14 @@ beforeEach(() => {
 });
 
 describe('AICodingDetail runner calls', () => {
+  it("puts Run and Submit in the editor's bar under the code, since the AI chat narrows it", async () => {
+    renderPage();
+    const editor = await screen.findByTestId('editor');
+    expect(editor).toHaveAttribute('data-actions-bar', 'true');
+    expect(editor).toContainElement(screen.getByRole('button', { name: 'Run' }));
+    expect(editor).toContainElement(screen.getByRole('button', { name: 'Submit' }));
+  });
+
   it('names the round and checkpoint and leaves the test command to the runner', async () => {
     vi.mocked(runProject).mockResolvedValue({
       passed: true,
@@ -153,7 +169,9 @@ describe('AICodingDetail denial states', () => {
 
     const region = screen.getByRole('status');
     await waitFor(() => expect(region).toHaveTextContent('Limit reached'));
-    expect(region).toHaveTextContent('Try again in 5 minutes. Your files and notes are still here.');
+    expect(region).toHaveTextContent('Try again in 5 minutes. Your files are still here.');
+    // AI coding has no notes to keep.
+    expect(region).not.toHaveTextContent('notes');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toHaveFocus());
     expect(persistAttempt).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
@@ -213,5 +231,36 @@ describe("AICodingDetail when the demo's code runs are off (ROUNDS-00B-L07)", ()
     expect(persistAttempt).not.toHaveBeenCalled();
     expect(deleteInProgressAttempt).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
+  });
+
+  it("on a phone, says so at the page's full width below the body, never in the files column", async () => {
+    window.matchMedia = phoneWidth();
+    try {
+      vi.mocked(gradeAttempt).mockImplementation(blurThenReject(demoOff()));
+      const user = userEvent.setup();
+      renderPage();
+      const submit = await screen.findByRole('button', { name: 'Submit' });
+      submit.focus();
+      await user.keyboard(' ');
+
+      const regions = screen.getAllByRole('status');
+      expect(regions).toHaveLength(1);
+      const [region] = regions;
+      await waitFor(() => expect(region).toHaveTextContent('Off in the demo'));
+      expect(region).toHaveTextContent('Code runs are off in the demo. Nothing was graded. Your files are still here.');
+      expect(region.closest('[data-ai-coding-pane="notice"]')).not.toBeNull();
+      expect(region.closest('[data-ai-coding-pane="center"]')).toBeNull();
+      // Focus still goes back to the button that started it.
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toHaveFocus());
+    } finally {
+      window.matchMedia = unmatched;
+    }
+  });
+
+  it('keeps the notice in the center column on a wider screen', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: 'Run' });
+    expect(screen.getByRole('status').closest('[data-ai-coding-pane="center"]')).not.toBeNull();
+    expect(document.querySelector('[data-ai-coding-pane="notice"]')).toBeNull();
   });
 });

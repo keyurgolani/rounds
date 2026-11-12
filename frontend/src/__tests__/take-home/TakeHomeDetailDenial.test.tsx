@@ -29,7 +29,11 @@ vi.mock('../../components/shell/AppHeader', () => ({ default: () => <header /> }
 vi.mock('../../components/shell/StatusAction', () => ({ default: () => null }));
 vi.mock('../../components/take-home/TakeHomeChatPanel', () => ({ default: () => null }));
 vi.mock('../../components/editor/MultiFileEditor', () => ({
-  default: (props: { bottomActions?: React.ReactNode }) => <div>{props.bottomActions}</div>,
+  default: (props: { bottomActions?: React.ReactNode; actionsBar?: boolean }) => (
+    <div data-testid="editor" data-actions-bar={String(Boolean(props.actionsBar))}>
+      {props.bottomActions}
+    </div>
+  ),
 }));
 
 import TakeHomeDetail from '../../pages/take-home/TakeHomeDetail';
@@ -40,6 +44,10 @@ import {
   submitAttempt,
 } from '../../pages/take-home/takeHomeApi';
 import { RunnerError } from '../../lib/runnerFetch';
+import { phoneWidth } from '../../test/media';
+
+// The setup's matchMedia, which matches nothing: a wide screen.
+const unmatched = window.matchMedia;
 
 const ASSIGNMENT = {
   id: 'a1',
@@ -81,6 +89,14 @@ beforeEach(() => {
 });
 
 describe('TakeHomeDetail denial states', () => {
+  it('keeps Run and Submit floating over the code, with no bar', async () => {
+    renderPage();
+    const editor = await screen.findByTestId('editor');
+    expect(editor).toHaveAttribute('data-actions-bar', 'false');
+    expect(editor).toContainElement(screen.getByRole('button', { name: 'Run' }));
+    expect(editor).toContainElement(screen.getByRole('button', { name: 'Submit' }));
+  });
+
   it('shows an unavailable run instead of a score of 0 and returns focus to Run', async () => {
     vi.mocked(runProject).mockImplementation(
       blurThenReject(new RunnerError({ message: 'take-home run 503: x', status: 503, code: 'worker_unavailable' })),
@@ -171,5 +187,38 @@ describe("TakeHomeDetail when the demo's code runs are off (ROUNDS-00B-L07)", ()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toHaveFocus());
     expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
     expect(deleteInProgressTakeHomeAttempt).not.toHaveBeenCalled();
+  });
+
+  it("on a phone, says so at the page's full width below the body, never in the files column", async () => {
+    window.matchMedia = phoneWidth();
+    try {
+      vi.mocked(submitAttempt).mockImplementation(blurThenReject(demoOff()));
+      const user = userEvent.setup();
+      renderPage();
+      const submit = await screen.findByRole('button', { name: 'Submit' });
+      submit.focus();
+      await user.keyboard('{Enter}');
+
+      const regions = screen.getAllByRole('status');
+      expect(regions).toHaveLength(1);
+      const [region] = regions;
+      await waitFor(() => expect(region).toHaveTextContent('Off in the demo'));
+      expect(region).toHaveTextContent(
+        'Code runs are off in the demo. Nothing was graded. Your files and notes are still here.',
+      );
+      expect(region.closest('[data-take-home-pane="notice"]')).not.toBeNull();
+      expect(region.closest('[data-take-home-pane="center"]')).toBeNull();
+      // Focus still goes back to the button that started it.
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toHaveFocus());
+    } finally {
+      window.matchMedia = unmatched;
+    }
+  });
+
+  it('keeps the notice in the center column on a wider screen', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: 'Run' });
+    expect(screen.getByRole('status').closest('[data-take-home-pane="center"]')).not.toBeNull();
+    expect(document.querySelector('[data-take-home-pane="notice"]')).toBeNull();
   });
 });

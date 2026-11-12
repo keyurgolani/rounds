@@ -41,7 +41,9 @@ import { formatWait, type RunnerDenial, type RunnerDenialKind } from '../../lib/
 import { reloadPage } from '../../lib/definitions';
 import { RunnerJobStatus, type RunnerJobView } from './RunnerJobStatus';
 
-export type RunnerAction = 'run' | 'tests' | 'grade' | 'pdf';
+// `grade` is AI coding's Submit and `submit` take-home's, which also keeps
+// the candidate's notes.
+export type RunnerAction = 'run' | 'tests' | 'grade' | 'submit' | 'pdf';
 
 interface ActionText {
   /** What the user tried, as in "Running code is turned off". */
@@ -68,6 +70,12 @@ const ACTION_TEXT: Record<RunnerAction, ActionText> = {
     tooLarge: 'Your code is over the size limit, so no tests ran. Shorten it and try again.',
   },
   grade: {
+    subject: 'Grading',
+    none: 'Nothing was graded.',
+    kept: 'Your files are still here.',
+    tooLarge: 'Your files are over the size limit, so nothing was graded. Trim them and try again.',
+  },
+  submit: {
     subject: 'Grading',
     none: 'Nothing was graded.',
     kept: 'Your files and notes are still here.',
