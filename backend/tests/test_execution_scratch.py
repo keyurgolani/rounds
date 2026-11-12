@@ -374,6 +374,18 @@ def test_a_job_claimed_while_the_key_isnt_on_is_withdrawn(job_secrets, monkeypat
         handlers.SCRATCH_HANDLERS["run"].prepare(_Job("run", TWO_SUM_REF, {"code": TWO_SUM, "input": {}}))
 
 
+def test_a_claimed_job_needs_the_gates_and_not_the_admission_secret(scratch_on, monkeypatch):
+    monkeypatch.delenv("ROUNDS_ADMISSION_SECRET")
+    job = _Job("run", TWO_SUM_REF, {"code": TWO_SUM, "input": {}})
+    # This runner's own routes act as off, and a job it claims still runs.
+    assert (keys.scratch(), keys.scratch(worker=True)) == ("off", "on")
+    handlers.SCRATCH_HANDLERS["run"].prepare(job)
+    monkeypatch.setattr(gates, "_snapshot", gates.load({**ON, "ROUNDS_GATE_EXECUTION_DEFINITIONS": "legacy"},
+                                                       gates.RUNNER))
+    with pytest.raises(Withdrawn):
+        handlers.SCRATCH_HANDLERS["run"].prepare(job)
+
+
 @pytest.mark.parametrize(
     "kind, definition, job_input",
     [
@@ -571,6 +583,63 @@ def test_off_answers_503_before_anything_and_keeps_every_draft(runner, node, pat
     assert state["commands"] == [] and state["counters"] == [] and state["jobs"] == []
 
 
+# The six routes, each with the sentence its key answers while it's off.
+ROUTE_OFF = {
+    "/api/run": "Running practice code is turned off on this server.",
+    "/api/evaluate": "Running practice code is turned off on this server.",
+    "/api/ai-coding/run-project": "Running practice code is turned off on this server.",
+    "/api/take-home/run": "Running practice code is turned off on this server.",
+    "/api/ai-coding/grade": keys.GRADING_OFF,
+    "/api/take-home/submit": keys.GRADING_OFF,
+}
+
+
+@pytest.fixture
+def unadmitted(job_secrets, monkeypatch):
+    """The six routes with no admission in front of them, their body
+    reader recording each read, and ``use(value)`` setting both keys."""
+    from fastapi import FastAPI
+
+    from app import errors, execution as definition_runs
+    from routers import ai_coding, runner as runner_routes, take_home
+
+    reads: list[str] = []
+
+    async def parse(request, *_models):
+        reads.append(request.url.path)
+        raise TypedError("invalid_request")
+
+    monkeypatch.setattr(definition_runs, "parse", parse)
+    app = FastAPI()
+    errors.install(app)
+    for module in (runner_routes, ai_coding, take_home):
+        app.include_router(module.router)
+    for module in (ai_coding, take_home):
+        app.dependency_overrides[module._auth_user] = lambda: {"id": A, "token": "test-token"}
+
+    def use(value: str) -> TestClient:
+        env = {**ON, "ROUNDS_GATE_EXECUTION_SCRATCH": value, "ROUNDS_GATE_EXECUTION_GRADING": value}
+        monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
+        return TestClient(app)
+
+    return use, reads
+
+
+@pytest.mark.parametrize("value", ["off", "legacy"])
+@pytest.mark.parametrize("path", sorted(ROUTE_OFF))
+def test_each_route_refuses_below_on_by_itself_before_it_reads_its_body(unadmitted, path, value):
+    use, reads = unadmitted
+    out = typed(use(value).post(path, json={"definition": TWO_SUM_REF}), 503, "execution_disabled")
+    assert out["detail"] == ROUTE_OFF[path] and reads == []
+
+
+@pytest.mark.parametrize("path", sorted(ROUTE_OFF))
+def test_each_route_reads_its_body_once_its_key_is_on(unadmitted, path):
+    use, reads = unadmitted
+    typed(use("on").post(path, json={"definition": TWO_SUM_REF}), 422, "invalid_request")
+    assert reads == [path]
+
+
 def test_the_defaults_run_each_scratch_route_as_a_job(runner, node):
     # Neither the store nor the key is set: both start on.
     client = runner({**ENFORCED, "ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "enforce", "ROUNDS_GATE_ENFORCE_QUOTA": "enforce"})
@@ -601,6 +670,38 @@ def test_on_without_what_it_needs_acts_as_off(runner, node, capsys, missing, sta
         # No worker starts, and the runner stays ready: only its code runs
         # are off.
         assert client.get("/ready").json() == {"status": "ok", "store": "unconfigured"}
+
+
+def _queued_by_another_replica(node: Node, account: str = A) -> str:
+    """A run admitted and enqueued the way another replica's request does
+    it, with that replica's own admission secret."""
+    key = new_key()
+    source, inputs = jobs.digest(TWO_SUM), jobs.digest({"input": RUN["input"]})
+    fingerprint = jobs.fingerprint("/api/run", TWO_SUM_REF, source, inputs)
+    auth = {"Authorization": f"Bearer {node.token(account)}", "X-Rounds-Admission-Key": RUNNER_KEY}
+    admit = node.http.post("/api/rounds/admission/admit", headers=auth, json={
+        "operation": "run", "command_id": key, "fingerprint": fingerprint, "wall_seconds": 3,
+        "idempotency": "enforce", "quota": "enforce", "lease_hash": "b" * 64})
+    assert admit.status_code == 200 and admit.json()["leased"] is True, admit.text
+    res = node.http.post("/api/rounds/execution/enqueue", headers=auth, json={
+        "command_id": key, "kind": "run", "definition": TWO_SUM_REF, "fingerprint": fingerprint,
+        "source_checksum": source, "input_digest": inputs, "input": {"code": TWO_SUM, "input": RUN["input"]}})
+    assert res.status_code == 200, res.text
+    return res.json()["job"]["id"]
+
+
+def test_a_runner_without_the_admission_secret_runs_a_job_another_replica_queued(runner, node):
+    client = runner(runner_key="")
+    # Its own routes act as off, as above.
+    typed(client.post("/api/run", json=RUN, headers=headers(node, key=new_key())), 503, "execution_disabled")
+    job_id = _queued_by_another_replica(node)
+
+    def job():
+        (found,) = [j for j in node.dump()["jobs"] if j["id"] == job_id]
+        return found
+
+    _until(lambda: kinds.is_terminal(job()["state"]), what="the job's end")
+    assert (job()["state"], job()["outcome_class"]) == ("completed", "passed")
 
 
 def test_a_run_is_a_job_answered_202_that_ends_with_its_envelope(runner, node, pocketbase, capsys):

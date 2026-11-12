@@ -22,7 +22,11 @@ same values, and since PR 4 each starts ``on``:
 
 Every reader asks ``scratch()`` or ``grading()``, so the routes, the
 worker, and the startup line can't disagree. Each of the six routes also
-calls ``require_on`` before it reads its body.
+calls ``require_on`` before it reads its body. The worker asks with
+``worker=True``, which needs the gates only: whichever replica took the
+request admitted and enqueued the job, and the worker that claimed it is
+logged in, so a job runs on a replica whose own routes lack the admission
+secret.
 """
 from __future__ import annotations
 
@@ -57,16 +61,20 @@ def _missing_secrets() -> list[str]:
     return missing
 
 
+def _gate_needs(pairs: tuple[tuple[str, str], ...]) -> list[str]:
+    return [f"{name}={value}" for name, value in pairs if gates.value(name) != value]
+
+
 def _needs(pairs: tuple[tuple[str, str], ...]) -> list[str]:
-    gate_needs = [f"{name}={value}" for name, value in pairs if gates.value(name) != value]
-    return gate_needs + _missing_secrets()
+    return _gate_needs(pairs) + _missing_secrets()
 
 
-def _effective(name: str) -> str:
+def _effective(name: str, worker: bool = False) -> str:
     value = gates.value(name)
     if value == "legacy":
         return "off"
-    if value == "on" and _needs(KEYS[name][1]):
+    pairs = KEYS[name][1]
+    if value == "on" and (_gate_needs(pairs) if worker else _needs(pairs)):
         return "off"
     return value
 
@@ -83,14 +91,16 @@ def grading_needs() -> list[str]:
     return _needs(GRADING_NEEDS)
 
 
-def scratch() -> str:
-    """The scratch key's effective value: on or off."""
-    return _effective("EXECUTION_SCRATCH")
+def scratch(worker: bool = False) -> str:
+    """The scratch key's effective value: on or off. With ``worker``, the
+    value a claimed job runs under, which needs the gates only."""
+    return _effective("EXECUTION_SCRATCH", worker)
 
 
-def grading() -> str:
-    """The grading key's effective value: on or off."""
-    return _effective("EXECUTION_GRADING")
+def grading(worker: bool = False) -> str:
+    """The grading key's effective value: on or off. With ``worker``, the
+    value a claimed job runs under, which needs the gates only."""
+    return _effective("EXECUTION_GRADING", worker)
 
 
 def for_operation(operation: str) -> str | None:

@@ -11,6 +11,7 @@ are tested without that server.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 import sys
@@ -22,6 +23,7 @@ from fastapi import HTTPException
 from app import admission, definitions, execution as definition_runs, gates, harness_results
 from app.errors import TypedError
 from execution import envelope, handlers, keys, kinds
+from execution.review import PROVIDER_FAILED
 from execution.worker import InvalidJob, Withdrawn
 from tests.test_definitions_enforce import (
     FIXED_CLIENT,
@@ -224,6 +226,18 @@ class _Job:
 @pytest.mark.parametrize("value", ["legacy", "off"])
 def test_a_grading_job_claimed_while_its_key_isnt_on_is_withdrawn(job_secrets, monkeypatch, value):
     monkeypatch.setattr(gates, "_snapshot", gates.load({**GRADING_ON, "ROUNDS_GATE_EXECUTION_GRADING": value},
+                                                       gates.RUNNER))
+    for kind in ("grade", "take_home_submit"):
+        with pytest.raises(Withdrawn):
+            handlers.GRADING_HANDLERS[kind].prepare(_Job(kind, GRADE_REF, {"files": {}}))
+
+
+def test_a_claimed_grading_job_needs_the_gates_and_not_the_admission_secret(grading_on, monkeypatch):
+    monkeypatch.delenv("ROUNDS_ADMISSION_SECRET")
+    # This runner's own routes act as off, and a job it claims still runs.
+    assert (keys.grading(), keys.grading(worker=True)) == ("off", "on")
+    handlers.GRADING_HANDLERS["grade"].prepare(_Job("grade", GRADE_REF, {"files": _project(FIXED_CLIENT)}))
+    monkeypatch.setattr(gates, "_snapshot", gates.load({**GRADING_ON, "ROUNDS_GATE_EXECUTION_DEFINITIONS": "legacy"},
                                                        gates.RUNNER))
     for kind in ("grade", "take_home_submit"):
         with pytest.raises(Withdrawn):
@@ -857,6 +871,31 @@ def test_a_review_whose_call_outlived_its_lease_is_lost(runner, node, provider, 
     assert review(client, node, done["job_id"], files).json()["rubric_state"] == "lost"
     assert graded_row_of(node, done["job_id"])["rubric_review"] is None
     assert review(client, node, done["job_id"], files).json()["rubric_state"] == "lost"
+    assert fake.calls == ["requested"]
+
+
+def test_a_provider_that_never_answers_is_cut_off_at_the_time_limit_and_the_review_completes_skipped(
+        runner, node, provider, monkeypatch):
+    client = runner(GRADING_ON)
+    seed_round(node)
+    fake = provider(answer='{"items": [], "total": 0.9, "summary": "late-provider-text-5c1e"}')
+    done = graded(client, node, grade_body())
+
+    async def never(*args, **kwargs):
+        await fake.complete(*args, **kwargs)
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr("routers.ai._call_complete", never)
+    monkeypatch.setattr("execution.review.REVIEW_TIMEOUT_S", 0.05)
+    answer = review(client, node, done["job_id"], _project(FIXED_CLIENT)).json()
+    skipped = {"items": [], "total": 0.0, "skipped": True, "reason": PROVIDER_FAILED}
+    assert (answer["rubric_state"], answer["rubric_review"]) == ("completed", skipped)
+    assert graded_row_of(node, done["job_id"])["rubric_review"] == skipped
+    assert "late-provider-text" not in json.dumps(node.dump())
+    # The review's admission finished completed, inside its lease.
+    state = node.dump()
+    (command,) = [c for c in state["commands"] if c["operation"] == "review"]
+    assert command["state"] == "completed" and not [l for l in state["leases"] if l["command"] == command["id"]]
     assert fake.calls == ["requested"]
 
 

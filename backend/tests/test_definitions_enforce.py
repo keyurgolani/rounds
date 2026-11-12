@@ -218,11 +218,15 @@ def test_an_older_request_shape_is_rejected_by_name_before_anything(client, sign
     assert rejected["code"] == "legacy_request_rejected" and rejected["field"] == field
 
 
-@pytest.mark.parametrize("field", ["test_command", "validators", "hidden_files", "env", "network", "limits", "image"])
-def test_a_forbidden_input_next_to_a_definition_is_still_rejected(client, signed_in, enforce, tripwires, field):
-    body = {**ROUTE_BODIES["/api/run"], field: "anything"}
-    out = typed(client.post("/api/run", json=body, headers=signed_in), 422, "legacy_request_rejected")
-    assert field in out["detail"] and tripwires == []
+@pytest.mark.parametrize("field", ["test_command", "validators", "hidden_files", "env", "network", "limits", "image",
+                                   "timeout_s", "entry", "test_cases"])
+@pytest.mark.parametrize("path", sorted(ROUTE_BODIES))
+def test_a_forbidden_input_next_to_a_definition_is_still_rejected(client, signed_in, enforce, tripwires, pocketbase,
+                                                                  admission_store, path, field):
+    body = {**ROUTE_BODIES[path], field: "anything"}
+    out = typed(client.post(path, json=body, headers=signed_in), 422, "legacy_request_rejected")
+    assert field in out["detail"]
+    assert tripwires == [] and pocketbase.calls == [] and admission_store.calls == []
 
 
 @pytest.mark.parametrize("path", sorted(ROUTE_BODIES))
