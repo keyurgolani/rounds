@@ -181,3 +181,41 @@ def test_the_policy_and_the_manifest_hold_the_same_rules(run):
         assert all(e["id"] != "client-graded-status" for e in row["exceptions"])
         for family in ("account-scope.create.graded.denied", "account-scope.update.graded.denied"):
             assert family in row["probes"] and policy["probe_families"][family]["status"] == "enforced"
+
+
+LEVER = ROOT / "pocketbase" / "levers" / "restore_collection.template.js"
+
+
+def _run_lever(tmp_path_factory, collection: str) -> dict:
+    """The restore lever filled in for ``collection``, run once against the
+    same stub, starting from the rules this migration sets."""
+    node = shutil.which("node")
+    assert node, "node is required for the PocketBase migration checks; CI installs it"
+    folder = tmp_path_factory.mktemp("restore-lever")
+    harness = folder / "harness.cjs"
+    harness.write_text(_HARNESS)
+    lever = folder / "1900000000_restore.js"
+    lever.write_text(LEVER.read_text().replace("__COLLECTION__", collection))
+    graded = _run(tmp_path_factory)["up"]["ai_coding_attempts"]
+    before = {collection: {"createRule": graded["createRule"], "updateRule": graded["updateRule"]}}
+    res = subprocess.run([node, str(harness), str(lever), json.dumps(before)], capture_output=True, text=True,
+                         timeout=60, env={"PATH": ""})
+    assert res.returncode == 0, res.stderr
+    return {"before": before[collection], **json.loads(res.stdout)}
+
+
+@pytest.mark.parametrize("collection", COLLECTIONS)
+def test_the_restore_lever_refuses_an_attempt_collection_and_changes_nothing(tmp_path_factory, collection):
+    out = _run_lever(tmp_path_factory, collection)
+    assert out["upError"] and "1700008700_attempt_grade_rules.js" in out["upError"]
+    assert out["saves"] == []
+    kept = out["up"][collection]
+    assert (kept["createRule"], kept["updateRule"]) == (out["before"]["createRule"], out["before"]["updateRule"])
+
+
+def test_the_restore_lever_still_restores_any_other_collection(tmp_path_factory):
+    out = _run_lever(tmp_path_factory, "campaigns")
+    assert out["upError"] is None and out["saves"] == ["campaigns"]
+    restored = out["up"]["campaigns"]
+    assert (restored["createRule"], restored["updateRule"]) == (_ownership_rule("CREATE_RULE"),
+                                                                _ownership_rule("UPDATE_RULE"))

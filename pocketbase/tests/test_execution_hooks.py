@@ -746,7 +746,7 @@ WORKER = {"collection": "execution_service", "username": "execution-worker"}
 @pytest.mark.parametrize(
     "case, out",
     [
-        ({"env": {"ROUNDS_GATE_EXECUTION_STORE": ""}}, {"reached": False, "status": 503, "error": "store_off"}),
+        ({"env": {"ROUNDS_GATE_EXECUTION_STORE": "off"}}, {"reached": False, "status": 503, "error": "store_off"}),
         ({"principal": None}, {"reached": False, "thrown": "UnauthorizedError"}),
         ({"headers": {}}, {"reached": False, "status": 403, "error": "forbidden"}),
         ({"headers": {"x_rounds_admission_key": "not-the-runner-key-0123456789abcdef"}},
