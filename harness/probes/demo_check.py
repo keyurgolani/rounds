@@ -8,8 +8,11 @@ Two phases on the real PocketBase:
   profile but not its password, email, username, or verification, can't
   delete itself or ask for an email change, and can't create a share link,
   an AI provider, or AI settings, through PocketBase or the runner, while a
-  standard account still can. It saves that account and its token to
-  ``/state`` for the next phase.
+  standard account still can. With the runners at
+  ``ROUNDS_GATE_DEMO_EXECUTION``'s default since phase 3c, the deployment
+  verifier's demo check passes through nginx: the seeded demo account's
+  code run is refused before anything runs (ROUNDS-00B-L07). It saves that
+  account and its token to ``/state`` for the next phase.
 - ``demo-off``: after PocketBase restarts with the demo gate at its
   default, both demo accounts' sign-ins get the answer a wrong password
   gets, and so does a demo account whose password a superuser has just
@@ -30,11 +33,13 @@ import sys
 from pathlib import Path
 
 import factory
+import verify_deployment as vd
 from admission_check import Checks, admin_token, call
 from pbclient import PBClient
 
 POCKETBASE_URL = os.environ.get("POCKETBASE_URL", "http://pocketbase:8090")
 RUNNER_URL = os.environ.get("RUNNER_URL", "http://runner:8000")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://frontend").rstrip("/")
 STATE = Path(os.environ.get("DEMO_STATE_PATH", "/state/demo.json"))
 NOT_PERMITTED = {"code": "demo_not_permitted", "message": "Not available in the demo."}
 
@@ -134,6 +139,11 @@ def run_on(c: Checks, pb: PBClient, admin: str) -> None:
             all(status == 403 and NOT_PERMITTED["code"] in json.dumps(body) for status, body in through.values())
             and all(n == 0 for n in left.values()),
             " ".join(f"{k}={v[0]}" for k, v in through.items()) + f" rows={left}")
+
+    # The demo's code runs, at their default since phase 3c: the deployment
+    # verifier's own check, through nginx as an operator runs it.
+    code_run = vd.check_demo_code_runs(FRONTEND_URL)
+    c.check("demo.on.the-demo-accounts-code-run-is-refused-through-nginx", code_run.passed, code_run.detail)
 
     # A standard account is held to none of it.
     s = _standard(pb, admin)

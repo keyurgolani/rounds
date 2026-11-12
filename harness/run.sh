@@ -21,7 +21,10 @@
 #                     admitted on each
 #  3d2. demo on    - PocketBase has run with ROUNDS_ENABLE_DEMO=true since
 #                     phase 1, as a hosted demo does: what a demo caller may
-#                     change and own, through PocketBase and the runner
+#                     change and own, through PocketBase and the runner, and
+#                     the deployment verifier's demo check through nginx: with
+#                     the runners at ROUNDS_GATE_DEMO_EXECUTION's default since
+#                     phase 3c, the seeded demo account's code run is refused
 #                     (harness/probes/demo_check.py)
 #  3e. execution store - PocketBase restarted with ROUNDS_GATE_EXECUTION_STORE
 #                     on and a worker secret: the job store's routes, rules,
@@ -237,11 +240,16 @@ SHARE_GATE=""
 SCRATCH_GATE=""
 DEFINITIONS_GATE=""
 GRADING_GATE=""
+# DEMO_EXECUTION_GATE sets ROUNDS_GATE_DEMO_EXECUTION for both runners. The
+# admission phase's demo accounts run code, so it's enabled for phases 3 and
+# 3b; from the emergency phases on the runners run with it at its default,
+# off, which phase 3d2 checks through nginx (ROUNDS-00B-L07).
+DEMO_EXECUTION_GATE=enabled
 set_signups() {
-  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\nROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=%s\nROUNDS_GATE_EXECUTION_SCRATCH=%s\nROUNDS_GATE_EXECUTION_DEFINITIONS=%s\nAI_KEY_SECRET=%s\nROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=%s\nROUNDS_SHARE_RESOLVER_PASSWORD=%s\nROUNDS_GATE_EXECUTION_GRADING=%s\n' \
+  printf 'IMAGE_PREFIX=%s\nROUNDS_DISABLE_SIGNUPS=%s\nROUNDS_GATE_ENFORCE_IDEMPOTENCY=enforce\nROUNDS_GATE_ENFORCE_QUOTA=enforce\nROUNDS_ADMISSION_SECRET=%s\nROUNDS_GATE_RUN=%s\nROUNDS_GATE_EXECUTION_STORE=%s\nPB_EXECUTION_SECRET=%s\nRUNNER_EXECUTION_SECRET=%s\nROUNDS_ENABLE_DEMO=%s\nROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=%s\nROUNDS_GATE_EXECUTION_SCRATCH=%s\nROUNDS_GATE_EXECUTION_DEFINITIONS=%s\nAI_KEY_SECRET=%s\nROUNDS_GATE_SHARE_CAPABILITY_RESOLUTION=%s\nROUNDS_SHARE_RESOLVER_PASSWORD=%s\nROUNDS_GATE_EXECUTION_GRADING=%s\nROUNDS_GATE_DEMO_EXECUTION=%s\n' \
     "${IMAGE_PREFIX}" "$1" "${ADMISSION_SECRET_V}" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${DEMO_V}" \
     "${SNAPSHOT_GATE}" "${SCRATCH_GATE}" "${DEFINITIONS_GATE}" "${SCAN_SECRET_V}" "${SHARE_GATE}" \
-    "${SHARE_RESOLVER_SECRET_V}" "${GRADING_GATE}" > "${ENV_FILE}"
+    "${SHARE_RESOLVER_SECRET_V}" "${GRADING_GATE}" "${DEMO_EXECUTION_GATE}" > "${ENV_FILE}"
 }
 
 # Waits until PocketBase answers its health route again.
@@ -487,6 +495,8 @@ compose stop runner runner-b
 # their accounts; nginx starts with the runner each time and is removed
 # again before PocketBase is recreated, since it looks addresses up once.
 echo "--- phase 3c: emergency disable (ROUNDS_GATE_RUN=disabled, both replicas restarted) ---"
+# The demo's code runs go back to their default, off, with this restart.
+DEMO_EXECUTION_GATE=""
 set_signups false disabled
 restart_runners
 capture_gates emergency-disable
