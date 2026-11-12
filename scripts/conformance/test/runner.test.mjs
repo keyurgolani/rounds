@@ -13,7 +13,7 @@ const allFindings = (results) => results.flatMap((r) => r.findings);
 describe('runner', () => {
   it('runs every rule clean on the repository with no drift', async () => {
     const results = await runConformance({ ...parseArgs([]), root: REPO_ROOT, base: 'none' });
-    assert.deepEqual(results.map((r) => r.id).sort(), ['authority', 'decision-records', 'vocabulary']);
+    assert.deepEqual(results.map((r) => r.id).sort(), ['authority', 'decision-records', 'program', 'vocabulary']);
     assert.deepEqual(allFindings(results), []);
     for (const r of results) assert.deepEqual(r.written, []);
   });
@@ -94,7 +94,7 @@ describe('runner', () => {
     }
     assert.ok(failed, 'the run fails');
     assert.equal(failed.status, 2);
-    assert.match(failed.stderr, /unknown rule vocabulry; rules are authority, decision-records, vocabulary/);
+    assert.match(failed.stderr, /unknown rule vocabulry; rules are authority, decision-records, program, vocabulary/);
   });
 
   it('compares with the branch a pull request targets, and runs on pushes to next', () => {
@@ -111,7 +111,7 @@ describe('runner', () => {
   it('exits 1 with path:line findings and 0 when clean', () => {
     const script = path.join(REPO_ROOT, 'scripts/conformance/run.mjs');
     const ok = execFileSync(process.execPath, [script, '--base', 'none'], { cwd: REPO_ROOT, encoding: 'utf8', env: { ...process.env, GITHUB_ACTIONS: '' } });
-    assert.match(ok, /conformance: 3 rule\(s\), 0 finding\(s\)/);
+    assert.match(ok, /conformance: 4 rule\(s\), 0 finding\(s\)/);
     const dir = fixture((d) => editText(d, 'README.md', (s) => s.replace(/^Rounds is a self-hostable career command center.*$/m, 'Rounds is a tool.')));
     let failed = null;
     try {

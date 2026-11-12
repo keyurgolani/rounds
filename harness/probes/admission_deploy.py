@@ -16,15 +16,17 @@ the two replicas). These phases add what stage 4's Deployment item asks for:
                      unprivileged uid and private scratch, an event loop a
                      running execution doesn't hold up, a status-only
                      renderer health check, and a typed render failure).
+                     Every code run is a job since ROUNDS-00A-L03 PR 4, so a
+                     closure's facts are its job's result.
   emergency-disable  both replicas restarted with ROUNDS_GATE_RUN=disabled:
                      the route answers 503 route_disabled through nginx and
                      at each replica for every caller and charges nothing,
                      each replica's gates line says so, and the other routes
-                     still refuse an anonymous caller 401 and admit a
-                     signed-in one.
+                     still refuse an anonymous caller 401 and take a
+                     signed-in one's job.
   emergency-enable   the gate cleared and both replicas restarted: every
                      route refuses an anonymous caller 401 again, runs are
-                     admitted through nginx and at each replica, and each
+                     jobs again through nginx and at each replica, and each
                      gates line says so.
 
 Each check writes one receipt, named by the guarantee it holds; the verdict
@@ -68,7 +70,7 @@ CHECKS: dict[str, str] = {
     "admission.closure.scratch.private":
         "a candidate process's home and temp directory are its own 0700 scratch",
     "admission.closure.event-loop.free":
-        "a running execution doesn't hold up the replica's other requests",
+        "a running execution doesn't hold up the replicas' other requests",
     "admission.closure.pdf-health.status-only":
         "the renderer health check answers only its status",
     "admission.closure.render-failure.typed":
@@ -90,7 +92,8 @@ ALLOWED_ENV = frozenset({
 CANDIDATE_UIDS = range(10001, 10005)
 # How long a replica may take to answer /health while a run is in flight.
 FREE_LOOP_S = 1.0
-SLOW_S = 3
+# A run that sleeps this long uses most of its 3 s budget.
+SLOW_S = 2
 RENDERER_TEXT = ("pdf-renderer", "Errno", "Traceback", "urlopen", "Connection refused")
 # The contract the runner and its admission store speak (backend/app/admission_state.py).
 ADMISSION_VERSION = "admission/v1"
@@ -99,21 +102,21 @@ ADMISSION_VERSION = "admission/v1"
 CLOSURE_CODE = '''import os
 
 
-def {name}(*args, **kwargs):
+def two_sum(*args, **kwargs):
     home = os.environ.get("HOME", "")
     try:
         st = os.stat(home)
         mode, owner = st.st_mode & 0o777, st.st_uid
     except OSError:
         mode, owner = None, None
-    return {{
+    return {
         "env": sorted(os.environ),
         "uid": os.getuid(),
         "app_writable": os.access("/app", os.W_OK) or os.access("/app/main.py", os.W_OK),
         "home_mode": mode,
         "home_owned": owner == os.getuid(),
         "tmpdir_is_home": os.environ.get("TMPDIR") == home,
-    }}
+    }
 '''
 
 
@@ -173,12 +176,12 @@ def _timed(fn: Callable[[], Any]) -> tuple[Any, int]:
 # --------------------------------------------------------------------------
 
 
-def check_order(writer: ReceiptWriter, replica: str, acct: factory.Account, slug: str, name: str) -> None:
-    # 5 before 6: fields the route doesn't take (client-supplied cases, and
-    # one named by a marker made for this run), and no key. The refusal is
-    # the typed envelope and repeats none of the request.
+def check_order(writer: ReceiptWriter, replica: str, acct: factory.Account) -> None:
+    # 5 before 6: a field the route doesn't take, named by a marker made for
+    # this run, and no key. The refusal is the typed envelope and repeats
+    # none of the request.
     marker = "s4echo" + secrets.token_hex(6)
-    sent = {**ac.run_body(slug, name), "test_cases": [], marker: marker}
+    sent = {**ac.run_body(), marker: marker}
     sent["code"] = f"# {marker}\n" + sent["code"]
     (status, raw, headers), ms = _timed(lambda: _raw_call(replica, "/api/run", acct.token, sent, keyed=False))
     code = _code_raw(raw)
@@ -186,38 +189,40 @@ def check_order(writer: ReceiptWriter, replica: str, acct: factory.Account, slug
     writer.write(receipt("admission.policy.fields-before-idempotency", target, "standard", 422, status,
                          status == 422 and code == "invalid_request", ms, f"status={status} code={code!r}"))
     problem = vd.envelope_problem(status, raw, headers)
-    echoed = sum(1 for t in (marker, "test_cases") if t in raw.decode("utf-8", "replace"))
+    echoed = int(marker in raw.decode("utf-8", "replace"))
     writer.write(receipt("admission.error-shape.no-echo", target, "standard", 422, status,
                          status == 422 and not problem and not echoed, ms,
                          f"status={status} {problem} echoed={echoed}".strip()))
-    # 6 before 8: no key, for a question that doesn't exist.
-    missing = {**ac.run_body(slug, name), "question_slug": "harness-no-such-question"}
+    # 6 before 8: no key, for a definition that doesn't exist.
+    missing = {**ac.run_body(), "definition": {**ac.TWO_SUM, "slug": "harness-no-such-item"}}
     (status, body, _), ms = _timed(lambda: ac.call(replica, "POST", "/api/run", acct.token, missing))
     ok = status == 400 and _code(body) == "idempotency_key_required"
     writer.write(receipt("admission.policy.idempotency-before-lookup", f"{replica} /api/run", "standard",
                          400, status, ok, ms, f"status={status} code={_code(body)!r}"))
 
 
-def check_closures(writer: ReceiptWriter, replica: str, acct: factory.Account, slug: str, name: str) -> None:
-    body = {"question_slug": slug, "language": "python", "code": CLOSURE_CODE.format(name=name), "input": {}}
-    (status, out, _), ms = _timed(lambda: ac.call(replica, "POST", "/api/run", acct.token, body, _keyed()))
-    facts = (out or {}).get("return_value") if status == 200 and isinstance(out, dict) else None
+def check_closures(writer: ReceiptWriter, replica: str, acct: factory.Account) -> None:
+    (status, answer, _), ms = _timed(lambda: ac.call(replica, "POST", "/api/run", acct.token,
+                                                     ac.run_body(code=CLOSURE_CODE), _keyed()))
+    job = ac.job_until(replica, acct.token, ac.job_id(answer)) if status == 202 else {}
+    out = (job.get("envelope") or {}).get("output")
+    facts = out.get("return_value") if isinstance(out, dict) else None
     target = f"{replica} /api/run"
     if not isinstance(facts, dict):
-        why = f"status={status} error={(out or {}).get('error')!r}" if isinstance(out, dict) else f"status={status}"
+        why = f"status={status} ended={job.get('state')}/{job.get('outcome_class')}"
         for check_id in ("admission.closure.child-env.minimal", "admission.closure.candidate.unprivileged",
                          "admission.closure.scratch.private"):
-            writer.write(receipt(check_id, target, "standard", 200, status, False, ms, f"no report: {why}"))
+            writer.write(receipt(check_id, target, "standard", 202, status, False, ms, f"no report: {why}"))
         return
     extra = sorted(set(facts.get("env") or []) - ALLOWED_ENV)
-    writer.write(receipt("admission.closure.child-env.minimal", target, "standard", 200, status, not extra, ms,
+    writer.write(receipt("admission.closure.child-env.minimal", target, "standard", 202, status, not extra, ms,
                          "unexpected variables: " + ", ".join(extra)))
     uid = facts.get("uid")
     ok = isinstance(uid, int) and uid in CANDIDATE_UIDS and facts.get("app_writable") is False
-    writer.write(receipt("admission.closure.candidate.unprivileged", target, "standard", 200, status, ok, ms,
+    writer.write(receipt("admission.closure.candidate.unprivileged", target, "standard", 202, status, ok, ms,
                          f"uid={uid} app_writable={facts.get('app_writable')}"))
     ok = facts.get("home_mode") == 0o700 and facts.get("home_owned") is True and facts.get("tmpdir_is_home") is True
-    writer.write(receipt("admission.closure.scratch.private", target, "standard", 200, status, ok, ms,
+    writer.write(receipt("admission.closure.scratch.private", target, "standard", 202, status, ok, ms,
                          f"home_mode={facts.get('home_mode')!r} owned={facts.get('home_owned')} "
                          f"tmpdir_is_home={facts.get('tmpdir_is_home')}"))
 
@@ -235,21 +240,23 @@ def check_store_contract(writer: ReceiptWriter, replica: str, acct: factory.Acco
                          f"v={after.get('v')!r} requests={counted} same_hour={same_hour}"))
 
 
-def check_event_loop(writer: ReceiptWriter, replica: str, acct: factory.Account, slug: str, name: str) -> None:
-    slow = ac.in_background(lambda: ac.call(replica, "POST", "/api/run", acct.token,
-                                            ac.run_body(slug, name, SLOW_S), _keyed()))
-    busy = ac.wait_in_flight(acct.token, 1)
-    worst, status = 0, 0
+def check_event_loop(writer: ReceiptWriter, replica: str, acct: factory.Account) -> None:
+    # Either replica's worker may take the job, so both answer while it runs.
+    status, answer, _ = ac.call(replica, "POST", "/api/run", acct.token, ac.run_body(SLOW_S), _keyed())
+    job = ac.job_id(answer) if status == 202 else ""
+    running = ac.job_until(replica, acct.token, job, lambda a: a.get("state") in ("started", *ac.ENDED), 60)
+    busy = running.get("state") == "started"
+    worst, answered = 0, []
     for _ in range(3):
-        (status, _body, _), ms = _timed(lambda: ac.call(replica, "GET", "/health", timeout=10))
-        worst = max(worst, ms)
-        if status != 200:
-            break
-    slow[0].join(timeout=60)
-    finished = slow[1].get("result", (0,))[0]
-    ok = busy and status == 200 and worst <= FREE_LOOP_S * 1000 and finished == 200
-    writer.write(receipt("admission.closure.event-loop.free", f"{replica} /health", "standard", 200, status, ok,
-                         worst, f"busy={busy} health_ms={worst} run_status={finished}"))
+        for base in ac.RUNNERS:
+            (got, _body, _), ms = _timed(lambda: ac.call(base, "GET", "/health", timeout=10))
+            worst = max(worst, ms)
+            answered.append(got)
+    health = next((s for s in answered if s != 200), 200) if answered else 0
+    finished = ac.job_until(replica, acct.token, job).get("state")
+    ok = busy and health == 200 and worst <= FREE_LOOP_S * 1000 and finished in ("completed", "timed-out")
+    writer.write(receipt("admission.closure.event-loop.free", f"{replica} /health", "standard", 200, health, ok,
+                         worst, f"busy={busy} health_ms={worst} job={finished}"))
 
 
 def owned_snapshot(pb: PBClient, admin: str, acct: factory.Account) -> tuple[str, str]:
@@ -314,16 +321,15 @@ def run_admission_deploy(writer: ReceiptWriter) -> None:
     pb = PBClient(POCKETBASE_URL)
     pb.wait_healthy()
     admin = ac.admin_token(pb)
-    slug, name, _charge = ac.a_question(pb, admin)
     for replica in replicas:
         verifier_receipts(writer, vd.check_admitted_routes(replica), where=replica)
         verifier_receipts(writer, vd.check_admission_body_caps(replica, at_runner=True), where=replica)
         acct = ac.account(pb, "s4")
         before = ac.usage(acct.token)
-        check_order(writer, replica, acct, slug, name)
-        check_closures(writer, replica, acct, slug, name)
+        check_order(writer, replica, acct)
+        check_closures(writer, replica, acct)
         check_store_contract(writer, replica, acct, before)
-        check_event_loop(writer, replica, acct, slug, name)
+        check_event_loop(writer, replica, acct)
         check_renderer(writer, replica, acct, pb, admin)
 
 
@@ -363,21 +369,20 @@ def run_emergency_disable(writer: ReceiptWriter) -> None:
     verifier_receipts(writer, vd.check_admitted_routes(FRONTEND_URL, disabled=["/api/run"]), where="with RUN off")
 
     pb = PBClient(POCKETBASE_URL)
-    admin = ac.admin_token(pb)
-    slug, name, _charge = ac.a_question(pb, admin)
     acct = ac.account(pb, "s4-off")
     for base in (FRONTEND_URL, *replicas):
         (status, body, _), ms = _timed(lambda: ac.call(base, "POST", "/api/run", acct.token,
-                                                       ac.run_body(slug, name), _keyed()))
+                                                       ac.run_body(), _keyed()))
         charged = ac.usage(acct.token)["requests"]
         ok = status == 503 and _code(body) == "route_disabled" and charged == 0
         writer.write(receipt("admission.emergency.disabled.signed-in-denied", f"{base} /api/run", "standard", 503,
                              status, ok, ms, f"status={status} code={_code(body)!r} charged={charged}"))
-    evaluate = {k: v for k, v in ac.run_body(slug, name).items() if k != "input"}
-    (status, body, _), ms = _timed(lambda: ac.call(FRONTEND_URL, "POST", "/api/evaluate", acct.token, evaluate,
-                                                   _keyed(), timeout=420))
-    writer.write(receipt("admission.emergency.disabled.others-unaffected", "/api/evaluate", "standard", 200,
-                         status, status == 200, ms, f"status={status} code={_code(body)!r}"))
+    (status, body, _), ms = _timed(lambda: ac.call(FRONTEND_URL, "POST", "/api/evaluate", acct.token,
+                                                   ac.evaluate_body(), _keyed()))
+    # The job ends before the replicas stop, so no later phase finds it queued.
+    ended = ac.all_ended(FRONTEND_URL, [(acct.token, ac.job_id(body))])
+    writer.write(receipt("admission.emergency.disabled.others-unaffected", "/api/evaluate", "standard", 202,
+                         status, status == 202 and ended, ms, f"status={status} code={_code(body)!r} ended={ended}"))
 
 
 def run_emergency_enable(writer: ReceiptWriter) -> None:
@@ -386,13 +391,13 @@ def run_emergency_enable(writer: ReceiptWriter) -> None:
     # Every route refuses an anonymous caller 401 again, none 503.
     verifier_receipts(writer, vd.check_admitted_routes(FRONTEND_URL), where="after RUN re-enabled")
     pb = PBClient(POCKETBASE_URL)
-    admin = ac.admin_token(pb)
-    slug, name, _charge = ac.a_question(pb, admin)
     acct = ac.account(pb, "s4-on")
     for base in (FRONTEND_URL, *replicas):
-        anonymous = ac.call(base, "POST", "/api/run", None, ac.run_body(slug, name))
+        anonymous = ac.call(base, "POST", "/api/run", None, ac.run_body())
         (status, body, _), ms = _timed(lambda: ac.call(base, "POST", "/api/run", acct.token,
-                                                       ac.run_body(slug, name), _keyed()))
-        ok = status == 200 and anonymous[0] == 401 and _code(anonymous[1]) == "unauthenticated"
-        writer.write(receipt("admission.emergency.enabled.restored", f"{base} /api/run", "standard", 200, status,
-                             ok, ms, f"signed_in={status} anonymous={anonymous[0]} code={_code(anonymous[1])!r}"))
+                                                       ac.run_body(), _keyed()))
+        ended = ac.all_ended(base, [(acct.token, ac.job_id(body))])
+        ok = status == 202 and ended and anonymous[0] == 401 and _code(anonymous[1]) == "unauthenticated"
+        writer.write(receipt("admission.emergency.enabled.restored", f"{base} /api/run", "standard", 202, status,
+                             ok, ms, f"signed_in={status} ended={ended} anonymous={anonymous[0]} "
+                             f"code={_code(anonymous[1])!r}"))

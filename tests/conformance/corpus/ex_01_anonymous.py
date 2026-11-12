@@ -23,7 +23,28 @@ from conformance.outcomes import Outcome
 from corpus._base import code_of, result
 from corpus._requests import bodies
 
-SUBCASE = "EX-01.anonymous-denied"
+# This fixture's spec; conformance/manifest.py reads it as a literal.
+SPEC = {
+    "routes": [
+        "POST /api/run",
+        "POST /api/evaluate",
+        "POST /api/ai-coding/run-project",
+        "POST /api/ai-coding/grade",
+        "POST /api/take-home/run",
+        "POST /api/take-home/submit",
+        "POST /api/pdf/render",
+    ],
+    "subcases": ["EX-01.anonymous-denied"],
+    "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
+    "languages": [],
+    "control": "selftest/test_negative_controls.py: the account step off, and the body checked before the account",
+    "setup": "none; the fixture sends no account",
+    "teardown": "none",
+    "destructive": False,
+    "environment_sensitive": True,
+}
+
+SUBCASE = SPEC["subcases"][0]
 # A gate's stop, before the account step (backend/app/admission.py).
 GATE_STOPS = frozenset({"route_disabled", "definitions_disabled"})
 

@@ -13,12 +13,13 @@
 // sign-in gets the answer a wrong password gets, any request a demo
 // account's token authenticates gets 401, and every start gives each demo
 // account a random password and a new token key. On or off, a demo caller
-// changes only its profile, and no demo account owns a share link or an AI
-// provider, credential, model, or settings row, whether a client or a
-// server hook writes it.
+// changes only its text profile fields, and no demo account owns a share
+// link or an AI provider, credential, model, or settings row, whether a
+// client or a server hook writes it.
 
-// What a demo caller may change on its own users record.
-const PROFILE_FIELDS = ["name", "bio", "target", "avatar"];
+// What a demo caller may change on its own users record. No client changes
+// a profile file (profile_files.js).
+const PROFILE_FIELDS = ["name", "bio", "target"];
 // What a demo account may not own, and how each row names its account:
 // its own field, or the provider it belongs to. ai_credentials and
 // ai_provider_models (#73) don't exist yet; the leaf that adds one confirms
@@ -124,14 +125,16 @@ function guardSession(c, env) {
   }
 }
 
-// 3. A demo caller changes its own name, bio, target, and avatar, and
-// nothing else: not its password, email, username, verification, or demo
-// fields. A superuser isn't held to it.
+// 3. A demo caller changes its own name, bio, and target, and nothing
+// else: not its profile file, password, email, username, verification, or
+// demo fields. A superuser isn't held to it.
 function guardAccountUpdate(e) {
   if (isSuperuser(e.httpContext) || !isDemo(e.record.originalCopy())) return;
-  // A change to the demo flags gets admission.js's answer whichever of the
-  // two users-update hooks PocketBase runs first, so it's always the same.
+  // A change to the demo flags gets admission.js's answer, and one to a
+  // profile file profile_files.js's, whichever users-update hook PocketBase
+  // runs first, so it's always the same.
   require(`${__hooks}/admission.js`).guardDemoUpdate(e);
+  require(`${__hooks}/profile_files.js`).guardUpdate(e);
   const data = $apis.requestInfo(e.httpContext).data || {};
   const keys = Object.keys(data).concat(Object.keys(e.uploadedFiles || {}));
   if (keys.some((key) => PROFILE_FIELDS.indexOf(key.replace(/[+-]$/, "")) < 0)) throw notPermitted("update", "users");

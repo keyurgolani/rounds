@@ -2,16 +2,14 @@
 
 Three decoys a contained worker must never reach: a fake cloud metadata
 endpoint, a fake RFC1918 internal service, and a logging DNS resolver.
-Each logs every request it receives to stdout, so a later leaf's fixture
-can assert, from the service's log, that a no-network worker reached none
-of them (EX-08, EX-09) and that a render worker fetched nothing (RD-03).
+Each logs every request it receives to stdout, so a fixture can show,
+from the service's log, that a contained worker reached none of them.
 They sit on an ``internal: true`` network and embed a per-run canary, so
 reaching one and reading its body leaks a value the receipt scans for.
 
 Standard library only. The mode is the first argument:
 ``metadata``, ``rfc1918``, or ``dns``. These services are the bait, not a
-probe: they run idle at stage 1 (the fixtures that exercise them are
-pending rows), and a closing leaf attaches the worker and reads the logs.
+probe: they idle until a fixture attaches a worker and reads the logs.
 """
 from __future__ import annotations
 
@@ -21,9 +19,8 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 CANARY = os.environ.get("BAIT_CANARY", "bait-canary-unset")
-# High ports so the decoys run as a non-root user. A closing leaf that
-# needs the real link-local metadata address (169.254.169.254:80) remaps
-# there; the fixtures that exercise these are pending at stage 1.
+# High ports so the decoys run as a non-root user. A fixture that needs
+# the real link-local metadata address (169.254.169.254:80) remaps there.
 HTTP_PORT = int(os.environ.get("BAIT_HTTP_PORT", "8080"))
 DNS_PORT = int(os.environ.get("BAIT_DNS_PORT", "5353"))
 

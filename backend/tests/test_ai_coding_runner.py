@@ -112,26 +112,18 @@ def project_runs(monkeypatch):
     return calls
 
 
+# The request shape the route took before definitions. Since ROUNDS-00A-L03
+# PR 4 the route runs definitions only, as jobs, and at the shipped gates
+# the execution keys act as off, so this answers 503 before the account
+# check and nothing runs (test_execution_scratch.py runs the jobs).
 RUN_PROJECT_BODY = {"round_slug": "cart-totals", "checkpoint_index": 0, "files": CART_FILES}
-
-
-def test_run_project_route(client, signed_in, cart_round, project_runs):
-    res = client.post("/api/ai-coding/run-project", json=RUN_PROJECT_BODY, headers=signed_in)
-    assert res.status_code == 200
-    data = res.json()
-    assert data["passed"] is True
-    assert data["passed_count"] == 1
-    assert data["failed_count"] == 0
-    ((args, kwargs),) = project_runs
-    assert args[2] == "pytest tests/test_x.py -q"
-    assert kwargs["timeout_s"] == 10
 
 
 def test_run_project_route_anonymous_is_denied_before_anything_runs(client, cart_round, project_runs, pocketbase):
     # Expected-deny control (#8).
     res = client.post("/api/ai-coding/run-project", json=RUN_PROJECT_BODY)
-    assert res.status_code == 401
-    assert res.json()["code"] == "unauthenticated"
+    assert res.status_code == 503
+    assert res.json()["code"] == "execution_disabled"
     assert project_runs == []
     assert pocketbase.calls == []
 
@@ -146,56 +138,10 @@ def test_run_project_route_anonymous_is_denied_before_anything_runs(client, cart
 )
 def test_run_project_refuses_a_caller_command_or_timeout(client, signed_in, cart_round, project_runs, pocketbase, extra):
     res = client.post("/api/ai-coding/run-project", json={**RUN_PROJECT_BODY, **extra}, headers=signed_in)
-    assert res.status_code == 422
-    assert res.json()["code"] == "invalid_request"
+    assert res.status_code == 503
+    assert res.json()["code"] == "execution_disabled"
     assert project_runs == []
     assert pocketbase.calls == []
-
-
-def test_run_project_picks_the_checkpoint_for_the_language(client, signed_in, pocketbase, project_runs):
-    pocketbase.add(
-        "ai_coding_rounds",
-        slug="two-langs",
-        language="python",
-        checkpoints={
-            "python": [{"test_command": "echo '1 passed in 0.01s'"}],
-            "typescript": [{"test_command": "echo '# pass 1'"}],
-        },
-    )
-    body = {"round_slug": "two-langs", "checkpoint_index": 0, "files": {}}
-    res = client.post("/api/ai-coding/run-project", json={**body, "language": "typescript"}, headers=signed_in)
-    assert res.status_code == 200
-    assert project_runs[-1][0][1:3] == ("typescript", "echo '# pass 1'")
-    res = client.post("/api/ai-coding/run-project", json=body, headers=signed_in)
-    assert res.status_code == 200
-    assert project_runs[-1][0][1:3] == ("python", "echo '1 passed in 0.01s'")
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        {"round_slug": "missing-round", "checkpoint_index": 0, "files": {}},
-        {"round_slug": "cart-totals", "checkpoint_index": 3, "files": {}},
-        {"round_slug": "cart-totals", "checkpoint_index": 0, "language": "typescript", "files": {}},
-    ],
-)
-def test_run_project_answers_not_found_before_anything_runs(client, signed_in, cart_round, project_runs, body):
-    res = client.post("/api/ai-coding/run-project", json=body, headers=signed_in)
-    assert res.status_code == 404
-    assert res.json()["code"] == "not_found"
-    assert project_runs == []
-
-
-def test_run_project_refuses_a_checkpoint_without_a_stored_command(client, signed_in, pocketbase, project_runs):
-    pocketbase.add("ai_coding_rounds", slug="no-command", language="python", checkpoints=[{"label": "cp0"}])
-    res = client.post(
-        "/api/ai-coding/run-project",
-        json={"round_slug": "no-command", "checkpoint_index": 0, "files": {}},
-        headers=signed_in,
-    )
-    assert res.status_code == 422
-    assert res.json()["code"] == "invalid_request"
-    assert project_runs == []
 
 
 def test_chat_route_requires_auth(client):

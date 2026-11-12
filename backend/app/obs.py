@@ -171,8 +171,11 @@ _GATE_VALUE = _matches(r"[a-z_]{1,16}", 16)
 _GATE_SOURCE = _one_of("default", "env", "alias", "invalid")
 
 
-# The gate settings a key can need (execution/keys.py), and nothing else.
-GATE_REQUIREMENTS = frozenset({"EXECUTION_STORE=on", "EXECUTION_DEFINITIONS=enforce"})
+# What a key can need (execution/keys.py), and nothing else: the gate
+# settings as NAME=value, and the secrets by name, never a value.
+GATE_REQUIREMENTS = frozenset({
+    "EXECUTION_STORE=on", "EXECUTION_DEFINITIONS=enforce", "ROUNDS_EXECUTION_SECRET", "ROUNDS_ADMISSION_SECRET",
+})
 
 
 def _gate_requirements(value: Any) -> bool:
@@ -205,8 +208,9 @@ def _gate_table(value: Any) -> bool:
 # share.rotate lines (ROUNDS-00B-L04) carry the same three: issued,
 # already_issued, ineligible, or the refusal's error code.
 # execution.scratch (ROUNDS-00A-L03 PR 2) is the startup line that says
-# ROUNDS_GATE_EXECUTION_SCRATCH is on but acts as off, and names the gate
-# values it needs; execution.grading (PR 3) says the same of
+# ROUNDS_GATE_EXECUTION_SCRATCH is on but acts as off, and names what it
+# needs (since PR 4, a missing secret by its name too), or that it's set
+# to legacy, which acts as off; execution.grading (PR 3) says the same of
 # ROUNDS_GATE_EXECUTION_GRADING. execution.review lines (PR 3) carry a
 # grading kind and a coarse outcome in `code` (requested, completed,
 # provider_failed, lost, in_flight, no_provider, files_changed,
@@ -274,7 +278,7 @@ FIELDS: dict[str, Callable[[Any], bool]] = {
     # A PocketBase record id, such as the share link or capability a
     # share.resolve or share.revoke line names.
     "record": _matches(r"[a-z0-9]{15}", 15),
-    # The gate values a key needs, such as EXECUTION_STORE=on.
+    # What a key needs, such as EXECUTION_STORE=on or ROUNDS_EXECUTION_SECRET.
     "needs": _gate_requirements,
 }
 # The fields an event may carry, where that's fewer than FIELDS: a job

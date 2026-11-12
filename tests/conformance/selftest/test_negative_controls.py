@@ -51,7 +51,7 @@ def _run(fixture_id: str, off: set[str]):
 
 
 def test_every_committed_fixture_has_a_control():
-    assert set(CONTROLS) == {f.id for f in MANIFEST.contained()}
+    assert set(CONTROLS) == {f.id for f in MANIFEST.runnable()}
 
 
 @pytest.mark.parametrize("fixture_id", sorted(CONTROLS))
@@ -59,8 +59,9 @@ def test_contained_when_the_guarantee_holds(fixture_id):
     ran = _run(fixture_id, set())
     assert ran.passed, ran.message
     assert ran.receipt.outcome == "contained"
-    contained = [s for s in ran.receipt.subcases if s["status"] == "contained"]
-    assert contained and all(s["outcome"] == "contained" for s in contained)
+    # One entry per sub-case the spec lists, each contained.
+    assert [s["id"] for s in ran.receipt.subcases] == MANIFEST.by_id(fixture_id).subcases
+    assert all(s["outcome"] == "contained" for s in ran.receipt.subcases)
 
 
 @pytest.mark.parametrize(

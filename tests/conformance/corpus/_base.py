@@ -1,13 +1,13 @@
 """Shared result type and helpers for the fixtures.
 
-A fixture returns a :class:`Result`: an outcome per contained sub-case it
-checked (the manifest lists them), the named text artifacts it wants
-retained (the plugin redacts and checksums them), the text to scan for
-canary hits, and a note. A fixture never writes a receipt or an artifact
-itself; the plugin does, so redaction and the receipt schema stay in one
-place. The fixture's overall outcome is its worst sub-case outcome. A row
-with no contained sub-case (a ``not-applicable`` row) has none to report,
-so its fixture gives one outcome for the whole row (``not_applicable``).
+A fixture returns a :class:`Result`: an outcome per sub-case it checked
+(its ``SPEC`` lists them), the named text artifacts it wants retained (the
+plugin redacts and checksums them), the text to scan for canary hits, and
+a note. A fixture never writes a receipt or an artifact itself; the
+plugin does, so redaction and the receipt schema stay in one place. The
+fixture's overall outcome is its worst sub-case outcome. A spec with no
+sub-case (a ``not-applicable`` fixture) has none to report, so its
+fixture gives one outcome for the whole row (``not_applicable``).
 """
 from __future__ import annotations
 

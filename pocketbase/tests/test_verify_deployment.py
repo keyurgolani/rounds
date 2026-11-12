@@ -79,7 +79,7 @@ class Deployment:
         if bare == "/api/collections/users/auth-methods":
             return 200, {"usernamePassword": False, "emailPassword": True, "authProviders": []}
         if bare == "/api/oauth2-redirect":
-            # What PocketBase 0.22.22 sends without state and code.
+            # What PocketBase 0.22.57 sends without state and code.
             return 307, b"", {"Location": vd.OAUTH_FAILURE_LOCATION}
         if bare.startswith("/api/files/"):
             return 404, PB_404

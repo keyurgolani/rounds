@@ -46,6 +46,8 @@ function record(fields, original) {
     tableName: () => data.table || "",
     getBool: (name) => data[name] === true,
     getString: (name) => (typeof data[name] === "string" ? data[name] : ""),
+    // A file field's names, as PocketBase reads them: a string is one name.
+    getStringSlice: (name) => (typeof data[name] === "string" && data[name] ? [data[name]] : []),
     setPassword: (password) => { data.calls.push("setPassword:" + password.length); },
     refreshTokenKey: () => { data.calls.push("refreshTokenKey"); },
     // PocketBase's original copy keeps the record's collection.
@@ -292,13 +294,32 @@ def test_a_demo_caller_changing_its_demo_flag_gets_the_admission_answer_whicheve
     ]
 
 
-def test_a_demo_caller_updates_its_name_bio_target_and_avatar():
+def test_a_demo_caller_updates_its_name_bio_and_target():
     assert run(
         {"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO,
          "data": {"name": "Visitor", "bio": "Trying it out", "target": "Staff engineer"}},
+        {"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO, "data": {"bio": "Trying it out"}},
+    ) == [{"allowed": True}] * 2
+
+
+LOCKED = {"status": 400, "message": "These account fields can't be changed.", "data": None}
+
+
+def test_a_demo_caller_cant_change_its_profile_file():
+    # In any form, alone or beside its text fields, with profile_files.js's
+    # answer whichever users update hook PocketBase runs first.
+    stored = dict(DEMO, avatar="face.png")
+    steps = [
         {"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO, "data": {}, "uploaded": {"avatar": [{}]}},
-        {"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO, "data": {"avatar-": "old.png"}},
-    ) == [{"allowed": True}] * 3
+        {"call": "guardAccountUpdate", "fields": stored, "original": stored, "data": {"avatar-": "face.png"}},
+        {"call": "guardAccountUpdate", "fields": stored, "original": stored, "data": {"avatar+": "face.png"}},
+        {"call": "guardAccountUpdate", "fields": stored, "original": stored, "data": {"avatar": ""}},
+        {"call": "guardAccountUpdate", "fields": stored, "original": stored, "data": {"avatar": None}},
+        {"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO, "data": {"name": "Visitor", "avatar": "face.png"}},
+        # The record as it would save, whatever the request named.
+        {"call": "guardAccountUpdate", "fields": DEMO, "original": stored, "data": {"name": "Visitor"}},
+    ]
+    assert run(*steps) == [LOCKED] * len(steps)
 
 
 def test_the_field_lock_holds_only_demo_callers_and_never_a_superuser():
@@ -377,7 +398,7 @@ def test_a_collection_with_no_owner_entry_is_refused_outright():
 def test_the_constants_are_the_bodys():
     (constants,) = run({"call": "constants"})
     assert constants == {
-        "profile": ["name", "bio", "target", "avatar"],
+        "profile": ["name", "bio", "target"],
         "contained": ["resume_share_links", "share_capabilities", "ai_providers", "ai_credentials",
                       "ai_provider_models", "ai_settings"],
         "chars": 48,

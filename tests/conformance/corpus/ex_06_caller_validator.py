@@ -1,13 +1,12 @@
 """EX-06: the caller cannot supply the validators or a driver.
 
 Guarantee (closed by ROUNDS-00A-L01 for caller validators and drivers,
-and ROUNDS-00A-L02 for keeping evaluation out of the API; running a
-definition's validators inside the worker is a pending row for
-ROUNDS-00A-L05): with server-owned definitions enforced, a well-formed
-request that also carries its own ``validators`` or ``entry`` is refused
-422 ``legacy_request_rejected`` before anything runs. Validators come
-only from the definition's pinned revision and run in the validator
-process, never in the API.
+and ROUNDS-00A-L02 for keeping evaluation out of the API): with
+server-owned definitions enforced, a well-formed request that also
+carries its own ``validators`` or ``entry`` is refused 422
+``legacy_request_rejected`` before anything runs. Validators come only
+from the definition's pinned revision and run in the validator process,
+never in the API.
 """
 from __future__ import annotations
 
@@ -15,8 +14,20 @@ from conformance.outcomes import Outcome
 from corpus._base import code_of, result
 from corpus._requests import bodies
 
-VALIDATORS = "EX-06.caller-validators-refused"
-DRIVER = "EX-06.caller-driver-refused"
+# This fixture's spec; conformance/manifest.py reads it as a literal.
+SPEC = {
+    "routes": ["POST /api/evaluate", "POST /api/run"],
+    "subcases": ["EX-06.caller-validators-refused", "EX-06.caller-driver-refused"],
+    "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
+    "languages": ["python", "javascript"],
+    "control": "selftest/test_negative_controls.py: caller fields accepted",
+    "setup": "one synthetic account; the enforced execution-definitions gate",
+    "teardown": "the account removed with the admin token",
+    "destructive": False,
+    "environment_sensitive": False,
+}
+
+VALIDATORS, DRIVER = SPEC["subcases"]
 CHECKS = (
     (VALIDATORS, ("POST", "/api/evaluate"), "validators", []),
     (DRIVER, ("POST", "/api/run"), "entry", {"kind": "custom"}),
