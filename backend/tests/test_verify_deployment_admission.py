@@ -826,3 +826,189 @@ def test_every_admission_check_id_is_registered():
         seen |= {r.check_id for r in vd.check_disabled_routes(url, ["/api/run"])}
     seen |= {r.check_id for r in vd.check_gates_log(gates_line(), {"RUN": "enabled"})}
     assert seen == set(vd.ADMISSION_CHECKS)
+
+
+# ---- the demo account's code runs (ROUNDS-00B-L07) ------------------------------
+
+DEMO_TOKEN = "demo-session-token-placeholder"
+DEMO_REFUSED = (503, envelope("demo_execution_disabled", "Code runs are off in the demo."), {"X-Correlation-Id": CID})
+
+
+def _demo_deployment(run, sign_in=200):
+    """The verifier's request function for the two answers --demo reads:
+    the demo account's sign-in, then its code run. ``run`` is (status,
+    body, headers); ``sign_in`` is the sign-in's status. Records each
+    request as (method, path, bearer)."""
+    seen: list[tuple[str, str, str]] = []
+
+    def req(method, url, *, body=None, token="", timeout=10.0):
+        path = urllib.parse.urlsplit(url).path
+        seen.append((method, path, token))
+        if path == vd.USER_SIGN_IN:
+            if sign_in == 200:
+                doc = {"token": DEMO_TOKEN, "record": {"id": "demo00000000001"}}
+            else:
+                doc = {"code": sign_in, "message": "Failed to authenticate.", "data": {}}
+            return vd.Response(sign_in, json.dumps(doc).encode(), {}, 0)
+        status, doc, headers = run
+        raw = doc if isinstance(doc, bytes) else json.dumps(doc).encode()
+        return vd.Response(status, raw, {k.lower(): v for k, v in headers.items()}, 0, "" if status else "URLError")
+
+    return req, seen
+
+
+def test_the_demo_check_passes_only_on_the_typed_refusal_after_one_demo_sign_in():
+    req, seen = _demo_deployment(DEMO_REFUSED)
+    result = vd.check_demo_code_runs("http://deploy.test/", req)
+    assert result.passed and result.detail == "" and result.check_id in vd.DEMO_CHECKS
+    assert (result.expected_status, result.observed_status, result.target) == (503, 503, vd.DEMO_CODE_RUN)
+    assert seen == [("POST", vd.USER_SIGN_IN, ""), ("POST", vd.DEMO_CODE_RUN, DEMO_TOKEN)]
+
+
+def test_the_demo_check_fails_where_the_demos_code_runs_are_open():
+    req, _seen = _demo_deployment((422, envelope("invalid_request"), {"X-Correlation-Id": CID}))
+    result = vd.check_demo_code_runs("http://deploy.test", req)
+    assert not result.passed and result.observed_status == 422
+    assert "ROUNDS_GATE_DEMO_EXECUTION is enabled" in result.detail
+
+
+@pytest.mark.parametrize(
+    "answer, says",
+    [
+        ((503, envelope("route_disabled"), {"X-Correlation-Id": CID}), "its gate is off"),
+        ((503, envelope("execution_disabled"), {"X-Correlation-Id": CID}), "ROUNDS_GATE_EXECUTION_SCRATCH"),
+        ((503, envelope("worker_unavailable"), {"X-Correlation-Id": CID}), "code='worker_unavailable'"),
+        ((503, envelope("demo_execution_disabled"), {}), "X-Correlation-Id header doesn't match"),
+        ((503, {"detail": "Service Unavailable"}, {}), "keys differ"),
+        ((503, b"<html>bad gateway</html>", {}), "answered_by=proxy"),
+        ((*DEMO_REFUSED[:2], {"X-Correlation-Id": CID, "Retry-After": "300"}), "retry-after"),
+        ((*DEMO_REFUSED[:2], {"X-Correlation-Id": CID, "Idempotent-Replayed": "true"}), "idempotent-replayed"),
+        ((200, {"stdout": "", "stderr": "", "error": None}, {}), "status=200"),
+        ((0, b"", {}), "no response"),
+    ],
+    ids=["route-off", "scratch-off", "busy", "no-correlation-header", "untyped", "proxy-page", "counted",
+         "replayed", "ran", "unreachable"],
+)
+def test_any_other_answer_to_the_demos_code_run_fails_and_says_what_came_back(answer, says):
+    req, _seen = _demo_deployment(answer)
+    result = vd.check_demo_code_runs("http://deploy.test", req)
+    assert not result.passed and not result.inconclusive
+    assert says in result.detail
+
+
+@pytest.mark.parametrize("status", [400, 401, 0], ids=["refused", "runner-shaped", "unreachable"])
+def test_a_demo_sign_in_the_deployment_refuses_fails_and_sends_no_code_run(status):
+    req, seen = _demo_deployment(DEMO_REFUSED, sign_in=status)
+    result = vd.check_demo_code_runs("http://deploy.test", req)
+    assert not result.passed and result.observed_status == status
+    assert "didn't sign in" in result.detail
+    assert [path for _m, path, _t in seen] == [vd.USER_SIGN_IN]
+
+
+def test_the_demo_check_reports_no_login_or_token():
+    for answer in (DEMO_REFUSED, (422, envelope("invalid_request"), {"X-Correlation-Id": CID})):
+        req, _seen = _demo_deployment(answer)
+        result = vd.check_demo_code_runs("http://deploy.test", req)
+        for value in (*vd.DEMO_LOGIN, DEMO_TOKEN):
+            assert value not in result.detail
+
+
+def test_the_demo_refusal_and_its_route_are_the_runners_and_the_login_is_the_shipped_one():
+    from app import admission, errors
+
+    assert errors.CODES[vd.DEMO_REFUSAL] == 503
+    assert admission.ROUTES[("POST", vd.DEMO_CODE_RUN)].operation in admission.DEFINITION_OPERATIONS
+    assert ("the demo account", *vd.DEMO_LOGIN) in vd.DEFAULT_ADMIN_LOGINS
+    seeded = (ROOT / "pocketbase" / "pb_migrations" / "1700000600_demo_user.js").read_text()
+    assert f'DEMO_EMAIL = "{vd.DEMO_LOGIN[0]}"' in seeded and f'DEMO_PASSWORD = "{vd.DEMO_LOGIN[1]}"' in seeded
+
+
+def _demo_in_process(client, monkeypatch):
+    """The verifier's request function with the sign-in answered the way
+    PocketBase answers the demo account's, and the code run answered by the
+    runner in process, which takes the issued token as that demo account."""
+    from app import admission
+    from app.errors import TypedError
+
+    async def authenticate(token):
+        if token != DEMO_TOKEN:
+            raise TypedError("unauthenticated")
+        return {"id": "demo00000000001", "token": token, "record": {"id": "demo00000000001", "is_demo": True}}
+
+    monkeypatch.setattr(admission, "authenticate", authenticate)
+    runner = _in_process(client)
+
+    def req(method, url, *, body=None, token="", timeout=10.0):
+        if urllib.parse.urlsplit(url).path == vd.USER_SIGN_IN:
+            return vd.Response(200, json.dumps({"token": DEMO_TOKEN, "record": {}}).encode(), {}, 0)
+        return runner(method, url, body=body, token=token, timeout=timeout)
+
+    return req
+
+
+@pytest.fixture
+def runs(monkeypatch):
+    """Every code run the runner starts, recorded and refused."""
+    from routers import runner as coding
+
+    started: list[str] = []
+
+    def run_one(*_args, **_kwargs):
+        started.append("run_one")
+        raise AssertionError("a code run started")
+
+    monkeypatch.setattr(coding, "run_one", run_one)
+    return started
+
+
+def test_the_runners_demo_refusal_passes_the_demo_check_and_charges_nothing(client, monkeypatch, admission_store,
+                                                                              runs):
+    from app import gates
+
+    monkeypatch.setattr(gates, "_snapshot", gates.load({}, gates.RUNNER))
+    result = vd.check_demo_code_runs("http://runner", _demo_in_process(client, monkeypatch))
+    assert result.passed, result.detail
+    assert admission_store.calls == [] and runs == []
+
+
+def test_where_the_demos_code_runs_are_open_the_check_fails_and_nothing_runs_or_is_charged(
+    client, monkeypatch, admission_store, runs
+):
+    from app import gates
+
+    env = {"ROUNDS_GATE_DEMO_EXECUTION": "enabled", "ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "enforce",
+           "ROUNDS_GATE_ENFORCE_QUOTA": "enforce"}
+    monkeypatch.setattr(gates, "_snapshot", gates.load(env, gates.RUNNER))
+    result = vd.check_demo_code_runs("http://runner", _demo_in_process(client, monkeypatch))
+    assert not result.passed and result.observed_status == 422
+    assert admission_store.calls == [] and runs == []
+
+
+def test_the_command_line_runs_the_demo_check_only_with_demo(monkeypatch, capsys):
+    dep = Admission()
+    dep.overrides[vd.USER_SIGN_IN] = (200, {"token": DEMO_TOKEN, "record": {}}, {})
+    dep.overrides[vd.DEMO_CODE_RUN] = DEMO_REFUSED
+    monkeypatch.setattr(vd, "check_proxy", lambda _url: [])
+    with fake(dep) as url:
+        assert vd.main(["--url", url], env={}) == 0
+        assert "deployment.demo" not in capsys.readouterr().out
+        assert vd.main(["--url", url, "--demo"], env={}) == 0
+        passed = capsys.readouterr().out
+        dep.overrides[vd.DEMO_CODE_RUN] = (422, envelope("invalid_request"), {"X-Correlation-Id": CID})
+        assert vd.main(["--url", url, "--demo"], env={}) == 1
+        failed_out = capsys.readouterr().out
+    assert "PASS deployment.demo.code-run.refused" in passed
+    assert "FAIL deployment.demo.code-run.refused" in failed_out and "ROUNDS_GATE_DEMO_EXECUTION" in failed_out
+    for value in (*vd.DEMO_LOGIN, DEMO_TOKEN):
+        assert value not in passed and value not in failed_out
+
+
+def test_the_demo_check_needs_the_url():
+    assert vd.main(["--demo"], env={}) == 2
+    assert vd.main(["--gates-log", "/nonexistent", "--demo"], env={}) == 2
+
+
+def test_every_demo_check_id_is_registered():
+    req, _seen = _demo_deployment(DEMO_REFUSED)
+    assert {vd.check_demo_code_runs("http://deploy.test", req).check_id} == set(vd.DEMO_CHECKS)
+    assert not set(vd.DEMO_CHECKS) & (set(vd.ADMISSION_CHECKS) | set(vd.CHECKS))

@@ -50,11 +50,22 @@ Read-only checks an operator runs against a Rounds deployment they operate:
                ROUNDS_GATE_EXECUTION_GRADING is on without the store on and
                definitions enforced (the runner then acts as if it were
                off), and each --expect-gate NAME=VALUE holds.
+  demo         (--demo, with --url) Through the public URL: the demo account
+               signs in with its published login, the one the credential
+               check tries as an admin, and one code run answers 503
+               demo_execution_disabled in the typed envelope, with no
+               Retry-After or replay header, as it does while
+               ROUNDS_GATE_DEMO_EXECUTION is at its default. The runner
+               refuses it before it reads the body, so nothing is charged or
+               run. The run's body is empty, which the runner refuses at its
+               fields where the demo's code runs are open, so nothing runs
+               there either, and the check fails.
 
 It never writes. Every request is a read, a login that is expected to fail, a
-request nginx refuses on its headers before PocketBase sees it, or a request to
+request nginx refuses on its headers before PocketBase sees it, a request to
 an admitted route that the runner refuses before it reads the body or names an
-account. It prints no
+account, or, with --demo, the demo account's sign-in and one code run that the
+runner refuses before it charges or runs anything. It prints no
 credentials, emails, tokens, or record contents. The admin password, when
 given, comes from an environment variable, never the command line. It never
 uses an environment proxy, and it refuses a plain-HTTP --pb-url that is not
@@ -91,6 +102,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+# The demo account's published login, which
+# pocketbase/pb_migrations/1700000600_demo_user.js seeds on every install.
+# The credential check tries it as an admin, and --demo signs in with it.
+DEMO_LOGIN: tuple[str, str] = ("demo@rounds.keyurgolani.name", "RoundsDemo123!")
+
 # The repository's shipped default credentials. Each must fail as an admin
 # login on every deployment. Kept in step with the files that ship them by
 # pocketbase/tests/test_verify_deployment.py.
@@ -98,7 +114,7 @@ from typing import Any, Callable, Iterable
 #   - pocketbase/pb_migrations/1700000600_demo_user.js seeds the demo account.
 DEFAULT_ADMIN_LOGINS: tuple[tuple[str, str, str], ...] = (
     ("the development compose default admin", "admin@local.dev", "changemenowplz"),
-    ("the demo account", "demo@rounds.keyurgolani.name", "RoundsDemo123!"),
+    ("the demo account", *DEMO_LOGIN),
 )
 DEFAULT_PASSWORDS: tuple[str, ...] = tuple(dict.fromkeys(p for _, _, p in DEFAULT_ADMIN_LOGINS))
 
@@ -930,6 +946,69 @@ def check_disabled_routes(base_url: str, paths: Iterable[str], req: Callable[...
     return out
 
 
+# --------------------------------------------------------------------------
+# the demo account's code runs (public URL, --demo)
+# --------------------------------------------------------------------------
+
+# While ROUNDS_GATE_DEMO_EXECUTION is at its default, the runner answers a
+# demo account's code run with this code at admission step 4, before it
+# reads the body (ROUNDS-00B-L07). Kept in step with the runner by
+# backend/tests/test_verify_deployment_admission.py.
+DEMO_REFUSAL = "demo_execution_disabled"
+DEMO_CODE_RUN = "/api/run"
+USER_SIGN_IN = "/api/collections/users/auth-with-password"
+DEMO_CHECK = "deployment.demo.code-run.refused"
+# What an answer carries once a request was counted or its command kept: a
+# quota refusal's wait, or a completed command's replay.
+COUNTED_HEADERS = ("retry-after", "idempotent-replayed")
+
+DEMO_CHECKS: dict[str, str] = {
+    DEMO_CHECK: "the demo account's code run is refused 503 demo_execution_disabled before anything is charged "
+                "or runs",
+}
+
+
+def check_demo_code_runs(base_url: str, req: Callable[..., Response] = request) -> Result:
+    """The demo account signs in through the public URL with its published
+    login, and its one code run answers 503 demo_execution_disabled in the
+    typed envelope with neither a Retry-After nor a replay header. Any other
+    answer fails, a sign-in the deployment refuses included, since then the
+    refusal can't be seen.
+
+    The run's body is an empty object. The runner refuses the demo's code
+    run before it reads the body; where the demo's code runs are open, it
+    refuses that body at its fields, before anything is admitted, so nothing
+    runs or is charged either way. Nothing from the sign-in is printed."""
+    base = base_url.rstrip("/")
+    identity, password = DEMO_LOGIN
+    signed = req("POST", base + USER_SIGN_IN, body={"identity": identity, "password": password})
+    doc = signed.json()
+    token = doc.get("token") if isinstance(doc, dict) else None
+    if signed.status != 200 or not isinstance(token, str) or not token:
+        return Result(DEMO_CHECK, DEMO_CODE_RUN, "demo", "demo", 503, signed.status, False, signed.elapsed_ms,
+                      f"the demo account didn't sign in (status={signed.status}, answered_by={answered_by(signed)}), "
+                      "so its code run wasn't tried: the demo is off on this deployment, or its password changed")
+    resp = req("POST", base + DEMO_CODE_RUN, body={}, token=token)
+    code = _code_of(resp.body)
+    problem = envelope_problem(resp.status, resp.body, resp.headers) if resp.status else ""
+    counted = [name for name in COUNTED_HEADERS if name in resp.headers]
+    ok = resp.status == 503 and code == DEMO_REFUSAL and not problem and not counted
+    if ok:
+        why = ""
+    elif resp.status == 0:
+        why = f"no response ({resp.error})"
+    elif resp.status == 422:
+        why = (f"the code run got past the account check (status=422 code={code!r}), so the demo's code runs are "
+               "open: ROUNDS_GATE_DEMO_EXECUTION is enabled, or the runner predates this release")
+    elif resp.status == 503 and code in STOP_CODES:
+        why = f"{DEMO_CODE_RUN} answered {code} before the account check ({STOPPED_BY[code]}), so this can't be seen"
+    elif counted:
+        why = f"the answer carries {', '.join(counted)}, so the request was counted or its command kept"
+    else:
+        why = f"status={resp.status} code={code!r} answered_by={answered_by(resp)} {problem}".strip()
+    return Result(DEMO_CHECK, DEMO_CODE_RUN, "demo", "demo", 503, resp.status, ok, resp.elapsed_ms, why)
+
+
 def parse_gates_log(text: str) -> dict[str, dict[str, str]] | None:
     """The gate table from the last runner ``gates`` line in a saved log.
     Lines may carry a compose or kubectl prefix before the JSON."""
@@ -1243,8 +1322,8 @@ def validate(args: argparse.Namespace, env: dict[str, str]) -> dict | None:
     when rules will be compared."""
     if not (args.url or args.pb_url or args.db or args.gates_log):
         raise ConfigError("give at least one of --url, --pb-url, --db, --gates-log")
-    if (args.admission or args.expect_disabled) and not args.url:
-        raise ConfigError("--admission and --expect-disabled need --url")
+    if (args.admission or args.expect_disabled or args.demo) and not args.url:
+        raise ConfigError("--admission, --expect-disabled, and --demo need --url")
     if args.expect_gate and not args.gates_log:
         raise ConfigError("--expect-gate needs --gates-log")
     parse_expected_disabled(args.expect_disabled or [])
@@ -1272,6 +1351,8 @@ def run(args: argparse.Namespace, env: dict[str, str], policy: dict | None, resu
             results += check_admission_body_caps(args.url)
         if args.expect_disabled:
             results += check_disabled_routes(args.url, args.expect_disabled)
+        if args.demo:
+            results.append(check_demo_code_runs(args.url))
 
     if args.gates_log:
         try:
@@ -1320,6 +1401,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         "execution routes when ROUNDS_GATE_EXECUTION_DEFINITIONS is disabled, or "
                         "execution_disabled for the four scratch routes when ROUNDS_GATE_EXECUTION_SCRATCH is off "
                         "(repeatable; for confirming an emergency disable)")
+    p.add_argument("--demo", action="store_true",
+                   help="with --url: sign in as the demo account with its published login and check that one code "
+                        "run answers 503 demo_execution_disabled, as it does while ROUNDS_GATE_DEMO_EXECUTION is at "
+                        "its default (the body is empty, so nothing is charged or run)")
     p.add_argument("--gates-log", metavar="FILE",
                    help="a saved runner log from its start: check the gates line it writes")
     p.add_argument("--expect-gate", action="append", metavar="NAME=VALUE",
