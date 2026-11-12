@@ -14,6 +14,7 @@ import {
   Send,
 } from 'lucide-react';
 import { useResizableWidth } from '../../hooks/useResizableWidth';
+import { NARROW_SCREEN_QUERY, useMediaQuery } from '../../hooks/useMediaQuery';
 import ResizeHandle from '../../components/layout/ResizeHandle';
 import AppHeader from '../../components/shell/AppHeader';
 import BackLink from '../../components/shell/BackLink';
@@ -158,6 +159,9 @@ export default function AICodingDetail() {
     false,
   );
   const [dockOpen, setDockOpen] = useState(false);
+  // On a phone the side rail leaves the center column too narrow for the
+  // runner notice, so the notice takes the page's full width below it.
+  const narrow = useMediaQuery(NARROW_SCREEN_QUERY);
   // A run or submission the runner refused or couldn't serve. Shown
   // above the console in place of a result or report.
   const [runDenial, setRunDenial] = useState<{
@@ -734,7 +738,21 @@ export default function AICodingDetail() {
         // Chat now toggles via the editor's floating toolbar button —
         // no longer surfaced as a left-edge floating tab.
 
+        // One live region for the page: in the center column, or on a
+        // phone at full width below the body.
+        const runnerNotice = (
+          <RunnerDenialNotice
+            denial={runDenial?.denial ?? null}
+            action={runDenial?.action ?? 'run'}
+            onReload={reloadKeepingDrafts}
+            className="flex-shrink-0"
+            contentStyle={{ margin: '8px 12px' }}
+            job={shownJob === 'grade' ? gradeView : jobView}
+          />
+        );
+
         return (
+          <>
           <div
             className="flex-1 min-h-0 flex overflow-hidden"
             style={{ minHeight: 0, position: 'relative' }}
@@ -748,6 +766,7 @@ export default function AICodingDetail() {
 
             {/* CENTER — problem above editor (hidden in focus), editor with floating actions, console below. */}
             <div
+              data-ai-coding-pane="center"
               className="flex-1 flex flex-col"
               style={{ minWidth: 0, minHeight: 0 }}
             >
@@ -876,14 +895,7 @@ export default function AICodingDetail() {
                 )}
               </div>
 
-              <RunnerDenialNotice
-                denial={runDenial?.denial ?? null}
-                action={runDenial?.action ?? 'run'}
-                onReload={reloadKeepingDrafts}
-                className="flex-shrink-0"
-                contentStyle={{ margin: '8px 12px' }}
-                job={shownJob === 'grade' ? gradeView : jobView}
-              />
+              {!narrow && runnerNotice}
 
               <RunDock
                 open={dockOpen}
@@ -943,6 +955,12 @@ export default function AICodingDetail() {
               </SideRail>
             )}
           </div>
+          {narrow && (
+            <div data-ai-coding-pane="notice" className="flex-shrink-0">
+              {runnerNotice}
+            </div>
+          )}
+          </>
         );
       })()}
 
