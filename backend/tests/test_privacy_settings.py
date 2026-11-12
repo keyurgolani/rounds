@@ -2,14 +2,17 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 
 from app import gates
 from app.privacy import evaluator, settings
 
 ENV = (settings.LOG_RETENTION, settings.BACKUP_RETENTION, settings.PRIVATE_ENDPOINTS)
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_unset_and_empty_take_the_defaults():
@@ -86,6 +89,28 @@ def test_the_runner_refuses_to_start_on_a_bad_value(monkeypatch, name, value, me
         with TestClient(app):
             pass
     assert message in str(raised.value)
+
+
+@pytest.mark.parametrize("compose_file", ["docker-compose.yml", "docker-compose.prod.yml"])
+def test_compose_passes_each_setting_to_the_runner_empty_by_default(compose_file):
+    compose = yaml.safe_load((ROOT / compose_file).read_text(encoding="utf-8"))
+    env = compose["services"]["runner"]["environment"]
+    for name in ENV:
+        assert f"{name}=${{{name}:-}}" in env, (compose_file, name)
+
+
+def test_the_k8s_runner_sets_each_setting_empty():
+    docs = [d for d in yaml.safe_load_all((ROOT / "k8s" / "runner.yaml").read_text(encoding="utf-8")) if d]
+    (deployment,) = [d for d in docs if d["kind"] == "Deployment"]
+    (container,) = deployment["spec"]["template"]["spec"]["containers"]
+    env = {e["name"]: e.get("value") for e in container["env"]}
+    assert {name: env.get(name) for name in ENV} == {name: "" for name in ENV}
+
+
+def test_the_example_env_lists_each_setting_empty():
+    lines = (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
+    for name in ENV:
+        assert f"{name}=" in lines, name
 
 
 def test_the_runner_starts_with_valid_values(monkeypatch):

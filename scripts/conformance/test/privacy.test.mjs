@@ -79,6 +79,8 @@ describe('privacy: repository', () => {
     const out = privacy.generate(REPO_ROOT, overlay());
     const paths = out.map((o) => o.path);
     assert.ok(paths.includes(DOC_PATH) && paths.includes(CONFIG_DOC_PATH));
+    const settings = out.find((o) => o.path === CONFIG_DOC_PATH).content;
+    for (const name of ['ROUNDS_LOG_RETENTION_DAYS', 'ROUNDS_BACKUP_RETENTION_DAYS', 'ROUNDS_AI_PRIVATE_ENDPOINTS']) assert.match(settings, new RegExp(`\\| \`${name}\` \\|`));
     for (const o of out) assert.equal(o.content, fs.readFileSync(path.join(REPO_ROOT, o.path), 'utf8'), `${o.path} differs; run node scripts/conformance/run.mjs --write`);
   });
 
@@ -347,6 +349,11 @@ describe('privacy: the violation register', () => {
   it('fails an open entry whose location is gone', () => {
     only(check({ files: edit(VIOLATIONS, (r) => { violation(r, 3).location.anchors[0].text = 'no longer in the file'; }) }), 'PRIVACY_VIOLATION_STALE');
     only(check({ files: edit(VIOLATIONS, (r) => { violation(r, 1).location.fields.push('storage:rounds:retired-key'); }) }), 'PRIVACY_VIOLATION_STALE');
+  });
+
+  it('needs each entry\'s location and exit', () => {
+    only(check({ files: edit(VIOLATIONS, (r) => { violation(r, 3).location = {}; }) }), 'PRIVACY_SCHEMA_INVALID');
+    only(check({ files: edit(VIOLATIONS, (r) => { delete violation(r, 3).exit; }) }), 'PRIVACY_SCHEMA_INVALID');
   });
 
   it('fails a closed entry that names no fixing PR, and an entry without a real owner', () => {
