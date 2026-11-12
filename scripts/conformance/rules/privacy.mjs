@@ -29,6 +29,10 @@ const memo = new WeakMap();
 function run(ctx) {
   if (memo.has(ctx)) return memo.get(ctx);
   const result = analyze(ctx);
+  // Without its markers the settings section would silently stop regenerating.
+  if (!ctx.exists(CONFIG_DOC_PATH) || spliceConfig(ctx.read(CONFIG_DOC_PATH), '') === null) {
+    result.findings.push(finding('PRIVACY_DOC_MARKERS', CONFIG_DOC_PATH, 1, 'needs its privacy-settings:begin and privacy-settings:end markers, so --write keeps the settings table'));
+  }
   if (ctx.reviewRoot) result.findings.push(...checkSpec(ctx, result.A.P));
   memo.set(ctx, result);
   return result;
