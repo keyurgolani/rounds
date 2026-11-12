@@ -407,8 +407,9 @@ def test_chat_route_rejects_partial_override(client):
 def test_grade_route_records_failure_for_missing_test_command(client, signed_in, monkeypatch):
     """A seeded checkpoint without a test_command is the definition's
     fault, not a failed solution (ROUNDS-00A-L03 PR 3): the grade answers
-    the typed definition_invalid before anything runs or is charged, so no
-    checkpoint reads as passed: false and no rubric review is asked for."""
+    the typed definition_invalid before anything runs, with its wall
+    seconds refunded, so no checkpoint reads as passed: false and no rubric
+    review is asked for."""
     async def fake_user(_):
         return {"id": "u1", "token": "t"}
 

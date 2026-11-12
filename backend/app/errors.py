@@ -67,7 +67,7 @@ CODES: dict[str, int] = {
     "case_unknown": 422,
     # A practice item whose own definition can't be graded, such as a
     # checkpoint with nothing to run (ROUNDS-00A-L03 PR 3). Refused before
-    # anything is charged or runs.
+    # anything runs; its wall seconds are refunded.
     "definition_invalid": 422,
     "definition_integrity_mismatch": 503,
     "worker_unavailable": 503,

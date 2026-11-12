@@ -14,7 +14,7 @@ grade, whose graded row the server writes with its result;
 ``POST /api/ai-coding/grade/{job}/review`` then asks for its rubric
 review, once per result (``execution.review``). A grade's answer carries
 only visible output, and a round with a checkpoint that has nothing to run
-is refused before anything is charged or runs."""
+is refused before anything runs; its wall seconds are refunded."""
 from __future__ import annotations
 
 import json
@@ -492,7 +492,8 @@ async def grade(request: Request, user: dict = Depends(_auth_user)) -> Dict[str,
     if graded > GRADE_MAX_CHECKPOINTS:
         raise TypedError("invalid_request", "This round can't be graded here.")
     # A checkpoint with nothing to run is the definition's fault: refused
-    # before anything is charged or runs, never graded as a failure.
+    # before anything runs; its wall seconds are refunded. It's never
+    # graded as a failure.
     if not _gradable(checkpoints):
         raise TypedError("definition_invalid")
     await admission.settle(request, graded * GRADE_CHECKPOINT_TIMEOUT_S)

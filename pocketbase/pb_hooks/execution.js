@@ -946,9 +946,10 @@ function nonNegativeInt(value) {
 }
 
 // The graded row for a job's authoritative result: the account, the item,
-// what the job's input recorded (files, chats, notes, session time, and
-// the campaign while it's the account's), and the graded content. Its
-// rubric review is empty until the review route fills it.
+// what the job's input recorded (the chats, the session time, and the
+// campaign while it's the account's; a take-home submission's row also
+// keeps the files and notes), and the graded content. Its rubric review
+// is empty until the review route fills it.
 function gradedRow(store, job, envelopeId, graded, itemId) {
   const input = isObject(job.input) ? job.input : {};
   const campaignId = typeof input.campaign_id === "string" && RECORD_ID.test(input.campaign_id) &&

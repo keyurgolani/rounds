@@ -102,7 +102,7 @@ Typed errors answer `{"detail", "code", "correlation_id"}`. `detail` is a fixed 
 | `definition_retired` | 410 | definition lookup | The named definition was retired; nothing runs | None; the item is gone. Drafts stay |
 | `runtime_unsupported` | 422 | definition lookup | This runner has no runtime for the named variant; the error names the variants it does have | Use a supported variant, or deploy a runner with that runtime |
 | `case_unknown` | 422 | definition lookup | An evaluate named a case id, or a run-project a checkpoint, that the resolved version doesn't have | The app asks for a reload |
-| `definition_invalid` | 422 | after the round lookup | At `EXECUTION_DEFINITIONS=legacy`, a grade of a round with a checkpoint that has no test command; nothing is charged or runs | None for the caller; fix the round's record. Drafts stay |
+| `definition_invalid` | 422 | after the round lookup | At `EXECUTION_DEFINITIONS=legacy`, a grade of a round with a checkpoint that has no test command; nothing runs, and its wall seconds are refunded | None for the caller; fix the round's record. Drafts stay |
 | `path_not_allowed` | 422 | after definition lookup | A submitted file uses a harness path, test or package configuration, a Python startup file, or a library module's name, has the same name as a folder, or has a name over 255 bytes; `detail` is a fixed sentence for the kind, never the path | Rename or remove the file; drafts stay |
 | `definition_integrity_mismatch` | 503 | startup and definition lookup | A shipped definition file is missing or its bytes don't match the manifest checksum | Redeploy a clean image; the alert names the version. See Alerts |
 | `worker_unavailable` | 503 | 9, or after admission | Every in-flight slot on this replica is busy, the runner couldn't write a submission's files into its scratch directory (a full disk, say), or the PDF renderer was unreachable, failed, opened no page within 2 s, or didn't answer within 25 s | The app retries with the same key, keeps the draft, and shows unavailable if it persists; check the renderer |
@@ -150,7 +150,7 @@ A job-backed request always needs its `Idempotency-Key`, the job's command id. A
 - To confirm `on`, run `--gates-log runner.log --expect-gate EXECUTION_GRADING=on`. It fails a gates line where the key is `on` without the store on or definitions enforced, and says which.
 - Rollback is `off`, then `legacy` once no page waits on a job. Ended jobs keep their graded rows and envelopes.
 
-At `legacy` a grade of a round with a checkpoint that has no test command answers 422 `definition_invalid` before anything is charged or runs, and a grade's answer carries only visible output.
+At `legacy` a grade of a round with a checkpoint that has no test command answers 422 `definition_invalid` before anything runs, its wall seconds refunded, and a grade's answer carries only visible output.
 
 ## Idempotency and Quotas
 

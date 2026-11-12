@@ -378,6 +378,69 @@ def _fake_grade(monkeypatch, channel: bytes, timed_out: bool = False, limit: str
     monkeypatch.setattr(handlers.definition_runs, "grade", grade)
 
 
+THREE_STEP_SLUG = "three-step-client"
+THREE_STEP_REF = {**GRADE_REF, "slug": THREE_STEP_SLUG}
+PASSED_CHANNEL = b'{"id": "fetch_user_against_real_server", "outcome": "passed", "reason": "ok"}\n'
+
+
+@pytest.fixture
+def three_step_store(tmp_path, monkeypatch):
+    """A test-only round with three checkpoints, made from the committed
+    round's one: the same harness and result id at indexes 0, 1, and 2.
+    Swapped in after the runner starts, which loads the committed store."""
+    committed = json.loads((ROOT / "backend" / "definitions" / "store" / "ai-coding" / GRADE_REF["slug"]
+                            / "python.v1.json").read_text())
+    (checkpoint,) = committed["checkpoints"]
+    document = {**committed, "slug": THREE_STEP_SLUG,
+                "checkpoints": [{**checkpoint, "index": i, "label": f"Step {i + 1}"} for i in range(3)]}
+    entry = {"kind": "harness-revision", "track": "ai-coding", "slug": THREE_STEP_SLUG, "variant": "python",
+             "content_version": 1}
+    store = _store(tmp_path, [(entry, document, "active")])
+
+    def use():
+        monkeypatch.setattr(definitions, "_store", store)
+
+    return use
+
+
+def test_a_grade_runs_its_checkpoints_in_order_and_a_limit_keeps_the_others_verdicts(runner, node, monkeypatch,
+                                                                                     three_step_store):
+    ran = []
+
+    def grade(checkpoint, _harness_files, _files, _slot, wall_s=None, control=None):
+        ran.append((checkpoint["index"], wall_s))
+        limited = checkpoint["index"] == 1
+        score = harness_results.score(b"" if limited else PASSED_CHANNEL, checkpoint["results"],
+                                      checkpoint["min_executed"], missing_reason="timeout" if limited else "no-result")
+        return definition_runs.Graded(score, limited, 5, None)
+
+    monkeypatch.setattr(handlers.definition_runs, "grade", grade)
+    client = runner(GRADING_ON)
+    three_step_store()
+    node.http.post("/__test/item", json={"collection": "ai_coding_rounds", "slug": THREE_STEP_SLUG})
+    done = graded(client, node, {**grade_body(), "definition": THREE_STEP_REF})
+    # In order, each held to its own 45 s.
+    assert ran == [(0, 45), (1, 45), (2, 45)]
+    assert (done["state"], done["outcome_class"]) == ("timed-out", "resource-limit")
+    env = done["envelope"]
+    assert (env["authoritative"], env["limit"], env["score"]) == (True, "wall_time", None)
+    assert env["parts"] == [
+        {"id": "checkpoint-0", "outcome_class": "passed", "limit": None},
+        {"id": "checkpoint-1", "outcome_class": "resource-limit", "limit": "wall_time"},
+        {"id": "checkpoint-2", "outcome_class": "passed", "limit": None},
+    ]
+    # The limit takes no verdict from the checkpoints around it.
+    first, limited, last = graded_row_of(node, done["job_id"])["test_results"]
+    assert (first["index"], first["passed"], first["score"]) == (0, True, 1.0)
+    assert (limited["index"], limited["outcome_class"], limited["passed"], limited["score"]) == (
+        1, "resource-limit", None, None)
+    assert (last["index"], last["passed"], last["score"]) == (2, True, 1.0)
+    # Three checkpoints' budget, declared at the start and charged.
+    (attempt,) = [a for a in node.dump()["attempts"] if a["job"] == done["job_id"]]
+    assert attempt["budget_s"] == 135
+    assert node.charged() == (1, 135)
+
+
 @pytest.mark.parametrize("limit", [name for name in kinds.LIMITS if name != "wall_time"])
 def test_each_other_limit_is_a_limit_naming_it_with_a_row_and_no_score(runner, node, monkeypatch, limit):
     _fake_grade(monkeypatch, b"", limit=limit)
@@ -407,17 +470,34 @@ def test_a_grade_its_harness_didnt_score_writes_no_row_and_no_score(runner, node
     assert graded_rows(node) == []
 
 
-def test_a_result_whose_row_cant_be_written_ends_degraded_and_scores_nothing(runner, node, monkeypatch):
-    def drop():
-        httpx.post(f"{node.url}/__test/drop-item", json={"collection": "ai_coding_rounds", "slug": GRADE_REF["slug"]})
+# The two grading kinds, as the tests below run each: its route, its body,
+# the page row its graded row points at, and a channel whose results pass.
+GRADING_KINDS = {
+    "grade": ("/api/ai-coding/grade", grade_body, "ai_coding_rounds", GRADE_REF["slug"], "ai_coding_attempts",
+              PASSED_CHANNEL),
+    "take_home_submit": ("/api/take-home/submit", submit_body, "take_home_assignments", TAKE_HOME_REF["slug"],
+                         "take_home_attempts",
+                         b'{"id": "adds_small", "outcome": "passed", "reason": "ok"}\n'
+                         b'{"id": "adds_large", "outcome": "passed", "reason": "ok"}\n'),
+}
 
-    channel = b'{"id": "fetch_user_against_real_server", "outcome": "passed", "reason": "ok"}\n'
+
+@pytest.mark.parametrize("kind", sorted(GRADING_KINDS))
+def test_a_result_whose_row_cant_be_written_ends_degraded_and_scores_nothing(runner, node, monkeypatch,
+                                                                            take_home_store, kind):
+    path, body, collection, slug, rows, channel = GRADING_KINDS[kind]
+
+    def drop():
+        httpx.post(f"{node.url}/__test/drop-item", json={"collection": collection, "slug": slug})
+
     _fake_grade(monkeypatch, channel, before=drop)
     client = runner(GRADING_ON)
-    seed_round(node)
-    done = graded(client, node, grade_body())
+    if kind == "take_home_submit":
+        take_home_store()
+    node.http.post("/__test/item", json={"collection": collection, "slug": slug})
+    done = graded(client, node, body(), path=path)
     assert (done["state"], done["outcome_class"], done["retryable"]) == ("failed", "infrastructure-degraded", True)
-    assert done["envelope"]["score"] is None and graded_rows(node) == []
+    assert done["envelope"]["score"] is None and graded_rows(node, rows) == []
 
 
 def test_a_round_without_its_own_row_is_refused_before_any_job(runner, node):
@@ -427,12 +507,15 @@ def test_a_round_without_its_own_row_is_refused_before_any_job(runner, node):
     assert node.dump()["jobs"] == [] and node.charged() == (1, 0)
 
 
-def test_another_accounts_campaign_is_refused_before_any_job(runner, node):
+@pytest.mark.parametrize("kind", sorted(GRADING_KINDS))
+def test_another_accounts_campaign_is_refused_before_any_job(runner, node, take_home_store, kind):
+    path, body, collection, slug, _rows, _channel = GRADING_KINDS[kind]
     client = runner(GRADING_ON)
-    seed_round(node)
+    if kind == "take_home_submit":
+        take_home_store()
+    node.http.post("/__test/item", json={"collection": collection, "slug": slug})
     node.http.post("/__test/campaign", json={"id": CAMPAIGN_B, "user": B})
-    res = client.post("/api/ai-coding/grade", json=grade_body(campaign_id=CAMPAIGN_B),
-                      headers=headers(node, key=new_key()))
+    res = client.post(path, json=body(campaign_id=CAMPAIGN_B), headers=headers(node, key=new_key()))
     typed(res, 404, "not_found")
     assert node.dump()["jobs"] == [] and node.charged() == (1, 0)
 

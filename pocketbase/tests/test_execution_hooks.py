@@ -1145,12 +1145,13 @@ def test_an_authoritative_grading_result_writes_its_graded_row_with_its_envelope
     assert (ended["state"], ended["outcome_class"]) == ("completed", "passed")
 
 
-def test_a_campaign_that_isnt_the_accounts_stays_off_the_graded_row():
-    steps, job, attempt, token = grading_job()
-    body, content = graded_result(job["id"])
-    out = run(*steps, item(), {"call": "seedCampaign", "id": CAMPAIGN, "user": B["id"]},
+@pytest.mark.parametrize("kind", ["grade", "take_home_submit"])
+def test_a_campaign_that_isnt_the_accounts_stays_off_the_graded_row(kind):
+    steps, job, attempt, token = grading_job(kind)
+    body, content = graded_result(job["id"], kind)
+    out = run(*steps, item(kind), {"call": "seedCampaign", "id": CAMPAIGN, "user": B["id"]},
               complete(attempt["id"], token, body, graded=content))
-    (row,) = out["store"]["graded"]["ai_coding_attempts"]
+    (row,) = out["store"]["graded"][GRADED[kind]]
     assert row["campaign"] == ""
 
 
@@ -1229,16 +1230,17 @@ def test_only_an_authoritative_grading_result_comes_with_graded_content():
     assert out["results"][-1]["status"] == 400
 
 
-def test_a_result_whose_items_row_is_gone_ends_degraded_and_writes_no_row():
-    steps, job, attempt, token = grading_job()
-    body, content = graded_result(job["id"])
+@pytest.mark.parametrize("kind", ["grade", "take_home_submit"])
+def test_a_result_whose_items_row_is_gone_ends_degraded_and_writes_no_row(kind):
+    steps, job, attempt, token = grading_job(kind)
+    body, content = graded_result(job["id"], kind)
     out = run(*steps, complete(attempt["id"], token, body, graded=content))
     assert out["results"][-1]["status"] == 200
     (envelope,) = out["store"]["envelopes"]
     assert (envelope["state"], envelope["outcome_class"], envelope["authoritative"]) == \
         ("failed", "infrastructure-degraded", False)
     assert envelope["user_view"]["score"] is None and envelope["graded_row"] == ""
-    assert out["store"]["graded"]["ai_coding_attempts"] == []
+    assert out["store"]["graded"][GRADED[kind]] == []
     (ended,) = out["store"]["jobs"]
     assert (ended["state"], ended["outcome_class"]) == ("failed", "infrastructure-degraded")
     assert run(*steps, complete(attempt["id"], token, body, graded=content),
