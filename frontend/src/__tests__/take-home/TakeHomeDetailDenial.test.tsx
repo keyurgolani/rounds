@@ -33,7 +33,12 @@ vi.mock('../../components/editor/MultiFileEditor', () => ({
 }));
 
 import TakeHomeDetail from '../../pages/take-home/TakeHomeDetail';
-import { getAssignment, runProject, submitAttempt } from '../../pages/take-home/takeHomeApi';
+import {
+  deleteInProgressTakeHomeAttempt,
+  getAssignment,
+  runProject,
+  submitAttempt,
+} from '../../pages/take-home/takeHomeApi';
 import { RunnerError } from '../../lib/runnerFetch';
 
 const ASSIGNMENT = {
@@ -124,5 +129,47 @@ describe('TakeHomeDetail denial states', () => {
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent('Your files are over the size limit, so nothing was graded.'),
     );
+  });
+});
+
+describe("TakeHomeDetail when the demo's code runs are off (ROUNDS-00B-L07)", () => {
+  const demoOff = () => new RunnerError({ message: 'x', status: 503, code: 'demo_execution_disabled' });
+
+  beforeEach(() => {
+    vi.mocked(deleteInProgressTakeHomeAttempt).mockClear();
+  });
+
+  it('says so where Run answers, shows no score, and keeps the files', async () => {
+    vi.mocked(runProject).mockImplementation(blurThenReject(demoOff()));
+    const user = userEvent.setup();
+    renderPage();
+    const run = await screen.findByRole('button', { name: 'Run' });
+    run.focus();
+    await user.keyboard('{Enter}');
+
+    const region = screen.getByRole('status');
+    await waitFor(() => expect(region).toHaveTextContent('Off in the demo'));
+    expect(region).toHaveTextContent('Code runs are off in the demo. Nothing ran. Your code is still here.');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Run' })).toHaveFocus());
+    expect(screen.queryByTestId('run-dock')).not.toBeInTheDocument();
+    expect(deleteInProgressTakeHomeAttempt).not.toHaveBeenCalled();
+  });
+
+  it('says so where Submit answers, opens no report, and keeps the files and notes', async () => {
+    vi.mocked(submitAttempt).mockImplementation(blurThenReject(demoOff()));
+    const user = userEvent.setup();
+    renderPage();
+    const submit = await screen.findByRole('button', { name: 'Submit' });
+    submit.focus();
+    await user.keyboard('{Enter}');
+
+    const region = screen.getByRole('status');
+    await waitFor(() => expect(region).toHaveTextContent('Off in the demo'));
+    expect(region).toHaveTextContent(
+      'Code runs are off in the demo. Nothing was graded. Your files and notes are still here.',
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toHaveFocus());
+    expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
+    expect(deleteInProgressTakeHomeAttempt).not.toHaveBeenCalled();
   });
 });

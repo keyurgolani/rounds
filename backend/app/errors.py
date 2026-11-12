@@ -44,6 +44,9 @@ CODES: dict[str, int] = {
     "unauthenticated": 401,
     "auth_unavailable": 503,
     "not_permitted": 403,
+    # A demo account's code run while ROUNDS_GATE_DEMO_EXECUTION is closed
+    # (ROUNDS-00B-L07): step 4, before anything is charged or runs.
+    "demo_execution_disabled": 503,
     "limit_exceeded": 413,
     "invalid_request": 422,
     # A request shape from before ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce
@@ -97,6 +100,7 @@ DETAILS: dict[str, str] = {
     "unauthenticated": "Sign in to continue.",
     "auth_unavailable": "Sign-in can't be checked right now. Try again shortly.",
     "not_permitted": "This isn't available for this account.",
+    "demo_execution_disabled": "Code runs are off in the demo.",
     "limit_exceeded": "Part of the request is over its size limit.",
     "invalid_request": "The request doesn't match what this route accepts.",
     "legacy_request_rejected": "This page is out of date. Reload it to continue.",

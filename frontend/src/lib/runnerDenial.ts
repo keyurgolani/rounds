@@ -17,7 +17,8 @@
 // nothing, and an unsupported language or a file the grader won't take
 // shows the server's fixed sentence, which never repeats the request. A
 // practice item the server can't grade (ROUNDS-00A-L03 PR 3) grades
-// nothing.
+// nothing. A demo account's code run while the demo's code runs are off
+// (ROUNDS-00B-L07) says so.
 
 import { isRunnerError } from './runnerFetch';
 
@@ -25,6 +26,7 @@ export type RunnerDenialKind =
   | 'sign_in'
   | 'limit'
   | 'turned_off'
+  | 'demo_off'
   | 'unavailable'
   | 'too_large'
   | 'not_permitted'
@@ -84,6 +86,8 @@ export function classifyRunnerError(
   if (code === 'route_disabled' || code === 'definitions_disabled' || code === 'execution_disabled') {
     kind = 'turned_off';
   }
+  // The demo account's code runs, off while ROUNDS_GATE_DEMO_EXECUTION is.
+  else if (code === 'demo_execution_disabled') kind = 'demo_off';
   else if (code !== null && RELOAD_CODES.has(code)) kind = 'reload';
   else if (code !== null && code in DEFINITION_KINDS) kind = DEFINITION_KINDS[code];
   else if (code === 'unauthenticated' || status === 401) kind = 'sign_in';

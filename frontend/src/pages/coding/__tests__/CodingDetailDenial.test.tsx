@@ -30,7 +30,8 @@ vi.mock('../../../components/editor/MultiFileEditor', () => ({
 
 import CodingDetail from '../../CodingDetail';
 import { getCodingQuestion } from '../../../content/api';
-import { evaluateCode } from '../runnerApi';
+import { deleteCodeDraft } from '../../../lib/codeDraftsApi';
+import { evaluateCode, runCode } from '../runnerApi';
 import { RunnerError } from '../../../lib/runnerFetch';
 import { UUID_V7_PATTERN } from '../../../lib/idempotency';
 
@@ -172,5 +173,39 @@ describe('CodingDetail denial states', () => {
     await waitFor(() => expect(region).toHaveTextContent('Unavailable right now'));
     await user.click(screen.getByRole('button', { name: 'Run all (2)' }));
     await waitFor(() => expect(region).toBeEmptyDOMElement());
+  });
+});
+
+describe("CodingDetail when the demo's code runs are off (ROUNDS-00B-L07)", () => {
+  const demoOff = () => new RunnerError({ message: 'x', status: 503, code: 'demo_execution_disabled' });
+
+  beforeEach(() => {
+    vi.mocked(runCode).mockReset();
+    vi.mocked(deleteCodeDraft).mockClear();
+  });
+
+  it('says so in the dock where Run all answers, and keeps the code', async () => {
+    vi.mocked(evaluateCode).mockRejectedValue(demoOff());
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Run all (2)' }));
+    const region = within(screen.getByTestId('right-dock')).getByRole('status');
+    await waitFor(() => expect(region).toHaveTextContent('Off in the demo'));
+    expect(region).toHaveTextContent('Code runs are off in the demo. No tests ran. Your code is still here.');
+    expect(screen.getByLabelText('Code')).toHaveValue(QUESTION.starter_code.python);
+    expect(deleteCodeDraft).not.toHaveBeenCalled();
+  });
+
+  it('says so in the dock where Run answers, and keeps the code', async () => {
+    vi.mocked(runCode).mockRejectedValue(demoOff());
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('tab', { name: 'Run' }));
+    await user.click(await screen.findByRole('button', { name: 'Run' }));
+    const region = within(screen.getByTestId('right-dock')).getByRole('status');
+    await waitFor(() => expect(region).toHaveTextContent('Off in the demo'));
+    expect(region).toHaveTextContent('Code runs are off in the demo. Nothing ran. Your code is still here.');
+    expect(screen.getByLabelText('Code')).toHaveValue(QUESTION.starter_code.python);
+    expect(deleteCodeDraft).not.toHaveBeenCalled();
   });
 });
