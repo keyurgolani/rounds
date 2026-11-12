@@ -20,6 +20,7 @@ These variables control host-side ports.
 | `RUNNER_PORT` | `3099` | dev compose | Exposes FastAPI runner on `127.0.0.1`. |
 | `FRONTEND_PORT` | `3001` | dev compose | Exposes Vite dev server on `127.0.0.1`. |
 | `HTTP_PORT` | `80` | prod compose | Exposes the nginx-fronted frontend. |
+| `HTTP_BIND` | blank (every address) | prod compose | The host address `HTTP_PORT` is published on. Set `127.0.0.1` when a proxy or tunnel on the same host sits in front, so the port isn't reachable from other machines. That's IPv4 loopback only; `[::1]` does the same for IPv6. Compose refuses a value that isn't an IP address, such as `localhost`. |
 
 Dev compose publishes its three ports on `127.0.0.1` only, since its admin login is a development placeholder; reach them from another machine through an SSH tunnel (`ssh -L 3001:127.0.0.1:3001 host`). Production compose exposes only `HTTP_PORT`. PocketBase and runner stay on the private Docker network.
 

@@ -18,7 +18,7 @@ Production compose runs four containers on a private network by default:
 
 A fifth container, `materializer`, renders Legacy Artifact Snapshots for PocketBase. It joins only the internal `materialize` network, which PocketBase also joins, so only PocketBase reaches it and it has no route out. PocketBase calls it only while `ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE` is enabled or an operator runs the snapshot scan, so it sits behind the `materializer` compose profile and does not start on a plain `up`. That keeps the stack starting after an upgrade before a `vX.Y.Z` tag publishes `rounds-materializer:latest`, and on a rollback to an older tag that has no materializer image. Start it alongside the rest with `docker compose -f docker-compose.prod.yml --profile materializer up -d` before you scan or turn the gate on ([operations.md](operations.md#legacy-artifact-snapshots)).
 
-Only `HTTP_PORT` is exposed on the host.
+Only `HTTP_PORT` is exposed on the host. Set `HTTP_BIND=127.0.0.1` when a proxy or tunnel on the same host sits in front, so the port isn't reachable from other machines. That publishes it on IPv4 loopback only, and `HTTP_BIND=[::1]` does the same for IPv6.
 
 The production compose file pulls published Docker Hub images by default:
 
