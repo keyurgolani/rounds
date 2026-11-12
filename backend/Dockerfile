@@ -31,6 +31,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+# The code worker image this runner's launcher starts (ROUNDS-00A-L05), by
+# digest. The image workflow passes the one it just published; empty, the
+# launcher refuses to start and names the worker image, and
+# ROUNDS_WORKER_IMAGE (digest form only) can supply one at deploy time.
+ARG ROUNDS_WORKER_IMAGE=""
+RUN printf '%s\n' "${ROUNDS_WORKER_IMAGE}" > /app/launcher/WORKER_IMAGE
 # Nothing under /app is writable by anyone but root.
 RUN chmod -R go-w /app \
     # The compiled server-owned definitions (ROUNDS-00A-L02) are
@@ -40,7 +46,13 @@ RUN chmod -R go-w /app \
     # revision, so hidden tests and validators never reach candidate
     # code. The raw authoring trees are excluded in .dockerignore.
     && find /app/definitions -type d -exec chmod 0500 {} + \
-    && find /app/definitions -type f -exec chmod 0400 {} +
+    && find /app/definitions -type f -exec chmod 0400 {} + \
+    # Except #2's resource profiles, which hold limits only: the launcher
+    # reads them as the worker daemon's user. /app/definitions lets others
+    # pass through to that one directory, never list it.
+    && chmod 0711 /app/definitions \
+    && chmod 0555 /app/definitions/profiles \
+    && find /app/definitions/profiles -type f -exec chmod 0444 {} +
 
 # Persistent volume mount point. Hosts with ephemeral filesystems (Render
 # free tier, etc.) should attach a disk here; single-box hosts with a

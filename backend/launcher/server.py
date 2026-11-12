@@ -127,7 +127,7 @@ def _observation(state: State, spec: jobspec.Spec, received: float, **fields: An
         "runtime": state.runtime, "profile": jobspec.profile.PROFILE_VERSION, "received_at": _ms(received),
         "started_at": None, "ended_at": None, "destroyed_at": None, "first_byte_ms": None, "queue_ms": 0,
         "start_ms": None, "prestarted": False, "cpu_time_ms": None, "nr_throttled": None, "peak_memory_bytes": None,
-        "exit_code": None, "oom": False, "kill_reason": None, "end": False, "setup": None, "residue": False,
+        "peak_tasks": None, "exit_code": None, "oom": False, "kill_reason": None, "end": False, "setup": None, "residue": False,
         "bytes": {"out": 0, "err": 0, "result": 0, "verdict": 0}, "truncated": False, "cleanup": "unconfirmed",
         "parts": [], "verdict_step": None,
     }
@@ -201,7 +201,7 @@ def execute(state: State, handle: Handle, spec: jobspec.Spec, archive: bytes, jo
         first_byte_ms=first_byte, queue_ms=queue_ms, start_ms=None if worker.prestarted else worker.start_ms,
         prestarted=worker.prestarted, cpu_time_ms=outcome.measured.cpu_time_ms,
         nr_throttled=outcome.measured.nr_throttled, peak_memory_bytes=outcome.measured.peak_memory_bytes,
-        exit_code=outcome.exit_code, oom=outcome.oom, kill_reason=outcome.kill_reason, end=end is not None,
+        peak_tasks=outcome.measured.peak_tasks, exit_code=outcome.exit_code, oom=outcome.oom, kill_reason=outcome.kill_reason, end=end is not None,
         setup=end["setup"] if end is not None else None, residue=bool(end and end["residue"]), bytes=sizes,
         truncated=truncated, cleanup=cleanup, parts=entries, verdict_step=end["verdict"] if end is not None else None,
     )

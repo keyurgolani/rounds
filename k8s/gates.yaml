@@ -55,6 +55,9 @@ data:
   # "enforce"; without either it acts as "off" and the runner's start log
   # says which it needs.
   ROUNDS_GATE_EXECUTION_SCRATCH: ""
+  # The code launcher, read by the runner: "off" (the default) or "on". No
+  # route uses it yet, and k8s has no launcher until #5's k8s stage.
+  ROUNDS_GATE_EXECUTION_LAUNCHER: ""
   # Legacy Artifact Snapshot creation, read by the runner and PocketBase:
   # "enabled" or "disabled". Empty is "disabled". Turn it on only with
   # the materializer applied (k8s/overlays/materializer) and after the

@@ -11,7 +11,9 @@ name: Publish Docker Images
 # together, deciding each from the repository as it is then, and only at an
 # image all five builds already pushed. Each channel's move-tags jobs run one
 # at a time across the repository, so an older publish can't move a tag back
-# after a newer one.
+# after a newer one. The code worker image builds first, only while the
+# repository variable PUBLISH_WORKER_IMAGE is 'true', and its tags then move
+# with the five.
 on:
   push:
     branches: [main]
@@ -41,9 +43,111 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/release_gate.py plan
 
-  publish:
+  worker:
+    # The code worker image (ROUNDS-00A-L05). It builds before the matrix,
+    # because the runner image bakes in its digest, and it publishes only
+    # while the repository variable PUBLISH_WORKER_IMAGE is 'true', the
+    # owner's opt-in to a new public image. While that's off this job is
+    # skipped, the five images still publish, the runner bakes an empty
+    # digest, and its launcher refuses to start until ROUNDS_WORKER_IMAGE
+    # names one by digest.
     needs: plan
-    if: needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release'
+    if: (needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release') && vars.PUBLISH_WORKER_IMAGE == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: publish-images-build-${{ github.ref }}-${{ github.sha }}-worker
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    env:
+      GHCR_REGISTRY: ghcr.io
+      DOCKERHUB_NAMESPACE: keyurgolani
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Decide the image tags
+        id: tags
+        env:
+          CHANNEL: ${{ needs.plan.outputs.channel }}
+        run: python3 scripts/release_gate.py tags
+
+      - name: Check for Docker Hub credentials
+        id: dockerhub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: steps.dockerhub.outputs.configured == 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # One build pushed to both registries, so both hold the same digest.
+      - name: Extract the worker image's metadata
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: |
+            name=${{ env.GHCR_REGISTRY }}/${{ github.repository }}-worker
+            name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/rounds-worker,enable=${{ steps.dockerhub.outputs.configured == 'true' }}
+          flavor: latest=false
+          tags: ${{ steps.tags.outputs.tags }}
+
+      - name: Build and push the worker image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ./backend
+          file: ./backend/worker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+
+      - name: Name the image by its digest
+        id: image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if ! [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::the worker build gave no digest, so the runner can't name it"
+            exit 1
+          fi
+          echo "image=ghcr.io/${REPOSITORY,,}-worker@${DIGEST}" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: [plan, worker]
+    # Runs whether the worker job published or was skipped, never after it
+    # failed.
+    if: >-
+      !cancelled()
+      && (needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release')
+      && (needs.worker.result == 'success' || needs.worker.result == 'skipped')
     runs-on: ubuntu-latest
     # Keyed per commit and image, so publishes of different commits or tags
     # never wait on or cancel each other; their tags never move.
@@ -133,6 +237,8 @@ jobs:
           flavor: latest=false
           tags: ${{ steps.tags.outputs.tags }}
 
+      # The runner bakes in the worker image's digest, empty when the
+      # worker job was skipped (ROUNDS-00A-L05).
       - name: Build and push ${{ matrix.service }} to GHCR
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
@@ -141,6 +247,7 @@ jobs:
           push: true
           tags: ${{ steps.meta-ghcr.outputs.tags }}
           labels: ${{ steps.meta-ghcr.outputs.labels }}
+          build-args: ${{ matrix.service == 'runner' && format('ROUNDS_WORKER_IMAGE={0}', needs.worker.outputs.image) || '' }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
@@ -162,6 +269,7 @@ jobs:
           push: true
           tags: ${{ steps.meta-dockerhub.outputs.tags }}
           labels: ${{ steps.meta-dockerhub.outputs.labels }}
+          build-args: ${{ matrix.service == 'runner' && format('ROUNDS_WORKER_IMAGE={0}', needs.worker.outputs.image) || '' }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
@@ -171,10 +279,14 @@ jobs:
           echo "Docker Hub publish skipped because DOCKERHUB_USERNAME and/or DOCKERHUB_TOKEN repository secrets are not configured."
 
   move-tags:
-    # Runs only once every build above succeeded, so the five images move
-    # together or not at all.
-    needs: [plan, publish]
-    if: needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release'
+    # Runs only once every build above succeeded, so the five images, and
+    # the worker image when it published, move together or not at all.
+    needs: [plan, worker, publish]
+    if: >-
+      !cancelled()
+      && (needs.plan.outputs.channel == 'edge' || needs.plan.outputs.channel == 'release')
+      && needs.publish.result == 'success'
+      && (needs.worker.result == 'success' || needs.worker.result == 'skipped')
     runs-on: ubuntu-latest
     # One moving-tag update at a time per channel across the repository; the
     # edge channel moves only edge, and the release channel only X.Y and
@@ -235,4 +347,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GHCR_PREFIX: ${{ env.GHCR_REGISTRY }}/${{ github.repository }}
           DOCKERHUB_PREFIX: ${{ steps.dockerhub.outputs.configured == 'true' && format('docker.io/{0}/rounds', env.DOCKERHUB_NAMESPACE) || '' }}
+          WORKER_PUBLISHED: ${{ needs.worker.result == 'success' }}
         run: python3 scripts/release_gate.py retag

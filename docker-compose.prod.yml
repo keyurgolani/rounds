@@ -1,6 +1,7 @@
-# Single-box production deploy. Five containers on a private network, and
-# an internal one only PocketBase and the snapshot materializer share; only
-# the nginx-fronted frontend's port 80 is exposed. By default this
+# Single-box production deploy. Five containers on a private network, an
+# internal one only PocketBase and the snapshot materializer share, and,
+# with the `workers` profile, the code launcher on an internal one only the
+# runner shares; only the nginx-fronted frontend's port 80 is exposed. By default this
 # file pulls published Docker Hub images. Set ROUNDS_IMAGE_TAG or the
 # per-service image variables below to pin a release or use GHCR.
 #
@@ -57,6 +58,13 @@
 #                          and the private ranges, where the bundled nginx
 #                          sits; `none` trusts no proxy. A proxy in front of
 #                          nginx is ROUNDS_FRONTEND_REAL_IP_FROM's.
+#   ROUNDS_LAUNCHER_TOKEN - 32 to 128 printable characters, the same on the
+#                          runner and the launcher (`openssl rand -hex 32`).
+#                          The launcher refuses to start without it.
+#   ROUNDS_ENGINE_SOCKET, ROUNDS_ENGINE_UID, ROUNDS_ENGINE_GID - the worker
+#                          daemon's socket and its user's ids, for the
+#                          `workers` profile (docs/deployment.md#code-workers).
+#   ROUNDS_WORKER_CONCURRENCY - the most workers at once, at 512 MiB each.
 #
 # If admin creds are unset, no admin is bootstrapped and you must run:
 #
@@ -121,6 +129,47 @@ services:
       - materialize
     restart: unless-stopped
 
+  # The code launcher (ROUNDS-00A-L05): the runner image's second entrypoint,
+  # and the only thing that can start code workers. It runs them on a
+  # rootless Docker daemon used only for workers, run by a dedicated user
+  # with nothing else in its home, whose socket is mounted here and nowhere
+  # else; it refuses any other engine. It joins only the internal exec
+  # network, which only the runner shares, publishes no port, holds no app
+  # secret, and runs read-only as that user. No route uses it yet, so it
+  # sits behind the `workers` profile and doesn't start on a plain `up`
+  # (docs/deployment.md#code-workers).
+  launcher:
+    profiles: ["workers"]
+    image: ${ROUNDS_RUNNER_IMAGE:-keyurgolani/rounds-runner:${ROUNDS_IMAGE_TAG:-latest}}
+    command: ["python", "-m", "launcher"]
+    user: "${ROUNDS_ENGINE_UID:-65534}:${ROUNDS_ENGINE_GID:-65534}"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges
+    environment:
+      - DOCKER_HOST=unix:///run/rounds-engine/docker.sock
+      # Inside its container, on the internal network, with no port
+      # published.
+      - ROUNDS_LAUNCHER_BIND=0.0.0.0
+      - ROUNDS_LAUNCHER_TOKEN=${ROUNDS_LAUNCHER_TOKEN:-}
+      - ROUNDS_WORKER_IMAGE=${ROUNDS_WORKER_IMAGE:-}
+      - ROUNDS_WORKER_RUNTIME=${ROUNDS_WORKER_RUNTIME:-}
+      - ROUNDS_WORKER_CONCURRENCY=${ROUNDS_WORKER_CONCURRENCY:-}
+      - ROUNDS_WORKER_RESERVED_MIB=${ROUNDS_WORKER_RESERVED_MIB:-}
+      - ROUNDS_WORKER_PRESTART=${ROUNDS_WORKER_PRESTART:-}
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      - type: bind
+        source: ${ROUNDS_ENGINE_SOCKET:-/run/rounds-engine/docker.sock}
+        target: /run/rounds-engine/docker.sock
+        bind:
+          create_host_path: false
+    networks:
+      - exec
+    restart: unless-stopped
+
   pdf-renderer:
     image: ${ROUNDS_PDF_RENDERER_IMAGE:-keyurgolani/rounds-pdf-renderer:${ROUNDS_IMAGE_TAG:-latest}}
     # Internal-only — only the runner reaches it via the docker network.
@@ -155,6 +204,10 @@ services:
       # uniform not-found. Candidate processes never get it.
       - ROUNDS_SHARE_RESOLVER_PASSWORD=${ROUNDS_SHARE_RESOLVER_PASSWORD:-}
       - ROUNDS_TRUSTED_PROXY_CIDRS=${ROUNDS_TRUSTED_PROXY_CIDRS:-}
+      # The code launcher, over the internal exec network (ROUNDS-00A-L05).
+      # Same token as the launcher's; candidate processes never get it.
+      - ROUNDS_LAUNCHER_URL=${ROUNDS_LAUNCHER_URL:-http://launcher:4300}
+      - ROUNDS_LAUNCHER_TOKEN=${ROUNDS_LAUNCHER_TOKEN:-}
       # Gates (docs/configuration.md#gates). Empty keeps each written
       # default, and the runner logs every value at startup.
       - ROUNDS_GATE_RUN=${ROUNDS_GATE_RUN:-}
@@ -173,6 +226,7 @@ services:
       - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
       - ROUNDS_GATE_EXECUTION_SCRATCH=${ROUNDS_GATE_EXECUTION_SCRATCH:-}
+      - ROUNDS_GATE_EXECUTION_LAUNCHER=${ROUNDS_GATE_EXECUTION_LAUNCHER:-}
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
       # Public shares (docs/operations.md, "Public shares"): PUBLIC_SHARES
       # turns every public share read off, and capability resolution stays
@@ -183,6 +237,11 @@ services:
       # PUBLIC_SHARES's alias: anything but false, 0, no, off, or empty
       # turns every public share read into the uniform not-found.
       - ROUNDS_DISABLE_PUBLIC_SHARES=${ROUNDS_DISABLE_PUBLIC_SHARES:-false}
+    # The private app network, plus the internal one only it shares with
+    # the launcher.
+    networks:
+      - default
+      - exec
     depends_on:
       - pocketbase
       - pdf-renderer
@@ -216,6 +275,9 @@ services:
 networks:
   # No route out; only PocketBase and the materializer join it.
   materialize:
+    internal: true
+  # No route out; only the runner and the launcher join it.
+  exec:
     internal: true
 
 volumes:

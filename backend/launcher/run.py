@@ -35,8 +35,13 @@ class Measured:
     cpu_time_ms: int | None = None
     nr_throttled: int | None = None
     peak_memory_bytes: int | None = None
+    # The most tasks (processes and threads) any sample saw.
+    peak_tasks: int | None = None
 
     def take(self, sample: dict[str, Any]) -> None:
+        tasks = (sample.get("pids_stats") or {}).get("current")
+        if isinstance(tasks, int) and tasks >= 0:
+            self.peak_tasks = max(self.peak_tasks or 0, tasks)
         cpu = (sample.get("cpu_stats") or {})
         usage = (cpu.get("cpu_usage") or {}).get("total_usage")
         if isinstance(usage, int) and usage >= 0:

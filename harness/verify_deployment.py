@@ -674,6 +674,8 @@ EXECUTION_GATES: dict[str, tuple[str, ...]] = {
     "EXECUTION_DEFINITIONS": ("legacy", "enforce", "disabled"),
     "EXECUTION_STORE": ("off", "on"),
     "EXECUTION_SCRATCH": ("legacy", "on", "off"),
+    # The code launcher's gate (ROUNDS-00A-L05).
+    "EXECUTION_LAUNCHER": ("off", "on"),
 }
 # What ROUNDS_GATE_EXECUTION_SCRATCH=on needs (backend/execution/keys.py);
 # without either it acts as off.

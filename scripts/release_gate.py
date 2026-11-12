@@ -19,8 +19,9 @@ The image workflow runs this three times:
 
 ``retag``, in the one job that runs after all five builds
     Decides the moving tags from the repository as it is at that moment and
-    moves them for all five images together with ``docker buildx imagetools
-    create``, without a rebuild:
+    moves them for all five images together, and for the worker image too
+    when this run published it, with ``docker buildx imagetools create``,
+    without a rebuild:
 
     - edge: ``edge`` points at main's current tip;
     - release: each line's ``X.Y`` points at its highest stable patch and
@@ -38,7 +39,8 @@ All three read GITHUB_REF, GITHUB_SHA, and GITHUB_REPOSITORY. ``plan`` and
 GITHUB_EVENT_NAME and GITHUB_EVENT_PATH, ``plan`` and ``tags`` write
 GITHUB_OUTPUT, ``tags`` and ``retag`` read CHANNEL, the plan job's channel,
 and ``retag`` reads GHCR_PREFIX and DOCKERHUB_PREFIX, each a registry's image
-name without its ``-<service>`` suffix (an empty one is skipped).
+name without its ``-<service>`` suffix (an empty one is skipped), and
+WORKER_PUBLISHED, ``true`` when the worker image's job published it.
 
 usage: release_gate.py plan|tags|retag
 exit status: 0 decided, 1 nothing may publish or a move failed
@@ -67,6 +69,16 @@ POLL_S = 30
 MAX_PAGES = 20
 # The five images every publish builds, as the workflow's matrix names them.
 IMAGES = ("frontend", "pocketbase", "runner", "pdf-renderer", "materializer")
+# The code worker image (ROUNDS-00A-L05) publishes only while the owner's
+# repository variable PUBLISH_WORKER_IMAGE is on. The retag step says
+# whether this run published it, in WORKER_PUBLISHED, and only then do its
+# tags move with the five.
+WORKER_IMAGE = "worker"
+
+
+def images(environ: Any) -> tuple[str, ...]:
+    """The images whose tags this run moves together."""
+    return IMAGES + (WORKER_IMAGE,) if environ.get("WORKER_PUBLISHED") == "true" else IMAGES
 # docker/metadata-action's type=sha tag uses the commit's first 7 characters.
 SHORT_SHA = 7
 IMAGE_PREFIX = re.compile(r"[a-z0-9.-]+(?::[0-9]+)?(?:/[a-z0-9._-]+)+")
@@ -286,14 +298,16 @@ def _image_prefix(prefix: str) -> str:
     return prefix
 
 
-def retag(moves: list[tuple[str, str]], prefixes: list[str], run: Runner) -> list[str]:
+def retag(moves: list[tuple[str, str]], prefixes: list[str], run: Runner,
+          names: tuple[str, ...] = IMAGES) -> list[str]:
     """Points each moving tag at its target on every registry prefix, for
-    all five images together, and returns what moved. A tag whose target
-    some image doesn't have yet stays where it is, with a warning."""
+    all the images together (the five, and the worker when it published),
+    and returns what moved. A tag whose target some image doesn't have yet
+    stays where it is, with a warning."""
     moved: list[str] = []
     for prefix in map(_image_prefix, prefixes):
         for moving, target in moves:
-            sources = [f"{prefix}-{image}:{target}" for image in IMAGES]
+            sources = [f"{prefix}-{image}:{target}" for image in names]
             missing = [s for s in sources if run(["docker", "buildx", "imagetools", "inspect", s]) != 0]
             if missing:
                 print(
@@ -301,7 +315,7 @@ def retag(moves: list[tuple[str, str]], prefixes: list[str], run: Runner) -> lis
                     f"{', '.join(missing)} can't be read, so it isn't pushed for every image yet"
                 )
                 continue
-            for image, source in zip(IMAGES, sources):
+            for image, source in zip(names, sources):
                 if run(["docker", "buildx", "imagetools", "create", "--tag", f"{prefix}-{image}:{moving}", source]) != 0:
                     raise GateError(f"moving {moving} on {prefix}-{image} failed; re-run this job")
             moved.append(f"{prefix}-*:{moving} -> {target}")
@@ -396,7 +410,7 @@ def main(argv: list[str] | None = None, run: Runner = run_command) -> int:
             prefixes = [p for p in (env.get("GHCR_PREFIX", ""), env.get("DOCKERHUB_PREFIX", "")) if p]
             if not prefixes:
                 raise GateError("GHCR_PREFIX isn't set, so no tag moved")
-            moved = retag(moves, prefixes, run)
+            moved = retag(moves, prefixes, run, images(env))
             print("moved: " + ("; ".join(moved) if moved else "nothing"))
             return 0
         _write_outputs(env.get("GITHUB_OUTPUT"), outputs)
