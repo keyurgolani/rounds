@@ -242,9 +242,17 @@ def check_store_contract(writer: ReceiptWriter, replica: str, acct: factory.Acco
 
 def check_event_loop(writer: ReceiptWriter, replica: str, acct: factory.Account) -> None:
     # Either replica's worker may take the job, so both answer while it runs.
-    status, answer, _ = ac.call(replica, "POST", "/api/run", acct.token, ac.run_body(SLOW_S), _keyed())
-    job = ac.job_id(answer) if status == 202 else ""
-    running = ac.job_until(replica, acct.token, job, lambda a: a.get("state") in ("started", *ac.ENDED), 60)
+    # A job that had ended by the time a read saw it leaves the timing
+    # nothing to measure, so a fresh one goes in under a new key.
+    for tries in range(1, ac.SLOW_TRIES + 1):
+        key = ac.uuid7()
+        status, answer, _ = ac.call(replica, "POST", "/api/run", acct.token, ac.run_body(SLOW_S),
+                                    {"Idempotency-Key": key})
+        job = ac.job_id(answer) if status == 202 else ""
+        running = ac.job_until(replica, acct.token, job, lambda a: a.get("state") in ("started", *ac.ENDED), 60)
+        if running.get("state") not in ac.ENDED or tries == ac.SLOW_TRIES:
+            break
+        ac.resubmitted("admission.closure.event-loop.free", key, running, tries + 1)
     busy = running.get("state") == "started"
     worst, answered = 0, []
     for _ in range(3):
@@ -256,7 +264,7 @@ def check_event_loop(writer: ReceiptWriter, replica: str, acct: factory.Account)
     finished = ac.job_until(replica, acct.token, job).get("state")
     ok = busy and health == 200 and worst <= FREE_LOOP_S * 1000 and finished in ("completed", "timed-out")
     writer.write(receipt("admission.closure.event-loop.free", f"{replica} /health", "standard", 200, health, ok,
-                         worst, f"busy={busy} health_ms={worst} job={finished}"))
+                         worst, f"busy={busy} health_ms={worst} job={finished} tries={tries}"))
 
 
 def owned_snapshot(pb: PBClient, admin: str, acct: factory.Account) -> tuple[str, str]:

@@ -7,8 +7,8 @@ serving pb_hooks/admission.js and pb_hooks/execution.js on one in-memory
 store, with the users auth-refresh the runner checks a bearer with. The
 harness runs the same routes through nginx on a real PocketBase with two
 replicas. The scratch key's values, the job fingerprint, the handlers'
-own checks, and the harness retry phase's readiness check are tested
-without that server.
+own checks, the harness retry phase's readiness check, and the start
+phase's reads and resubmits are tested without that server.
 """
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -1092,3 +1093,135 @@ def test_a_replica_that_answers_ready_is_ready():
         server.shutdown()
         server.server_close()
         thread.join(5)
+
+
+# ---- the harness's start phase ------------------------------------------------------
+
+
+PROBE_TOKEN = "token-placeholder-scr-kill"
+CHECK = "execution.scratch.long-run.started"
+
+
+def _slow_run(state: str, took_ms: int | None = None) -> dict:
+    """The slow run as a read sees it: in ``state``, with its output's
+    timing once it ended with one."""
+    return {"state": state, "envelope": None if took_ms is None else {"output": {"duration_ms": took_ms}}}
+
+
+def _start_phase(monkeypatch, tmp_path, *seen):
+    """The start phase where the reads of the runs it submits answer
+    ``seen`` in turn: its checks, the keys its runs went in under, and the
+    wait each read asked for."""
+    probe = _scratch_probe()
+    monkeypatch.setattr(probe, "PBClient", lambda _url: SimpleNamespace(wait_healthy=lambda: None))
+    monkeypatch.setattr(probe, "accounts", lambda _pb, _writer, *_tags: [SimpleNamespace(token=PROBE_TOKEN)])
+    monkeypatch.setattr(probe, "STATE", tmp_path / "state" / "scratch.json")
+    keys, waits, answers = [], [], iter(seen)
+
+    def submit(token, path, key, body):
+        assert (token, path, body["files"]) == (PROBE_TOKEN, "/api/ai-coding/run-project", probe.SLOW_PROJECT)
+        keys.append(key)
+        return 202, {"job_id": f"job{len(keys):012d}", "state": "queued"}
+
+    def read(_token, job_id, wait=0):
+        waits.append(wait)
+        return 200, {"job_id": job_id, **next(answers)}, 1
+
+    monkeypatch.setattr(probe, "submit", submit)
+    monkeypatch.setattr(probe, "read", read)
+    checks = probe.Checks()
+    probe.run_start(checks, None)
+    return checks, keys, waits
+
+
+def test_the_slow_run_still_takes_eight_seconds():
+    probe = _scratch_probe()
+    assert probe.SLOW_PROJECT["tests/checkpoint_0/test_visible.py"] == (
+        "import time\n\n\ndef test_takes_a_while():\n    time.sleep(8)\n")
+
+
+@pytest.mark.parametrize(
+    "seen, verdict",
+    [
+        (_slow_run("started"), "running"),
+        (_slow_run("completed", 8000), "ran"),
+        (_slow_run("completed", 7999), "failed"),
+        (_slow_run("completed"), "failed"),
+        ({"state": "completed", "envelope": {"output": None, "started_at": 100, "finished_at": 108}}, "ran"),
+        ({"state": "completed", "envelope": {"output": None, "started_at": 100, "finished_at": 101}}, "failed"),
+        (_slow_run("timed-out"), "failed"),
+        (_slow_run("failed"), "failed"),
+        (_slow_run("denied"), "failed"),
+        (_slow_run("canceled"), "failed"),
+        (_slow_run("leased"), "failed"),
+        ({}, "failed"),
+    ],
+    ids=["running", "completed-after-its-slow-test", "completed-short-of-it", "completed-without-a-timing",
+         "completed-after-it-by-the-clock", "completed-at-once-by-the-clock", "timed-out", "failed", "denied",
+         "canceled", "never-started", "never-read"],
+)
+def test_the_start_phase_saves_a_running_slow_run_and_sends_one_that_ran_again(seen, verdict):
+    assert _scratch_probe().long_run(seen) == verdict
+
+
+def test_a_slow_run_seen_running_is_the_one_the_start_phase_saves(monkeypatch, tmp_path, capsys):
+    probe = _scratch_probe()
+    checks, keys, waits = _start_phase(monkeypatch, tmp_path, _slow_run("leased"), _slow_run("started"))
+    assert (checks.passed, checks.failed) == (1, 0)
+    # The wait for the start reads the job as it is, never a long-poll.
+    assert len(keys) == 1 and waits == [0, 0]
+    saved = json.loads(probe.STATE.read_text())
+    assert (saved["key"], saved["job_id"]) == (keys[0], "job000000000001")
+    assert capsys.readouterr().out == f"PASS {CHECK}\n"
+
+
+def test_a_slow_run_that_completed_after_its_slow_test_goes_in_again_under_a_new_key(monkeypatch, tmp_path,
+                                                                                      capsys):
+    probe = _scratch_probe()
+    checks, keys, _waits = _start_phase(monkeypatch, tmp_path, _slow_run("completed", 8123), _slow_run("started"))
+    assert (checks.passed, checks.failed) == (1, 0)
+    assert len(set(keys)) == len(keys) == 2
+    saved = json.loads(probe.STATE.read_text())
+    assert (saved["key"], saved["job_id"]) == (keys[1], "job000000000002")
+    out = capsys.readouterr().out
+    assert out.splitlines() == [
+        f"INFO {CHECK}: resubmitted, key={keys[0]} state=completed ran_ms=8123 (try 2 of 3)",
+        f"PASS {CHECK}",
+    ]
+    assert PROBE_TOKEN not in out
+
+
+def test_a_slow_run_that_completed_at_once_fails_the_start(monkeypatch, tmp_path, capsys):
+    probe = _scratch_probe()
+    checks, keys, _waits = _start_phase(monkeypatch, tmp_path, _slow_run("completed", 140))
+    assert (checks.passed, checks.failed) == (0, 1)
+    assert len(keys) == 1 and not probe.STATE.exists()
+    assert capsys.readouterr().out == f"FAIL {CHECK}: status=202 state=completed ran_ms=140 tries=1\n"
+
+
+def test_three_slow_runs_that_each_completed_fail_the_start(monkeypatch, tmp_path, capsys):
+    probe = _scratch_probe()
+    checks, keys, _waits = _start_phase(monkeypatch, tmp_path, *[_slow_run("completed", 8000 + i) for i in range(3)])
+    assert (checks.passed, checks.failed) == (0, 1)
+    assert len(set(keys)) == len(keys) == 3 and not probe.STATE.exists()
+    out = capsys.readouterr().out
+    assert out.splitlines() == [
+        f"INFO {CHECK}: resubmitted, key={keys[0]} state=completed ran_ms=8000 (try 2 of 3)",
+        f"INFO {CHECK}: resubmitted, key={keys[1]} state=completed ran_ms=8001 (try 3 of 3)",
+        f"FAIL {CHECK}: status=202 state=completed ran_ms=8002 tries=3",
+    ]
+    assert PROBE_TOKEN not in out
+
+
+def test_a_wait_for_an_end_long_polls_and_a_wait_for_a_start_reads_the_job_as_it_is(monkeypatch):
+    probe = _scratch_probe()
+    waits, answers = [], iter([_slow_run("started"), _slow_run("completed", 8100)])
+
+    def read(_token, job_id, wait=0):
+        waits.append(wait)
+        return 200, {"job_id": job_id, **next(answers)}, 1
+
+    monkeypatch.setattr(probe, "read", read)
+    assert probe.settle(PROBE_TOKEN, "job000000000001", 30, probe.started)["state"] == "started"
+    assert probe.settle(PROBE_TOKEN, "job000000000001", 30)["state"] == "completed"
+    assert waits == [0, 20]
