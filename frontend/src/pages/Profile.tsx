@@ -101,7 +101,7 @@ function ProfileBody() {
           </dl>
           <p
             className="flex items-start gap-2 pt-2"
-            style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-3)' }}
+            style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-2)' }}
           >
             <Lock aria-hidden="true" size={14} strokeWidth={1.8} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>The demo profile can't be changed.</span>
@@ -421,7 +421,8 @@ function ProfileValue({ label, value }: { label: string; value?: string }) {
           margin: 0,
           fontSize: 14,
           lineHeight: 1.5,
-          color: value ? 'var(--text)' : 'var(--text-4)',
+          color: value ? 'var(--text)' : 'var(--text-2)',
+          fontStyle: value ? 'normal' : 'italic',
           overflowWrap: 'anywhere',
         }}
       >
