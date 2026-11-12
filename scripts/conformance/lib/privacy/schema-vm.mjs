@@ -302,7 +302,8 @@ export function extractSchema(tree, { only = null } = {}) {
   const collections = db.snapshot().map((c) => ({
     name: c.name,
     type: c.type,
-    fields: c.schema.map((f) => ({ name: f.name, type: f.type })),
+    // A text field's pattern is what makes it constrained rather than free text.
+    fields: c.schema.map((f) => ({ name: f.name, type: f.type, ...(f.options?.pattern ? { pattern: f.options.pattern } : {}) })),
     listRule: c.listRule,
     viewRule: c.viewRule,
   }));
