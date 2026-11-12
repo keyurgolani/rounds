@@ -5,7 +5,11 @@ and ``ROUNDS_EXECUTION_SECRET`` logs in as ``execution-worker``:
 
 1. Claim. While the replica has a free in-flight slot, it claims the next
    queued job under a new fencing token: accounts with fewer than 2 active
-   take turns by their oldest queued job. A claim reaps first.
+   take turns by their oldest queued job. A claim reaps first. After a
+   claim that finds nothing it waits ``CLAIM_IDLE_S``, twice as long after
+   each empty one in a row, up to ``CLAIM_IDLE_MAX_S``. A job one of this
+   replica's routes queues (``wake``), or a run of its own that ends, has
+   it claim at once and start those pauses over.
 2. Run. The job's kind's handler runs its parts through the executor in a
    slot. Before the first part, a heartbeat marks the candidate tree
    started with the attempt's wall budget, which is never more than the
@@ -58,8 +62,14 @@ _log = logging.getLogger(__name__)
 
 HEARTBEAT_S = 10.0
 REAP_EVERY_S = 15.0
-# How long an idle claim loop waits before it asks again.
+# How long an idle claim loop waits before it asks again: this long after
+# a claim that found nothing, doubling with each empty one after it up to
+# CLAIM_IDLE_MAX_S, with a jitter of half either way.
 CLAIM_IDLE_S = 1.0
+# The longest idle pause, jitter included: no more than REAP_EVERY_S, since
+# each claim reaps first, and half READY_WINDOW_S, so an idle worker stays
+# ready.
+CLAIM_IDLE_MAX_S = 15.0
 # How long a claimed job waits for a slot before it ends starved.
 SLOT_WAIT_S = 5.0
 # Backoff after a failed store call, up to the last.
@@ -144,6 +154,10 @@ class Worker:
         self._tasks: set[asyncio.Task] = set()
         self._attempts: dict[str, _Attempt] = {}
         self._stopping = asyncio.Event()
+        # Ends the claim loop's idle pause early: a wake, a run's end, or
+        # the stop. A wake from another thread sets it on _loop.
+        self._woken = asyncio.Event()
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._last_ok: float | None = None
         self._claimed = 0
 
@@ -177,6 +191,7 @@ class Worker:
         """Stops claiming, stops every run in flight, and waits for their
         tasks to end. Each run it stops ends ``failed``, ``worker-lost``."""
         self._stopping.set()
+        self._woken.set()
         # Until no task is left: a task that began before the stop marks
         # its own attempt interrupted (_process).
         while self._tasks:
@@ -190,18 +205,40 @@ class Worker:
             # spinning on them.
             self._tasks.difference_update([task for task in self._tasks if task.done()])
 
-    async def _pause(self, seconds: float) -> None:
+    def wake(self) -> None:
+        """Has the claim loop claim now instead of at the end of its idle
+        pause, and start its pauses over. The job routes call it, through
+        ``runtime.wake``, once they've queued a job. Any thread may call
+        it; before the loop starts it does nothing, since the loop's first
+        claim comes at once."""
+        loop = self._loop
+        if loop is None:
+            return
         try:
-            await asyncio.wait_for(self._stopping.wait(), timeout=seconds)
-        except asyncio.TimeoutError:
+            loop.call_soon_threadsafe(self._woken.set)
+        except RuntimeError:
+            # The loop has closed, and the worker with it.
             pass
 
+    async def _pause(self, seconds: float, wakes: bool = False) -> bool:
+        """Waits ``seconds``, or less once the replica stops or, with
+        ``wakes``, once a wake comes. Answers whether either cut it short."""
+        try:
+            await asyncio.wait_for((self._woken if wakes else self._stopping).wait(), timeout=seconds)
+        except asyncio.TimeoutError:
+            return False
+        return True
+
     async def _claim_loop(self) -> None:
-        failures = 0
+        self._loop = asyncio.get_running_loop()
+        failures, step = 0, 0.0
         while not self._stopping.is_set():
             if self._executor.free_slots() - self._claimed <= 0:
                 await self._pause(CLAIM_IDLE_S)
                 continue
+            # A wake from here on may be for a job this claim misses, so it
+            # still cuts the pause after the claim short.
+            self._woken.clear()
             try:
                 claim = await self._client.claim(self.name)
             except store.LoginRejected:
@@ -217,8 +254,14 @@ class Worker:
             self._ok()
             self._reaped(claim.reaped if claim else None)
             if claim is None:
-                await self._pause(CLAIM_IDLE_S * (0.5 + random.random()))
+                # Twice the last step, from CLAIM_IDLE_S up to the cap, and
+                # the jitter never takes the pause past the cap. A pause a
+                # wake cut short starts the steps over.
+                step = min(step * 2, CLAIM_IDLE_MAX_S) if step else CLAIM_IDLE_S
+                if await self._pause(min(step * (0.5 + random.random()), CLAIM_IDLE_MAX_S), wakes=True):
+                    step = 0.0
                 continue
+            step = 0.0
             if self._stopping.is_set():
                 # A claim that came back once the replica began to stop
                 # never starts: its lease runs out and reap puts the job
@@ -292,6 +335,9 @@ class Worker:
             self._attempts.pop(claim.attempt.id, None)
             if slot is not None:
                 await self._executor.release(slot)
+            # A slot is free and the account runs one job fewer, so a job
+            # either held back is claimed now, not after an idle pause.
+            self._woken.set()
 
     @staticmethod
     def _prepare(handler: Handler, job: store.Job) -> Outcome | None:
