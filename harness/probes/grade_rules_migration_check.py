@@ -83,12 +83,18 @@ def _insert(conn: sqlite3.Connection, table: str, **cols: object) -> None:
 
 
 def seed(db: Path) -> dict[str, str]:
-    """The fixture rows; answers one envelope id for the served checks."""
+    """The fixture rows; answers one envelope id for the served checks.
+    The seeds hold no take-home assignment, so the fixture plants one for
+    its attempts to hang off, as it does any parent the seeds lack."""
     conn = sqlite3.connect(str(db))
     try:
         parents = {}
         for collection, (field, table) in PARENT.items():
             found = conn.execute(f'SELECT id FROM "{table}" ORDER BY id LIMIT 1').fetchone()
+            if found is None and table == "take_home_assignments":
+                _insert(conn, table, id=rid("thparent"), slug="grade-rules-fixture", title="Fixture",
+                        language="python", entrypoint="main.py", ai_policy="off")
+                found = (rid("thparent"),)
             if found is None:
                 raise RuntimeError(f"no {table} row to hang the fixture's attempts off")
             parents[collection] = (field, found[0])
