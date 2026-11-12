@@ -9,7 +9,7 @@
       "service": "Transaction-owning Command Gateway",
       "spec": "spec 1919",
       "baseline_locations": "n/a:no command path at the audited revision; #19 (ROUNDS-02-L02) builds it",
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/lib/command-gateway/"
     },
     {
       "id": "account",
@@ -24,21 +24,21 @@
         "pocketbase/pb_hooks/main.pb.js",
         "pocketbase/pb_migrations/1700000600_demo_user.js"
       ],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/account/"
     },
     {
       "id": "career-profile",
       "service": "Career Profile Service",
       "spec": "spec 1921",
       "baseline_locations": ["frontend/src/experience/","frontend/src/pages/Profile.tsx"],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/career-profile/"
     },
     {
       "id": "identity-directory",
       "service": "Identity Directory for Organization and Person",
       "spec": "spec 1922",
       "baseline_locations": "n/a:organizations and people are free-text fields on other records at the audited revision",
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/identity-directory/"
     },
     {
       "id": "opportunity-pursuit",
@@ -50,21 +50,21 @@
         "frontend/src/pages/ApplicationDetail.tsx",
         "frontend/src/campaign/"
       ],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/opportunity-pursuit/"
     },
     {
       "id": "interview-process",
       "service": "Interview Process Service",
       "spec": "spec 1924",
       "baseline_locations": ["frontend/src/applications/RoundCard.tsx","frontend/src/applications/interviewTypes.ts"],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/interview-process/"
     },
     {
       "id": "artifact",
       "service": "Artifact Service",
       "spec": "spec 1925",
       "baseline_locations": ["frontend/src/features/resume/","backend/routers/pdf.py"],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/artifact/"
     },
     {
       "id": "practice",
@@ -82,42 +82,42 @@
         "backend/routers/ai_coding.py",
         "backend/routers/sd_practice.py"
       ],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/practice/"
     },
     {
       "id": "action",
       "service": "Action Service",
       "spec": "spec 1927",
       "baseline_locations": ["frontend/src/todos/","frontend/src/pages/Todos.tsx"],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/action/"
     },
     {
       "id": "capture-ingestion",
       "service": "Capture and Ingestion Service",
       "spec": "spec 1928",
       "baseline_locations": ["frontend/src/experience/ImportReview.tsx","backend/routers/ai.py"],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/capture-ingestion/"
     },
     {
       "id": "revision-audit",
       "service": "Revision and Audit Service",
       "spec": "spec 1929",
       "baseline_locations": "n/a:no change sets, audit entries, or events at the audited revision",
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/lib/revision-audit/"
     },
     {
       "id": "search",
       "service": "Search Service",
       "spec": "spec 1930",
       "baseline_locations": "n/a:search and filters run in the browser over loaded lists at the audited revision",
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/search/"
     },
     {
       "id": "read-model",
       "service": "Read Model and Recommendation Service",
       "spec": "spec 1931",
       "baseline_locations": ["frontend/src/components/dashboard/"],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/read-model/"
     },
     {
       "id": "career-pack-registry",
@@ -129,28 +129,28 @@
         "pocketbase/seeds/",
         "pocketbase/pb_migrations/1700000100_seed_data.js"
       ],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/career-pack-registry/"
     },
     {
       "id": "public-share",
       "service": "Public Share Capability Service",
       "spec": "spec 1933",
       "baseline_locations": ["backend/routers/share.py","frontend/src/features/resume/share/"],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/public-share/"
     },
     {
       "id": "execution-control-plane",
       "service": "Execution Control Plane",
       "spec": "spec 1934",
       "baseline_locations": ["backend/main.py","backend/routers/runner.py","backend/app/"],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "pocketbase/pb_hooks/domain/execution-control-plane/"
     },
     {
       "id": "execution-worker",
       "service": "Ephemeral Execution Worker pool",
       "spec": "spec 1935",
       "baseline_locations": ["backend/drivers/","backend/ai_coding/","backend/take_home/","backend/pdf_renderer/"],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "backend/worker/"
     },
     {
       "id": "provider-gateway",
@@ -164,7 +164,7 @@
         "frontend/src/settings/aiProviderEndpoints.ts",
         "pocketbase/pb_migrations/1700000800_ai_providers.js"
       ],
-      "target_path": "pending:ROUNDS-02-L01"
+      "target_path": "backend/app/provider_gateway/"
     }
   ]
 }

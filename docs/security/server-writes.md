@@ -1,6 +1,6 @@
 # Server-Write Record
 
-The contract for who may write server-only PocketBase collections. It comes from #1 (`ROUNDS-00A-L01`) and lands in its stage 0, before any containment collection exists. #18 (`ROUNDS-02-L01`) ratifies it or migrates it.
+The contract for who may write server-only PocketBase collections. It comes from #1 (`ROUNDS-00A-L01`) and lands in its stage 0, before any containment collection exists. #18 (`ROUNDS-02-L01`) ratifies it as DR-0004's decision DB4 (`docs/decisions/DR-0004-canonical-database.md`).
 
 ## The Rule
 
@@ -155,7 +155,7 @@ Each row restates the leaf's current body. The leaf confirms or corrects its row
 | #177 S3 | System hook | `demo.pb.js`: the boot sweep, the `cronAdd` sweep, and the anonymous `POST /api/rounds/demo/sessions` | demo `users`, `account_system_state`, and the deployment `demo-session-create` bucket in `admission_counters` through `pb_hooks/admission.js` | none |
 | #177 S3 | Caller | `POST /api/rounds/demo/sessions/end` | deletes the demo caller's account and files | caller's bearer |
 
-#19's command gateway becomes a Caller hook route if #18 keeps PocketBase, and registers here then.
+DR-0004 keeps PocketBase, so #19's command gateway is a set of Caller hook routes under `/api/rounds/commands/` (decision DB3), and it registers here when it lands.
 
 ## Leaves Cited
 

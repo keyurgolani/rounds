@@ -1,8 +1,9 @@
 ---
-# PocketBase owns all app data + auth. One replica only — pb_data is a
-# single SQLite file and PocketBase isn't designed for multi-writer
-# setups. For HA, swap the PVC for a managed Postgres connection string
-# (PocketBase 0.23+) and bump replicas.
+# PocketBase owns all app data and auth in one SQLite database with one
+# writer (DR-0004, docs/decisions/DR-0004-canonical-database.md). Keep one
+# replica with Recreate: PocketBase has no Postgres or multi-writer mode,
+# so a second replica would be a second writer on the same files. It scales
+# up, not out; size the PVC and limits from DR-0004's storage plan.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
