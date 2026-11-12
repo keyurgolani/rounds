@@ -324,9 +324,11 @@ def parse_private_endpoints(value: str) -> list[dict[str, Any]]:
         if not 1 <= port <= 65535:
             raise ValueError(f"{name} entry {item!r} has port {port}; ports run from 1 to 65535")
         try:
+            if "%" in host or ("/" in host and not re.fullmatch(r"[0-9]{1,3}", host.split("/", 1)[1])):
+                raise ValueError("a plain address and a prefix length, not a zone or a netmask")
             network = ipaddress.ip_network(host, strict=True)
         except ValueError:
-            if _service_name(host) or not re.fullmatch(r"[0-9a-fA-F.:/]+", host):
+            if _service_name(host) or not re.fullmatch(r"[0-9a-fA-F.:/]+", host.split("%", 1)[0]):
                 raise ValueError(f"{name} entry {item!r} names a host; entries are addresses or CIDR ranges, and service names are never destinations") from None
             raise ValueError(f"{name} entry {item!r} isn't a valid address or CIDR range") from None
         if network.num_addresses == 1:
@@ -459,9 +461,10 @@ def evaluate_egress(purpose: str, field_ids: Sequence[str], endpoint: Mapping[st
 # ---------------------------------------------------------------- retention
 
 def _instant(value: Any) -> datetime:
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(timezone.utc)
+    """An instant; a timestamp without a zone reads as UTC."""
+    if not isinstance(value, datetime):
+        value = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
 def _iso(value: datetime | None) -> str | None:
