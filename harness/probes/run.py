@@ -600,7 +600,8 @@ def main() -> int:
               "execution-scratch|execution-scratch-start|execution-scratch-retry|execution-grading|"
               "execution-migration|json-limits|demo-on|demo-off|demo-contain-migration|snapshot-create|"
               "snapshot-create-down|snapshot-create-retry|snapshot-scan|snapshot-create-off|snapshot-create-again|"
-              "share-capabilities|share-secrets|share-secrets-down|share-secrets-scan}",
+              "snapshot-render|snapshot-render-audit|snapshot-render-down|snapshot-recovery|share-capabilities|"
+              "share-secrets|share-secrets-down|share-secrets-scan}",
               file=sys.stderr)
         return 2
     phase = sys.argv[1]
@@ -612,7 +613,9 @@ def main() -> int:
         import snapshot_store_check
 
         return snapshot_store_check.main()
-    if phase.startswith("snapshot-create") or phase == "snapshot-scan":
+    # Every snapshot- phase but snapshot-store, above, is the snapshot
+    # probe's (ROUNDS-00A-L04).
+    if phase.startswith("snapshot-"):
         import legacy_snapshot_check
 
         if phase not in legacy_snapshot_check.PHASES:

@@ -61,6 +61,8 @@ FIRST_CHARGE = {
 MOST = {"evaluate": 32 * 10, "grade": 8 * 45}
 JSON_ROUTES = [name for name in ALLOCATING if name != "pdf_render"]
 WITH_LOOKUPS = ("run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit")
+# A render's step 8 reads the caller's snapshot (ROUNDS-00A-L04).
+WITH_LOOKUPS += ("pdf_render",)
 ENFORCE = {"ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "enforce", "ROUNDS_GATE_ENFORCE_QUOTA": "enforce"}
 PDF = b"%PDF-1.4 rendered"
 # A test value, not a deployment's.
@@ -263,7 +265,7 @@ def test_a_completed_command_replays_its_stored_response_and_runs_nothing(
 
 
 def test_a_completed_render_answers_already_completed_and_no_pdf_is_kept(
-    client, signed_in, succeeding, admission_store, enforcing
+    client, signed_in, seeded, succeeding, admission_store, enforcing
 ):
     first = _send(client, "pdf_render", keyed(signed_in))
     assert first.status_code == 200 and first.content == PDF
@@ -569,6 +571,25 @@ def test_a_step_8_denial_leaves_the_command_retryable_and_its_key_runs_admission
     assert len(admission_store.called("admit")) == 2 and tripwires == []
 
 
+def test_a_render_whose_stored_file_doesnt_match_its_checksum_is_refunded_and_renders_nothing(
+    client, signed_in, seeded, tripwires, admission_store, enforcing, monkeypatch
+):
+    from app import legacy_snapshots
+    from routers import pdf
+
+    async def changed(_token, _snapshot_id, _name):
+        return b"not the markup the checksum names"
+
+    monkeypatch.setattr(legacy_snapshots, "read_markup", changed)
+    res = _send(client, "pdf_render", keyed(signed_in))
+    _assert_typed(res, 503, "worker_unavailable")
+    assert res.json()["detail"] == pdf.RENDER_FAILED
+    # Refused at step 8, before a slot: refunded, and the key can run again.
+    assert [f["outcome"] for f in admission_store.called("finish")] == ["denied"]
+    assert admission_store.commands[(TEST_TOKEN, KEY)]["state"] == "retryable"
+    assert admission_store.leases == {} and tripwires == []
+
+
 def test_a_full_replica_is_a_step_9_denial(client, signed_in, seeded, tripwires, busy, admission_store, enforcing):
     _assert_typed(_send(client, "run", keyed(signed_in)), 503, "worker_unavailable")
     assert [f["outcome"] for f in admission_store.called("finish")] == ["denied"]
@@ -576,7 +597,7 @@ def test_a_full_replica_is_a_step_9_denial(client, signed_in, seeded, tripwires,
 
 
 def test_a_render_that_fails_after_admission_is_an_infrastructure_failure(
-    client, signed_in, admission_store, monkeypatch, enforcing, capsys
+    client, signed_in, seeded, admission_store, monkeypatch, enforcing, capsys
 ):
     from routers import pdf
 
@@ -605,7 +626,7 @@ def _sidecar_answer(status: int, body: dict) -> urllib.error.HTTPError:
     ids=["sidecar-timeout"],
 )
 def test_a_render_that_runs_out_of_time_keeps_its_charge_and_is_not_retried(
-    client, signed_in, admission_store, monkeypatch, enforcing, capsys, failure
+    client, signed_in, seeded, admission_store, monkeypatch, enforcing, capsys, failure
 ):
     from routers import pdf
 
@@ -637,7 +658,7 @@ def test_a_render_that_runs_out_of_time_keeps_its_charge_and_is_not_retried(
     ids=["render-failed", "no-page-in-time", "other-422", "connect-timeout", "no-answer-in-time"],
 )
 def test_any_other_render_failure_is_the_infrastructures(
-    client, signed_in, admission_store, monkeypatch, enforcing, capsys, failure
+    client, signed_in, seeded, admission_store, monkeypatch, enforcing, capsys, failure
 ):
     from routers import pdf
 

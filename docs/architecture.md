@@ -144,7 +144,8 @@ Endpoints:
 
 - `POST /api/run`: execute one input case.
 - `POST /api/evaluate`: execute a selected set of test cases and compare results.
-- `POST /api/pdf/render`: forward to the headless-Chromium sidecar and stream the resulting PDF back.
+- `POST /api/pdf/render`: render one of the caller's own Legacy Artifact Snapshots, named by id and checksum (`render-request/v1`), through the headless-Chromium sidecar and stream the PDF back.
+- `POST /api/pdf/snapshots`: make or reuse that snapshot from the caller's saved resume, through PocketBase's hook (`docs/operations.md`, Legacy Artifact Snapshots).
 - `POST /api/ai/*`: server-side AI provider calls. The runner reads each user's stored credentials from PocketBase, decrypts them with `AI_KEY_SECRET`, and proxies the request — keys never reach the browser.
 - `GET /api/share/<token>`: public read-only resume fetch backed by a cached PocketBase admin token so the endpoint can bypass per-user owner rules.
 - `GET /health`: container health check path outside the `/api` namespace.

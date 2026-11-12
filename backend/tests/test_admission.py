@@ -7,6 +7,7 @@ the PDF sidecar, and nothing reads a record before step 8."""
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import tempfile
@@ -19,12 +20,33 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app import admission, gates, obs
+from app import admission, gates, legacy_snapshots, obs
 from app.errors import TypedError
+from conftest import TEST_ACCOUNT_ID
 
 HEX32 = re.compile(r"[0-9a-f]{32}")
 KIB = 1024
 MIB = 1024 * KIB
+
+# The render's snapshot (ROUNDS-00A-L04): the caller's own, over its own
+# resume, with the markup its checksum names.
+SNAPSHOT_ID = "snapaaaaaaaaaa1"
+SNAPSHOT_SOURCE = "resumeaaaaaaaa1"
+SNAPSHOT_FILE = "snapshot_a1b2c3d4e5.html"
+SNAPSHOT_MARKUP = b"<!DOCTYPE html><html><body><article data-resume-page></article></body></html>"
+SNAPSHOT_CHECKSUM = "sha256:" + hashlib.sha256(SNAPSHOT_MARKUP).hexdigest()
+# The render body's own command id, which a keyed request sends as its
+# Idempotency-Key too (test_admission_state.KEY).
+RENDER_KEY = "0190f000-0000-7000-8000-000000000001"
+RENDER_BODY = {
+    "snapshot_id": SNAPSHOT_ID,
+    "expected_checksum": SNAPSHOT_CHECKSUM,
+    "idempotency_id": RENDER_KEY,
+    "format": "pdf",
+    "locale": "en",
+    "page_size": "A4",
+    "margin_mm": 0,
+}
 
 
 class Tripped(Exception):
@@ -69,7 +91,7 @@ ROUTES = {
         {"assignment_slug": "a-1", "files": {"a.py": "pass"}},
         {"assignment_slug": "a-1", "files": {}, "notes": "x" * (64 * KIB + 1)},
     ),
-    "pdf_render": ("POST", "/api/pdf/render", {"html": "<p>hi</p>"}, None),
+    "pdf_render": ("POST", "/api/pdf/render", RENDER_BODY, None),
     "pdf_health": ("GET", "/api/pdf/health", None, None),
     "ats_rule": (
         "POST",
@@ -104,6 +126,8 @@ ALLOCATING = sorted(n for n in ROUTES if n not in ("ats_rule", "pdf_health"))
 WITH_BODY = sorted(n for n in ROUTES if ROUTES[n][2] is not None)
 WITH_LIMITS = sorted(n for n in ROUTES if ROUTES[n][3] is not None)
 WITH_LOOKUPS = ("run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit")
+# The render reads its snapshot at step 8 too (ROUNDS-00A-L04).
+WITH_LOOKUPS += ("pdf_render",)
 
 
 def _send(client, name, headers=None, body=None, content=None):
@@ -150,11 +174,23 @@ def tripwires(monkeypatch):
 
 
 @pytest.fixture
-def seeded(pocketbase):
-    """One record for every lookup the valid bodies make."""
+def seeded(pocketbase, monkeypatch):
+    """One record for every lookup the valid bodies make, and the render
+    snapshot's file."""
     pocketbase.add("coding_questions", slug="q-1", entry={"kind": "function", "name": "f"}, test_cases=[{"input": {}, "expected": None}])
     pocketbase.add("ai_coding_rounds", slug="r-1", language="python", checkpoints=[{"test_command": "true"}], rubric={"items": []})
     pocketbase.add("take_home_assignments", slug="a-1", entrypoint="true", harness_files=[], rubric={"items": []})
+    pocketbase.add("resumes", id=SNAPSHOT_SOURCE, user=TEST_ACCOUNT_ID)
+    pocketbase.add(
+        "legacy_artifact_snapshots", id=SNAPSHOT_ID, user=TEST_ACCOUNT_ID, source_kind="resume",
+        source_id=SNAPSHOT_SOURCE, content_checksum=SNAPSHOT_CHECKSUM, markup=SNAPSHOT_FILE,
+    )
+
+    async def read_markup(_token, snapshot_id, name):
+        assert (snapshot_id, name) == (SNAPSHOT_ID, SNAPSHOT_FILE)
+        return SNAPSHOT_MARKUP
+
+    monkeypatch.setattr(legacy_snapshots, "read_markup", read_markup)
     return pocketbase
 
 

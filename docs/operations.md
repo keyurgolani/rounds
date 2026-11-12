@@ -275,15 +275,29 @@ The harness runs the same checks through its own nginx frontend on every CI run,
 
 ### Legacy Artifact Snapshots
 
-`1700008000_legacy_artifact_snapshots.js` adds `legacy_artifact_snapshots`, the immutable resume snapshots server PDF and sharing will render. Owners can list and view their own; no client can create, update, or delete one. The `materializer` container builds a snapshot's markup for PocketBase. It holds no secret, writes nothing, joins only the internal `materialize` network in Compose, and in Kubernetes accepts only pods labeled `rounds.io/net: pocketbase`.
+`1700008000_legacy_artifact_snapshots.js` adds `legacy_artifact_snapshots`, the immutable resume snapshots server PDF renders and sharing will. Owners can list and view their own; no client can create, update, or delete one. The `materializer` container builds a snapshot's markup for PocketBase. It holds no secret, writes nothing, joins only the internal `materialize` network in Compose, and in Kubernetes accepts only pods labeled `rounds.io/net: pocketbase`.
 
 The migration's down step drops the collection only while it's empty. Once a snapshot exists, `migrate down` fails, PocketBase logs why, and the collection, its rows, and their files stay. Deleting an account deletes its snapshots.
 
-**The gate.** `ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE` (`enabled` or `disabled`, empty is `disabled`) turns on snapshot creation, `POST /api/pdf/snapshots` on the runner. The runner and PocketBase both read it, and while it's off both answer 503 `route_disabled` and PocketBase never calls the materializer. It ships off. Server PDF doesn't read snapshots yet ([#4](https://github.com/keyurgolani/rounds/issues/4)'s next release does), so leaving it off changes nothing a user sees.
+**The gate.** `ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE` (`enabled` or `disabled`, empty is `disabled`) turns on snapshot creation, `POST /api/pdf/snapshots` on the runner. The runner and PocketBase both read it, and while it's off both answer 503 `route_disabled` and PocketBase never calls the materializer. It ships off. Server PDF renders only snapshots, so while it's off the Export tab's high-fidelity PDF says it's turned off on this server and offers browser printing, and the other formats work as before. A release that carries server PDF on snapshot ids turns server PDF off on any deployment that hasn't turned this gate on, until it does (Turning it on, below).
 
 A snapshot is built only from the caller's own resume or variant, read on the server; the request names the source and the `updated` the caller saw, never markup, a template, or a design. Another account's source answers the same 404 as a missing one. A source that changed since the caller saw it answers 409 and writes nothing. The same source, inputs, and materializer build give back the stored snapshot (`reused`), and a retry with the same `Idempotency-Key` returns the first answer. Each account holds at most 500 snapshots and 200 MiB of markup; past either, creation answers 429 `snapshot_quota_exceeded`. Rows leave only with the account.
 
-**Why a source is ineligible.** An ineligible source gets no snapshot, so it gets no server PDF and no share; the other export formats still work.
+**Server PDF.** The Export tab saves pending edits, asks for a snapshot of the saved resume (naming the `updated` its save returned), and renders that snapshot. `POST /api/pdf/render` takes only `render-request/v1` (`contracts/definitions/render-request.v1.schema.json`): the snapshot's id, its `content_checksum`, and fixed output options (`pdf`, `A4`, `en`, `margin_mm` 0, since the snapshot carries its own margin), plus `idempotency_id`, which is the call's own `Idempotency-Key`. It never takes markup. With the caller's bearer, and never the superuser, the runner reads the snapshot, checks that its checksum is the one the request names and that its source resume or variant still exists, reads its file, checks the file against the checksum, and only then takes a render slot and sends the stored markup to the PDF renderer. What it answers:
+
+| Answer | When |
+|---|---|
+| 200 and the PDF | The caller's own snapshot, whole, with its source still there |
+| 404 `not_found` | The snapshot is missing or another account's, or its source was deleted; all the same answer |
+| 409 `checksum_mismatch` | The snapshot's checksum isn't the one the request names |
+| 422 `legacy_request_rejected` | A body in the shape from before snapshots; the page asks for a reload. It's never charged |
+| 422 `invalid_request` | Anything else that isn't the contract, or an `Idempotency-Key` that isn't the body's `idempotency_id` |
+| 503 `worker_unavailable` | The renderer is down or busy, or the snapshot's stored file is missing or doesn't hold what its checksum says (the runner logs `pdf render refused: the snapshot's stored markup is unusable`) |
+| 503 `route_disabled` | `ROUNDS_GATE_PDF_RENDER` is off |
+
+Rendering doesn't need the materializer or `ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE`: a snapshot that exists renders for its owner either way. A snapshot's markup file lives in `pb_data/storage/`, so back up and restore the whole `pb_data` volume, as in Backups and Restore; without `storage/`, no snapshot renders.
+
+**Why a source is ineligible.** An ineligible source gets no snapshot, so it gets no server PDF and no share; the other export formats still work, and the Export tab says why.
 
 | Reason | What it means | What fixes it |
 |---|---|---|
@@ -307,7 +321,7 @@ docker compose -f docker-compose.prod.yml exec -T runner python -m app.legacy_re
 docker compose -f docker-compose.prod.yml exec -T runner python -m app.legacy_receipt verify - < scan.signed.json
 ```
 
-On Kubernetes, apply `k8s/overlays/materializer` instead of the base, then run the same two commands with `kubectl -n rounds exec`. The report goes to a new file outside `pb_data`, so backups never carry it: the scan refuses a relative path, a path that leads under `pb_data` (with any `..` resolved), and a file that already exists. Pick a directory that isn't a link into `pb_data`. Keep the signed report as the inventory for the switch. Read `complete`: `false` means the materializer failed for some source or more than one materializer build answered, so fix that and scan again before going on.
+On Kubernetes, apply `k8s/overlays/materializer` instead of the base, then run the same two commands with `kubectl -n rounds exec`. The report goes to a new file outside `pb_data`, so backups never carry it: the scan refuses a relative path, a path that leads under `pb_data` (with any `..` resolved), and any name that already exists in its directory, whatever it is (a file, a link, a FIFO, a directory), without opening it. It writes the report under a temporary name beside it and renames it into place, so it never writes through what's there. Pick a directory only you can write that isn't a link into `pb_data`. Keep the signed report as the inventory for the switch. Read `complete`: `false` means the materializer failed for some source or more than one materializer build answered, so fix that and scan again before going on.
 
 **Turning it on.**
 
@@ -315,12 +329,18 @@ On Kubernetes, apply `k8s/overlays/materializer` instead of the base, then run t
 2. Run and sign the scan as above, and check its counts by reason.
 3. Set `ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=enabled` for PocketBase and every runner (`.env`, or the `rounds-gates` ConfigMap), then restart PocketBase and the runners.
 4. Confirm: both gates lines show `LEGACY_SNAPSHOT_CREATE` `enabled`, and `verify_deployment.py --gates-log runner.log --expect-gate LEGACY_SNAPSHOT_CREATE=enabled` passes (see Deployment verification).
+5. In the app, open a resume's Export tab and download the high-fidelity PDF. A resume the scan counted as ineligible says why instead, and its other formats still work.
 
 **Metrics.** PocketBase logs one `obs/v1` line per command, `event` `legacy_snapshot`, with `outcome` (`created`, `reused`, `ineligible`, `conflict`, `not_found`, `quota_exceeded`, `materializer_unavailable`, `replayed`, `disabled`, `invalid`, `unavailable`), the `reason` for `ineligible`, `bytes` for `created`, and `materialize_ms` when the materializer ran. A line carries no id, name, or resume content. The scan logs one `legacy_snapshot_scan` line with its totals and checksum.
 
-**Alerts.** Page on any `markup_unsafe`, any snapshot written while the gate is off, a create stuck past the admission lease, or a rescan at one materializer digest that doesn't match the signed report. Warn when `materializer_unavailable` is over 5% of creates for 15 minutes, when the ineligible rate doubles after a deploy, and on `quota_exceeded`.
+**Alerts.** Page on any `markup_unsafe`, any snapshot written while the gate is off, a create stuck past the admission lease, a rescan at one materializer digest that doesn't match the signed report, or any `pdf render refused: the snapshot's stored markup is unusable` line from a runner. Warn when `materializer_unavailable` is over 5% of creates for 15 minutes, when the ineligible rate doubles after a deploy, and on `quota_exceeded`.
 
-**Rollback.** Set the gate back to `disabled` (or turn off the render route's own gate) and restart PocketBase and the runners. Creation stops at once with 503 `route_disabled`; rows already written stay, still readable only by their owners. No resume, variant, or version row is ever written by creation, so there's nothing to reverse. Keep the `admission_commands` rows and runner logs as the request and denial record. Before turning it back on, scan again and compare the counts with the signed report.
+**Rollback.** Two gates, each on its own, as #1 built them:
+
+- `ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=disabled` on PocketBase and the runners, then restart them: creation stops at once with 503 `route_disabled`, and with it server PDF in the app, which says it's turned off and offers browser printing. Snapshots already written stay, readable and renderable only by their owners.
+- `ROUNDS_GATE_PDF_RENDER=disabled` on the runners, then restart them: every render stops, existing snapshots included. Use it when there's any doubt about stored markup.
+
+To stop everything, turn both off. No resume, variant, or version row is ever written by creation or rendering, so there's nothing to reverse. Keep the `admission_commands` rows and runner logs as the request and denial record. Turn server PDF off with these gates, not by going back to an earlier image: only this release and later ones render from server-built snapshots alone. Before turning creation back on, scan again and compare the counts with the signed report, then check that a resume downloads as a PDF mid-save, that a failed save pauses server PDF while Word still exports, and that a resume changed in another tab gets the reload message.
 ## Execution Job Store
 
 `ROUNDS_GATE_EXECUTION_STORE` turns on the durable job store from [#3](https://github.com/keyurgolani/rounds/issues/3) (`ROUNDS-00A-L03`). It starts `off`. While `ROUNDS_GATE_EXECUTION_SCRATCH` is `on`, run, evaluate, run-project, and take-home run go through it ([Scratch jobs](#scratch-jobs)), and while `ROUNDS_GATE_EXECUTION_GRADING` is `on`, grade and take-home submit do ([Grading jobs](#grading-jobs)). PocketBase keeps jobs, attempts, and result envelopes in `execution_jobs`, `execution_attempts`, and `execution_envelopes`, and only its hooks write them. An account reads its own envelopes and nothing else in the store ([server-writes.md](security/server-writes.md#execution-job-store)).

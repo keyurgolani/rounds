@@ -6,14 +6,16 @@ only its status, ``ok`` with 200 or ``unavailable`` with 503, and a render
 the renderer can't finish answers its typed status with that code's fixed
 sentence, never the renderer's body or a transport error. The fixture
 compares the answer with exactly those, so any other text is a finding,
-whatever it says. The corpus stack runs no renderer at stage 1, so the
-fixture's ordinary render request always fails at the renderer.
+whatever it says. The corpus stack runs no renderer at stage 1, so a
+render of the account's own snapshot, which passes every check before the
+renderer (ROUNDS-00A-L04), always fails at the renderer.
 """
 from __future__ import annotations
 
 from conformance.outcomes import Outcome
 from corpus._base import code_of, result
-from corpus._requests import bodies
+from corpus._requests import render_body
+from corpus._snapshots import owned_snapshot
 
 HEALTH = "RD-07.health-status-only"
 RENDER = "RD-07.render-failure-typed"
@@ -61,9 +63,10 @@ def _render(resp) -> tuple[str, str]:
 
 def run(ctx):
     acct = ctx.new_account("rd07")
+    snapshot_id, checksum = owned_snapshot(ctx, acct)
     health = ctx.runner.request("GET", "/api/pdf/health", token=acct.token)
     render = ctx.runner.request("POST", "/api/pdf/render", token=acct.token,
-                                json_body=bodies()[("POST", "/api/pdf/render")])
+                                json_body=render_body(snapshot_id, checksum))
     subcases: dict[str, str] = {}
     notes: list[str] = []
     for subcase, (outcome, why) in ((HEALTH, _health(health)), (RENDER, _render(render))):

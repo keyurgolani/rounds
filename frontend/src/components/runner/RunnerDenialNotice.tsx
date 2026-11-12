@@ -181,6 +181,9 @@ interface RunnerDenialNoticeProps {
   contentStyle?: CSSProperties;
   /** The action's durable job, shown while there's no denial. */
   job?: RunnerJobView | null;
+  /** The actions' minimum height in CSS pixels, for a surface whose
+   *  targets are 44 px (the Export tab, ROUNDS-00A-L04). */
+  actionMinHeight?: number;
 }
 
 export function RunnerDenialNotice({
@@ -192,7 +195,9 @@ export function RunnerDenialNotice({
   className,
   contentStyle,
   job = null,
+  actionMinHeight,
 }: RunnerDenialNoticeProps) {
+  const actions = actionMinHeight ? { ...actionStyle, minHeight: actionMinHeight } : actionStyle;
   const location = useLocation();
   useEffect(() => {
     const trigger = denial?.trigger;
@@ -219,7 +224,7 @@ export function RunnerDenialNotice({
       data-testid="runner-denial"
       className={className}
     >
-      {!denial && job && <RunnerJobStatus view={job} contentStyle={contentStyle} actionStyle={actionStyle} />}
+      {!denial && job && <RunnerJobStatus view={job} contentStyle={contentStyle} actionStyle={actions} />}
       {denial && content && Icon && (
         <div
           data-denial={denial.kind}
@@ -259,7 +264,7 @@ export function RunnerDenialNotice({
                   <button
                     type="button"
                     onClick={() => void (onReload ? onReload() : reloadPage())}
-                    style={actionStyle}
+                    style={actions}
                   >
                     <RotateCw aria-hidden="true" size={12} strokeWidth={1.8} />
                     Reload
@@ -269,14 +274,14 @@ export function RunnerDenialNotice({
                   <Link
                     to={signInHref}
                     state={{ from: location.pathname }}
-                    style={actionStyle}
+                    style={actions}
                   >
                     <LogIn aria-hidden="true" size={12} strokeWidth={1.8} />
                     Sign in
                   </Link>
                 )}
                 {offerPrint && (
-                  <button type="button" onClick={onPrint} style={actionStyle}>
+                  <button type="button" onClick={onPrint} style={actions}>
                     <Printer aria-hidden="true" size={12} strokeWidth={1.8} />
                     Print to PDF instead
                   </button>

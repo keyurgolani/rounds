@@ -35,5 +35,6 @@ def test_no_orphan_fixture_module():
 def test_stage_1_contains_the_enforced_guarantees_only():
     man = m.load_manifest()
     contained = {fx.id for fx in man.contained()}
-    # The guarantees already enforced on the branch; every other row is pending.
-    assert contained == {"EX-01", "EX-02", "EX-03", "EX-04", "EX-05", "EX-06", "EX-07", "RD-07"}
+    # The guarantees already enforced on the branch; every other row is
+    # pending. RD-01 joined with server PDF on snapshot ids (ROUNDS-00A-L04).
+    assert contained == {"EX-01", "EX-02", "EX-03", "EX-04", "EX-05", "EX-06", "EX-07", "RD-01", "RD-07"}

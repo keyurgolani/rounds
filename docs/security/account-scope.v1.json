@@ -582,6 +582,20 @@
       ],
       "guarantee": "asking for the review of another account's grading result answers the same 404 as an unknown job id and charges nothing"
     },
+    "isolation.render.snapshot.uniform-not-found": {
+      "surface": "runner:render",
+      "actor": "authenticated-other",
+      "variant": "foreign_owner",
+      "expected": "uniform_not_found",
+      "control": "the owner's own render of the same snapshot answers its PDF",
+      "owner_leaf": "ROUNDS-00A-L04",
+      "status": "pass",
+      "lane": "pr",
+      "evidence": [
+        "isolation.render.snapshot.uniform-not-found"
+      ],
+      "guarantee": "another account's snapshot, named with its own checksum, renders nothing and answers exactly like a snapshot that doesn't exist"
+    },
     "account-scope.create.owner-shape.uniform": {
       "surface": "pb:{collection}",
       "actor": "authenticated-other",
