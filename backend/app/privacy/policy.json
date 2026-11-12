@@ -208,7 +208,7 @@
     ],
     "never": {
       "loopback": ["127.0.0.0/8", "::1/128"],
-      "linkLocal": ["169.254.0.0/16", "fe80::/10"],
+      "linkLocal": ["fe80::/10", "169.254.0.0/16"],
       "unspecified": ["0.0.0.0/32", "::/128"],
       "metadata": ["169.254.169.254", "169.254.170.2", "169.254.170.23", "100.100.100.200", "168.63.129.16", "fd00:ec2::254", "fd00:ec2::23"],
       "serviceNames": ["pocketbase", "pdf-renderer", "runner", "frontend", "materializer", "localhost"],

@@ -101,7 +101,7 @@ A destination's location comes from the resolved address, not the base URL.
 - `operator-network`: a private address when ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK is enabled and the address and port match a ROUNDS_AI_PRIVATE_ENDPOINTS entry.
 - `third-party-hosted`: a public address; an aggregator is marked subprocessors: undisclosed.
 
-Never destinations, which get no location class: loopback (127.0.0.0/8, ::1/128), link-local (169.254.0.0/16, fe80::/10), unspecified (0.0.0.0/32, ::/128), the metadata addresses (169.254.169.254, 169.254.170.2, 169.254.170.23, 100.100.100.200, 168.63.129.16, fd00:ec2::254, fd00:ec2::23), single-label host names, the service names `pocketbase`, `pdf-renderer`, `runner`, `frontend`, `materializer`, `localhost`, and names ending `.localhost`, `.internal`, `.svc`, `.cluster.local`.
+Never destinations, which get no location class: loopback (127.0.0.0/8, ::1/128), link-local (fe80::/10, 169.254.0.0/16), unspecified (0.0.0.0/32, ::/128), the metadata addresses (169.254.169.254, 169.254.170.2, 169.254.170.23, 100.100.100.200, 168.63.129.16, fd00:ec2::254, fd00:ec2::23), single-label host names, the service names `pocketbase`, `pdf-renderer`, `runner`, `frontend`, `materializer`, `localhost`, and names ending `.localhost`, `.internal`, `.svc`, `.cluster.local`.
 
 Private networks: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, fc00::/7. A private destination passes only when ROUNDS_GATE_PROVIDER_PRIVATE_NETWORK is enabled and the resolved address and port match a ROUNDS_AI_PRIVATE_ENDPOINTS entry. With the gate off, every private address is refused whatever the list says; with the gate on, an empty list refuses every private address.
 
