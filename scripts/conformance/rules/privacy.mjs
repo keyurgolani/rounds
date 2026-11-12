@@ -100,7 +100,8 @@ export function summary(repoRoot, ctx = createContext(repoRoot)) {
   lines.push(`versions: ${P.policy.versions.map((v) => `${v.id}@${v.current}`).join(', ')}; decision record ${P.policy.decisionRecord}${A.record ? ` (${A.record.record.status})` : ' missing'}`);
   const purposes = P.purposes?.purposes || [];
   const byStatus = ['legacy', 'current', 'retired'].map((s) => `${purposes.filter((p) => p.status === s).length} ${s}`).join(', ');
-  lines.push(`purposes: ${purposes.length} (${byStatus}); provider call references scanned: ${(A.callRefs || []).filter((r) => r.kind === 'helper').length}`);
+  const refs = (kind) => (A.callRefs || []).filter((r) => r.kind === kind).length;
+  lines.push(`purposes: ${purposes.length} (${byStatus}); provider call references scanned: ${refs('helper')} to helpers, ${refs('wrapper')} to registered call sites, ${refs('vendor')} vendor markers`);
   const schema = A.schema;
   lines.push(`field map: ${P.fieldMap?.entries?.length ?? 0} ids; live schema ${schema ? `${schema.collections.length} collections, ${schema.collections.reduce((n, c) => n + c.fields.length, 0)} fields from ${schema.files.length} migrations` : 'unread'}; ${A.storage ? A.storage.families.size : 0} storage key families; ${(A.definitions?.used || []).reduce((n, d) => n + d.properties.length, 0)} definition properties`);
   const unclassified = findings.filter((f) => f.code === 'FIELD_UNCLASSIFIED').length;

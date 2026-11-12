@@ -2,7 +2,7 @@
   "$schema": "../policy.schema.json",
   "registry": "rounds-privacy-vectors",
   "suite": "visibility",
-  "description": "One case per visibility and sink (27) for platform content, which takes a ROUNDS-01-L02 visibility instead of a class. No server-only field reaches a provider, a log, the browser, or an export.",
+  "description": "One case per visibility and sink (27) for platform content, which takes a ROUNDS-01-L02 visibility instead of a class, then the parent and server-only paths. No server-only field reaches a provider, a log, the browser, or an export, and a parent id passes only when every entry below it does.",
   "cases": [
     { "id": "public-ui.remote-ai", "call": "evaluate_sink", "args": { "field_id": "pb:coding_guides.title", "sink": "remote-ai" }, "expect": { "decision": "allow", "obligations": [] } },
     { "id": "public-ui.index", "call": "evaluate_sink", "args": { "field_id": "pb:coding_guides.title", "sink": "index" }, "expect": { "decision": "allow", "obligations": [] } },

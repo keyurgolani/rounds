@@ -2,7 +2,7 @@
   "$schema": "../policy.schema.json",
   "registry": "rounds-privacy-vectors",
   "suite": "egress",
-  "description": "evaluate_egress: the purpose, field, credential, location, and consent checks. A registryPatch sets fields on a copy of the purpose registry, so a case can exercise a current or retired purpose before any exists.",
+  "description": "evaluate_egress: the purpose, role, field, credential, location, and consent checks. A field id covers everything below it, so each entry below must pass too. Every endpoint names its role, host, port, and resolved addresses. A registryPatch sets fields on a copy of the purpose registry, so a case can exercise a current or retired purpose, or an input a purpose doesn't list, before any exists. A malformed argument answers INPUT_INVALID.",
   "cases": [
     { "id": "purpose.unregistered", "call": "evaluate_egress", "args": { "purpose": "resume.summarize", "field_ids": ["pb:resumes.data"], "endpoint": { "role": "text", "host": "api.anthropic.com", "port": 443, "addresses": ["160.79.104.10"] }, "location": "third-party-hosted", "consent": { "unit": "per-request", "preview": true } }, "expect": { "decision": "deny", "code": "PURPOSE_UNREGISTERED", "rule": "purposes" } },
     { "id": "purpose.vision-role", "call": "evaluate_egress", "args": { "purpose": "resume.tailor", "field_ids": ["pb:resumes.data#/experience"], "endpoint": { "role": "vision", "host": "api.anthropic.com", "port": 443, "addresses": ["160.79.104.10"] }, "location": "third-party-hosted", "consent": { "unit": "legacy-implicit" } }, "expect": { "decision": "deny", "code": "ROLE_DENIED", "rule": "purposes.roles" } },

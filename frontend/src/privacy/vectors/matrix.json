@@ -2,7 +2,7 @@
   "$schema": "../policy.schema.json",
   "registry": "rounds-privacy-vectors",
   "suite": "matrix",
-  "description": "One case per class and sink (40), each asserting the decision and obligations from the spec's cell, then the allow paths of the conditional cells. Both evaluators run these.",
+  "description": "One case per class and sink (40), each asserting the decision and obligations from the spec's cell, then the allow paths of the conditional cells, the verifier and digest fields, free text in logs, parent ids, and malformed context. Both evaluators run these.",
   "cases": [
     { "id": "private.remote-ai", "call": "evaluate_sink", "args": { "field_id": "pb:applications.company", "sink": "remote-ai", "context": { "consent": { "unit": "per-request", "preview": true }, "purpose": "resume.tailor", "purposeStatus": "current" } }, "expect": { "decision": "allow", "obligations": ["consent:per-request", "preview:payload", "snapshot:provider-payload-snapshot"], "versions": { "consent": "consent@1", "privacy": "privacy@1", "redaction": "redaction@1", "retention": "retention@1" } } },
     { "id": "private.index", "call": "evaluate_sink", "args": { "field_id": "pb:applications.company", "sink": "index" }, "expect": { "decision": "allow", "obligations": ["namespace:account"] } },

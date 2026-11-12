@@ -2,7 +2,7 @@
   "$schema": "../policy.schema.json",
   "registry": "rounds-privacy-vectors",
   "suite": "destinations",
-  "description": "classify_destination: the location class from the resolved addresses. Loopback, link-local, metadata addresses, and service names are never destinations; a private address needs the gate and an allowlist entry.",
+  "description": "classify_destination: the location class from the resolved addresses. Loopback, link-local, metadata addresses, and service names are never destinations, the other non-public ranges get no class, and an IPv6 address that carries an IPv4 one is judged as that address; a private address needs the gate and an allowlist entry, and an IP literal host must match its addresses.",
   "cases": [
     { "id": "never.runner-itself", "call": "classify_destination", "args": { "host": "localhost", "port": 8000, "addresses": ["127.0.0.1"] }, "expect": { "decision": "deny", "code": "DESTINATION_NEVER", "rule": "locations.never" } },
     { "id": "never.pocketbase", "call": "classify_destination", "args": { "host": "pocketbase", "port": 8090, "addresses": ["172.18.0.2"], "settings": { "gate": "enabled", "allowlist": "172.18.0.0/16:8090" } }, "expect": { "decision": "deny", "code": "DESTINATION_NEVER", "rule": "locations.never" } },

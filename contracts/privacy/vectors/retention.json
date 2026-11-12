@@ -2,7 +2,7 @@
   "$schema": "../policy.schema.json",
   "registry": "rounds-privacy-vectors",
   "suite": "retention",
-  "description": "evaluate_retention on a fixed clock (anchor 2026-01-01T00:00:00Z): each row's default, its allowed values, an out-of-bound value refused, and purge by the deadline plus 24 hours.",
+  "description": "evaluate_retention on a fixed clock (anchor 2026-01-01T00:00:00Z unless a case names another): each row's default, its allowed values, an out-of-bound value refused, and purge by the deadline plus 24 hours. An anchor outside the ISO 8601 forms both evaluators read, or past year 9999, answers INPUT_INVALID.",
   "cases": [
     { "id": "canonical.default", "call": "evaluate_retention", "args": { "row_id": "canonical", "value": null, "anchor": "2026-01-01T00:00:00Z" }, "expect": { "decision": "allow", "value": "until-delete", "expires_at": null, "purge_by": null } },
     { "id": "canonical.delete", "call": "evaluate_retention", "args": { "row_id": "canonical", "value": "delete", "anchor": "2026-01-01T00:00:00Z" }, "expect": { "decision": "allow", "expires_at": "2026-01-01T00:00:00Z", "purge_by": "2026-01-02T00:00:00Z", "tombstone_until": "2026-04-01T00:00:00Z" } },
