@@ -66,6 +66,7 @@ import {
 } from '../../pages/ai-coding/aiCodingApi';
 import { RunnerError } from '../../lib/runnerFetch';
 import { UUID_V7_PATTERN } from '../../lib/idempotency';
+import { phoneWidth } from '../../test/media';
 import type { JobAnswer, JobEnvelope, JobLimit, OutcomeClass } from '../../lib/executionJobs';
 import type { ReviewAnswer } from '../../lib/gradedRows';
 
@@ -364,5 +365,48 @@ describe('AICodingDetail grade jobs', () => {
     await waitFor(() => expect(within(dialog).getByText('pass')).toBeInTheDocument());
     // The row already holds its review, so nothing asks for one.
     expect(requestGradeReview).not.toHaveBeenCalled();
+  });
+});
+
+describe('AICodingDetail jobs on a phone', () => {
+  const unmatched = window.matchMedia;
+  afterEach(() => {
+    window.matchMedia = unmatched;
+  });
+
+  /** The page's own state: the notice's slot and the one live region. */
+  function notice() {
+    const regions = screen.getAllByRole('status');
+    expect(regions).toHaveLength(1);
+    return regions[0];
+  }
+
+  it('shows a queued run, then a grade, at the full width below the body, never in the files column', async () => {
+    window.matchMedia = phoneWidth();
+    vi.mocked(runProject).mockResolvedValue(job('queued'));
+    vi.mocked(gradeAttempt).mockResolvedValue(job('started'));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(notice()).toHaveTextContent('Queued'));
+    expect(notice().closest('[data-ai-coding-pane="notice"]')).not.toBeNull();
+    expect(notice().closest('[data-ai-coding-pane="center"]')).toBeNull();
+
+    answers.push(ended('canceled', 'canceled', null));
+    await waitFor(() => expect(notice()).toHaveTextContent('Canceled'));
+    await submit(user);
+    await waitFor(() => expect(notice()).toHaveTextContent('Grading'));
+    expect(notice().closest('[data-ai-coding-pane="notice"]')).not.toBeNull();
+    expect(notice().closest('[data-ai-coding-pane="center"]')).toBeNull();
+  });
+
+  it('keeps a job in the center column on a wider screen', async () => {
+    vi.mocked(runProject).mockResolvedValue(job('queued'));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(notice()).toHaveTextContent('Queued'));
+    expect(notice().closest('[data-ai-coding-pane="center"]')).not.toBeNull();
+    expect(document.querySelector('[data-ai-coding-pane="notice"]')).toBeNull();
   });
 });

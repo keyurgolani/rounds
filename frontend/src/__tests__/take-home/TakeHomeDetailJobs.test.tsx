@@ -54,6 +54,7 @@ import {
 } from '../../pages/take-home/takeHomeApi';
 import { RunnerError } from '../../lib/runnerFetch';
 import { UUID_V7_PATTERN } from '../../lib/idempotency';
+import { phoneWidth } from '../../test/media';
 import type { JobAnswer, JobEnvelope, JobLimit, OutcomeClass } from '../../lib/executionJobs';
 import type { ReviewAnswer } from '../../lib/gradedRows';
 
@@ -286,5 +287,48 @@ describe('TakeHomeDetail submission jobs', () => {
     const problem = within(dialog).getByTestId('report-problem');
     expect(problem).toHaveTextContent("Grading didn't finish, so nothing was graded. Submit again.");
     expect(dialog.textContent).not.toMatch(/Cannot read|harness"|\b0\b|\/100|Harness/);
+  });
+});
+
+describe('TakeHomeDetail jobs on a phone', () => {
+  const unmatched = window.matchMedia;
+  afterEach(() => {
+    window.matchMedia = unmatched;
+  });
+
+  /** The page's one live region. */
+  function notice() {
+    const regions = screen.getAllByRole('status');
+    expect(regions).toHaveLength(1);
+    return regions[0];
+  }
+
+  it('shows a queued run, then a submission, at the full width below the body, never in the files column', async () => {
+    window.matchMedia = phoneWidth();
+    vi.mocked(runProject).mockResolvedValue(job('queued'));
+    vi.mocked(submitAttempt).mockResolvedValue(job('started'));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(notice()).toHaveTextContent('Queued'));
+    expect(notice().closest('[data-take-home-pane="notice"]')).not.toBeNull();
+    expect(notice().closest('[data-take-home-pane="center"]')).toBeNull();
+
+    answers.push(ended('canceled', 'canceled', null));
+    await waitFor(() => expect(notice()).toHaveTextContent('Canceled'));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(notice()).toHaveTextContent('Your submission is being graded on the server.'));
+    expect(notice().closest('[data-take-home-pane="notice"]')).not.toBeNull();
+    expect(notice().closest('[data-take-home-pane="center"]')).toBeNull();
+  });
+
+  it('keeps a job in the center column on a wider screen', async () => {
+    vi.mocked(runProject).mockResolvedValue(job('queued'));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(notice()).toHaveTextContent('Queued'));
+    expect(notice().closest('[data-take-home-pane="center"]')).not.toBeNull();
+    expect(document.querySelector('[data-take-home-pane="notice"]')).toBeNull();
   });
 });

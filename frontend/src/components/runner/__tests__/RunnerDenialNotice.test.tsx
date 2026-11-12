@@ -126,14 +126,14 @@ describe('RunnerDenialNotice', () => {
 describe('definition states (ROUNDS-00A-L02)', () => {
   const DEFINITION_CASES: Array<[RunnerDenialKind, RunnerAction, string, RegExp]> = [
     ['reload', 'tests', 'Reload to continue', /This page is out of date\. No tests ran\. Your code is still here\./],
-    ['retired', 'grade', 'Retired', /This practice item was retired, so it no longer runs\. Your files and notes are still here\./],
+    ['retired', 'grade', 'Retired', /This practice item was retired, so it no longer runs\. Your files are still here\./],
     ['not_found', 'run', 'Not on this server', /doesn't have this practice item in this language\. Nothing ran\./],
     // ROUNDS-00A-L03 PR 3.
     [
       'not_gradable',
       'grade',
       "Can't grade here",
-      /This practice item can't be graded on this server\. Nothing was graded\. Your files and notes are still here\./,
+      /This practice item can't be graded on this server\. Nothing was graded\. Your files are still here\./,
     ],
   ];
 
@@ -150,7 +150,7 @@ describe('definition states (ROUNDS-00A-L02)', () => {
     ['path_not_allowed', 'A file uses a path the grader owns. Rename or remove it and try again.'],
   ] as const)("%s shows the server's fixed sentence", (kind, detail) => {
     renderNotice(<RunnerDenialNotice denial={denial(kind, { detail })} action="grade" />);
-    expect(screen.getByRole('status')).toHaveTextContent(`${detail} Nothing was graded. Your files and notes are still here.`);
+    expect(screen.getByRole('status')).toHaveTextContent(`${detail} Nothing was graded. Your files are still here.`);
   });
 
   it('offers a keyboard-reachable Reload that runs what the page passes', async () => {
@@ -175,7 +175,7 @@ describe('definition states (ROUNDS-00A-L02)', () => {
     expect(region).toHaveAttribute('aria-live', 'polite');
     expect(within(region).getByText('Draft not saved')).toBeInTheDocument();
     expect(region).toHaveTextContent(
-      "Your draft couldn't be saved, so the page didn't reload. Your files and notes are still here. Try Reload again.",
+      "Your draft couldn't be saved, so the page didn't reload. Your files are still here. Try Reload again.",
     );
     await user.tab();
     expect(screen.getByRole('button', { name: 'Reload' })).toHaveFocus();
@@ -263,7 +263,8 @@ describe("RunnerDenialNotice when the demo's code runs are off (ROUNDS-00B-L07)"
   it.each([
     ['run', 'Code runs are off in the demo. Nothing ran. Your code is still here.'],
     ['tests', 'Code runs are off in the demo. No tests ran. Your code is still here.'],
-    ['grade', 'Code runs are off in the demo. Nothing was graded. Your files and notes are still here.'],
+    ['grade', 'Code runs are off in the demo. Nothing was graded. Your files are still here.'],
+    ['submit', 'Code runs are off in the demo. Nothing was graded. Your files and notes are still here.'],
   ] as const)('says so plainly for %s, with what was kept', (action, body) => {
     renderNotice(
       <RunnerDenialNotice
@@ -282,5 +283,36 @@ describe("RunnerDenialNotice when the demo's code runs are off (ROUNDS-00B-L07)"
     // Nothing to sign in to, reload, or print instead.
     expect(within(region).queryByRole('button')).not.toBeInTheDocument();
     expect(within(region).queryByRole('link')).not.toBeInTheDocument();
+  });
+});
+
+describe("what a refused Submit keeps: AI coding's files, take-home's files and notes", () => {
+  it.each([
+    'sign_in',
+    'limit',
+    'turned_off',
+    'demo_off',
+    'unavailable',
+    'reload',
+    'retired',
+    'not_found',
+    'unsupported',
+    'path_not_allowed',
+    'not_gradable',
+  ] as const)('%s', (kind) => {
+    const { unmount } = renderNotice(<RunnerDenialNotice denial={denial(kind)} action="grade" />);
+    expect(screen.getByRole('status')).toHaveTextContent('Your files are still here.');
+    expect(screen.getByRole('status')).not.toHaveTextContent('notes');
+    unmount();
+    renderNotice(<RunnerDenialNotice denial={denial(kind)} action="submit" />);
+    expect(screen.getByRole('status')).toHaveTextContent('Your files and notes are still here.');
+  });
+
+  it.each(['too_large', 'not_permitted'] as const)('%s reads the same for both', (kind) => {
+    const { unmount } = renderNotice(<RunnerDenialNotice denial={denial(kind)} action="grade" />);
+    const graded = screen.getByRole('status').textContent;
+    unmount();
+    renderNotice(<RunnerDenialNotice denial={denial(kind)} action="submit" />);
+    expect(screen.getByRole('status').textContent).toBe(graded);
   });
 });

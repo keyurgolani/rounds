@@ -764,7 +764,7 @@ export default function AICodingDetail() {
 
             {floatingTabs.length > 0 && <FloatingPanelTab tabs={floatingTabs} />}
 
-            {/* CENTER — problem above editor (hidden in focus), editor with floating actions, console below. */}
+            {/* CENTER: the problem above the editor (hidden in focus), the editor with Run and Submit in a bar under it, the console below. */}
             <div
               data-ai-coding-pane="center"
               className="flex-1 flex flex-col"

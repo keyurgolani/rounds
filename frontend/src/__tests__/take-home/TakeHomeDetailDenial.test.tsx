@@ -40,6 +40,10 @@ import {
   submitAttempt,
 } from '../../pages/take-home/takeHomeApi';
 import { RunnerError } from '../../lib/runnerFetch';
+import { phoneWidth } from '../../test/media';
+
+// The setup's matchMedia, which matches nothing: a wide screen.
+const unmatched = window.matchMedia;
 
 const ASSIGNMENT = {
   id: 'a1',
@@ -171,5 +175,38 @@ describe("TakeHomeDetail when the demo's code runs are off (ROUNDS-00B-L07)", ()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toHaveFocus());
     expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
     expect(deleteInProgressTakeHomeAttempt).not.toHaveBeenCalled();
+  });
+
+  it("on a phone, says so at the page's full width below the body, never in the files column", async () => {
+    window.matchMedia = phoneWidth();
+    try {
+      vi.mocked(submitAttempt).mockImplementation(blurThenReject(demoOff()));
+      const user = userEvent.setup();
+      renderPage();
+      const submit = await screen.findByRole('button', { name: 'Submit' });
+      submit.focus();
+      await user.keyboard('{Enter}');
+
+      const regions = screen.getAllByRole('status');
+      expect(regions).toHaveLength(1);
+      const [region] = regions;
+      await waitFor(() => expect(region).toHaveTextContent('Off in the demo'));
+      expect(region).toHaveTextContent(
+        'Code runs are off in the demo. Nothing was graded. Your files and notes are still here.',
+      );
+      expect(region.closest('[data-take-home-pane="notice"]')).not.toBeNull();
+      expect(region.closest('[data-take-home-pane="center"]')).toBeNull();
+      // Focus still goes back to the button that started it.
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toHaveFocus());
+    } finally {
+      window.matchMedia = unmatched;
+    }
+  });
+
+  it('keeps the notice in the center column on a wider screen', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: 'Run' });
+    expect(screen.getByRole('status').closest('[data-take-home-pane="center"]')).not.toBeNull();
+    expect(document.querySelector('[data-take-home-pane="notice"]')).toBeNull();
   });
 });
