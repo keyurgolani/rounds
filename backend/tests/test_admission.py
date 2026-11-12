@@ -479,8 +479,15 @@ def _outcome(client, name: str, headers: dict[str, str]) -> tuple:
     return (res.status_code, body.get("code") if isinstance(body, dict) else None)
 
 
-def test_the_demos_code_runs_are_the_six_definition_operations():
-    assert {_operation(name) for name in CODE_RUNS} == admission.DEFINITION_OPERATIONS
+def test_the_closed_gate_refuses_the_demo_tier_exactly_the_six_code_runs(gate_env):
+    operations = {route.operation for route in admission.ROUTES.values()}
+    gate_env({})
+    refused = {operation for operation in operations if admission.refusal("demo", operation) is not None}
+    assert refused == {_operation(name) for name in CODE_RUNS} == admission.DEFINITION_OPERATIONS
+    assert {admission.refusal("demo", operation) for operation in refused} == {"demo_execution_disabled"}
+    assert all(admission.refusal("standard", operation) is None for operation in operations)
+    gate_env({"ROUNDS_GATE_DEMO_EXECUTION": "enabled"})
+    assert all(admission.refusal(tier, operation) is None for tier in admission.TIERS for operation in operations)
 
 
 @pytest.mark.parametrize("name", CODE_RUNS)
