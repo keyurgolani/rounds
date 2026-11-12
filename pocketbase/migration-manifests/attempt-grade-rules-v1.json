@@ -2,7 +2,7 @@
   "$comment": "Rule manifest attempt-grade-rules-v1 (ROUNDS-00A-L03 PR 4, #3): what pocketbase/pb_migrations/1700008700_attempt_grade_rules.js changes. It replaces the create and update rules of the two attempt collections and reads or writes no row, so the census of each collection comes out the same after it as before. The harness's dry run (harness/probes/grade_rules_migration_check.py, phase 16) takes the census of a seeded pb_data copy before and after the up step and compares the two: that comparison is the reconciliation report it prints. The rules each collection held before are the reverse journal, which the up step records in the _params row named below, and which down() keeps, as it keeps the new rules.",
   "manifest": "attempt-grade-rules-v1",
   "issue": "#3",
-  "reviewed_by": "rounds lane review, ROUNDS-00A-L03/4",
+  "reviewed_by": "rounds lane review (PR #221, r1 and r2), 2026-11-12",
   "migration": "1700008700_attempt_grade_rules",
   "rows_touched": 0,
   "collections": {

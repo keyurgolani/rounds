@@ -24,10 +24,11 @@ account included:
 4. ``pocketbase migrate down 1``, confirmed on a pseudo terminal as an
    operator would, keeps the rules and the record, and applying the
    migration again changes neither.
-5. Serves a copy without the migration, whose rules still take an owner's
-   graded write, with the execution hooks only: their record checks alone
-   refuse every client write that would grade a row, change a graded row,
-   or set an envelope, in each request form, and open rows still save.
+5. Serves a copy without the migration, whose two rules hash to the ones
+   the manifest says it replaces, which still take an owner's graded
+   write, with the execution hooks only: their record checks alone refuse
+   every client write that would grade a row, change a graded row, or set
+   an envelope, in each request form, and open rows still save.
 
 Prints one PASS/FAIL line per check and exits non-zero on any failure.
 """
@@ -325,6 +326,20 @@ def check_client_writes(c: Checks, pb: PBClient, admin: str, envelope: str, pare
                 f"graded={bool(graded)} statuses={[a.status for a in answers]} unchanged={unchanged}")
 
 
+def holds_the_rules_before(db: Path, manifest: dict) -> tuple[bool, str]:
+    """Whether both collections' create and update rules on ``db`` hash to
+    the manifest's record of the rules this migration replaces."""
+    rules = _rules(db)
+    differ = []
+    for name in COLLECTIONS:
+        for key, field in (("create", "createRule"), ("update", "updateRule")):
+            text = rules.get(name, {}).get(field)
+            want = manifest["collections"][name]["before"][f"{key}_sha256"]
+            if not isinstance(text, str) or hashlib.sha256(text.encode()).hexdigest() != want:
+                differ.append(f"{name}.{key}")
+    return not differ, "rules differ: " + ", ".join(differ)
+
+
 def check_the_guards_alone(c: Checks, pb: PBClient, admin: str, envelope: str, parents: dict[str, str]) -> None:
     acct = factory.make_account("guard")
     factory.register(pb, acct)
@@ -439,14 +454,17 @@ def main() -> int:
         hooks.mkdir()
         for name in EXECUTION_HOOKS:
             shutil.copy(HOOKS / name, hooks / name)
-        try:
-            with Served(work, guarded, base, hooks) as pb:
-                auth = pb.admin_auth(admin_env["PB_ADMIN_EMAIL"], admin_env["PB_ADMIN_PASSWORD"])
-                admin = auth.body.get("token", "") if isinstance(auth.body, dict) else ""
-                if c.check("grade-rules.guards.superuser", auth.status == 200 and bool(admin), f"status={auth.status}"):
-                    check_the_guards_alone(c, pb, admin, envelope, parents)
-        except Exception as err:  # noqa: BLE001 - report, never crash the phase
-            c.check("grade-rules.guards-copy", False, str(err)[:300])
+        held, why = holds_the_rules_before(guarded / "data.db", manifest)
+        if c.check("grade-rules.guards.copy-holds-the-rules-before-this-migration", held, why):
+            try:
+                with Served(work, guarded, base, hooks) as pb:
+                    auth = pb.admin_auth(admin_env["PB_ADMIN_EMAIL"], admin_env["PB_ADMIN_PASSWORD"])
+                    admin = auth.body.get("token", "") if isinstance(auth.body, dict) else ""
+                    if c.check("grade-rules.guards.superuser", auth.status == 200 and bool(admin),
+                               f"status={auth.status}"):
+                        check_the_guards_alone(c, pb, admin, envelope, parents)
+            except Exception as err:  # noqa: BLE001 - report, never crash the phase
+                c.check("grade-rules.guards-copy", False, str(err)[:300])
 
         kept_rules, kept_record = _rules(db), _record(db)
         code, out = _migrate_down_confirmed(data, full)

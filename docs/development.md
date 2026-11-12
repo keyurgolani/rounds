@@ -15,7 +15,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Code runs need two values in `.env` first: `ROUNDS_EXECUTION_SECRET`, 32 to 72 printable characters such as the output of `openssl rand -hex 32`, and `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`. Without them, every code run says it's turned off and keeps your draft.
+Code runs need two values in `.env`: `ROUNDS_EXECUTION_SECRET`, 32 to 72 printable characters such as the output of `openssl rand -hex 32`, and `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`. Set them, then run `docker compose up -d` again. Without them, every code run says it's turned off and keeps your draft.
 
 Services:
 

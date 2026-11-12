@@ -272,7 +272,8 @@ the record holds what was found. On the first copy, served with no hooks so only
 graded row, or one that would grade a row or give it an envelope, is refused,
 and in-progress rows still save. `migrate down 1` keeps the rules and the
 record, and applying it again changes neither. Last, a copy without the
-migration, whose rules still take an owner's graded write, is served with the
+migration, whose rules still take an owner's graded write (they must hash to
+the manifest's record of the rules it replaces), is served with the
 execution hooks alone: their record checks refuse every client write that
 would grade a row, change a graded row, or set an envelope, in each request
 form, and open rows still save.

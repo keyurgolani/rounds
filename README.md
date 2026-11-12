@@ -37,7 +37,7 @@ Opened without steps 1 and 2, the share dialog says it can't create a new link y
 1. Set `ROUNDS_EXECUTION_SECRET` on PocketBase and every runner, the same value on each: 32 to 72 printable characters, such as the output of `openssl rand -hex 32`. Keep `ROUNDS_ADMISSION_SECRET` set on both.
 2. Set `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce` on every runner and the frontend, and restart both.
 
-If either is missing, the app says code runs are turned off on this server and keeps every draft, and the runner's start log names each missing setting. The migration also makes graded attempts the server's to write: no client can create a graded row or change one, and rows already saved stay as they were. The "Scratch jobs", "Grading jobs", and "Graded attempt rows" sections of [docs/operations.md](docs/operations.md#graded-attempt-rows) have the checks to run after the deploy.
+If a runner lacks any of these, the app says code runs are turned off on this server and keeps every draft, and the runner's start log names each missing setting. If PocketBase lacks the secret or the values differ, code runs say they're unavailable, and the runner logs `login_rejected`. The migration also makes graded attempts the server's to write: no client can create a graded row or change one, and rows already saved stay as they were. "Execution Job Store" in [docs/operations.md](docs/operations.md#execution-job-store) and the sections after it have the checks to run after the deploy.
 
 ## Features
 
@@ -81,7 +81,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Code runs need two values in `.env` first: `ROUNDS_EXECUTION_SECRET`, 32 to 72 printable characters such as the output of `openssl rand -hex 32`, and `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`. Without them, every code run says it's turned off and keeps your draft.
+Code runs need two values in `.env`: `ROUNDS_EXECUTION_SECRET`, 32 to 72 printable characters such as the output of `openssl rand -hex 32`, and `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`. Set them, then run `docker compose up -d` again. Without them, every code run says it's turned off and keeps your draft.
 
 Services:
 

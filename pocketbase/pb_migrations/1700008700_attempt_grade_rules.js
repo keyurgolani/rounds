@@ -37,7 +37,7 @@
 // and the manifest pocketbase/migration-manifests/attempt-grade-rules-v1.json.
 
 const COLLECTIONS = ["ai_coding_attempts", "take_home_attempts"];
-// The _params row where the up step records the rules it replaced.
+// The _params row where the up step records the rules it found.
 const PRIOR_KEY = "1700008700_attempt_grade_rules.js";
 
 const SIGNED_IN = '@request.auth.id != ""';

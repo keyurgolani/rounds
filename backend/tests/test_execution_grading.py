@@ -874,18 +874,21 @@ def test_a_review_whose_call_outlived_its_lease_is_lost(runner, node, provider, 
     assert fake.calls == ["requested"]
 
 
-def test_a_provider_that_never_answers_is_cut_off_at_the_time_limit_and_the_review_completes_skipped(
+def test_a_provider_answering_after_the_time_limit_is_cut_off_and_the_review_completes_skipped(
         runner, node, provider, monkeypatch):
     client = runner(GRADING_ON)
     seed_round(node)
     fake = provider(answer='{"items": [], "total": 0.9, "summary": "late-provider-text-5c1e"}')
     done = graded(client, node, grade_body())
 
-    async def never(*args, **kwargs):
-        await fake.complete(*args, **kwargs)
-        await asyncio.sleep(3600)
+    async def late(*args, **kwargs):
+        # The answer comes 2 s after the call, long past the limit below,
+        # so a limit that's gone or wider lets it land and fails the test.
+        answer = await fake.complete(*args, **kwargs)
+        await asyncio.sleep(2)
+        return answer
 
-    monkeypatch.setattr("routers.ai._call_complete", never)
+    monkeypatch.setattr("routers.ai._call_complete", late)
     monkeypatch.setattr("execution.review.REVIEW_TIMEOUT_S", 0.05)
     answer = review(client, node, done["job_id"], _project(FIXED_CLIENT)).json()
     skipped = {"items": [], "total": 0.0, "skipped": True, "reason": PROVIDER_FAILED}
