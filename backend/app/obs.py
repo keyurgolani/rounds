@@ -9,7 +9,10 @@ and latency. ``definition.*`` lines carry a definition's identity
 ``execution.job`` lines are the job metrics (ROUNDS-00A-L03): a metric
 name and a count or seconds, labeled by kind, purpose, state, outcome
 class, and executor kind, never by account; ``execution.worker`` says
-what the replica's worker did at start.
+what the replica's worker did at start. ``execution.launcher`` lines
+(ROUNDS-00A-L05) come from the code launcher and from the runner's start:
+a code, what a start is missing from a fixed vocabulary, and the
+launcher's metrics, never a job, an account, or anything a worker wrote.
 Unknown fields are dropped, and every value has to match its field's
 pattern, so source code, program output, HTML, bearer tokens, provider
 payloads, and raw account ids never reach the log.
@@ -209,8 +212,41 @@ def _gate_table(value: Any) -> bool:
 # values it needs.
 EVENTS = frozenset({
     "decision", "gates", "definitions.loaded", "definition.resolved", "definition.rejected", "execution.job",
-    "execution.worker", "execution.scratch", "share.resolve", "share.revoke", "share.create", "share.rotate",
+    "execution.worker", "execution.scratch", "execution.launcher", "share.resolve", "share.revoke", "share.create",
+    "share.rotate",
 })
+# The code launcher's metrics (ROUNDS-00A-L05): start latency, dispatch to
+# first byte, kills by reason, cap hits, cleanup failures, orphans removed,
+# quarantined slots, saturation, and pre-started workers.
+LAUNCHER_METRICS = (
+    "rounds_worker_start_ms",
+    "rounds_worker_first_byte_ms",
+    "rounds_worker_kill_total",
+    "rounds_worker_cap_hit_total",
+    "rounds_worker_cleanup_failed_total",
+    "rounds_worker_orphan_removed_total",
+    "rounds_worker_slots_quarantined",
+    "rounds_worker_saturated_total",
+    "rounds_worker_prestarted",
+)
+# What a launcher's start, or a runner's launcher settings, can be missing.
+LAUNCHER_MISSING = frozenset({
+    "docker_host", "token", "app_secret", "worker_image", "runtime", "capacity", "port", "launcher_url",
+    "engine_unreachable", "engine_api", "rootless", "seccomp", "cgroup_v2", "cgroup_driver", "memory_limit",
+    "swap_limit", "cpu_quota", "pids_limit", "image_unavailable", "profile", "self_check", "seccomp_filter",
+})
+LAUNCHER_REASONS = (
+    "wall_time", "output", "files", "processes", "memory", "policy", "canceled", "lost", "malformed", "starved",
+    "engine",
+)
+
+
+def _launcher_missing(value: Any) -> bool:
+    return (
+        isinstance(value, list)
+        and 0 < len(value) <= len(LAUNCHER_MISSING)
+        and all(isinstance(v, str) and v in LAUNCHER_MISSING for v in value)
+    )
 # The job metrics' names (ROUNDS-00A-L03). #54, #22, #154, and #174 reuse
 # the shape.
 JOB_METRICS = (
@@ -243,7 +279,7 @@ FIELDS: dict[str, Callable[[Any], bool]] = {
     # The code an observe-mode gate would have answered with.
     "would_deny": _matches(r"[a-z][a-z0-9_]{0,63}", 64),
     "latency_ms": _int_between(0, 86_400_000),
-    "service": _one_of("runner", "pocketbase", "frontend"),
+    "service": _one_of("runner", "pocketbase", "frontend", "launcher"),
     "gates": _gate_table,
     # track/slug/variant@content_version, e.g. coding/two-sum/python@1.
     "definition": _matches(
@@ -254,8 +290,8 @@ FIELDS: dict[str, Callable[[Any], bool]] = {
     # The request field a definition.rejected line counts, such as
     # test_command for legacy_request_rejected: a field name, never a value.
     "field": _matches(r"[a-z][a-z0-9_]{0,31}", 32),
-    # execution.job (ROUNDS-00A-L03).
-    "metric": _one_of(*JOB_METRICS),
+    # execution.job (ROUNDS-00A-L03) and execution.launcher (ROUNDS-00A-L05).
+    "metric": _one_of(*JOB_METRICS, *LAUNCHER_METRICS),
     "value": _int_between(0, 1_000_000_000),
     "kind": _one_of("run", "evaluate", "run_project", "take_home_run", "grade", "take_home_submit"),
     "purpose": _one_of("scratch", "grading"),
@@ -270,6 +306,14 @@ FIELDS: dict[str, Callable[[Any], bool]] = {
     "record": _matches(r"[a-z0-9]{15}", 15),
     # The gate values a key needs, such as EXECUTION_STORE=on.
     "needs": _gate_requirements,
+    # execution.launcher (ROUNDS-00A-L05).
+    "missing": _launcher_missing,
+    "reason": _one_of(*LAUNCHER_REASONS),
+    "slots": _int_between(0, 1024),
+    "prestart": _int_between(0, 1024),
+    "runtime": _one_of("runc", "runsc"),
+    # The worker daemon serves this launcher only.
+    "engine": _one_of("dedicated"),
 }
 # The fields an event may carry, where that's fewer than FIELDS: a job
 # metric never carries an account or a correlation id.
@@ -278,6 +322,8 @@ EVENT_FIELDS: dict[str, frozenset[str]] = {
                                 "service"}),
     "execution.worker": frozenset({"code", "service"}),
     "execution.scratch": frozenset({"code", "needs", "service"}),
+    "execution.launcher": frozenset({"code", "missing", "metric", "value", "reason", "slots", "prestart", "runtime",
+                                     "engine", "service"}),
     "share.resolve": frozenset({"correlation_id", "record", "code"}),
     "share.revoke": frozenset({"correlation_id", "account", "record", "code"}),
     "share.create": frozenset({"correlation_id", "account", "record", "code"}),

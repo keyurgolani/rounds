@@ -16,8 +16,15 @@ and take-home run execute:
 
 Every reader asks ``scratch()``, so the routes, the worker, and the
 startup line can't disagree.
+
+``ROUNDS_GATE_EXECUTION_LAUNCHER`` (ROUNDS-00A-L05) is ``off`` or ``on``. No
+route reads it yet; with it on, the start logs one ``execution.launcher``
+line, ``configured``, or ``unconfigured`` naming the launcher URL or token
+the runner is missing.
 """
 from __future__ import annotations
+
+from typing import Mapping
 
 from app import gates, obs
 
@@ -39,10 +46,30 @@ def scratch() -> str:
     return value
 
 
+def launcher() -> str:
+    """``ROUNDS_GATE_EXECUTION_LAUNCHER``: on or off (ROUNDS-00A-L05). No
+    route reads it yet."""
+    return gates.value("EXECUTION_LAUNCHER")
+
+
+def launcher_missing(environ: Mapping[str, str] | None = None) -> list[str]:
+    """The runner's launcher settings that are missing, by name."""
+    from execution import launcher_client
+
+    return launcher_client.settings(environ)[2]
+
+
 def log_startup() -> None:
-    """At start: when the key is on but acts as off, one line naming the
-    settings it needs."""
+    """At start: when the scratch key is on but acts as off, one line naming
+    the settings it needs; and with the launcher's gate on, one line saying
+    whether the runner has its launcher settings."""
     if gates.value("EXECUTION_SCRATCH") == "on":
         needs = scratch_needs()
         if needs:
             obs.emit("execution.scratch", code="acting_off", needs=needs, service="runner")
+    if launcher() == "on":
+        missing = launcher_missing()
+        if missing:
+            obs.emit("execution.launcher", code="unconfigured", missing=missing, service="runner")
+        else:
+            obs.emit("execution.launcher", code="configured", service="runner")

@@ -19,7 +19,8 @@ async def lifespan(_app: FastAPI):
     # Gates are read once per process; the startup log lists each value.
     gates.init()
     # ROUNDS_GATE_EXECUTION_SCRATCH on without what it needs acts as off,
-    # and says so once here (ROUNDS-00A-L03).
+    # and says so once here (ROUNDS-00A-L03); with the launcher's gate on,
+    # so does a runner without its launcher settings (ROUNDS-00A-L05).
     execution_keys.log_startup()
     # Every stored definition's checksum is checked once per process; a
     # mismatch logs definition.rejected and that version fails closed.

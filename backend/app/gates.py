@@ -34,7 +34,10 @@ SPA read ``SIGNUPS``, and PocketBase reads ``DEMO``. ``EXECUTION_STORE``
 turns on the execution job store (ROUNDS-00A-L03): PocketBase serves its
 hook routes and each runner replica runs its executor and reaper.
 ``EXECUTION_SCRATCH`` moves run, evaluate, run-project, and take-home run
-onto it; ``execution/keys.py`` gives its effective value. The share routes
+onto it; ``execution/keys.py`` gives its effective value.
+``EXECUTION_LAUNCHER`` (ROUNDS-00A-L05) is the code launcher's gate, which
+no route reads yet; the runner's start says whether its launcher settings
+are there. The share routes
 read ``PUBLIC_SHARES`` and ``SHARE_CAPABILITY_RESOLUTION``
 on each request (ROUNDS-00B-L03); the startup log still lists both.
 
@@ -71,6 +74,8 @@ STORE_VALUES = ("off", "on")
 # ROUNDS-00A-L03 PR 2: legacy runs the four scratch routes in their
 # request as before, on runs them as jobs, and off turns them off.
 SCRATCH_VALUES = ("legacy", "on", "off")
+# ROUNDS-00A-L05: whether the runner sends code to the launcher's workers.
+LAUNCHER_VALUES = ("off", "on")
 
 _log = logging.getLogger(__name__)
 
@@ -204,6 +209,21 @@ REGISTRY: tuple[Gate, ...] = (
             "Run, evaluate, run-project, and take-home run: legacy runs each in its request as before; on runs "
             "each as a durable job, and acts as off unless EXECUTION_STORE is on and EXECUTION_DEFINITIONS is "
             "enforce; off answers 503 execution_disabled and keeps every draft."
+        ),
+    ),
+    Gate(
+        # ROUNDS-00A-L05: the code launcher. No route reads it yet; each
+        # route that moves onto the launcher's workers reads it from then
+        # on, and with it off, or the launcher down, that route answers 503
+        # worker_unavailable and never runs code in the runner instead.
+        name="EXECUTION_LAUNCHER",
+        values=LAUNCHER_VALUES,
+        default="off",
+        closed="off",
+        readers=frozenset({RUNNER}),
+        description=(
+            "Code workers: on sends a route's code to the launcher, which runs each job in a fresh isolated "
+            "worker; off answers those routes 503 worker_unavailable. No route uses it yet."
         ),
     ),
     Gate(
