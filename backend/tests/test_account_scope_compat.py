@@ -16,8 +16,6 @@ live rules accept exactly these shapes.
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi import HTTPException
-
 CALLER = "user-caller-000"
 
 
@@ -172,121 +170,9 @@ def test_no_runner_module_writes_an_older_share_link_or_its_views():
 
 
 # ---------------------------------------------------------------------------
-# take_home_attempts (submit is an admitted route, so the account comes from
-# admission). A client-side (4xx) persist rejection, including an
-# authorization denial, surfaces to the caller with PocketBase's own status
-# and body; only a server-side (5xx) persist failure stays best-effort so the
-# grade is not dropped. The first test asserts the create's payload; the next
-# two assert each of those two persist outcomes.
+# take_home_attempts and ai_coding_attempts: since ROUNDS-00A-L03 PR 4 the
+# runner writes neither with a caller's token. A submission or a grade is a
+# job, and the server writes its graded row, naming the job's account, with
+# the job's result (test_execution_grading.py). No execution key's value
+# writes one from a request (test_execution_grading.py's negative control).
 # ---------------------------------------------------------------------------
-
-# The account conftest's `signed_in` fixture admits (TEST_ACCOUNT_ID there).
-ADMITTED = "u1"
-
-
-def test_take_home_submit_attempt_names_the_caller(client, signed_in):
-    captured = {}
-
-    async def fake_pb_get(_token, _path, params=None):
-        return {"items": [{
-            "id": "a1", "slug": "tinytest", "entrypoint": "python3 harness.py",
-            "harness_files": [{"path": "harness.py", "contents": (
-                "import json\nprint(json.dumps({"
-                "\"criteria\":[{\"id\":\"a\",\"passed\":True,\"weight\":1.0,\"logs\":\"\"}],"
-                "\"score\":1.0,\"duration_ms\":1}))\n"
-            )}],
-            "rubric": {"items": []},
-        }]}
-
-    async def fake_pb_post(_token, _path, body):
-        captured.update(body)
-        return {"id": "att1"}
-
-    async def no_provider(_user):
-        raise Exception("no provider")
-
-    with patch("routers.take_home.pb_get", fake_pb_get), \
-         patch("routers.take_home.pb_post", fake_pb_post), \
-         patch("routers.take_home._active_text_config", no_provider):
-        res = client.post("/api/take-home/submit", headers=signed_in, json={
-            "assignment_slug": "tinytest",
-            "files": {"main.py": "# user file"},
-            "notes": "n",
-            "ai_chats": [],
-            "duration_ms": 10,
-        })
-    assert res.status_code == 200
-    assert captured.get("user") == ADMITTED, f"take_home attempt set user={captured.get('user')!r}"
-    assert captured.get("status") == "graded"
-
-
-def test_take_home_submit_surfaces_a_persist_time_authorization_denial(client, signed_in):
-    # PocketBase refuses the attempts insert at persist time (for example a
-    # typed relation pointed at a record the account does not own). The grade
-    # must not mask it: the caller sees the same status and body PocketBase
-    # returned.
-    denial = {"code": 400, "message": "Failed to create record.", "data": {}}
-
-    async def denying_pb_post(_token, _path, _body):
-        raise HTTPException(status_code=400, detail=f"PocketBase error: {denial}")
-
-    async def fake_pb_get(_token, _path, params=None):
-        return {"items": [{
-            "id": "a1", "slug": "tinytest", "entrypoint": "python3 harness.py",
-            "harness_files": [{"path": "harness.py", "contents": (
-                "import json\nprint(json.dumps({"
-                "\"criteria\":[{\"id\":\"a\",\"passed\":True,\"weight\":1.0,\"logs\":\"\"}],"
-                "\"score\":1.0,\"duration_ms\":1}))\n"
-            )}],
-            "rubric": {"items": []},
-        }]}
-
-    async def no_provider(_user):
-        raise Exception("no provider")
-
-    with patch("routers.take_home.pb_get", fake_pb_get), \
-         patch("routers.take_home.pb_post", denying_pb_post), \
-         patch("routers.take_home._active_text_config", no_provider):
-        res = client.post("/api/take-home/submit", headers=signed_in, json={
-            "assignment_slug": "tinytest",
-            "files": {"main.py": "# user file"},
-            "notes": "n",
-            "ai_chats": [],
-            "duration_ms": 10,
-        })
-    assert res.status_code == 400
-    assert "Failed to create record." in res.json()["detail"]
-
-
-def test_take_home_submit_keeps_the_grade_on_a_persist_infrastructure_failure(client, signed_in):
-    # A server-side persistence failure (PocketBase outage, 5xx) stays
-    # best-effort so it doesn't drop the user's grade.
-    async def failing_pb_post(_token, _path, _body):
-        raise HTTPException(status_code=502, detail="PocketBase error: upstream down")
-
-    async def fake_pb_get(_token, _path, params=None):
-        return {"items": [{
-            "id": "a1", "slug": "tinytest", "entrypoint": "python3 harness.py",
-            "harness_files": [{"path": "harness.py", "contents": (
-                "import json\nprint(json.dumps({"
-                "\"criteria\":[{\"id\":\"a\",\"passed\":True,\"weight\":1.0,\"logs\":\"\"}],"
-                "\"score\":1.0,\"duration_ms\":1}))\n"
-            )}],
-            "rubric": {"items": []},
-        }]}
-
-    async def no_provider(_user):
-        raise Exception("no provider")
-
-    with patch("routers.take_home.pb_get", fake_pb_get), \
-         patch("routers.take_home.pb_post", failing_pb_post), \
-         patch("routers.take_home._active_text_config", no_provider):
-        res = client.post("/api/take-home/submit", headers=signed_in, json={
-            "assignment_slug": "tinytest",
-            "files": {"main.py": "# user file"},
-            "notes": "n",
-            "ai_chats": [],
-            "duration_ms": 10,
-        })
-    assert res.status_code == 200
-    assert res.json()["harness"]["score"] == 1.0

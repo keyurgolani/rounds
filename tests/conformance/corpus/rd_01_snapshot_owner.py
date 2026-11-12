@@ -20,9 +20,22 @@ from corpus._base import code_of, result
 from corpus._requests import NO_SNAPSHOT, render_body
 from corpus._snapshots import owned_snapshot
 
-NOT_RENDERED = "RD-01.foreign-snapshot-not-rendered"
-SAME = "RD-01.foreign-reads-as-missing"
-SUBCASES = (NOT_RENDERED, SAME)
+# This fixture's spec; conformance/manifest.py reads it as a literal.
+SPEC = {
+    "routes": ["POST /api/pdf/render"],
+    "subcases": ["RD-01.foreign-snapshot-not-rendered", "RD-01.foreign-reads-as-missing"],
+    "expected": {"ci": "contained", "compose": "contained", "k8s": "contained"},
+    "languages": [],
+    "control": "selftest/test_negative_controls.py: the render route without the snapshot owner check",
+    "setup": ("two synthetic accounts and a snapshot the first owns, seeded with the admin token over its own "
+              "resume"),
+    "teardown": "both accounts removed with the admin token, their resumes and snapshots with them",
+    "destructive": False,
+    "environment_sensitive": True,
+}
+
+SUBCASES = tuple(SPEC["subcases"])
+NOT_RENDERED, SAME = SUBCASES
 # What a render that got past every snapshot check answers: a PDF, or the
 # renderer's own typed failure (backend/routers/pdf.py).
 REACHED_RENDERER = {(503, "worker_unavailable"), (422, "render_timeout")}

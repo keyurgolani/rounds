@@ -13,7 +13,7 @@ const allFindings = (results) => results.flatMap((r) => r.findings);
 describe('runner', () => {
   it('runs every rule clean on the repository with no drift', async () => {
     const results = await runConformance({ ...parseArgs([]), root: REPO_ROOT, base: 'none' });
-    assert.deepEqual(results.map((r) => r.id).sort(), ['authority', 'database-adr', 'decision-records', 'vocabulary']);
+    assert.deepEqual(results.map((r) => r.id).sort(), ['authority', 'database-adr', 'decision-records', 'program', 'vocabulary']);
     assert.deepEqual(allFindings(results), []);
     for (const r of results) assert.deepEqual(r.written, []);
   });
@@ -96,7 +96,7 @@ describe('runner', () => {
     }
     assert.ok(failed, 'the run fails');
     assert.equal(failed.status, 2);
-    assert.match(failed.stderr, /unknown rule vocabulry; rules are authority, database-adr, decision-records, vocabulary/);
+    assert.match(failed.stderr, /unknown rule vocabulry; rules are authority, database-adr, decision-records, program, vocabulary/);
   });
 
   it('compares with the branch a pull request targets, and runs on pushes to next', () => {

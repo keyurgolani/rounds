@@ -4,8 +4,8 @@
 // the registers and the rollback template. report.mjs and the conformance
 // tests use it. Node built-ins only.
 //
-// TODO(ROUNDS-01-L03): S2's scripts/conformance/rules/program.mjs runs
-// checkProgram in the conformance job and adds the leaf-dag.json checks.
+// scripts/conformance/rules/program.mjs runs checkProgram in the conformance
+// job, beside scripts/program/dag.mjs's leaf-dag.json checks (S2).
 
 import { createContext, finding, jsonLine, sha256 } from '../conformance/lib/context.mjs';
 import { validate } from '../conformance/lib/json-schema.mjs';

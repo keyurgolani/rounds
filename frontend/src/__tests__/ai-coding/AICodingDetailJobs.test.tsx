@@ -37,7 +37,6 @@ vi.mock('../../pages/ai-coding/aiCodingApi', async (importOriginal) => ({
   getLatestAttempt: vi.fn().mockResolvedValue(null),
   runProject: vi.fn(),
   gradeAttempt: vi.fn(),
-  persistAttempt: vi.fn(),
   getGradedAttempt: vi.fn(),
   requestGradeReview: vi.fn(),
   upsertInProgressAttempt: vi.fn().mockResolvedValue(undefined),
@@ -58,7 +57,6 @@ import {
   getGradedAttempt,
   getRound,
   gradeAttempt,
-  persistAttempt,
   requestGradeReview,
   runProject,
   type AttemptRow,
@@ -123,7 +121,6 @@ beforeEach(() => {
   vi.mocked(getRound).mockResolvedValue(ROUND as never);
   vi.mocked(runProject).mockReset();
   vi.mocked(gradeAttempt).mockReset();
-  vi.mocked(persistAttempt).mockReset();
   vi.mocked(getGradedAttempt).mockReset();
   vi.mocked(requestGradeReview).mockReset();
   practice.set.mockReset();
@@ -263,7 +260,6 @@ describe('AICodingDetail grade jobs', () => {
     expect(requestGradeReview).toHaveBeenCalledTimes(1);
     expect(vi.mocked(requestGradeReview).mock.calls[0].slice(0, 2)).toEqual(['jobaaaaaaaaaaa1', drafts.files]);
     // The server wrote the row; the page writes none.
-    expect(persistAttempt).not.toHaveBeenCalled();
     expect(practice.set).toHaveBeenCalledWith('mastered');
     const [req, init] = vi.mocked(gradeAttempt).mock.calls[0];
     expect(req).toMatchObject({ round_slug: 'cart-totals', files: drafts.files, duration_ms: expect.any(Number) });
@@ -334,7 +330,6 @@ describe('AICodingDetail grade jobs', () => {
     await waitFor(() => expect(region).toHaveTextContent("Can't grade here"));
     expect(region).toHaveTextContent('Nothing was graded.');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(persistAttempt).not.toHaveBeenCalled();
   });
 
   it('says a grade that failed without a result in a fixed sentence, with no score or server text', async () => {
@@ -347,7 +342,6 @@ describe('AICodingDetail grade jobs', () => {
     expect(problem).toHaveTextContent("Grading didn't finish");
     expect(problem).toHaveTextContent('Grading failed with status 409, so nothing was graded. Submit again.');
     expect(dialog.textContent).not.toMatch(/Traceback|secret|\d+ ?\/ ?100|checkpoints passed/);
-    expect(persistAttempt).not.toHaveBeenCalled();
   });
 
   it("offers Try again when the report couldn't load, and opens it once it does", async () => {

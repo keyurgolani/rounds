@@ -1,8 +1,8 @@
 """This replica's execution worker, from start to shutdown, and what
 ``/ready`` reports about it (ROUNDS-00A-L03).
 
-1. ``ROUNDS_GATE_EXECUTION_STORE=off``, the default: nothing starts, and
-   ``/ready`` is ready without the store.
+1. ``ROUNDS_GATE_EXECUTION_STORE=off``, its emergency stop: nothing
+   starts, and ``/ready`` is ready without the store.
 2. ``on`` with no usable ``ROUNDS_EXECUTION_SECRET``: nothing starts, the
    start logs ``execution.worker`` with ``unconfigured``, and ``/ready``
    stays ready, so a deployment without the secret keeps serving. The

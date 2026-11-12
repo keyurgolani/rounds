@@ -94,7 +94,7 @@ def test_owned_and_server_only_match_the_policy(src, policy):
         row = policy["collections"][name]
         assert row["migration"] == row["target_rule_migration"] > MIGRATION.name, name
         assert (MIGRATION.parent / row["migration"]).is_file(), name
-    # users keeps its 0.22.22 defaults; the migration must not touch it.
+    # users keeps its 0.22.57 defaults; the migration must not touch it.
     assert "users" not in owned and "users" not in server_only
 
 

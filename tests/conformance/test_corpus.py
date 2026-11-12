@@ -6,9 +6,10 @@ one fixture and its context. Each case runs the fixture through
 ``conformance.execute.run_fixture`` against the built stack, records its
 receipt entry, and asserts the strict expected outcome; a fixture that
 detects a regression fails here with its id, the reason, its note, and
-its redacted evidence. A quarantined fixture records the skip ledger's
-owner and expiry and is skipped. The last case checks that the receipt
-has one entry for every manifest row.
+its redacted evidence, and the log shows that message alone. A
+quarantined fixture records the skip ledger's owner and expiry and is
+skipped. The last case checks that the receipt has one entry for every
+manifest row.
 
 This module runs only when ``CORPUS_RUN`` is set; otherwise every case is
 skipped (the corpus needs a built stack).
@@ -55,7 +56,10 @@ def test_fixture(fixture_id, corpus_session):
     ran = run_fixture(fx, module, make_context, session.canaries, session.target)
     session.totals.add_spend(ran.receipt.budget)
     session.receipt.add(ran.receipt)
-    assert ran.passed, ran.message
+    if not ran.passed:
+        # The message alone: an assert would also print the whole receipt
+        # entry next to it.
+        pytest.fail(ran.message, pytrace=False)
 
 
 def test_every_manifest_row_has_a_receipt_entry(corpus_session):

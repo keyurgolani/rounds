@@ -1,0 +1,113 @@
+{
+  "$schema": "./leaf-program.schema.json",
+  "description": "Program inputs to leaf-dag.json besides the issue export (ROUNDS-01-L03 S2, DR-0003 decisions P1 and P13): each leaf's base phase and milestone, the stage lists read from issue bodies, and the edge corrections the export's prose can't carry. Draft until re-authorization item 6 puts milestone, phase, and stages in the catalog (docs/program/reauthorization.md). A rule's match is a leaf id, a capability, or \"<leaf> to <leaf>\" inside one capability; the last matching rule wins. scripts/program/dag.mjs then pulls a leaf's phase and milestone earlier when a leaf that needs it lands earlier.",
+  "decision": "DR-0003@2",
+  "phases": {
+    "source": "spec 3070-3091 (Proposal Dependencies), DR-0003 decision P1",
+    "titles": [
+      { "phase": 1, "title": "Containment", "spec": "3074" },
+      { "phase": 2, "title": "Decisions and early gates", "spec": "3075-3076" },
+      { "phase": 3, "title": "Authority substrate", "spec": "3077-3078" },
+      { "phase": 4, "title": "Canonical aggregates", "spec": "3079" },
+      { "phase": 5, "title": "Ingestion substrate", "spec": "3080-3081" },
+      { "phase": 6, "title": "Vertical product slices", "spec": "3082-3085" },
+      { "phase": 7, "title": "Software Engineering pack completion", "spec": "3086-3087" },
+      { "phase": 8, "title": "Integrated guidance", "spec": "3088-3089" },
+      { "phase": 9, "title": "Final cutover and release proof", "spec": "3090-3092" }
+    ],
+    "rules": [
+      { "match": ["ROUNDS-00A", "ROUNDS-00B"], "phase": 1, "reason": "Containment: ROUNDS-00A and ROUNDS-00B." },
+      { "match": ["ROUNDS-01", "ROUNDS-02-L01", "ROUNDS-34-L01 to ROUNDS-34-L03", "ROUNDS-34-L08"], "phase": 2, "reason": "Decisions and early gates: ROUNDS-01, the database and transaction ADR, and the early ROUNDS-34 security and migration test infrastructure." },
+      { "match": ["ROUNDS-02-L02 to ROUNDS-02-L06", "ROUNDS-06-L01", "ROUNDS-06-L02", "ROUNDS-07-L01 to ROUNDS-07-L04", "ROUNDS-14-L01", "ROUNDS-32-L02"], "phase": 3, "reason": "Authority substrate: commands and idempotency, relation integrity, the pack contract, privacy policy, and the migration journal." },
+      { "match": ["ROUNDS-03", "ROUNDS-04", "ROUNDS-05", "ROUNDS-06-L03", "ROUNDS-07-L05", "ROUNDS-08"], "phase": 4, "reason": "Canonical aggregates: ROUNDS-03 through ROUNDS-07, with the shared field and editor contracts of ROUNDS-08 they edit through." },
+      { "match": ["ROUNDS-09", "ROUNDS-10", "ROUNDS-11", "ROUNDS-12", "ROUNDS-13", "ROUNDS-14-L02 to ROUNDS-14-L07"], "phase": 5, "reason": "Ingestion substrate: privacy policy, ROUNDS-10 to ROUNDS-12 before the full ROUNDS-09 Capture UI, and the ROUNDS-13 source adapters." },
+      { "match": ["ROUNDS-15", "ROUNDS-16", "ROUNDS-17", "ROUNDS-18", "ROUNDS-19", "ROUNDS-20", "ROUNDS-21", "ROUNDS-22", "ROUNDS-23", "ROUNDS-24", "ROUNDS-25", "ROUNDS-26", "ROUNDS-27", "ROUNDS-31-L02 to ROUNDS-31-L08", "ROUNDS-33"], "phase": 6, "reason": "Vertical product slices: Materials, Opportunity and Pursuit, Interviews, People, Offers, Campaigns, Actions, each with its read model and UI." },
+      { "match": ["ROUNDS-28", "ROUNDS-31-L06"], "phase": 7, "reason": "Software Engineering pack completion: the five practice tracks and the practice read model they ship with." },
+      { "match": ["ROUNDS-29", "ROUNDS-30", "ROUNDS-31-L07"], "phase": 8, "reason": "Integrated guidance: ROUNDS-29 and ROUNDS-30, with the Today read model they feed." },
+      { "match": ["ROUNDS-31-L01", "ROUNDS-31-L09", "ROUNDS-32-L01", "ROUNDS-32-L03 to ROUNDS-32-L10", "ROUNDS-34-L04 to ROUNDS-34-L07"], "phase": 9, "reason": "Final cutover and release proof: the remaining ROUNDS-31, ROUNDS-32, and ROUNDS-34 leaves." },
+      { "match": "ROUNDS-33-L05", "phase": 9, "reason": "#169 completes accessibility and interaction adoption after #164's legacy removal (its section), with the Milestone 7 gates." }
+    ]
+  },
+  "milestones": {
+    "source": "spec 3098-3147 (Vertical Transformation Milestones)",
+    "titles": [
+      { "milestone": 0, "title": "Contain active security risk", "spec": "3103-3106" },
+      { "milestone": 1, "title": "Build a trustworthy Career Profile", "spec": "3108-3112" },
+      { "milestone": 2, "title": "Follow one opportunity end to end", "spec": "3114-3117" },
+      { "milestone": 3, "title": "Produce and submit one reproducible material", "spec": "3119-3123" },
+      { "milestone": 4, "title": "Run one complete interview process", "spec": "3125-3128" },
+      { "milestone": 5, "title": "Preserve and contextualize all practice", "spec": "3130-3134" },
+      { "milestone": 6, "title": "Close the attention loop", "spec": "3136-3139" },
+      { "milestone": 7, "title": "Prove portability and retire legacy authority", "spec": "3141-3145" }
+    ],
+    "rules": [
+      { "match": ["ROUNDS-00A", "ROUNDS-00B", "ROUNDS-01", "ROUNDS-02-L01", "ROUNDS-14-L01", "ROUNDS-34-L01 to ROUNDS-34-L03", "ROUNDS-34-L08"], "milestone": 0, "reason": "Containment, with the decisions and early harnesses every later milestone builds on." },
+      { "match": ["ROUNDS-02-L02 to ROUNDS-02-L06", "ROUNDS-03", "ROUNDS-04", "ROUNDS-05", "ROUNDS-06", "ROUNDS-08", "ROUNDS-09", "ROUNDS-10", "ROUNDS-11", "ROUNDS-12", "ROUNDS-13", "ROUNDS-14-L02 to ROUNDS-14-L05", "ROUNDS-31-L01", "ROUNDS-31-L02", "ROUNDS-32-L01 to ROUNDS-32-L03", "ROUNDS-32-L05", "ROUNDS-33-L01 to ROUNDS-33-L03", "ROUNDS-34-L04", "ROUNDS-34-L05"], "milestone": 1, "reason": "Account separation, the canonical Career Profile, Organizations and People, manual editing, profile bootstrap, claim review, one migration slice, and provenance history." },
+      { "match": ["ROUNDS-19", "ROUNDS-20", "ROUNDS-21", "ROUNDS-23", "ROUNDS-25", "ROUNDS-26", "ROUNDS-27", "ROUNDS-31-L03", "ROUNDS-31-L04", "ROUNDS-32-L06", "ROUNDS-32-L08"], "milestone": 2, "reason": "Opportunity and Pursuit, one pipeline stage machine, the Campaign lens, the Opportunity Workspace, native People and Actions, and migrated application data." },
+      { "match": ["ROUNDS-14-L07", "ROUNDS-15", "ROUNDS-16", "ROUNDS-17", "ROUNDS-18", "ROUNDS-31-L05", "ROUNDS-32-L07"], "milestone": 3, "reason": "Artifact Editions and Revisions, canonical-fact selection, one Resume Studio path, deterministic export, submission history, and safe public sharing." },
+      { "match": ["ROUNDS-22", "ROUNDS-24"], "milestone": 4, "reason": "Process, stages, and rounds, scheduling, preparation context, debrief, Offer revisions, and migrated round and offer history." },
+      { "match": ["ROUNDS-07", "ROUNDS-14-L06", "ROUNDS-28", "ROUNDS-31-L06", "ROUNDS-32-L09"], "milestone": 5, "reason": "The five practice tracks behind the Software Engineering pack." },
+      { "match": ["ROUNDS-29", "ROUNDS-30", "ROUNDS-31-L07 to ROUNDS-31-L09"], "milestone": 6, "reason": "Readiness snapshots, explainable recommendations, authoritative read models, and Today." },
+      { "match": ["ROUNDS-03-L04", "ROUNDS-32-L04", "ROUNDS-32-L10", "ROUNDS-33-L04", "ROUNDS-33-L05", "ROUNDS-34-L06", "ROUNDS-34-L07"], "milestone": 7, "reason": "Account portability and settings, bounded-context cutovers, accessibility and responsive gates, self-host documentation, and final legacy-path removal." }
+    ]
+  },
+  "stages": {
+    "ROUNDS-00A-L01": { "stages": ["S0", "S1", "S2", "S3", "S4", "S5"], "source": "#1 Stages; the six stage PRs merged on next" },
+    "ROUNDS-00A-L02": { "stages": ["1", "2", "3"], "numbered": true, "source": "#2 steps 1 to 3, labeled by number (DR-0003 departure X4)" },
+    "ROUNDS-00A-L03": { "stages": ["1", "2", "3", "4"], "numbered": true, "source": "#3 PRs 1 to 4, labeled by number" },
+    "ROUNDS-00A-L04": { "stages": ["1", "2", "3"], "numbered": true, "source": "#4 PRs 1 to 3, labeled by number" },
+    "ROUNDS-00A-L08": { "stages": ["S1", "S2"], "phrases": { "corpus stage": "S1", "release gate": "S2" }, "source": "#8 Stage 1 (corpus and detection) and Stage 2 (required gate)" },
+    "ROUNDS-00B-L01": { "stages": ["S1", "S2", "S3", "S4"], "source": "#9 Merge stages" },
+    "ROUNDS-00B-L03": { "stages": ["S1", "S2"], "source": "#11 Stage 1 and Stage 2" },
+    "ROUNDS-00B-L07": { "stages": ["S1", "S2", "S3", "S4"], "source": "#177 Merge stages" },
+    "ROUNDS-01-L03": { "stages": ["S1", "S2", "S3", "S4"], "source": "#17 Stages" },
+    "ROUNDS-03-L03": { "stages": ["SA", "SB"], "source": "#26 Delivery stages" },
+    "ROUNDS-03-L04": { "stages": ["S1a", "S1b", "S2", "S2d", "S2i"], "phrases": { "preference": "S1b", "account commands": "S1b", "timezone": "S1b", "account surface": "S2" }, "source": "#178 Delivery stages (1b: commands, 2: surface)" },
+    "ROUNDS-07-L05": { "stages": ["SA", "SB"], "source": "#43 Stages" },
+    "ROUNDS-08-L02": { "stages": ["S1", "S2"], "source": "#45 Delivery stages" },
+    "ROUNDS-09-L02": { "stages": ["S1", "S2"], "source": "#50 Release stages" },
+    "ROUNDS-09-L03": { "stages": ["S1", "S2", "S3"], "source": "#51 Delivery stages" },
+    "ROUNDS-14-L02": { "stages": ["SA", "SB", "SC"], "source": "#73 Stages and legacy purposes" },
+    "ROUNDS-14-L04": { "stages": ["P1", "P2"], "source": "#75 Delivery" },
+    "ROUNDS-14-L05": { "stages": ["S1a", "S1b", "S2", "S3"], "aliases": { "S1": ["S1a", "S1b"] }, "source": "#76 Exact prerequisite leaf issues" },
+    "ROUNDS-14-L06": { "stages": ["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10"], "source": "#179 PRs" },
+    "ROUNDS-16-L02": { "stages": ["S1", "S2", "S3", "S4", "S5"], "source": "#82 Delivery stages" },
+    "ROUNDS-16-L04": { "stages": ["S1", "S2"], "source": "#84 Stage 1 client and the switch step" },
+    "ROUNDS-18-L03": { "stages": ["S1", "S2"], "source": "#91 Exporter registration v1 (Stage 1) and its Stage 2 prerequisites" },
+    "ROUNDS-18-L04": { "stages": ["S1", "S2", "S3"], "source": "#92 Exact prerequisite leaf issues, Stage 1 to Stage 3" },
+    "ROUNDS-32-L04": { "stages": ["S1", "S2"], "source": "#158 Exact prerequisite leaf issues, stage 1 and stage 2" },
+    "ROUNDS-21-L02": { "stages": ["SA", "SB"], "source": "#103 Stage A and Stage B" },
+    "ROUNDS-22-L02": { "stages": ["SA", "SB", "SC"], "phrases": { "envelope stage": "SA" }, "source": "#107 Exact prerequisite leaf issues, Stage A to Stage C" },
+    "ROUNDS-22-L03": { "stages": ["S1", "S2"], "source": "#108 Stages" },
+    "ROUNDS-24-L01": { "stages": ["P1", "P2", "P3"], "source": "#115 PRs 1 to 3 (its section's for PR 1, PR 2, and PR 3 lines)" },
+    "ROUNDS-27-L04": { "stages": ["S1", "S2"], "source": "#129 Stages" },
+    "ROUNDS-29-L01": { "stages": ["P1", "P2"], "source": "#138 PR 1 and PR 2" },
+    "ROUNDS-31-L01": { "stages": ["S1", "S2", "S3"], "source": "#146 Stages and placement" },
+    "ROUNDS-31-L06": { "stages": ["P1", "P2"], "phrases": { "track and overview": "P1" }, "source": "#151 PR 1 (track and overview sections, Milestone 5) and PR 2 (Milestone 6)" },
+    "ROUNDS-31-L09": { "stages": ["S1", "S2"], "source": "#154 Stages" },
+    "ROUNDS-32-L06": { "stages": ["S1", "S2", "S3", "S4", "S5", "S6"], "source": "#160 Stages" },
+    "ROUNDS-32-L08": { "stages": ["S1", "S2", "S3"], "source": "#162 Stage 1 to Stage 3" },
+    "ROUNDS-33-L04": { "stages": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S13"], "source": "#168 Delivery boundary: one PR per stage, S1 to S13" },
+    "ROUNDS-34-L01": { "stages": ["S1", "S2", "S3"], "source": "#170 Exact prerequisite leaf issues" },
+    "ROUNDS-34-L03": { "stages": ["S1", "S2"], "source": "#172 Stages" },
+    "ROUNDS-34-L06": { "stages": ["S1", "S2", "S3", "S4"], "source": "#175 Stage 1 to Stage 4" },
+    "ROUNDS-34-L08": { "stages": ["P1", "P2", "P3"], "source": "#182 PR 1 to PR 3" }
+  },
+  "satisfiedBy": {
+    "ROUNDS-01-L03": { "stages": ["S2"], "reason": "Dependents need S2, the DAG and its check in report mode; S3 follows #18 and S4 waits on the owner's ruleset (rounds lead decision D12)." },
+    "ROUNDS-24-L01": { "stages": ["P1", "P2"], "reason": "#115's PR 3 only adds RecordLegacyOfferDecision, after #118 (#115's section); #118 takes PRs 1 and 2, and so do the leaves that build on Offer Revisions." },
+    "ROUNDS-03-L04": { "stages": ["S1a", "S1b", "S2", "S2d"], "reason": "#178 closes after the Account switch, the editor removal, and 2d, in Milestone 1; 2i ships at program step 9 after #92 (#178's section)." }
+  },
+  "edges": {
+    "drop": [
+      { "dependent": "ROUNDS-32-L04", "prerequisite": "ROUNDS-28-L02", "reason": "#158's stage 2 comes after #131, not its stage 1, which #131 needs (#158's and #131's sections)." },
+      { "dependent": "ROUNDS-18-L04", "prerequisite": "ROUNDS-18-L03", "reason": "#91's section: #92 takes Stage 1 for its first PR and Stage 2 after, so #92 waits on #91's stages, not the whole leaf." },
+      { "dependent": "ROUNDS-18-L03", "prerequisite": "ROUNDS-03-L04", "reason": "#178's 2i needs #92 (#178's section), and #92 takes #91's Stage 2, so #91's Stage 2 can't wait on all of #178." }
+    ],
+    "add": [
+      { "dependent": "ROUNDS-32-L04", "prerequisite": "ROUNDS-28-L02", "forStages": ["S2"], "reason": "Stage 1 lands at the end of step 3, stage 2 after #131 in Milestone 5 (#158's section)." },
+      { "dependent": "ROUNDS-18-L04", "prerequisite": "ROUNDS-18-L03/S2", "forStages": ["S2", "S3"], "reason": "#92 takes #91's Stage 1 for its first PR and Stage 2 after (#91's section)." },
+      { "dependent": "ROUNDS-18-L03", "prerequisite": "ROUNDS-03-L04/S2", "forStages": ["S2"], "reason": "#91's Stage 2 adds #178 (Account); it takes #178's stage 2 surface, since #178's 2i import UI comes after #92." }
+    ]
+  }
+}

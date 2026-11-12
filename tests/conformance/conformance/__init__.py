@@ -12,10 +12,10 @@ fixture), the pytest plugin in ``conftest.py``, and the self-tests in
 No part of this package encodes an attack recipe or a request shape that
 reproduces a bypass. A fixture states the guarantee it checks and the
 contained answer it expects; a regression fails the lane with the fixture
-id and redacted artifacts. Fixtures are committed only for guarantees the
-branch already enforces; every other inventory row is a ``pending`` row
-in the manifest naming the leaf that closes it, with no fixture code
-(orchestrator decision D4).
+id and redacted artifacts. The manifest lists every fixture by id and
+family; a fixture's detail lives in its module, which is committed only
+for a guarantee the branch already enforces, and a fixture's probe lands
+with the fix that makes it pass (orchestrator decision D4).
 """
 
 CORPUS_VERSION = "1"

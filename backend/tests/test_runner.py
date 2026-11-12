@@ -57,6 +57,26 @@ def test_run_class_based_ops():
     assert outcome.error is None
 
 
+def test_run_class_ops_dispatches_to_the_named_class_past_a_helper_class():
+    # The class an entry names runs; a helper class beside it is never
+    # mistaken for it (a regression the request path's tests carried until
+    # ROUNDS-00A-L03 PR 4).
+    from tests.test_coding_endpoints import LRU_CODE
+
+    input_data = {
+        "ops": ["LRUCache", "put", "put", "get", "put", "get", "get"],
+        "args": [[2], [1, 1], [2, 2], [1], [3, 3], [2], [3]],
+    }
+    outcome = run_one(LRU_CODE, "python", {"kind": "class_ops", "class": "LRUCache"}, input_data)
+    assert outcome.error is None
+    assert outcome.return_value == [None, None, None, 1, None, -1, 3]
+
+
+def test_run_names_an_entry_without_its_function_name():
+    outcome = run_one("def f(): pass", "python", {"kind": "function"}, {})
+    assert outcome.error and "missing 'name'" in outcome.error
+
+
 def test_run_javascript_basic():
     code = "function solve(a, b) { console.log('js'); return a + b; }"
     outcome = run_one(code, "javascript", {"kind": "function", "name": "solve"}, {"a": 2, "b": 3})

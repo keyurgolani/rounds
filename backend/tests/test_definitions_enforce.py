@@ -4,15 +4,20 @@
 Every request names one compiled definition, and what runs, how it
 scores, and what comes back are the definition's. Coding and AI-coding run
 the committed store; take-home runs a test-only definition, since every
-seeded assignment is retired. The forgery fixtures go through the routes:
-a candidate can't report its own result, change the score, or read a
-hidden file back out of a response or an attempt row.
+seeded assignment is retired.
+
+Since ROUNDS-00A-L03 PR 4 every route here runs its request as a job, so
+these tests check each request as far as its job: every refusal comes
+before one is enqueued. The forgery fixtures below run as jobs in
+test_execution_scratch.py and test_execution_grading.py: a candidate
+can't report its own result, change the score, or read a hidden file back
+out of a job's answer or its graded row.
 """
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -22,10 +27,11 @@ from starlette.requests import Request
 from app import canonical, definitions, execution, gates
 from app.errors import TypedError
 from app.limits import StrictModel
+from execution import jobs, runtime
+from execution import store as job_store
 from routers import ai_coding, runner, take_home
 
 BACKEND = Path(__file__).resolve().parents[1]
-MANIFEST = json.loads((BACKEND / "definitions" / "manifest.json").read_text())
 HARNESS_LIB = (BACKEND / "definitions" / "harness" / "rounds_harness.py").read_text()
 
 PYTHON_TWO_SUM = (
@@ -66,17 +72,6 @@ def ref(track: str, slug: str, variant: str, version: int = 1) -> dict:
     return {"track": track, "slug": slug, "variant": variant, "version": version}
 
 
-def active_entry(receipt: dict) -> dict:
-    """The manifest entry a response's receipt names; it must be active."""
-    (entry,) = [
-        e for e in MANIFEST["entries"]
-        if (e["track"], e["slug"], e["variant"], e["content_version"])
-        == (receipt["track"], receipt["slug"], receipt["variant"], receipt["content_version"])
-    ]
-    assert entry["lifecycle"] == "active" and entry["checksum"] == receipt["checksum"]
-    return entry
-
-
 def typed(res, status: int, code: str) -> dict:
     assert res.status_code == status, res.text
     body = res.json()
@@ -84,8 +79,33 @@ def typed(res, status: int, code: str) -> dict:
     return body
 
 
+_keys = itertools.count(1)
+
+
+class _Keyed:
+    """The test client, sending each request under a key of its own unless
+    the test names one, as a job needs (ROUNDS-00A-L03 PR 4)."""
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+
+    def post(self, url, *, headers=None, **kwargs):
+        headers = dict(headers or {})
+        if not any(name.lower() == "idempotency-key" for name in headers):
+            headers["Idempotency-Key"] = f"0190f000-0000-7000-9000-{next(_keys):012d}"
+        return self._inner.post(url, headers=headers, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
 @pytest.fixture
-def gate(monkeypatch):
+def client(client):
+    return _Keyed(client)
+
+
+@pytest.fixture
+def gate(job_secrets, monkeypatch):
     def set_value(value: str) -> None:
         monkeypatch.setattr(gates, "_snapshot", gates.load({"ROUNDS_GATE_EXECUTION_DEFINITIONS": value}, gates.RUNNER))
 
@@ -93,8 +113,16 @@ def gate(monkeypatch):
 
 
 @pytest.fixture
-def enforce(gate):
+def enforce(gate, monkeypatch):
+    """Definitions enforced, which with the test secrets turns the
+    execution keys on, as they ship from ROUNDS-00A-L03 PR 4: each route
+    checks a request up to its job. This replica takes jobs, and the job
+    store's routes are faked."""
+    from tests.test_execution_scratch import FakeCaller
+
     gate("enforce")
+    monkeypatch.setattr(runtime, "accepting_jobs", lambda: True)
+    monkeypatch.setattr(job_store, "Caller", FakeCaller())
 
 
 @pytest.fixture
@@ -115,23 +143,18 @@ def tripwires(monkeypatch):
 
         return guarded
 
+    async def enqueue(*_args, **_kwargs):
+        hits.append("enqueue")
+        raise AssertionError("a job was enqueued")
+
     monkeypatch.setattr(runner, "run_one", trip("run_one"))
     monkeypatch.setattr(execution, "run_step", trip("run_step"))
     monkeypatch.setattr(execution, "grade", trip("grade"))
     monkeypatch.setattr(ai_coding, "run_project", trip("run_project"))
     monkeypatch.setattr(take_home, "run_assignment", trip("run_assignment"))
+    # Since ROUNDS-00A-L03 PR 4 code runs only once its job is enqueued.
+    monkeypatch.setattr(jobs, "enqueue", enqueue)
     return hits
-
-
-@pytest.fixture
-def no_review(monkeypatch):
-    """No provider in tests: the rubric review is skipped."""
-
-    async def unavailable(_user):
-        raise RuntimeError("no provider in tests")
-
-    monkeypatch.setattr(ai_coding, "_active_text_config", unavailable)
-    monkeypatch.setattr(take_home, "_active_text_config", unavailable)
 
 
 # ---- the gate ---------------------------------------------------------------------
@@ -195,11 +218,15 @@ def test_an_older_request_shape_is_rejected_by_name_before_anything(client, sign
     assert rejected["code"] == "legacy_request_rejected" and rejected["field"] == field
 
 
-@pytest.mark.parametrize("field", ["test_command", "validators", "hidden_files", "env", "network", "limits", "image"])
-def test_a_forbidden_input_next_to_a_definition_is_still_rejected(client, signed_in, enforce, tripwires, field):
-    body = {**ROUTE_BODIES["/api/run"], field: "anything"}
-    out = typed(client.post("/api/run", json=body, headers=signed_in), 422, "legacy_request_rejected")
-    assert field in out["detail"] and tripwires == []
+@pytest.mark.parametrize("field", ["test_command", "validators", "hidden_files", "env", "network", "limits", "image",
+                                   "timeout_s", "entry", "test_cases"])
+@pytest.mark.parametrize("path", sorted(ROUTE_BODIES))
+def test_a_forbidden_input_next_to_a_definition_is_still_rejected(client, signed_in, enforce, tripwires, pocketbase,
+                                                                  admission_store, path, field):
+    body = {**ROUTE_BODIES[path], field: "anything"}
+    out = typed(client.post(path, json=body, headers=signed_in), 422, "legacy_request_rejected")
+    assert field in out["detail"]
+    assert tripwires == [] and pocketbase.calls == [] and admission_store.calls == []
 
 
 @pytest.mark.parametrize("path", sorted(ROUTE_BODIES))
@@ -227,13 +254,18 @@ def _nested(levels: int) -> object:
 
 @pytest.mark.parametrize("value", ["legacy", "enforce"])
 @pytest.mark.parametrize("path", sorted(ROUTE_BODIES))
-def test_a_body_nested_too_deep_for_the_json_parser_is_invalid_at_either_gate_value(client, signed_in, gate,
-                                                                                     tripwires, pocketbase, path,
-                                                                                     value):
+def test_a_body_nested_too_deep_for_the_json_parser_runs_nothing_at_either_gate_value(client, signed_in, gate,
+                                                                                      tripwires, pocketbase, path,
+                                                                                      value):
     gate(value)
     body = "[" * 100_000 + "]" * 100_000
-    typed(client.post(path, content=body, headers={**signed_in, "Content-Type": "application/json"}),
-          422, "invalid_request")
+    res = client.post(path, content=body, headers={**signed_in, "Content-Type": "application/json"})
+    if value == "legacy":
+        # Since ROUNDS-00A-L03 PR 4 legacy turns the execution keys off,
+        # which answers before any body is read.
+        typed(res, 503, "execution_disabled")
+    else:
+        typed(res, 422, "invalid_request")
     assert tripwires == [] and pocketbase.calls == []
 
 
@@ -275,55 +307,15 @@ def test_any_other_unknown_field_is_invalid(client, signed_in, enforce, tripwire
     assert tripwires == []
 
 
-def test_a_definition_request_at_legacy_is_invalid(client, signed_in, tripwires):
-    # legacy takes stage 2's shapes only, so a newer tab's request is refused.
-    typed(client.post("/api/run", json=ROUTE_BODIES["/api/run"], headers=signed_in), 422, "invalid_request")
+def test_a_definition_request_at_legacy_answers_that_running_code_is_off(client, signed_in, gate, tripwires):
+    # legacy acts as off for the execution keys (ROUNDS-00A-L03 PR 4).
+    gate("legacy")
+    out = typed(client.post("/api/run", json=ROUTE_BODIES["/api/run"], headers=signed_in), 503, "execution_disabled")
+    assert out["detail"] == "Running practice code is turned off on this server."
     assert tripwires == []
 
 
 # ---- coding --------------------------------------------------------------------------
-
-
-def test_a_run_comes_from_the_definition_and_names_it(client, signed_in, enforce, committed_store, pocketbase):
-    res = client.post("/api/run", json=ROUTE_BODIES["/api/run"], headers=signed_in)
-    assert res.status_code == 200, res.text
-    body = res.json()
-    assert body["return_value"] == [0, 1] and body["error"] is None
-    active_entry(body["definition"])
-    # Nothing came from PocketBase.
-    assert pocketbase.calls == []
-
-
-def test_an_evaluate_runs_every_case_and_its_validators_out_of_process(client, signed_in, enforce, committed_store,
-                                                                       pocketbase):
-    res = client.post("/api/evaluate", json=ROUTE_BODIES["/api/evaluate"], headers=signed_in)
-    assert res.status_code == 200, res.text
-    body = res.json()
-    document = definitions.store().resolve("coding", "two-sum", "python", 1).document
-    assert body["failed"] == 0 and body["passed"] == len(document["cases"])
-    assert [r["case_id"] for r in body["results"]] == [c["case_id"] for c in document["cases"]]
-    assert all(r["expected"] == {"$match": "validator"} for r in body["results"])
-    active_entry(body["definition"])
-    assert pocketbase.calls == []
-
-
-def test_an_evaluate_takes_case_ids_and_tags(client, signed_in, enforce, committed_store):
-    base = {"definition": ref("coding", "binary-search", "python"), "code": PYTHON_SEARCH}
-    by_id = client.post("/api/evaluate", json={**base, "case_ids": ["c001", "c000"]}, headers=signed_in).json()
-    assert [r["case_id"] for r in by_id["results"]] == ["c000", "c001"] and by_id["failed"] == 0
-    document = definitions.store().resolve("coding", "binary-search", "python", 1).document
-    tagged = {c["case_id"] for c in document["cases"] if "basic" in c["tags"]}
-    by_tag = client.post("/api/evaluate", json={**base, "tags": ["basic"]}, headers=signed_in).json()
-    assert {r["case_id"] for r in by_tag["results"]} == tagged
-    assert by_tag["results"][0]["expected"] == document["cases"][0]["expected"]["literal"]
-
-
-@pytest.mark.skipif(shutil.which("node") is None, reason="node not on PATH")
-def test_the_javascript_variant_runs_its_own_definition(client, signed_in, enforce, committed_store):
-    body = {"definition": ref("coding", "binary-search", "javascript"), "code": JS_SEARCH}
-    res = client.post("/api/evaluate", json=body, headers=signed_in)
-    assert res.status_code == 200, res.text
-    assert res.json()["failed"] == 0 and res.json()["definition"]["variant"] == "javascript"
 
 
 def test_a_case_the_version_doesnt_have_is_case_unknown(client, signed_in, enforce, committed_store, tripwires):
@@ -456,6 +448,7 @@ def test_files_that_cant_be_written_beside_each_other_are_found(files, harness, 
 # ---- AI-coding ----------------------------------------------------------------------
 
 ROUND = BACKEND / "ai_coding" / "rounds" / "hallucinated-http-client"
+ROUND_DEFINITION = BACKEND / "definitions" / "store" / "ai-coding" / "hallucinated-http-client" / "python.v1.json"
 
 
 def starter(variant: str) -> dict[str, str]:
@@ -500,52 +493,25 @@ def _project(client_code: str | None = None) -> dict[str, str]:
     return files
 
 
-def test_a_visible_run_runs_the_revisions_run_step(client, signed_in, enforce, committed_store, pocketbase):
-    body = {**ROUTE_BODIES["/api/ai-coding/run-project"], "files": _project()}
-    res = client.post("/api/ai-coding/run-project", json=body, headers=signed_in)
-    assert res.status_code == 200, res.text
-    out = res.json()
-    assert out["passed_count"] + out["failed_count"] >= 1
-    active_entry(out["definition"])
-    assert pocketbase.calls == []
-
-
 def test_a_checkpoint_the_version_doesnt_have_is_case_unknown(client, signed_in, enforce, committed_store, tripwires):
     body = {**ROUTE_BODIES["/api/ai-coding/run-project"], "checkpoint": 5}
     typed(client.post("/api/ai-coding/run-project", json=body, headers=signed_in), 422, "case_unknown")
     assert tripwires == []
 
 
-def test_a_fixed_client_passes_the_hidden_check(client, signed_in, enforce, committed_store, no_review, pocketbase):
-    body = {**ROUTE_BODIES["/api/ai-coding/grade"], "files": _project(FIXED_CLIENT)}
-    res = client.post("/api/ai-coding/grade", json=body, headers=signed_in)
-    assert res.status_code == 200, res.text
-    out = res.json()
-    (result,) = out["test_results"]
-    assert result["passed"] is True and result["score"] == 1.0 and out["passed"] is True and out["score"] == 1.0
-    assert result["outcomes"] == [{"id": "fetch_user_against_real_server", "outcome": "passed", "reason": "ok"}]
-    assert "stdout" not in result
-    active_entry(out["definition"])
-    assert pocketbase.calls == []
-
-
-def test_a_forging_client_gets_no_pass_and_no_hidden_file_back(client, signed_in, enforce, committed_store, no_review):
-    body = {**ROUTE_BODIES["/api/ai-coding/grade"], "files": _project(FORGING_CLIENT)}
-    res = client.post("/api/ai-coding/grade", json=body, headers=signed_in)
-    assert res.status_code == 200, res.text
-    (result,) = res.json()["test_results"]
-    # Only the driver's own line arrived: no forged pass, no duplicate.
-    assert result["outcomes"] == [{"id": "fetch_user_against_real_server", "outcome": "failed", "reason": "assertion"}]
-    assert result["passed"] is False and result["score"] == 0.0
-    assert "users service" not in res.text and "ThreadingHTTPServer" not in res.text
-
-
-def test_an_edited_visible_test_doesnt_change_the_grade(client, signed_in, enforce, committed_store, no_review):
-    files = _project()
-    files["tests/checkpoint_0/test_visible.py"] = "def test_everything():\n    assert True\n"
-    res = client.post("/api/ai-coding/grade", json={**ROUTE_BODIES["/api/ai-coding/grade"], "files": files},
-                      headers=signed_in)
-    assert res.status_code == 200 and res.json()["test_results"][0]["passed"] is False
+def test_a_checkpoint_without_a_run_step_runs_nothing(client, signed_in, enforce, tmp_path, monkeypatch, tripwires,
+                                                      admission_store):
+    document = json.loads(ROUND_DEFINITION.read_text())
+    document["checkpoints"][0]["run"] = None
+    entry = {"kind": "harness-revision", "track": "ai-coding", "slug": "hallucinated-http-client", "variant": "python",
+             "content_version": 1}
+    monkeypatch.setattr(definitions, "_store", _store(tmp_path, [(entry, document, "active")]))
+    out = typed(client.post("/api/ai-coding/run-project", json=ROUTE_BODIES["/api/ai-coding/run-project"],
+                            headers=signed_in), 422, "invalid_request")
+    assert out["detail"] == "This checkpoint can't run here."
+    assert tripwires == []
+    (finished,) = admission_store.called("finish")
+    assert finished["outcome"] == "denied"
 
 
 FIXED_TS_CLIENT = (
@@ -558,23 +524,6 @@ FIXED_TS_CLIENT = (
     "}\n"
 )
 TS_REF = ref("ai-coding", "hallucinated-http-client", "typescript")
-
-
-@pytest.mark.skipif(shutil.which("tsx") is None, reason="tsx not on PATH")
-def test_the_typescript_variant_runs_and_grades_through_its_python_driver(client, signed_in, enforce,
-                                                                          committed_store, no_review):
-    project = {**starter("typescript"), **visible_tests("typescript")}
-    run = client.post("/api/ai-coding/run-project", json={"definition": TS_REF, "checkpoint": 0, "files": project},
-                      headers=signed_in)
-    assert run.status_code == 200, run.text
-    assert run.json()["passed_count"] + run.json()["failed_count"] >= 1
-    grades = {}
-    for name, files in (("starter", project), ("fixed", {**project, "client.ts": FIXED_TS_CLIENT})):
-        res = client.post("/api/ai-coding/grade", json={"definition": TS_REF, "files": files}, headers=signed_in)
-        assert res.status_code == 200, res.text
-        (result,) = res.json()["test_results"]
-        grades[name] = (result["passed"], result["outcomes"][0]["outcome"])
-    assert grades == {"starter": (False, "failed"), "fixed": (True, "passed")}
 
 
 @pytest.mark.parametrize("extra", ["conftest.py", "tests/conftest.py", "json.py", "sitecustomize.py",
@@ -618,22 +567,9 @@ def test_text_utf8_cant_hold_is_refused_before_a_slot(client, signed_in, enforce
     typed(client.post(path, content=body, headers={**signed_in, "Content-Type": "application/json"}), 422,
           "invalid_request")
     assert tripwires == []
-    (finished,) = admission_store.called("finish")
-    assert finished["outcome"] == "denied"
-
-
-@pytest.mark.parametrize("path", ["/api/ai-coding/run-project", "/api/ai-coding/grade"])
-def test_a_write_the_runner_cant_make_is_a_typed_infrastructure_failure(client, signed_in, enforce,
-                                                                        committed_store, admission_store,
-                                                                        monkeypatch, path):
-    def full_disk(*_args, **_kwargs):
-        raise OSError(28, "No space left on device")
-
-    monkeypatch.setattr(execution, "_write", full_disk)
-    res = client.post(path, json={**ROUTE_BODIES[path], "files": _project(FIXED_CLIENT)}, headers=signed_in)
-    typed(res, 503, "worker_unavailable")
-    (finished,) = admission_store.called("finish")
-    assert finished["outcome"] == "infrastructure"
+    # A job's fingerprint can't hold it, so it is refused before admission
+    # and nothing was charged.
+    assert admission_store.calls == []
 
 
 # ---- take-home, on a test-only definition ---------------------------------------------
@@ -734,32 +670,18 @@ def attempts(monkeypatch, pocketbase):
 
 TAKE_HOME_REF = ref("take-home", "add-numbers-py", "python")
 HONEST = "def add(a, b):\n    return a + b\n"
+# Prints hidden harness files while it runs.
+LEAKING = (
+    "import pathlib\n"
+    "def add(a, b):\n"
+    "    print(pathlib.Path('harness/notes.txt').read_text())\n"
+    "    print(pathlib.Path('harness/grade.py').read_text())\n"
+    "    return a + b\n"
+)
 
 
-def _take_home(client, signed_in, path: str, solution: str, **extra_files: str):
-    files = {"solution.py": solution, **{k.replace("__", "/"): v for k, v in extra_files.items()}}
-    return client.post(path, json={"definition": TAKE_HOME_REF, "files": files}, headers=signed_in)
-
-
-def test_an_honest_take_home_passes_on_the_servers_score(client, signed_in, enforce, take_home_store, attempts,
-                                                        no_review):
-    run = _take_home(client, signed_in, "/api/take-home/run", HONEST)
-    assert run.status_code == 200, run.text
-    body = run.json()
-    assert (body["passed"], body["score"]) == (True, 1.0)
-    assert [c["id"] for c in body["criteria"]] == ["adds_small", "adds_large"] and body["stdout"] == ""
-    submit = _take_home(client, signed_in, "/api/take-home/submit", HONEST)
-    assert submit.status_code == 200, submit.text
-    (row,) = attempts
-    assert row["body"]["harness_output"]["passed"] is True and row["body"]["harness_output"]["stdout"] == ""
-    assert submit.json()["definition"]["slug"] == "add-numbers-py"
-
-
-def _outcomes(res) -> list[tuple[str, str, str]]:
-    assert res.status_code == 200, res.text
-    return [(o["id"], o["outcome"], o["reason"]) for o in res.json()["outcomes"]]
-
-
+# Each forged solution, and the class each criterion of its graded run
+# ends with.
 FORGERIES = {
     # The grader is killed before it reports: nothing passes.
     "reports-nothing": (
@@ -794,25 +716,6 @@ FORGERIES = {
 }
 
 
-@pytest.mark.parametrize("name", sorted(FORGERIES))
-def test_a_forged_take_home_result_fails_closed(client, signed_in, enforce, take_home_store, name):
-    solution, expected = FORGERIES[name]
-    res = _take_home(client, signed_in, "/api/take-home/run", solution)
-    assert _outcomes(res) == expected
-    assert res.json()["passed"] is False and 0.0 <= res.json()["score"] <= 1.0
-
-
-def test_the_out_of_range_score_is_the_servers_weighting(client, signed_in, enforce, take_home_store):
-    res = _take_home(client, signed_in, "/api/take-home/run", FORGERIES["out-of-range-score"][0])
-    assert res.json()["score"] == 0.5
-
-
-def test_an_edited_visible_test_doesnt_change_the_take_home_grade(client, signed_in, enforce, take_home_store):
-    res = _take_home(client, signed_in, "/api/take-home/run", "def add(a, b):\n    return 0\n",
-                     tests__test_solution_py="def test_passes():\n    assert True\n")
-    assert res.json()["passed"] is False
-
-
 @pytest.mark.parametrize("extra", ["conftest.py", "json.py", "harness/grade.py", "sitecustomize.py"])
 def test_a_take_home_file_that_changes_the_grader_is_refused(client, signed_in, enforce, take_home_store, tripwires,
                                                              attempts, extra):
@@ -834,21 +737,3 @@ def test_a_take_home_file_and_folder_with_one_name_are_refused_before_a_slot(cli
     assert tripwires == [] and attempts == []
     (finished,) = admission_store.called("finish")
     assert finished["outcome"] == "denied"
-
-
-def test_a_take_home_that_prints_hidden_files_gets_none_back(client, signed_in, enforce, take_home_store, attempts,
-                                                            no_review):
-    leaking = (
-        "import pathlib\n"
-        "def add(a, b):\n"
-        "    print(pathlib.Path('harness/notes.txt').read_text())\n"
-        "    print(pathlib.Path('harness/grade.py').read_text())\n"
-        "    return a + b\n"
-    )
-    run = _take_home(client, signed_in, "/api/take-home/run", leaking)
-    submit = _take_home(client, signed_in, "/api/take-home/submit", leaking)
-    for res in (run, submit):
-        assert res.status_code == 200, res.text
-        assert HIDDEN_MARKER not in res.text and "rounds_harness" not in res.text
-    (row,) = attempts
-    assert HIDDEN_MARKER not in json.dumps(row["body"]["harness_output"])

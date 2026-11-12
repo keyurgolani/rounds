@@ -16,7 +16,7 @@ const drafts = vi.hoisted(() => {
     savedFiles: files,
     setFile: () => {},
     hydrated: true,
-    resetToStarter: () => {},
+    resetToStarter: vi.fn(),
     persistImmediately: () => Promise.resolve(),
     saveNow: vi.fn(async (): Promise<boolean> => true),
   };
@@ -29,7 +29,6 @@ vi.mock('../../pages/ai-coding/aiCodingApi', async (importOriginal) => ({
   getLatestAttempt: vi.fn().mockResolvedValue(null),
   runProject: vi.fn(),
   gradeAttempt: vi.fn(),
-  persistAttempt: vi.fn(),
   upsertInProgressAttempt: vi.fn().mockResolvedValue(undefined),
   deleteInProgressAttempt: vi.fn().mockResolvedValue(undefined),
 }));
@@ -48,7 +47,7 @@ vi.mock('../../components/editor/MultiFileEditor', () => ({
 }));
 
 import AICodingDetail from '../../pages/ai-coding/AICodingDetail';
-import { getRound, gradeAttempt, persistAttempt, runProject } from '../../pages/ai-coding/aiCodingApi';
+import { deleteInProgressAttempt, getRound, gradeAttempt, runProject } from '../../pages/ai-coding/aiCodingApi';
 import { RunnerError } from '../../lib/runnerFetch';
 import { UUID_V7_PATTERN } from '../../lib/idempotency';
 
@@ -96,12 +95,16 @@ beforeEach(() => {
   vi.mocked(getRound).mockResolvedValue(ROUND as never);
   vi.mocked(runProject).mockReset();
   vi.mocked(gradeAttempt).mockReset();
-  vi.mocked(persistAttempt).mockReset();
 });
 
 describe('AICodingDetail definition requests', () => {
   it("names the round's definition version on a run", async () => {
-    vi.mocked(runProject).mockResolvedValue(RUN_OK);
+    // A job, as every run is (ROUNDS-00A-L03 PR 4), here one that ended
+    // with nothing to show.
+    vi.mocked(runProject).mockResolvedValue({
+      job_id: 'jobaaaaaaaaaaa1', state: 'canceled', outcome_class: 'canceled', retryable: false,
+      cancel_requested: true, envelope: null,
+    } as never);
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run' }));
@@ -123,20 +126,14 @@ describe('AICodingDetail definition requests', () => {
     vi.mocked(getRound)
       .mockResolvedValueOnce(ROUND as never)
       .mockResolvedValue({ ...ROUND, definition_version: 2 } as never);
+    // The retry's grade is a job (ROUNDS-00A-L03 PR 4), here one that
+    // ended without a report to open.
     vi.mocked(gradeAttempt)
       .mockRejectedValueOnce(new RunnerError({ message: 'x', status: 409, code: 'definition_superseded' }))
       .mockResolvedValue({
-        test_results: [
-          {
-            passed: true,
-            passed_count: 1,
-            failed_count: 0,
-            error: null,
-            outcomes: [{ id: 'fetch_user_against_real_server', outcome: 'passed', reason: 'ok' }],
-          },
-        ],
-        rubric_review: { items: [], total: 0, skipped: true, reason: 'no provider' },
-      });
+        job_id: 'jobaaaaaaaaaaa1', state: 'canceled', outcome_class: 'canceled', retryable: false,
+        cancel_requested: true, envelope: null,
+      } as never);
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Submit' }));
@@ -145,9 +142,35 @@ describe('AICodingDetail definition requests', () => {
       ['python', 1],
       ['python', 2],
     ]);
-    // The outcomes, not harness output, are what the report shows.
-    expect(await screen.findByText('fetch_user_against_real_server: pass')).toBeInTheDocument();
-    await waitFor(() => expect(persistAttempt).toHaveBeenCalledTimes(1));
+  });
+
+  it('reports a run that answers anything but a job as unavailable, shows no result, and keeps the files', async () => {
+    drafts.resetToStarter.mockClear();
+    vi.mocked(deleteInProgressAttempt).mockClear();
+    vi.mocked(runProject).mockResolvedValue(RUN_OK);
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Run' }));
+    const region = screen.getByRole('status');
+    await waitFor(() => expect(region).toHaveTextContent('Unavailable right now'));
+    expect(region).toHaveTextContent('Nothing ran. Your code is still here.');
+    expect(screen.queryByText(/PASS ·|passed ·/)).not.toBeInTheDocument();
+    expect(drafts.resetToStarter).not.toHaveBeenCalled();
+    expect(deleteInProgressAttempt).not.toHaveBeenCalled();
+  });
+
+  it('reports a grade that answers anything but a job as unavailable, and shows no report', async () => {
+    vi.mocked(gradeAttempt).mockResolvedValue({
+      test_results: [{ passed: true, passed_count: 1, failed_count: 0, error: null, outcomes: [] }],
+      rubric_review: { items: [], total: 1 },
+    } as never);
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Submit' }));
+    const region = screen.getByRole('status');
+    await waitFor(() => expect(region).toHaveTextContent('Unavailable right now'));
+    expect(screen.queryByText(/: pass$/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
   });
 
   it("shows the server's sentence for a file the grader won't take", async () => {
@@ -163,7 +186,6 @@ describe('AICodingDetail definition requests', () => {
     const region = screen.getByRole('status');
     await waitFor(() => expect(region).toHaveTextContent('File not allowed'));
     expect(region).toHaveTextContent(`${detail} Nothing was graded. Your files are still here.`);
-    expect(persistAttempt).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
   });
 

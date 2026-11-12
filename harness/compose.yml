@@ -37,10 +37,11 @@ services:
       - ROUNDS_ENABLE_DEMO=${ROUNDS_ENABLE_DEMO:-false}
       # The runner key, a test placeholder shared with both runners.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}
-      # The execution job store's phases (ROUNDS-00A-L03) turn it on and
-      # rotate the worker secret, a test placeholder. PocketBase's and the
-      # runners' come from separate variables, so the launcher can rotate
-      # one before the other.
+      # The execution job store (ROUNDS-00A-L03), on by default since PR 4,
+      # and the worker secret, a test placeholder, which the launcher gives
+      # every phase but 4 and 5 and rotates in phase 3g. PocketBase's and
+      # the runners' come from separate variables, so the launcher can
+      # rotate one before the other.
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
       - ROUNDS_EXECUTION_SECRET=${PB_EXECUTION_SECRET:-}
       # Legacy Artifact Snapshot creation (ROUNDS-00A-L04): the snapshot
@@ -122,15 +123,14 @@ services:
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-harness-admission-key-not-a-secret-0123}
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
       - ROUNDS_EXECUTION_SECRET=${RUNNER_EXECUTION_SECRET:-}
-      # The scratch jobs phase runs the four scratch routes as jobs on
-      # server-owned definitions (ROUNDS-00A-L03 PR 2), and the grading
-      # phase grade and take-home submit (PR 3).
+      # Both keys are on by default (ROUNDS-00A-L03 PR 4), so with
+      # definitions enforced every phase runs code as jobs on server-owned
+      # definitions; phases 3e to 3g3 turn one key or both off.
       - ROUNDS_GATE_EXECUTION_SCRATCH=${ROUNDS_GATE_EXECUTION_SCRATCH:-}
       - ROUNDS_GATE_EXECUTION_GRADING=${ROUNDS_GATE_EXECUTION_GRADING:-}
       - ROUNDS_GATE_EXECUTION_DEFINITIONS=${ROUNDS_GATE_EXECUTION_DEFINITIONS:-}
       - ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE=${ROUNDS_GATE_LEGACY_SNAPSHOT_CREATE:-}
-      # The admission phase opens the demo's code runs for its demo
-      # accounts; the later phases run with them at their default, off
+      # Every phase runs with the demo's code runs at their default, off
       # (ROUNDS-00B-L07).
       - ROUNDS_GATE_DEMO_EXECUTION=${ROUNDS_GATE_DEMO_EXECUTION:-}
       # The share secrets phases open share capability resolution

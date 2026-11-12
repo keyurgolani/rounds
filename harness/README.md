@@ -105,18 +105,19 @@ The launcher builds the pocketbase, probe, runner, frontend, and materializer
 images, brings PocketBase up, runs the main probe phase, runs the admission
 check and the admission-deploy phase against two runner replicas, restarts the
 runner with `/api/run` turned off and then on again, runs the demo checks with
-the demo on, turns the execution job store on and checks it on PocketBase and
-both replicas through a secret rotation, recreates PocketBase with signups
-disabled and the demo at its default (the named `pb_data` volume keeps the
-run's accounts and rows), runs the signup-hook probe and the demo-off checks,
-brings the runner and nginx frontend up and runs the deployment verifier
-through them, checks that only PocketBase reaches the snapshot materializer
+the demo on, checks the execution job store on PocketBase and both replicas
+through a secret rotation with both execution keys off, then each key on in
+turn, recreates PocketBase with signups disabled, the demo at its default, and
+no worker secret (the named `pb_data` volume keeps the run's accounts and
+rows), runs the signup-hook probe and the demo-off checks, recreates
+PocketBase with the worker secret, brings the runner and nginx frontend up and
+runs the deployment verifier through them, checks that only PocketBase reaches the snapshot materializer
 and that it has no route out, stops PocketBase for the degraded probe, runs
 the verifier's checks and the cross-owner scan on the run's `pb_data`, prints
 the verdict (pass / expected-fail / fail counts), runs the admission
 migration, execution migration, JSON limits, demo containment migration,
-relation quarantine, snapshot store, and older share links' migration checks,
-and tears the stack down, removing the images and the volumes it made.
+relation quarantine, snapshot store, older share links' migration, and attempt
+grade rules checks, and tears the stack down, removing the images and the volumes it made.
 Its exit code is non-zero on any failed or missing result.
 
 ## Admission state across two replicas
@@ -126,13 +127,17 @@ every runner replica sees one count. The admission phase starts `runner` and
 `runner-b`, two replicas of the runner image built from this commit, on the
 one PocketBase, with `ROUNDS_GATE_ENFORCE_IDEMPOTENCY` and
 `ROUNDS_GATE_ENFORCE_QUOTA` at `enforce` and a test `ROUNDS_ADMISSION_SECRET`
-shared by PocketBase, both runners, and the probe, and
+shared by PocketBase, both runners, and the probe. Since `ROUNDS-00A-L03` PR 4
+it runs, as the later phases do unless they say otherwise, with definitions
+enforced, both execution keys on, the job store on, and the worker secret, so
+each code run is a job; it waits until both replicas answer ready.
 [`probes/admission_check.py`](probes/admission_check.py) checks that:
 
-- a run completed on one replica replays on the other, and a reused or
-  missing `Idempotency-Key` is refused;
-- runs on both replicas land in one hourly count, and an account's in-flight
-  limit and the shared demo tier's hold across them;
+- a run's duplicate on the other replica answers the same job, and a reused
+  or missing `Idempotency-Key` is refused;
+- runs on both replicas land in one hourly count, an evaluate settles on the
+  cases it runs, each account's tier comes from its record, and every job the
+  phase makes ends before it does;
 - a run denied at step 8 stays retryable, with no live lease, on either
   replica;
 - no client sets or clears `is_demo`, the `admission_*` collections are
@@ -160,8 +165,9 @@ replica that:
   the account's requests so far only the one it admitted counts;
 - stage 2's closures hold in the built image: a candidate process sees only
   the minimal environment and runs as a candidate uid that can't write
-  `/app`, from its own 0700 scratch; a running execution doesn't hold up the
-  replica's `/health`; the renderer health check answers only its status; and
+  `/app`, from its own 0700 scratch, each read from a run's job; a running
+  job doesn't hold up either replica's `/health`; the renderer health check
+  answers only its status; and
   a render the renderer can't finish is the typed 503 without its text.
 
 Next the launcher restarts both replicas and nginx with
@@ -169,10 +175,13 @@ Next the launcher restarts both replicas and nginx with
 so the phase can make its account: `/api/run` answers 503 `route_disabled`
 through nginx and at each replica, for no bearer, an unknown bearer, and a
 signed-in account, and charges nothing, while the other routes still refuse
-an anonymous caller 401, `/api/evaluate` still admits, and each replica's
-saved gates line shows `RUN` disabled. It clears the gate and restarts both
-again (`emergency-enable`): every route refuses an anonymous caller 401
-again, and runs are admitted through nginx and at each replica. Later the
+an anonymous caller 401, `/api/evaluate` still answers with a job that ends,
+and each replica's saved gates line shows `RUN` disabled. It clears the gate
+and restarts both again (`emergency-enable`): every route refuses an
+anonymous caller 401 again, and runs are jobs again through nginx and at each
+replica, each of which ends. A saved gates line keeps the execution keys'
+start lines after it, so a key that acts as off fails the gates check with
+what it needs. Later the
 deploy phase adds the verifier's `--admission` checks through the real nginx
 and the runner's startup gates line. The verdict requires a passing receipt
 for every check id in `verify_deployment.ADMISSION_CHECKS` and
@@ -203,17 +212,18 @@ store that:
   attempt, and one account's backlog of queued jobs holds no other account's
   job back.
 
-Then both replicas start with the store on (`execution-runners`): each is
-ready, and each claims jobs and ends every one once, a scratch kind
-`canceled` before it starts, since the scratch key isn't on, and a grading
-kind, which has no handler until PR 3, `denied`, `definition-invalid`.
+The store and the secret are on from phase 1 since PR 4, and from this
+phase to `execution-scratch` both execution keys are off. Then both replicas
+start (`execution-runners`): each is ready, and each claims jobs and ends
+every one once, `canceled` before it starts, since neither key is on.
 PocketBase restarts with another secret and neither replica stays ready
 (`execution-unready`); the replicas restart with it, both are ready again,
 and only the new secret logs in (`execution-ready-again`).
 
 PR 2's scratch jobs (`execution-scratch`, [`probes/scratch_check.py`](probes/scratch_check.py))
-restart both replicas and nginx with `ROUNDS_GATE_EXECUTION_SCRATCH=on` and
-`ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`, and check through nginx that each
+restart both replicas and nginx with `ROUNDS_GATE_EXECUTION_SCRATCH=on`, the
+grading key off, and `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`, and check
+through nginx that each
 replica's gates line holds the three values; a run answers 202 with its job,
 which ends with its envelope; a duplicate answers the same job and charges
 nothing more, and the same key for other work is a mismatch; another
@@ -227,7 +237,8 @@ that refuses the connection while it starts reads as not ready yet, until
 a deadline) the job ends `worker-lost` once its lease runs out, and a
 same-key retry through nginx runs it to the end
 (`execution-scratch-retry`). The signup restart runs PocketBase with no worker
-secret, and the last one no longer logs in (`execution-disabled`). The deploy
+secret, and the last one no longer logs in (`execution-disabled`); PocketBase
+gets it back before the runner and nginx start for the deploy phase. The deploy
 phase's verifier checks that nginx answers `/api/rounds/execution/` and the
 worker's login and records with 404, those in other cases too.
 
@@ -246,6 +257,26 @@ with envelopes that link into no service-only collection and a down step
 that keeps a store holding a job and, on an empty one, puts back the
 `files` limit it found, also on a `pb_data` where PocketBase's reset ran
 first and `files` held 2 MiB.
+[`probes/grade_rules_migration_check.py`](probes/grade_rules_migration_check.py)
+is the dry run of `1700008700_attempt_grade_rules.js` (`ROUNDS-00A-L03` PR 4)
+on a `pb_data` built from every other migration, with in-progress rows and
+both kinds of graded row planted for two accounts. It takes each attempt
+collection's census from the manifest
+(`pocketbase/migration-manifests/attempt-grade-rules-v1.json`) before and after
+the migration and prints them as one reconciliation line, counts and
+checksums only, which must match; the rules must be the policy's and the
+`_params` record the rules they replaced, with nothing else changed. On a
+second copy, where the lock lever froze `take_home_attempts` before the
+upgrade, that collection keeps its lock, the other takes the new rules, and
+the record holds what was found. On the first copy, served with no hooks so only the rules decide, every client write to a
+graded row, or one that would grade a row or give it an envelope, is refused,
+and in-progress rows still save. `migrate down 1` keeps the rules and the
+record, and applying it again changes neither. Last, a copy without the
+migration, whose rules still take an owner's graded write (they must hash to
+the manifest's record of the rules it replaces), is served with the
+execution hooks alone: their record checks refuse every client write that
+would grade a row, change a graded row, or set an envelope, in each request
+form, and open rows still save.
 [`probes/json_limits_check.py`](probes/json_limits_check.py) holds every JSON
 field's maxSize to the limit its migrations declare (D10). PocketBase's own
 `1702134272_set_default_json_max_size` resets them all to 2,000,000 bytes and
@@ -316,10 +347,8 @@ runner up (`demo-on`) that:
 - the deployment verifier's demo check (`--demo`) passes through nginx: the
   seeded demo account's code run answers 503 `demo_execution_disabled`.
 
-The demo's code runs are open only for the admission phase, whose demo accounts
-run code to check the shared demo tier (`ROUNDS_GATE_DEMO_EXECUTION=enabled` for
-phases 3 and 3b); from the emergency phases on, the runners run with the gate at
-its default, off, as a release ships it.
+The runners run with `ROUNDS_GATE_DEMO_EXECUTION` at its default, off, in
+every phase, as a release ships it.
 
 The signup restart turns the demo off, and `demo-off` checks that both demo
 accounts' sign-ins get the answer a wrong password gets, as does a demo
@@ -477,7 +506,8 @@ two accounts, their views, and one link on another account's resume; then
 PocketBase starts on it and runs every later migration before its first
 request. Both runners reach PocketBase through the recorder
 ([`probes/recorder.py`](probes/recorder.py)), with nginx, snapshot creation,
-and the materializer on, and the probe checks, in three phases:
+and the materializer on, and the job store off, so the recorder sees no
+worker's calls, and the probe checks, in three phases:
 
 - `legacy-shares-fixture`: the pb_data, with the pinned binary and no network.
 - `legacy-shares`: every older link's value, and as many random ones, gets

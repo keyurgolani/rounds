@@ -9,7 +9,12 @@ infrastructure failure, or another error), even when the store lost the
 admit answer or missed the first try. Only the runner, with its key,
 reaches the store. The store here is conftest's in-memory
 FakeAdmissionStore; pocketbase/tests/test_admission_hooks.py covers the
-hook's decisions, and the harness runs both together."""
+hook's decisions, and the harness runs both together.
+
+Since ROUNDS-00A-L03 PR 4 the six code-run routes start jobs and run
+nothing in their request, so the tests of one route's steps 6 and 7 send
+a render, which still runs in its request, and the settle tests send
+evaluate and grade down the job path as far as its enqueue."""
 from __future__ import annotations
 
 import asyncio
@@ -27,10 +32,12 @@ import anyio
 import httpx
 import pytest
 
-from app import admission, admission_state, errors
+from app import admission, admission_state, definitions, errors, legacy_snapshots
 from conftest import TEST_TOKEN
 from tests.test_admission import (  # noqa: F401  (fixtures)
     ALLOCATING,
+    CODE_RUNS,
+    RENDER_BODY,
     ROUTES,
     Tripped,
     _assert_typed,
@@ -38,9 +45,12 @@ from tests.test_admission import (  # noqa: F401  (fixtures)
     _send,
     busy,
     gate_env,
+    keys_on,
     seeded,
     tripwires,
 )
+from tests.test_definitions_enforce import _store
+from tests.test_execution_scratch import QUEUED, FakeCaller
 
 ROOT = Path(__file__).resolve().parents[2]
 KEY = "0190f000-0000-7000-8000-000000000001"
@@ -59,7 +69,6 @@ FIRST_CHARGE = {
 # The most a settle may raise evaluate and grade to: every case or
 # checkpoint they may run. Every other route's first charge is its most.
 MOST = {"evaluate": 32 * 10, "grade": 8 * 45}
-JSON_ROUTES = [name for name in ALLOCATING if name != "pdf_render"]
 WITH_LOOKUPS = ("run", "evaluate", "run_project", "grade", "take_home_run", "take_home_submit")
 # A render's step 8 reads the caller's snapshot (ROUNDS-00A-L04).
 WITH_LOOKUPS += ("pdf_render",)
@@ -67,6 +76,12 @@ ENFORCE = {"ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "enforce", "ROUNDS_GATE_ENFORCE_QU
 PDF = b"%PDF-1.4 rendered"
 # A test value, not a deployment's.
 RUNNER_KEY = "test-runner-key-" + "0" * 32
+# A render names its command in its body too, so a render sent under
+# OTHER_KEY says so there as well.
+OTHER_RENDER = {**RENDER_BODY, "idempotency_id": OTHER_KEY}
+# The shipped round grade sends, with a file it may hold.
+GRADE_SLUG = "hallucinated-http-client"
+GRADE_BODY = {**ROUTES["grade"][2], "files": {"client.py": "pass"}}
 
 
 def keyed(headers: dict, key: str = KEY) -> dict:
@@ -87,6 +102,39 @@ def enforcing(gate_env):
 def runner_key(monkeypatch):
     monkeypatch.setenv(admission_state.RUNNER_KEY_ENV, RUNNER_KEY)
     return RUNNER_KEY
+
+
+@pytest.fixture
+def taking_jobs(monkeypatch):
+    """The job path's front half for the six code-run routes: this replica
+    takes jobs, and the job store's routes are faked. Answers the fake,
+    whose ``calls`` list each enqueue and status read."""
+    from execution import runtime
+    from execution import store as job_store
+
+    monkeypatch.setattr(runtime, "accepting_jobs", lambda: True)
+    caller = FakeCaller()
+    monkeypatch.setattr(job_store, "Caller", caller)
+    return caller
+
+
+@pytest.fixture
+def grade_round(pocketbase):
+    """The round's own row, which a grade job's graded row points at."""
+    pocketbase.add("ai_coding_rounds", slug=GRADE_SLUG, language="python")
+    return pocketbase
+
+
+def _with_checkpoints(tmp_path: Path, monkeypatch, count: int) -> None:
+    """The shipped grade round, as a store holding it with ``count`` copies
+    of its checkpoint."""
+    entry = {"kind": "harness-revision", "track": "ai-coding", "slug": GRADE_SLUG, "variant": "python",
+             "content_version": 1}
+    path = ROOT / "backend" / "definitions" / "store" / "ai-coding" / GRADE_SLUG / "python.v1.json"
+    document = json.loads(path.read_text())
+    (checkpoint,) = document["checkpoints"]
+    document["checkpoints"] = [{**checkpoint, "index": i} for i in range(count)]
+    monkeypatch.setattr(definitions, "_store", _store(tmp_path, [(entry, document, "active")]))
 
 
 class _Rendered:
@@ -153,14 +201,14 @@ def succeeding(monkeypatch):
 
 @pytest.mark.parametrize("name", ALLOCATING)
 def test_steps_6_and_7_run_once_the_body_is_parsed_and_before_any_lookup(
-    client, signed_in, seeded, tripwires, admission_store, enforcing, name
+    client, signed_in, seeded, tripwires, admission_store, enforcing, taking_jobs, name
 ):
     admission_store.quota = "exceeded"
     admission_store.retry_after = 1234
     res = _send(client, name, keyed(signed_in))
     _assert_typed(res, 429, "quota_exceeded")
     assert res.headers["Retry-After"] == "1234"
-    assert tripwires == [] and seeded.calls == []
+    assert tripwires == [] and seeded.calls == [] and taking_jobs.calls == []
     (call,) = admission_store.called("admit")
     assert call["operation"] == operation(name) and call["wall_seconds"] == FIRST_CHARGE[name]
     assert call["max_wall_seconds"] == MOST.get(name)
@@ -195,8 +243,8 @@ def test_rule_scoring_and_health_skip_steps_6_and_7(client, signed_in, admission
 def test_with_both_gates_off_nothing_reaches_the_store(client, signed_in, seeded, succeeding, admission_store, gate_env, capsys):
     gate_env({"ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "off", "ROUNDS_GATE_ENFORCE_QUOTA": "off"})
     capsys.readouterr()
-    assert _send(client, "run", signed_in).status_code == 200
-    assert admission_store.calls == [] and succeeding["run_one"] == 1
+    assert _send(client, "pdf_render", signed_in).status_code == 200
+    assert admission_store.calls == [] and succeeding["render"] == 1
     (line,) = _decisions(capsys)
     assert line["idempotency"] == "skipped" and line["quota"] == "skipped" and "would_deny" not in line
 
@@ -222,19 +270,24 @@ def test_an_admitted_route_cannot_allocate_before_steps_6_and_7():
 
 @pytest.mark.parametrize("key", [None, "not-a-key", "0190f000-0000-4000-8000-000000000001", KEY + "0"])
 def test_a_missing_or_malformed_key_is_400_when_idempotency_enforces(
-    client, signed_in, seeded, tripwires, admission_store, enforcing, key
+    client, signed_in, seeded, tripwires, admission_store, enforcing, taking_jobs, key
 ):
     headers = signed_in if key is None else keyed(signed_in, key)
+    # A code run's job needs its key whatever the gate says. A render
+    # whose key isn't its body's command is refused at step 5, so only
+    # the missing key reaches its step 6.
     _assert_typed(_send(client, "run", headers), 400, "idempotency_key_required")
-    assert admission_store.calls == [] and tripwires == [] and seeded.calls == []
+    if key is None:
+        _assert_typed(_send(client, "pdf_render", headers), 400, "idempotency_key_required")
+    assert admission_store.calls == [] and tripwires == [] and seeded.calls == [] and taking_jobs.calls == []
 
 
 def test_observe_mode_runs_a_request_without_a_key_and_logs_what_enforcing_would_answer(
     client, signed_in, seeded, succeeding, admission_store, capsys
 ):
     capsys.readouterr()
-    assert _send(client, "run", signed_in).status_code == 200
-    assert succeeding["run_one"] == 1
+    assert _send(client, "pdf_render", signed_in).status_code == 200
+    assert succeeding["render"] == 1
     (call,) = admission_store.called("admit")
     assert call["key"] is None and call["fingerprint"] is None and call["mode"] == "observe"
     (line,) = _decisions(capsys)
@@ -249,21 +302,6 @@ def test_an_uppercase_key_is_the_same_command():
     assert admission_state.command_id([]) is None
 
 
-@pytest.mark.parametrize("name", JSON_ROUTES)
-def test_a_completed_command_replays_its_stored_response_and_runs_nothing(
-    client, signed_in, seeded, succeeding, admission_store, enforcing, name
-):
-    first = _send(client, name, keyed(signed_in))
-    assert first.status_code == 200, first.text
-    ran, lookups = dict(succeeding), len(seeded.calls)
-    again = _send(client, name, keyed(signed_in))
-    assert again.status_code == 200 and again.json() == first.json()
-    assert again.headers[errors.REPLAY_HEADER] == "true"
-    # No execution, provider call, attempt row, or lookup.
-    assert dict(succeeding) == ran and len(seeded.calls) == lookups
-    assert [f["outcome"] for f in admission_store.called("finish")] == ["completed"]
-
-
 def test_a_completed_render_answers_already_completed_and_no_pdf_is_kept(
     client, signed_in, seeded, succeeding, admission_store, enforcing
 ):
@@ -275,37 +313,38 @@ def test_a_completed_render_answers_already_completed_and_no_pdf_is_kept(
     assert succeeding["render"] == 1
 
 
-def test_a_key_reused_for_a_different_request_is_409(client, signed_in, seeded, succeeding, admission_store, enforcing):
-    assert _send(client, "run", keyed(signed_in)).status_code == 200
-    changed = {**ROUTES["run"][2], "code": "def f(): return 2"}
-    _assert_typed(_send(client, "run", keyed(signed_in), body=changed), 409, "idempotency_mismatch")
+def test_a_key_reused_for_a_different_request_is_409(
+    client, signed_in, seeded, succeeding, admission_store, enforcing, taking_jobs
+):
+    assert _send(client, "pdf_render", keyed(signed_in)).status_code == 200
+    changed = {**RENDER_BODY, "margin_mm": 5}
+    _assert_typed(_send(client, "pdf_render", keyed(signed_in), body=changed), 409, "idempotency_mismatch")
     # The same key on another route is another request too.
-    _assert_typed(_send(client, "evaluate", keyed(signed_in)), 409, "idempotency_mismatch")
-    assert succeeding["run_one"] == 1
+    _assert_typed(_send(client, "run", keyed(signed_in)), 409, "idempotency_mismatch")
+    assert succeeding["render"] == 1 and taking_jobs.calls == []
 
 
 def test_a_duplicate_of_a_running_command_is_409_with_when_to_try_again(
     client, signed_in, seeded, tripwires, admission_store, enforcing
 ):
-    from schemas import CodeRunRequest
-
-    body = ROUTES["run"][2]
-    fingerprint = admission_state.fingerprint("POST /api/run", "run", CodeRunRequest(**body))
+    request = legacy_snapshots.RenderRequestV1.model_validate(RENDER_BODY)
+    fingerprint = admission_state.fingerprint("POST /api/pdf/render", operation("pdf_render"), request)
     admission_store.commands[(TEST_TOKEN, KEY)] = {
-        "fingerprint": fingerprint, "operation": "run", "state": "in_flight", "result": None, "wall_seconds": 3,
+        "fingerprint": fingerprint, "operation": operation("pdf_render"), "state": "in_flight", "result": None,
+        "wall_seconds": FIRST_CHARGE["pdf_render"],
     }
-    res = _send(client, "run", keyed(signed_in))
+    res = _send(client, "pdf_render", keyed(signed_in))
     _assert_typed(res, 409, "already_in_flight")
     assert res.headers["Retry-After"] == str(admission_store.in_flight_retry_after)
     assert tripwires == [] and seeded.calls == []
 
 
 def test_observe_mode_runs_a_replay_again_and_logs_it(client, signed_in, seeded, succeeding, admission_store, capsys):
-    assert _send(client, "run", keyed(signed_in)).status_code == 200
+    assert _send(client, "pdf_render", keyed(signed_in)).status_code == 200
     capsys.readouterr()
-    again = _send(client, "run", keyed(signed_in))
+    again = _send(client, "pdf_render", keyed(signed_in))
     assert again.status_code == 200 and errors.REPLAY_HEADER not in again.headers
-    assert succeeding["run_one"] == 2
+    assert succeeding["render"] == 2
     (line,) = _decisions(capsys)
     assert line["idempotency"] == "replay" and line["quota"] == "charged"
 
@@ -320,7 +359,7 @@ def test_observe_mode_runs_a_refused_duplicate_and_logs_the_would_be_409(
     monkeypatch.setattr(admission_store, "admit", refused)
     monkeypatch.setattr(admission_store, "finish", lambda *a, **k: asyncio.sleep(0, result=True))
     capsys.readouterr()
-    assert _send(client, "run", keyed(signed_in)).status_code == 200
+    assert _send(client, "pdf_render", keyed(signed_in)).status_code == 200
     (line,) = _decisions(capsys)
     assert line["idempotency"] == verdict and line["would_deny"] == code
 
@@ -348,8 +387,8 @@ def test_a_job_verdict_never_runs_a_request_in_place(
 
     monkeypatch.setattr(admission_store, "admit", answered)
     monkeypatch.setattr(admission_store, "finish", finish)
-    _assert_typed(_send(client, "run", keyed(signed_in)), 409, "idempotency_mismatch")
-    assert succeeding["run_one"] == 0
+    _assert_typed(_send(client, "pdf_render", keyed(signed_in)), 409, "idempotency_mismatch")
+    assert succeeding["render"] == 0
     assert finished == (["denied"] if leased else [])
 
 
@@ -363,7 +402,7 @@ def test_over_quota_is_429_with_retry_after_when_quota_enforces(
     gate_env({"ROUNDS_GATE_ENFORCE_QUOTA": "enforce"})
     admission_store.quota = verdict
     admission_store.retry_after = 3540
-    res = _send(client, "evaluate", keyed(signed_in))
+    res = _send(client, "pdf_render", keyed(signed_in))
     _assert_typed(res, 429, code)
     assert res.headers["Retry-After"] == "3540"
     assert tripwires == [] and seeded.calls == []
@@ -374,9 +413,9 @@ def test_observe_mode_runs_an_over_quota_request_and_logs_the_would_be_denial(
 ):
     admission_store.quota = "demo_limit"
     capsys.readouterr()
-    first = _send(client, "run", keyed(signed_in))
+    first = _send(client, "pdf_render", keyed(signed_in))
     assert first.status_code == 200
-    assert succeeding["run_one"] == 1
+    assert succeeding["render"] == 1
     (line,) = _decisions(capsys)
     assert line["quota"] == "demo_limit" and line["would_deny"] == "demo_limit_reached"
     # Nothing was charged past the limit, but the command was recorded,
@@ -389,21 +428,23 @@ def test_observe_mode_runs_an_over_quota_request_and_logs_the_would_be_denial(
 
 
 def test_with_quota_off_nothing_is_counted_and_idempotency_still_holds(
-    client, signed_in, seeded, succeeding, admission_store, gate_env, capsys
+    client, signed_in, seeded, admission_store, gate_env, taking_jobs, capsys
 ):
     gate_env({"ROUNDS_GATE_ENFORCE_IDEMPOTENCY": "enforce", "ROUNDS_GATE_ENFORCE_QUOTA": "off"})
     capsys.readouterr()
     first = _send(client, "evaluate", keyed(signed_in))
-    assert first.status_code == 200
+    assert first.status_code == 202, first.text
     (call,) = admission_store.called("admit")
     assert call["quota"] == "off"
     (line,) = _decisions(capsys)
     assert line["quota"] == "skipped" and "would_deny" not in line
     # Nothing was charged, so nothing settles.
     assert admission_store.called("settle") == []
+    # The key names its job from here, as the store's enqueue records.
+    admission_store.link_job(TEST_TOKEN, KEY, QUEUED.id)
     again = _send(client, "evaluate", keyed(signed_in))
-    assert again.headers[errors.REPLAY_HEADER] == "true" and again.json() == first.json()
-    assert succeeding["run_one"] == 1
+    assert again.status_code == 202 and again.json()["job_id"] == first.json()["job_id"] == QUEUED.id
+    assert [name for name, _ in taking_jobs.calls] == ["enqueue", "status"]
 
 
 @pytest.mark.parametrize(
@@ -415,14 +456,14 @@ def test_the_store_down_is_503_when_either_gate_enforces(
 ):
     gate_env(env)
     admission_store.down = True
-    _assert_typed(_send(client, "run", keyed(signed_in)), 503, "quota_unavailable")
+    _assert_typed(_send(client, "pdf_render", keyed(signed_in)), 503, "quota_unavailable")
     assert tripwires == [] and seeded.calls == []
 
 
 def test_the_store_down_denies_nothing_in_observe_mode(client, signed_in, seeded, succeeding, admission_store, capsys):
     admission_store.down = True
     capsys.readouterr()
-    assert _send(client, "run", keyed(signed_in)).status_code == 200
+    assert _send(client, "pdf_render", keyed(signed_in)).status_code == 200
     (line,) = _decisions(capsys)
     assert line["quota"] == "unavailable" and line["idempotency"] == "unavailable"
     assert line["would_deny"] == "quota_unavailable"
@@ -431,75 +472,73 @@ def test_the_store_down_denies_nothing_in_observe_mode(client, signed_in, seeded
 # ---- settling and finishing ---------------------------------------------------------
 
 
-def test_evaluate_settles_on_its_selected_cases_timeouts(client, signed_in, pocketbase, succeeding, admission_store):
-    pocketbase.add(
-        "coding_questions",
-        slug="q-1",
-        entry={"kind": "function", "name": "f"},
-        test_cases=[{"input": {}}, {"input": {}, "tags": ["large"]}, {"input": {}, "tags": ["edge"]}],
-    )
-    assert _send(client, "evaluate", keyed(signed_in)).status_code == 200
+def test_evaluate_settles_on_its_selected_cases_timeouts(client, signed_in, admission_store, taking_jobs):
+    # two-sum's twelve cases: nine standard (3 s each) and three large
+    # (10 s each), the large ones tagged so.
+    assert _send(client, "evaluate", keyed(signed_in)).status_code == 202
     (settled,) = admission_store.called("settle")
-    assert settled["wall_seconds"] == 3 + 10 + 3
-    filtered = {**ROUTES["evaluate"][2], "filter": {"tags": ["large"]}}
-    assert _send(client, "evaluate", keyed(signed_in, OTHER_KEY), body=filtered).status_code == 200
-    assert admission_store.called("settle")[1]["wall_seconds"] == 10
+    assert settled["wall_seconds"] == 9 * 3 + 3 * 10
+    filtered = {**ROUTES["evaluate"][2], "tags": ["large"]}
+    assert _send(client, "evaluate", keyed(signed_in, OTHER_KEY), body=filtered).status_code == 202
+    assert admission_store.called("settle")[1]["wall_seconds"] == 3 * 10
+    assert [name for name, _ in taking_jobs.calls] == ["enqueue", "enqueue"]
 
 
-def test_grade_settles_on_45_seconds_per_checkpoint(client, signed_in, pocketbase, succeeding, admission_store):
-    pocketbase.add("ai_coding_rounds", slug="r-1", language="python",
-                   checkpoints=[{"test_command": "true"}] * 3, rubric={"items": []})
-    assert _send(client, "grade", keyed(signed_in)).status_code == 200
+def test_grade_settles_on_45_seconds_per_checkpoint(
+    client, signed_in, grade_round, admission_store, taking_jobs, tmp_path, monkeypatch
+):
+    _with_checkpoints(tmp_path, monkeypatch, 3)
+    assert _send(client, "grade", keyed(signed_in), body=GRADE_BODY).status_code == 202
     (settled,) = admission_store.called("settle")
     assert settled["wall_seconds"] == 3 * 45
 
 
 def test_a_settle_the_store_cant_record_is_503_when_quota_enforces(
-    client, signed_in, seeded, tripwires, admission_store, monkeypatch, enforcing
+    client, signed_in, seeded, tripwires, admission_store, monkeypatch, enforcing, taking_jobs
 ):
     async def down(*_args, **_kwargs):
         raise admission_state.Unavailable
 
     monkeypatch.setattr(admission_store, "settle", down)
     _assert_typed(_send(client, "evaluate", keyed(signed_in)), 503, "quota_unavailable")
-    assert tripwires == []
+    assert tripwires == [] and taking_jobs.calls == []
     # Denied before it ran, so the command is retryable and refunded.
     assert [f["outcome"] for f in admission_store.called("finish")] == ["denied"]
 
 
 @pytest.mark.parametrize("verdict, code", [("exceeded", "quota_exceeded"), ("demo_limit", "demo_limit_reached")])
 def test_a_settle_the_hour_cant_fit_is_a_step_7_denial_when_quota_enforces(
-    client, signed_in, seeded, tripwires, admission_store, enforcing, verdict, code
+    client, signed_in, seeded, tripwires, admission_store, enforcing, taking_jobs, verdict, code
 ):
     admission_store.settle_quota = verdict
     admission_store.retry_after = 1800
     res = _send(client, "evaluate", keyed(signed_in))
     _assert_typed(res, 429, code)
     assert res.headers["Retry-After"] == "1800"
-    assert tripwires == []
+    assert tripwires == [] and taking_jobs.calls == []
     assert [f["outcome"] for f in admission_store.called("finish")] == ["denied"]
     assert admission_store.commands[(TEST_TOKEN, KEY)]["state"] == "retryable"
 
 
 def test_observe_mode_runs_a_settle_the_hour_cant_fit_and_logs_it(
-    client, signed_in, seeded, succeeding, admission_store, capsys
+    client, signed_in, seeded, admission_store, taking_jobs, capsys
 ):
     admission_store.settle_quota = "exceeded"
     capsys.readouterr()
-    assert _send(client, "evaluate", keyed(signed_in)).status_code == 200
+    assert _send(client, "evaluate", keyed(signed_in)).status_code == 202
     (line,) = _decisions(capsys)
     assert line["quota"] == "exceeded" and line["would_deny"] == "quota_exceeded"
+    assert [name for name, _ in taking_jobs.calls] == ["enqueue"]
 
 
 def test_grade_refuses_a_round_with_more_checkpoints_than_it_is_admitted_for(
-    client, signed_in, pocketbase, tripwires, admission_store, enforcing
+    client, signed_in, grade_round, tripwires, admission_store, enforcing, taking_jobs, tmp_path, monkeypatch
 ):
     from routers import ai_coding
 
-    pocketbase.add("ai_coding_rounds", slug="r-1", language="python", rubric={"items": []},
-                   checkpoints=[{"test_command": "true"}] * (ai_coding.GRADE_MAX_CHECKPOINTS + 1))
-    _assert_typed(_send(client, "grade", keyed(signed_in)), 422, "invalid_request")
-    assert tripwires == [] and admission_store.called("settle") == []
+    _with_checkpoints(tmp_path, monkeypatch, ai_coding.GRADE_MAX_CHECKPOINTS + 1)
+    _assert_typed(_send(client, "grade", keyed(signed_in), body=GRADE_BODY), 422, "invalid_request")
+    assert tripwires == [] and taking_jobs.calls == [] and admission_store.called("settle") == []
     assert [f["outcome"] for f in admission_store.called("finish")] == ["denied"]
 
 
@@ -516,7 +555,7 @@ def test_the_response_waits_until_the_store_recorded_the_end(signed_in, seeded, 
         return await finish(*args, **kwargs)
 
     monkeypatch.setattr(admission_store, "finish", recording_finish)
-    body = json.dumps(ROUTES["run"][2]).encode()
+    body = json.dumps(RENDER_BODY).encode()
     sent = [False]
 
     async def receive():
@@ -530,7 +569,7 @@ def test_the_response_waits_until_the_store_recorded_the_end(signed_in, seeded, 
 
     scope = {
         "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST", "scheme": "http",
-        "path": "/api/run", "raw_path": b"/api/run", "root_path": "", "query_string": b"",
+        "path": "/api/pdf/render", "raw_path": b"/api/pdf/render", "root_path": "", "query_string": b"",
         "headers": [(b"host", b"testserver"), (b"content-type", b"application/json"),
                     (b"content-length", str(len(body)).encode()),
                     (b"authorization", signed_in["Authorization"].encode()), (b"idempotency-key", KEY.encode())],
@@ -541,34 +580,42 @@ def test_the_response_waits_until_the_store_recorded_the_end(signed_in, seeded, 
     assert order.count("finish") == 1
 
 
-def test_a_completed_response_is_kept_for_replay(client, signed_in, seeded, succeeding, admission_store):
+def test_a_completed_response_is_kept_for_replay(client, signed_in, admission_store, taking_jobs):
+    # A job route's answer is its job, kept as any JSON answer is.
     res = _send(client, "run", keyed(signed_in))
+    assert res.status_code == 202, res.text
     (finished,) = admission_store.called("finish")
     assert finished["outcome"] == "completed"
-    assert finished["result"] == {"status": 200, "body": res.json()}
+    assert finished["result"] == {"status": 202, "body": res.json()}
 
 
-def test_a_response_too_large_to_keep_completes_without_a_result(client, signed_in, seeded, admission_store, monkeypatch):
-    from routers import runner
-    from runner import ExecutionOutcome
-
-    big = "x" * (admission_state.RESULT_MAX_BYTES + 1)
-    monkeypatch.setattr(runner, "run_one", lambda *a, **k: ExecutionOutcome(big, "", None, None, 1, False))
-    assert _send(client, "run", keyed(signed_in)).status_code == 200
-    (finished,) = admission_store.called("finish")
-    assert finished["outcome"] == "completed" and finished["result"] is None
+def test_a_response_too_large_to_keep_completes_without_a_result(client, signed_in, admission_store, taking_jobs,
+                                                                 monkeypatch):
+    res = _send(client, "run", keyed(signed_in))
+    assert res.status_code == 202, res.text
+    monkeypatch.setattr(admission_state, "RESULT_MAX_BYTES", len(res.content) - 1)
+    assert _send(client, "run", keyed(signed_in, OTHER_KEY)).status_code == 202
+    first, second = admission_store.called("finish")
+    assert first["result"] == {"status": 202, "body": res.json()}
+    assert second["outcome"] == "completed" and second["result"] is None
 
 
 @pytest.mark.parametrize("name", WITH_LOOKUPS)
 def test_a_step_8_denial_leaves_the_command_retryable_and_its_key_runs_admission_again(
-    client, signed_in, pocketbase, tripwires, admission_store, enforcing, name
+    client, signed_in, pocketbase, tripwires, admission_store, enforcing, taking_jobs, name
 ):
-    _assert_typed(_send(client, name, keyed(signed_in)), 404, "not_found")
+    body, code = None, "not_found"
+    if name in CODE_RUNS:
+        # A code run's step 8 reads its definition first.
+        valid = ROUTES[name][2]
+        body = {**valid, "definition": {**valid["definition"], "slug": "no-such-item"}}
+        code = "definition_not_found"
+    _assert_typed(_send(client, name, keyed(signed_in), body=body), 404, code)
     assert [f["outcome"] for f in admission_store.called("finish")] == ["denied"]
     assert admission_store.commands[(TEST_TOKEN, KEY)]["state"] == "retryable"
     assert admission_store.leases == {}
-    _assert_typed(_send(client, name, keyed(signed_in)), 404, "not_found")
-    assert len(admission_store.called("admit")) == 2 and tripwires == []
+    _assert_typed(_send(client, name, keyed(signed_in), body=body), 404, code)
+    assert len(admission_store.called("admit")) == 2 and tripwires == [] and taking_jobs.calls == []
 
 
 def test_a_render_whose_stored_file_doesnt_match_its_checksum_is_refunded_and_renders_nothing(
@@ -591,7 +638,7 @@ def test_a_render_whose_stored_file_doesnt_match_its_checksum_is_refunded_and_re
 
 
 def test_a_full_replica_is_a_step_9_denial(client, signed_in, seeded, tripwires, busy, admission_store, enforcing):
-    _assert_typed(_send(client, "run", keyed(signed_in)), 503, "worker_unavailable")
+    _assert_typed(_send(client, "pdf_render", keyed(signed_in)), 503, "worker_unavailable")
     assert [f["outcome"] for f in admission_store.called("finish")] == ["denied"]
     assert admission_store.commands[(TEST_TOKEN, KEY)]["state"] == "retryable"
 
@@ -689,44 +736,15 @@ def test_the_sidecar_answers_before_the_runner_stops_waiting():
     assert "'render_timeout'" in server and pdf.SIDECAR_TIMEOUT_ERROR == "render_timeout"
 
 
-@pytest.mark.parametrize("name", ["grade", "take_home_submit"])
-def test_the_rubric_review_ends_inside_the_lease(client, signed_in, seeded, succeeding, admission_store, monkeypatch, name):
-    from ai_coding.rubric import REVIEW_TIMED_OUT
-    from routers import ai_coding, take_home
-
-    async def slow_provider(_user):
-        await anyio.sleep(3600)
-
-    for module in (ai_coding, take_home):
-        monkeypatch.setattr(module, "_active_text_config", slow_provider)
-        monkeypatch.setattr(module, "REVIEW_TIMEOUT_S", 0.05)
-    res = _send(client, name, keyed(signed_in))
-    assert res.status_code == 200, res.text
-    assert res.json()["rubric_review"] == {"items": [], "total": 0.0, "skipped": True, "reason": REVIEW_TIMED_OUT}
-    assert [f["outcome"] for f in admission_store.called("finish")] == ["completed"]
-
-
-def test_the_attempt_write_ends_inside_the_lease(client, signed_in, seeded, succeeding, admission_store, monkeypatch):
-    from routers import take_home
-
-    async def hang(*_args, **_kwargs):
-        await anyio.sleep(3600)
-
-    monkeypatch.setattr(take_home, "pb_post", hang)
-    monkeypatch.setattr(take_home, "ATTEMPT_WRITE_TIMEOUT_S", 0.05)
-    assert _send(client, "take_home_submit", keyed(signed_in)).status_code == 200
-    assert [f["outcome"] for f in admission_store.called("finish")] == ["completed"]
-
-
 def test_an_untyped_failure_after_admission_keeps_its_charge(client, signed_in, seeded, admission_store, monkeypatch, enforcing):
-    from routers import runner
+    from routers import pdf
 
     def crash(*_args, **_kwargs):
         raise RuntimeError("driver bug")
 
-    monkeypatch.setattr(runner, "run_one", crash)
+    monkeypatch.setattr(pdf.urllib.request, "urlopen", crash)
     with pytest.raises(RuntimeError):
-        _send(client, "run", keyed(signed_in))
+        _send(client, "pdf_render", keyed(signed_in))
     assert [f["outcome"] for f in admission_store.called("finish")] == ["error"]
     assert admission_store.commands[(TEST_TOKEN, KEY)]["state"] == "failed_infrastructure"
 
@@ -740,7 +758,7 @@ def test_a_finish_the_store_misses_still_answers_the_caller(client, signed_in, s
 
     monkeypatch.setattr(admission_store, "finish", down)
     capsys.readouterr()
-    assert _send(client, "run", keyed(signed_in)).status_code == 200
+    assert _send(client, "pdf_render", keyed(signed_in)).status_code == 200
     assert len(tries) == admission.FINISH_ATTEMPTS
     (line,) = _decisions(capsys)
     # The lease stops counting when its window ends, and the sweep
@@ -752,12 +770,13 @@ def test_a_finish_the_store_missed_at_first_is_tried_again_and_recorded(
     client, signed_in, seeded, succeeding, admission_store, enforcing
 ):
     admission_store.finish_failures = admission.FINISH_ATTEMPTS - 1
-    first = _send(client, "run", keyed(signed_in))
+    first = _send(client, "pdf_render", keyed(signed_in))
     assert first.status_code == 200
     assert len(admission_store.called("finish")) == admission.FINISH_ATTEMPTS
     assert admission_store.commands[(TEST_TOKEN, KEY)]["state"] == "completed" and admission_store.leases == {}
-    again = _send(client, "run", keyed(signed_in))
-    assert again.headers[errors.REPLAY_HEADER] == "true" and again.json() == first.json()
+    # Recorded as completed: a render keeps no PDF to replay.
+    _assert_typed(_send(client, "pdf_render", keyed(signed_in)), 409, "already_completed")
+    assert succeeding["render"] == 1
 
 
 def test_the_end_of_a_request_waits_on_the_store_only_so_long(signed_in, admission_store, monkeypatch):
@@ -813,7 +832,7 @@ def test_a_lost_admit_answer_still_ends_its_lease_so_the_key_runs_again(
 ):
     gate_env(env)
     admission_store.lost_answers = 1
-    first = _send(client, "run", keyed(signed_in))
+    first = _send(client, "pdf_render", keyed(signed_in))
     if env:
         _assert_typed(first, 503, "quota_unavailable")
     else:
@@ -825,7 +844,7 @@ def test_a_lost_admit_answer_still_ends_its_lease_so_the_key_runs_again(
     assert released["outcome"] == "infrastructure"
     assert admission_store.commands[(TEST_TOKEN, KEY)]["state"] == "failed_infrastructure"
     assert admission_store.leases == {}
-    again = _send(client, "run", keyed(signed_in))
+    again = _send(client, "pdf_render", keyed(signed_in))
     assert again.status_code == 200 and errors.REPLAY_HEADER not in again.headers
     assert admission_store.called("admit")[1]["key"] == KEY
 
@@ -835,14 +854,15 @@ def test_a_runner_without_its_key_calls_nothing_and_denies_only_when_a_gate_enfo
 ):
     admission_store.unconfigured = True
     capsys.readouterr()
-    assert _send(client, "run", keyed(signed_in)).status_code == 200
+    assert _send(client, "pdf_render", keyed(signed_in)).status_code == 200
     (line,) = _decisions(capsys)
     assert line["would_deny"] == "quota_unavailable"
     # Nothing was sent, so there's no lease to end.
     assert admission_store.called("finish") == []
     gate_env(ENFORCE)
-    _assert_typed(_send(client, "run", keyed(signed_in, OTHER_KEY)), 503, "quota_unavailable")
-    assert succeeding["run_one"] == 1
+    _assert_typed(_send(client, "pdf_render", keyed(signed_in, OTHER_KEY), body=OTHER_RENDER), 503,
+                  "quota_unavailable")
+    assert succeeding["render"] == 1
 
 
 def test_a_refused_admit_ends_no_lease_and_denies_only_when_a_gate_enforces(
@@ -852,21 +872,22 @@ def test_a_refused_admit_ends_no_lease_and_denies_only_when_a_gate_enforces(
     # written, so there's nothing to end and no finish call to make.
     admission_store.refused = True
     capsys.readouterr()
-    assert _send(client, "run", keyed(signed_in)).status_code == 200
+    assert _send(client, "pdf_render", keyed(signed_in)).status_code == 200
     (line,) = _decisions(capsys)
     assert line["would_deny"] == "quota_unavailable"
     gate_env(ENFORCE)
-    _assert_typed(_send(client, "run", keyed(signed_in, OTHER_KEY)), 503, "quota_unavailable")
+    _assert_typed(_send(client, "pdf_render", keyed(signed_in, OTHER_KEY), body=OTHER_RENDER), 503,
+                  "quota_unavailable")
     assert len(admission_store.called("admit")) == 2
     assert admission_store.called("finish") == []
-    assert succeeding["run_one"] == 1
+    assert succeeding["render"] == 1
 
 
 def test_the_decision_line_never_carries_the_key_the_fingerprint_or_the_lease(
     client, signed_in, seeded, succeeding, admission_store, runner_key, capsys
 ):
     capsys.readouterr()
-    assert _send(client, "run", keyed(signed_in)).status_code == 200
+    assert _send(client, "pdf_render", keyed(signed_in)).status_code == 200
     out = capsys.readouterr().out
     (admitted,) = admission_store.called("admit")
     (finished,) = admission_store.called("finish")

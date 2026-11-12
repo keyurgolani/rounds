@@ -26,7 +26,6 @@ vi.mock('../../pages/ai-coding/aiCodingApi', async (importOriginal) => ({
   getLatestAttempt: vi.fn().mockResolvedValue(null),
   runProject: vi.fn(),
   gradeAttempt: vi.fn(),
-  persistAttempt: vi.fn(),
   upsertInProgressAttempt: vi.fn().mockResolvedValue(undefined),
   deleteInProgressAttempt: vi.fn().mockResolvedValue(undefined),
 }));
@@ -49,7 +48,6 @@ import {
   deleteInProgressAttempt,
   getRound,
   gradeAttempt,
-  persistAttempt,
   runProject,
 } from '../../pages/ai-coding/aiCodingApi';
 import { RunnerError } from '../../lib/runnerFetch';
@@ -95,7 +93,6 @@ beforeEach(() => {
   vi.mocked(getRound).mockResolvedValue(ROUND as never);
   vi.mocked(runProject).mockReset();
   vi.mocked(gradeAttempt).mockReset();
-  vi.mocked(persistAttempt).mockReset();
 });
 
 describe('AICodingDetail runner calls', () => {
@@ -108,16 +105,12 @@ describe('AICodingDetail runner calls', () => {
   });
 
   it('names the round and checkpoint and leaves the test command to the runner', async () => {
+    // A job, as every run is (ROUNDS-00A-L03 PR 4), here one that ended
+    // with nothing to show.
     vi.mocked(runProject).mockResolvedValue({
-      passed: true,
-      passed_count: 1,
-      failed_count: 0,
-      stdout: '',
-      stderr: '',
-      error: null,
-      duration_ms: 1,
-      truncated: false,
-    });
+      job_id: 'jobaaaaaaaaaaa1', state: 'canceled', outcome_class: 'canceled', retryable: false,
+      cancel_requested: true, envelope: null,
+    } as never);
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Run' }));
@@ -173,7 +166,6 @@ describe('AICodingDetail denial states', () => {
     // AI coding has no notes to keep.
     expect(region).not.toHaveTextContent('notes');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toHaveFocus());
-    expect(persistAttempt).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
   });
 
@@ -228,7 +220,6 @@ describe("AICodingDetail when the demo's code runs are off (ROUNDS-00B-L07)", ()
     await waitFor(() => expect(region).toHaveTextContent('Off in the demo'));
     expect(region).toHaveTextContent('Code runs are off in the demo. Nothing was graded.');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toHaveFocus());
-    expect(persistAttempt).not.toHaveBeenCalled();
     expect(deleteInProgressAttempt).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Open last submission' })).toBeDisabled();
   });
