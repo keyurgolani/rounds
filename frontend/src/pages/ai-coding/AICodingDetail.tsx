@@ -879,6 +879,9 @@ export default function AICodingDetail() {
                         />
                       ) : undefined
                     }
+                    // The AI chat narrows the code, so Run and Submit sit
+                    // in a bar under it rather than over its gutter.
+                    actionsBar
                     bottomActions={
                       <EditorActions
                         onRun={() => void handleRun()}

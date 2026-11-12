@@ -20,6 +20,7 @@ import SubmissionModal from '../../components/shell/SubmissionModal';
 import MultiFileEditor from '../../components/editor/MultiFileEditor';
 import TakeHomeChatPanel from '../../components/take-home/TakeHomeChatPanel';
 import { useResizableWidth } from '../../hooks/useResizableWidth';
+import { NARROW_SCREEN_QUERY, useMediaQuery } from '../../hooks/useMediaQuery';
 import { RunDock } from '../coding/RunDock';
 import {
   deleteInProgressTakeHomeAttempt,
@@ -179,6 +180,9 @@ export default function TakeHomeDetail() {
     false,
   );
   const [dockOpen, setDockOpen] = useState(false);
+  // On a phone the side rail leaves the center column too narrow for the
+  // runner notice, so the notice takes the page's full width below it.
+  const narrow = useMediaQuery(NARROW_SCREEN_QUERY);
   // A run or submission the runner refused or couldn't serve. Shown
   // above the console in place of a result or report.
   const [runDenial, setRunDenial] = useState<{
@@ -318,7 +322,7 @@ export default function TakeHomeDetail() {
       onEnded: (job) => void openGraded(job),
       onDenied: (err) => {
         const denial = classifyRunnerError(err, submitTriggerRef.current);
-        if (denial) setRunDenial({ action: 'grade', denial });
+        if (denial) setRunDenial({ action: 'submit', denial });
       },
     },
   );
@@ -476,7 +480,7 @@ export default function TakeHomeDetail() {
       // A denied submission isn't graded, so no report opens.
       const denial = classifyRunnerError(e, trigger);
       if (denial) {
-        setRunDenial({ action: 'grade', denial });
+        setRunDenial({ action: 'submit', denial });
         return;
       }
       // Nothing came back to grade, so no report or score shows: only
@@ -636,7 +640,22 @@ export default function TakeHomeDetail() {
         }
         // Chat now toggles via the editor's floating toolbar button —
         // no longer surfaced as a left-edge floating tab.
+
+        // One live region for the page: in the center column, or on a
+        // phone at full width below the body.
+        const runnerNotice = (
+          <RunnerDenialNotice
+            denial={runDenial?.denial ?? null}
+            action={runDenial?.action ?? 'run'}
+            onReload={reloadKeepingDrafts}
+            className="flex-shrink-0"
+            contentStyle={{ margin: '8px 12px' }}
+            job={shownJob === 'submit' ? submitView : jobView}
+          />
+        );
+
         return (
+        <>
         <div
           className="flex-1 min-h-0 flex overflow-hidden"
           style={{ minHeight: 0, position: 'relative' }}
@@ -645,6 +664,7 @@ export default function TakeHomeDetail() {
 
           {/* CENTER — problem above editor (hidden in focus), editor with floating actions, console below. */}
           <div
+            data-take-home-pane="center"
             className="flex-1 flex flex-col"
             style={{ minWidth: 0, minHeight: 0 }}
           >
@@ -742,14 +762,7 @@ export default function TakeHomeDetail() {
               )}
             </div>
 
-            <RunnerDenialNotice
-              denial={runDenial?.denial ?? null}
-              action={runDenial?.action ?? 'run'}
-              onReload={reloadKeepingDrafts}
-              className="flex-shrink-0"
-              contentStyle={{ margin: '8px 12px' }}
-              job={shownJob === 'submit' ? submitView : jobView}
-            />
+            {!narrow && runnerNotice}
 
             <RunDock
               open={dockOpen}
@@ -811,6 +824,12 @@ export default function TakeHomeDetail() {
             </SideRail>
           )}
         </div>
+        {narrow && (
+          <div data-take-home-pane="notice" className="flex-shrink-0">
+            {runnerNotice}
+          </div>
+        )}
+        </>
         );
       })()}
 

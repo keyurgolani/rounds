@@ -38,6 +38,10 @@ type Props = {
   height?: number | string;
   /** Optional bottom-right floating action slot (e.g. Run / Submit). */
   bottomActions?: ReactNode;
+  /** When true, `bottomActions` sit in a bar under the files and the
+   *  code instead of floating over the code, so a code column the AI
+   *  chat has narrowed keeps its gutter clear. */
+  actionsBar?: boolean;
   /** Whether the surrounding chrome is in "focus mode". When true, the
    *  Focus button shows the exit icon. Independent of the editor —
    *  the parent owns the focus state and decides what to collapse. */
@@ -112,6 +116,45 @@ const MIN_CHAT_W = 260;
 // shrink as the chat grows; the user can drag back if it's too tight.
 const MAX_CHAT_W = 4000;
 
+/** The files and the code, side by side. Given a `bar`, the two sit
+ *  above it in one column, and the AI chat stays full height beside
+ *  them. */
+function FilesAndCode({ bar, children }: { bar: ReactNode; children: ReactNode }) {
+  if (!bar) return <>{children}</>;
+  return (
+    <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div className="flex" style={{ flex: 1, minHeight: 0 }}>
+        {children}
+      </div>
+      {bar}
+    </div>
+  );
+}
+
+/** Run, Submit, and the like, right-aligned in a bar under the code.
+ *  A bar narrower than its buttons lets them run past its right edge,
+ *  above the columns beside it, the way the floating slot does. */
+function ActionsBar({ children }: { children: ReactNode }) {
+  return (
+    <div
+      data-editor-actions="bar"
+      style={{
+        flexShrink: 0,
+        display: 'flex',
+        padding: '8px 12px',
+        borderTop: '1px solid var(--border)',
+        background: 'var(--bg-elev)',
+        position: 'relative',
+        zIndex: 10,
+      }}
+    >
+      <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Multi-file Monaco editor with a directory-tree file explorer on the
  * left (resizable + collapsible) and a floating top-right toolbar
@@ -133,6 +176,7 @@ export default function MultiFileEditor({
   readonlyPaths,
   height = '100%',
   bottomActions,
+  actionsBar = false,
   focused,
   onFocusToggle,
   storageKey = 'rounds:editor.explorer',
@@ -270,6 +314,7 @@ export default function MultiFileEditor({
 
   return (
     <div className="flex" style={{ height, position: 'relative' }}>
+      <FilesAndCode bar={actionsBar && bottomActions ? <ActionsBar>{bottomActions}</ActionsBar> : null}>
       {/* File explorer (resizable). The column is removed entirely
           when collapsed — parent renders a floating tab elsewhere.
           Hidden entirely in single-file mode (`hideExplorer`). */}
@@ -527,7 +572,7 @@ export default function MultiFileEditor({
           }}
         />
 
-        {bottomActions && (
+        {bottomActions && !actionsBar && (
           <div
             style={{
               position: 'absolute',
@@ -543,6 +588,7 @@ export default function MultiFileEditor({
           </div>
         )}
       </div>
+      </FilesAndCode>
 
       {/* AI chat rail (right of the editor). Renders only when the
           parent passed an `aiChat` slot AND the rail is open — when

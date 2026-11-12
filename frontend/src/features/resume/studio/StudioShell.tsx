@@ -151,12 +151,14 @@ export default function StudioShell({ result, active, onActiveChange }: Props) {
   return (
     <EnhancementProvider resume={result.data}>
     <div
+      data-studio-shell={wide ? 'columns' : 'stacked'}
       style={{
         // The shell fills its flex parent (ResumeStudio's body wrapper).
         // On wide screens it becomes a 3-column grid where each column
         // is its own scroll container; on narrow screens it stacks
-        // vertically and the body scrolls naturally.
-        flex: '1 1 0',
+        // vertically and the body scrolls naturally. Stacked, it takes
+        // its content's height, so no pane is squeezed under the next.
+        flex: wide ? '1 1 0' : '0 0 auto',
         minHeight: 0,
         display: 'grid',
         gap: 16,
