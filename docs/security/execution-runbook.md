@@ -73,7 +73,7 @@ To turn on `enforce`, set it and restart the runner and the frontend. The runner
 
 Since `ROUNDS-00A-L03` PR 4 the execution keys need `enforce`: at `legacy` or `disabled` they act as `off`, so the six routes run nothing, and at `legacy` each answers 503 `execution_disabled` before the account, with every draft kept ([Scratch Jobs](#scratch-jobs), [Grading Jobs](#grading-jobs)).
 
-At startup the runner reads `backend/definitions/manifest.json` (mode 0400 in the image) and checks every shipped version's bytes against its checksum. It logs one `definitions.loaded` line with `entries` and `mismatched`; `mismatched` should be 0. A version whose file is missing or altered is the only one that fails, with `definition_integrity_mismatch`, and the rest keep serving. A manifest that's missing, isn't JSON, or isn't the manifest's shape leaves no definitions at all: the runner logs one `definition.rejected` line with `definition_integrity_mismatch` and no `definitions.loaded` line, keeps starting, and the legacy routes keep serving.
+At startup the runner reads `backend/definitions/manifest.json` (mode 0400 in the image) and checks every shipped version's bytes against its checksum. It logs one `definitions.loaded` line with `entries` and `mismatched`; `mismatched` should be 0. A version whose file is missing or altered is the only one that fails, with `definition_integrity_mismatch`, and the rest keep serving. A manifest that's missing, isn't JSON, or isn't the manifest's shape leaves no definitions at all: the runner logs one `definition.rejected` line with `definition_integrity_mismatch` and no `definitions.loaded` line, keeps starting, and every code run answers `definition_not_found` while the routes that run no code keep serving.
 
 ## Error Codes
 

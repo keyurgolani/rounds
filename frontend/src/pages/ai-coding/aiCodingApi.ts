@@ -411,9 +411,9 @@ export async function getLatestAttempt(
 /**
  * Upsert the in-progress attempt for the current (user, round, campaign).
  * Used to persist the chat log between message turns so a refresh
- * doesn't lose the conversation. Once the user submits, persistAttempt
- * creates a new graded row alongside this one (we leave the in-progress
- * row in place — it's a chronological audit trail).
+ * doesn't lose the conversation. Once a submission's grading job ends
+ * with a result, the server writes the graded row alongside this one (the
+ * in-progress row stays in place as a chronological audit trail).
  */
 export async function upsertInProgressAttempt(input: {
   roundId: string;

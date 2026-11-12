@@ -32,6 +32,13 @@ The demo is off unless the operator sets `ROUNDS_ENABLE_DEMO=true` on PocketBase
 
 Opened without steps 1 and 2, the share dialog says it can't create a new link yet. The dry run and the receipt are in the "Older share links" runbook in [docs/operations.md](docs/operations.md#older-share-links).
 
+**Upgrading to the release that adds `1700008700_attempt_grade_rules.js`:** from this release, every code run, test run, grade, and take-home submission is a job on PocketBase's execution store, and nothing runs code inside a runner request. Before you deploy:
+
+1. Set `ROUNDS_EXECUTION_SECRET` on PocketBase and every runner, the same value on each: 32 to 72 printable characters, such as the output of `openssl rand -hex 32`. Keep `ROUNDS_ADMISSION_SECRET` set on both.
+2. Set `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce` on every runner and the frontend, and restart both.
+
+If either is missing, the app says code runs are turned off on this server and keeps every draft, and the runner's start log names each missing setting. The migration also makes graded attempts the server's to write: no client can create a graded row or change one, and rows already saved stay as they were. The "Scratch jobs", "Grading jobs", and "Graded attempt rows" sections of [docs/operations.md](docs/operations.md#graded-attempt-rows) have the checks to run after the deploy.
+
 ## Features
 
 - System design practice with question lists, API-backed cheat-sheet guides, diagrams, trade-off panels, and senior follow-up topics.
@@ -73,6 +80,8 @@ Opened without steps 1 and 2, the share dialog says it can't create a new link y
 cp .env.example .env
 docker compose up -d
 ```
+
+Code runs need two values in `.env` first: `ROUNDS_EXECUTION_SECRET`, 32 to 72 printable characters such as the output of `openssl rand -hex 32`, and `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`. Without them, every code run says it's turned off and keeps your draft.
 
 Services:
 
@@ -128,6 +137,8 @@ Fresh deployments run these migrations in order:
 `1700006700_demo_contain.js` deletes what accounts with `is_demo` own in `resume_share_links` (with their `resume_share_views`), `ai_settings`, and `ai_providers`. It's forward-only and touches nothing a standard account owns. See the hosted-demo upgrade note above.
 
 `1700008500_legacy_share_migration.js` turns off every share link made before it, for good, records each one's outcome in `legacy_share_migration`, and drops the link fields only those links used. Its `migrate down` keeps every link off. See the upgrade note above.
+
+`1700008700_attempt_grade_rules.js` changes the create and update rules of `ai_coding_attempts` and `take_home_attempts` so that a client writes only its own open rows, never a graded one, and never an `envelope`. It reads and writes no row, keeps a collection's lock if you locked one, and its `migrate down` keeps the new rules. See the upgrade note above.
 
 The release that adds `1700006000_account_scope_rules.js` tightens the create and update rules on every user-owned collection so a write must name the signed-in account, and makes `resume_share_views` superuser-only. Before deploying it, back up `pb_data` and run the cross-owner relation scan on a copy taken with PocketBase stopped. The rules are forward-only: `migrate down` keeps them. See the "Account-scope rules" runbook in [docs/operations.md](docs/operations.md).
 
