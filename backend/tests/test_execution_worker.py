@@ -784,6 +784,10 @@ def test_on_with_the_store_down_is_unready(monkeypatch):
 
 # ---- the claim loop's pauses ---------------------------------------------------------
 
+# The cadence as it ships, which the quick fixture scales down for the
+# tests above.
+SHIPPED = {name: getattr(worker_mod, name) for name in ("CLAIM_IDLE_S", "REAP_EVERY_S")}
+
 
 class Clock:
     """The worker's clock where only its pauses move it, at once."""
@@ -846,10 +850,12 @@ class Claims:
 
 
 def _paced(monkeypatch, script: list[bool], draw: float | None = None) -> tuple[Claims, list[float]]:
-    """Runs the claim loop alone over ``script``, with the jitter's draw
-    fixed at ``draw`` when one is given, on a clock each pause moves on at
-    once by what it asked for. A claimed job ends at once. Answers the
-    claims and each pause the loop asked for."""
+    """Runs the claim loop alone over ``script`` at the shipped cadence,
+    with the jitter's draw fixed at ``draw`` when one is given, on a clock
+    each pause moves on at once by what it asked for. A claimed job ends
+    at once. Answers the claims and each pause the loop asked for."""
+    for name, value in SHIPPED.items():
+        monkeypatch.setattr(worker_mod, name, value)
     clock, asked = Clock(), []
 
     async def pause(self, seconds, wakes=False):
