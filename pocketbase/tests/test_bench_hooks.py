@@ -250,6 +250,31 @@ def test_derived_ids_match_the_python_rule_and_repeat_for_a_retry():
     assert benchlib.V7.match(js[0])
 
 
+def _whole_key_lookups(plan: list[dict]) -> bool:
+    """Every lookup inside a correlated subquery searches an index on both of
+    its key columns, not a scan or a search on the first column alone."""
+    inner = False
+    for d in (r["detail"] for r in plan):
+        inner = inner or d.startswith("CORRELATED")
+        if inner and d.startswith(("SCAN", "SEARCH")) and not (d.startswith("SEARCH") and "INDEX" in d and d.count("=?") >= 2):
+            return False
+    return True
+
+
+def test_the_consistency_checks_search_through_whole_keys():
+    # A restore or crash check runs these against a whole copy of the
+    # database. A lookup that reads all of an account's change sets per row
+    # takes minutes at 1 account and hours at 10.
+    import bench  # noqa: PLC0415
+    explain = [{"op": "raw", "sql": "EXPLAIN QUERY PLAN " + sql, "shape": {"detail": ""}} for sql in bench.CHECKS.values()]
+    for name, plan in zip(bench.CHECKS, run(explain)):
+        assert _whole_key_lookups(plan), (name, plan)
+    # Without the (account_id, command_id) key, the pairing check falls back
+    # to the account's whole position index, and the plan check says so.
+    dropped = run([{"op": "rawWrite", "sql": "DROP INDEX idx_bench_change_sets_command"}] + explain)[1:]
+    assert not _whole_key_lookups(dropped[list(bench.CHECKS).index("idempotencyWithoutChangeSet")])
+
+
 def test_the_bench_ships_nowhere():
     dockerfile = (ROOT / "pocketbase" / "Dockerfile").read_text()
     # The image copies these three directories under pocketbase/ and nothing else.

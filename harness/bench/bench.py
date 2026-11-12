@@ -470,6 +470,24 @@ def summarize_records(recs: list[dict], seconds: float) -> dict:
 # Verification on a copy (read-only SQLite) and restores.
 # ---------------------------------------------------------------------------
 
+# The consistency checks a restore or a crash must pass. Each correlated
+# lookup goes through an index, so a check stays seconds at 10 accounts;
+# pocketbase/tests/test_bench_hooks.py holds each plan to that.
+CHECKS = {
+    "changeSetsWithoutIdempotency":
+        "SELECT COUNT(*) FROM bench_change_sets cs WHERE cs.actor LIKE 'user:%' AND NOT EXISTS (SELECT 1 FROM bench_idempotency i "
+        "WHERE i.account_id = cs.account_id AND i.command_id = cs.command_id)",
+    "idempotencyWithoutChangeSet":
+        "SELECT COUNT(*) FROM bench_idempotency i WHERE i.state = 'completed' AND i.fingerprint != 'seed' AND NOT EXISTS (SELECT 1 FROM bench_change_sets cs "
+        "WHERE cs.account_id = i.account_id AND cs.command_id = i.command_id)",
+    "changeSetsWithWrongOutbox":
+        "SELECT COUNT(*) FROM bench_change_sets cs WHERE cs.actor LIKE 'user:%' AND json_array_length(cs.ops) != (SELECT COUNT(*) FROM bench_outbox o "
+        "WHERE o.account_id = cs.account_id AND o.commit_position = cs.commit_position)",
+    "activeOfferDuplicates":
+        "SELECT COUNT(*) FROM (SELECT parent FROM bench_records WHERE kind = 'offer' AND status = 'active' GROUP BY parent HAVING COUNT(*) > 1)",
+}
+
+
 def verify(data_dir: Path, acked: list[tuple[str, str, int, float]] | None, blobs: bool) -> dict:
     db = data_dir / "data.db"
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
@@ -481,17 +499,8 @@ def verify(data_dir: Path, acked: list[tuple[str, str, int, float]] | None, blob
             missing = [a for a in acked if f"{a[0]}:{a[1]}" not in present]
             out["ackedChecked"] = len(acked)
             out["ackedMissing"] = len(missing)
-        out["changeSetsWithoutIdempotency"] = con.execute(
-            "SELECT COUNT(*) FROM bench_change_sets cs WHERE cs.actor LIKE 'user:%' AND NOT EXISTS (SELECT 1 FROM bench_idempotency i "
-            "WHERE i.account_id = cs.account_id AND i.command_id = cs.command_id)").fetchone()[0]
-        out["idempotencyWithoutChangeSet"] = con.execute(
-            "SELECT COUNT(*) FROM bench_idempotency i WHERE i.state = 'completed' AND i.fingerprint != 'seed' AND NOT EXISTS (SELECT 1 FROM bench_change_sets cs "
-            "WHERE cs.account_id = i.account_id AND cs.command_id = i.command_id)").fetchone()[0]
-        out["changeSetsWithWrongOutbox"] = con.execute(
-            "SELECT COUNT(*) FROM bench_change_sets cs WHERE cs.actor LIKE 'user:%' AND json_array_length(cs.ops) != (SELECT COUNT(*) FROM bench_outbox o "
-            "WHERE o.account_id = cs.account_id AND o.commit_position = cs.commit_position)").fetchone()[0]
-        out["activeOfferDuplicates"] = con.execute(
-            "SELECT COUNT(*) FROM (SELECT parent FROM bench_records WHERE kind = 'offer' AND status = 'active' GROUP BY parent HAVING COUNT(*) > 1)").fetchone()[0]
+        for name, sql in CHECKS.items():
+            out[name] = con.execute(sql).fetchone()[0]
         if blobs:
             col = con.execute("SELECT id FROM _collections WHERE name = 'bench_blobs'").fetchone()[0]
             bad = 0

@@ -40,6 +40,8 @@ migrate(
         indexes: [
           "CREATE UNIQUE INDEX idx_bench_change_sets_seq ON bench_change_sets (seq)",
           "CREATE UNIQUE INDEX idx_bench_change_sets_position ON bench_change_sets (account_id, commit_position)",
+          // #21: command_id, like commit_position, is unique per account.
+          "CREATE UNIQUE INDEX idx_bench_change_sets_command ON bench_change_sets (account_id, command_id)",
         ],
       },
       {
