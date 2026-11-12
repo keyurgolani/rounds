@@ -1,0 +1,30 @@
+# The rounds-worker image's Python packages (ROUNDS-00A-L05): pytest and
+# httpx at the runner's pins, and everything they need on Python 3.12, each
+# one wheel by its hash. The image installs this file with
+#   pip install --require-hashes --no-deps --only-binary=:all:
+# so nothing outside it is resolved. Each hash is from the URL above it,
+# read 2026-11-11.
+# https://pypi.org/pypi/pytest/8.3.3/json
+pytest==8.3.3 --hash=sha256:a6853c7375b2663155079443d2e45de913a911a11d669df02a50814944db57b2
+# https://pypi.org/pypi/iniconfig/2.3.1/json
+iniconfig==2.3.1 --hash=sha256:9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7
+# https://pypi.org/pypi/packaging/26.3/json
+packaging==26.3 --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
+# https://pypi.org/pypi/pluggy/1.7.0/json
+pluggy==1.7.0 --hash=sha256:7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec
+# https://pypi.org/pypi/httpx/0.27.2/json
+httpx==0.27.2 --hash=sha256:7bb2708e112d8fdd7829cd4243970f0c223274051cb35ee80c03301ee29a3df0
+# https://pypi.org/pypi/anyio/4.16.0/json
+anyio==4.16.0 --hash=sha256:c66ae634e0b8228396b801741beb3294326d4b6102f7bba4041c0dfb58c29026
+# https://pypi.org/pypi/certifi/2026.10.23/json
+certifi==2026.10.23 --hash=sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1
+# https://pypi.org/pypi/httpcore/1.0.9/json
+httpcore==1.0.9 --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55
+# https://pypi.org/pypi/h11/0.16.0/json
+h11==0.16.0 --hash=sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86
+# https://pypi.org/pypi/idna/3.20/json
+idna==3.20 --hash=sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c
+# https://pypi.org/pypi/sniffio/1.3.1/json
+sniffio==1.3.1 --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
+# https://pypi.org/pypi/typing-extensions/4.16.0/json
+typing-extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8

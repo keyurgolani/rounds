@@ -1,0 +1,16 @@
+# The worker image's build context is backend/ (backend/worker/Dockerfile).
+# Everything is excluded, then only the worker package, its two lockfiles,
+# the drivers, and the harness runtime are let back in.
+*
+!worker/__init__.py
+!worker/frames.py
+!worker/manifest.py
+!worker/seccomp.py
+!worker/init.py
+!worker/requirements.txt
+!worker/node/package.json
+!worker/node/package-lock.json
+!drivers/
+!definitions/harness/rounds_harness.py
+**/__pycache__
+**/*.pyc

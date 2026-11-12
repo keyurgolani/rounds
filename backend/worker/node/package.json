@@ -1,0 +1,8 @@
+{
+  "name": "rounds-worker-node",
+  "private": true,
+  "description": "The TypeScript loader the rounds-worker image carries (ROUNDS-00A-L05). The worker build installs exactly this lockfile with npm ci.",
+  "dependencies": {
+    "tsx": "4.23.15"
+  }
+}
