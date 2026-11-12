@@ -43,6 +43,9 @@ const OWNERS = {
   ai_settings: { field: "user" },
 };
 const CONTAINED = Object.keys(OWNERS);
+// The query that finds the candidate demo accounts, which the boot lock
+// and the sweep then ask tierOf() about, one by one.
+const DEMO_CANDIDATES = "is_demo = true";
 const PASSWORD_CHARS = 48;
 const NOT_PERMITTED = "demo_not_permitted";
 const NOT_PERMITTED_MESSAGE = "Not available in the demo.";
@@ -89,7 +92,7 @@ function lockAll(dao, env) {
   if (enabled(env)) return { demo: "enabled" };
   let accounts;
   try {
-    accounts = dao.findRecordsByFilter("users", "is_demo = true");
+    accounts = dao.findRecordsByFilter("users", DEMO_CANDIDATES);
   } catch (err) {
     return { demo: "disabled", code: /no such table/i.test(String(err)) ? "not_ready" : "query_failed" };
   }
@@ -432,7 +435,7 @@ function sweep(app, env, now) {
   const out = { checked: 0, reset: 0, failed: 0 };
   let accounts;
   try {
-    accounts = app.dao().findRecordsByFilter("users", "is_demo = true");
+    accounts = app.dao().findRecordsByFilter("users", DEMO_CANDIDATES);
   } catch (_) {
     logResetFailure("sweep", "accounts", "");
     out.failed += 1;
