@@ -324,7 +324,7 @@ def share_owner_only_isolated(pb, collection, a, b, expected) -> Receipt:
 # them at PocketBase inside the stack.
 CAPABILITY_ROUTE = "/api/rounds/share/capabilities"
 # #12 (ROUNDS-00B-L04) adds the version Rotate expects and whether a
-# password protects the link.
+# password protects the link, and the list adds the resume each link shares.
 CAPABILITY_OWNER_FIELDS = frozenset({"id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at",
                                      "capability_version", "password_set", "root_resume_id"})
 

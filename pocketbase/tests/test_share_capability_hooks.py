@@ -42,7 +42,9 @@ MARKUP_B = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resume</titl
 MARKUP_D = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resume</title></head><body><p>Demo</p></body></html>'
 
 OWNER_FIELDS = ["id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at",
-                "capability_version", "password_set", "root_resume_id"]
+                "capability_version", "password_set"]
+# The owner's list adds the resume each link shares.
+LIST_FIELDS = OWNER_FIELDS + ["root_resume_id"]
 LOOKUP_FIELDS = ["id", "status", "expires_at", "capability_version", "snapshot", "password_policy_ref", "markup"]
 
 # A verifier in #12's pinned format (backend/app/share_password.py): only its
@@ -50,13 +52,11 @@ LOOKUP_FIELDS = ["id", "status", "expires_at", "capability_version", "snapshot",
 PW1 = "pw1$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$" + "A" * 43
 
 
-def owner_view(row: dict, root: str = "") -> dict:
-    """What the owner sees of a stored row: never its digest or verifier.
-    root is the resume it shares, which only the list fills in."""
+def owner_view(row: dict) -> dict:
+    """What the owner sees of a stored row: never its digest or verifier."""
     view = {k: row[k] for k in OWNER_FIELDS[:7]}
     view["capability_version"] = row["capability_version"]
     view["password_set"] = row["password_policy_ref"] != ""
-    view["root_resume_id"] = root
     return view
 
 
@@ -144,6 +144,7 @@ def test_the_contract_constants():
     assert (c["KIND"], c["PROJECTION_VERSION"], c["VIEW_POLICY"]) == ("legacy_artifact_snapshot", 1, "disabled")
     assert (c["DEFAULT_DAYS"], c["MAX_DAYS"], c["PURPOSE_MAX"], c["LIST_LIMIT"]) == (90, 365, 80, 200)
     assert c["OWNER_FIELDS"] == OWNER_FIELDS
+    assert c["LIST_FIELDS"] == LIST_FIELDS
     assert c["LOOKUP_FIELDS"] == LOOKUP_FIELDS
     # Every stored field is either fixed at create or one of the moves an
     # update may make, nothing in both.
@@ -547,7 +548,7 @@ def test_the_owner_list_has_only_the_callers_rows_newest_first_and_only_the_owne
     assert res["value"]["status"] == 200
     items = res["value"]["body"]["items"]
     assert [i["id"] for i in items] == ["capaaaaaaaaaaa2", "capaaaaaaaaaaa1"]
-    assert all(list(i) == OWNER_FIELDS for i in items)
+    assert all(list(i) == LIST_FIELDS for i in items)
     # The version Rotate expects, and whether a password protects the link.
     assert [(i["capability_version"], i["password_set"]) for i in items] == [(3, True), (1, False)]
     text = json.dumps(res["value"])
@@ -593,10 +594,12 @@ def test_a_link_whose_snapshot_names_no_resume_of_the_owner_lists_with_none(snap
     assert (only["id"], only["root_resume_id"]) == ("capaaaaaaaaaaa1", "")
 
 
-def test_a_command_answer_names_no_resume():
+def test_revoke_answers_the_owner_fields_only_and_reads_no_snapshot():
     out = run([{"call": "revoke", "caller": A, "id": "capaaaaaaaaaaa1"}], shared_state())
-    assert out["results"][0]["value"]["body"]["capability"]["root_resume_id"] == ""
-    assert "snapshot" not in out["results"][0]["calls"]
+    (res,) = out["results"]
+    assert list(res["value"]["body"]["capability"]) == OWNER_FIELDS
+    assert res["value"]["body"]["capability"] == owner_view(out["state"]["capabilities"]["capaaaaaaaaaaa1"])
+    assert "snapshot" not in res["calls"]
 
 
 def test_a_caller_with_no_capabilities_or_no_account_lists_none():

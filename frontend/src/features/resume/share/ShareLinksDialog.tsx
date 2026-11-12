@@ -42,6 +42,7 @@ import {
   rotateCapability,
   type CapabilityState,
   type IssuedFields,
+  type ListedCapability,
   type OlderLink,
   type OlderLinkState,
   type ShareCapability,
@@ -236,7 +237,7 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
   const closeRef = useRef<HTMLButtonElement>(null);
   const opener = useRef<Element | null>(typeof document !== 'undefined' ? document.activeElement : null);
 
-  const [rows, setRows] = useState<ShareCapability[] | null>(null);
+  const [rows, setRows] = useState<ListedCapability[] | null>(null);
   const [listFailed, setListFailed] = useState(false);
   const [expiryDays, setExpiryDays] = useState<number>(DEFAULT_EXPIRY_DAYS);
   const [wantsPassword, setWantsPassword] = useState(false);

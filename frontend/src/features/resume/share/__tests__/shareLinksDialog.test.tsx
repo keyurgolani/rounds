@@ -48,6 +48,7 @@ import {
   expiryDay,
   olderLinkState,
   type OlderLink,
+  type ListedCapability,
   type ShareCapability,
 } from '../client';
 
@@ -61,7 +62,7 @@ function pbDate(ms: number): string {
   return new Date(ms).toISOString().replace('T', ' ');
 }
 
-function row(id: string, over: Partial<ShareCapability> = {}): ShareCapability {
+function row(id: string, over: Partial<ListedCapability> = {}): ListedCapability {
   return {
     id,
     status: 'active',
@@ -75,6 +76,13 @@ function row(id: string, over: Partial<ShareCapability> = {}): ShareCapability {
     root_resume_id: RESUME,
     ...over,
   };
+}
+
+// A command's answer for a link: the owner fields, without the resume the
+// list adds.
+function answered(link: ListedCapability): ShareCapability {
+  const { root_resume_id: _root, ...fields } = link;
+  return fields;
 }
 
 function issued(id: string, token: string | null, version = 1) {
@@ -112,7 +120,7 @@ function older(id: string, over: Partial<OlderLink> = {}): OlderLink {
 
 class FakeRunner {
   calls: Call[] = [];
-  list: ShareCapability[] = [];
+  list: ListedCapability[] = [];
   older: OlderLink[] = [];
   // Answers for the older links' list, in turn; then `older`.
   olderAnswers: Array<() => Response> = [];
@@ -405,7 +413,7 @@ describe('the list', () => {
     runner.answers.push(() => {
       runner.list = [row('capliveaaaaaaa1', { purpose: 'Live link', status: 'revoked', revoked_reason: 'owner',
         revoked_at: pbDate(Date.now()) })];
-      return json(200, runner.list[0]);
+      return json(200, answered(runner.list[0]));
     });
     openDialog();
     await user.click(await within(await screen.findByRole('list')).findByRole('button', { name: 'Revoke' }));
@@ -476,7 +484,7 @@ describe('with the gate closed', () => {
     runner.answers.push(() => {
       runner.list = [row('capliveaaaaaaa1', { purpose: 'Live link', status: 'revoked', revoked_reason: 'owner',
         revoked_at: pbDate(Date.now()) })];
-      return json(200, { ...runner.list[0], root_resume_id: '' });
+      return json(200, answered(runner.list[0]));
     });
     openDialog();
     await user.click(await screen.findByRole('button', { name: 'Revoke' }));

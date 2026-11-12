@@ -180,7 +180,7 @@ for (const step of program.steps) {
         VIEW_POLICY: caps.VIEW_POLICY, DEFAULT_DAYS: caps.DEFAULT_DAYS, MAX_DAYS: caps.MAX_DAYS,
         MIN_LIFETIME_MS: caps.MIN_LIFETIME_MS, PURPOSE_MAX: caps.PURPOSE_MAX, PURPOSE_FALLBACK: caps.PURPOSE_FALLBACK,
         LIST_LIMIT: caps.LIST_LIMIT, OWNER_FIELDS: caps.OWNER_FIELDS, LOOKUP_FIELDS: caps.LOOKUP_FIELDS,
-        FIXED: caps.FIXED, MUTABLE: caps.MUTABLE,
+        FIXED: caps.FIXED, MUTABLE: caps.MUTABLE, LIST_FIELDS: caps.LIST_FIELDS,
       } };
       break;
     case "parseDate":

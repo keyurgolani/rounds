@@ -69,9 +69,7 @@ export class ShareThrottled extends Error {
 // ---- share capabilities (ROUNDS-00B-L04) ------------------------------------
 
 /** What the owner sees of one link (backend/app/share_capabilities.py
- *  OWNER_FIELDS): never its secret, digest, or password. root_resume_id is
- *  the resume it shares, a variant's by its resume; a command's answer
- *  leaves it empty. */
+ *  OWNER_FIELDS): never its secret, digest, or password. */
 export type ShareCapability = {
   id: string;
   status: 'active' | 'revoked';
@@ -82,8 +80,11 @@ export type ShareCapability = {
   revoked_at: string;
   capability_version: number;
   password_set: boolean;
-  root_resume_id: string;
 };
+
+/** One row of the owner's list (LIST_FIELDS): the owner's fields, and the
+ *  resume the link shares, a variant's by its resume. */
+export type ListedCapability = ShareCapability & { root_resume_id: string };
 
 /** The fields CreateShare and RotateShareBearer answer for the link. */
 export type IssuedFields = {
@@ -138,15 +139,18 @@ function isCapability(value: unknown): value is ShareCapability {
     (v.status === 'active' || v.status === 'revoked') &&
     ['revoked_reason', 'purpose', 'expires_at', 'created', 'revoked_at'].every((k) => typeof v[k] === 'string') &&
     typeof v.capability_version === 'number' &&
-    typeof v.password_set === 'boolean' &&
-    typeof v.root_resume_id === 'string'
+    typeof v.password_set === 'boolean'
   );
 }
 
-/** The caller's links, newest first. */
-export async function listCapabilities(): Promise<ShareCapability[]> {
+function isListed(value: unknown): value is ListedCapability {
+  return isCapability(value) && typeof (value as Record<string, unknown>).root_resume_id === 'string';
+}
+
+/** The caller's links, newest first, each with the resume it shares. */
+export async function listCapabilities(): Promise<ListedCapability[]> {
   const items = await runnerJSON<unknown>('/api/share/capabilities', { method: 'GET', errorPrefix: 'Share' });
-  if (!Array.isArray(items) || !items.every(isCapability)) throw new Error('Share: unexpected answer');
+  if (!Array.isArray(items) || !items.every(isListed)) throw new Error('Share: unexpected answer');
   return items;
 }
 

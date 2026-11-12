@@ -67,13 +67,13 @@ const CONTROLS = /[\u0000-\u001f\u007f]/g;
 const DATETIME = /^([0-9]{4})-([0-9]{2})-([0-9]{2})[ T]([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,9}))?Z$/;
 
 // What the owner sees, and all the owner's routes answer with: the version
-// Rotate expects, and whether a password protects it, never the verifier;
-// and the resume the link shares, which the list fills in and a command's
-// answer leaves empty.
+// Rotate expects, and whether a password protects it, never the verifier.
 const OWNER_FIELDS = [
   "id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at", "capability_version",
-  "password_set", "root_resume_id",
+  "password_set",
 ];
+// The owner's list adds the resume each link shares.
+const LIST_FIELDS = OWNER_FIELDS.concat(["root_resume_id"]);
 // What lookup_capability answers with, for #12's route: #12's fields plus
 // the markup, which is projection v1.
 const LOOKUP_FIELDS = ["id", "status", "expires_at", "capability_version", "snapshot", "password_policy_ref", "markup"];
@@ -188,10 +188,14 @@ function ownerView(row) {
   OWNER_FIELDS.forEach((key) => {
     if (key === "capability_version") out[key] = isInt(row.capability_version) ? row.capability_version : 0;
     else if (key === "password_set") out[key] = typeof row.password_policy_ref === "string" && row.password_policy_ref !== "";
-    else if (key === "root_resume_id") out[key] = isId(row.root_resume_id) ? row.root_resume_id : "";
     else out[key] = typeof row[key] === "string" ? row[key] : "";
   });
   return out;
+}
+
+// One row of the owner's list: the owner's fields and the resume it shares.
+function listView(row, root) {
+  return Object.assign(ownerView(row), { root_resume_id: isId(root) ? root : "" });
 }
 
 // The resume a link shares, read from its snapshot: the resume itself, or
@@ -446,7 +450,7 @@ function listOwn(deps, caller) {
     if (!Object.prototype.hasOwnProperty.call(roots, id)) {
       roots[id] = id === "" ? "" : rootOf(deps.store.snapshot(id), caller);
     }
-    return ownerView(Object.assign({}, row, { root_resume_id: roots[id] }));
+    return listView(row, roots[id]);
   });
   return { status: 200, body: { v: VERSION, items } };
 }
@@ -798,6 +802,7 @@ module.exports = {
   PURPOSE_FALLBACK,
   LIST_LIMIT,
   OWNER_FIELDS,
+  LIST_FIELDS,
   LOOKUP_FIELDS,
   FIXED,
   MUTABLE,
