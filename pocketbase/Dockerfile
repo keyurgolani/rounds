@@ -41,4 +41,8 @@ COPY seeds /pb_seeds
 
 EXPOSE 8090
 
-CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8090", "--dir=/pb/pb_data", "--migrationsDir=/pb/pb_migrations", "--hooksDir=/pb/pb_hooks"]
+# With --hooksWatch=false, a hook file that fails to load stops PocketBase at
+# start, and its log names the file. Watch mode, upstream's default, would
+# log the error and serve without that file. The hooks ship in the image, so
+# nothing needs watch mode's live reload.
+CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8090", "--dir=/pb/pb_data", "--migrationsDir=/pb/pb_migrations", "--hooksDir=/pb/pb_hooks", "--hooksWatch=false"]

@@ -2,7 +2,13 @@
 # Account-scope two-account harness launcher.
 #
 # Sequences the phases against one compose stack and always tears it down:
-#   1. bring PocketBase up with signups enabled
+#   0. hook load    - CI only: the PocketBase image with one more hook file,
+#                     which throws as it loads. With watch mode on,
+#                     PocketBase's default, it serves anyway and the log
+#                     check flags the file; with the image's own CMD it exits
+#                     non-zero and names the file
+#   1. bring PocketBase up with signups enabled; its log names no hook file
+#      that failed to load (every wait for PocketBase checks that)
 #   2. main phase   - create two accounts, seed fixtures, run enforced probes,
 #                     read the live rules back against the policy table
 #   3. admission    - two runner replicas built from this commit on the one
@@ -178,6 +184,8 @@ PBBIN_VOLUME="${PROJECT}_pbbin"
 # made before the stack starts and removed at teardown.
 LEGACY_VOLUME="${PROJECT}_pb_legacy"
 RECORDER_VOLUME="${PROJECT}_recorder"
+# Phase 0's PocketBase, started on its own outside the stack.
+HOOK_CONTROL="${PROJECT}-hook-control"
 RUNNER_URLS="http://runner:8000,http://runner-b:8000"
 
 PB_ADMIN_EMAIL_V="${PB_ADMIN_EMAIL:-ops@harness.test}"
@@ -235,6 +243,7 @@ cleanup() {
   echo "--- tearing down harness stack ---"
   rm -rf "${STATE_DIR}"
   rmdir "${HARNESS_DIR}/.state" 2>/dev/null || true
+  ${CONTAINER_BIN} rm -f "${HOOK_CONTROL}" >/dev/null 2>&1 || true
   compose down -v --remove-orphans >/dev/null 2>&1 || true
   ${CONTAINER_BIN} volume rm "${PBBIN_VOLUME}" "${LEGACY_VOLUME}" "${RECORDER_VOLUME}" >/dev/null 2>&1 || true
   ${CONTAINER_BIN} rmi ${BUILT_IMAGES} >/dev/null 2>&1 || true
@@ -280,13 +289,68 @@ set_signups() {
     "${RECORDER_VOLUME}" "${RECORDER_SALT_V}" "${DEMO_EXECUTION_GATE}" > "${ENV_FILE}"
 }
 
-# Waits until PocketBase answers its health route again.
+# PocketBase logs "Failed to execute <file>" for a hook file that throws as
+# it loads. One PASS or FAIL line for the log given as text; FAIL quotes
+# those lines, which name the files.
+hook_log_clean() {
+  local found=""
+  found="$(printf '%s\n' "$1" | grep -F 'Failed to execute' | head -n 5)" || true
+  if [ -n "${found}" ]; then
+    echo "FAIL hooks.load.no-failed-file: ${found}"
+    return 1
+  fi
+  echo "PASS hooks.load.no-failed-file"
+}
+
+# Waits until PocketBase answers its health route again, then checks that
+# its log names no hook file that failed to load.
 wait_pocketbase() {
+  local up=1 log=""
   for _ in $(seq 1 60); do
-    compose exec -T pocketbase wget -q -T 3 -O /dev/null http://127.0.0.1:8090/api/health >/dev/null 2>&1 && return 0
+    if compose exec -T pocketbase wget -q -T 3 -O /dev/null http://127.0.0.1:8090/api/health >/dev/null 2>&1; then
+      up=0
+      break
+    fi
     sleep 1
   done
-  return 1
+  log="$(compose logs --no-color pocketbase 2>&1)" || { echo "FAIL hooks.load.no-failed-file: no log"; return 1; }
+  hook_log_clean "${log}" || up=1
+  return "${up}"
+}
+
+# Phase 0 (CI only). Starts the PocketBase image on its own, with no network
+# and phase 0's throwing hook file mounted into its hook directory, and waits
+# until PocketBase exits or answers its health route. With no arguments it
+# runs the image's own CMD. Prints "stopped" if it exited non-zero and its
+# log names that file, "served" if it answered, or what happened otherwise.
+# Its log stays in the run's state as hook-control.log.
+hook_control() {
+  local state="neither exited nor served in 60s" code="" log="${STATE_DIR}/hook-control.log"
+  ${CONTAINER_BIN} rm -f "${HOOK_CONTROL}" >/dev/null 2>&1 || true
+  if ! ${CONTAINER_BIN} run -d --name "${HOOK_CONTROL}" --network none \
+       -v "${STATE_DIR}/load_error.pb.js:/pb/pb_hooks/load_error.pb.js:ro" \
+       "${IMAGE_PREFIX}-pocketbase:test" "$@" >/dev/null; then
+    echo "not started"
+    return 0
+  fi
+  for _ in $(seq 1 60); do
+    if [ "$(${CONTAINER_BIN} inspect -f '{{.State.Running}}' "${HOOK_CONTROL}" 2>/dev/null)" != "true" ]; then
+      code="$(${CONTAINER_BIN} inspect -f '{{.State.ExitCode}}' "${HOOK_CONTROL}" 2>/dev/null || true)"
+      state="exited ${code:-with no code}"
+      break
+    fi
+    if ${CONTAINER_BIN} exec "${HOOK_CONTROL}" wget -q -T 2 -O /dev/null http://127.0.0.1:8090/api/health >/dev/null 2>&1; then
+      state="served"
+      break
+    fi
+    sleep 1
+  done
+  ${CONTAINER_BIN} logs "${HOOK_CONTROL}" > "${log}" 2>&1 || true
+  ${CONTAINER_BIN} rm -f "${HOOK_CONTROL}" >/dev/null 2>&1 || true
+  if [ -n "${code}" ] && [ "${code}" != "0" ] && grep -qF 'Failed to execute load_error.pb.js' "${log}"; then
+    state="stopped"
+  fi
+  echo "${state}"
 }
 
 # Waits until PocketBase reaches the materializer over its network.
@@ -343,7 +407,7 @@ backup_and_restore() {
 # PASS or FAIL line each; the report holds counts only.
 scan_report() {
   local name="$1" fails=0
-  if compose exec -T pocketbase /pb/pocketbase legacy-snapshot-scan --dir=/pb/pb_data --hooksDir=/pb/pb_hooks \
+  if compose exec -T pocketbase /pb/pocketbase legacy-snapshot-scan --dir=/pb/pb_data --hooksDir=/pb/pb_hooks --hooksWatch=false \
        --migrationsDir=/pb/pb_migrations --out "/tmp/${name}.json" --commit "${GIT_COMMIT}" >/dev/null \
      && compose exec -T pocketbase cat "/tmp/${name}.json" > "${RECEIPTS_DIR}/${name}.json"; then
     echo "PASS snapshot.scan.${name}.written"
@@ -507,8 +571,39 @@ echo "--- building pocketbase, probes, runner, frontend, materializer, and pdf-r
 set_signups false
 compose build pocketbase probes runner frontend materializer pdf-renderer
 
+# Phase 0, CI only. The hook file throws as PocketBase loads it. With watch
+# mode on, PocketBase's default and how the image ran it before
+# --hooksWatch=false, PocketBase serves anyway, and the log check must flag
+# the file. With the image's own CMD it must exit non-zero before serving,
+# and its log must name the file.
+echo "--- phase 0: hook load (CI only: a hook file that throws, with watch mode on, then the image's CMD) ---"
+hooks_rc=0
+if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+  printf 'throw new Error("harness: this hook file fails to load");\n' > "${STATE_DIR}/load_error.pb.js"
+  served="$(hook_control /pb/pocketbase serve --http=127.0.0.1:8090 --dir=/pb/pb_data \
+    --migrationsDir=/pb/pb_migrations --hooksDir=/pb/pb_hooks --hooksWatch=true)"
+  if [ "${served}" = "served" ] && ! hook_log_clean "$(cat "${STATE_DIR}/hook-control.log" 2>/dev/null)" >/dev/null; then
+    echo "PASS hooks.load-error.log-check-catches-it"
+  else
+    echo "FAIL hooks.load-error.log-check-catches-it: ${served}"
+    hooks_rc=1
+  fi
+  stopped="$(hook_control)"
+  if [ "${stopped}" = "stopped" ]; then
+    echo "PASS hooks.load-error.stops-pocketbase"
+  else
+    echo "FAIL hooks.load-error.stops-pocketbase: ${stopped}"
+    tail -n 20 "${STATE_DIR}/hook-control.log" 2>/dev/null || true
+    hooks_rc=1
+  fi
+  rm -f "${STATE_DIR}/load_error.pb.js" "${STATE_DIR}/hook-control.log"
+else
+  echo "SKIP hooks.load-error: CI only (GITHUB_ACTIONS=true)"
+fi
+
 echo "--- phase 1: PocketBase up (signups enabled) ---"
 compose up -d pocketbase
+wait_pocketbase || hooks_rc=1
 
 echo "--- phase 2: main (accounts, fixtures, enforced probes, rule read-back) ---"
 probe main
@@ -956,7 +1051,7 @@ if [ "${rc}" -ne 0 ] || [ "${scan_rc}" -ne 0 ] || [ "${admission_rc}" -ne 0 ] ||
    || [ "${execution_rc}" -ne 0 ] || [ "${quarantine_rc}" -ne 0 ] || [ "${reach_rc}" -ne 0 ] \
    || [ "${snapshot_rc}" -ne 0 ] || [ "${demo_rc}" -ne 0 ] || [ "${legacy_rc}" -ne 0 ] \
    || [ "${share_rc}" -ne 0 ] || [ "${share_secrets_rc}" -ne 0 ] || [ "${legacy_shares_rc}" -ne 0 ] \
-   || [ "${legacy_migration_rc}" -ne 0 ]; then
+   || [ "${legacy_migration_rc}" -ne 0 ] || [ "${hooks_rc}" -ne 0 ]; then
   exit 1
 fi
 exit 0

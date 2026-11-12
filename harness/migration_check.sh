@@ -97,10 +97,12 @@ read_rule() { # data.db collection create|update  -> rule text, <<NULL>>, <<ABSE
   python3 "${HARNESS_DIR}/probes/read_collection_rule.py" "$1" "$2" "$3"
 }
 
+# The image's hooks load too, from /pb/pb_hooks next to --dir, and as in the
+# image's CMD a hook file that fails to load stops PocketBase.
 migrate_up() { # migrations_dir pb_data_dir   (exit code is PocketBase's)
   ${CONTAINER_BIN} run --rm \
     -v "$1:/mig:ro" -v "$2:/pb/pb_data" \
-    "${PB_IMAGE}" /pb/pocketbase migrate up --dir=/pb/pb_data --migrationsDir=/mig
+    "${PB_IMAGE}" /pb/pocketbase migrate up --dir=/pb/pb_data --migrationsDir=/mig --hooksWatch=false
 }
 
 down_reverts_nothing() { # migration.js  -> OK when its down callback writes no rule
