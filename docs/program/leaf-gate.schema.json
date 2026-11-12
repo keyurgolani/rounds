@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/program/leaf-gate.schema.json",
+  "title": "Leaf gate mode",
+  "description": "Format of docs/program/leaf-gate.json (ROUNDS-01-L03): report or enforce, and the DR-0003 revision that sets it.",
+  "type": "object",
+  "required": ["description", "mode", "decision"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string", "minLength": 1 },
+    "mode": { "enum": ["report", "enforce"] },
+    "decision": { "type": "string", "pattern": "^DR-\\d{4}@\\d+$" }
+  }
+}
