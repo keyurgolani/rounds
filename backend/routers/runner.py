@@ -19,6 +19,10 @@ With ``ROUNDS_GATE_EXECUTION_SCRATCH`` on (ROUNDS-00A-L03), both routes
 run nothing themselves: they admit and enqueue a job and answer 202
 (``execution.jobs``), and a worker runs the same definition
 (``execution.handlers``).
+Since PR 4 that key is on by default and no value runs code here: below
+``on`` (``legacy`` included) admission answers 503 ``execution_disabled``
+before the account, and ``keys.require_on`` checks it again first in each
+route, so the in-request paths below never run.
 """
 from __future__ import annotations
 

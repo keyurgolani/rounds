@@ -14,7 +14,13 @@ grade, whose graded row the server writes with its result;
 ``POST /api/ai-coding/grade/{job}/review`` then asks for its rubric
 review, once per result (``execution.review``). A grade's answer carries
 only visible output, and a round with a checkpoint that has nothing to run
-is refused before anything runs; its wall seconds are refunded."""
+is refused before anything runs; its wall seconds are refunded.
+
+Since PR 4 both keys are on by default and no value runs code or grades
+here: below ``on`` (``legacy`` included) admission answers 503
+``execution_disabled`` before the account, and ``keys.require_on`` checks
+it again first in each route, so the in-request paths below never run and
+never write an attempt row."""
 from __future__ import annotations
 
 import json

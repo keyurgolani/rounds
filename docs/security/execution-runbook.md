@@ -71,6 +71,8 @@ The harness (`harness/run.sh`) does this whole cycle on every CI run: it restart
 
 To turn on `enforce`, set it and restart the runner and the frontend. The runner's gates line shows `"EXECUTION_DEFINITIONS":{"source":"env","value":"enforce"}`, which the verifier checks with `--gates-log runner.log --expect-gate EXECUTION_DEFINITIONS=enforce`, and the frontend's start log shows `runtime-config: ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`. `--admission` passes as before, since every route still refuses an anonymous caller before it reads the body. A tab opened before the switch gets `legacy_request_rejected` and a Reload button. To go back, set `legacy`, or leave it empty, and restart both; nothing in PocketBase changes, and drafts and attempts stay. A tab opened while it was `enforce` gets `invalid_request` until it reloads.
 
+Since `ROUNDS-00A-L03` PR 4 the execution keys need `enforce`: at `legacy` or `disabled` they act as `off`, so the six routes run nothing, and at `legacy` each answers 503 `execution_disabled` before the account, with every draft kept ([Scratch Jobs](#scratch-jobs), [Grading Jobs](#grading-jobs)).
+
 At startup the runner reads `backend/definitions/manifest.json` (mode 0400 in the image) and checks every shipped version's bytes against its checksum. It logs one `definitions.loaded` line with `entries` and `mismatched`; `mismatched` should be 0. A version whose file is missing or altered is the only one that fails, with `definition_integrity_mismatch`, and the rest keep serving. A manifest that's missing, isn't JSON, or isn't the manifest's shape leaves no definitions at all: the runner logs one `definition.rejected` line with `definition_integrity_mismatch` and no `definitions.loaded` line, keeps starting, and the legacy routes keep serving.
 
 ## Error Codes
@@ -81,8 +83,8 @@ Typed errors answer `{"detail", "code", "correlation_id"}`. `detail` is a fixed 
 | --- | --- | --- | --- | --- |
 | `payload_too_large` | 413 | 1 | The body is over the route's cap, at nginx, the Ingress, or the runner | The app shows too large; trim the input |
 | `route_disabled` | 503 | 2 | The route's gate is off | Turn it back on when it's safe |
-| `definitions_disabled` | 503 | 2 | `ROUNDS_GATE_EXECUTION_DEFINITIONS` is `disabled`, so the six execution routes are off | Set it to `legacy` (or leave it unset) and restart; drafts are kept |
-| `execution_disabled` | 503 | 2 | `ROUNDS_GATE_EXECUTION_SCRATCH` is `off`, or `on` without the store on and definitions enforced, so run, evaluate, run-project, and take-home run are off; or the same for `ROUNDS_GATE_EXECUTION_GRADING`, so grade, take-home submit, and the review routes are off; or a review route while that key isn't `on` | Set what the start's `execution.scratch` or `execution.grading` line names, or set the key to `legacy`, and restart; drafts are kept (Scratch Jobs, Grading Jobs) |
+| `definitions_disabled` | 503 | 2 | `ROUNDS_GATE_EXECUTION_DEFINITIONS` is `disabled`, so the six execution routes are off | Set it to `enforce` and restart the runner and the frontend; at `legacy` the execution keys act as `off`. Drafts are kept |
+| `execution_disabled` | 503 | 2 | `ROUNDS_GATE_EXECUTION_SCRATCH` is `off` or `legacy`, or `on` without the store on, definitions enforced, and both runner secrets, so run, evaluate, run-project, and take-home run are off; or the same for `ROUNDS_GATE_EXECUTION_GRADING`, so grade, take-home submit, and the review routes are off; or a review route while that key isn't `on` | Set what the start's `execution.scratch` or `execution.grading` line names, or set the key back to `on`, and restart; drafts are kept (Scratch Jobs, Grading Jobs) |
 | `unauthenticated` | 401 | 3 | No usable bearer, or PocketBase refused it | The app asks the person to sign in again |
 | `auth_unavailable` | 503 | 3, 8 | PocketBase is down or answered 5xx while checking the account or reading a record | Check PocketBase from the runner (Dependency Checks) |
 | `not_permitted` | 403 | 4 | The account's tier can't use this operation | Every pair in the table is permitted; the demo tier's limits are its quota, and its code runs are `ROUNDS_GATE_DEMO_EXECUTION`'s |
@@ -104,7 +106,7 @@ Typed errors answer `{"detail", "code", "correlation_id"}`. `detail` is a fixed 
 | `definition_retired` | 410 | definition lookup | The named definition was retired; nothing runs | None; the item is gone. Drafts stay |
 | `runtime_unsupported` | 422 | definition lookup | This runner has no runtime for the named variant; the error names the variants it does have | Use a supported variant, or deploy a runner with that runtime |
 | `case_unknown` | 422 | definition lookup | An evaluate named a case id, or a run-project a checkpoint, that the resolved version doesn't have | The app asks for a reload |
-| `definition_invalid` | 422 | after the round lookup | At `EXECUTION_DEFINITIONS=legacy`, a grade of a round with a checkpoint that has no test command; nothing runs, and its wall seconds are refunded | None for the caller; fix the round's record. Drafts stay |
+| `definition_invalid` | 422 | none since PR 4 | The in-request grade's answer for a round it couldn't grade. No key value grades in the request now; a grading job its definition can't run ends `denied`, `definition-invalid` | None |
 | `path_not_allowed` | 422 | after definition lookup | A submitted file uses a harness path, test or package configuration, a Python startup file, or a library module's name, has the same name as a folder, or has a name over 255 bytes; `detail` is a fixed sentence for the kind, never the path | Rename or remove the file; drafts stay |
 | `definition_integrity_mismatch` | 503 | startup and definition lookup | A shipped definition file is missing or its bytes don't match the manifest checksum | Redeploy a clean image; the alert names the version. See Alerts |
 | `worker_unavailable` | 503 | 9, or after admission | Every in-flight slot on this replica is busy, the runner couldn't write a submission's files into its scratch directory (a full disk, say), or the PDF renderer was unreachable, failed, opened no page within 2 s, or didn't answer within 25 s; also a snapshot whose stored file is missing or doesn't hold what its checksum says, which the runner logs (see `docs/operations.md`, Legacy Artifact Snapshots) | The app retries with the same key, keeps the draft, and shows unavailable if it persists; check the renderer, or for a stored file, the restore |
@@ -115,9 +117,9 @@ The app retries `auth_unavailable`, `quota_unavailable`, and `worker_unavailable
 
 ## Scratch Jobs
 
-`ROUNDS_GATE_EXECUTION_SCRATCH` (`ROUNDS-00A-L03` PR 2) runs run, evaluate, run-project, and take-home run as durable jobs on the execution job store. It is `legacy` by default, which runs them in their request.
+`ROUNDS_GATE_EXECUTION_SCRATCH` (`ROUNDS-00A-L03` PR 2) runs run, evaluate, run-project, and take-home run as durable jobs on the execution job store. It is `on` by default since PR 4, and no value runs them in their request: `legacy` acts as `off`, and the runner's start logs `{"event":"execution.scratch","code":"legacy_retired"}`.
 
-- `on` needs `ROUNDS_GATE_EXECUTION_STORE=on` and `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce` on the runner. Set both values, `EXECUTION_DEFINITIONS=enforce` on the frontend too, then `EXECUTION_SCRATCH=on`, and restart every runner replica. A route answers 202 with its job, and the app shows it as queued, running, or how it ended, with Cancel while it waits or runs and Retry after an end the server caused. `on` without either setting acts as `off`, and the runner's start logs `{"event":"execution.scratch","code":"acting_off","needs":[...]}` naming each one missing.
+- `on` needs `ROUNDS_GATE_EXECUTION_STORE=on`, `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce`, `ROUNDS_EXECUTION_SECRET`, and `ROUNDS_ADMISSION_SECRET` on the runner, and `EXECUTION_DEFINITIONS=enforce` on the frontend. Set them before the upgrade, and restart every runner replica after any change. A route answers 202 with its job, and the app shows it as queued, running, or how it ended, with Cancel while it waits or runs and Retry after an end the server caused. `on` without any of them acts as `off`, and the runner's start logs `{"event":"execution.scratch","code":"acting_off","needs":[...]}` naming each one missing, a secret by its name only.
 - `off`: the four routes answer 503 `execution_disabled` before the account, for every caller, and every draft is kept. A queued job a worker claims ends `canceled` before it starts; one already running finishes. To confirm it, name each of the four with that code:
 
   ```sh
@@ -129,16 +131,16 @@ The app retries `auth_unavailable`, `quota_unavailable`, and `worker_unavailable
     --gates-log runner.log --expect-gate EXECUTION_SCRATCH=off
   ```
 
-- To confirm `on`, run `--gates-log runner.log --expect-gate EXECUTION_SCRATCH=on`. It fails a gates line where the key is `on` without the store on or definitions enforced, and says which.
-- Rollback is `off`, then `legacy` once no page waits on a job. `GET /api/execution/jobs/{id}` and its cancel keep answering whatever the key says, so a page sees its job through.
+- To confirm `on`, run `--gates-log runner.log --expect-gate EXECUTION_SCRATCH=on`. It fails a log where the key is `on` without what it needs, from the gates line or the start's `execution.scratch` line, and says which; a key at `legacy` fails too.
+- Rollback is `off`. No value runs code in the request again, `legacy` included; only the previous image on the pre-upgrade backup does ([operations](../operations.md#rolling-back)). `GET /api/execution/jobs/{id}` and its cancel keep answering whatever the key says, so a page sees its job through.
 
 A job-backed request always needs its `Idempotency-Key`, the job's command id. A duplicate answers the job as it is, its envelope once it ended, and isn't charged; the same key for other work is 409 `idempotency_mismatch`. A same-key retry after `worker-lost` or `infrastructure-degraded` runs the job again, charged its wall seconds and no request, until 3 of its attempts have started. A second retry that arrives before the first one has queued the job again gets 409 `already_in_flight` and pays nothing. A charge comes back only when the candidate never started. A replica whose worker isn't ready answers 503 `worker_unavailable` before it charges or enqueues anything. Reading or canceling another account's job, an unknown id, and a malformed one all answer the same 404 `not_found`. A read waits at most 20 s (`?wait=20`); more is 422 `invalid_request`. Only an end the run earned, `passed` or `candidate-failure`, carries the run's output in its envelope; a limit, a cancel, and an end the definition or the infrastructure caused carry none.
 
 ## Grading Jobs
 
-`ROUNDS_GATE_EXECUTION_GRADING` (`ROUNDS-00A-L03` PR 3) runs grade and take-home submit as durable jobs, on the same protocol and with the same key, duplicate, and retry rules as Scratch Jobs. It is `legacy` by default, which grades in the request.
+`ROUNDS_GATE_EXECUTION_GRADING` (`ROUNDS-00A-L03` PR 3) runs grade and take-home submit as durable jobs, on the same protocol and with the same key, duplicate, and retry rules as Scratch Jobs. It is `on` by default since PR 4, and no value grades in the request: `legacy` acts as `off`, and the start logs `{"event":"execution.grading","code":"legacy_retired"}`.
 
-- `on` needs `ROUNDS_GATE_EXECUTION_STORE=on` and `ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce` on the runner, and `EXECUTION_DEFINITIONS=enforce` on the frontend. Set them, then `EXECUTION_GRADING=on`, and restart every runner replica. `on` without either runner setting acts as `off`, and the start logs `{"event":"execution.grading","code":"acting_off","needs":[...]}`. An authoritative end writes the graded row with its envelope, and the app opens the report from that row. A grade is admitted for 45 s a checkpoint; a submission for 120 s.
+- `on` needs what Scratch Jobs' `on` needs. Without any of it, it acts as `off`, and the start logs `{"event":"execution.grading","code":"acting_off","needs":[...]}`. An authoritative end writes the graded row with its envelope, and the app opens the report from that row. A grade is admitted for 45 s a checkpoint; a submission for 120 s.
 - The review routes answer only at `on`: the grade's, `POST /api/ai-coding/grade/{job}/review`, and the submission's, `POST /api/take-home/submit/{job}/review`. Each needs an `Idempotency-Key` and the files that were graded. A review is charged 1 request and no wall seconds, with a 90 s in-flight lease, once per result: asking again answers where the review stands and charges nothing. The answer is `{job_id, rubric_state, rubric_review, unavailable}`. `unavailable` is `no_provider` (no AI provider set up; nothing charged), `files_changed` (the files aren't the ones graded; nothing charged), or `not_reviewable`. A review another request has under way answers 409 `already_in_flight` with a `Retry-After` of 5 s. Another account's job and an unknown one answer 404 `not_found`. The runner's `execution.review` line carries only the kind and a code.
 - `off`: grade, take-home submit, and the review routes answer 503 `execution_disabled` before the account, and drafts are kept. A queued grading job a worker claims ends `canceled`. To confirm it:
 
@@ -149,10 +151,10 @@ A job-backed request always needs its `Idempotency-Key`, the job's command id. A
     --gates-log runner.log --expect-gate EXECUTION_GRADING=off
   ```
 
-- To confirm `on`, run `--gates-log runner.log --expect-gate EXECUTION_GRADING=on`. It fails a gates line where the key is `on` without the store on or definitions enforced, and says which.
-- Rollback is `off`, then `legacy` once no page waits on a job. Ended jobs keep their graded rows and envelopes.
+- To confirm `on`, run `--gates-log runner.log --expect-gate EXECUTION_GRADING=on`. It fails a log where the key is `on` without what it needs, or at `legacy`, and says which.
+- Rollback is `off`. Ended jobs keep their graded rows and envelopes. No value grades in the request again, `legacy` included.
 
-At `legacy` a grade of a round with a checkpoint that has no test command answers 422 `definition_invalid` before anything runs, its wall seconds refunded, and a grade's answer carries only visible output.
+No client writes a graded row at any key value: `1700008700_attempt_grade_rules.js` takes only an account's own `in-progress` or `submitted` row with no `envelope`, and no change to a graded row ([operations](../operations.md#graded-attempt-rows)).
 
 ## Idempotency and Quotas
 

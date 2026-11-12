@@ -25,9 +25,11 @@ services:
       # The key the runner sends with each admission store write; the
       # runner gets the same value. The default is dev-only.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-rounds-dev-admission-key-DO-NOT-USE-IN-PROD}
-      # The execution job store (ROUNDS-00A-L03): its gate, and the
-      # execution-worker password the runner logs in with. No default,
-      # since a known password would log in; set both in .env to try it.
+      # The execution job store (ROUNDS-00A-L03): its gate, on by
+      # default, and the execution-worker password the runner logs in with.
+      # No default, since a known password would log in. Code runs need it
+      # in .env, with ROUNDS_GATE_EXECUTION_DEFINITIONS=enforce; without
+      # either they answer 503 execution_disabled and keep the draft.
       - ROUNDS_GATE_EXECUTION_STORE=${ROUNDS_GATE_EXECUTION_STORE:-}
       - ROUNDS_EXECUTION_SECRET=${ROUNDS_EXECUTION_SECRET:-}
       # The share resolver's password (ROUNDS-00B-L04), the same on the
@@ -90,7 +92,7 @@ services:
       # Same value as PocketBase's; candidate processes never get it.
       - ROUNDS_ADMISSION_SECRET=${ROUNDS_ADMISSION_SECRET:-rounds-dev-admission-key-DO-NOT-USE-IN-PROD}
       # Same value as PocketBase's, with no default; candidate processes
-      # never get it either.
+      # never get it either. Without it the execution keys act as off.
       - ROUNDS_EXECUTION_SECRET=${ROUNDS_EXECUTION_SECRET:-}
       # The share resolver's password, the same value as PocketBase's, with
       # no default; candidate processes never get it (ROUNDS-00B-L04).
