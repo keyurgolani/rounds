@@ -421,6 +421,8 @@ describe('the list', () => {
     await user.click(screen.getByRole('button', { name: 'Revoke link' }));
     expect(await within(item('Live link')).findByText(/^Revoked [A-Z]/)).toBeInTheDocument();
     expect(runner.writes()[0].url).toBe('/api/share/capabilities/capliveaaaaaaa1/revoke');
+    // The answer, the owner fields alone, reads as a revoke that worked.
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('says when there are no links yet', async () => {
@@ -492,6 +494,7 @@ describe('with the gate closed', () => {
     await user.click(screen.getByRole('button', { name: 'Revoke link' }));
     expect(await screen.findByText(/^Revoked [A-Z]/)).toBeInTheDocument();
     expect(runner.writes().map((c) => c.url)).toEqual(['/api/share/capabilities/capliveaaaaaaa1/revoke']);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 
