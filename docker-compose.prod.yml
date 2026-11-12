@@ -213,7 +213,8 @@ services:
     ports:
       # HTTP_BIND is the host address. Unset or blank, it's left empty, and
       # Compose reads the entry as it reads a bare "80:80": every IPv4 and
-      # IPv6 address. 127.0.0.1 or [::1] keeps the port to this host, and a
+      # IPv6 address. 127.0.0.1 or [::1] publishes on loopback only, which
+      # keeps the port to this host on Docker Engine 28.0 or newer, and a
       # value that isn't an IP address stops Compose (docs/configuration.md).
       - "${HTTP_BIND:-}:${HTTP_PORT:-80}:80"
     depends_on:

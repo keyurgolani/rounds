@@ -4,9 +4,9 @@ Production publishes only the frontend's nginx port, on the host address
 HTTP_BIND names. Unset or blank, the address is empty, and Compose reads the
 entry exactly as it read the bare "80:80" entry before HTTP_BIND, which
 Docker publishes on every IPv4 and IPv6 address. 127.0.0.1 or [::1], the
-spellings the docs give, keep the port to this host, for a proxy or tunnel
-in front, and a value that isn't an IP address stops Compose. Dev compose
-publishes each of its ports on 127.0.0.1.
+spellings the docs give, publish it on loopback only, and a value that isn't
+an IP address stops Compose. Dev compose publishes each of its ports on
+127.0.0.1.
 
 The tests that run real Compose run only in GitHub Actions, whose backend
 job has the docker CLI, and skip everywhere else. They only render the
