@@ -7,16 +7,18 @@
 //   - The secret appears only in the show-once panel, in this
 //     component's state. Nothing copies it for you, and "I saved this
 //     link" is the panel's only way out; closing it drops the secret.
-//   - Each live row can be rotated (a new link, one key per click; the
-//     old link stops working) or revoked. Expired, revoked, and source
-//     deleted rows only show their state.
+//   - Your links lists this resume's links: the resume's own and its
+//     variants', never another resume's. Each live row can be rotated (a
+//     new link, one key per click; the old link stops working) or revoked.
+//     Expired, revoked, and source deleted rows only show their state.
 //   - Older links (ROUNDS-00B-L06), this resume's links from before every
 //     link became a share capability, show under the list with why each
 //     is off. One that can gets "Get a new link": CreateShare naming it,
 //     one key per press, into the same show-once panel. None opens, copies,
 //     or deletes anything.
-//   - With share capability resolution off, one line replaces the create
-//     form and every "Get a new link".
+//   - With share capability resolution off, the dialog offers only what
+//     still works: one line replaces the create form, and no row offers
+//     Rotate or "Get a new link". Revoke stays, since it works either way.
 //
 // The panel is the dialog: it traps focus, takes Escape and the backdrop
 // only while no secret shows, and gives focus back to what opened it.
@@ -67,7 +69,7 @@ export const ALREADY_ISSUED_TEXT = 'You already made this link, and Rounds shows
 export const ROTATE_CONFIRM_TEXT = 'The current link stops working, and Rounds makes a new one.';
 export const REVOKE_CONFIRM_TEXT = 'This link stops working for good. You can’t undo this.';
 export const COPY_FAILED_TEXT = 'Couldn’t copy. Select the link and copy it.';
-export const SHARING_OFF_TEXT = 'Sharing is turned off on this server.';
+export const SHARING_OFF_TEXT = 'Sharing is turned off on this server for now.';
 export const OLDER_INTRO_TEXT = 'These links no longer open. Get a new link for any you still need, then send it again.';
 export const OLDER_INTRO_OFF_TEXT = 'These links no longer open.';
 export const REPLACE_LATER_TEXT = 'Can’t create a new link yet.';
@@ -456,6 +458,8 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
   }
 
   const alreadyIssued = notice?.kind === 'already-issued' ? notice : null;
+  // A variant's links name its resume, so they list here too.
+  const rowsHere = rows === null ? null : rows.filter((row) => row.root_resume_id === resumeId);
   const olderHere = (older ?? []).filter((link) => link.root_resume_id === resumeId);
 
   return (
@@ -681,8 +685,9 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
                 Your links
               </h3>
               <LinkList
-                rows={rows}
+                rows={rowsHere}
                 failed={listFailed}
+                canRotate={sharingOn}
                 onRetry={load}
                 action={rowAction}
                 busy={rowBusy}
@@ -727,6 +732,7 @@ function SharePanel({ onClose, resumeId }: { onClose: () => void; resumeId: stri
 function LinkList({
   rows,
   failed,
+  canRotate,
   onRetry,
   action,
   busy,
@@ -738,6 +744,8 @@ function LinkList({
 }: {
   rows: ShareCapability[] | null;
   failed: boolean;
+  // Rotate needs share capability resolution on; Revoke works either way.
+  canRotate: boolean;
   onRetry: () => void;
   action: RowAction | null;
   busy: string | null;
@@ -821,9 +829,11 @@ function LinkList({
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                  <button type="button" onClick={() => onAction({ id: row.id, kind: 'rotate' })} className="share-btn share-btn-quiet">
-                    Rotate
-                  </button>
+                  {canRotate && (
+                    <button type="button" onClick={() => onAction({ id: row.id, kind: 'rotate' })} className="share-btn share-btn-quiet">
+                      Rotate
+                    </button>
+                  )}
                   <button type="button" onClick={() => onAction({ id: row.id, kind: 'revoke' })} className="share-btn share-btn-quiet">
                     Revoke
                   </button>

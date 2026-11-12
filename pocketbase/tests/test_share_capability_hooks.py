@@ -42,7 +42,7 @@ MARKUP_B = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resume</titl
 MARKUP_D = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resume</title></head><body><p>Demo</p></body></html>'
 
 OWNER_FIELDS = ["id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at",
-                "capability_version", "password_set"]
+                "capability_version", "password_set", "root_resume_id"]
 LOOKUP_FIELDS = ["id", "status", "expires_at", "capability_version", "snapshot", "password_policy_ref", "markup"]
 
 # A verifier in #12's pinned format (backend/app/share_password.py): only its
@@ -50,11 +50,13 @@ LOOKUP_FIELDS = ["id", "status", "expires_at", "capability_version", "snapshot",
 PW1 = "pw1$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$" + "A" * 43
 
 
-def owner_view(row: dict) -> dict:
-    """What the owner sees of a stored row: never its digest or verifier."""
+def owner_view(row: dict, root: str = "") -> dict:
+    """What the owner sees of a stored row: never its digest or verifier.
+    root is the resume it shares, which only the list fills in."""
     view = {k: row[k] for k in OWNER_FIELDS[:7]}
     view["capability_version"] = row["capability_version"]
     view["password_set"] = row["password_policy_ref"] != ""
+    view["root_resume_id"] = root
     return view
 
 
@@ -68,9 +70,9 @@ def checksum(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def snap(user: str, kind: str, source: str, markup: str) -> dict:
-    return {"user": user, "source_kind": kind, "source_id": source, "content_checksum": checksum(markup),
-            "markup": "snapshot_abc.html", "markup_text": markup}
+def snap(user: str, kind: str, source: str, markup: str, parent: str = "") -> dict:
+    return {"user": user, "source_kind": kind, "source_id": source, "parent_id": parent,
+            "content_checksum": checksum(markup), "markup": "snapshot_abc.html", "markup_text": markup}
 
 
 def base_state() -> dict:
@@ -84,7 +86,7 @@ def base_state() -> dict:
         "variants": {"variantaaaaaaa1": {"user": A, "name": "Backend roles", "resume": "resumeaaaaaaaa1"}},
         "snapshots": {
             "snapresumeaaaa1": snap(A, "resume", "resumeaaaaaaaa1", MARKUP_A),
-            "snapvariantaaa1": snap(A, "variant", "variantaaaaaaa1", MARKUP_V),
+            "snapvariantaaa1": snap(A, "variant", "variantaaaaaaa1", MARKUP_V, parent="resumeaaaaaaaa1"),
             "snapresumebbbb1": snap(B, "resume", "resumebbbbbbbb1", MARKUP_B),
             "snapdemodemo001": snap(DEMO, "resume", "resumedemodemo1", MARKUP_D),
         },
@@ -551,6 +553,50 @@ def test_the_owner_list_has_only_the_callers_rows_newest_first_and_only_the_owne
     text = json.dumps(res["value"])
     for secret in (D1, D2, D3, PW1, "argon2id", "snapresumeaaaa1", A, B):
         assert secret not in text
+
+
+def test_the_owner_list_names_the_resume_each_link_shares_a_variants_by_its_resume():
+    state = _owned_state()
+    state["resumes"]["resumeaaaaaaaa2"] = {"user": A, "name": "Ada's second resume"}
+    state["snapshots"]["snapresumeaaaa2"] = snap(A, "resume", "resumeaaaaaaaa2", MARKUP_A)
+    caps = state["capabilities"]
+    caps["capaaaaaaaaaaa3"] = cap_row("capaaaaaaaaaaa3", A, "snapresumeaaaa2", D9, state, created=fmt(NOW - 2 * DAY))
+    caps["capaaaaaaaaaaa4"] = cap_row("capaaaaaaaaaaa4", A, "snapresumeaaaa1", "4" * 64, state,
+                                      created=fmt(NOW - 4 * DAY))
+    (res,) = run([{"call": "list", "caller": A}], state)["results"]
+    items = res["value"]["body"]["items"]
+    assert [(i["id"], i["root_resume_id"]) for i in items] == [
+        ("capaaaaaaaaaaa2", "resumeaaaaaaaa1"),  # the variant's link, by the variant's resume
+        ("capaaaaaaaaaaa3", "resumeaaaaaaaa2"),
+        ("capaaaaaaaaaaa1", "resumeaaaaaaaa1"),
+        ("capaaaaaaaaaaa4", "resumeaaaaaaaa1"),
+    ]
+    # Each snapshot is read once, however many links name it.
+    assert res["calls"] == ["ownRows", "snapshot", "snapshot", "snapshot"]
+
+
+@pytest.mark.parametrize("snapshot", [
+    None,  # gone
+    snap(B, "resume", "resumebbbbbbbb1", MARKUP_B),  # another account's
+    snap(A, "variant", "variantaaaaaaa1", MARKUP_V),  # a variant naming no resume
+    snap(A, "variant", "variantaaaaaaa1", MARKUP_V, parent="not-a-record-id"),
+    snap(A, "resume", "RESUMEAAAAAAAA1", MARKUP_A),
+])
+def test_a_link_whose_snapshot_names_no_resume_of_the_owner_lists_with_none(snapshot):
+    state = shared_state()
+    if snapshot is None:
+        del state["snapshots"]["snapresumeaaaa1"]
+    else:
+        state["snapshots"]["snapresumeaaaa1"] = snapshot
+    (res,) = run([{"call": "list", "caller": A}], state)["results"]
+    (only,) = res["value"]["body"]["items"]
+    assert (only["id"], only["root_resume_id"]) == ("capaaaaaaaaaaa1", "")
+
+
+def test_a_command_answer_names_no_resume():
+    out = run([{"call": "revoke", "caller": A, "id": "capaaaaaaaaaaa1"}], shared_state())
+    assert out["results"][0]["value"]["body"]["capability"]["root_resume_id"] == ""
+    assert "snapshot" not in out["results"][0]["calls"]
 
 
 def test_a_caller_with_no_capabilities_or_no_account_lists_none():

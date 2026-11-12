@@ -979,7 +979,7 @@ class _CapabilityPB:
     def _item(self, cid):
         item = {"id": cid, "status": self.status if cid.startswith("a-") else "active", "revoked_reason": "",
                 "purpose": "p", "expires_at": "t", "created": "t", "revoked_at": "", "capability_version": 1,
-                "password_set": False}
+                "password_set": False, "root_resume_id": ""}
         if self.extra_field:
             item["bearer_digest"] = "d" * 64
         return item

@@ -45,7 +45,8 @@ function storeOver(state, calls, options) {
   const view = (id) => {
     const s = state.snapshots[id];
     return s
-      ? { id, user: s.user, source_kind: s.source_kind, source_id: s.source_id, content_checksum: s.content_checksum,
+      ? { id, user: s.user, source_kind: s.source_kind, source_id: s.source_id,
+          parent_id: typeof s.parent_id === "string" ? s.parent_id : "", content_checksum: s.content_checksum,
           markup: typeof s.markup === "string" ? s.markup : "snapshot_x.html", key: "snapshots/" + id }
       : null;
   };

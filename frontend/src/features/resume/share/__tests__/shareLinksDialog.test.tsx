@@ -2,9 +2,11 @@
 // in the show-once panel, which copies nothing for you and closes only
 // through "I saved this link"; a clipboard failure leaves the link
 // selectable; the secret is gone once the panel closes; one key per create
-// form and per Rotate click; rows show their state, and only live rows
-// can be rotated or revoked; the panel is the dialog, traps focus, and
-// gives it back; and with the gate closed one line replaces the create.
+// form and per Rotate click; Your links lists only this resume's links,
+// its variants' included; rows show their state, and only live rows can
+// be rotated or revoked; the panel is the dialog, traps focus, and gives
+// it back; and with the gate closed one line replaces the create, and
+// Revoke is the only action a row offers.
 //
 // Older links (ROUNDS-00B-L06): only this resume's, each saying why it's
 // off; "Get a new link" only where one can be made, one key per press,
@@ -50,6 +52,7 @@ import {
 } from '../client';
 
 const RESUME = 'resumeaaaaaaaa1';
+const OTHER_RESUME = 'resumebbbbbbbb1';
 const TOKEN = 'sd1_AbCdEfGhIjKlMnOpQrStUv';
 const NEW_TOKEN = 'sd1_ZyXwVuTsRqPoNmLkJiHgFe';
 const DAY = 86_400_000;
@@ -69,6 +72,7 @@ function row(id: string, over: Partial<ShareCapability> = {}): ShareCapability {
     revoked_at: '',
     capability_version: 1,
     password_set: false,
+    root_resume_id: RESUME,
     ...over,
   };
 }
@@ -415,6 +419,72 @@ describe('the list', () => {
     openDialog();
     expect(await screen.findByText(/No links yet/)).toBeInTheDocument();
   });
+
+  it('lists only this resume’s links, its variants’ included, and never another resume’s', async () => {
+    runner.list = [
+      row('capresumeaaaaa1', { purpose: 'Resume link' }),
+      // A variant's link names the variant's resume.
+      row('capvariantaaaa1', { purpose: 'Variant link' }),
+      row('capotherresume1', { purpose: 'Other resume link', root_resume_id: OTHER_RESUME }),
+      row('capunnamedaaaa1', { purpose: 'Unnamed link', root_resume_id: '' }),
+    ];
+    openDialog();
+    const list = await screen.findByRole('list');
+    expect(within(list).getAllByRole('listitem').map((li) => li.querySelector('span')?.textContent)).toEqual([
+      'Resume link',
+      'Variant link',
+    ]);
+    expect(screen.queryByText('Other resume link')).toBeNull();
+    expect(screen.queryByText('Unnamed link')).toBeNull();
+  });
+
+  it('says there are no links yet when only another resume has some', async () => {
+    runner.list = [row('capotherresume1', { purpose: 'Other resume link', root_resume_id: OTHER_RESUME })];
+    openDialog();
+    expect(await screen.findByText(/No links yet/)).toBeInTheDocument();
+    expect(screen.queryByText('Other resume link')).toBeNull();
+  });
+});
+
+describe('with the gate closed', () => {
+  it('offers Revoke alone, with no create, Rotate, or Get a new link', async () => {
+    gate.value = 'disabled';
+    runner.list = [row('capliveaaaaaaa1', { purpose: 'Live link' })];
+    runner.older = [older('lnkturnedoffaa1')];
+    openDialog();
+    const live = (await screen.findByText('Live link')).closest('li') as HTMLElement;
+    await screen.findByRole('heading', { name: 'Older links' });
+    expect(within(live).queryByRole('button', { name: 'Rotate' })).toBeNull();
+    expect(within(live).getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual([
+      'Close',
+      'Revoke',
+    ]);
+  });
+
+  it('says in one line that sharing is turned off on this server for now', async () => {
+    gate.value = 'disabled';
+    openDialog();
+    expect(screen.getByText('Sharing is turned off on this server for now.')).toBeInTheDocument();
+    expect(await screen.findByText('No links yet.')).toBeInTheDocument();
+  });
+
+  it('still revokes after a confirm', async () => {
+    const user = setupUser();
+    gate.value = 'disabled';
+    runner.list = [row('capliveaaaaaaa1', { purpose: 'Live link' })];
+    runner.answers.push(() => {
+      runner.list = [row('capliveaaaaaaa1', { purpose: 'Live link', status: 'revoked', revoked_reason: 'owner',
+        revoked_at: pbDate(Date.now()) })];
+      return json(200, { ...runner.list[0], root_resume_id: '' });
+    });
+    openDialog();
+    await user.click(await screen.findByRole('button', { name: 'Revoke' }));
+    expect(screen.getByText(REVOKE_CONFIRM_TEXT)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Revoke link' }));
+    expect(await screen.findByText(/^Revoked [A-Z]/)).toBeInTheDocument();
+    expect(runner.writes().map((c) => c.url)).toEqual(['/api/share/capabilities/capliveaaaaaaa1/revoke']);
+  });
 });
 
 describe('the dialog', () => {
@@ -474,8 +544,6 @@ describe('a gate flip', () => {
 });
 
 describe('older links', () => {
-  const OTHER_RESUME = 'resumebbbbbbbb1';
-
   function rows(): OlderLink[] {
     return [
       older('lnkturnedoffaa1'),

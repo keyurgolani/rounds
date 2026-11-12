@@ -60,9 +60,11 @@ MAX_RESOLVE_BODY = 2048
 RECORD_ID = re.compile(r"[a-z0-9]{15}")
 # What an owner sees of a capability; nothing else leaves these routes.
 # #12 (ROUNDS-00B-L04) adds the version Rotate expects and whether a
-# password protects the link, never the verifier.
+# password protects the link, never the verifier. root_resume_id is the
+# resume the link shares, a variant's by its resume: a record id, or empty
+# in a command's answer.
 OWNER_FIELDS = ("id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at",
-                "capability_version", "password_set")
+                "capability_version", "password_set", "root_resume_id")
 _TEXT_FIELDS = OWNER_FIELDS[:7]
 STATUSES = ("active", "revoked")
 
@@ -239,6 +241,10 @@ def owner_view(item: Any) -> dict[str, Any] | None:
     out["capability_version"], out["password_set"] = version, password_set
     if RECORD_ID.fullmatch(out["id"]) is None or out["status"] not in STATUSES:
         return None
+    root = item.get("root_resume_id", "")
+    if not isinstance(root, str) or (root and RECORD_ID.fullmatch(root) is None):
+        return None
+    out["root_resume_id"] = root
     return out
 
 

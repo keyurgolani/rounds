@@ -69,7 +69,9 @@ export class ShareThrottled extends Error {
 // ---- share capabilities (ROUNDS-00B-L04) ------------------------------------
 
 /** What the owner sees of one link (backend/app/share_capabilities.py
- *  OWNER_FIELDS): never its secret, digest, or password. */
+ *  OWNER_FIELDS): never its secret, digest, or password. root_resume_id is
+ *  the resume it shares, a variant's by its resume; a command's answer
+ *  leaves it empty. */
 export type ShareCapability = {
   id: string;
   status: 'active' | 'revoked';
@@ -80,6 +82,7 @@ export type ShareCapability = {
   revoked_at: string;
   capability_version: number;
   password_set: boolean;
+  root_resume_id: string;
 };
 
 /** The fields CreateShare and RotateShareBearer answer for the link. */
@@ -135,7 +138,8 @@ function isCapability(value: unknown): value is ShareCapability {
     (v.status === 'active' || v.status === 'revoked') &&
     ['revoked_reason', 'purpose', 'expires_at', 'created', 'revoked_at'].every((k) => typeof v[k] === 'string') &&
     typeof v.capability_version === 'number' &&
-    typeof v.password_set === 'boolean'
+    typeof v.password_set === 'boolean' &&
+    typeof v.root_resume_id === 'string'
   );
 }
 

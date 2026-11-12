@@ -326,7 +326,7 @@ CAPABILITY_ROUTE = "/api/rounds/share/capabilities"
 # #12 (ROUNDS-00B-L04) adds the version Rotate expects and whether a
 # password protects the link.
 CAPABILITY_OWNER_FIELDS = frozenset({"id", "status", "revoked_reason", "purpose", "expires_at", "created", "revoked_at",
-                                     "capability_version", "password_set"})
+                                     "capability_version", "password_set", "root_resume_id"})
 
 
 def list_server_only_denied(pb, collection, a, b, expected) -> Receipt:
