@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { AuthRecord } from 'pocketbase';
 import { pb } from '../lib/pocketbase';
+import { clearDemoKeys } from '../lib/demoKeys';
 import { signupConfig } from './signupConfig';
 
 // Idle timeout: log the user out if they don't interact with the app
@@ -70,42 +71,41 @@ function recordToUser(record: AuthRecord | null): User | null {
   };
 }
 
-const DEMO_COLLECTIONS_IN_DELETE_ORDER = [
-  'todos',
-  'code_drafts',
-  'offers',
-  'user_preferences',
-  'user_progress',
-  'interview_rounds',
-  'applications',
-  'campaigns',
-  'experience_anecdotes',
-];
+// The demo's sign-out on the server (ROUNDS-00B-L07): PocketBase clears
+// what the demo account holds and puts its seeded profile back. The SPA
+// waits for it at most DEMO_END_WAIT_MS and signs out either way; a sweep
+// clears the account when nobody signs out.
+const DEMO_END_PATH = '/api/rounds/demo/sessions/end';
+const DEMO_END_WAIT_MS = 5000;
 
-async function resetDemoUser(record: AuthRecord): Promise<void> {
-  if (!record?.id) return;
-  const userId = record.id;
-
-  for (const collection of DEMO_COLLECTIONS_IN_DELETE_ORDER) {
-    const rows = await pb.collection(collection).getFullList<{ id: string }>({
-      filter: `user = "${userId}"`,
-      fields: 'id',
-    });
-    await Promise.all(rows.map((row) => pb.collection(collection).delete(row.id)));
-  }
-
-  // Only profile fields: PocketBase refuses a client write to is_demo or
-  // the old demo flags, and the runner's demo tier holds the limits.
-  const updated = await pb.collection('users').update(userId, {
-    name: 'Rounds Demo',
-    bio: 'Disposable hosted demo account. Changes reset on logout.',
-    target: 'Explore Rounds',
-  });
-  pb.authStore.save(pb.authStore.token, updated);
-
-  clearDemoStorage(userId);
+function isDemoRecord(record: AuthRecord | null): boolean {
+  return Boolean(record) && (record as unknown as { is_demo?: boolean }).is_demo === true;
 }
 
+// The request starts before this returns its promise, with the token it
+// was given, so a caller may clear the auth store right after.
+// `keepalive` lets it finish when the page is going away.
+async function endDemoSession(token: string, keepalive = false): Promise<void> {
+  const controller = typeof AbortController === 'undefined' ? null : new AbortController();
+  const timer = controller ? window.setTimeout(() => controller.abort(), DEMO_END_WAIT_MS) : 0;
+  try {
+    await fetch(pb.buildURL(DEMO_END_PATH), {
+      method: 'POST',
+      headers: { Authorization: token },
+      keepalive,
+      signal: controller?.signal,
+    });
+  } catch {
+    /* the sweep clears the account later */
+  } finally {
+    if (timer) window.clearTimeout(timer);
+  }
+}
+
+// What a demo session left in this browser: its code drafts and login
+// streak, the current campaign, practice status, theme tweaks, and the
+// activity clock, its code-run keys in session storage, and every key
+// under the demo-only prefix (lib/demoKeys).
 function clearDemoStorage(userId: string): void {
   try {
     const prefixes = [
@@ -125,10 +125,25 @@ function clearDemoStorage(userId: string): void {
       if (exact.has(key) || prefixes.some((prefix) => key.startsWith(prefix))) keys.push(key);
     }
     for (const key of keys) window.localStorage.removeItem(key);
+    const jobs: string[] = [];
+    for (let i = 0; i < window.sessionStorage.length; i += 1) {
+      const key = window.sessionStorage.key(i);
+      if (key && key.startsWith('rounds:job:')) jobs.push(key);
+    }
+    for (const key of jobs) window.sessionStorage.removeItem(key);
   } catch {
     /* storage may be unavailable */
   }
+  clearDemoKeys();
 }
+
+// A start with no demo session clears the demo-only keys a demo session
+// that ended elsewhere (a closed tab, an expired token) left behind. It
+// runs once, when the app loads.
+export function clearDemoKeysWithoutADemoSession(): void {
+  if (!(pb.authStore.isValid && isDemoRecord(pb.authStore.record))) clearDemoKeys();
+}
+clearDemoKeysWithoutADemoSession();
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -167,6 +182,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // failure) keeps the user signed in and retries next mount.
         const status = (err as { status?: number } | null)?.status ?? 0;
         if (status === 401 || status === 403 || status === 404) {
+          // A rejected demo session can't reach the server's sign-out,
+          // so the sweep clears the account; the browser's keys go now.
+          const record = pb.authStore.record;
+          if (record && isDemoRecord(record)) clearDemoStorage(record.id);
           pb.authStore.clear();
           if (!cancelled) setUser(null);
         }
@@ -243,6 +262,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // storage event. Reading localStorage on every tick would also
       // work but isn't necessary.
       if (Date.now() - lastActivityRef.current >= IDLE_TIMEOUT_MS) {
+        // An idle demo session ends on the server too; keepalive lets the
+        // request finish if the tab is closing.
+        const record = pb.authStore.record;
+        if (record && isDemoRecord(record)) {
+          void endDemoSession(pb.authStore.token, true);
+          clearDemoStorage(record.id);
+        }
         pb.authStore.clear();
       }
     }, IDLE_CHECK_INTERVAL_MS);
@@ -283,10 +309,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await pb.collection('users').authWithOAuth2({ provider });
   }, []);
 
+  // A demo sign-out clears what the demo account holds on the server and
+  // what the session left in this browser, then signs out even if the
+  // server didn't answer.
   const logout = useCallback(async () => {
     const record = pb.authStore.record;
-    if (record && (record as unknown as { is_demo?: boolean }).is_demo === true) {
-      await resetDemoUser(record);
+    if (record && isDemoRecord(record)) {
+      await endDemoSession(pb.authStore.token);
+      clearDemoStorage(record.id);
     }
     pb.authStore.clear();
   }, []);
@@ -323,6 +353,11 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
+}
+
+/** Whether the demo account is signed in; false outside AuthProvider. */
+export function useIsDemo(): boolean {
+  return useContext(AuthContext)?.user?.isDemo === true;
 }
 
 export function initials(name: string) {

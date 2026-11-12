@@ -16,6 +16,8 @@ import { useSearchParams } from 'react-router-dom';
 import { Sparkles, Wand2 } from 'lucide-react';
 import { listApplications } from '../../../../applications/api';
 import { usePersistedState } from '../../../../hooks/usePersistedState';
+import { useIsDemo } from '../../../../auth/AuthProvider';
+import { localKey } from '../../../../lib/demoKeys';
 import type { Resume, ResumeData } from '../../types';
 import { tailorResume } from '../../ai/client';
 import { createVariant } from '../../api';
@@ -47,7 +49,8 @@ const TONES = [
 ];
 
 export default function TailorTab({ data, resume, setData, links, setLinks }: Props) {
-  const persistKey = `rounds.resume.tailor.${resume?.id ?? 'untitled'}`;
+  // The demo account's keys go under the demo-only prefix (lib/demoKeys).
+  const persistKey = localKey(`rounds.resume.tailor.${resume?.id ?? 'untitled'}`, useIsDemo());
   const [searchParams] = useSearchParams();
   const urlAppId = searchParams.get('app');
 

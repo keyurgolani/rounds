@@ -72,6 +72,12 @@ describe('the profile page', () => {
     expect(values[1]).toBe('Not set');
   });
 
+  it('says what the demo sign-out clears', () => {
+    renderAs({ ...BASE, isDemo: true });
+    expect(screen.getByText('Signs you out and clears what everyone added to the demo account.')).toBeTruthy();
+    expect(screen.queryByText('Clears your local session on this device.')).toBeNull();
+  });
+
   it('still lets any other account edit and save its profile', () => {
     const { container } = renderAs({ ...BASE, name: 'Ada', isDemo: false });
     expect(container.querySelector('form')).not.toBeNull();

@@ -298,7 +298,9 @@ function ProfileBody() {
           <div
             style={{ fontSize: 11.5, color: 'var(--text-4)', marginTop: 3, fontWeight: 400 }}
           >
-            Clears your local session on this device.
+            {user.isDemo
+              ? 'Signs you out and clears what everyone added to the demo account.'
+              : 'Clears your local session on this device.'}
           </div>
         </button>
       </aside>
