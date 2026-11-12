@@ -222,7 +222,7 @@ jobs:
   containment-corpus:
     # Adversarial execution and rendering conformance corpus
     # (ROUNDS-00A-L08, stage 1). Builds the stack from this commit and runs
-    # the hostile-fixture corpus against it, then uploads the receipt. Runs
+    # the hostile-fixture corpus against it. Runs
     # on pull requests into main and next and on pushes to them. Not yet a
     # required check: the owner adds it to the ruleset at stage 2.
     if: >-
@@ -246,10 +246,4 @@ jobs:
       # use Finch.
       - name: Run the containment corpus
         run: COMPOSE_BIN="docker compose" tests/conformance/run.sh
-      - name: Upload receipt
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: containment-corpus-receipt
-          path: tests/conformance/.receipts/
-          if-no-files-found: warn
+      # The receipt stays in the job: no upload until what a class-level receipt holds has been reviewed.
