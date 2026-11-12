@@ -258,8 +258,8 @@ REGISTRY: tuple[Gate, ...] = (
         # CreateShare, and rotation. Read on each request, like the switch
         # above, and by the SPA, so the share dialog matches the runner.
         # Closed by default: until the owner opens it, no share link
-        # resolves and none is made (ROUNDS-00B-L06), so a deploy changes
-        # nothing about who can read a link.
+        # resolves and none is made (ROUNDS-00B-L06), so a deploy opens
+        # nothing.
         name="SHARE_CAPABILITY_RESOLUTION",
         values=ROUTE_VALUES,
         default="disabled",

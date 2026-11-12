@@ -300,7 +300,7 @@ def check_uniform(c: Checks, writer: ReceiptWriter, pb: PBClient, state: dict, o
     if not uniform(resolved) or resolved[0][:2] != (404, NOT_FOUND):
         problems.append(f"resolver status={resolved[0][0]} uniform={uniform(resolved)}")
 
-    # PocketBase itself, not through nginx, as the scan expects.
+    # PocketBase's own API, for every caller.
     for label, token in (("anonymous", None), ("owner", owner), ("other", other)):
         by_filter = [_rest(f"{LINKS_PATH}?filter=" + _q(f"token='{v}'"), token) for v in values]
         by_param = [_rest(f"{LINKS_PATH}?token=" + _q(v), token) for v in values]
