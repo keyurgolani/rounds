@@ -26,7 +26,8 @@ DOCKERFILE = ROOT / "pocketbase/Dockerfile"
 HOOKS = ROOT / "pocketbase/pb_hooks"
 MIGRATIONS = ROOT / "pocketbase/pb_migrations"
 RUNNER = {"ai.py": ROOT / "backend/routers/ai.py", "take_home.py": ROOT / "backend/routers/take_home.py"}
-COUNTED_PATHS = ["pocketbase/pb_hooks", "pocketbase/pb_migrations", "backend/routers/ai.py", "backend/routers/take_home.py"]
+VERIFIER = ROOT / "harness/verify_deployment.py"
+COUNTED_PATHS = ["pocketbase/pb_hooks", "pocketbase/pb_migrations", "backend/routers/ai.py", "backend/routers/take_home.py", "harness/verify_deployment.py"]
 
 rc = json.loads(RECEIPT.read_text()) if RECEIPT.exists() else None
 _pin = re.search(r"^ARG PB_VERSION=(\d+\.\d+\.\d+)$", DOCKERFILE.read_text(), re.M)
@@ -90,6 +91,10 @@ F["runnerWrites"] = sum(F["runner"].values())
 # runner's in-request take-home writes can't run.
 _take_home = RUNNER["take_home.py"].read_text()
 TAKE_HOME_GATED = all(f'keys.require_on("{r}")' in _take_home for r in ("take_home_run", "take_home_submit"))
+# The deployment verifier's two comments on what a 0.22 server answers, by line.
+F["verifierShapes"] = [i + 1 for i, line in enumerate(VERIFIER.read_text().splitlines()) if re.search(r"PocketBase 0\.22\.\d+(?:'s answer| answers)", line)]
+if len(F["verifierShapes"]) != 2:
+    raise SystemExit(f"expected 2 comments on PocketBase 0.22's answers in {VERIFIER.name}, found {len(F['verifierShapes'])}")
 # Which binary made the schema snapshot; the record says so (DB9).
 SNAP_VERSION = json.loads((ROOT / "contracts/database/schema-snapshot.json").read_text())["pocketbaseVersion"]
 if F["newDao"] != F["migrations"]:
@@ -164,6 +169,19 @@ restore = target("restore_rto")
 result = (rc or {}).get("result", "pending")
 checkpoint = get(S10, "steady", "checkpoint") or {}
 steady_failed = sum(n for s, n in (get(S10, "steady", "statuses") or {}).items() if s not in ("200", "409"))
+# Read-your-writes: the p99 is over the probes the projection answered within
+# 5 s; the rest took the canonical fallback, so say both.
+ryw_n = get(S10, "steady", "readYourWritesMs", "n")
+ryw_fallbacks = get(S10, "steady", "readYourWritesFallbacks")
+ryw_probes = get(S10, "steady", "probes")
+if None not in (ryw_n, ryw_fallbacks, ryw_probes) and ryw_n + ryw_fallbacks != ryw_probes:
+    raise SystemExit(f"the receipt's {ryw_probes} probes aren't its {ryw_n} answered reads plus {ryw_fallbacks} fallbacks")
+ryw_limit = (
+    f"Read-your-writes p99 {ms(ryw99)} over the {ryw_n} reads the projection answered, against 5 s; the other {ryw_fallbacks} of "
+    f"{ryw_probes} waited past 5 s and took the canonical fallback."
+    if ryw_fallbacks else
+    f"Read-your-writes p99 {ms(ryw99)} through the projection over all {ryw_probes} reads, against 5 s, with none taking the canonical fallback."
+)
 
 
 def backup(sc: dict, method: str) -> dict:
@@ -537,11 +555,9 @@ record["decisions"] = [
         "limits": [
             f"Relay lag p95 {ms(lag95)} at the steady rate with 10 accounts, against 2 s, and {ms(get(S1, 'steady', 'relayLagMs', 'p95'))} "
             "with 1, counted over the phase's own events once the sweep's backlog had drained; #22 sizes its batches and poll interval "
-            f"against it{', and it is the closest of the five targets' if CLOSEST == 'projection_lag_p95' else ''}. The tail is the "
-            f"checkpoint's: p99.9 {ms(lag999)} at 10 accounts while a TRUNCATE checkpoint held the writer (DB1).",
-            f"Read-your-writes p99 {ms(ryw99)} through the projection, against 5 s, with "
-            f"{get(S10, 'steady', 'readYourWritesFallbacks', default='pending')} of {get(S10, 'steady', 'readYourWritesMs', 'n', default='pending')} "
-            "reads taking the canonical fallback.",
+            f"against it{', and it is the closest of the five targets' if CLOSEST == 'projection_lag_p95' else ''}. Its p99.9 at 10 "
+            f"accounts, {ms(lag999)}, is as long as the commands in flight during the TRUNCATE checkpoint took (DB1).",
+            ryw_limit,
         ],
         "consequences": "#22 runs the relay in the runner and #23 the projectors in PocketBase; both write through dispatcher_service.",
         "migrationImpact": "#22 and #23 add their tables in additive migrations with null rules.",
@@ -583,8 +599,9 @@ record["decisions"] = [
             f"Restore at 10 accounts: {restore.get('value', 'pending')} s against 30 minutes ({restore.get('basis', 'pending')}): the "
             f"database restored and checked in {restore_of(S10, 'vacuum-into').get('restoreSeconds', 'pending')} s, and 100 GB of files at "
             f"the 2 GiB sample's {copy_rate}.",
-            f"Taking the online copy at 10 accounts: VACUUM INTO {round((vac10.get('ms') or 0) / 1000, 1)} s and SQLite's backup API "
-            f"{ext10.get('seconds', 'pending')} s, with commands waiting at most {ms(vac10.get('queueMsDuring', {}).get('max'))} meanwhile.",
+            f"Taking the online copy at 10 accounts: VACUUM INTO took {round((vac10.get('ms') or 0) / 1000, 1)} s, with commands waiting at "
+            f"most {ms(vac10.get('queueMsDuring', {}).get('max'))} meanwhile, and SQLite's backup API {ext10.get('seconds', 'pending')} s, "
+            f"with commands waiting at most {ms(ext10.get('queueMsDuring', {}).get('max'))}.",
         ],
         "consequences": "#157 writes the procedure and its rehearsal; #76 holds file purges until a backup has run.",
         "migrationImpact": "None here. #157 changes docs/operations.md.",
@@ -764,7 +781,8 @@ record["pocketbase"] = {
         {"id": "admins-denials", "site": "frontend/nginx.conf, harness/verify_deployment.py (deployment.admins.present)", "count": 2,
          "upstream": f"{GUIDE} (implied: admins become _superusers records, so /api/admins goes)",
          "note": "The nginx refusal and the verifier's check both name /api/admins."},
-        {"id": "verifier-shapes", "site": "harness/verify_deployment.py:123 and :431", "count": 2, "upstream": f"{GUIDE} (response shapes change)",
+        {"id": "verifier-shapes", "site": f"harness/verify_deployment.py:{F['verifierShapes'][0]} and :{F['verifierShapes'][1]}", "count": 2,
+         "upstream": f"{GUIDE} (response shapes change)",
          "note": "The deployment verifier pins 0.22 answers."},
         {"id": "sdk-skew", "site": "frontend/package.json (pocketbase ^0.26.8)", "count": 1, "upstream": f"{GUIDE} (a 0.22 server keeps the JS SDK below 0.22.0)",
          "note": "The SPA runs SDK 0.26.8 against a 0.22 server; #19's client uses only calls a 0.22 server answers, and the port settles the skew."},
@@ -801,13 +819,15 @@ if BENCH_VERSION not in ("pending", PIN):
         f"The receipt ran on {BENCH_VERSION}, before P3 moved the pin to {PIN}. Both are on the {LINE} line; the numbers are "
         f"{BENCH_VERSION}'s, and the port re-runs the benchmark."
     )
+# Anchored to the ratification: the snapshot isn't governed, and a later
+# migration PR regenerates it, on whatever binary it runs, with no revision.
 record["pocketbase"]["snapshot"] = (
-    (f"At this revision, contracts/database/schema-snapshot.json comes from migrate up on the {SNAP_VERSION} binary, not {PIN}: "
-     f"the {LINE} releases between them add no database migration, so the schema is the same. A PR that changes a migration "
-     "regenerates it.")
+    (f"When this revision was ratified, contracts/database/schema-snapshot.json came from migrate up on the {SNAP_VERSION} binary, "
+     f"not {PIN}: the {LINE} releases between them add no database migration, so the schema is the same. A PR that changes a "
+     "migration regenerates it.")
     if SNAP_VERSION != PIN else
-    (f"At this revision, contracts/database/schema-snapshot.json comes from migrate up on the pinned {PIN} binary. A PR that "
-     "changes a migration regenerates it.")
+    (f"When this revision was ratified, contracts/database/schema-snapshot.json came from migrate up on the pinned {PIN} binary. "
+     "A PR that changes a migration regenerates it.")
 )
 
 record["identifiers"] = [

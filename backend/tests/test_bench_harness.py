@@ -214,3 +214,33 @@ def test_the_relay_backlog_is_the_outbox_past_the_cursor(tmp_path):
     con.commit()
     con.close()
     assert bench.relay_backlog(dirs) == 0 and bench.wait_relayed(dirs, timeout=1) < 1
+
+
+def _executable(path: Path, version: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"#!/bin/sh\necho 'pocketbase version {version}'\n")
+    path.chmod(0o755)
+    return path
+
+
+def test_the_default_binary_is_the_pinned_release_under_the_tools_directory(tmp_path, monkeypatch):
+    pb = bench.pbnative
+    pinned = pb.pinned_version()
+    assert pinned.count(".") == 2 and all(p.isdigit() for p in pinned.split("."))
+    exe = _executable(tmp_path / f"pocketbase-{pinned}" / "bin" / "pocketbase", pinned)
+    monkeypatch.setenv(pb.TOOLS_ENV, str(tmp_path))
+    assert pb.binary_path() == exe
+    # No other release stands in for the pin, and with no directory the run needs a path.
+    monkeypatch.setenv(pb.TOOLS_ENV, str(tmp_path / "elsewhere"))
+    with pytest.raises(FileNotFoundError):
+        pb.binary_path()
+    monkeypatch.delenv(pb.TOOLS_ENV)
+    with pytest.raises(FileNotFoundError, match="--pocketbase"):
+        pb.binary_path()
+
+
+def test_the_bench_refuses_a_binary_other_than_the_pin(tmp_path, capsys):
+    other = _executable(tmp_path / "pocketbase", "0.0.1")
+    assert bench.main(["--out", str(tmp_path / "receipt.json"), "--pocketbase", str(other)]) == 75
+    assert "pins" in capsys.readouterr().err
+    assert not (tmp_path / "receipt.json").exists()

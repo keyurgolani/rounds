@@ -2,6 +2,10 @@
 
     python harness/bench/bench.py --accounts 1,10 --out contracts/database/benchmark.json
 
+The binary is --pocketbase PATH, or pocketbase-<version>/bin/pocketbase for
+the version pocketbase/Dockerfile pins under $ROUNDS_BENCH_TOOLS, and the run
+refuses any other version than the pin.
+
 A non-shipping spike. It runs the pinned PocketBase natively (pbnative.py) on
 127.0.0.1 with the repository's own migrations and hooks plus the bench's
 overlay (pb_hooks/, pb_migrations/), seeds synthetic accounts at the spec's
@@ -1106,6 +1110,12 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     args.sweep = [int(x) for x in args.sweep.split(",") if x]
     binary = pbnative.binary_path(args.pocketbase)
+    # A receipt from another release than the pin fails its own check
+    # (DB_BENCH_INVALID), so the run refuses one before it starts.
+    ran, pinned = pbnative.binary_version(binary), pbnative.pinned_version()
+    if ran != pinned:
+        print(f"refusing to start: {binary} is PocketBase {ran}, and pocketbase/Dockerfile pins {pinned}", file=sys.stderr)
+        return 75
     free = benchlib.free_disk_gb(str(ROOT))
     if free < args.min_free_gb:
         print(f"refusing to start: {free:.0f} GB free, need {args.min_free_gb:.0f}", file=sys.stderr)

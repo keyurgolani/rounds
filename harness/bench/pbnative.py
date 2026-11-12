@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import signal
 import socket
@@ -37,7 +38,10 @@ SCRATCH = ROOT / "harness" / "bench" / ".scratch"
 SEED_MIGRATION = "1700000100_seed_data.js"
 CONTAINER_SEEDS = "/pb_seeds/"
 LOOPBACK = "127.0.0.1"
-DEFAULT_BINARY = Path.home() / "Library" / "Caches" / "rounds-lane" / "tools" / "pocketbase-0.22.22" / "bin" / "pocketbase"
+DOCKERFILE = ROOT / "pocketbase" / "Dockerfile"
+# A directory holding pocketbase-<version>/bin/pocketbase; with it set, the
+# default binary is the release pocketbase/Dockerfile pins.
+TOOLS_ENV = "ROUNDS_BENCH_TOOLS"
 
 # The environment a native PocketBase gets: nothing from the caller's shell
 # but what a process needs to run, so no unrelated setting leaks in.
@@ -60,8 +64,22 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def pinned_version() -> str:
+    """The PocketBase release pocketbase/Dockerfile pins."""
+    m = re.search(r"^ARG PB_VERSION=(\d+\.\d+\.\d+)$", DOCKERFILE.read_text(), re.M)
+    if not m:
+        raise RuntimeError(f"{DOCKERFILE} has no ARG PB_VERSION=<x.y.z>")
+    return m.group(1)
+
+
 def binary_path(value: str | os.PathLike[str] | None = None) -> Path:
-    path = Path(value) if value else DEFAULT_BINARY
+    """The binary to run: the given path, or the pinned release under $ROUNDS_BENCH_TOOLS."""
+    if value:
+        path = Path(value)
+    elif os.environ.get(TOOLS_ENV):
+        path = Path(os.environ[TOOLS_ENV]) / f"pocketbase-{pinned_version()}" / "bin" / "pocketbase"
+    else:
+        raise FileNotFoundError(f"pass --pocketbase PATH, or set {TOOLS_ENV} to a directory holding pocketbase-<version>/bin/pocketbase")
     if not path.is_file() or not os.access(path, os.X_OK):
         raise FileNotFoundError(f"no executable PocketBase at {path}")
     return path

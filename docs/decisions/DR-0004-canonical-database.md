@@ -241,8 +241,8 @@ A command writes its domain events to domain_outbox in its own transaction, with
 
 **Limits**
 
-- Relay lag p95 105 ms at the steady rate with 10 accounts, against 2 s, and 61 ms with 1, counted over the phase's own events once the sweep's backlog had drained; #22 sizes its batches and poll interval against it. The tail is the checkpoint's: p99.9 11.7 s at 10 accounts while a TRUNCATE checkpoint held the writer (DB1).
-- Read-your-writes p99 191 ms through the projection, against 5 s, with 3 of 184 reads taking the canonical fallback.
+- Relay lag p95 105 ms at the steady rate with 10 accounts, against 2 s, and 61 ms with 1, counted over the phase's own events once the sweep's backlog had drained; #22 sizes its batches and poll interval against it. Its p99.9 at 10 accounts, 11.7 s, is as long as the commands in flight during the TRUNCATE checkpoint took (DB1).
+- Read-your-writes p99 191 ms over the 184 reads the projection answered, against 5 s; the other 3 of 187 waited past 5 s and took the canonical fallback.
 
 **Consequences.** #22 runs the relay in the runner and #23 the projectors in PocketBase; both write through dispatcher_service.
 
@@ -275,7 +275,7 @@ Sources: spec 2056-2067; docs/security/server-writes.md; contracts/database/benc
 **Limits**
 
 - Restore at 10 accounts: 381.74 s against 30 minutes (extrapolated): the database restored and checked in 2.23 s, and 100 GB of files at the 2 GiB sample's 263 MB/s.
-- Taking the online copy at 10 accounts: VACUUM INTO 5.4 s and SQLite's backup API 3.8 s, with commands waiting at most 6 ms meanwhile.
+- Taking the online copy at 10 accounts: VACUUM INTO took 5.4 s, with commands waiting at most 6 ms meanwhile, and SQLite's backup API 3.8 s, with commands waiting at most 7 ms.
 
 **Consequences.** #157 writes the procedure and its rehearsal; #76 holds file purges until a backup has run.
 
@@ -423,7 +423,7 @@ The counts below are at `fe01163`.
 | login-guards | admission.pb.js, demo.pb.js, execution.pb.js, profile_files.pb.js, share_secrets.pb.js | 6 | https://pocketbase.io/v023upgrade/jsvm/ (auth request hooks change name and take e.next()) | 6 sign-in hooks in 5 files: the guards of #1, #3, #12, and #177 on PocketBase's password and OAuth2 hooks. |
 | system-migration-name | scripts/lint_migrations.py and scripts/migration-lint-allowlist.json (D10's 1702134273) | 1 | https://pocketbase.io/v023upgrade/jsvm/ (system migrations are squashed) | D10 names a migration that follows 0.22's own system migration. |
 | admins-denials | frontend/nginx.conf, harness/verify_deployment.py (deployment.admins.present) | 2 | https://pocketbase.io/v023upgrade/jsvm/ (implied: admins become _superusers records, so /api/admins goes) | The nginx refusal and the verifier's check both name /api/admins. |
-| verifier-shapes | harness/verify_deployment.py:123 and :431 | 2 | https://pocketbase.io/v023upgrade/jsvm/ (response shapes change) | The deployment verifier pins 0.22 answers. |
+| verifier-shapes | harness/verify_deployment.py:125 and :433 | 2 | https://pocketbase.io/v023upgrade/jsvm/ (response shapes change) | The deployment verifier pins 0.22 answers. |
 | sdk-skew | frontend/package.json (pocketbase ^0.26.8) | 1 | https://pocketbase.io/v023upgrade/jsvm/ (a 0.22 server keeps the JS SDK below 0.22.0) | The SPA runs SDK 0.26.8 against a 0.22 server; #19's client uses only calls a 0.22 server answers, and the port settles the skew. |
 | gateway-transactions | #19's gateway routes (not built) | 0 | https://pocketbase.io/v023upgrade/jsvm/ ($app.runInTransaction((txApp) => ...)) | Goes through pocketbase/pb_hooks/lib/pocketbase.js, so the port changes one module. |
 | normalization-pin | #172's normalization.v1.json (not on next) | 0 | n/a: a repository pin, not an upstream change | #172 cites this record's line when it lands. |
@@ -442,7 +442,7 @@ The counts below are at `fe01163`.
 
 **Benchmarked version.** The receipt ran on 0.22.22, before P3 moved the pin to 0.22.57. Both are on the 0.22 line; the numbers are 0.22.22's, and the port re-runs the benchmark.
 
-**Schema snapshot.** At this revision, contracts/database/schema-snapshot.json comes from migrate up on the 0.22.22 binary, not 0.22.57: the 0.22 releases between them add no database migration, so the schema is the same. A PR that changes a migration regenerates it.
+**Schema snapshot.** When this revision was ratified, contracts/database/schema-snapshot.json came from migrate up on the 0.22.22 binary, not 0.22.57: the 0.22 releases between them add no database migration, so the schema is the same. A PR that changes a migration regenerates it.
 
 ## ERD
 

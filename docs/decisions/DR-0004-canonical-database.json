@@ -314,8 +314,8 @@
         "A crash after commit and before the relay leaves events in the outbox; the next holder relays them once (the after-commit failpoint)."
       ],
       "limits": [
-        "Relay lag p95 105 ms at the steady rate with 10 accounts, against 2 s, and 61 ms with 1, counted over the phase's own events once the sweep's backlog had drained; #22 sizes its batches and poll interval against it. The tail is the checkpoint's: p99.9 11.7 s at 10 accounts while a TRUNCATE checkpoint held the writer (DB1).",
-        "Read-your-writes p99 191 ms through the projection, against 5 s, with 3 of 184 reads taking the canonical fallback."
+        "Relay lag p95 105 ms at the steady rate with 10 accounts, against 2 s, and 61 ms with 1, counted over the phase's own events once the sweep's backlog had drained; #22 sizes its batches and poll interval against it. Its p99.9 at 10 accounts, 11.7 s, is as long as the commands in flight during the TRUNCATE checkpoint took (DB1).",
+        "Read-your-writes p99 191 ms over the 184 reads the projection answered, against 5 s; the other 3 of 187 waited past 5 s and took the canonical fallback."
       ],
       "consequences": "#22 runs the relay in the runner and #23 the projectors in PocketBase; both write through dispatcher_service.",
       "migrationImpact": "#22 and #23 add their tables in additive migrations with null rules.",
@@ -354,7 +354,7 @@
       ],
       "limits": [
         "Restore at 10 accounts: 381.74 s against 30 minutes (extrapolated): the database restored and checked in 2.23 s, and 100 GB of files at the 2 GiB sample's 263 MB/s.",
-        "Taking the online copy at 10 accounts: VACUUM INTO 5.4 s and SQLite's backup API 3.8 s, with commands waiting at most 6 ms meanwhile."
+        "Taking the online copy at 10 accounts: VACUUM INTO took 5.4 s, with commands waiting at most 6 ms meanwhile, and SQLite's backup API 3.8 s, with commands waiting at most 7 ms."
       ],
       "consequences": "#157 writes the procedure and its rehearsal; #76 holds file purges until a backup has run.",
       "migrationImpact": "None here. #157 changes docs/operations.md.",
@@ -584,7 +584,7 @@
       },
       {
         "id": "verifier-shapes",
-        "site": "harness/verify_deployment.py:123 and :431",
+        "site": "harness/verify_deployment.py:125 and :433",
         "count": 2,
         "upstream": "https://pocketbase.io/v023upgrade/jsvm/ (response shapes change)",
         "note": "The deployment verifier pins 0.22 answers."
@@ -620,7 +620,7 @@
       "A leaf needs a feature only a newer line has."
     ],
     "benchmark": "The receipt ran on 0.22.22, before P3 moved the pin to 0.22.57. Both are on the 0.22 line; the numbers are 0.22.22's, and the port re-runs the benchmark.",
-    "snapshot": "At this revision, contracts/database/schema-snapshot.json comes from migrate up on the 0.22.22 binary, not 0.22.57: the 0.22 releases between them add no database migration, so the schema is the same. A PR that changes a migration regenerates it."
+    "snapshot": "When this revision was ratified, contracts/database/schema-snapshot.json came from migrate up on the 0.22.22 binary, not 0.22.57: the 0.22 releases between them add no database migration, so the schema is the same. A PR that changes a migration regenerates it."
   },
   "identifiers": [
     {
