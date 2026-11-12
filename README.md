@@ -20,7 +20,7 @@ Demo login on the hosted instance:
 - Email: `demo@rounds.keyurgolani.name`
 - Password: `RoundsDemo123!`
 
-The demo is off unless the operator sets `ROUNDS_ENABLE_DEMO=true` on PocketBase. Off is the default on every install, self-hosted ones included: PocketBase refuses the demo account's sign-in and gives it a new random password and token key at every start. With the demo on, the account runs under the demo tier's limits, can change only its name, bio, target, and avatar, can't hold share links, AI providers, or AI settings, and resets its profile, progress, drafts, applications, todos, preferences, and local caches when it logs out.
+The demo is off unless the operator sets `ROUNDS_ENABLE_DEMO=true` on PocketBase. Off is the default on every install, self-hosted ones included: PocketBase refuses the demo account's sign-in and gives it a new random password and token key at every start. With the demo on, the account runs under the demo tier's limits, can change only its name, bio, target, and avatar, can't hold share links, AI providers, or AI settings, can't run code unless the operator also sets `ROUNDS_GATE_DEMO_EXECUTION=enabled` on the runner, and resets its profile, progress, drafts, applications, todos, preferences, and local caches when it logs out.
 
 **Upgrading a hosted demo:** set `ROUNDS_ENABLE_DEMO=true` on the PocketBase service before you deploy the release that adds `1700006700_demo_contain.js`, or the demo login stops working. That migration deletes the demo account's share links (and their view records), AI providers, and AI settings.
 
