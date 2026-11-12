@@ -13,13 +13,20 @@
 // sign-in gets the answer a wrong password gets, any request a demo
 // account's token authenticates gets 401, and every start gives each demo
 // account a random password and a new token key. On or off, a demo caller
-// changes only its text profile fields, and no demo account owns a share
-// link or an AI provider, credential, model, or settings row, whether a
-// client or a server hook writes it.
+// changes nothing on its own users record, and no demo account owns a
+// share link or an AI provider, credential, model, or settings row,
+// whether a client or a server hook writes it.
 
-// What a demo caller may change on its own users record. No client changes
-// a profile file (profile_files.js).
+// The text profile fields. A demo caller's request may name them, but its
+// record must save exactly the seeded profile; any other key it sends is
+// refused. No client changes a profile file (profile_files.js).
 const PROFILE_FIELDS = ["name", "bio", "target"];
+// The demo account's profile as 1700000600_demo_user.js seeds it.
+const SEEDED_PROFILE = {
+  name: "Rounds Demo",
+  bio: "Disposable hosted demo account. Changes reset on logout.",
+  target: "Explore Rounds",
+};
 // What a demo account may not own, and how each row names its account:
 // its own field, or the provider it belongs to. ai_credentials and
 // ai_provider_models (#73) don't exist yet; the leaf that adds one confirms
@@ -125,19 +132,34 @@ function guardSession(c, env) {
   }
 }
 
-// 3. A demo caller changes its own name, bio, and target, and nothing
-// else: not its profile file, password, email, username, verification, or
-// demo fields. A superuser isn't held to it.
+// Whether a record holds exactly the seeded profile.
+function seededProfile(record) {
+  return PROFILE_FIELDS.every((field) => record.getString(field) === SEEDED_PROFILE[field]);
+}
+
+// 3. A demo caller changes nothing on its own users record. A request
+// that names a profile field in any form (the field, a + or - modifier,
+// or an upload under its name, whatever the value), or whose record would
+// save a different one, gets the 400 a locked account field gets, unless
+// the record it would save holds exactly the seeded profile. Any other
+// key gets 403: its profile file, password, email, username,
+// verification, and demo fields. A superuser isn't held to it.
 function guardAccountUpdate(e) {
   if (isSuperuser(e.httpContext) || !isDemo(e.record.originalCopy())) return;
   // A change to the demo flags gets admission.js's answer, and one to a
-  // profile file profile_files.js's, whichever users-update hook PocketBase
-  // runs first, so it's always the same.
+  // profile file profile_files.js's, which is the locked profile's too,
+  // whichever users-update hook PocketBase runs first, so it's always the
+  // same.
   require(`${__hooks}/admission.js`).guardDemoUpdate(e);
-  require(`${__hooks}/profile_files.js`).guardUpdate(e);
+  const files = require(`${__hooks}/profile_files.js`);
+  files.guardUpdate(e);
   const data = $apis.requestInfo(e.httpContext).data || {};
   const keys = Object.keys(data).concat(Object.keys(e.uploadedFiles || {}));
-  if (keys.some((key) => PROFILE_FIELDS.indexOf(key.replace(/[+-]$/, "")) < 0)) throw notPermitted("update", "users");
+  const original = e.record.originalCopy();
+  const named = keys.some((key) => PROFILE_FIELDS.indexOf(files.fieldOf(key)) >= 0);
+  const changed = PROFILE_FIELDS.some((field) => e.record.getString(field) !== original.getString(field));
+  if ((named || changed) && !seededProfile(e.record)) throw new BadRequestError(files.LOCKED);
+  if (keys.some((key) => PROFILE_FIELDS.indexOf(files.fieldOf(key)) < 0)) throw notPermitted("update", "users");
 }
 
 // 3. A demo caller can't delete its account or change its email.
@@ -206,6 +228,7 @@ function guardContainedModel(e) {
 
 module.exports = {
   PROFILE_FIELDS,
+  SEEDED_PROFILE,
   OWNERS,
   CONTAINED,
   PASSWORD_CHARS,

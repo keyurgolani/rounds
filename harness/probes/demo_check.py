@@ -4,9 +4,10 @@ Two phases on the real PocketBase:
 
 - ``demo-on``: PocketBase runs with ``ROUNDS_ENABLE_DEMO=true``, as a
   hosted demo does, with the runner up. The seeded demo account signs in,
-  and so does a demo account a superuser makes. That caller changes its
-  profile but not its password, email, username, or verification, can't
-  delete itself or ask for an email change, and can't create a share link,
+  and so does a demo account a superuser makes. That caller can't change
+  its profile beyond the seeded one, its password, email, username, or
+  verification, can't delete itself or ask for an email change, and can't
+  create a share link,
   an AI provider, or AI settings, through PocketBase or the runner, while a
   standard account still can. With the runners at
   ``ROUNDS_GATE_DEMO_EXECUTION``'s default since phase 3c, the deployment
@@ -42,6 +43,11 @@ RUNNER_URL = os.environ.get("RUNNER_URL", "http://runner:8000")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://frontend").rstrip("/")
 STATE = Path(os.environ.get("DEMO_STATE_PATH", "/state/demo.json"))
 NOT_PERMITTED = {"code": "demo_not_permitted", "message": "Not available in the demo."}
+# The answer to a locked account field, and the profile
+# 1700000600_demo_user.js seeds.
+LOCKED = "These account fields can't be changed."
+SEEDED_PROFILE = {"name": "Rounds Demo", "bio": "Disposable hosted demo account. Changes reset on logout.",
+                  "target": "Explore Rounds"}
 
 
 def _wrong_password() -> str:
@@ -86,10 +92,23 @@ def run_on(c: Checks, pb: PBClient, admin: str) -> None:
     d.token = (signed.body or {}).get("token", "")
     c.check("demo.on.a-demo-account-signs-in", signed.status == 200 and bool(d.token), f"status={signed.status}")
 
-    # The account's own record: its profile changes, nothing else does.
-    profile = pb.update("users", d.user_id, {"name": "Visitor", "bio": "Trying it", "target": "Staff"}, d.token)
-    c.check("demo.on.the-profile-changes", profile.status == 200 and (profile.body or {}).get("name") == "Visitor",
-            f"status={profile.status}")
+    # The account's own record: its profile is locked. A request leaving
+    # exactly the seeded profile, as the sign-out reset sends it, goes
+    # through; one that would change name, bio, or target, in a JSON or a
+    # multipart body, gets the 400 a locked account field gets.
+    seeded = pb.update("users", d.user_id, SEEDED_PROFILE, d.token)
+    attempts = {
+        "name": pb.update("users", d.user_id, {"name": "Visitor"}, d.token),
+        "bio": pb.update("users", d.user_id, {"bio": ""}, d.token),
+        "target": pb.update("users", d.user_id, {"target": None}, d.token),
+        "multipart": pb.update_form("users", d.user_id, [("name", "Visitor")], d.token),
+    }
+    kept = {k: (pb.view("users", d.user_id, admin).body or {}).get(k) for k in SEEDED_PROFILE}
+    c.check("demo.on.the-profile-is-locked",
+            seeded.status == 200 and kept == SEEDED_PROFILE
+            and all(r.status == 400 and (r.body or {}).get("message") == LOCKED for r in attempts.values()),
+            f"seeded={seeded.status} " + " ".join(f"{k}={r.status}" for k, r in attempts.items())
+            + f" unchanged={kept == SEEDED_PROFILE}")
     new_password = factory.make_account("demo").password
     locked = ("email", "username", "verified", "is_demo")
     before = {k: (pb.view("users", d.user_id, admin).body or {}).get(k) for k in locked}

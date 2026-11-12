@@ -141,6 +141,7 @@ function exec(step) {
     case "constants":
       return {
         profile: demo.PROFILE_FIELDS, contained: demo.CONTAINED, chars: demo.PASSWORD_CHARS, owners: demo.OWNERS,
+        seeded: demo.SEEDED_PROFILE,
       };
     case "logged": {
       logs.length = 0;
@@ -281,7 +282,6 @@ def test_standard_accounts_and_the_demo_when_on_sign_in():
     {"verified": False},
     {"emailVisibility": True},
     {"is_demo": False},
-    {"name": "Visitor", "password": "a-new-password-1"},
 ])
 def test_a_demo_caller_changes_nothing_but_its_profile(data):
     assert run({"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO, "data": data}) == [NOT_PERMITTED]
@@ -294,15 +294,85 @@ def test_a_demo_caller_changing_its_demo_flag_gets_the_admission_answer_whicheve
     ]
 
 
-def test_a_demo_caller_updates_its_name_bio_and_target():
+LOCKED = {"status": 400, "message": "These account fields can't be changed.", "data": None}
+# 1700000600_demo_user.js's seeded profile, and one that differs from it.
+SEEDED = {"name": "Rounds Demo", "bio": "Disposable hosted demo account. Changes reset on logout.",
+          "target": "Explore Rounds"}
+SEEDED_DEMO = dict(DEMO, **SEEDED)
+OTHER_DEMO = dict(DEMO, name="Visitor", bio="", target="")
+
+
+# Each step's `fields` is the record as PocketBase would save it, and
+# `original` the record as stored.
+@pytest.mark.parametrize("original, data, saved", [
+    (SEEDED_DEMO, {"name": "Visitor"}, dict(SEEDED_DEMO, name="Visitor")),
+    (SEEDED_DEMO, {"bio": ""}, dict(SEEDED_DEMO, bio="")),
+    (SEEDED_DEMO, {"target": None}, dict(SEEDED_DEMO, target="")),
+    (SEEDED_DEMO, dict(SEEDED, name="Visitor"), dict(SEEDED_DEMO, name="Visitor")),
+    # A form the request data doesn't show: the record as it would save.
+    (SEEDED_DEMO, {}, dict(SEEDED_DEMO, name="Visitor")),
+    # Beside another key, the profile's answer comes first.
+    (SEEDED_DEMO, {"name": "Visitor", "password": "a-new-password-1"}, dict(SEEDED_DEMO, name="Visitor")),
+    # A modifier or an upload under a profile field's name, on a record
+    # that doesn't hold the seeded profile.
+    (OTHER_DEMO, {"name+": "x"}, OTHER_DEMO),
+    (OTHER_DEMO, {"+name": "x"}, OTHER_DEMO),
+    (OTHER_DEMO, {"bio-": "x"}, OTHER_DEMO),
+    (OTHER_DEMO, {"target": "Explore Rounds"}, dict(OTHER_DEMO, target="Explore Rounds")),
+])
+def test_a_demo_caller_cant_change_its_name_bio_or_target_in_any_form(original, data, saved):
+    assert run({"call": "guardAccountUpdate", "fields": saved, "original": original, "data": data}) == [LOCKED]
+
+
+def test_an_upload_under_a_profile_fields_name_is_held_to_the_profile_lock():
+    assert run({"call": "guardAccountUpdate", "fields": OTHER_DEMO, "original": OTHER_DEMO, "data": {},
+                "uploaded": {"target": [{}]}}) == [LOCKED]
+
+
+def test_a_request_leaving_exactly_the_seeded_profile_goes_through():
+    # What the sign-out reset sends today, on a record that holds the
+    # seeded profile or one that doesn't.
     assert run(
-        {"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO,
-         "data": {"name": "Visitor", "bio": "Trying it out", "target": "Staff engineer"}},
-        {"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO, "data": {"bio": "Trying it out"}},
+        {"call": "guardAccountUpdate", "fields": SEEDED_DEMO, "original": SEEDED_DEMO, "data": dict(SEEDED)},
+        {"call": "guardAccountUpdate", "fields": SEEDED_DEMO, "original": OTHER_DEMO, "data": dict(SEEDED)},
+        {"call": "guardAccountUpdate", "fields": SEEDED_DEMO, "original": SEEDED_DEMO, "data": {"name": "Rounds Demo"}},
+        {"call": "guardAccountUpdate", "fields": SEEDED_DEMO, "original": SEEDED_DEMO, "data": {"name+": "x"}},
+    ) == [{"allowed": True}] * 4
+
+
+def test_the_profile_lock_answers_as_the_other_locked_fields_do_whichever_hook_runs_first():
+    flag = dict(SEEDED_DEMO, name="Visitor", is_demo=False)
+    file = dict(SEEDED_DEMO, name="Visitor", avatar="face.png")
+    assert run(
+        {"call": "guardAccountUpdate", "fields": flag, "original": SEEDED_DEMO, "data": {"name": "Visitor", "is_demo": False}},
+        {"call": "guardAccountUpdate", "fields": file, "original": SEEDED_DEMO, "data": {"name": "Visitor", "avatar": "face.png"}},
+        {"call": "guardAccountUpdate", "fields": dict(SEEDED_DEMO, name="Visitor"), "original": SEEDED_DEMO,
+         "data": {"name": "Visitor"}},
+    ) == [LOCKED] * 3
+
+
+def test_the_profile_lock_holds_only_demo_callers_and_never_a_superuser():
+    standard = dict(STANDARD, **SEEDED)
+    assert run(
+        {"call": "guardAccountUpdate", "fields": dict(standard, name="Visitor"), "original": standard,
+         "data": {"name": "Visitor"}},
+        {"call": "guardAccountUpdate", "fields": dict(SEEDED_DEMO, name="Visitor"), "original": SEEDED_DEMO,
+         "data": {"name": "Visitor"}, "superuser": True},
     ) == [{"allowed": True}] * 2
 
 
-LOCKED = {"status": 400, "message": "These account fields can't be changed.", "data": None}
+def test_the_profile_lock_logs_nothing():
+    (result,) = run({"call": "logged", "step": {"call": "guardAccountUpdate", "fields": dict(SEEDED_DEMO, name="Visitor"),
+                                                "original": SEEDED_DEMO, "data": {"name": "Visitor"}}})
+    assert result == {"result": LOCKED, "logs": []}
+
+
+def test_the_seeded_profile_is_the_migrations():
+    (constants,) = run({"call": "constants"})
+    migration = (ROOT / "pocketbase" / "pb_migrations" / "1700000600_demo_user.js").read_text()
+    for field, value in constants["seeded"].items():
+        assert f'demo.set("{field}", {json.dumps(value)});' in migration, field
+    assert constants["seeded"] == SEEDED
 
 
 def test_a_demo_caller_cant_change_its_profile_file():
@@ -410,6 +480,7 @@ def test_the_constants_are_the_bodys():
             "ai_provider_models": {"via": "provider"},
             "ai_settings": {"field": "user"},
         },
+        "seeded": SEEDED,
     }
 
 
@@ -440,11 +511,12 @@ def test_each_denial_logs_one_line_without_an_id_or_a_value():
 def test_an_allowed_write_logs_nothing():
     results = run(
         {"call": "logged", "step": {"call": "guardSignIn", "env": ON, "record": DEMO}},
-        {"call": "logged", "step": {"call": "guardAccountUpdate", "fields": DEMO, "original": DEMO,
-                                    "data": {"name": "Visitor"}}},
+        {"call": "logged", "step": {"call": "guardAccountUpdate", "fields": SEEDED_DEMO, "original": SEEDED_DEMO,
+                                    "data": dict(SEEDED)}},
         {"call": "logged", "step": {"call": "guardContainedModel", "users": USERS,
                                     "fields": {"user": "user00000000001", "table": "ai_settings"}}},
     )
+    assert [r["result"] for r in results] == [{"allowed": True}] * 3
     assert [r["logs"] for r in results] == [[], [], []]
 
 

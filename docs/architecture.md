@@ -180,7 +180,7 @@ Migrations:
 Hooks:
 
 - `main.pb.js`: server-side signup disablement.
-- `demo.pb.js`, with its logic in `demo.js`: the demo account's containment. With `ROUNDS_ENABLE_DEMO` off, the default, no demo account signs in, and each one gets a new random password and token key at every start. On or off, a demo account changes only its text profile fields and owns no share link, AI provider, or AI settings row.
+- `demo.pb.js`, with its logic in `demo.js`: the demo account's containment. With `ROUNDS_ENABLE_DEMO` off, the default, no demo account signs in, and each one gets a new random password and token key at every start. On or off, a demo account can't change its profile and owns no share link, AI provider, or AI settings row.
 - `profile_files.pb.js`, with its logic in `profile_files.js`: no client creates or changes a profile file; a superuser can.
 
 PocketBase stores SQLite data and uploads in the `pb_data` Docker volume.
