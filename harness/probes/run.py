@@ -278,6 +278,20 @@ def run_main(doc: dict, writer: ReceiptWriter) -> None:
                 writer.write(families.update_reassign_denied(pb, name, a.ids[name], b.user_id, a.token, admin_token, a.user_id, expected))
             elif pid == families.UPDATE_OWN_FAMILY:
                 writer.write(families.update_own_accepted(pb, name, b.ids[name], b.user_id, b.token, expected))
+            elif pid == families.CREATE_GRADED_FAMILY:
+                # The no-rows account c creates rows of its own, so a row a
+                # refused create left behind shows in its count; the envelope
+                # it names is account a's seeded one.
+                payload = factory.fresh_payload(name, c.user_id, a, b, content, secrets.token_hex(6))
+                writer.write(families.create_graded_denied(pb, name, c, payload, a.ids["execution_envelopes"],
+                                                           admin_token, expected))
+            elif pid == families.UPDATE_GRADED_FAMILY:
+                # Account a's graded row, which the superuser writes as the
+                # server does, and a's seeded in-progress row.
+                payload = factory.fresh_payload(name, a.user_id, a, b, content, secrets.token_hex(6))
+                graded = families.graded_row(pb, name, admin_token, payload)
+                writer.write(families.update_graded_denied(pb, name, a, graded, a.ids["execution_envelopes"],
+                                                           admin_token, expected))
             elif pid == families.SERVER_ONLY_CREATE_FAMILY:
                 payload = factory.fresh_payload(name, c.user_id, a, b, content, secrets.token_hex(6))
                 writer.write(families.create_server_only_denied(pb, name, b.token, payload, admin_token, c.user_id, expected))

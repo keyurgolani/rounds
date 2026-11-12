@@ -47,9 +47,11 @@ Read-only checks an operator runs against a Rounds deployment they operate:
                gates line lists every admitted route's gate and both
                enforcement gates with valid values, none fell back from an
                invalid setting, neither ROUNDS_GATE_EXECUTION_SCRATCH nor
-               ROUNDS_GATE_EXECUTION_GRADING is on without the store on and
-               definitions enforced (the runner then acts as if it were
-               off), and each --expect-gate NAME=VALUE holds.
+               ROUNDS_GATE_EXECUTION_GRADING is legacy, or on without the
+               store on, definitions enforced, and both secrets the start
+               names (the runner then acts as if it were off), unless an
+               operator's stop is what holds it off, and each
+               --expect-gate NAME=VALUE holds.
   demo         (--demo, with --url) Through the public URL: the demo account
                signs in with its published login, the one the credential
                check tries as an admin, and one code run answers 503
@@ -711,8 +713,8 @@ STOP_CODES = ("route_disabled", "definitions_disabled", "execution_disabled")
 STOPPED_BY = {
     "route_disabled": "its gate is off",
     "definitions_disabled": "ROUNDS_GATE_EXECUTION_DEFINITIONS is disabled",
-    "execution_disabled": "ROUNDS_GATE_EXECUTION_SCRATCH or ROUNDS_GATE_EXECUTION_GRADING is off, or on "
-                          "without what it needs",
+    "execution_disabled": "ROUNDS_GATE_EXECUTION_SCRATCH or ROUNDS_GATE_EXECUTION_GRADING is off or legacy, "
+                          "or on without what it needs",
 }
 DEFINITION_ROUTES = frozenset({
     "/api/run", "/api/evaluate", "/api/ai-coding/run-project", "/api/ai-coding/grade",
@@ -735,10 +737,17 @@ EXECUTION_GATES: dict[str, tuple[str, ...]] = {
     "EXECUTION_GRADING": ("legacy", "on", "off"),
 }
 # What ROUNDS_GATE_EXECUTION_SCRATCH=on and ROUNDS_GATE_EXECUTION_GRADING=on
-# need (backend/execution/keys.py); without either, each acts as off.
+# need of the gates (backend/execution/keys.py); without either, each acts as
+# off. Each also needs ROUNDS_EXECUTION_SECRET and ROUNDS_ADMISSION_SECRET on
+# the runner (ROUNDS-00A-L03 PR 4), which the gates line can't show: the
+# start's execution.scratch or execution.grading line names any it lacks.
 SCRATCH_NEEDS = (("EXECUTION_STORE", "on"), ("EXECUTION_DEFINITIONS", "enforce"))
 GRADING_NEEDS = SCRATCH_NEEDS
 KEY_NEEDS = {"EXECUTION_SCRATCH": SCRATCH_NEEDS, "EXECUTION_GRADING": GRADING_NEEDS}
+KEY_EVENTS = {"EXECUTION_SCRATCH": "execution.scratch", "EXECUTION_GRADING": "execution.grading"}
+# An operator's stop for every execution route (docs/security/execution-runbook.md):
+# a key that is on acts as off while one holds, which is the stop working.
+STOP_VALUES = {"EXECUTION_STORE": "off", "EXECUTION_DEFINITIONS": "disabled"}
 # A made-up bearer no deployment ever issued: a disabled route must refuse
 # it before it asks PocketBase who it is.
 BOGUS_BEARER = "verify-deployment-not-a-token"
@@ -757,8 +766,8 @@ ADMISSION_CHECKS: dict[str, str] = {
     "deployment.gates.logged":
         "the runner's startup log lists every admitted route's gate and both enforcement gates",
     "deployment.gates.valid":
-        "every logged gate holds one of its values, none fell back from a value it doesn't know, and none is on "
-        "without the gates it needs",
+        "every logged gate holds one of its values, none fell back from a value it doesn't know, no execution key is "
+        "legacy, and none is on without what it needs unless an operator's stop holds it off",
     "deployment.gates.expected":
         "each gate the operator named holds the value they expect, and acts on it",
     "deployment.gates.disabled-route.denied":
@@ -1028,6 +1037,38 @@ def parse_gates_log(text: str) -> dict[str, dict[str, str]] | None:
     return found
 
 
+def parse_key_lines(text: str) -> dict[str, list[str]]:
+    """What each execution key that acts as off named at the last runner
+    start in a saved log: its ``execution.scratch`` or
+    ``execution.grading`` line after the last gates line, as NAME=value
+    for a gate and NAME alone for a secret. Names only; a line never
+    carries a value of a secret."""
+    found: dict[str, list[str]] = {}
+    events = {event: key for key, event in KEY_EVENTS.items()}
+    for line in text.splitlines():
+        start = line.find("{")
+        if start < 0:
+            continue
+        try:
+            doc = json.loads(line[start:])
+        except ValueError:
+            continue
+        if not isinstance(doc, dict) or doc.get("service") != "runner":
+            continue
+        if doc.get("event") == "gates":
+            found = {}
+        elif doc.get("event") in events and doc.get("code") == "acting_off" and isinstance(doc.get("needs"), list):
+            found[events[doc["event"]]] = [str(need) for need in doc["needs"]]
+    return found
+
+
+def _stopped(gates: dict[str, Any], need: str) -> bool:
+    """Whether ``need`` is missing because an operator's stop holds."""
+    name, sep, _want = need.partition("=")
+    entry = gates.get(name)
+    return bool(sep) and name in STOP_VALUES and isinstance(entry, dict) and entry.get("value") == STOP_VALUES[name]
+
+
 def key_acting_off(gates: dict[str, Any], key: str = "EXECUTION_SCRATCH") -> list[str]:
     """When the gates line has ``key`` (ROUNDS_GATE_EXECUTION_SCRATCH or
     ROUNDS_GATE_EXECUTION_GRADING) on without what it needs, the missing
@@ -1050,10 +1091,11 @@ def scratch_acting_off(gates: dict[str, Any]) -> list[str]:
 def check_gates_log(text: str, expected: dict[str, str] | None = None, source: str = "runner log") -> list[Result]:
     """The runner's startup gates line: it lists every admitted route's gate
     and both enforcement gates, each value is one of its gate's values, none
-    came from an invalid setting, ROUNDS_GATE_EXECUTION_SCRATCH isn't on
-    without what it needs, and the gates the operator named hold the values
-    they expect and act on them. Gate values aren't secret; the log is only
-    read."""
+    came from an invalid setting, neither execution key is legacy or on
+    without what it needs (unless an operator's stop is what holds it off),
+    and the gates the operator named hold the values they expect and act on
+    them. Gate values aren't secret, and the start names a missing secret
+    by name only; the log is only read."""
     gates = parse_gates_log(text)
     if gates is None:
         missing = Result("deployment.gates.logged", source, "gates", "operator", 200, 0, False, 0,
@@ -1082,12 +1124,24 @@ def check_gates_log(text: str, expected: dict[str, str] | None = None, source: s
         if allowed is not None and value not in allowed:
             problems.append(f"{name}={value!r} isn't one of {', '.join(allowed)}")
     acting_off = {}
+    started = parse_key_lines(text)
     for key in KEY_NEEDS:
+        setting = (gates.get(key) or {}).get("value")
+        if setting == "legacy":
+            # It ran code in the request until ROUNDS-00A-L03 PR 4.
+            acting_off[key] = f"{key} is legacy, which now acts as off: set it to on, or off to keep it stopped"
+            problems.append(acting_off[key])
+            continue
+        if setting != "on":
+            continue
         needs = key_acting_off(gates, key)
+        needs += [need for need in started.get(key, []) if need not in needs]
         if needs:
             acting_off[key] = (f"{key} is on but the runner acts as if it were off: it also needs "
                                f"{' and '.join(needs)}")
-            problems.append(acting_off[key])
+            # A stop holding the key off is the stop working, not a gap.
+            if not all(_stopped(gates, need) for need in needs):
+                problems.append(acting_off[key])
     out.append(Result("deployment.gates.valid", source, "gates", "operator", 200, 200, not problems, 0,
                       "; ".join(problems)))
     if expected:

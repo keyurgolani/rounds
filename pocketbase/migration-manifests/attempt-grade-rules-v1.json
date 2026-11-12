@@ -1,0 +1,52 @@
+{
+  "$comment": "Rule manifest attempt-grade-rules-v1 (ROUNDS-00A-L03 PR 4, #3): what pocketbase/pb_migrations/1700008700_attempt_grade_rules.js changes. It replaces the create and update rules of the two attempt collections and reads or writes no row, so the census of each collection comes out the same after it as before. The harness's dry run (harness/probes/grade_rules_migration_check.py, phase 16) takes the census of a seeded pb_data copy before and after the up step and compares the two: that comparison is the reconciliation report it prints. The rules each collection held before are the reverse journal, which the up step records in the _params row named below, and which down() keeps, as it keeps the new rules.",
+  "manifest": "attempt-grade-rules-v1",
+  "issue": "#3",
+  "reviewed_by": "rounds lane review, ROUNDS-00A-L03/4",
+  "migration": "1700008700_attempt_grade_rules",
+  "rows_touched": 0,
+  "collections": {
+    "ai_coding_attempts": {
+      "rules": ["create", "update"],
+      "before": {
+        "from": "1700006000_account_scope_rules.js, its CREATE_RULE and UPDATE_RULE",
+        "create_sha256": "0a4ec0622cd1729f59daf53f4899125f8549d9b9834adeac67153bb93bf14b22",
+        "update_sha256": "91940ef896f39254b4b7ca2e29e16594a034d33e17127f1aad6106a8d7ea1fc8"
+      },
+      "after": {
+        "create": "@request.auth.id != \"\" && @request.data.envelope:isset = false && (@request.data.status = \"in-progress\" || @request.data.status = \"submitted\") && @request.auth.id = @request.data.user",
+        "update": "status != \"graded\" && user = @request.auth.id && @request.data.envelope:isset = false && (@request.data.status:isset = false || @request.data.status = \"in-progress\" || @request.data.status = \"submitted\") && (@request.data.user:isset = false || @request.auth.id = @request.data.user)"
+      }
+    },
+    "take_home_attempts": {
+      "rules": ["create", "update"],
+      "before": {
+        "from": "1700006000_account_scope_rules.js, its CREATE_RULE and UPDATE_RULE",
+        "create_sha256": "0a4ec0622cd1729f59daf53f4899125f8549d9b9834adeac67153bb93bf14b22",
+        "update_sha256": "91940ef896f39254b4b7ca2e29e16594a034d33e17127f1aad6106a8d7ea1fc8"
+      },
+      "after": {
+        "create": "@request.auth.id != \"\" && @request.data.envelope:isset = false && (@request.data.status = \"in-progress\" || @request.data.status = \"submitted\") && @request.auth.id = @request.data.user",
+        "update": "status != \"graded\" && user = @request.auth.id && @request.data.envelope:isset = false && (@request.data.status:isset = false || @request.data.status = \"in-progress\" || @request.data.status = \"submitted\") && (@request.data.user:isset = false || @request.auth.id = @request.data.user)"
+      }
+    }
+  },
+  "journal": {
+    "param": "1700008700_attempt_grade_rules.js",
+    "holds": "one {collection, create, update} per collection, with the rules the up step replaced",
+    "rerun": "the up step records nothing when both collections already hold the new rules, so a second forward run keeps the first record",
+    "down": "kept, with the new rules"
+  },
+  "census": {
+    "fields": ["rows", "in_progress", "submitted", "graded", "server_written", "legacy_client_written", "checksum"],
+    "server_written": "a graded row whose envelope names it back: the envelope's graded_collection is the row's collection and its graded_row the row's id, for the row's own account",
+    "legacy_client_written": "every other graded row",
+    "checksum": "sha256 over the canonical JSON (sorted keys, no spaces) of every row in id order, every column included"
+  },
+  "reconciliation": "each collection's census after the up step equals its census before it, field for field",
+  "harness_fixture": {
+    "accounts": 2,
+    "per_account_and_collection": {"in_progress": 1, "legacy_client_written": 1, "server_written": 1},
+    "expected": {"rows": 6, "in_progress": 2, "submitted": 0, "graded": 4, "server_written": 2, "legacy_client_written": 2}
+  }
+}

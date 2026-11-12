@@ -444,6 +444,7 @@ def test_files_that_cant_be_written_beside_each_other_are_found(files, harness, 
 # ---- AI-coding ----------------------------------------------------------------------
 
 ROUND = BACKEND / "ai_coding" / "rounds" / "hallucinated-http-client"
+ROUND_DEFINITION = BACKEND / "definitions" / "store" / "ai-coding" / "hallucinated-http-client" / "python.v1.json"
 
 
 def starter(variant: str) -> dict[str, str]:
@@ -492,6 +493,21 @@ def test_a_checkpoint_the_version_doesnt_have_is_case_unknown(client, signed_in,
     body = {**ROUTE_BODIES["/api/ai-coding/run-project"], "checkpoint": 5}
     typed(client.post("/api/ai-coding/run-project", json=body, headers=signed_in), 422, "case_unknown")
     assert tripwires == []
+
+
+def test_a_checkpoint_without_a_run_step_runs_nothing(client, signed_in, enforce, tmp_path, monkeypatch, tripwires,
+                                                      admission_store):
+    document = json.loads(ROUND_DEFINITION.read_text())
+    document["checkpoints"][0]["run"] = None
+    entry = {"kind": "harness-revision", "track": "ai-coding", "slug": "hallucinated-http-client", "variant": "python",
+             "content_version": 1}
+    monkeypatch.setattr(definitions, "_store", _store(tmp_path, [(entry, document, "active")]))
+    out = typed(client.post("/api/ai-coding/run-project", json=ROUTE_BODIES["/api/ai-coding/run-project"],
+                            headers=signed_in), 422, "invalid_request")
+    assert out["detail"] == "This checkpoint can't run here."
+    assert tripwires == []
+    (finished,) = admission_store.called("finish")
+    assert finished["outcome"] == "denied"
 
 
 FIXED_TS_CLIENT = (

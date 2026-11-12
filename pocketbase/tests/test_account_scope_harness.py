@@ -525,6 +525,63 @@ def test_update_own_accepted_fails_if_either_shape_is_rejected():
     assert not r.passed and "resend=404" in r.detail
 
 
+# ---- graded attempt rows are the server's (ROUNDS-00A-L03 PR 4) ----------------------
+
+OWNER = factory.Account(tag="c", email="c@harness.invalid", password="x", user_id="uid-c", token="c-token",
+                        ids={"ai_coding_attempts": "inprogress00001"})
+
+
+def test_create_graded_denied_passes_when_both_creates_are_refused_and_nothing_is_left():
+    pb = _ProbePB(create=Response(400, {"message": "Failed to create record.", "data": {}}, 1), listing=_count(0))
+    r = families.create_graded_denied(pb, "ai_coding_attempts", OWNER, {"user": "uid-c", "status": "in-progress"},
+                                      "envelope0000001", "admin", 400)
+    assert r.passed and r.probe_id == families.CREATE_GRADED_FAMILY
+    # One graded create and one in progress naming the envelope, both by the owner.
+    (first, second) = [call for call in pb.calls if call[0] == "create"]
+    assert first[2] == second[2] == "c-token"
+    assert first[3]["status"] == "graded" and "envelope" not in first[3]
+    assert second[3] == {"user": "uid-c", "status": "in-progress", "envelope": "envelope0000001"}
+
+
+@pytest.mark.parametrize("create, left, why", [
+    (Response(200, {"id": "planted", "status": "graded"}, 1), 1, "rows_under_owner=1"),
+    (Response(400, {"data": {"round": {"code": "validation_required"}}}, 1), 0, "refused=[False, False]"),
+], ids=["created", "validation-not-the-rule"])
+def test_create_graded_denied_fails_on_a_create_that_got_in_or_a_refusal_that_isnt_the_rules(create, left, why):
+    pb = _ProbePB(create=create, listing=_count(left))
+    r = families.create_graded_denied(pb, "ai_coding_attempts", OWNER, {"user": "uid-c", "status": "in-progress"},
+                                      "envelope0000001", "admin", 400)
+    assert not r.passed and why in r.detail
+
+
+def test_update_graded_denied_passes_when_every_update_is_not_found_and_both_rows_are_unchanged():
+    pb = _ProbePB(update=Response(404, {}, 1), view=Response(200, {"id": "x", "status": "graded"}, 1))
+    r = families.update_graded_denied(pb, "ai_coding_attempts", OWNER, "graded000000001", "envelope0000001", "admin",
+                                      404)
+    assert r.passed and r.probe_id == families.UPDATE_GRADED_FAMILY
+    updates = [(call[2], call[4]) for call in pb.calls if call[0] == "update"]
+    assert updates == [("graded000000001", {}), ("graded000000001", {"status": "in-progress"}),
+                       ("graded000000001", {"duration_ms": 1}), ("inprogress00001", {"status": "graded"}),
+                       ("inprogress00001", {"envelope": "envelope0000001"})]
+    # The superuser reads both rows back; the owner never does.
+    assert {call[3] for call in pb.calls if call[0] == "view"} == {"admin"}
+
+
+def test_update_graded_denied_fails_when_an_update_goes_through():
+    answers = [Response(404, {}, 1)] * 3 + [Response(200, {"id": "x", "status": "graded"}, 1), Response(404, {}, 1)]
+    pb = _ProbePB(update=list(answers), view=Response(200, {"id": "x"}, 1))
+    r = families.update_graded_denied(pb, "ai_coding_attempts", OWNER, "graded000000001", "envelope0000001", "admin",
+                                      404)
+    assert not r.passed and "statuses=[404, 404, 404, 200, 404]" in r.detail
+
+
+def test_a_failed_graded_fixture_fails_the_update_probe():
+    assert families.graded_row(_ProbePB(create=Response(400, {"data": {}}, 1)), "ai_coding_attempts", "admin", {}) == ""
+    pb = _ProbePB(update=Response(404, {}, 1), view=Response(404, {}, 1))
+    r = families.update_graded_denied(pb, "ai_coding_attempts", OWNER, "", "envelope0000001", "admin", 404)
+    assert not r.passed and "unchanged=False" in r.detail
+
+
 def test_server_only_create_denied_passes_on_forbidden_and_no_planted_row():
     pb = _ProbePB(create=Response(403, {"message": "Only superusers can perform this action."}, 1), listing=_count(0))
     r = families.create_server_only_denied(pb, "resume_share_views", "b-token", {"user": "uid-c"}, "admin", "uid-c", 403)

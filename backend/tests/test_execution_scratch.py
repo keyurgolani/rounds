@@ -864,6 +864,16 @@ def test_an_evaluate_job_runs_every_case_on_its_validators(runner, node):
     assert all(r["expected"] == {"$match": "validator"} for r in out["results"])
 
 
+def test_a_case_that_raises_in_an_evaluate_job_never_reaches_its_validator(runner, node):
+    # Otherwise a validator's own failure could hide what the code raised.
+    client = runner()
+    code = "def two_sum(nums, target):\n    raise ValueError('boom')\n"
+    done = _job(client, node, "/api/evaluate", {"definition": TWO_SUM_REF, "code": code, "tags": ["basic"]})
+    assert (done["state"], done["outcome_class"]) == ("completed", "candidate-failure")
+    errors = [r["error"] or "" for r in done["envelope"]["output"]["results"]]
+    assert errors and all("boom" in e and "Validator error" not in e for e in errors)
+
+
 def test_an_evaluate_job_takes_case_ids_and_tags(runner, node):
     client = runner()
     base = {"definition": {**TWO_SUM_REF, "slug": "binary-search"}, "code": PYTHON_SEARCH}

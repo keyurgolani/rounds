@@ -20,6 +20,7 @@ import pytest
 from fastapi import HTTPException
 
 from app import admission, definitions, execution as definition_runs, gates, harness_results
+from app.errors import TypedError
 from execution import envelope, handlers, keys, kinds
 from execution.worker import InvalidJob, Withdrawn
 from tests.test_definitions_enforce import (
@@ -320,6 +321,50 @@ def test_off_answers_503_before_anything_and_keeps_every_draft(runner, node, pat
     assert "turned off" in res.json()["detail"]
     dump = node.dump()
     assert dump["jobs"] == [] and dump["commands"] == [] and dump["counters"] == []
+
+
+@pytest.mark.parametrize("definitions_value", ["legacy", "enforce", "disabled"])
+@pytest.mark.parametrize("key_value", ["on", "off", "legacy"])
+def test_no_key_value_runs_code_or_saves_an_attempt_in_the_request(client, signed_in, job_secrets, monkeypatch,
+                                                                   key_value, definitions_value):
+    """The negative control for PR 4: whatever the two keys and the
+    definitions gate say, none of the six routes runs code in its request
+    or saves an attempt with the caller's token, for a request of either
+    shape. Only a definition request, with both keys on, starts a job."""
+    from execution import jobs
+    from routers import ai_coding, runner as coding, take_home
+    from tests.test_definitions_enforce import LEGACY_BODIES, ROUTE_BODIES
+
+    monkeypatch.setattr(gates, "_snapshot", gates.load({
+        "ROUNDS_GATE_EXECUTION_SCRATCH": key_value, "ROUNDS_GATE_EXECUTION_GRADING": key_value,
+        "ROUNDS_GATE_EXECUTION_DEFINITIONS": definitions_value,
+    }, gates.RUNNER))
+    ran: list[str] = []
+
+    def trip(name):
+        def tripped(*_args, **_kwargs):
+            ran.append(name)
+            raise AssertionError(f"{name} ran in the request")
+
+        return tripped
+
+    for module, name in ((coding, "run_one"), (definition_runs, "run_step"), (definition_runs, "grade"),
+                         (ai_coding, "run_project"), (take_home, "run_assignment"), (take_home, "pb_post")):
+        monkeypatch.setattr(module, name, trip(name))
+    started: list[str] = []
+
+    async def begin(_request, kind, *_args, **_kwargs):
+        started.append(kind)
+        raise TypedError("worker_unavailable")
+
+    monkeypatch.setattr(jobs, "begin", begin)
+    requests = [(path, body) for path, body, _field in LEGACY_BODIES] + list(ROUTE_BODIES.items())
+    for path, body in requests:
+        res = client.post(path, json=body, headers={**signed_in, "Idempotency-Key": new_key()})
+        assert res.status_code in (422, 503), (path, res.text)
+    assert ran == []
+    on = key_value == "on" and definitions_value == "enforce"
+    assert sorted(started) == (sorted(kinds.KINDS) if on else [])
 
 
 def test_the_defaults_grade_as_a_job_whose_row_the_server_writes(runner, node):

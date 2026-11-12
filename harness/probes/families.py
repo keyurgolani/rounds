@@ -224,6 +224,52 @@ def update_own_accepted(pb, collection, record_id, owner_id, owner_token, expect
                    expected, partial.status, ok, partial.elapsed_ms, detail)
 
 
+def create_graded_denied(pb, collection, caller: Account, payload, envelope_id, admin_token, expected) -> Receipt:
+    # The account creates rows of its own, complete and valid: one already
+    # graded, and one in progress that names an envelope (a real one, so
+    # validation passes). Only the server writes a graded attempt row
+    # (ROUNDS-00A-L03 PR 4), so the create rule refuses both, with the
+    # deny-contract status and empty `data` (a validation failure fills
+    # `data`), and the superuser then finds no row under the account, which
+    # owns none.
+    tries = [{**payload, "status": "graded"}, {**payload, "envelope": envelope_id}]
+    answers = [pb.create(collection, caller.token, body) for body in tries]
+    refused = [r.status == expected and isinstance(r.body, dict) and r.body.get("data") == {} for r in answers]
+    left, listing_status = _admin_owner_count(pb, collection, admin_token, caller.user_id)
+    ok = all(refused) and left == 0
+    detail = "" if ok else (f"graded={answers[0].status} envelope={answers[1].status} refused={refused} "
+                            f"{_owner_count_detail(left, listing_status)}")
+    return Receipt(CREATE_GRADED_FAMILY, collection, "create", "authenticated-owner",
+                   expected, answers[0].status, ok, answers[0].elapsed_ms, detail)
+
+
+def update_graded_denied(pb, collection, owner: Account, graded_id, envelope_id, admin_token, expected) -> Receipt:
+    # The owner's graded row takes no update, not even an empty one, and its
+    # in-progress row can't become graded or take an envelope. Each update
+    # is not found under the update rule, and the superuser reads both rows
+    # back exactly as they were.
+    in_progress = owner.ids[collection]
+    rows = (graded_id, in_progress)
+    before = {rid: pb.view(collection, rid, token=admin_token) for rid in rows}
+    tries = [(graded_id, {}), (graded_id, {"status": "in-progress"}), (graded_id, {"duration_ms": 1}),
+             (in_progress, {"status": "graded"}), (in_progress, {"envelope": envelope_id})]
+    answers = [pb.update(collection, rid, body, token=owner.token) for rid, body in tries]
+    after = {rid: pb.view(collection, rid, token=admin_token) for rid in rows}
+    unchanged = all(before[r].status == 200 and after[r].status == 200 and before[r].body == after[r].body
+                    for r in rows)
+    ok = all(r.status == expected for r in answers) and unchanged
+    detail = "" if ok else f"statuses={[r.status for r in answers]} unchanged={unchanged}"
+    return Receipt(UPDATE_GRADED_FAMILY, collection, "update", "authenticated-owner",
+                   expected, answers[0].status, ok, answers[0].elapsed_ms, detail)
+
+
+def graded_row(pb, collection, admin_token, payload) -> str:
+    """A graded row, written by the superuser as the server writes one;
+    its id, or "" when the write fails, which fails the probe that reads it."""
+    resp = pb.create(collection, admin_token, {**payload, "status": "graded"})
+    return resp.body.get("id", "") if resp.status == 200 and isinstance(resp.body, dict) else ""
+
+
 def create_server_only_denied(pb, collection, caller_token, payload, admin_token, owner_id, expected) -> Receipt:
     # A server-only collection (create rule null) rejects an authenticated
     # client create outright. An authenticated caller is the hardest to deny,
@@ -715,6 +761,9 @@ OVERSIZED_FAMILY = "account-scope.oversized-input.rejected"
 FOREIGN_OWNER_FAMILY = "account-scope.create.foreign-owner.denied"
 REASSIGN_FAMILY = "account-scope.update.reassign-owner.denied"
 UPDATE_OWN_FAMILY = "account-scope.update.own.accepted"
+# Only the server writes a graded attempt row (ROUNDS-00A-L03 PR 4).
+CREATE_GRADED_FAMILY = "account-scope.create.graded.denied"
+UPDATE_GRADED_FAMILY = "account-scope.update.graded.denied"
 SERVER_ONLY_CREATE_FAMILY = "account-scope.create.server-only.denied"
 SERVER_ONLY_UPDATE_FAMILY = "account-scope.update.server-only.denied"
 SERVER_ONLY_DELETE_FAMILY = "account-scope.delete.server-only.denied"
@@ -748,6 +797,8 @@ IMPLEMENTED_FAMILIES = (
         FOREIGN_OWNER_FAMILY,
         REASSIGN_FAMILY,
         UPDATE_OWN_FAMILY,
+        CREATE_GRADED_FAMILY,
+        UPDATE_GRADED_FAMILY,
         SERVER_ONLY_CREATE_FAMILY,
         SERVER_ONLY_UPDATE_FAMILY,
         SERVER_ONLY_DELETE_FAMILY,
