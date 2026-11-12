@@ -14,7 +14,8 @@
 
 ``/health`` stays liveness and never looks at the store. A job-backed
 route asks ``accepting_jobs`` first (PR 2): only while this replica's
-worker is up and ready does it charge and enqueue anything.
+worker is up and ready does it charge and enqueue anything. Once it has
+queued a job it calls ``wake``, so the worker claims it at once.
 """
 from __future__ import annotations
 
@@ -92,6 +93,14 @@ def readiness() -> dict[str, Any]:
         return {"ready": True, "store": _runtime.mode}
     worker = _runtime.worker
     return {"ready": worker is not None and worker.ready(), "store": "on"}
+
+
+def wake() -> None:
+    """Has this replica's worker claim at once: one of its routes just
+    queued a job. Does nothing while no worker runs."""
+    worker = _runtime.worker
+    if worker is not None:
+        worker.wake()
 
 
 def accepting_jobs() -> bool:

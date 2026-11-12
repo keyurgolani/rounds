@@ -14,8 +14,9 @@ take-home submit (PR 3). Each route, in order:
    source, and its typed inputs, never session time;
 3. resolves the definition and runs the checks it runs in-request, so a
    typed refusal comes before any job exists;
-4. enqueues the job with the caller's bearer and the runner key, and
-   answers 202 with it.
+4. enqueues the job with the caller's bearer and the runner key, wakes
+   this replica's worker so it claims the job at once, and answers 202
+   with it.
 
 A duplicate (step 2) answers 202 with its job as it is now, its envelope
 included once it ended, and charges nothing. ``routers/execution.py``
@@ -174,6 +175,10 @@ async def enqueue(request: Request, submission: Submission, job_input: dict[str,
         raise TypedError("idempotency_mismatch") from None
     except store.Unavailable:
         raise TypedError("worker_unavailable") from None
+    if not duplicate or requeued:
+        # It's queued, so this replica's worker claims it now rather than at
+        # the end of its idle pause.
+        runtime.wake()
     return JSONResponse(answer(job, False, None), status_code=202)
 
 
