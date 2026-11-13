@@ -133,9 +133,14 @@ SPECIAL_PURPOSE = [
     "2001:30::/28", "2001:db8::/32", "2002::/16", "2620:4f:8000::/48", "3fff::/20", "5f00::/16", "fc00::/7", "fe80::/10",
 ]
 PUBLIC = ["8.8.8.8", "104.18.6.192", "2606:4700::6812:6c0", "2a00:1450:4001:80b::200e"]
-# IANA's globally reachable exceptions inside 192.0.0.0/24 and 2001::/23,
-# which the policy refuses whole and R0 lets through.
+# IANA's globally reachable exceptions inside 192.0.0.0/24 and 2001::/23
+# that CPython calls global, so R0 lets them through; the policy refuses
+# them whole. IANA also lists 2001:1::3/128 (RFC 9665), which no CPython
+# calls global yet.
 GLOBAL_EXCEPTIONS = ["192.0.0.9/32", "192.0.0.10/32", "2001:1::1/128", "2001:1::2/128", "2001:3::/32", "2001:4:112::/48", "2001:20::/28", "2001:30::/28"]
+# Exceptions whose R0 answer waits on a CPython release, like 5f00::/16
+# above: a release that starts calling one global needs no test change.
+RELEASE_DEPENDENT_EXCEPTIONS = {"2001:1::3/128"}
 
 
 def _samples(network):
@@ -170,7 +175,8 @@ def test_destination_lists_match_the_runner():
     of IANA's special-purpose ranges and the policy's own lists, a sampled
     address the policy refuses, R0 refuses, outside the ranges named here.
     The policy also refuses the globally reachable exceptions inside
-    192.0.0.0/24 and 2001::/23, with their ranges, which R0 allows."""
+    192.0.0.0/24 and 2001::/23, with their ranges; R0 allows each one its
+    CPython release calls global."""
     loc = evaluator.POLICY["locations"]
     assert sorted(map(str, destinations.METADATA_ADDRESSES)) == sorted(str(ipaddress.ip_address(a)) for a in loc["never"]["metadata"])
     assert [str(n) for n in destinations.PRIVATE_NETWORKS] == loc["privateNetworks"]
@@ -179,7 +185,7 @@ def test_destination_lists_match_the_runner():
     for net in _policy_lists():
         for sample in _samples(net):
             assert not _policy_allows(sample), (net, str(sample))
-    named = STRICTER_THAN_R0 | RELEASE_DEPENDENT | set(GLOBAL_EXCEPTIONS)
+    named = STRICTER_THAN_R0 | RELEASE_DEPENDENT | set(GLOBAL_EXCEPTIONS) | RELEASE_DEPENDENT_EXCEPTIONS
     for net in SPECIAL_PURPOSE + _policy_lists():
         if net in named:
             continue

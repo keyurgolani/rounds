@@ -3,10 +3,19 @@
   "id": "DR-0002",
   "title": "Source-of-truth and package-boundary matrix",
   "leaf": "ROUNDS-01-L02",
-  "status": "draft",
+  "status": "ratified",
   "owner": "Product Architecture",
-  "approver": "",
-  "approvalRef": null,
+  "approver": "rounds lane review (PR #223, r3), 2026-11-12",
+  "approvalRef": {
+    "pr": 223,
+    "governedFiles": [
+      {"path":"contracts/authority/matrix.json","sha256":"e60cf830034800e7abf56be38c168da202e243d29f19038b80f7b50b1168b253"},
+      {"path":"contracts/authority/packages.json","sha256":"11823361bf1a222ea1b9551ce962adb02aac04a87bc7cf949791b3cb5283ff99"},
+      {"path":"contracts/authority/owner-labels.json","sha256":"f260e1d2d3cc6572c9c9456bb0d4886483bf8b989c9ebaabe68d2e188e31d800"},
+      {"path":"contracts/authority/baseline-stores.json","sha256":"a04b3674b6ce1445ca5ec27609f1f1b237fecf43b2d7d5494d75b34ef0913f11"}
+    ]
+  },
+  "ratifiedOn": "2026-11-12",
   "compatibility": "additive",
   "revision": 3,
   "supersedes": "DR-0002@2",
@@ -390,7 +399,7 @@
     {
       "id": "F1",
       "title": "Field maps from DR-0005",
-      "status": "draft",
+      "status": "ratified",
       "sources": ["DR-0005@1 decisions PRIV-1 and PRIV-9", "contracts/privacy/field-map.json"],
       "decision": "Each row's field_map cell that revision 1 left pending on ROUNDS-14-L01 names contracts/privacy/field-map.json. There every field the row holds takes one class or visibility, no looser than the row's privacy_floor or visibility, and the privacy rule fails a field that is looser or unlisted. Some of these rows are planned and hold no field yet; their fields join the map when their stores land. The ten rows that hold no account fields keep n/a, and the login streak stays blocked:OD-5.",
       "alternatives": [

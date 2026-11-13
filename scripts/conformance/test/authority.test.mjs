@@ -18,9 +18,9 @@ const LEDGER = 'contracts/authority/disposition-ledger.json';
 const CORRECTIONS = 'contracts/authority/owner-sentence-corrections.json';
 const DR = 'docs/decisions/DR-0002-authority-matrix.json';
 const AUDITED = '62d4eae';
-// DR-0002@3 is a draft until #223's r2 review passes; its ratification
-// commit sets this to 'ratified'. #222 ratified revision 2.
-const DR_STATUS = 'draft';
+// #223 ratified DR-0002@3 over #222's revision 2. A later revision's PR
+// sets this to 'draft' until that revision is ratified.
+const DR_STATUS = 'ratified';
 // A rounds-review checkout, when one is named, for the verbatim checks.
 const ROUNDS_REVIEW = process.env.ROUNDS_REVIEW_ROOT || null;
 

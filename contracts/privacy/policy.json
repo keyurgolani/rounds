@@ -13,10 +13,10 @@
     "packRule": "A career pack may make a rule stricter but cannot relax it."
   },
   "versions": [
-    { "id": "privacy", "current": 1, "covers": "classes, sinks, the matrix, visibility rules, locations, and the credential channel", "revisions": [{ "revision": 1, "status": "draft", "compatibleWith": [], "changedConstraint": null }] },
-    { "id": "retention", "current": 1, "covers": "the lifecycle rows, account deletion, and the operator retention settings", "revisions": [{ "revision": 1, "status": "draft", "compatibleWith": [], "changedConstraint": null }] },
-    { "id": "redaction", "current": 1, "covers": "the redaction operators and each purpose's omitted fields", "revisions": [{ "revision": 1, "status": "draft", "compatibleWith": [], "changedConstraint": null }] },
-    { "id": "consent", "current": 1, "covers": "the consent units and the batch cap", "revisions": [{ "revision": 1, "status": "draft", "compatibleWith": [], "changedConstraint": null }] }
+    { "id": "privacy", "current": 1, "covers": "classes, sinks, the matrix, visibility rules, locations, and the credential channel", "revisions": [{ "revision": 1, "status": "ratified", "compatibleWith": [], "changedConstraint": null }] },
+    { "id": "retention", "current": 1, "covers": "the lifecycle rows, account deletion, and the operator retention settings", "revisions": [{ "revision": 1, "status": "ratified", "compatibleWith": [], "changedConstraint": null }] },
+    { "id": "redaction", "current": 1, "covers": "the redaction operators and each purpose's omitted fields", "revisions": [{ "revision": 1, "status": "ratified", "compatibleWith": [], "changedConstraint": null }] },
+    { "id": "consent", "current": 1, "covers": "the consent units and the batch cap", "revisions": [{ "revision": 1, "status": "ratified", "compatibleWith": [], "changedConstraint": null }] }
   ],
   "classes": [
     { "name": "Private", "rank": 1, "default": true },
