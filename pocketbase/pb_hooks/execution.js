@@ -707,6 +707,22 @@ function purge(store, now) {
   return { purged: jobs.length };
 }
 
+// One account's jobs, whatever their purpose or age, as the purge removes
+// them: each with its envelopes, its attempts, and its admission command.
+// demo.js's reset (ROUNDS-00B-L07) calls it. A job leased or started
+// stays, since a worker may hold it; it's taken once it ends. At most
+// `limit` jobs a call; returns how many rows of each kind it removed.
+function purgeAccount(store, accountId, limit) {
+  const out = { jobs: 0, envelopes: 0, commands: 0 };
+  store.accountJobs(accountId, limit).forEach((job) => {
+    out.envelopes += store.deleteEnvelopes(job.id) || 0;
+    out.commands += store.deleteCommandOf(job) ? 1 : 0;
+    store.deleteJob(job);
+    out.jobs += 1;
+  });
+  return out;
+}
+
 // Whether a worker still holds the job: it's leased or started, and its
 // current attempt's lease hasn't run out.
 function heldByAWorker(store, job, now) {
@@ -1410,14 +1426,32 @@ function pbStore(dao) {
           { cutoff },
         )
         .map(job),
+    // One account's jobs no worker can hold (none leased or started), at
+    // most `limit`, oldest first.
+    accountJobs: (accountId, limit) =>
+      dao
+        .findRecordsByFilter(
+          JOBS,
+          "account = {:account} && state != 'leased' && state != 'started'",
+          "queued_at",
+          limit,
+          0,
+          { account: accountId },
+        )
+        .map(job),
+    // How many it removed.
     deleteEnvelopes: (jobId) => {
-      dao.findRecordsByFilter(ENVELOPES, "job = {:job}", "", 0, 0, { job: jobId }).forEach((r) => dao.deleteRecord(r));
+      const rows = dao.findRecordsByFilter(ENVELOPES, "job = {:job}", "", 0, 0, { job: jobId });
+      rows.forEach((r) => dao.deleteRecord(r));
+      return rows.length;
     },
     // The admission command the job was enqueued under, when it still
-    // names this job; its leases go with it.
+    // names this job; its leases go with it. Whether there was one.
     deleteCommandOf: (row) => {
       const found = first(COMMANDS, "account = {:account} && command_id = {:id}", { account: row.account, id: row.command_id });
-      if (found !== null && found.getString("job") === row.id) dao.deleteRecord(found);
+      if (found === null || found.getString("job") !== row.id) return false;
+      dao.deleteRecord(found);
+      return true;
     },
     deleteJob: (row) => dao.deleteRecord(row._record),
   };
@@ -1699,6 +1733,7 @@ module.exports = {
   complete,
   reap,
   purge,
+  purgeAccount,
   reviewStart,
   reviewFinish,
   ensureWorker,

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Flame } from 'lucide-react';
+import { ArrowRight, Flame, Lock } from 'lucide-react';
 import { initials, useAuth } from '../auth/AuthProvider';
 import AppHeader from '../components/shell/AppHeader';
 import PageShell from '../components/shell/PageShell';
@@ -61,77 +61,101 @@ function ProfileBody() {
     year: 'numeric',
   });
 
+  const identity = (
+    <div className="flex items-center gap-4 pb-4" style={{ borderBottom: '1px solid var(--border)' }}>
+      <div
+        className="display-italic flex items-center justify-center flex-shrink-0"
+        style={{
+          width: 64,
+          height: 64,
+          borderRadius: 999,
+          background: 'var(--accent-soft)',
+          color: 'var(--accent)',
+          fontSize: 26,
+        }}
+      >
+        {initials(user.name || 'You')}
+      </div>
+      <div className="min-w-0">
+        <div className="display-italic" style={{ fontSize: 24, fontWeight: 400, lineHeight: 1.1 }}>
+          {user.name}
+        </div>
+        <div className="mono" style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 2 }}>
+          {user.email}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="px-5 sm:px-8 py-6 grid gap-6 grid-cols-1 lg:[grid-template-columns:minmax(0,1fr)_320px]">
-      <form onSubmit={handleSave} className="card p-6 flex flex-col gap-4">
-        <div className="flex items-center gap-4 pb-4" style={{ borderBottom: '1px solid var(--border)' }}>
-          <div
-            className="display-italic flex items-center justify-center flex-shrink-0"
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 999,
-              background: 'var(--accent-soft)',
-              color: 'var(--accent)',
-              fontSize: 26,
-            }}
+      {user.isDemo ? (
+        // The demo account's profile is fixed, so it reads as text: no
+        // field to edit and nothing to save.
+        <section aria-label="Profile" className="card p-6 flex flex-col gap-4">
+          {identity}
+          <dl className="flex flex-col gap-4" style={{ margin: 0 }}>
+            <ProfileValue label="Display name" value={user.name} />
+            <ProfileValue label="Target role / company" value={user.target} />
+            <ProfileValue label="Short bio" value={user.bio} />
+          </dl>
+          <p
+            className="flex items-start gap-2 pt-2"
+            style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-2)' }}
           >
-            {initials(user.name || 'You')}
+            <Lock aria-hidden="true" size={14} strokeWidth={1.8} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>The demo profile can't be changed.</span>
+          </p>
+        </section>
+      ) : (
+        <form onSubmit={handleSave} className="card p-6 flex flex-col gap-4">
+          {identity}
+
+          <label className="flex flex-col gap-1">
+            <span className="eyebrow">Display name</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="eyebrow">Target role / company</span>
+            <input
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              placeholder="e.g. Stripe L5 · Backend"
+              style={inputStyle}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="eyebrow">Short bio</span>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              rows={3}
+              placeholder="One line of context, like a career chapter, a focus, or a principle you're leaning on."
+              style={{ ...inputStyle, resize: 'vertical', minHeight: 80 }}
+            />
+          </label>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button type="submit" style={primaryBtn}>
+              Save changes
+            </button>
+            {saved && (
+              <span
+                className="mono"
+                style={{ fontSize: 11, color: 'var(--forest)', letterSpacing: '0.1em' }}
+              >
+                SAVED
+              </span>
+            )}
           </div>
-          <div className="min-w-0">
-            <div className="display-italic" style={{ fontSize: 24, fontWeight: 400, lineHeight: 1.1 }}>
-              {user.name}
-            </div>
-            <div className="mono" style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 2 }}>
-              {user.email}
-            </div>
-          </div>
-        </div>
-
-        <label className="flex flex-col gap-1">
-          <span className="eyebrow">Display name</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={inputStyle}
-          />
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="eyebrow">Target role / company</span>
-          <input
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            placeholder="e.g. Stripe L5 — Backend"
-            style={inputStyle}
-          />
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="eyebrow">Short bio</span>
-          <textarea
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            rows={3}
-            placeholder="One line of context — career chapter, focus, or a principle you're leaning on."
-            style={{ ...inputStyle, resize: 'vertical', minHeight: 80 }}
-          />
-        </label>
-
-        <div className="flex items-center gap-3 pt-2">
-          <button type="submit" style={primaryBtn}>
-            Save changes
-          </button>
-          {saved && (
-            <span
-              className="mono"
-              style={{ fontSize: 11, color: 'var(--forest)', letterSpacing: '0.1em' }}
-            >
-              SAVED
-            </span>
-          )}
-        </div>
-      </form>
+        </form>
+      )}
 
       <aside className="flex flex-col gap-4">
         <div className="card p-5">
@@ -272,9 +296,18 @@ function ProfileBody() {
             <ArrowRight size={14} strokeWidth={1.7} />
           </div>
           <div
-            style={{ fontSize: 11.5, color: 'var(--text-4)', marginTop: 3, fontWeight: 400 }}
+            style={{
+              fontSize: 11.5,
+              // The demo's line says a sign-out clears everyone's work, so
+              // it reads at full body contrast.
+              color: user.isDemo ? 'var(--text-2)' : 'var(--text-4)',
+              marginTop: 3,
+              fontWeight: 400,
+            }}
           >
-            Clears your local session on this device.
+            {user.isDemo
+              ? 'Signs you out and clears what everyone added to the demo account.'
+              : 'Clears your local session on this device.'}
           </div>
         </button>
       </aside>
@@ -382,6 +415,26 @@ function ActivityStat({
           {sub}
         </div>
       )}
+    </div>
+  );
+}
+
+function ProfileValue({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <dt className="eyebrow">{label}</dt>
+      <dd
+        style={{
+          margin: 0,
+          fontSize: 14,
+          lineHeight: 1.5,
+          color: value ? 'var(--text)' : 'var(--text-2)',
+          fontStyle: value ? 'normal' : 'italic',
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {value || 'Not set'}
+      </dd>
     </div>
   );
 }
