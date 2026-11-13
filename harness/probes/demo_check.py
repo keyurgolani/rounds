@@ -116,6 +116,10 @@ def run_reset(c: Checks, pb: PBClient, admin: str, d: factory.Account) -> None:
     fields = _account_fields(pb, admin)
     before = _rows_of(pb, admin, fields, d.user_id)
     standard_before = _rows_of(pb, admin, fields, w.user_id)
+    # A superuser's edit, which the lock doesn't hold, so the reset has a
+    # profile to put back.
+    drifted = pb.update("users", d.user_id, {"name": "Visitor"}, admin)
+    drift_took = drifted.status == 200 and (pb.view("users", d.user_id, admin).body or {}).get("name") == "Visitor"
 
     ended = call(POCKETBASE_URL, "POST", END_PATH, d.token, {})
     after = _rows_of(pb, admin, fields, d.user_id)
@@ -124,8 +128,9 @@ def run_reset(c: Checks, pb: PBClient, admin: str, d: factory.Account) -> None:
     left = sorted(f"{name}.{field}={n}" for (name, field), n in after.items() if n != 0 and name not in KEPT)
     c.check("demo.on.ending-the-session-leaves-no-demo-row",
             ended[0] == 204 and seeded_everywhere and before[("execution_jobs", "account")] >= 1
-            and left == [] and profile == SEEDED_PROFILE,
-            f"status={ended[0]} seeded={seeded_everywhere} left={left} profile={profile == SEEDED_PROFILE}")
+            and left == [] and drift_took and profile == SEEDED_PROFILE,
+            f"status={ended[0]} seeded={seeded_everywhere} left={left} drifted={drift_took}"
+            f" profile={profile == SEEDED_PROFILE}")
 
     # The SPA reaches it through the public proxy.
     proxied = call(FRONTEND_URL, "POST", END_PATH, d.token, {})
