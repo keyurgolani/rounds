@@ -466,6 +466,13 @@ describe('privacy: purposes and the provider-call scan', () => {
     }
   });
 
+  it('refuses a malformed credential id rather than reading it', () => {
+    const set = (credential) => edit(PURPOSES, (r) => { purpose(r, 'provider.test').credential = credential; });
+    for (const credential of ['pb:users.passwordHash#', 'pb:users.passwordHash#/*', 'pb:users#/passwordHash']) {
+      only(check({ files: set(credential) }), 'PRIVACY_FIELD_ID_INVALID');
+    }
+  });
+
   it('reads an input\'s whole subtree: a parent holding a Secret or server-only entry fails', () => {
     const add = (field) => edit(PURPOSES, (r) => { purpose(r, 'resume.improve').inputs.push({ field }); });
     const secret = check({ files: add('pb:share_capabilities') });

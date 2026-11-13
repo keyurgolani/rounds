@@ -37,6 +37,15 @@
       "reason": "Turns off every share link made before the release, for good: sets each link's outcome fields, keeps only the day on each view row, gives quarantined share entries the same treatment, journals one row per link, and drops the link fields only those links used, with their index. The disposition per collection is in the manifest; down() restores no secret and turns no link back on.",
       "reviewed_by": "pending owner review",
       "manifest": "pocketbase/migration-manifests/legacy-shares-v1.json"
+    },
+    {
+      "path": "pocketbase/pb_migrations/1700008820_ai_credentials_move.js",
+      "rules": ["rewrites-rows"],
+      "sha256": "3951c000bd021050a76eb8c0674ea590a181612ab72b809e8c50cc1c65c5beff",
+      "issue": "#73",
+      "reason": "Moves each saved AI provider key and model list out of ai_providers at start: copies each whole key pair, unopened, into ai_credentials as legacy-v0 (suspect-planted where the same pair sits under another account), seeds ai_provider_models from each cached list and saved model choice, sets a first-party provider with an address of its own to the compatible kind, and clears the moved key columns. The disposition per collection is in the manifest; down() puts every moved pair and changed kind back.",
+      "reviewed_by": "pending lane review",
+      "manifest": "pocketbase/migration-manifests/ai-credentials-v1.json"
     }
   ]
 }

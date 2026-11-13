@@ -3,7 +3,7 @@
   "description": "PocketBase's own schema after every migration at the revision below, from `pocketbase migrate up` on an empty directory (harness/bench/schema_dump.py). Regenerate it with that script; never edit it by hand. The ERD (erd.json) is checked against it.",
   "pocketbaseVersion": "0.22.22",
   "revision": {
-    "commit": "988653cec5bc60fc06a862be1be308b03b890f64",
+    "commit": "2b3a1b3b69ed9f5e195b7235ed42e369f5ce5a09",
     "migrationsClean": true
   },
   "migrations": [
@@ -158,6 +158,18 @@
     {
       "file": "1700008700_attempt_grade_rules.js",
       "sha256": "963236d47713153900647d03d9440399abbb00a3f8d78486be1eabb28242c027"
+    },
+    {
+      "file": "1700008800_ai_credentials.js",
+      "sha256": "8e6bf222721896a5a2a43f5a1a81dfcc9db115590eb2db89476af5d4bce28ded"
+    },
+    {
+      "file": "1700008810_ai_provider_writes.js",
+      "sha256": "dbb2fb220773418444abe8ce0a96cf31355c7874f7cc6124f0490b96df40c465"
+    },
+    {
+      "file": "1700008820_ai_credentials_move.js",
+      "sha256": "3951c000bd021050a76eb8c0674ea590a181612ab72b809e8c50cc1c65c5beff"
     },
     {
       "file": "1702134273_json_limits.js",
@@ -711,6 +723,166 @@
       }
     },
     {
+      "name": "ai_credentials",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "ciphertext",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "key_version",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "legacy_ciphertext",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "legacy_nonce",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "nonce",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "provider",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "ai_providers",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "registered_host",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "registered_port",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "wrap",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ai_credentials_provider",
+          "unique": true,
+          "columns": [
+            "ai_credentials.provider"
+          ]
+        },
+        {
+          "name": "idx_ai_credentials_user",
+          "unique": false,
+          "columns": [
+            "ai_credentials.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
+      "name": "ai_provider_models",
+      "type": "base",
+      "system": false,
+      "fields": [
+        {
+          "name": "model",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "provider",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "ai_providers",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "relation": {
+            "collection": "users",
+            "cascadeDelete": true,
+            "minSelect": null,
+            "maxSelect": 1
+          }
+        },
+        {
+          "name": "verification",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ai_provider_models_model",
+          "unique": true,
+          "columns": [
+            "ai_provider_models.provider",
+            "ai_provider_models.model"
+          ]
+        },
+        {
+          "name": "idx_ai_provider_models_user",
+          "unique": false,
+          "columns": [
+            "ai_provider_models.user"
+          ]
+        }
+      ],
+      "rules": {
+        "list": "null",
+        "view": "null",
+        "create": "null",
+        "update": "null",
+        "delete": "null"
+      }
+    },
+    {
       "name": "ai_providers",
       "type": "base",
       "system": false,
@@ -775,8 +947,8 @@
       "rules": {
         "list": "expression",
         "view": "expression",
-        "create": "expression",
-        "update": "expression",
+        "create": "null",
+        "update": "null",
         "delete": "expression"
       }
     },
@@ -4810,6 +4982,30 @@
       "table": "ai_coding_drafts"
     },
     {
+      "name": "rel_authz_ai_credentials_provider_ins",
+      "table": "ai_credentials"
+    },
+    {
+      "name": "rel_authz_ai_credentials_provider_tgt",
+      "table": "ai_providers"
+    },
+    {
+      "name": "rel_authz_ai_credentials_provider_upd",
+      "table": "ai_credentials"
+    },
+    {
+      "name": "rel_authz_ai_provider_models_provider_ins",
+      "table": "ai_provider_models"
+    },
+    {
+      "name": "rel_authz_ai_provider_models_provider_tgt",
+      "table": "ai_providers"
+    },
+    {
+      "name": "rel_authz_ai_provider_models_provider_upd",
+      "table": "ai_provider_models"
+    },
+    {
       "name": "rel_authz_ai_settings_text_provider_ins",
       "table": "ai_settings"
     },
@@ -5268,6 +5464,9 @@
     "1700008400_grading_review.js",
     "1700008500_legacy_share_migration.js",
     "1700008700_attempt_grade_rules.js",
+    "1700008800_ai_credentials.js",
+    "1700008810_ai_provider_writes.js",
+    "1700008820_ai_credentials_move.js",
     "1701496825_allow_single_oauth2_provider_in_multiple_auth_collections.go",
     "1702134272_set_default_json_max_size.go",
     "1702134273_json_limits.js",

@@ -331,7 +331,7 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 
 ## Adapters
 
-174 entries: 58 collection, 3 field, 19 stored-value, 10 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
+176 entries: 60 collection, 3 field, 19 stored-value, 10 api-route, 31 route-segment, 28 ui-string, 20 app-header, 3 positioning, 2 doc. Each maps a baseline name to a term or to the leaf that decides it, gives the label it becomes, and names the retiring leaf: the leaf that renames or removes the name, or confirms it as a canonical internal name.
 
 ### collection
 
@@ -343,6 +343,8 @@ Write it as "data-preserving clean cutover". The check rejects the phrase withou
 | ai_coding_attempts | `pocketbase/pb_migrations/1700001100_ai_coding.js:101` | `practice-attempt` | Attempt | #164 (ROUNDS-32-L10) |
 | ai_coding_drafts | `pocketbase/pb_migrations/1700001100_ai_coding.js:64` | `practice-draft` | Practice Draft | #164 (ROUNDS-32-L10) |
 | ai_coding_rounds | `pocketbase/pb_migrations/1700001100_ai_coding.js:37` | `practice-item` | Practice Item | #43 (ROUNDS-07-L05) |
+| ai_credentials | `pocketbase/pb_migrations/1700008800_ai_credentials.js:86` | `ai-provider` |  | #164 (ROUNDS-32-L10) |
+| ai_provider_models | `pocketbase/pb_migrations/1700008800_ai_credentials.js:125` | `ai-provider` |  | #164 (ROUNDS-32-L10) |
 | ai_providers | `pocketbase/pb_migrations/1700000800_ai_providers.js:43` | `ai-provider` | AI provider | #164 (ROUNDS-32-L10) |
 | ai_settings | `pocketbase/pb_migrations/1700000700_resume_studio.js:198` | `account-preference` | Settings | #164 (ROUNDS-32-L10) |
 | anecdotes (historical) | `pocketbase/pb_migrations/1700000000_init_collections.js:223` | `narrative` | Story | #164 (ROUNDS-32-L10) |

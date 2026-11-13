@@ -174,6 +174,9 @@
     "deployment.proxy.share-hooks.denied": {
       "guarantee": "the share capability hook routes, which only the runner calls, are not reachable at the public URL"
     },
+    "deployment.proxy.ai-hooks.denied": {
+      "guarantee": "the AI provider custody hook routes, which only the runner calls, are not reachable at the public URL"
+    },
     "deployment.proxy.share-resolve.uniform": {
       "guarantee": "a share capability resolve with a malformed or unknown token answers one byte-identical 404 with no-store, noindex, no-referrer, nosniff, DENY framing, and the resolver CSP"
     },
@@ -309,7 +312,10 @@
       "resource": [
         "resume_share_views",
         "legacy_artifact_snapshots",
-        "share_capabilities"
+        "share_capabilities",
+        "ai_credentials",
+        "ai_provider_models",
+        "ai_providers"
       ]
     },
     "account-scope.update.server-only.denied": {
@@ -322,7 +328,10 @@
         "resume_share_links",
         "resume_share_views",
         "legacy_artifact_snapshots",
-        "share_capabilities"
+        "share_capabilities",
+        "ai_credentials",
+        "ai_provider_models",
+        "ai_providers"
       ]
     },
     "account-scope.delete.server-only.denied": {
@@ -334,7 +343,9 @@
       "resource": [
         "legacy_artifact_snapshots",
         "execution_envelopes",
-        "share_capabilities"
+        "share_capabilities",
+        "ai_credentials",
+        "ai_provider_models"
       ]
     },
     "account-scope.create.superuser.accepted": {
@@ -445,7 +456,11 @@
       "status": "enforced",
       "deny_key": "server_only",
       "guarantee": "a client list on a collection whose list rule is null is forbidden, the owner's own included, and returns no row",
-      "resource": "share_capabilities"
+      "resource": [
+        "share_capabilities",
+        "ai_credentials",
+        "ai_provider_models"
+      ]
     },
     "account-scope.view.server-only.denied": {
       "operation": "view",
@@ -453,7 +468,11 @@
       "status": "enforced",
       "deny_key": "server_only",
       "guarantee": "a client read by id on a collection whose view rule is null is forbidden, the owner's own row included",
-      "resource": "share_capabilities"
+      "resource": [
+        "share_capabilities",
+        "ai_credentials",
+        "ai_provider_models"
+      ]
     },
     "account-scope.share.capability-list.owner-only": {
       "operation": "list",
@@ -1612,16 +1631,25 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
+        "create": null,
+        "update": null,
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+        "create": null,
+        "update": null
       },
       "target_rule_migration": "1700006000_account_scope_rules.js",
-      "hook": null,
+      "rule_overrides": [
+        {
+          "migration": "1700008810_ai_provider_writes.js",
+          "rules": [
+            "create",
+            "update"
+          ]
+        }
+      ],
+      "hook": "pocketbase/pb_hooks/ai_custody.pb.js",
       "relation_exceptions": [],
       "exceptions": [],
       "probes": [
@@ -1634,21 +1662,9 @@
         "account-scope.list.filter.isolated",
         "account-scope.view.foreign-or-missing.indistinguishable",
         "account-scope.delete.foreign-or-missing.indistinguishable",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
-        "account-scope.create.anonymous.denied",
-        "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted",
-        "account-scope.update.foreign-or-missing.indistinguishable",
-        "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied",
-        "account-scope.oversized-input.rejected"
-      ],
-      "oversized_probe": {
-        "field": "models_cache",
-        "max_bytes": 262144
-      }
+        "account-scope.create.server-only.denied",
+        "account-scope.update.server-only.denied"
+      ]
     },
     "ai_settings": {
       "migration": "1700000800_ai_providers.js",
@@ -2625,6 +2641,78 @@
         "account-scope.create.relation-superuser.denied",
         "account-scope.share.capability-list.owner-only",
         "account-scope.share.capability-revoke.foreign-or-missing.indistinguishable"
+      ]
+    },
+    "ai_credentials": {
+      "migration": "1700008800_ai_credentials.js",
+      "fixture": "ai_credentials",
+      "owner_field": "user",
+      "current_rules": {
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "target_rules": {
+        "create": null,
+        "update": null
+      },
+      "target_rule_migration": "1700008800_ai_credentials.js",
+      "hook": "pocketbase/pb_hooks/ai_custody.pb.js",
+      "relation_exceptions": [
+        "provider"
+      ],
+      "relation_endpoints": [
+        {
+          "field": "provider",
+          "target": "ai_providers"
+        }
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.server-only.denied",
+        "account-scope.view.server-only.denied",
+        "account-scope.create.server-only.denied",
+        "account-scope.update.server-only.denied",
+        "account-scope.delete.server-only.denied",
+        "account-scope.create.relation-superuser.denied"
+      ]
+    },
+    "ai_provider_models": {
+      "migration": "1700008800_ai_credentials.js",
+      "fixture": "ai_provider_models",
+      "owner_field": "user",
+      "current_rules": {
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "target_rules": {
+        "create": null,
+        "update": null
+      },
+      "target_rule_migration": "1700008800_ai_credentials.js",
+      "hook": "pocketbase/pb_hooks/ai_custody.pb.js",
+      "relation_exceptions": [
+        "provider"
+      ],
+      "relation_endpoints": [
+        {
+          "field": "provider",
+          "target": "ai_providers"
+        }
+      ],
+      "exceptions": [],
+      "probes": [
+        "account-scope.list.server-only.denied",
+        "account-scope.view.server-only.denied",
+        "account-scope.create.server-only.denied",
+        "account-scope.update.server-only.denied",
+        "account-scope.delete.server-only.denied",
+        "account-scope.create.relation-superuser.denied"
       ]
     },
     "users": {

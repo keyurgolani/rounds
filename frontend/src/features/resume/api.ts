@@ -11,7 +11,6 @@ import type { RecordModel } from 'pocketbase';
 import { pb } from '../../lib/pocketbase';
 import { slugify } from '../../lib/slug';
 import type {
-  AISettings,
   Resume,
   ResumeData,
   ResumeVariant,
@@ -66,22 +65,11 @@ interface VersionRow extends RecordModel {
   is_auto: boolean;
 }
 
-interface AISettingsRow extends RecordModel {
-  user: string;
-  provider: AISettings['provider'];
-  model: string;
-  import_model?: string;
-  base_url?: string;
-  encrypted_key?: string;
-  key_iv?: string;
-}
-
 // ---- Typed collection accessors -------------------------------------
 
 const resumesCol = () => pb.collection<ResumeRow>('resumes');
 const variantsCol = () => pb.collection<VariantRow>('resume_variants');
 const versionsCol = () => pb.collection<VersionRow>('resume_versions');
-const aiSettingsCol = () => pb.collection<AISettingsRow>('ai_settings');
 
 function userId(): string {
   const id = pb.authStore.record?.id;
@@ -142,20 +130,6 @@ function adaptVersion(r: VersionRow): ResumeVersion {
     label: r.label,
     is_auto: Boolean(r.is_auto),
     created_at: r.created,
-  };
-}
-
-function adaptAISettings(r: AISettingsRow): AISettings {
-  return {
-    id: r.id,
-    user_id: r.user,
-    provider: r.provider ?? 'anthropic',
-    model: r.model ?? '',
-    import_model: r.import_model,
-    base_url: r.base_url,
-    encrypted_key: r.encrypted_key,
-    key_iv: r.key_iv,
-    updated_at: r.updated,
   };
 }
 
@@ -342,46 +316,4 @@ export async function createVersion(input: {
     is_auto: input.isAuto ?? true,
   });
   return adaptVersion(r);
-}
-
-// --- AI Settings ------------------------------------------------------
-
-export async function getAISettings(): Promise<AISettings | null> {
-  const me = userId();
-  try {
-    const r = await aiSettingsCol().getFirstListItem(`user = "${me}"`);
-    return adaptAISettings(r);
-  } catch (err: unknown) {
-    if (pbStatus(err) === 404) return null;
-    throw err;
-  }
-}
-
-export async function upsertAISettings(input: {
-  provider: AISettings['provider'];
-  model: string;
-  import_model?: string;
-  base_url?: string;
-  encrypted_key?: string;
-  key_iv?: string;
-}): Promise<AISettings> {
-  const me = userId();
-  const payload = {
-    user: me,
-    provider: input.provider,
-    model: input.model,
-    import_model: input.import_model ?? '',
-    base_url: input.base_url ?? '',
-    encrypted_key: input.encrypted_key ?? '',
-    key_iv: input.key_iv ?? '',
-  };
-  try {
-    const existing = await aiSettingsCol().getFirstListItem(`user = "${me}"`);
-    const r = await aiSettingsCol().update(existing.id, payload);
-    return adaptAISettings(r);
-  } catch (err: unknown) {
-    if (pbStatus(err) !== 404) throw err;
-  }
-  const r = await aiSettingsCol().create(payload);
-  return adaptAISettings(r);
 }

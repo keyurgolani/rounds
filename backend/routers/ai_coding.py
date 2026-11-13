@@ -54,10 +54,9 @@ from routers.ai import (
     _call_stream,
     _friendly_error,
     _list_providers_raw,
-    _load_provider,
     _request_id,
 )
-from app.crypto import decrypt
+from app.provider_gateway import custody
 
 _log = logging.getLogger(__name__)
 
@@ -252,16 +251,13 @@ async def _resolve_text_cfg(user: dict, provider_id: str | None, model: str | No
     the user's active text-model setting. Both paths return the same
     cfg dict shape: {kind, model, api_key, base_url}."""
     if provider_id and model:
-        provider = await _load_provider(user, provider_id)
-        api_key = decrypt(provider.get("encrypted_key") or "", provider.get("key_iv") or "")
-        if not api_key:
-            raise HTTPException(status_code=400, detail="No API key on file for the chosen provider.")
-        destination = await destinations.vet(provider.get("base_url") or "")
+        opened = await custody.key_for(user, provider_id, model)
+        destination = await destinations.vet(opened.base_url)
         return {
-            "kind": provider.get("kind") or "provider",
+            "kind": opened.kind or "provider",
             "model": model,
-            "api_key": api_key,
-            "base_url": provider.get("base_url") or "",
+            "api_key": opened.api_key,
+            "base_url": opened.base_url,
             "destination": destination,
         }
     return await _active_text_config(user)
@@ -545,12 +541,12 @@ async def list_available_models(user: dict = Depends(_auth_user)) -> List[AICodi
     rows = await _list_providers_raw(user)
     out: List[AICodingModel] = []
     for r in rows:
-        # Skip malformed (no id) or unusable (no key on file) providers —
-        # the dropdown emits provider_id back to /chat, so a row without
-        # both an id AND a decryptable key is actively broken UX.
-        if not r.get("id") or not r.get("encrypted_key"):
+        # Skip malformed (no id) or unusable (no saved key) providers: the
+        # dropdown emits provider_id back to /chat, so a row without both
+        # an id and a usable key is broken UX.
+        if not r.get("id") or not r.get("has_key"):
             continue
-        for m in (r.get("models_cache") or []):
+        for m in (r.get("models") or []):
             out.append(AICodingModel(
                 provider_id=r["id"],
                 provider_label=r.get("label") or "",

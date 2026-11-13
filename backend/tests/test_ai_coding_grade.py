@@ -151,22 +151,22 @@ def test_models_route_flattens_providers_and_cached_models(client):
                 "id": "p1",
                 "kind": "anthropic",
                 "label": "Anthropic prod",
-                "encrypted_key": "ZW5j",
-                "models_cache": ["claude-sonnet-4-6", "claude-opus-4-7"],
+                "has_key": True,
+                "models": ["claude-sonnet-4-6", "claude-opus-4-7"],
             },
             {
                 "id": "p2",
                 "kind": "openai",
                 "label": "OpenAI test",
-                "encrypted_key": "ZW5j",
-                "models_cache": ["gpt-4o-mini"],
+                "has_key": True,
+                "models": ["gpt-4o-mini"],
             },
             {
                 "id": "p3",
                 "kind": "openai",
                 "label": "Empty",
-                "encrypted_key": "ZW5j",
-                "models_cache": [],  # never enumerated
+                "has_key": True,
+                "models": [],  # never enumerated
             },
         ]
 
@@ -197,18 +197,18 @@ def test_models_route_skips_unusable_provider_rows(client):
         return [
             {  # no id — malformed row
                 "kind": "anthropic", "label": "Bad",
-                "encrypted_key": "ZW5j",
-                "models_cache": ["claude-sonnet-4-6"],
+                "has_key": True,
+                "models": ["claude-sonnet-4-6"],
             },
-            {  # no encrypted_key — unusable
+            {  # no saved key, so unusable
                 "id": "p2", "kind": "openai", "label": "NoKey",
-                "encrypted_key": "",
-                "models_cache": ["gpt-4o-mini"],
+                "has_key": False,
+                "models": ["gpt-4o-mini"],
             },
             {  # valid
                 "id": "p3", "kind": "anthropic", "label": "Good",
-                "encrypted_key": "ZW5j",
-                "models_cache": ["claude-opus-4-7"],
+                "has_key": True,
+                "models": ["claude-opus-4-7"],
             },
         ]
 
@@ -238,17 +238,11 @@ def test_chat_route_uses_provider_override_when_supplied(client):
             ]
         }
 
-    async def fake_load_provider(_user, _pid):
-        return {
-            "id": "p9",
-            "kind": "openai",
-            "encrypted_key": "ZW5j",   # base64 'enc'
-            "key_iv": "aXY=",          # base64 'iv'
-            "base_url": "",
-        }
+    async def fake_key_for(_user, pid, model):
+        from app.provider_gateway import custody
 
-    def fake_decrypt(*_args):
-        return "K"
+        assert (pid, model) == ("p9", "gpt-4o-mini")
+        return custody.Opened(provider_id=pid, kind="openai", base_url="", api_key="K")
 
     async def fake_call_stream(*args, **kwargs):
         # Resilient against signature changes — handle either positional
@@ -265,8 +259,7 @@ def test_chat_route_uses_provider_override_when_supplied(client):
 
     with patch("routers.ai_coding.current_user", fake_user), \
          patch("routers.ai_coding.pb_get", fake_pb_get), \
-         patch("routers.ai_coding._load_provider", fake_load_provider), \
-         patch("routers.ai_coding.decrypt", fake_decrypt), \
+         patch("app.provider_gateway.custody.key_for", fake_key_for), \
          patch("routers.ai_coding._call_stream", fake_call_stream), \
          patch("routers.ai_coding._active_text_config", fake_active_cfg_should_not_be_called):
         res = client.post("/api/ai-coding/chat", json={

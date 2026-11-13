@@ -85,6 +85,10 @@ services:
       - PDF_RENDERER_URL=${PDF_RENDERER_URL:-http://pdf-renderer:4000}
       - POCKETBASE_URL=${POCKETBASE_INTERNAL_URL:-http://pocketbase:8090}
       - AI_KEY_SECRET=${AI_KEY_SECRET:-rounds-dev-key-DO-NOT-USE-IN-PROD}
+      # The placeholder above is public, so it counts only where a compose
+      # file opts in, as the development and test ones do; elsewhere saved
+      # AI provider keys and share links answer that they're unavailable.
+      - ROUNDS_ALLOW_DEV_KEY=true
       # Used by the public-share endpoint to bypass PB owner rules
       # via a cached admin token. Defaults match the bootstrap admin.
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-admin@local.dev}

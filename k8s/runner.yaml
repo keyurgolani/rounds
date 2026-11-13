@@ -50,10 +50,14 @@
 #      network, inside the default ROUNDS_TRUSTED_PROXY_CIDRS; see
 #      frontend.yaml for the client address it forwards.
 #
-# The runner refuses to start when AI_KEY_SECRET is unset or matches
-# the dev placeholder, so a misconfigured rollout fails closed (the
-# pod will CrashLoopBackOff with a clear stderr message instead of
-# silently encrypting user keys with a public secret).
+# AI_KEY_SECRET is the root of the runner's keyring (ROUNDS-14-L02),
+# which wraps each saved AI provider key. Without a usable one (unset,
+# or the development placeholder, which counts only where a development
+# compose file sets ROUNDS_ALLOW_DEV_KEY=true) the runner still starts
+# and logs one line naming AI_KEY_SECRET: saved AI provider keys answer
+# 503 keyring_unavailable, share links answer that they're unavailable,
+# and everything else works. Only a value that is set and malformed
+# stops the runner at startup, so the pod fails its rollout instead.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

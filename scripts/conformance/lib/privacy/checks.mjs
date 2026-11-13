@@ -436,7 +436,10 @@ function checkPurposes(ctx, P, F, A, resolveLeaf) {
     if (p.status === 'legacy' && ['current', 'retired'].includes(baseStatus.get(p.id))) push('PRIVACY_LEGACY_OUTSIDE_BASELINE', [...parts, 'status'], `${p.id} was ${baseStatus.get(p.id)} on the base branch and can't go back to legacy`);
     if ((p.status === 'legacy') !== (p.consent === 'legacy-implicit')) push('PRIVACY_SCHEMA_INVALID', [...parts, 'consent'], `${p.id}: legacy purposes and only they take legacy-implicit consent`);
     if (p.batchMax && policy && p.batchMax > policy.consent.batchMax) push('PRIVACY_SCHEMA_INVALID', [...parts, 'batchMax'], `${p.id} batch ${p.batchMax} exceeds the policy's ${policy.consent.batchMax}`);
-    if (p.credential && R && R.resolve(p.credential)?.class !== 'Secret') push('PRIVACY_UNKNOWN_REF', [...parts, 'credential'], `${p.id} credential ${p.credential} is not a Secret field`);
+    // The credential's id takes the same forms as every input's.
+    const badCredential = p.credential ? callerIdError(p.credential) : null;
+    if (badCredential) push('PRIVACY_FIELD_ID_INVALID', [...parts, 'credential'], `${p.id} credential ${p.credential} ${badCredential}`);
+    else if (p.credential && R && R.resolve(p.credential)?.class !== 'Secret') push('PRIVACY_UNKNOWN_REF', [...parts, 'credential'], `${p.id} credential ${p.credential} is not a Secret field`);
     const classes = new Set();
     p.inputs.forEach((input, j) => {
       const malformed = callerIdError(input.field);

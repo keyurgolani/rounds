@@ -8,6 +8,7 @@ from starlette.types import ASGIApp
 
 from app import access_log, admission, definitions, errors, gates, obs, share_password
 from app.privacy import settings as privacy_settings
+from app.provider_gateway import keyring
 from execution import keys as execution_keys
 from execution import runtime as execution_runtime
 from routers import ai, ai_coding, execution, pdf, runner, sd_practice, share, share_capabilities, take_home
@@ -22,6 +23,11 @@ async def lifespan(_app: FastAPI):
     # A bad privacy setting stops the runner here, naming the setting and
     # its bound or the entry it refuses (ROUNDS-14-L01).
     privacy_settings.init()
+    # One line about AI_KEY_SECRET, never its value. Without a usable root
+    # the runner still starts, and saved AI provider keys and share links
+    # answer that they're unavailable; only a value that is set and
+    # malformed stops it here (ROUNDS-14-L02).
+    keyring.init()
     # ROUNDS_GATE_EXECUTION_SCRATCH on without what it needs acts as off,
     # and says so once here (ROUNDS-00A-L03).
     execution_keys.log_startup()

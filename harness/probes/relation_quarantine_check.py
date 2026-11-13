@@ -756,11 +756,13 @@ def check_failure_reporting(c: Checks, work: Path, base: Path, full: Path, admin
 
 # -- D. deletes through the API on a served copy ----------------------------------------
 
-def _shapes(pb: PBClient, acct: factory.Account) -> dict[str, str]:
+def _shapes(pb: PBClient, acct: factory.Account, admin: str) -> dict[str, str]:
     """A provider set as both providers, and an application with two chained offers."""
     tok, uid, tag = acct.token, acct.user_id, acct.tag
     ids: dict[str, str] = {}
-    ids["provider"] = _ok(pb.create("ai_providers", tok, {"user": uid, "kind": "openai", "label": "p"}), 200)["id"]
+    # Only the AI hook routes write providers (ROUNDS-14-L02), so the
+    # fixture's goes in with the admin token; its owner still deletes it.
+    ids["provider"] = _ok(pb.create("ai_providers", admin, {"user": uid, "kind": "openai", "label": "p"}), 200)["id"]
     ids["settings"] = _ok(pb.create("ai_settings", tok, {"user": uid, "text_provider": ids["provider"],
                                                          "vision_provider": ids["provider"]}), 200)["id"]
     ids["campaign"] = _ok(pb.create("campaigns", tok, {"user": uid, "name": tag, "slug": f"{tag}-{secrets.token_hex(3)}"}), 200)["id"]
@@ -790,9 +792,9 @@ def check_deletes(c: Checks, work: Path, full: Path, admin_env: dict[str, str]) 
                 acct = factory.make_account(tag)
                 factory.register(pb, acct)
                 accounts[tag] = acct
-            one = _shapes(pb, accounts["del1"])
-            two = _shapes(pb, accounts["del2"])
-            keep = _shapes(pb, accounts["keep"])
+            one = _shapes(pb, accounts["del1"], admin)
+            two = _shapes(pb, accounts["del2"], admin)
+            keep = _shapes(pb, accounts["keep"], admin)
             tok = accounts["del1"].token
 
             resp = pb.delete("ai_providers", one["provider"], tok)

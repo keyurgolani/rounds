@@ -102,7 +102,11 @@ def test_the_oversized_probes_use_the_declared_limits():
     policy = json.loads(POLICY.read_text())
     registry = lm.registry_limits(_migrations())
     probes = {name: row["oversized_probe"] for name, row in policy["collections"].items() if "oversized_probe" in row}
-    assert len(probes) >= 14
+    # 14 until #73 stage A made ai_providers' create server-only, which
+    # took its models_cache probe with it: no client create reaches the
+    # size check there.
+    assert len(probes) >= 13
+    assert "ai_providers" not in probes and policy["collections"]["ai_providers"]["current_rules"]["create"] is None
     for name, probe in probes.items():
         assert probe["max_bytes"] == registry[(name, probe["field"])], name
 

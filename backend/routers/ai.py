@@ -4,8 +4,9 @@ Multi-provider model. A user can configure several `ai_providers` rows
 (Anthropic, OpenAI, OpenAI-compatible, Anthropic-compatible) and then
 assign one model from any of them to a role: ``text`` (used by import,
 improve, tailor, ATS) or ``vision`` (reserved for future image-based
-imports). Provider keys are AES-GCM-encrypted at rest and only
-decrypted server-side when calling the provider.
+imports). PocketBase keeps each saved provider key wrapped by the
+runner's keyring, and only app.provider_gateway opens one, for a call to
+the address it was entered for (ROUNDS-14-L02).
 
 Endpoints:
 
@@ -43,8 +44,8 @@ from app import ats as ats_mod
 from app import destinations, gates, limits, obs
 from app.errors import TypedError
 from app.limits import StrictModel
-from app.crypto import decrypt, encrypt
 from app.pb_auth import POCKETBASE_URL, current_user, pb_get, pb_patch, pb_post
+from app.provider_gateway import custody
 
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -306,36 +307,21 @@ def _provider_out(row: dict[str, Any]) -> ProviderOut:
         kind=row.get("kind") or "provider",
         label=row.get("label") or "",
         base_url=row.get("base_url") or "",
-        has_key=bool(row.get("encrypted_key")),
-        models=list(row.get("models_cache") or []),
+        has_key=bool(row.get("has_key")),
+        models=list(row.get("models") or []),
         models_cached_at=row.get("models_cached_at") or "",
     )
 
 
 async def _list_providers_raw(user: dict) -> list[dict[str, Any]]:
-    body = await pb_get(
-        user["token"],
-        "/api/collections/ai_providers/records",
-        params={
-            "filter": f'user = "{user["id"]}"',
-            "perPage": 50,
-            "sort": "created",
-        },
-    )
-    return list((body or {}).get("items") or [])
+    """The caller's providers, as custody shows them: never a key."""
+    return await custody.list_providers(user)
 
 
 async def _load_provider(user: dict, provider_id: str) -> dict[str, Any]:
-    row = await pb_get(
-        user["token"],
-        f"/api/collections/ai_providers/records/{provider_id}",
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Provider not found.")
-    if row.get("user") != user["id"]:
-        # PB's listRule should already enforce this — defense in depth.
-        raise HTTPException(status_code=403, detail="Forbidden.")
-    return row
+    """One of the caller's providers; 404 provider_unavailable for one that
+    is missing or another account's, with one answer for both."""
+    return await custody.load(user, provider_id)
 
 
 async def _load_settings(user: dict) -> dict[str, Any] | None:
@@ -375,51 +361,21 @@ async def list_providers(request: Request) -> list[ProviderOut]:
 @router.post("/providers", response_model=ProviderOut)
 async def create_provider(request: Request, body: ProviderIn) -> ProviderOut:
     user = await current_user(request)
-    await destinations.check(body.base_url)
-    payload: dict[str, Any] = {
-        "user": user["id"],
-        "kind": body.kind,
-        "label": body.label,
-        "base_url": body.base_url or "",
-    }
-    if body.key:
-        enc = encrypt(body.key.strip())
-        payload["encrypted_key"] = enc.ciphertext_b64
-        payload["key_iv"] = enc.iv_b64
-    res = await pb_post(
-        user["token"], "/api/collections/ai_providers/records", payload
-    )
-    return _provider_out(res)
+    # A blank key saves none; the address is checked before anything else.
+    return _provider_out(await custody.create(user, body.kind, body.label, body.base_url, body.key or None))
 
 
 @router.patch("/providers/{provider_id}", response_model=ProviderOut)
 async def update_provider(
     request: Request, provider_id: str, body: ProviderIn
 ) -> ProviderOut:
+    """``key`` None clears the saved key, blank keeps it, and anything else
+    replaces it. A saved key works only with the address it was entered
+    for, so changing the address asks for the key again."""
     user = await current_user(request)
-    row = await _load_provider(user, provider_id)
-    await destinations.check(body.base_url)
-    payload: dict[str, Any] = {
-        "kind": body.kind,
-        "label": body.label,
-        "base_url": body.base_url or "",
-    }
-    if body.key is None:
-        # Explicit clear.
-        payload["encrypted_key"] = ""
-        payload["key_iv"] = ""
-    elif body.key.strip():
-        enc = encrypt(body.key.strip())
-        payload["encrypted_key"] = enc.ciphertext_b64
-        payload["key_iv"] = enc.iv_b64
-    # else: empty string → leave existing key in place (don't touch the field)
-
-    res = await pb_patch(
-        user["token"],
-        f"/api/collections/ai_providers/records/{provider_id}",
-        payload,
+    return _provider_out(
+        await custody.update(user, provider_id, body.kind, body.label, body.base_url, body.key)
     )
-    return _provider_out(res)
 
 
 @router.delete("/providers/{provider_id}")
@@ -440,27 +396,19 @@ async def test_provider(
 ) -> dict[str, Any]:
     user = await current_user(request)
     row = await _load_provider(user, provider_id)
-    api_key = decrypt(row.get("encrypted_key") or "", row.get("key_iv") or "")
-    if not api_key:
-        raise HTTPException(status_code=400, detail="No API key on file for this provider.")
-    kind = row.get("kind") or "provider"
-    base_url = row.get("base_url") or ""
-    destination = await destinations.vet(base_url)
 
-    # Pick the cheapest reasonable model. For the test we ask the model
-    # to say PONG; if anything comes back we treat it as success.
-    cached = list(row.get("models_cache") or [])
-    model = cached[0] if cached else _default_model(kind)
-    if not model:
-        # Refresh once, then try again.
+    # The first model on the provider's list; with none listed yet, refresh
+    # the list once. For the test we ask the model to say PONG; if anything
+    # comes back we treat it as success.
+    listed = list(row.get("models") or [])
+    if not listed:
         try:
-            cached = await _fetch_models(kind, api_key, base_url, destination=destination)
-            await pb_patch(
-                user["token"],
-                f"/api/collections/ai_providers/records/{provider_id}",
-                {"models_cache": cached, "models_cached_at": _utc_now_iso()},
-            )
-            model = cached[0] if cached else _default_model(kind)
+            opened = await custody.key_for(user, provider_id, None)
+            destination = await destinations.vet(opened.base_url)
+            fetched = await _fetch_models(opened.kind or "provider", opened.api_key, opened.base_url,
+                                          destination=destination)
+            refreshed = await custody.put_models(user, provider_id, fetched, "registry", True)
+            listed = list(refreshed.get("models") or [])
         except HTTPException:
             raise
         except Exception as err:  # noqa: BLE001
@@ -470,6 +418,14 @@ async def test_provider(
                 status_code=503,
                 detail=f"Provider error: {err} (request id: {rid})",
             ) from err
+    if not listed:
+        raise TypedError("model_unregistered")
+    model = listed[0]
+    opened = await custody.key_for(user, provider_id, model)
+    kind = opened.kind or "provider"
+    api_key = opened.api_key
+    base_url = opened.base_url
+    destination = await destinations.vet(base_url)
 
     try:
         text = await _call_complete(
@@ -500,16 +456,11 @@ async def refresh_models(
     request: Request, provider_id: str
 ) -> dict[str, Any]:
     user = await current_user(request)
-    row = await _load_provider(user, provider_id)
-    api_key = decrypt(row.get("encrypted_key") or "", row.get("key_iv") or "")
-    if not api_key:
-        raise HTTPException(status_code=400, detail="No API key on file for this provider.")
-    kind = row.get("kind") or "provider"
-    base_url = row.get("base_url") or ""
-    destination = await destinations.vet(base_url)
-
     try:
-        models = await _fetch_models(kind, api_key, base_url, destination=destination)
+        # One 404 for a provider that is missing or another account's.
+        opened = await custody.key_for(user, provider_id, None)
+        destination = await destinations.vet(opened.base_url)
+        models = await _fetch_models(opened.kind or "provider", opened.api_key, opened.base_url, destination=destination)
     except HTTPException:
         raise
     except Exception as err:  # noqa: BLE001
@@ -520,12 +471,8 @@ async def refresh_models(
             detail=f"Provider error: {err} (request id: {rid})",
         ) from err
 
-    await pb_patch(
-        user["token"],
-        f"/api/collections/ai_providers/records/{provider_id}",
-        {"models_cache": models, "models_cached_at": _utc_now_iso()},
-    )
-    return {"models": models, "models_cached_at": _utc_now_iso()}
+    provider = await custody.put_models(user, provider_id, models, "registry", True)
+    return {"models": models, "models_cached_at": provider.get("models_cached_at") or _utc_now_iso()}
 
 
 # -----------------------------------------------------------------------------
@@ -547,9 +494,25 @@ async def get_settings(request: Request) -> SettingsOut:
     )
 
 
+async def _list_choice(user: dict, provider_id: str | None, model: str) -> None:
+    """A role's model must be on its provider's list. For a compatible
+    provider, whose model its owner types, choosing it names it there; a
+    first-party provider's list is the provider's own."""
+    if not provider_id or not model:
+        return
+    provider = await _load_provider(user, provider_id)
+    if model in (provider.get("models") or []):
+        return
+    if custody.is_first_party(provider.get("kind") or ""):
+        raise TypedError("model_unregistered")
+    await custody.put_models(user, provider_id, [model], "user-declared", False)
+
+
 @router.put("/settings", response_model=SettingsOut)
 async def put_settings(request: Request, body: SettingsIn) -> SettingsOut:
     user = await current_user(request)
+    await _list_choice(user, body.text_provider_id, body.text_model or "")
+    await _list_choice(user, body.vision_provider_id, body.vision_model or "")
     row = await _load_settings(user)
     payload: dict[str, Any] = {
         "user": user["id"],
@@ -588,19 +551,15 @@ async def _active_text_config(user: dict) -> dict[str, Any]:
             status_code=400,
             detail="No text model configured. Visit Settings → AI providers.",
         )
-    provider = await _load_provider(user, settings["text_provider"])
-    api_key = decrypt(provider.get("encrypted_key") or "", provider.get("key_iv") or "")
-    if not api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="No API key on file for the selected text provider.",
-        )
-    destination = await destinations.vet(provider.get("base_url") or "")
+    # The model rule, the saved key, its address, and the keyring, in that
+    # order, before the key opens (app.provider_gateway.custody.key_for).
+    opened = await custody.key_for(user, settings["text_provider"], settings["text_model"])
+    destination = await destinations.vet(opened.base_url)
     return {
-        "kind": provider.get("kind") or "provider",
+        "kind": opened.kind or "provider",
         "model": settings["text_model"],
-        "api_key": api_key,
-        "base_url": provider.get("base_url") or "",
+        "api_key": opened.api_key,
+        "base_url": opened.base_url,
         # Vetted once here; the call reuses it rather than looking up again.
         "destination": destination,
     }

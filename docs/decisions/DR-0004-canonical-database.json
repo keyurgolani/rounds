@@ -3,23 +3,14 @@
   "id": "DR-0004",
   "title": "Canonical database and transaction owner",
   "leaf": "ROUNDS-02-L01",
-  "status": "ratified",
+  "status": "draft",
   "owner": "Domain Platform",
-  "approver": "rounds lane review (PR #222, r2), 2026-11-12",
-  "approvalRef": {
-    "pr": 222,
-    "governedFiles": [
-      {"path": "contracts/database/erd-decisions.json", "sha256": "296dbc6c95f76e77df077dde35d82f0aeb3d92c72afafaf4ccdff9f0a84a89ce"},
-      {"path": "contracts/database/erd-decisions.schema.json", "sha256": "21c458d58c7e456de2f428acef3f4b03fee7560721bc4a96447b0aed5eba4764"},
-      {"path": "contracts/database/benchmark.json", "sha256": "1de8d3567a837672b704e65350e81bbb21d93e693827f9e39a9238413bb1129c"},
-      {"path": "contracts/database/benchmark.schema.json", "sha256": "0bdc7404634114f90d3ecfc1fd4f0527250b98d2b15fed09ddbb04b072dbc2c3"},
-      {"path": "docs/decisions/DR-0004-canonical-database.md", "sha256": "0cfcfe6d69c8dd7682b9cff5cd243620c795e776c7476ae40d120b3c81a838b7"}
-    ]
-  },
-  "ratifiedOn": "2026-11-12",
+  "approver": "",
+  "approvalRef": null,
   "compatibility": "additive",
-  "revision": 1,
-  "supersedes": null,
+  "revision": 2,
+  "supersedes": "DR-0004@1",
+  "supersessionReason": "Revision 2 is #73's stage A (ROUNDS-14-L02/SA). It adds two account-scoped tables to the ERD's written part, ai_credentials and ai_provider_models, which only PocketBase's AI hook routes write, and moves the runner's provider writes behind those routes. The routes hold the caller's bearer and the runner key (ROUNDS_ADMISSION_SECRET), as #3's, #4's and #12's do, so the planned ai_gateway identity and its secret are not made. It changes no store, owning process, owning leaf, partition, or delete behavior, so it is additive, and revision 1 was ratified as PR #222.",
   "consumers": [
     "ROUNDS-00A-L06",
     "ROUNDS-00B-L07",
@@ -95,7 +86,7 @@
     {
       "id": "DB1",
       "title": "Canonical write database",
-      "status": "ratified",
+      "status": "draft",
       "concern": "canonical-write-database",
       "store": "sqlite-data",
       "process": "PocketBase (the pocketbase container), the only process that writes pb_data",
@@ -132,7 +123,7 @@
     {
       "id": "DB2",
       "title": "Transaction owner and isolation",
-      "status": "ratified",
+      "status": "draft",
       "concern": "transaction-owner",
       "store": "sqlite-data",
       "process": "the command's gateway hook route, in PocketBase's JSVM",
@@ -168,7 +159,7 @@
     {
       "id": "DB3",
       "title": "Gateway placement",
-      "status": "ratified",
+      "status": "draft",
       "concern": "gateway-placement",
       "store": "sqlite-data",
       "process": "PocketBase hook routes; the runner is only ever a caller",
@@ -187,7 +178,7 @@
       "failureModes": [
         "A route that doesn't register as a Caller row is an unrecorded writer; #19's registry check fails it.",
         "A gateway-owned collection that keeps a REST write rule is a path around the gateway; DB4 nulls it at each transfer.",
-        "Until #73 lands, the runner's 7 provider and settings writes keep going around the gateway with the caller's token."
+        "From #73's stage A the provider writes go through its hook routes; the 2 settings writes and the owner's provider delete keep going around the gateway with the caller's token, under #9's rules."
       ],
       "limits": [
         "A command body up to nginx's 1m default under /api/.",
@@ -208,12 +199,12 @@
     {
       "id": "DB4",
       "title": "Account authorization",
-      "status": "ratified",
+      "status": "draft",
       "concern": "account-authorization",
       "store": "sqlite-data",
       "process": "the command's gateway hook route, inside its transaction",
       "owningLeaf": "ROUNDS-02-L02",
-      "decision": "The account is the bearer's auth record, which the route reads inside its transaction; no command body names its account. Each record a command loads and each relation endpoint it writes is checked against that account in the same transaction with #10's predicate (pocketbase/pb_hooks/relation_endpoints.js), and #10's triggers stay as the backstop. Share capabilities keep #11's and #12's checks. #9's collection rules (docs/security/account-scope.v1.json) keep guarding legacy REST writes until each context transfers; the transfer leaf then sets that context's create, update, and delete rules to null, and #21's tables are born with null rules. #1's three writer kinds (Caller, Service, System) are ratified as they stand. Service identities are non-superuser auth collections whose login answers only under the collection's exact name: execution_service and share_resolvers today, ai_gateway (#73) and dispatcher_service (#22) planned. The gateway never authenticates as the superuser.",
+      "decision": "The account is the bearer's auth record, which the route reads inside its transaction; no command body names its account. Each record a command loads and each relation endpoint it writes is checked against that account in the same transaction with #10's predicate (pocketbase/pb_hooks/relation_endpoints.js), and #10's triggers stay as the backstop. Share capabilities keep #11's and #12's checks. #9's collection rules (docs/security/account-scope.v1.json) keep guarding legacy REST writes until each context transfers; the transfer leaf then sets that context's create, update, and delete rules to null, and #21's tables are born with null rules. #1's three writer kinds (Caller, Service, System) are ratified as they stand. Service identities are non-superuser auth collections whose login answers only under the collection's exact name: execution_service and share_resolvers today, and dispatcher_service (#22) planned; #73's routes hold the caller's bearer and the runner key instead (DR-0004@2). The gateway never authenticates as the superuser.",
       "alternatives": [
         {
           "option": "Keep #9's collection rules as the only check",
@@ -243,7 +234,7 @@
     {
       "id": "DB5",
       "title": "Idempotency store",
-      "status": "ratified",
+      "status": "draft",
       "concern": "idempotency-store",
       "store": "sqlite-data",
       "process": "the command's gateway hook route",
@@ -274,7 +265,7 @@
     {
       "id": "DB6",
       "title": "Aggregate and version model",
-      "status": "ratified",
+      "status": "draft",
       "concern": "aggregate-version-model",
       "store": "sqlite-data",
       "process": "the command's gateway hook route",
@@ -305,7 +296,7 @@
     {
       "id": "DB7",
       "title": "Outbox and projectors",
-      "status": "ratified",
+      "status": "draft",
       "concern": "outbox-projectors",
       "store": "sqlite-data",
       "process": "the runner's dispatcher, as dispatcher_service",
@@ -340,7 +331,7 @@
     {
       "id": "DB8",
       "title": "Backup and restore owner",
-      "status": "ratified",
+      "status": "draft",
       "concern": "backup-restore",
       "store": "n/a:a procedure over sqlite-data and files; #157 names the backup target",
       "process": "an operator procedure with a read-only reader process beside PocketBase, owned by #157",
@@ -379,7 +370,7 @@
     {
       "id": "DB9",
       "title": "PocketBase retained, upgraded, or replaced",
-      "status": "ratified",
+      "status": "draft",
       "concern": "pocketbase-version",
       "store": "n/a:a binary version, not a store",
       "process": "the pocketbase image build (pocketbase/Dockerfile)",
@@ -408,7 +399,7 @@
     {
       "id": "DB10",
       "title": "Byte store",
-      "status": "ratified",
+      "status": "draft",
       "concern": "byte-store",
       "store": "files",
       "process": "PocketBase file storage, written by gateway routes",
@@ -820,7 +811,7 @@
     {
       "credential": "ROUNDS_AI_GATEWAY_SECRET",
       "holder": "ai_gateway",
-      "disposition": "Planned: #73's provider gateway identity, which takes over the runner's 7 provider and settings writes.",
+      "disposition": "Not made (DR-0004@2): #73's hook routes hold the caller's bearer and the runner key, ROUNDS_ADMISSION_SECRET, as #3's, #4's and #12's do.",
       "leaf": "ROUNDS-14-L02"
     },
     {
@@ -838,7 +829,7 @@
     {
       "credential": "AI_KEY_SECRET",
       "holder": "the runner",
-      "disposition": "Kept: the runner's key for what it seals or keys, stored provider keys among them (docs/operations.md), kept apart from the backups (DB8); #73's keyring takes over the provider keys.",
+      "disposition": "Kept: the root of #73's keyring (backend/app/provider_gateway/keyring.py), which derives every key the runner seals or keys with, stored provider keys among them (docs/operations.md), kept apart from the backups (DB8).",
       "leaf": "ROUNDS-14-L02"
     }
   ],

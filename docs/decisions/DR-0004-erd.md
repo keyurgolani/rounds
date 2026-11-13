@@ -2,7 +2,7 @@
 
 <!-- Generated from contracts/database/erd.json by node scripts/conformance/run.mjs --write. Edit contracts/database/erd-decisions.json for the written fields, and regenerate contracts/database/schema-snapshot.json with harness/bench/schema_dump.py for the rest. -->
 
-Every collection at snapshot `988653c` (PocketBase 0.22.22), 55 in all, the 5 system tables, the 11 planned or held tables DR-0004 places, and 86 relations. The written fields (group, scope, rows, writers, purge, a text partition, merge, notes, and the planned tables) are DR-0004's and change only with a revision of it; the rest comes from the snapshot, and the PR that changes a migration regenerates this file. Delete behavior is PocketBase's own, measured on the snapshot's native run: multi-optional-no-cascade unset, single-optional-cascade cascade, single-optional-no-cascade unset, single-required-cascade cascade, single-required-no-cascade restrict.
+Every collection at snapshot `2b3a1b3` (PocketBase 0.22.22), 57 in all, the 5 system tables, the 11 planned or held tables DR-0004 places, and 90 relations. The written fields (group, scope, rows, writers, purge, a text partition, merge, notes, and the planned tables) are DR-0004's and change only with a revision of it; the rest comes from the snapshot, and the PR that changes a migration regenerates this file. Delete behavior is PocketBase's own, measured on the snapshot's native run: multi-optional-no-cascade unset, single-optional-cascade cascade, single-optional-no-cascade unset, single-required-cascade cascade, single-required-no-cascade restrict.
 
 | Store | Kind | Location | Canonical | Backup |
 | --- | --- | --- | --- | --- |
@@ -14,6 +14,10 @@ Every collection at snapshot `988653c` (PocketBase 0.22.22), 55 in all, the 5 sy
 
 ```mermaid
 erDiagram
+  ai_providers ||--o{ ai_credentials : "provider (cascade)"
+  users ||--o{ ai_credentials : "user (cascade)"
+  ai_providers ||--o{ ai_provider_models : "provider (cascade)"
+  users ||--o{ ai_provider_models : "user (cascade)"
   users ||--o{ ai_providers : "user (cascade)"
   ai_providers |o--o{ ai_settings : "text_provider (unset)"
   users ||--o{ ai_settings : "user (cascade)"
@@ -25,8 +29,10 @@ erDiagram
 
 | Entity | Status | Scope | Partition | Indexed | Writers | On account delete |
 | --- | --- | --- | --- | --- | --- | --- |
-| ai_providers | live | account | user (relation, cascade) | 1, partition first | the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
-| ai_settings | live | account | user (relation, cascade) | 1, partition first | the SPA and the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
+| ai_credentials | live | account | user (relation, cascade) | 2, partition first | #73's AI hook routes only, for the runner with the caller's bearer and the runner key; the move migration at start | cascades with the account and with its provider |
+| ai_provider_models | live | account | user (relation, cascade) | 2, partition first | #73's AI hook routes only, for the runner with the caller's bearer and the runner key; the move migration at start | cascades with the account and with its provider |
+| ai_providers | live | account | user (relation, cascade) | 1, partition first | #73's AI hook routes, for the runner with the caller's bearer and the runner key; the owner deletes through REST under #9's rules | cascades with the account |
+| ai_settings | live | account | user (relation, cascade) | 1, partition first | the runner with the caller's token through REST under #9's rules | cascades with the account |
 | user_preferences | live | account | user (relation, cascade) | 1, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 | users | live | account | id (self, pocketbase) | primary key | PocketBase's own auth routes under its rules; the signup, demo, admission, and profile file hooks guard what a client may set | PocketBase deletes the account; every relation to it cascades, unsets, or restricts as listed |
 | account_system_state | planned (ROUNDS-00B-L07/S2) | account | user (relation, cascade) | 1, partition first | #177's state migration and its demo hooks | cascades with the account |
@@ -283,6 +289,10 @@ erDiagram
 | ai_coding_drafts.campaign | campaigns | many-to-one | no | unset | none | relation-endpoint |
 | ai_coding_drafts.round | ai_coding_rounds | many-to-one | yes | cascade | none | content |
 | ai_coding_drafts.user | users | many-to-one | yes | cascade | n/a | owner |
+| ai_credentials.provider | ai_providers | many-to-one | yes | cascade | none | relation-endpoint |
+| ai_credentials.user | users | many-to-one | yes | cascade | n/a | owner |
+| ai_provider_models.provider | ai_providers | many-to-one | yes | cascade | none | relation-endpoint |
+| ai_provider_models.user | users | many-to-one | yes | cascade | n/a | owner |
 | ai_providers.user | users | many-to-one | yes | cascade | n/a | owner |
 | ai_settings.text_provider | ai_providers | many-to-one | no | unset | none | relation-endpoint |
 | ai_settings.user | users | many-to-one | yes | cascade | n/a | owner |

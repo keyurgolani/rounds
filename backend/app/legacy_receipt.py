@@ -10,8 +10,9 @@ it. The runner holds ``AI_KEY_SECRET``, so it signs:
 
 ``sign`` checks the report's schema and checksum, then adds
 ``signature``: HMAC-SHA256 over the canonical JSON of the report without
-its signature, under the key HKDF-SHA256 derives from ``AI_KEY_SECRET``
-with the schema's label (``rounds/legacy-snapshot-scan/v1``). ``verify``
+its signature, under the key the keyring (``app.provider_gateway.keyring``)
+derives from ``AI_KEY_SECRET`` with the schema's label
+(``rounds/legacy-snapshot-scan/v1``). ``verify``
 recomputes the checksum and the signature. REPORT may be ``-`` for stdin;
 the signed report goes to stdout unless ``--out`` names a file, written
 0600. Neither prints the secret, the key, or anything but counts.
@@ -21,12 +22,13 @@ verify, 2 a usage or configuration error.
 
 #14 (ROUNDS-00B-L06) signs its receipt here too: ``pocketbase
 legacy-share-receipt`` writes ``legacy-share-receipt/v1``, signed under the
-label ROUNDS-00B-L04 reserved for it (``share_secrets.LEGACY_RECEIPT_INFO``).
+label ROUNDS-00B-L04 reserved for it (``keyring.LEGACY_SHARE_RECEIPT``).
 Each schema has its own label (``LABELS``), so one signature never passes
 as the other's.
 
-TODO(ROUNDS-14-L02): #73's keyring derives this key; until then it is
-HKDF over AI_KEY_SECRET directly, as app.obs derives its pseudonym key.
+Signing is stricter than the keyring: it refuses an unset secret, any
+development value, and one shorter than 32 bytes, even where the keyring
+would load it, because a signature under any of them proves nothing.
 """
 from __future__ import annotations
 
@@ -38,17 +40,14 @@ import os
 import sys
 from typing import Any, BinaryIO, TextIO
 
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-
 from app import canonical
-from app.share_secrets import LEGACY_RECEIPT_INFO
+from app.provider_gateway import keyring
 
-SECRET_ENV = "AI_KEY_SECRET"
-# The development compose files' placeholder (app.crypto). A signature
-# under any development value proves nothing, so none of them signs or
-# verifies: there is no fallback key, here or in production.
-DEV_SECRET = "rounds-dev-key-DO-NOT-USE-IN-PROD"
+SECRET_ENV = keyring.SECRET_ENV
+# The development compose files' placeholder (keyring.DEV_SECRET). A
+# signature under any development value proves nothing, so none of them
+# signs or verifies: there is no fallback key, here or in production.
+DEV_SECRET = keyring.DEV_SECRET
 DEV_MARKER = "do-not-use-in-prod"
 # An operator's secret is `openssl rand -hex 32` (docs/operations.md); a
 # shorter one is no key to sign an inventory with.
@@ -56,8 +55,8 @@ MIN_SECRET_BYTES = 32
 ALGORITHM = "HMAC-SHA256"
 # Report schema -> the HKDF label its key derives with.
 LABELS: dict[str, str] = {
-    "legacy-snapshot-scan/v1": "rounds/legacy-snapshot-scan/v1",
-    "legacy-share-receipt/v1": LEGACY_RECEIPT_INFO.decode("ascii"),
+    "legacy-snapshot-scan/v1": keyring.LEGACY_SNAPSHOT_SCAN.decode("ascii"),
+    "legacy-share-receipt/v1": keyring.LEGACY_SHARE_RECEIPT.decode("ascii"),
 }
 MAX_REPORT_BYTES = 32 * 1024 * 1024
 
@@ -76,8 +75,9 @@ class UnsafeSecretError(ConfigError):
 
 
 def key_for(label: str, secret: str) -> bytes:
-    """The signing key: HKDF-SHA256 over the operator's secret with the
-    label. Raises UnsafeSecretError for anything but an operator's secret."""
+    """The signing key: the keyring's HKDF-SHA256 over the operator's secret
+    with the label. Raises UnsafeSecretError for anything but an operator's
+    secret."""
     if not secret or not secret.strip():
         raise UnsafeSecretError(f"{SECRET_ENV} is not set; sign on the runner that holds it")
     if secret == DEV_SECRET or DEV_MARKER in secret.lower():
@@ -88,9 +88,7 @@ def key_for(label: str, secret: str) -> bytes:
         raise UnsafeSecretError(
             f"{SECRET_ENV} is shorter than {MIN_SECRET_BYTES} bytes; set the deployment's own secret"
         )
-    return HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=label.encode("ascii")).derive(
-        secret.encode("utf-8")
-    )
+    return keyring.hkdf(secret.encode("utf-8"), label.encode("ascii"))
 
 
 def _without(report: dict[str, Any], *names: str) -> dict[str, Any]:

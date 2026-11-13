@@ -25,10 +25,11 @@ const POCKETBASE_TARGET = process.env.VITE_POCKETBASE_PROXY_TARGET || 'http://po
 
 // PocketBase's admin UI, the admission and execution hook routes, the
 // execution service and share resolver records' routes, the legacy
-// snapshot hook and the share capability hooks, which only the runner
-// calls, the admin APIs, and collection metadata (nginx.conf, "Never
-// proxied"). The collection paths and the execution, legacy snapshot,
-// and share hooks match in any case, as their nginx locations do (~*),
+// snapshot hook, the share capability hooks, and the AI provider custody
+// hooks, which only the runner calls, the admin APIs, and collection
+// metadata (nginx.conf, "Never proxied"). The collection paths and the
+// execution, legacy snapshot, share, and AI hooks match in any case, as
+// their nginx locations do (~*),
 // and a collection segment outside the name alphabet, which no
 // collection name or id uses, is refused too. So is the older share
 // read's path, which nginx answers itself with the resolver's not-found
@@ -40,6 +41,7 @@ const NEVER_PROXIED: RegExp[] = [
   /^\/api\/rounds\/execution\//i,
   /^\/api\/rounds\/legacy-snapshots/i,
   /^\/api\/rounds\/share/i,
+  /^\/api\/rounds\/ai(\/|$)/i,
   /^\/api\/collections\/execution_service\//i,
   /^\/api\/collections\/share_resolvers\//i,
   /^\/api\/collections\/[^/]*[^A-Za-z0-9_/][^/]*(\/|$)/,

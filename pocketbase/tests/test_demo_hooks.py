@@ -634,8 +634,9 @@ def test_an_allowed_write_logs_nothing():
 
 
 # Collections the OWNERS map names before their leaf adds them. The leaf
-# that adds one confirms its entry here and drops it from this set.
-NOT_YET = {"ai_credentials", "ai_provider_models"}
+# that adds one confirms its entry here and drops it from this set; #73
+# stage A confirmed the last two.
+NOT_YET: set[str] = set()
 
 
 def _collection_blocks() -> dict[str, str]:
@@ -1250,7 +1251,7 @@ def test_every_collection_with_an_account_field_is_reset_refused_or_kept():
     for name in DROPPED:
         assert any(f'findCollectionByNameOrId("{name}")' in t and "deleteCollection(" in t for t in texts), name
     owned -= DROPPED | NOT_OWNED
-    unclassified = owned - set(named) - {"ai_credentials", "ai_provider_models"}
+    unclassified = owned - set(named)
     assert unclassified == set(), f"classify these in demo.js: {sorted(unclassified)}"
     # The reset's own collections are the ones the account writes itself.
     for name in constants["reset"]:

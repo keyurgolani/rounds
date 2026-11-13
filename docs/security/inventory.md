@@ -242,7 +242,7 @@ All six write candidate code into a temp file or a fresh `mkdtemp` directory und
 
 ### AI Provider and Settings Routes
 
-All eight check the bearer in the handler after validation, read and write with the caller's token, and stamp `user` from the bearer on create. PocketBase error text passes through as `detail` (`X1`). #73 owns them. Its stage A moves their writes to its `ai_gateway` service writer (see [server-writes.md](server-writes.md)), and its stage C moves them to #19's command gateway.
+All eight check the bearer in the handler after validation, read and write with the caller's token, and stamp `user` from the bearer on create. PocketBase error text passes through as `detail` (`X1`). #73 owns them. Its stage A moves their provider writes behind PocketBase's AI hook routes, which take the caller's bearer and the runner key (see [server-writes.md](server-writes.md#ai-provider-keys)), and its stage C moves them to #19's command gateway.
 
 | Route | Caller sends | What runs |
 | --- | --- | --- |

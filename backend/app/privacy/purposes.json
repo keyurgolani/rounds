@@ -23,7 +23,7 @@
   "purposes": [
     {
       "id": "provider.test", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": [],
-      "inputs": [], "credential": "pb:ai_providers.encrypted_key",
+      "inputs": [], "credential": "pb:ai_credentials.ciphertext",
       "outputScope": "A reachability answer shown in Settings; nothing saved.", "toolAuthority": "none", "flag": null,
       "manualPath": "Save the provider without testing it.", "streaming": false,
       "note": "A fixed prompt; once current its consent is none, since it sends no classed field as content.",
@@ -31,8 +31,8 @@
     },
     {
       "id": "provider.refresh_models", "status": "legacy", "consent": "legacy-implicit", "owner": "ROUNDS-14-L06", "classes": [],
-      "inputs": [], "credential": "pb:ai_providers.encrypted_key",
-      "outputScope": "pb:ai_providers.models_cache", "toolAuthority": "none", "flag": null,
+      "inputs": [], "credential": "pb:ai_credentials.ciphertext",
+      "outputScope": "pb:ai_provider_models.model", "toolAuthority": "none", "flag": null,
       "manualPath": "Type the model name by hand.", "streaming": false,
       "note": "Lists models; once current its consent is none.",
       "callSites": [{ "path": "backend/routers/ai.py", "function": "refresh_models" }]

@@ -26,14 +26,12 @@ import hashlib
 import hmac
 import json
 import logging
-import os
 import re
 import secrets
 import sys
 from typing import Any, Callable
 
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from app.provider_gateway import keyring
 
 KIT_VERSION = "obs/v1"
 LOGGER_NAME = "rounds.obs"
@@ -41,7 +39,7 @@ CORRELATION_HEADER = "X-Correlation-Id"
 
 _CORRELATION_RE = re.compile(r"[0-9a-f]{32}")
 _FIELD_NAME_RE = re.compile(r"[a-z][a-z0-9_]{0,31}")
-_PSEUDONYM_INFO = b"rounds/obs/account-pseudonym/v1"
+_PSEUDONYM_INFO = keyring.OBS_PSEUDONYM
 
 _current: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "rounds_correlation_id", default=None
@@ -110,26 +108,22 @@ _pseudonym_key_cache: bytes | None = None
 
 
 def _pseudonym_key() -> bytes:
-    """HKDF-SHA256 over AI_KEY_SECRET with a versioned label.
+    """The keyring's key for the versioned pseudonym label.
 
-    Without AI_KEY_SECRET the key is random for this process, so
+    Without a usable AI_KEY_SECRET the key is random for this process, so
     pseudonyms stay comparable within one process and nowhere else.
     """
     global _pseudonym_key_cache
     if _pseudonym_key_cache is None:
-        root = os.environ.get("AI_KEY_SECRET", "")
-        if root:
-            _pseudonym_key_cache = HKDF(
-                algorithm=hashes.SHA256(),
-                length=32,
-                salt=None,
-                info=_PSEUDONYM_INFO,
-            ).derive(root.encode("utf-8"))
-        else:
+        try:
+            _pseudonym_key_cache = keyring.derive(_PSEUDONYM_INFO)
+        except keyring.Unavailable:
             _pseudonym_key_cache = secrets.token_bytes(32)
-            logging.getLogger(__name__).warning(
-                "AI_KEY_SECRET is unset, so account pseudonyms only match within this process."
-            )
+            if keyring.status().reason == "unset":
+                why = "AI_KEY_SECRET is unset"
+            else:
+                why = "AI_KEY_SECRET isn't usable here"
+            logging.getLogger(__name__).warning("%s, so account pseudonyms only match within this process.", why)
     return _pseudonym_key_cache
 
 

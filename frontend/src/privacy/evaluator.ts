@@ -185,6 +185,8 @@ function endpointError(endpoint: unknown): string | null {
   if (absent(credential)) return null;
   if (!isObject(credential)) return 'endpoint.credential';
   if (!optional(credential, 'field', 'string')) return 'endpoint.credential.field';
+  // The credential's id takes the same forms as every other field id.
+  if (!absent(credential.field) && malformedId(credential.field)) return 'endpoint.credential.field';
   const registered = credential.registeredFor;
   if (absent(registered)) return null;
   if (!isObject(registered)) return 'endpoint.credential.registeredFor';

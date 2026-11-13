@@ -1,0 +1,29 @@
+{
+  "$comment": "Rule manifest ai-provider-writes-v1 (ROUNDS-14-L02 stage A, #73): what pocketbase/pb_migrations/1700008810_ai_provider_writes.js changes. It sets the client create and update rules of ai_providers to null, so only the AI hook routes in pocketbase/pb_hooks/ai_custody.js write a provider row, and it reads or writes no row. The rules the collection held before are the reverse journal, which the up step records in the _params row named below and which down() puts back.",
+  "manifest": "ai-provider-writes-v1",
+  "issue": "#73",
+  "migration": "1700008810_ai_provider_writes",
+  "rows_touched": 0,
+  "collections": {
+    "ai_providers": {
+      "rules": ["create", "update"],
+      "before": {
+        "from": "1700006000_account_scope_rules.js, its CREATE_RULE and UPDATE_RULE",
+        "create_sha256": "0a4ec0622cd1729f59daf53f4899125f8549d9b9834adeac67153bb93bf14b22",
+        "update_sha256": "91940ef896f39254b4b7ca2e29e16594a034d33e17127f1aad6106a8d7ea1fc8"
+      },
+      "after": {
+        "create": null,
+        "update": null
+      },
+      "unchanged": ["list", "view", "delete"]
+    }
+  },
+  "journal": {
+    "param": "1700008810_ai_provider_writes.js",
+    "holds": "{collection, create, update}, with the rules the up step found",
+    "locked": "a rule an operator's lock left null stays null, and the record holds it as null",
+    "rerun": "the up step records nothing when both rules are already null, so a second forward run keeps the first record",
+    "down": "puts the recorded rules back and removes the record"
+  }
+}

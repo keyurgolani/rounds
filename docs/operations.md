@@ -554,6 +554,47 @@ The receipt holds counts by outcome and by reason, incidents, how many links got
 
 **Rolling back.** `migrate down 1` leaves every link off, as above. Restoring the pre-upgrade backup from [Upgrades](#upgrades) with the previous tag turns every older link back on, as it was before the release, so do that only to undo the release. Restored onto this release's image, the same backup runs the migration again before its first request.
 
+### AI provider keys
+
+From #73's stage A, PocketBase keeps each saved AI provider key in `ai_credentials` and each provider's model list in `ai_provider_models`, and only the runner opens a key. The runner wraps a key under a key its keyring derives from `AI_KEY_SECRET`, for the account, the provider, and the address it was entered for, so a saved key works only with the address it was entered for, and changing a provider's address asks for the key again. The runner writes these rows, and creates and updates providers, only through PocketBase's routes under `/api/rounds/ai/`, with the caller's bearer and `ROUNDS_ADMISSION_SECRET` ([Server-Write Record](security/server-writes.md#ai-provider-keys)). nginx answers those routes itself with 404, and [Deployment verification](#deployment-verification) checks that as `deployment.proxy.ai-hooks.denied`. Three migrations come with it:
+
+- `1700008800_ai_credentials.js` adds the two collections, every client rule null.
+- `1700008810_ai_provider_writes.js` makes `ai_providers`' client creates and updates server-only. The owner still lists, views, and deletes its providers.
+- `1700008820_ai_credentials_move.js` moves each saved key and model list out of `ai_providers` at the first start of the release, in one transaction, under manifest `pocketbase/migration-manifests/ai-credentials-v1.json`. A key moves as it was, without being opened, as `legacy-v0`. A key that also sits under another account's provider is marked `suspect-planted` on each and never opens; its owners enter their keys again. A first-party provider (Anthropic, OpenAI) with an address of its own becomes the matching compatible kind, so it calls the address it names. Each cached model list, and each model a saved setting picks, becomes the provider's model list. Then the moved key columns are cleared.
+
+**Before the upgrade: the dry run.** Run the new release's migrations on a copy taken with PocketBase stopped, with the dry run on. It takes the apply's path, writes its report, and rolls everything back.
+
+```sh
+docker compose -f docker-compose.prod.yml stop pocketbase
+docker volume create rounds_pb_data_copy
+docker run --rm -v rounds_pb_data:/from:ro -v rounds_pb_data_copy:/to alpine cp -a /from/. /to/
+docker compose -f docker-compose.prod.yml start pocketbase
+docker run --rm -v rounds_pb_data_copy:/pb/pb_data -v "$(pwd)":/out \
+  -e ROUNDS_AI_CREDENTIALS_MOVE=dry-run -e ROUNDS_AI_CREDENTIALS_MOVE_REPORT=/out/ai-credentials-move.json \
+  keyurgolani/rounds-pocketbase:NEW_TAG /pb/pocketbase migrate up --dir=/pb/pb_data --migrationsDir=/pb/pb_migrations
+docker volume rm rounds_pb_data_copy
+```
+
+The command ends with `dry run complete`, and the report, written 0600, holds counts and a checksum, never an id or a key: `providers`, `keys_moved`, `keys_suspect_planted`, `halves_left` (one half of a pair alone, never a key, which stays as it was), `kinds_converted`, `providers_with_models`, `models_seeded`, and `models_declared`. `ROUNDS_AI_CREDENTIALS_MOVE_REPORT` must be set and outside `pb_data`, or the dry run refuses before it reads anything.
+
+**The deploy.** Deploy as in [Upgrades](#upgrades). PocketBase logs one `ai_credentials_moved` line with the same counts and checksum as the dry run's report, or `ai_credentials_move_failed` with the step that failed, and starts only once the move has run. Keys saved between the dry run and the deploy add to the counts. The runner logs one line naming `AI_KEY_SECRET` at start ([Configuration](configuration.md)).
+
+**The first use of each key.** The runner rewraps a moved key as `aad-v1`, for its account, provider, and address, the first time it opens it, in one transaction that loses to any change made to the key since. Until then a moved key keeps its provider's kind and address as they are: changing either asks for the key again.
+
+**Without a usable `AI_KEY_SECRET`.** The runner starts, and the AI provider routes answer 503 `keyring_unavailable` while everything else works. Outside the development compose files the development placeholder counts as unset. A key wrapped under one `AI_KEY_SECRET` opens under no other, so set the deployment's own value before the upgrade and keep it ([Backups](#backups)).
+
+**Rolling back.** The pre-upgrade backup undoes all of it ([Rolling back](#rolling-back)). To keep what was written since, stop the stack and run `migrate down 3` with this release's image before you set the previous tag; `3` counts these three migrations, so read the release notes of a release that adds more.
+
+```sh
+docker compose -f docker-compose.prod.yml down
+docker run --rm -v rounds_pb_data:/pb/pb_data keyurgolani/rounds-pocketbase:NEW_TAG \
+  /pb/pocketbase migrate down 3 --dir=/pb/pb_data --migrationsDir=/pb/pb_migrations
+# set ROUNDS_IMAGE_TAG in .env back to the previous tag
+docker compose -f docker-compose.prod.yml up -d
+```
+
+It puts each moved key back on its provider, as it was, and each changed kind back, deletes the saved keys and model lists, puts back the client create and update rules on `ai_providers`, and drops the two collections. A key entered after the upgrade has no older copy, so its owner enters it again after the rollback.
+
 ## Smoke Test Checklist
 
 After deploy or restore, verify:
