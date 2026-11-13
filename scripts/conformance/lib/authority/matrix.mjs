@@ -952,9 +952,12 @@ const rowContent = (r) => {
   return canonical(rest);
 };
 
-// Rule 11: a changed row carries the new matrix revision and declares its
+// Rule 11: a new or changed row carries a revision above the base's matrix
+// revision and at most the current one, and a changed row declares its
 // compatibility; a breaking change (owner, target authority, privacy floor or
-// visibility, scope, package) is marked breaking; rows are never removed.
+// visibility, scope, package) is marked breaking; rows are never removed. A
+// pull request's base is one revision back, so its rows take the new one. A
+// promotion's base can be several back, and a row keeps the one it changed at.
 export function checkRevision(ctx, A) {
   const cur = A.matrix;
   if (!isObject(cur)) return { base: 'unavailable' };
@@ -991,19 +994,23 @@ export function checkRevision(ctx, A) {
   let breaking = false;
   const prevRows = new Map(list(prev.rows).filter(isObject).map((r) => [r.id, r]));
   const changedRows = [];
+  // The span is empty unless the matrix revision went up, so no new or changed
+  // row passes without that.
+  const inSpan = (r) => prev.revision < r.revision && r.revision <= cur.revision;
+  const span = `a revision above ${prev.revision} and at most ${cur.revision}`;
   for (const r of A.rows) {
     const p = prevRows.get(r.id);
     const at = (k) => A.where(r.id, k);
     if (!p) {
       changed = true;
       changedRows.push(r.id);
-      if (r.revision !== cur.revision) A.push('AUTH_REVISION_NOT_BUMPED', MATRIX_PATH, at('revision'), `${r.id} is new, so it carries the matrix revision ${cur.revision}, not ${r.revision}`);
+      if (!inSpan(r)) A.push('AUTH_REVISION_NOT_BUMPED', MATRIX_PATH, at('revision'), `${r.id} is new since ${ctx.baseRef}; give it ${span}, not ${r.revision}`);
       continue;
     }
     if (rowContent(r) === rowContent(p)) continue;
     changed = true;
     changedRows.push(r.id);
-    if (r.revision !== cur.revision || !(cur.revision > prev.revision)) A.push('AUTH_REVISION_NOT_BUMPED', MATRIX_PATH, at('revision'), `${r.id} changed since ${ctx.baseRef}; give it the new matrix revision (above ${prev.revision}) and declare its compatibility`);
+    if (!inSpan(r)) A.push('AUTH_REVISION_NOT_BUMPED', MATRIX_PATH, at('revision'), `${r.id} changed since ${ctx.baseRef}; give it ${span}, and declare its compatibility`);
     const fields = BREAKING_FIELDS.filter((k) => canonical(r[k]) !== canonical(p[k]));
     if (fields.length) {
       breaking = true;

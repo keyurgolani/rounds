@@ -19,7 +19,7 @@ export const RULES = [
   ['8', 'A package, service, or term does not resolve.', 'AUTH_UNRESOLVED_REF, AUTH_PACKAGE_MISMATCH'],
   ['9', 'A baseline-stores.json entry has no row, or a writer names an undeclared store.', 'AUTH_STORE_NO_ROW, AUTH_STORE_UNDECLARED'],
   ['10', 'A Test Definition or Harness Revision row is not server-only.', 'AUTH_CONTAINMENT_VISIBILITY'],
-  ['11', 'A changed row keeps its revision or misdeclares its compatibility, or a row is removed.', 'AUTH_REVISION_NOT_BUMPED, AUTH_COMPATIBILITY_UNDECLARED, AUTH_ROW_REMOVED'],
+  ['11', 'A new or changed row carries a revision at or below the base\'s matrix revision or past the current one, a changed row misdeclares its compatibility, or a row is removed.', 'AUTH_REVISION_NOT_BUMPED, AUTH_COMPATIBILITY_UNDECLARED, AUTH_ROW_REMOVED'],
   ['12', 'A command type sits on two rows, or a row lists commands with no command owner.', 'AUTH_COMMAND_DUPLICATE, AUTH_COMMAND_UNOWNED'],
   ['Coverage', 'A collection or browser key family at the audited revision has no baseline-stores.json entry, an entry is not a store there, or a storage call cannot be resolved.', 'AUTH_STORE_UNDECLARED, AUTH_STORE_STALE'],
   ['Conflicts', 'One of #16\'s C1 to C13 is not flagged, or a row and a conflict disagree.', 'AUTH_CONFLICT_MISSING, AUTH_CONFLICT_UNFLAGGED'],
