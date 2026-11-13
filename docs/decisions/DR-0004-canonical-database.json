@@ -86,7 +86,7 @@
     {
       "id": "DB1",
       "title": "Canonical write database",
-      "status": "ratified",
+      "status": "draft",
       "concern": "canonical-write-database",
       "store": "sqlite-data",
       "process": "PocketBase (the pocketbase container), the only process that writes pb_data",
@@ -123,7 +123,7 @@
     {
       "id": "DB2",
       "title": "Transaction owner and isolation",
-      "status": "ratified",
+      "status": "draft",
       "concern": "transaction-owner",
       "store": "sqlite-data",
       "process": "the command's gateway hook route, in PocketBase's JSVM",
@@ -159,7 +159,7 @@
     {
       "id": "DB3",
       "title": "Gateway placement",
-      "status": "ratified",
+      "status": "draft",
       "concern": "gateway-placement",
       "store": "sqlite-data",
       "process": "PocketBase hook routes; the runner is only ever a caller",
@@ -199,7 +199,7 @@
     {
       "id": "DB4",
       "title": "Account authorization",
-      "status": "ratified",
+      "status": "draft",
       "concern": "account-authorization",
       "store": "sqlite-data",
       "process": "the command's gateway hook route, inside its transaction",
@@ -234,7 +234,7 @@
     {
       "id": "DB5",
       "title": "Idempotency store",
-      "status": "ratified",
+      "status": "draft",
       "concern": "idempotency-store",
       "store": "sqlite-data",
       "process": "the command's gateway hook route",
@@ -265,7 +265,7 @@
     {
       "id": "DB6",
       "title": "Aggregate and version model",
-      "status": "ratified",
+      "status": "draft",
       "concern": "aggregate-version-model",
       "store": "sqlite-data",
       "process": "the command's gateway hook route",
@@ -296,7 +296,7 @@
     {
       "id": "DB7",
       "title": "Outbox and projectors",
-      "status": "ratified",
+      "status": "draft",
       "concern": "outbox-projectors",
       "store": "sqlite-data",
       "process": "the runner's dispatcher, as dispatcher_service",
@@ -331,7 +331,7 @@
     {
       "id": "DB8",
       "title": "Backup and restore owner",
-      "status": "ratified",
+      "status": "draft",
       "concern": "backup-restore",
       "store": "n/a:a procedure over sqlite-data and files; #157 names the backup target",
       "process": "an operator procedure with a read-only reader process beside PocketBase, owned by #157",
@@ -370,7 +370,7 @@
     {
       "id": "DB9",
       "title": "PocketBase retained, upgraded, or replaced",
-      "status": "ratified",
+      "status": "draft",
       "concern": "pocketbase-version",
       "store": "n/a:a binary version, not a store",
       "process": "the pocketbase image build (pocketbase/Dockerfile)",
@@ -399,7 +399,7 @@
     {
       "id": "DB10",
       "title": "Byte store",
-      "status": "ratified",
+      "status": "draft",
       "concern": "byte-store",
       "store": "files",
       "process": "PocketBase file storage, written by gateway routes",

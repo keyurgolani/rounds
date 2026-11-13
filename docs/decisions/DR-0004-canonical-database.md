@@ -29,7 +29,7 @@ Career data has one canonical write database: PocketBase's SQLite file pb_data/d
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
-| canonical-write-database | sqlite-data | PocketBase (the pocketbase container), the only process that writes pb_data | ROUNDS-02-L01 | ratified |
+| canonical-write-database | sqlite-data | PocketBase (the pocketbase container), the only process that writes pb_data | ROUNDS-02-L01 | draft |
 
 **Alternatives**
 
@@ -68,7 +68,7 @@ Each command runs in exactly one runInTransaction that its gateway route owns, a
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
-| transaction-owner | sqlite-data | the command's gateway hook route, in PocketBase's JSVM | ROUNDS-02-L02 | ratified |
+| transaction-owner | sqlite-data | the command's gateway hook route, in PocketBase's JSVM | ROUNDS-02-L02 | draft |
 
 **Alternatives**
 
@@ -103,7 +103,7 @@ The command gateway is a set of PocketBase hook routes under /api/rounds/command
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
-| gateway-placement | sqlite-data | PocketBase hook routes; the runner is only ever a caller | ROUNDS-02-L02 | ratified |
+| gateway-placement | sqlite-data | PocketBase hook routes; the runner is only ever a caller | ROUNDS-02-L02 | draft |
 
 **Alternatives**
 
@@ -135,7 +135,7 @@ The account is the bearer's auth record, which the route reads inside its transa
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
-| account-authorization | sqlite-data | the command's gateway hook route, inside its transaction | ROUNDS-02-L02 | ratified |
+| account-authorization | sqlite-data | the command's gateway hook route, inside its transaction | ROUNDS-02-L02 | draft |
 
 **Alternatives**
 
@@ -166,7 +166,7 @@ Command idempotency uses #1's admission_commands, keyed by its unique (account, 
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
-| idempotency-store | sqlite-data | the command's gateway hook route | ROUNDS-02-L03 | ratified |
+| idempotency-store | sqlite-data | the command's gateway hook route | ROUNDS-02-L03 | draft |
 
 **Alternatives**
 
@@ -196,7 +196,7 @@ Every aggregate row carries an integer version that each committed change raises
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
-| aggregate-version-model | sqlite-data | the command's gateway hook route | ROUNDS-02-L03 | ratified |
+| aggregate-version-model | sqlite-data | the command's gateway hook route | ROUNDS-02-L03 | draft |
 
 **Alternatives**
 
@@ -226,7 +226,7 @@ A command writes its domain events to domain_outbox in its own transaction, with
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
-| outbox-projectors | sqlite-data | the runner's dispatcher, as dispatcher_service | ROUNDS-02-L05 | ratified |
+| outbox-projectors | sqlite-data | the runner's dispatcher, as dispatcher_service | ROUNDS-02-L05 | draft |
 
 **Alternatives**
 
@@ -258,7 +258,7 @@ Sources: spec 2056-2067; docs/security/server-writes.md; contracts/database/benc
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
-| backup-restore | n/a:a procedure over sqlite-data and files; #157 names the backup target | an operator procedure with a read-only reader process beside PocketBase, owned by #157 | ROUNDS-32-L03 | ratified |
+| backup-restore | n/a:a procedure over sqlite-data and files; #157 names the backup target | an operator procedure with a read-only reader process beside PocketBase, owned by #157 | ROUNDS-32-L03 | draft |
 
 **Alternatives**
 
@@ -291,7 +291,7 @@ Retain PocketBase and stay on its 0.22 line, which upstream patched through 0.22
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
-| pocketbase-version | n/a:a binary version, not a store | the pocketbase image build (pocketbase/Dockerfile) | ROUNDS-02-L01 | ratified |
+| pocketbase-version | n/a:a binary version, not a store | the pocketbase image build (pocketbase/Dockerfile) | ROUNDS-02-L01 | draft |
 
 **Alternatives**
 
@@ -321,7 +321,7 @@ Bytes live in PocketBase's file storage, pb_data/storage, behind one account-sco
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
-| byte-store | files | PocketBase file storage, written by gateway routes | ROUNDS-10-L01 | ratified |
+| byte-store | files | PocketBase file storage, written by gateway routes | ROUNDS-10-L01 | draft |
 
 **Alternatives**
 

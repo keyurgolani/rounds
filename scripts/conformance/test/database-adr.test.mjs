@@ -33,9 +33,10 @@ const PACKAGES = 'contracts/authority/packages.json';
 const DOCKERFILE = 'pocketbase/Dockerfile';
 const MIGRATIONS = 'pocketbase/pb_migrations';
 
-// DR-0004 is a draft until #222's r2 review passes; harness/bench/ratify.py
-// sets this to 'ratified' in the ratification commit.
-const STATUS = 'ratified';
+// DR-0004@1 was ratified by #222's r2 review. DR-0004@2, #73's stage A, is
+// a draft until the lane's review of that PR ratifies it; the ratification
+// commit sets this to 'ratified', with that PR in the approver below.
+const STATUS = 'draft';
 // What a ratified DR-0004 pins (M4): the ERD's written part, the receipt,
 // their schemas, and the ADR. The snapshot and the generated ERD are not
 // governed; a migration change regenerates them.
@@ -301,14 +302,15 @@ describe('database ADR: negative controls', () => {
   });
 
   it('fails DB_VERSION_MISMATCH for an ERD, a receipt, a result, or a cell at another revision', () => {
-    only(run(erd((e) => { e.revision = 2; })), 'DB_VERSION_MISMATCH');
-    only(run(written((d) => { d.revision = 2; })), 'DB_VERSION_MISMATCH');
+    const next = repo(RECORD).revision + 1;
+    only(run(erd((e) => { e.revision = next; })), 'DB_VERSION_MISMATCH');
+    only(run(written((d) => { d.revision = next; })), 'DB_VERSION_MISMATCH');
     only(run(erd((e) => { e.snapshot.revision = '0'.repeat(40); })), 'DB_VERSION_MISMATCH');
     only(run(record((r) => { r.benchmark.result = r.benchmark.result === 'pass' ? 'fail' : 'pass'; })), 'DB_VERSION_MISMATCH');
-    only(run(edit(MATRIX, (m) => { m.rows[0].storage = 'DR-0004@2:sqlite-data'; })), 'DB_VERSION_MISMATCH');
-    only(run(fixture((d) => fs.writeFileSync(path.join(d, 'docs/example-db.md'), 'Cite DR-0004@2:DB2.\n'))), 'DB_VERSION_MISMATCH');
+    only(run(edit(MATRIX, (m) => { m.rows[0].storage = `DR-0004@${next}:sqlite-data`; })), 'DB_VERSION_MISMATCH');
+    only(run(fixture((d) => fs.writeFileSync(path.join(d, 'docs/example-db.md'), `Cite DR-0004@${next}:DB2.\n`))), 'DB_VERSION_MISMATCH');
     // L5 (f): the receipt shares the record's revision counter.
-    only(run(receipt((rc) => { rc.revision = 2; })), 'DB_VERSION_MISMATCH');
+    only(run(receipt((rc) => { rc.revision = next; })), 'DB_VERSION_MISMATCH');
   });
 
   describe('the PocketBase line (M6)', () => {
@@ -497,7 +499,7 @@ describe('database ADR: the record checks every decision record gets', () => {
     recordOnly(runRecords(record((r) => { delete r.owner; })), 'DR_RECORD_INCOMPLETE');
     recordOnly(runRecords(record((r) => { r.affectedPackages.push('no-such-package'); })), 'DR_UNKNOWN_PACKAGE');
     recordOnly(runRecords(record((r) => { r.consumers.push('ROUNDS-99-L01'); })), 'VOCAB_UNRESOLVED_REF');
-    recordOnly(runRecords(record((r) => { r.revision = 2; })), 'DR_SUPERSEDES_INVALID');
+    recordOnly(runRecords(record((r) => { r.supersedes = null; })), 'DR_SUPERSEDES_INVALID');
     recordOnly(runRecords(record((r) => { r.decisions[0].alternatives = []; })), 'DR_RECORD_INCOMPLETE');
   });
 

@@ -193,10 +193,10 @@ describe('vocabulary: coverage set (schema)', () => {
   const analysis = analyzeCoverage(ctx, reg, byId);
   const cov = analysis.cov;
 
-  it('extracts exactly 55 live and 3 historical collections: the baseline 40, the three admission collections, the definitions journal, the two relation-quarantine collections, the snapshot store, the share capability store, the four execution job store collections, the share resolver\'s two, and the older share links\' journal', () => {
+  it('extracts exactly 57 live and 3 historical collections: the baseline 40, the three admission collections, the definitions journal, the two relation-quarantine collections, the snapshot store, the share capability store, the four execution job store collections, the share resolver\'s two, the older share links\' journal, and the saved AI provider keys and model lists', () => {
     const live = cov.collections.filter((c) => !c.historical).map((c) => c.name);
     const historical = cov.collections.filter((c) => c.historical).map((c) => c.name).sort();
-    assert.equal(live.length, 55);
+    assert.equal(live.length, 57);
     assert.deepEqual(historical, ['anecdotes', 'experience_items', 'resume_bullets']);
     assert.ok(live.includes('users'));
     for (const c of ['admission_commands', 'admission_counters', 'admission_leases']) assert.ok(live.includes(c), c);
@@ -207,6 +207,7 @@ describe('vocabulary: coverage set (schema)', () => {
     for (const c of ['execution_service', 'execution_jobs', 'execution_attempts', 'execution_envelopes']) assert.ok(live.includes(c), c);
     for (const c of ['share_resolvers', 'share_throttle']) assert.ok(live.includes(c), c);
     assert.ok(live.includes('legacy_share_migration'), 'legacy_share_migration');
+    for (const c of ['ai_credentials', 'ai_provider_models']) assert.ok(live.includes(c), c);
     for (const j of ['exp_job_projects', 'exp_job_anecdotes', 'exp_job_bullets', 'exp_project_anecdotes', 'exp_project_bullets', 'exp_anecdote_bullets']) assert.ok(live.includes(j), j);
     assert.ok(live.includes('ai_settings'), 'ai_settings is dropped and recreated, so it is live');
   });
@@ -319,7 +320,7 @@ describe('vocabulary: stored legacy terms (migration)', () => {
       }
     }
     const collections = adapters.filter((a) => a.kind === 'collection');
-    assert.equal(collections.length, 58);
+    assert.equal(collections.length, 60);
     for (const a of collections) {
       assert.ok(a.termId || a.decidedBy, a.legacyName);
       assert.ok(resolve(a.retiringLeaf).ok, a.legacyName);
@@ -534,6 +535,6 @@ describe('vocabulary: extraction without adapters', () => {
     // creates two collections through one shared `new Collection` call, and
     // the older share links' journal (ROUNDS-00B-L06).
     assert.equal(cov.unresolvedCollections.length, 3);
-    assert.equal(cov.collections.filter((c) => !c.historical).length, 46);
+    assert.equal(cov.collections.filter((c) => !c.historical).length, 48);
   });
 });
