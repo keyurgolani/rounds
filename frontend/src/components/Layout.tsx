@@ -28,6 +28,7 @@ import {
 import { useTheme } from '../theme/ThemeProvider';
 import { initials, useAuth } from '../auth/AuthProvider';
 import CampaignPill from '../campaign/CampaignPill';
+import DemoNotice from './shell/DemoNotice';
 import { CommandCenterProvider } from '../command-center/CommandCenterProvider';
 import { CommandCenter } from '../command-center/CommandCenter';
 import { usePlatform } from '../hooks/usePlatform';
@@ -64,6 +65,7 @@ const trackingNav: NavDef[] = [
 export default function Layout() {
   const location = useLocation();
   const { navStyle } = useTheme();
+  const { user } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -240,6 +242,7 @@ export default function Layout() {
         )}
 
         <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {user?.isDemo && <DemoNotice />}
           <Outlet />
         </main>
       </div>

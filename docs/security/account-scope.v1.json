@@ -752,8 +752,11 @@
       "expected": "allow",
       "control": "the demo session's rows exist before the reset",
       "owner_leaf": "ROUNDS-00B-L07",
-      "status": "pending",
+      "status": "pass",
       "lane": "pr",
+      "evidence": [
+        "phase:demo-on"
+      ],
       "guarantee": "a demo session's reset leaves no row behind in any collection"
     },
     "isolation.slot.sources": {

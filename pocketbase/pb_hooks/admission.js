@@ -67,7 +67,8 @@ const IN_FLIGHT_RETRY_S = 10;
 // A completed result is kept for replay only up to this many characters
 // of JSON; a larger one completes without one.
 const RESULT_MAX_CHARS = 256 * 1024;
-// Old counters and expired rows go in batches this size.
+// Old counters and expired rows go in batches this size, and so do the
+// rows demo.js's reset deletes in one transaction.
 const SWEEP_BATCH = 500;
 
 // [least, most] wall seconds each operation charges: one request plus the
@@ -912,6 +913,7 @@ module.exports = {
   HOLD_S,
   IN_FLIGHT_RETRY_S,
   RESULT_MAX_CHARS,
+  SWEEP_BATCH,
   OPERATIONS,
   HOOK_ONLY_OPERATIONS,
   DEMO_FIELDS,

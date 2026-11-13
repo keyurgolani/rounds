@@ -37,15 +37,16 @@ onRecordBeforeAuthWithPasswordRequest((e) => {
   });
 }, "users");
 
+// The demo account signs in with its password only, on or off.
 onRecordBeforeAuthWithOAuth2Request((e) => {
-  require(`${__hooks}/demo.js`).guardSignIn(e, {
+  require(`${__hooks}/demo.js`).guardPasswordOnly(e, {
     ROUNDS_GATE_DEMO: $os.getenv("ROUNDS_GATE_DEMO"),
     ROUNDS_ENABLE_DEMO: $os.getenv("ROUNDS_ENABLE_DEMO"),
   });
 }, "users");
 
-// 3. A demo caller changes only its profile, and can't delete its account
-// or change its email.
+// 3. A demo caller changes nothing on its own users record, its profile
+// included, and can't delete its account or change its email.
 onRecordBeforeUpdateRequest((e) => {
   require(`${__hooks}/demo.js`).guardAccountUpdate(e);
 }, "users");
@@ -76,3 +77,23 @@ onModelBeforeCreate((e) => {
 onModelBeforeUpdate((e) => {
   require(`${__hooks}/demo.js`).guardContainedModel(e);
 }, "resume_share_links", "share_capabilities", "ai_providers", "ai_credentials", "ai_provider_models", "ai_settings");
+
+// 5. The demo's sign-out clears what the demo account holds, and puts its
+// seeded profile back. With the demo off it answers as a route that
+// doesn't exist, so it carries no auth middleware of its own.
+routerAdd("POST", "/api/rounds/demo/sessions/end", (c) => {
+  return require(`${__hooks}/demo.js`).handleEnd(c, {
+    ROUNDS_GATE_DEMO: $os.getenv("ROUNDS_GATE_DEMO"),
+    ROUNDS_ENABLE_DEMO: $os.getenv("ROUNDS_ENABLE_DEMO"),
+  });
+});
+
+// 6. Every 5 minutes with the demo on: the same reset for a demo account
+// none of whose rows the reset can clear changed in 2 hours, or whose
+// oldest such row is a day old.
+cronAdd("rounds_demo_reset", "*/5 * * * *", () => {
+  require(`${__hooks}/demo.js`).sweepNow({
+    ROUNDS_GATE_DEMO: $os.getenv("ROUNDS_GATE_DEMO"),
+    ROUNDS_ENABLE_DEMO: $os.getenv("ROUNDS_ENABLE_DEMO"),
+  });
+});

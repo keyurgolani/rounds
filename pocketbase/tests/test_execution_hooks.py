@@ -1118,6 +1118,54 @@ def test_the_purge_takes_one_batch_at_a_time():
     assert out["results"][-2:] == [{"purged": execution_constant("PURGE_BATCH")}, {"purged": 1}]
 
 
+def test_an_accounts_purge_takes_its_ended_and_queued_jobs_with_everything_they_left():
+    # The demo reset's step (ROUNDS-00B-L07): any purpose, any age, and
+    # never a job a worker holds or another account's.
+    steps, grading, g_attempt, g_token = started_job(kind="grade")
+    body, content = graded_result(grading["id"])
+    steps += [item(), complete(g_attempt["id"], g_token, body, graded=content)]
+    # A second job, which a worker now holds.
+    key, token = new_key(), new_token()
+    steps += [command(key), enqueue(key), claim(token)]
+    claimed = run(*steps)["results"][-1]["body"]
+    held = claimed["job"]
+    steps.append(heartbeat(claimed["attempt"]["id"], token, budget=3))
+    # A queued job, and another account's.
+    queued, other = new_key(), new_key()
+    steps += [command(queued), enqueue(queued), command(other, account=B), enqueue(other, account=B)]
+    out = run(*steps, {"call": "purgeAccount", "account": A["id"]})
+    assert out["results"][-1] == {"jobs": 2, "envelopes": 1, "commands": 2}
+    left = {job["id"]: job for job in out["store"]["jobs"]}
+    assert held["id"] in left and left[held["id"]]["state"] == "started"
+    assert sorted(job["account"] for job in left.values()) == sorted([A["id"], B["id"]])
+    assert all(e["job"] in left for e in out["store"]["envelopes"])
+    assert all(c["job"] in left for c in out["store"]["commands"] if c.get("job"))
+
+
+def test_a_worker_finds_nothing_once_the_demo_reset_removed_its_job():
+    # A queued job the reset removed: the next claim finds nothing and
+    # writes nothing.
+    queued_steps, _job_id = queued_job()
+    out = run(*queued_steps, {"call": "purgeAccount", "account": A["id"]}, claim(new_token(), now=T0 + 2))
+    purged, claimed = out["results"][-2:]
+    assert purged["jobs"] == 1
+    assert claimed["status"] == 200 and claimed["body"]["job"] is None and claimed["body"]["attempt"] is None
+    assert out["store"]["jobs"] == [] and out["store"]["attempts"] == []
+    # A job its worker lost, ended by reap and then removed: the worker's
+    # late heartbeat and complete get the 404 and write nothing.
+    steps, job, attempt, token = started_job()
+    lost = T0 + 120
+    steps.append({"call": "reap", "now": lost})
+    out = run(*steps, {"call": "purgeAccount", "account": A["id"]},
+              heartbeat(attempt["id"], token, now=lost + 1),
+              complete(attempt["id"], token, result(job["id"]), now=lost + 1))
+    purged, beat, completed = out["results"][-3:]
+    assert purged["jobs"] == 1
+    assert beat["status"] == 404 and completed["status"] == 404
+    for rows in ("jobs", "attempts", "envelopes", "commands", "leases"):
+        assert out["store"][rows] == [], rows
+
+
 def execution_constant(name: str) -> int:
     """A whole-number constant in execution.js, written as a product such
     as ``7 * 24 * 3600``."""

@@ -20,6 +20,8 @@ import { Link } from 'react-router-dom';
 import { ArrowUpRight, ChevronDown, Sparkles } from 'lucide-react';
 import { listApplications } from '../../../../applications/api';
 import { usePersistedState } from '../../../../hooks/usePersistedState';
+import { useIsDemo } from '../../../../auth/AuthProvider';
+import { localKey } from '../../../../lib/demoKeys';
 import type { Resume, ResumeData } from '../../types';
 import {
   getATSAIScore,
@@ -131,7 +133,8 @@ function upsert<T extends { fingerprint: string; timestamp: number }>(
 }
 
 export default function ATSTab({ data, resume }: Props) {
-  const persistKey = `rounds.resume.ats.${resume?.id ?? 'untitled'}`;
+  // The demo account's keys go under the demo-only prefix (lib/demoKeys).
+  const persistKey = localKey(`rounds.resume.ats.${resume?.id ?? 'untitled'}`, useIsDemo());
   const [jd, setJd] = usePersistedState<string>(`${persistKey}.jd`, '');
   const [appId, setAppId] = usePersistedState<string | null>(
     `${persistKey}.appId`,

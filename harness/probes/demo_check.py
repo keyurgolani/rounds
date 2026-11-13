@@ -4,9 +4,10 @@ Two phases on the real PocketBase:
 
 - ``demo-on``: PocketBase runs with ``ROUNDS_ENABLE_DEMO=true``, as a
   hosted demo does, with the runner up. The seeded demo account signs in,
-  and so does a demo account a superuser makes. That caller changes its
-  profile but not its password, email, username, or verification, can't
-  delete itself or ask for an email change, and can't create a share link,
+  and so does a demo account a superuser makes. That caller can't change
+  its profile beyond the seeded one, its password, email, username, or
+  verification, can't delete itself or ask for an email change, and can't
+  create a share link,
   an AI provider, or AI settings, through PocketBase or the runner, while a
   standard account still can. With the runners at
   ``ROUNDS_GATE_DEMO_EXECUTION``'s default since phase 3c, the deployment
@@ -42,6 +43,25 @@ RUNNER_URL = os.environ.get("RUNNER_URL", "http://runner:8000")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://frontend").rstrip("/")
 STATE = Path(os.environ.get("DEMO_STATE_PATH", "/state/demo.json"))
 NOT_PERMITTED = {"code": "demo_not_permitted", "message": "Not available in the demo."}
+# The answer to a locked account field, and the profile
+# 1700000600_demo_user.js seeds.
+LOCKED = "These account fields can't be changed."
+SEEDED_PROFILE = {"name": "Rounds Demo", "bio": "Disposable hosted demo account. Changes reset on logout.",
+                  "target": "Explore Rounds"}
+# What the demo's sign-out clears: every collection a demo account writes
+# itself (pb_hooks/demo.js RESET; test_demo_hooks.py keeps the two equal).
+# The admission rows hold the limits and stay.
+DEMO_RESET = (
+    "exp_anecdote_bullets", "exp_project_bullets", "exp_project_anecdotes", "exp_job_bullets", "exp_job_anecdotes",
+    "exp_job_projects",
+    "experience_bullets", "experience_anecdotes", "experience_projects", "experience_jobs",
+    "resume_versions", "resume_variants", "resumes",
+    "ai_coding_attempts", "take_home_attempts", "ai_coding_drafts", "take_home_drafts", "question_timers",
+    "todos", "code_drafts", "offers", "interview_rounds", "user_progress", "user_preferences", "applications",
+    "campaigns",
+)
+KEPT = ("admission_commands", "admission_counters", "admission_leases")
+END_PATH = "/api/rounds/demo/sessions/end"
 
 
 def _wrong_password() -> str:
@@ -55,6 +75,73 @@ def _not_permitted(status: int, body) -> bool:
 def _count(pb: PBClient, admin: str, collection: str, user_id: str) -> int:
     resp = pb.listing(collection, admin, {"filter": f'user = "{user_id}"', "perPage": 1})
     return int((resp.body or {}).get("totalItems", -1)) if resp.status == 200 else -1
+
+
+def _account_fields(pb: PBClient, admin: str) -> list[tuple[str, str]]:
+    """Every (collection, field) in the live schema that names a users
+    record, the users collection itself aside."""
+    listed = (pb.collections_meta(admin).body or {}).get("items", [])
+    users = next((col["id"] for col in listed if col.get("name") == "users"), "")
+    return sorted(
+        (col["name"], field["name"])
+        for col in listed if col.get("name") != "users"
+        for field in col.get("schema", [])
+        if field.get("type") == "relation" and (field.get("options") or {}).get("collectionId") == users
+    )
+
+
+def _rows_of(pb: PBClient, admin: str, fields: list[tuple[str, str]], account: str) -> dict[tuple[str, str], int]:
+    out = {}
+    for name, field in fields:
+        resp = pb.listing(name, admin, {"filter": f'{field} = "{account}"', "perPage": 1})
+        out[(name, field)] = int((resp.body or {}).get("totalItems", -1)) if resp.status == 200 else -1
+    return out
+
+
+def _seeded(pb: PBClient, admin: str, acct: factory.Account, content: dict[str, str]) -> None:
+    """One row in every collection the account writes itself, with its own
+    token, and a superuser's code-run job with its envelope."""
+    factory.seed_account(pb, acct, content, admin,
+                         collections=frozenset(DEMO_RESET) | {"execution_jobs", "execution_envelopes"})
+
+
+def run_reset(c: Checks, pb: PBClient, admin: str, d: factory.Account) -> None:
+    """The demo's sign-out clears what the demo account holds, on the live
+    schema, and nothing a standard account holds."""
+    content = factory.ensure_content_fixtures(pb, admin)
+    _seeded(pb, admin, d, content)
+    w = _standard(pb, admin)
+    w.token = (pb.auth_password(w.email, w.password).body or {}).get("token", "")
+    _seeded(pb, admin, w, content)
+    fields = _account_fields(pb, admin)
+    before = _rows_of(pb, admin, fields, d.user_id)
+    standard_before = _rows_of(pb, admin, fields, w.user_id)
+    # A superuser's edit, which the lock doesn't hold, so the reset has a
+    # profile to put back.
+    drifted = pb.update("users", d.user_id, {"name": "Visitor"}, admin)
+    drift_took = drifted.status == 200 and (pb.view("users", d.user_id, admin).body or {}).get("name") == "Visitor"
+
+    ended = call(POCKETBASE_URL, "POST", END_PATH, d.token, {})
+    after = _rows_of(pb, admin, fields, d.user_id)
+    profile = {k: (pb.view("users", d.user_id, admin).body or {}).get(k) for k in SEEDED_PROFILE}
+    seeded_everywhere = all(before.get((name, "user"), 0) >= 1 for name in DEMO_RESET)
+    left = sorted(f"{name}.{field}={n}" for (name, field), n in after.items() if n != 0 and name not in KEPT)
+    c.check("demo.on.ending-the-session-leaves-no-demo-row",
+            ended[0] == 204 and seeded_everywhere and before[("execution_jobs", "account")] >= 1
+            and left == [] and drift_took and profile == SEEDED_PROFILE,
+            f"status={ended[0]} seeded={seeded_everywhere} left={left} drifted={drift_took}"
+            f" profile={profile == SEEDED_PROFILE}")
+
+    # The SPA reaches it through the public proxy.
+    proxied = call(FRONTEND_URL, "POST", END_PATH, d.token, {})
+    c.check("demo.on.the-sign-out-route-is-reachable-through-nginx", proxied[0] == 204, f"status={proxied[0]}")
+
+    anonymous = call(POCKETBASE_URL, "POST", END_PATH, None, {})
+    standard = call(POCKETBASE_URL, "POST", END_PATH, w.token, {})
+    standard_after = _rows_of(pb, admin, fields, w.user_id)
+    c.check("demo.on.only-a-demo-caller-ends-a-demo-session",
+            anonymous[0] == 401 and standard[0] == 403 and standard_after == standard_before,
+            f"anonymous={anonymous[0]} standard={standard[0]} standard-rows-unchanged={standard_after == standard_before}")
 
 
 def _standard(pb: PBClient, admin: str) -> factory.Account:
@@ -86,10 +173,23 @@ def run_on(c: Checks, pb: PBClient, admin: str) -> None:
     d.token = (signed.body or {}).get("token", "")
     c.check("demo.on.a-demo-account-signs-in", signed.status == 200 and bool(d.token), f"status={signed.status}")
 
-    # The account's own record: its profile changes, nothing else does.
-    profile = pb.update("users", d.user_id, {"name": "Visitor", "bio": "Trying it", "target": "Staff"}, d.token)
-    c.check("demo.on.the-profile-changes", profile.status == 200 and (profile.body or {}).get("name") == "Visitor",
-            f"status={profile.status}")
+    # The account's own record: its profile is locked. A request leaving
+    # exactly the seeded profile, as the sign-out reset sends it, goes
+    # through; one that would change name, bio, or target, in a JSON or a
+    # multipart body, gets the 400 a locked account field gets.
+    seeded = pb.update("users", d.user_id, SEEDED_PROFILE, d.token)
+    attempts = {
+        "name": pb.update("users", d.user_id, {"name": "Visitor"}, d.token),
+        "bio": pb.update("users", d.user_id, {"bio": ""}, d.token),
+        "target": pb.update("users", d.user_id, {"target": None}, d.token),
+        "multipart": pb.update_form("users", d.user_id, [("name", "Visitor")], d.token),
+    }
+    kept = {k: (pb.view("users", d.user_id, admin).body or {}).get(k) for k in SEEDED_PROFILE}
+    c.check("demo.on.the-profile-is-locked",
+            seeded.status == 200 and kept == SEEDED_PROFILE
+            and all(r.status == 400 and (r.body or {}).get("message") == LOCKED for r in attempts.values()),
+            f"seeded={seeded.status} " + " ".join(f"{k}={r.status}" for k, r in attempts.items())
+            + f" unchanged={kept == SEEDED_PROFILE}")
     new_password = factory.make_account("demo").password
     locked = ("email", "username", "verified", "is_demo")
     before = {k: (pb.view("users", d.user_id, admin).body or {}).get(k) for k in locked}
@@ -148,6 +248,9 @@ def run_on(c: Checks, pb: PBClient, admin: str) -> None:
             and share[0] != 201 and "token" not in json.dumps(share[1] or {})
             and all(n == 0 for n in left.values()),
             f"share={share[0]} " + " ".join(f"{k}={v[0]}" for k, v in through.items()) + f" rows={left}")
+
+    # The demo's sign-out clears what the demo account holds.
+    run_reset(c, pb, admin, d)
 
     # The demo's code runs, at their default since phase 3c: the deployment
     # verifier's own check, through nginx as an operator runs it.

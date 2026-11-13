@@ -123,7 +123,9 @@ Every install creates the demo account (`1700000600_demo_user.js`), and it stays
 ROUNDS_ENABLE_DEMO=true
 ```
 
-Off, PocketBase refuses a demo account's sign-in with the answer a wrong password gets, and at each start gives every demo account a new random password and token key, so a session from before the restart ends, and any request a demo account's token authenticates gets 401. On or off, a demo account can change only its own name, bio, and target, can't delete itself or change its email, and can't own a share link, an AI provider, or AI settings: those writes get 403 `demo_not_permitted`, from a client or a server hook. Restart PocketBase after changing either variable.
+Off, PocketBase refuses a demo account's sign-in with the answer a wrong password gets, and at each start gives every demo account a new random password and token key, so a session from before the restart ends, and any request a demo account's token authenticates gets 401. On or off, a demo account can't change its profile, delete itself, or change its email, and can't own a share link, an AI provider, or AI settings. A profile change gets the 400 a locked account field gets, and the other writes get 403 `demo_not_permitted`, from a client or a server hook. Restart PocketBase after changing either variable.
+
+Visitors share the demo account, and other visitors can see what one adds while it lasts, so no one should enter real personal details in it. Any sign-out, the 30-minute idle one included, clears what everyone added, and a sweep clears what's left when nobody signs out. Never set `is_demo` on a real account, not even to try the demo tier ([Demo Account](operations.md#demo-account)).
 
 With the demo on, its code runs stay off until the operator opens them with `ROUNDS_GATE_DEMO_EXECUTION=enabled` on every runner replica, followed by a restart. Until then a demo account's code run answers 503 `demo_execution_disabled` before anything is charged or runs, and the coding, AI-coding, and take-home pages say code runs are off in the demo and keep the draft. Other accounts, and the demo's other pages, aren't affected.
 
