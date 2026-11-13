@@ -160,7 +160,6 @@ import {
   createVersion,
   updateResume,
   updateVariant,
-  upsertAISettings,
 } from '../features/resume/api';
 import { emptyResumeData } from '../features/resume/types';
 import { createUserProgress, updateUserProgress, type UserProgressInput } from '../hooks/progressApi';
@@ -281,7 +280,6 @@ const ROWS = {
   revisedOffer: { id: 'offers-2', application: 'applications-1', status: 'pending', previous_offer: 'offers-1', trail: [] },
   preferences: { id: 'user_preferences-1', theme: 'light' },
   codeDraft: { id: 'code_drafts-1', campaign: 'campaigns-1', question: 'two-sum', language: 'python', code: '' },
-  aiSettings: { id: 'ai_settings-1', provider: 'anthropic', model: 'claude' },
   aiCodingDraft: { id: 'ai_coding_drafts-1', round: 'rounds-1', file_path: 'main.py', contents: '' },
   aiCodingAttempt: { id: 'ai_coding_attempts-1', round: 'rounds-1', status: 'in-progress' },
   takeHomeAttempt: { id: 'take_home_attempts-1', assignment: 'assignments-1', status: 'in-progress' },
@@ -610,19 +608,6 @@ const WRITE_PATHS: Record<string, Branch[]> = {
       when: 'snapshots a version',
       run: () => createVersion({ resumeId: 'resumes-1', data: emptyResumeData(), label: 'Before edits' }),
       writes: [['resume_versions', 'create', 'caller']],
-    },
-  ],
-  'features/resume/api.ts#upsertAISettings': [
-    {
-      when: 'creates the settings row',
-      run: () => upsertAISettings({ provider: 'anthropic', model: 'claude' }),
-      writes: [['ai_settings', 'create', 'caller']],
-    },
-    {
-      when: 'updates the settings row',
-      existing: { ai_settings: ROWS.aiSettings },
-      run: () => upsertAISettings({ provider: 'openai', model: 'gpt' }),
-      writes: [['ai_settings', 'update', 'caller']],
     },
   ],
 
@@ -957,7 +942,7 @@ describe('coverage guard', () => {
     'resumes',
     'resume_variants',
     'resume_versions',
-    'ai_settings',
+    // ai_settings left with #73 stage A: only the runner writes it now.
     'ai_coding_drafts',
     'ai_coding_attempts',
     'take_home_drafts',

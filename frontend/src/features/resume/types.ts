@@ -200,29 +200,6 @@ export type ResumeVersion = {
   created_at: string;
 };
 
-export type AIProvider =
-  | 'anthropic'
-  | 'openai'
-  | 'google'
-  | 'ollama'
-  | 'groq'
-  | 'openrouter'
-  | 'deepseek'
-  | 'mistral'
-  | 'custom';
-
-export type AISettings = {
-  id: string;
-  user_id: string;
-  provider: AIProvider;
-  model: string;
-  import_model?: string;
-  base_url?: string;
-  encrypted_key?: string;
-  key_iv?: string;
-  updated_at: string;
-};
-
 // Empty resume factory — used when creating a new blank resume.
 export function emptyResumeData(): ResumeData {
   return {
