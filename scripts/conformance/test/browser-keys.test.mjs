@@ -129,6 +129,16 @@ describe('browser keys: the demo account\'s prefix', () => {
     assert.deepEqual(Object.keys(families(own)), ['rounds.demo.notes', 'rounds.notes']);
     assert.deepEqual(own.unresolved, []);
   });
+
+  it('fails closed past the key cap, and when the prefix slot names a parameter', () => {
+    const pick = (v, c) => `${c} === 0 ? '${v}0' : ${c} === 1 ? '${v}1' : ${c} === 2 ? '${v}2' : '${v}3'`;
+    const many = extract({ [DEMO]: demoKeys(), [TAB]: `import { localKey } from '../lib/demoKeys';\nexport function f(p: number, q: number, r: number, isDemo: boolean) {\n  const A = ${pick('a', 'p')}; const B = ${pick('b', 'q')}; const C = ${pick('c', 'r')};\n  localStorage.setItem(localKey(\`rounds.\${A}.\${B}.\${C}\`, isDemo), '1');\n}\n` });
+    assert.deepEqual(families(many), {});
+    assert.deepEqual(many.unresolved, [`${TAB}:4`]);
+    const shadowed = extract({ [DEMO]: demoKeys().replace(/\bkey\b/g, 'DEMO_KEY_PREFIX'), [TAB]: writeThrough("localKey('rounds.notes', isDemo)") });
+    assert.deepEqual(families(shadowed), {});
+    assert.deepEqual(shadowed.unresolved, [`${TAB}:4`]);
+  });
 });
 
 describe('browser keys: the audited revision', () => {

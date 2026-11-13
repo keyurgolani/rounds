@@ -151,7 +151,7 @@
         { "field": "storage:rounds.resume.ats.*.jd" },
         { "field": "storage:rounds.demo.resume.ats.*.jd" }
       ],
-      "outputScope": "An AI ATS answer shown beside the rule-based one (storage:rounds.resume.ats.*.cache.ai.v2).", "toolAuthority": "none", "flag": null,
+      "outputScope": "An AI ATS answer shown beside the rule-based one (storage:rounds.resume.ats.*.cache.ai.v2, or storage:rounds.demo.resume.ats.*.cache.ai.v2 for the demo account).", "toolAuthority": "none", "flag": null,
       "manualPath": "The rule-based ATS check, which sends nothing.", "streaming": false,
       "note": "An explicit trigger once current (Decision 2).",
       "callSites": [{ "path": "backend/routers/ai.py", "function": "ats_ai" }]

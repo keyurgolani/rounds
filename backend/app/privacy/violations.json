@@ -24,7 +24,7 @@
     },
     {
       "id": 3, "status": "open",
-      "summary": "The ATS AI answer cache keeps entries for 90 days and past sign-out.",
+      "summary": "The ATS AI answer cache keeps entries for 90 days, and past sign-out for every account but the demo account.",
       "rule": "browser-ai-caches",
       "location": { "fields": ["storage:rounds.resume.ats.*.cache.ai.v2", "storage:rounds.demo.resume.ats.*.cache.ai.v2"], "anchors": [{ "path": "frontend/src/features/resume/studio/tabs/ATSTab.tsx", "text": "const TTL_MS = 90 * 24 * 60 * 60 * 1000;" }] },
       "owner": "ROUNDS-14-L06",

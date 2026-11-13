@@ -170,7 +170,7 @@ Every purpose that calls an AI provider. The scan fails CI on a provider call fr
 | --- | --- | --- | --- | --- |
 | 1 | open | Session state sits in browser storage: the session token through the SDK's default store, and the session's idle clock. | ROUNDS-03-L04 | ROUNDS-03-L04 keeps the session in memory or an httpOnly cookie, and the idle clock with it. |
 | 2 | closed (#215) | Share views kept more about each viewer than the coarse time the policy allows. | ROUNDS-00B-L06 | No writer remains and every stored view keeps the day only. Dropping the collection stays an optional later step of ROUNDS-00B-L06. |
-| 3 | open | The ATS AI answer cache keeps entries for 90 days and past sign-out. | ROUNDS-14-L06 | ROUNDS-14-L06 routes the call through the gateway and ROUNDS-14-L05 purges the cache on the draft row's schedule. |
+| 3 | open | The ATS AI answer cache keeps entries for 90 days, and past sign-out for every account but the demo account. | ROUNDS-14-L06 | ROUNDS-14-L06 routes the call through the gateway and ROUNDS-14-L05 purges the cache on the draft row's schedule. |
 | 4 | open | Provider output and fetched URLs reach the logs, and a provider's error text is kept in a rubric review. | ROUNDS-14-L06 | ROUNDS-14-L06 routes these calls through the gateway, which logs no content, and ROUNDS-14-L05 purges what was kept. |
 | 5 | open | Server-only grading material is readable through two practice-content collections. | ROUNDS-00A-L02 | ROUNDS-00A-L02 makes the grading fields server-only. |
 | 6 | closed (#203) | Data the shared demo account saved outlived its reset. | ROUNDS-00B-L07 | Demo containment: the demo account keeps no secrets, as the decided secrets row says. |

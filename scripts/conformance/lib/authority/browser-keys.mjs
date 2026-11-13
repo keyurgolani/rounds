@@ -279,7 +279,8 @@ function returnRanges(info, fn) {
 }
 
 // { prefix, strip } from the demo keys module, { unreadable: true } when
-// `localKey` isn't exported in LOCAL_KEY_SHAPE's shape or P isn't a module
+// `localKey` isn't exported in LOCAL_KEY_SHAPE's shape, K, D and P don't
+// name three different things, or P isn't declared once, as a module
 // constant holding a string, and null when there is no such module.
 function readDemoKeys(info) {
   if (!info) return null;
@@ -299,8 +300,9 @@ function readDemoKeys(info) {
     if (got.type !== slot || (bound[want.value] !== undefined && bound[want.value] !== got.value)) return { unreadable: true };
     bound[want.value] = got.value;
   }
-  if (bound.K === bound.D || !bound.S) return { unreadable: true };
-  const prefix = info.consts.find((c) => c.name === bound.P && tokens[c.at].value === 'const' && !enclosing(info, c.at));
+  if (new Set([bound.K, bound.D, bound.P]).size !== 3 || !bound.S) return { unreadable: true };
+  const decls = info.consts.filter((c) => c.name === bound.P);
+  const prefix = decls.length === 1 && tokens[decls[0].at].value === 'const' && !enclosing(info, decls[0].at) ? decls[0] : null;
   const init = prefix && prefix.initEnd === prefix.initStart + 1 ? tokens[prefix.initStart] : null;
   if (!init || init.type !== 'string' || !init.value) return { unreadable: true };
   return { prefix: init.value, strip: bound.S };
@@ -383,7 +385,8 @@ class Resolver {
     const arg = args[0];
     const keys = this.demo.prefix !== undefined && arg ? this.resolve(arg.info, arg.s, arg.e, depth + 1) : null;
     if (!keys || !keys.length) return [[UNKNOWN]];
-    return keys.flatMap((key) => [key, demoKey(key, this.demo)]).slice(0, 64);
+    const out = keys.flatMap((key) => [key, demoKey(key, this.demo)]);
+    return out.length > 64 ? [[UNKNOWN]] : out;
   }
 
   // Resolves tokens[s, e) of info at scope index; returns keys or null.
