@@ -128,6 +128,17 @@ const NEVER_PROXIED = [
   '/api/rounds/Share/capabilities',
   '/api/rounds/SHARE/x',
   '/api/rounds/%73hare/capabilities',
+  // The AI provider custody hooks (ROUNDS-14-L02), in any case.
+  '/api/rounds/ai/providers/list',
+  '/api/rounds/ai/providers/create',
+  '/api/rounds/ai/providers/update',
+  '/api/rounds/ai/providers/models',
+  '/api/rounds/ai/credentials/read',
+  '/api/rounds/ai/credentials/convert?x=1',
+  '/api/rounds/ai',
+  '/api/rounds/AI/credentials/read',
+  '/api/rounds/Ai/providers/update',
+  '/api/rounds/%61i/credentials/read',
   '/api/admins',
   '/api/admins/auth-with-password',
   '/api/settings',
@@ -158,6 +169,9 @@ const PROXIED = [
   '/api/ai-coding/grade',
   '/api/take-home/submit',
   '/api/rounds/other',
+  '/api/rounds/aim',
+  '/api/ai/providers',
+  '/api/ai/providers/prova0000000001/test',
   '/api/settingsx',
   '/api/collections/users/records',
   '/api/collections/users/records?filter=x',
@@ -201,6 +215,7 @@ describe('the dev proxy and production nginx', () => {
     '/api/collections/share_resolvers/auth-with-password',
     '/api/rounds/legacy-snapshots',
     '/api/rounds/share/capabilities',
+    '/api/rounds/ai/credentials/read',
   ])('refuses a WebSocket upgrade on %s too', (url) => {
     const { entry, socket, forwarded } = upgrade(url);
     expect(entry.ws).toBe(true);

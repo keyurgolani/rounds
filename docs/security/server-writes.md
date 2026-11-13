@@ -18,10 +18,9 @@ A server-only collection has `null` client create, update, and delete rules. At 
 
 ## Superuser Token
 
-No writer kind uses the superuser token. Two operator-run steps use superuser credentials, outside the app:
+No writer kind uses the superuser token. One operator-run step uses superuser credentials, outside the app: #10's quarantine replay, which goes through the admin API so #10's relation hook re-checks each entry.
 
-1. #73's `migrate-legacy`, which rewraps legacy provider keys. The operator enters the credentials for that run only. #1's body names this as the only superuser row.
-2. #10's quarantine replay, which goes through the admin API so #10's relation hook re-checks each entry. It's a second operator-run row, recorded here so the list is complete.
+#73 moves and rewraps the saved AI provider keys with no operator step and no superuser: its migration moves them at start, and the runner rewraps each one on its first good use ([AI Provider Keys](#ai-provider-keys)).
 
 At `62d4eae` the runner itself uses the superuser token. All of it retires:
 
@@ -112,6 +111,15 @@ PocketBase refuses the `share-resolver` record on every route but its lookup.
 
 The operator's `pocketbase legacy-share-receipt` writes nothing to the database.
 
+## AI Provider Keys
+
+#73's stage A adds `ai_credentials`, one saved key a provider, and `ai_provider_models`, one row a model, in `pocketbase/pb_migrations/1700008800_ai_credentials.js`, every client rule `null` on both. `1700008810_ai_provider_writes.js` sets `ai_providers`' create and update rules to `null`, so its owner still lists, views, and deletes a provider through PocketBase's API, and a delete takes the provider's key and models with it. Only `pocketbase/pb_hooks/ai_custody.js` writes these rows, and never with the superuser:
+
+1. The Caller routes under `/api/rounds/ai/` in `pb_hooks/ai_custody.pb.js`, which the runner reaches with the caller's bearer and `ROUNDS_ADMISSION_SECRET`: list the caller's providers, create one, update one, replace its model list, read its saved key, and rewrap a key saved before this release. Each runs in one transaction, reads and writes only the caller's rows, and writes nothing when it refuses. A demo account writes none. nginx and the Vite proxy answer `/api/rounds/ai/` in any case with 404, so a browser reaches none of them.
+2. `1700008820_ai_credentials_move.js`, at the first start of its release, under manifest `ai-credentials-v1`: it moves each saved key and model list out of `ai_providers` (the #73 rows below).
+
+PocketBase never holds a key in the clear. The runner's keyring (`backend/app/provider_gateway/keyring.py`) wraps a key for its account, its provider, and the address it was entered for before a route sees it, and only the runner opens one. A saved key works only with the address it was entered for, so an update that changes a provider's address asks for the key again unless it brings one. #10's owner triggers keep every key and model on its own account's provider.
+
 ## Registry of Planned Writers
 
 Each row restates the leaf's current body. The leaf confirms or corrects its row in the PR that adds the writer. Credentials appear by environment variable name only.
@@ -142,9 +150,10 @@ Each row restates the leaf's current body. The leaf confirms or corrects its row
 | #22 | Service | `dispatcher_service`: routes under `/api/outbox/` | `outbox_cursors`, `outbox_watermarks`, `outbox_parked`, and the relay lease in `platform_leases` | `ROUNDS_DISPATCHER_SECRET` |
 | #54 | Caller and Service | `pb_hooks/processing.pb.js`: `enqueue`, `cancel`, and `retry` with the caller's bearer; `checkpoint`, `block`, and `complete` as `execution_service` | `processing_*` | caller's bearer; `ROUNDS_EXECUTION_SECRET` |
 | #56 | Service | #54's `complete`, as `execution_service` | `processing_extraction_outputs` | `ROUNDS_EXECUTION_SECRET` |
-| #73 | Service | `ai_gateway`, one record, scoped to the bearer's account | `ai_providers`, `ai_credentials`, `ai_provider_models`, Intent records | `ROUNDS_AI_GATEWAY_SECRET` |
-| #73 | System hook | `onBeforeServe`, which seeds the `ai_gateway` record | `ai_gateway` | `ROUNDS_AI_GATEWAY_SECRET` |
-| #73 | Migration | step 3, which moves the legacy ciphertext and model caches out of `ai_providers` | `ai_credentials_legacy`, `ai_provider_models` | none |
+| #73 SA | Caller | the routes under `/api/rounds/ai/` in `pb_hooks/ai_custody.pb.js`: list, create, and update a provider, replace its model list, read its saved key, and rewrap a key saved before this release, in `pb_hooks/ai_custody.js` | `ai_providers` (create and update), `ai_credentials`, `ai_provider_models` | caller's bearer and `ROUNDS_ADMISSION_SECRET` |
+| #73 SA | Migration | `1700008810_ai_provider_writes.js` at start | the create and update rules of `ai_providers`, and one `_params` record with the rules they replaced, which its down step puts back | none |
+| #73 SA | Migration | `1700008820_ai_credentials_move.js` at start, under manifest `ai-credentials-v1` | `ai_credentials` and `ai_provider_models` from each provider's saved key and model list; clears `encrypted_key` and `key_iv` and sets a first-party provider with its own address to the compatible kind on `ai_providers`; one `_params` record with the kinds it changed | none |
+| #73 SC | Caller | the provider gateway's Intent and Outcome routes under `/api/rounds/ai/`, beside stage A's | Intent and Outcome records | caller's bearer and `ROUNDS_ADMISSION_SECRET` |
 | #76 | Model hook | `onModelBeforeDelete` on each classed collection; retention purges run as #22's `dispatcher_service` | `deletion_journal` | rides on the delete |
 | #80 | set by #80 | the backfill and deltas, per account through #19 | `legacy_material_blocks` | never the superuser |
 | #91 | Service | the export pool as `execution_service`, through `pb_hooks/account_export.pb.js` | `account_exports` | `ROUNDS_EXECUTION_SECRET` |

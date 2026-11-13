@@ -223,16 +223,19 @@ def run_on(c: Checks, pb: PBClient, admin: str) -> None:
         "ai_providers": pb.create("ai_providers", d.token, {"user": d.user_id, "kind": "openai", "label": "demo"}),
         "ai_settings": pb.create("ai_settings", d.token, {"user": d.user_id}),
     }
-    # Since ROUNDS-00B-L06 no client creates a share link row, so PocketBase
-    # refuses the demo account's before the demo hook sees it; the other two
-    # are the demo hook's own refusal.
+    # Since ROUNDS-00B-L06 no client creates a share link row, and since
+    # ROUNDS-14-L02 none creates a provider row, so PocketBase refuses the
+    # demo account's before the demo hook sees them; the settings row is the
+    # demo hook's own refusal.
     link = direct.pop("resume_share_links")
+    provider = direct.pop("ai_providers")
     c.check("demo.on.no-share-link-provider-or-settings-row-through-pocketbase",
-            resume.status == 200 and link.status in (400, 403)
+            resume.status == 200 and link.status in (400, 403) and provider.status in (400, 403)
             and all(_not_permitted(r.status, r.body) for r in direct.values()),
-            f"resume={resume.status} resume_share_links={link.status} "
+            f"resume={resume.status} resume_share_links={link.status} ai_providers={provider.status} "
             + " ".join(f"{k}={r.status}" for k, r in direct.items()))
     direct["resume_share_links"] = link
+    direct["ai_providers"] = provider
     # A share link is CreateShare (ROUNDS-00B-L04), which makes none for a
     # demo account, whatever it answers; the no-row counts below hold it.
     share = call(RUNNER_URL, "POST", "/api/share", d.token, {"resume_id": resume_id}, {"Idempotency-Key": uuid7()})[:2]

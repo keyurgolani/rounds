@@ -311,7 +311,8 @@
         "legacy_artifact_snapshots",
         "share_capabilities",
         "ai_credentials",
-        "ai_provider_models"
+        "ai_provider_models",
+        "ai_providers"
       ]
     },
     "account-scope.update.server-only.denied": {
@@ -326,7 +327,8 @@
         "legacy_artifact_snapshots",
         "share_capabilities",
         "ai_credentials",
-        "ai_provider_models"
+        "ai_provider_models",
+        "ai_providers"
       ]
     },
     "account-scope.delete.server-only.denied": {
@@ -1626,16 +1628,25 @@
       "current_rules": {
         "list": "user = @request.auth.id",
         "view": "user = @request.auth.id",
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)",
+        "create": null,
+        "update": null,
         "delete": "user = @request.auth.id"
       },
       "target_rules": {
-        "create": "@request.auth.id != \"\" && @request.data.user = @request.auth.id",
-        "update": "user = @request.auth.id && (@request.data.user:isset = false || @request.data.user = @request.auth.id)"
+        "create": null,
+        "update": null
       },
       "target_rule_migration": "1700006000_account_scope_rules.js",
-      "hook": null,
+      "rule_overrides": [
+        {
+          "migration": "1700008810_ai_provider_writes.js",
+          "rules": [
+            "create",
+            "update"
+          ]
+        }
+      ],
+      "hook": "pocketbase/pb_hooks/ai_custody.pb.js",
       "relation_exceptions": [],
       "exceptions": [],
       "probes": [
@@ -1648,21 +1659,9 @@
         "account-scope.list.filter.isolated",
         "account-scope.view.foreign-or-missing.indistinguishable",
         "account-scope.delete.foreign-or-missing.indistinguishable",
-        "account-scope.update.cross-account.denied",
-        "account-scope.update.anonymous.denied",
-        "account-scope.create.anonymous.denied",
-        "account-scope.create.foreign-owner.denied",
-        "account-scope.update.reassign-owner.denied",
-        "account-scope.update.own.accepted",
-        "account-scope.update.foreign-or-missing.indistinguishable",
-        "account-scope.create.replayed-denied.denied",
-        "account-scope.create.nonexistent-owner.denied",
-        "account-scope.oversized-input.rejected"
-      ],
-      "oversized_probe": {
-        "field": "models_cache",
-        "max_bytes": 262144
-      }
+        "account-scope.create.server-only.denied",
+        "account-scope.update.server-only.denied"
+      ]
     },
     "ai_settings": {
       "migration": "1700000800_ai_providers.js",
@@ -2657,7 +2656,7 @@
         "update": null
       },
       "target_rule_migration": "1700008800_ai_credentials.js",
-      "hook": null,
+      "hook": "pocketbase/pb_hooks/ai_custody.pb.js",
       "relation_exceptions": [
         "provider"
       ],
@@ -2693,7 +2692,7 @@
         "update": null
       },
       "target_rule_migration": "1700008800_ai_credentials.js",
-      "hook": null,
+      "hook": "pocketbase/pb_hooks/ai_custody.pb.js",
       "relation_exceptions": [
         "provider"
       ],

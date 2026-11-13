@@ -995,6 +995,13 @@ def test_every_collection_covers_each_actor_operation_and_resource_state():
         assert reads <= probes, (name, sorted(reads - probes))
         if name == "resume_share_views":
             assert server_only <= probes, name
+        elif name != "users" and all(row["current_rules"].get(op, "") is None for op in ("create", "update")):
+            # A store only a hook creates and updates, which its owner still
+            # reads and deletes (#73's providers): the create and update
+            # families give way to their server-only forms, which refuse
+            # even the owner's own.
+            assert {"account-scope.create.server-only.denied", "account-scope.update.server-only.denied"} <= probes, name
+            assert not owned_writes & probes, name
         elif name != "users" and row["current_rules"].get("update", "") is None:
             # Owner creates, and no client updates at all (#11's share links):
             # the not-found and accepted update families give way to

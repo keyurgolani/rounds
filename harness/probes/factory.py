@@ -264,11 +264,16 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
         if has("share_capabilities"):
             mk_admin("share_capabilities", capability_fields(rec["id"]))
 
-    provider = mk("ai_providers", {"kind": "openai", "label": "provider"})
+    # From 1700008810 on (ROUNDS-14-L02), only PocketBase's AI hook routes
+    # write providers, saved keys, and model lists, so these go in with the
+    # admin token, through the same owner triggers every writer meets. A
+    # database built on earlier migrations (the demo containment check)
+    # still takes the owner's create.
+    if has("ai_credentials"):
+        provider = mk_admin("ai_providers", {"kind": "openai", "label": "provider"})
+    else:
+        provider = mk("ai_providers", {"kind": "openai", "label": "provider"})
     mk("ai_settings", {})
-    # Only PocketBase's AI hook routes write saved keys and model lists
-    # (ROUNDS-14-L02), so these go in with the admin token, through the
-    # same owner triggers every writer meets.
     if provider:
         mk_admin("ai_credentials", credential_fields(provider))
         mk_admin("ai_provider_models", model_fields(provider))
