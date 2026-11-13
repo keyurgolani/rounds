@@ -200,7 +200,7 @@ def test_models_route_skips_unusable_provider_rows(client):
                 "has_key": True,
                 "models": ["claude-sonnet-4-6"],
             },
-            {  # no saved key — unusable
+            {  # no saved key, so unusable
                 "id": "p2", "kind": "openai", "label": "NoKey",
                 "has_key": False,
                 "models": ["gpt-4o-mini"],
