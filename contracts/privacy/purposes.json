@@ -46,6 +46,7 @@
         { "field": "pb:resumes.data#/personalInfo/location", "omit": true },
         { "field": "pb:resume_variants.data" },
         { "field": "storage:rounds.resume.ats.*.cache.ai.v2" },
+        { "field": "storage:rounds.demo.resume.ats.*.cache.ai.v2" },
         { "field": "request:resume.improve#/context" }
       ],
       "outputScope": "The one field being edited, shown as a suggestion.", "toolAuthority": "none", "flag": "PAPER_FETCH",
@@ -83,8 +84,11 @@
         { "field": "pb:resume_variants.role_focus" },
         { "field": "pb:applications.job_description" },
         { "field": "storage:rounds.resume.tailor.*.jd" },
+        { "field": "storage:rounds.demo.resume.tailor.*.jd" },
         { "field": "storage:rounds.resume.tailor.*.roleFocus" },
-        { "field": "storage:rounds.resume.tailor.*.tone" }
+        { "field": "storage:rounds.demo.resume.tailor.*.roleFocus" },
+        { "field": "storage:rounds.resume.tailor.*.tone" },
+        { "field": "storage:rounds.demo.resume.tailor.*.tone" }
       ],
       "outputScope": "Highlights, the summary, and skill order; the server reattaches every field outside that scope.", "toolAuthority": "none", "flag": null,
       "manualPath": "Tailor the variant by hand.", "streaming": false,
@@ -103,7 +107,8 @@
         { "field": "pb:resume_variants.job_title" },
         { "field": "pb:resume_variants.tone" },
         { "field": "pb:applications.job_description" },
-        { "field": "storage:rounds.resume.tailor.*.jd" }
+        { "field": "storage:rounds.resume.tailor.*.jd" },
+        { "field": "storage:rounds.demo.resume.tailor.*.jd" }
       ],
       "outputScope": "A letter draft shown to the user; nothing saved.", "toolAuthority": "none", "flag": null,
       "manualPath": "Write the letter by hand.", "streaming": true,
@@ -143,7 +148,8 @@
         { "field": "pb:resume_variants.data" },
         { "field": "pb:resume_variants.job_description" },
         { "field": "pb:applications.job_description" },
-        { "field": "storage:rounds.resume.ats.*.jd" }
+        { "field": "storage:rounds.resume.ats.*.jd" },
+        { "field": "storage:rounds.demo.resume.ats.*.jd" }
       ],
       "outputScope": "An AI ATS answer shown beside the rule-based one (storage:rounds.resume.ats.*.cache.ai.v2).", "toolAuthority": "none", "flag": null,
       "manualPath": "The rule-based ATS check, which sends nothing.", "streaming": false,

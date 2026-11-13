@@ -161,6 +161,24 @@ describe('privacy: coverage', () => {
     assert.match(findings[0].message, /storage:rounds:overlay-example/);
   });
 
+  it('fails a new key built through localKey, as it is and under the demo-only prefix', () => {
+    const file = 'frontend/src/lib/overlayDemoExample.ts';
+    const text = "import { localKey } from './demoKeys';\nexport const remember = (isDemo: boolean) => localStorage.setItem(localKey('rounds.overlay.demoExample', isDemo), '1');\n";
+    const findings = check({ files: { [file]: text } });
+    only(findings, 'FIELD_UNCLASSIFIED');
+    assert.deepEqual(findings.map((f) => /storage:\S+/.exec(f.message)[0]).sort(), ['storage:rounds.demo.overlay.demoExample', 'storage:rounds.overlay.demoExample']);
+    const plain = { id: 'storage:rounds.overlay.demoExample', class: 'Private', kind: 'metadata', row: 'view-state' };
+    const one = check({ files: { [file]: text, ...edit(FIELD_MAP, (m) => { m.entries.push(plain); }) } });
+    only(one, 'FIELD_UNCLASSIFIED');
+    assert.equal(one.length, 1);
+    assert.match(one[0].message, /storage:rounds\.demo\.overlay\.demoExample /);
+    clean(check({ files: { [file]: text, ...edit(FIELD_MAP, (m) => { m.entries.push(plain, { ...plain, id: 'storage:rounds.demo.overlay.demoExample' }); }) } }));
+    // A key whose start can't tell whether `rounds.` drops leaves the demo account's key unresolved.
+    const undecided = check({ files: { [file]: text.replace("'rounds.overlay.demoExample'", '`${String(isDemo)}.overlay`') } });
+    assert.deepEqual(codes(undecided), ['FIELD_UNCLASSIFIED', 'PRIVACY_STORAGE_UNRESOLVED']);
+    assert.deepEqual(undecided.filter((f) => f.code === 'PRIVACY_STORAGE_UNRESOLVED').map((f) => `${f.path}:${f.line}`), [`${file}:2`]);
+  });
+
   it('fails a new property on a stored definition\'s schema', () => {
     const used = definitionUse(real).used.find((d) => d.name === 'manifest');
     const findings = check({ files: edit(used.path, (s) => { s.properties = { ...s.properties, overlay_note: { type: 'string' } }; }) });

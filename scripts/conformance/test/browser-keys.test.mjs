@@ -65,6 +65,66 @@ describe('browser keys: resolution', () => {
   });
 });
 
+// frontend/src/lib/demoKeys.ts in #230's shape, with its prefix, the text a
+// key drops, or the body of localKey replaced.
+const DEMO = 'frontend/src/lib/demoKeys.ts';
+const TAB = 'frontend/src/pages/Tab.tsx';
+const SHAPED = (drop) => `  if (!isDemo) return key;\n  return DEMO_KEY_PREFIX + (key.startsWith('${drop}') ? key.slice('${drop}'.length) : key);\n`;
+const demoKeys = ({ prefix = 'rounds.demo.', body = SHAPED('rounds.') } = {}) => `export const DEMO_KEY_PREFIX = '${prefix}';\n\nexport function localKey(key: string, isDemo: boolean): string {\n${body}}\n`;
+const writeThrough = (call) => `import { localKey } from '../lib/demoKeys';\nexport function f(isDemo: boolean) {\n  const k = crypto.randomUUID();\n  localStorage.setItem(${call}, '1');\n}\n`;
+
+describe('browser keys: the demo account\'s prefix', () => {
+  it('follows localKey to both keys, through a constant, a template, and a wrapper', () => {
+    const out = extract({
+      [DEMO]: demoKeys(),
+      'frontend/src/hooks/usePersisted.ts': 'export function usePersisted(key: string, v: string) {\n  localStorage.setItem(key, v);\n}\n',
+      [TAB]: [
+        "import { localKey } from '../lib/demoKeys';",
+        "import { usePersisted } from '../hooks/usePersisted';",
+        'export function Tab({ id, isDemo }: { id?: string; isDemo: boolean }) {',
+        "  const persistKey = localKey(`rounds.tab.${id ?? 'untitled'}`, isDemo);",
+        "  usePersisted(`${persistKey}.jd`, '');",
+        "  localStorage.setItem(localKey('legacy.flag', isDemo), '1');",
+        '  return null;',
+        '}',
+        '',
+      ].join('\n'),
+    });
+    assert.deepEqual(Object.keys(families(out)), ['legacy.flag', 'rounds.demo.legacy.flag', 'rounds.demo.tab.*.jd', 'rounds.tab.*.jd']);
+    assert.deepEqual(out.families.get('rounds.demo.tab.*.jd').writes, ['frontend/src/hooks/usePersisted.ts:2', `${TAB}:5`]);
+    assert.deepEqual(out.unresolved, []);
+  });
+
+  it('reads the prefix and the dropped text from the module, under any import name', () => {
+    const call = "import { localKey as lk } from '../lib/demoKeys';\nexport const f = (d: boolean) => localStorage.setItem(lk('app.notes', d), '1');\n";
+    assert.deepEqual(Object.keys(families(extract({ [DEMO]: demoKeys({ prefix: 'visitor.', body: SHAPED('app.') }), [TAB]: call }))), ['app.notes', 'visitor.notes']);
+    assert.deepEqual(Object.keys(families(extract({ [DEMO]: demoKeys(), [TAB]: call }))), ['app.notes', 'rounds.demo.app.notes']);
+  });
+
+  it('fails closed when localKey changes shape, or a key\'s start leaves the drop undecided', () => {
+    const changed = extract({ [DEMO]: demoKeys({ body: '  return isDemo ? `${DEMO_KEY_PREFIX}${key}` : key;\n' }), [TAB]: writeThrough("localKey('rounds.notes', isDemo)") });
+    assert.deepEqual(families(changed), {});
+    assert.deepEqual(changed.unresolved, [`${TAB}:4`]);
+    const undecided = extract({ [DEMO]: demoKeys(), [TAB]: writeThrough('localKey(`${k}.notes`, isDemo)') });
+    assert.deepEqual(Object.keys(families(undecided)), ['*.notes']);
+    assert.deepEqual(undecided.unresolved, [`${TAB}:4`]);
+    const inTemplate = extract({ [DEMO]: demoKeys(), [TAB]: writeThrough("`${localKey('rounds.notes', isDemo)}.v1`") });
+    assert.deepEqual(families(inTemplate), {});
+    assert.deepEqual(inTemplate.unresolved, [`${TAB}:4`]);
+  });
+
+  it('follows only the demo keys module\'s localKey', () => {
+    const own = extract({ [DEMO]: demoKeys(), [TAB]: "function localKey(k: string) { return `own.${k}`; }\nlocalStorage.setItem(localKey('x'), '1');\n" });
+    assert.deepEqual(Object.keys(families(own)), ['own.x']);
+    const other = extract({ [DEMO]: demoKeys(), 'frontend/src/lib/other.ts': 'export function localKey(k: string) { return k; }\n', [TAB]: writeThrough("localKey('rounds.notes', isDemo)").replace('../lib/demoKeys', '../lib/other') });
+    assert.deepEqual(families(other), {});
+    assert.deepEqual(other.unresolved, [`${TAB}:4`]);
+    const absent = extract({ [TAB]: writeThrough("localKey('rounds.notes', isDemo)") });
+    assert.deepEqual(families(absent), {});
+    assert.deepEqual(absent.unresolved, [`${TAB}:4`]);
+  });
+});
+
 describe('browser keys: the audited revision', () => {
   it('resolves every storage call at 62d4eae, the login streak included', () => {
     const out = extractBrowserKeys(createContext(REPO_ROOT).tree('62d4eae'));
