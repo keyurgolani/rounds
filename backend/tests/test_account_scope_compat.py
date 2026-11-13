@@ -10,8 +10,10 @@ Each test drives a real write endpoint with the PocketBase layer mocked to
 record the written payload, then asserts the invariant: a create names the
 caller, an update omits `user` or resends the caller's own id. No runner
 module writes an older share link or its views since ROUNDS-00B-L06 stage
-1, which a static check below asserts. The two-account harness proves the
-live rules accept exactly these shapes.
+1, which a static check below asserts, and since ROUNDS-14-L02 stage A
+the provider writes go through PocketBase's AI hook routes, which take the
+account from the bearer, so none of them names one. The two-account
+harness proves the live rules accept exactly these shapes.
 """
 from pathlib import Path
 from unittest.mock import patch
@@ -60,51 +62,79 @@ class _Recorder:
 
 
 # ---------------------------------------------------------------------------
-# ai_providers
+# ai_providers: since ROUNDS-14-L02 stage A the runner writes no provider
+# row through REST at all. PocketBase's AI hook routes write them, with the
+# account from the caller's bearer, so no write the runner sends names one.
 # ---------------------------------------------------------------------------
 
 
-def test_create_provider_names_the_caller(client):
-    rec = _Recorder()
-    with patch("routers.ai.current_user", _fake_user), patch("routers.ai.pb_post", rec.post):
+class _Hooks:
+    """The AI hook routes the runner calls, recording each body."""
+
+    def __init__(self):
+        self.calls = []
+
+    async def call(self, _user, path, payload):
+        self.calls.append((path, dict(payload)))
+        view = {"id": payload.get("id") or payload.get("provider") or "prov00000000001", "kind": payload.get("kind", "openai"),
+                "label": payload.get("label", "x"), "base_url": "", "has_key": False, "models": [], "models_cached_at": ""}
+        if path.endswith("/list"):
+            return {"v": "ai-custody/v1", "providers": [view]}
+        return {"v": "ai-custody/v1", "provider": view}
+
+
+def _no_rest(*_args, **_kwargs):
+    raise AssertionError("a provider row was written through REST")
+
+
+def _assert_no_write_names_an_account(calls):
+    assert calls, "expected at least one write"
+    for path, body in calls:
+        assert "user" not in body and CALLER not in str(body), path
+
+
+def test_create_provider_writes_through_the_hook_and_names_no_account(client):
+    hooks = _Hooks()
+    with patch("routers.ai.current_user", _fake_user), patch("routers.ai.pb_post", _no_rest), \
+         patch("app.provider_gateway.custody._call", hooks.call):
         res = client.post("/api/ai/providers", json={"kind": "openai", "label": "Prov"})
     assert res.status_code == 200
-    _assert_create_names_caller([w for w in rec.writes if _collection(w[1]) == "ai_providers"])
+    assert [p for p, _b in hooks.calls] == ["/providers/create"]
+    _assert_no_write_names_an_account(hooks.calls)
 
 
-def test_update_provider_does_not_reassign(client):
-    rec = _Recorder()
-
-    async def fake_load_provider(_user, provider_id):
-        return {"id": provider_id, "kind": "openai", "label": "x", "base_url": "",
-                "encrypted_key": "", "key_iv": "", "models_cache": []}
-
-    with patch("routers.ai.current_user", _fake_user), \
-         patch("routers.ai._load_provider", fake_load_provider), \
-         patch("routers.ai.pb_patch", rec.patch):
-        res = client.patch("/api/ai/providers/p1", json={"kind": "openai", "label": "x2"})
+def test_update_provider_writes_through_the_hook_and_names_no_account(client):
+    hooks = _Hooks()
+    with patch("routers.ai.current_user", _fake_user), patch("routers.ai.pb_patch", _no_rest), \
+         patch("app.provider_gateway.custody._call", hooks.call):
+        res = client.patch("/api/ai/providers/prov00000000001", json={"kind": "openai", "label": "x2", "key": ""})
     assert res.status_code == 200
-    _assert_update_keeps_owner(rec.writes)
+    assert [p for p, _b in hooks.calls] == ["/providers/update"]
+    _assert_no_write_names_an_account(hooks.calls)
 
 
-def test_refresh_models_update_does_not_reassign(client):
-    rec = _Recorder()
+def test_refresh_models_writes_through_the_hook_and_names_no_account(client):
+    from app.provider_gateway import custody
 
-    async def fake_load_provider(_user, provider_id):
-        return {"id": provider_id, "kind": "openai", "encrypted_key": "enc", "key_iv": "iv",
-                "base_url": "", "models_cache": []}
+    hooks = _Hooks()
+
+    async def fake_key_for(_user, provider_id, model):
+        assert model is None
+        return custody.Opened(provider_id=provider_id, kind="openai", base_url="", api_key="sk-test")
 
     async def fake_fetch_models(_kind, _key, _base, **_kwargs):
         return ["model-a", "model-b"]
 
-    with patch("routers.ai.current_user", _fake_user), \
-         patch("routers.ai._load_provider", fake_load_provider), \
-         patch("routers.ai.decrypt", lambda *_a, **_k: "sk-test"), \
-         patch("routers.ai._fetch_models", fake_fetch_models), \
-         patch("routers.ai.pb_patch", rec.patch):
-        res = client.post("/api/ai/providers/p1/refresh-models")
+    with patch("routers.ai.current_user", _fake_user), patch("routers.ai.pb_patch", _no_rest), \
+         patch("app.provider_gateway.custody._call", hooks.call), \
+         patch("app.provider_gateway.custody.key_for", fake_key_for), \
+         patch("routers.ai._fetch_models", fake_fetch_models):
+        res = client.post("/api/ai/providers/prov00000000001/refresh-models")
     assert res.status_code == 200
-    _assert_update_keeps_owner(rec.writes)
+    writes = [(p, b) for p, b in hooks.calls if not p.endswith("/list")]
+    assert writes == [("/providers/models", {"provider": "prov00000000001", "models": ["model-a", "model-b"],
+                                             "verification": "registry", "replace": True})]
+    _assert_no_write_names_an_account(writes)
 
 
 # ---------------------------------------------------------------------------

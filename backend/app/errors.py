@@ -89,6 +89,18 @@ CODES: dict[str, int] = {
     "capability_version_conflict": 409,
     "capability_revoked": 409,
     "capability_expired": 409,
+    # Saved AI provider keys (ROUNDS-14-L02 stage A): the keyring has no
+    # usable root, PocketBase's AI routes don't answer, the provider is
+    # missing or another account's, no usable key is saved, the address
+    # isn't the one the key was entered for, the model isn't on the
+    # provider's list, and a demo account's write.
+    "keyring_unavailable": 503,
+    "providers_unavailable": 503,
+    "provider_unavailable": 404,
+    "credential_missing": 400,
+    "credential_required": 400,
+    "model_unregistered": 400,
+    "demo_not_permitted": 403,
 }
 
 # The fixed sentence each code answers with unless a caller passes its own.
@@ -131,6 +143,15 @@ DETAILS: dict[str, str] = {
     "capability_version_conflict": "This link changed since the list loaded. Reload it to continue.",
     "capability_revoked": "This link was revoked.",
     "capability_expired": "This link has expired.",
+    "keyring_unavailable": "Saved AI provider keys can't be used on this server right now.",
+    "providers_unavailable": "AI providers can't be loaded right now. Try again shortly.",
+    "provider_unavailable": "This AI provider isn't available.",
+    "credential_missing": "This provider has no usable API key. Enter the key again in Settings.",
+    "credential_required": (
+        "A saved key works only with the address it was entered for. Enter the API key again to use this address."
+    ),
+    "model_unregistered": "This model isn't on the provider's model list. Refresh the list or choose another model.",
+    "demo_not_permitted": "Not available in the demo.",
 }
 
 # Pydantic error type a field validator raises for an over-limit value.

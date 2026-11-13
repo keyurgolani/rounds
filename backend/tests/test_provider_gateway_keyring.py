@@ -93,15 +93,27 @@ def test_derive_refuses_a_label_it_doesnt_list(label):
         keyring.derive(label)
 
 
-def test_the_keyring_is_the_only_place_that_runs_hkdf():
+KEY_WORK = {
+    "derives a key": re.compile(r"\bHKDF\("),
+    "seals or opens with AES-GCM": re.compile(r"\bAESGCM\("),
+    "reads the root itself": re.compile(r"""(os\.environ\.get|os\.getenv|os\.environ\[)\s*\(?\s*["']AI_KEY_SECRET["']"""),
+}
+
+
+@pytest.mark.parametrize("what", KEY_WORK)
+def test_only_the_keyring_does_key_work(what):
     found = []
     for path in sorted(BACKEND.rglob("*.py")):
         rel = path.relative_to(BACKEND).as_posix()
         if rel.startswith(("tests/", "app/contracts/")) or rel == "app/provider_gateway/keyring.py":
             continue
-        if re.search(r"\bHKDF\(", path.read_text(encoding="utf-8")):
+        if KEY_WORK[what].search(path.read_text(encoding="utf-8")):
             found.append(rel)
-    assert found == []
+    assert found == [], f"{found} {what} outside app/provider_gateway/keyring.py"
+
+
+def test_the_old_provider_key_module_is_gone():
+    assert not (BACKEND / "app" / "crypto.py").exists()
 
 
 # ---- the root ---------------------------------------------------------------

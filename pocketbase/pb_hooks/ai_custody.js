@@ -139,8 +139,13 @@ function providerFields(data) {
   return { kind: data.kind, label, base_url: baseUrl };
 }
 
+// An optional provider id lists that one provider of the caller's, or none.
 function checkList(data) {
-  return only(data || {}, []) ? {} : null;
+  const value = data || {};
+  if (!only(value, ["provider"])) return null;
+  if (value.provider === undefined) return { provider: null };
+  if (typeof value.provider !== "string" || !RECORD_ID.test(value.provider)) return null;
+  return { provider: value.provider };
 }
 
 function checkCreate(data) {
@@ -266,7 +271,11 @@ function view(store, row) {
   return providerView(row, store.credential(row.id), store.models(row.id));
 }
 
-function list(store, account) {
+function list(store, account, input) {
+  if (input.provider !== null) {
+    const row = owned(store, account, input.provider);
+    return ok({ providers: row === null ? [] : [view(store, row)] });
+  }
   const rows = store.providers(account.id, PROVIDERS_MAX);
   return ok({ providers: rows.map((row) => view(store, row)) });
 }

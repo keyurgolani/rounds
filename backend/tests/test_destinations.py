@@ -16,6 +16,7 @@ import pytest
 
 from app import destinations, gates
 from app.errors import TypedError
+from app.provider_gateway import custody
 
 
 @pytest.fixture
@@ -198,6 +199,16 @@ def _provider_user():
     return {"id": "u1", "token": "test-token-placeholder", "record": {"id": "u1"}}
 
 
+def _opened(kind: str, base_url: str):
+    """custody.key_for, past its checks: the saved key for a provider at
+    ``base_url``. The resolvers vet that address before any call."""
+
+    async def key_for(_user, provider_id, _model):
+        return custody.Opened(provider_id=provider_id, kind=kind, base_url=base_url, api_key="test-key")
+
+    return key_for
+
+
 def test_creating_a_provider_on_loopback_is_refused_before_saving(client, monkeypatch, private_network):
     from routers import ai
 
@@ -208,7 +219,7 @@ def test_creating_a_provider_on_loopback_is_refused_before_saving(client, monkey
         pytest.fail("the provider was saved")
 
     monkeypatch.setattr(ai, "current_user", user)
-    monkeypatch.setattr(ai, "pb_post", save)
+    monkeypatch.setattr(custody, "_call", save)
     res = client.post(
         "/api/ai/providers",
         json={"kind": "openai-compatible", "label": "Local", "base_url": "http://127.0.0.1:11434/v1", "key": "test-key"},
@@ -223,15 +234,11 @@ def test_updating_a_provider_to_a_service_name_is_refused_before_saving(client, 
     async def user(_request):
         return _provider_user()
 
-    async def load(_user, _provider_id):
-        return {"id": "p1", "user": "u1", "kind": "openai-compatible", "base_url": ""}
-
     async def save(*_args, **_kwargs):
         pytest.fail("the provider was saved")
 
     monkeypatch.setattr(ai, "current_user", user)
-    monkeypatch.setattr(ai, "_load_provider", load)
-    monkeypatch.setattr(ai, "pb_patch", save)
+    monkeypatch.setattr(custody, "_call", save)
     res = client.patch(
         "/api/ai/providers/p1",
         json={"kind": "openai-compatible", "label": "X", "base_url": "http://pocketbase:8090/api"},
@@ -246,12 +253,8 @@ def test_a_stored_provider_on_a_private_address_is_refused_before_any_call(monke
     async def settings(_user):
         return {"text_provider": "p1", "text_model": "m"}
 
-    async def load(_user, _provider_id):
-        return {"id": "p1", "user": "u1", "kind": "openai-compatible", "base_url": "http://10.1.2.3:8000/v1", "encrypted_key": "e", "key_iv": "i"}
-
     monkeypatch.setattr(ai, "_load_settings", settings)
-    monkeypatch.setattr(ai, "_load_provider", load)
-    monkeypatch.setattr(ai, "decrypt", lambda *_a: "test-key")
+    monkeypatch.setattr(custody, "key_for", _opened("openai-compatible", "http://10.1.2.3:8000/v1"))
     with pytest.raises(TypedError) as err:
         asyncio.run(ai._active_text_config(_provider_user()))
     assert err.value.code == "destination_denied"
@@ -383,12 +386,8 @@ def test_a_configured_provider_is_looked_up_once_for_the_config_and_the_call(mon
     async def settings(_user):
         return {"text_provider": "p1", "text_model": "m"}
 
-    async def load(_user, _provider_id):
-        return {"id": "p1", "user": "u1", "kind": "anthropic-compatible", "base_url": PROVIDER_URL, "encrypted_key": "e", "key_iv": "i"}
-
     monkeypatch.setattr(ai, "_load_settings", settings)
-    monkeypatch.setattr(ai, "_load_provider", load)
-    monkeypatch.setattr(ai, "decrypt", lambda *_a: "test-key")
+    monkeypatch.setattr(custody, "key_for", _opened("anthropic-compatible", PROVIDER_URL))
     resolves.answers["models.example.com"] = [PUBLIC]
     wire.respond = lambda request: httpx.Response(200, json=MESSAGES_REPLY)
 
@@ -411,12 +410,12 @@ def test_testing_a_provider_looks_it_up_once(client, monkeypatch, private_networ
         return _provider_user()
 
     async def load(_user, _provider_id):
-        return {"id": "p1", "user": "u1", "kind": "anthropic-compatible", "base_url": PROVIDER_URL,
-                "encrypted_key": "e", "key_iv": "i", "models_cache": ["m"]}
+        return {"id": "p1", "kind": "anthropic-compatible", "label": "p", "base_url": PROVIDER_URL, "has_key": True,
+                "models": ["m"], "models_cached_at": ""}
 
     monkeypatch.setattr(ai, "current_user", user)
     monkeypatch.setattr(ai, "_load_provider", load)
-    monkeypatch.setattr(ai, "decrypt", lambda *_a: "test-key")
+    monkeypatch.setattr(custody, "key_for", _opened("anthropic-compatible", PROVIDER_URL))
     resolves.answers["models.example.com"] = [PUBLIC]
     wire.respond = lambda request: httpx.Response(200, json=MESSAGES_REPLY)
     res = client.post("/api/ai/providers/p1/test")
@@ -527,12 +526,7 @@ def test_a_client_that_follows_redirects_checks_every_hop(private_network, resol
 def test_a_chosen_provider_on_a_denied_address_is_refused_in_design_practice(monkeypatch, private_network):
     from routers import sd_practice
 
-    async def load(_user, _provider_id):
-        return {"id": "p1", "user": "u1", "kind": "openai-compatible", "base_url": "http://169.254.169.254/v1",
-                "encrypted_key": "e", "key_iv": "i"}
-
-    monkeypatch.setattr(sd_practice, "_load_provider", load)
-    monkeypatch.setattr(sd_practice, "decrypt", lambda *_a: "test-key")
+    monkeypatch.setattr(custody, "key_for", _opened("openai-compatible", "http://169.254.169.254/v1"))
     with pytest.raises(TypedError) as err:
         asyncio.run(sd_practice._resolve_text_cfg(_provider_user(), "p1", "m"))
     assert err.value.code == "destination_denied"

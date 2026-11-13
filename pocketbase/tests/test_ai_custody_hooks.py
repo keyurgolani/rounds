@@ -115,10 +115,18 @@ def test_a_key_that_also_sits_under_another_account_counts_as_no_key():
     assert res["body"]["providers"][0]["has_key"] is False
 
 
-@pytest.mark.parametrize("data", [{"provider": P_A}, {"x": 1}, []])
-def test_list_takes_no_fields(data):
+@pytest.mark.parametrize("data", [{"provider": "SHORT"}, {"provider": None}, {"x": 1}, []])
+def test_list_takes_only_a_provider_id(data):
     (res,) = run([{"op": "list", "account": A, "data": data}])["results"]
     assert error(res) == (400, "invalid_request")
+
+
+def test_a_list_of_one_holds_the_callers_provider_or_nothing():
+    mine, theirs, missing = run([{"op": "list", "account": A, "data": {"provider": P_A}},
+                                 {"op": "list", "account": A, "data": {"provider": P_B}},
+                                 {"op": "list", "account": A, "data": {"provider": "provnone0000001"}}])["results"]
+    assert [p["id"] for p in mine["body"]["providers"]] == [P_A]
+    assert theirs == missing == {"status": 200, "body": {"v": "ai-custody/v1", "providers": []}}
 
 
 def test_a_read_carries_the_callers_ciphertext_only():

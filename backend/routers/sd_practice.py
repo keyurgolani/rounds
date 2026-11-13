@@ -34,13 +34,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
 from app import destinations
-from app.crypto import decrypt
 from app.pb_auth import current_user
+from app.provider_gateway import custody
 from routers.ai import (
     _ANTHROPIC_DEFAULT_BASE,
     _active_text_config,
     _friendly_error,
-    _load_provider,
     _request_id,
 )
 
@@ -415,21 +414,13 @@ async def _resolve_text_cfg(
     user: dict, provider_id: str | None, model: str | None
 ) -> dict:
     if provider_id and model:
-        provider = await _load_provider(user, provider_id)
-        api_key = decrypt(
-            provider.get("encrypted_key") or "", provider.get("key_iv") or ""
-        )
-        if not api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="No API key on file for the chosen provider.",
-            )
-        destination = await destinations.vet(provider.get("base_url") or "")
+        opened = await custody.key_for(user, provider_id, model)
+        destination = await destinations.vet(opened.base_url)
         return {
-            "kind": provider.get("kind") or "provider",
+            "kind": opened.kind or "provider",
             "model": model,
-            "api_key": api_key,
-            "base_url": provider.get("base_url") or "",
+            "api_key": opened.api_key,
+            "base_url": opened.base_url,
             "destination": destination,
         }
     return await _active_text_config(user)
