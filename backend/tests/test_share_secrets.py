@@ -136,6 +136,31 @@ def test_without_the_secret_nothing_is_derived(monkeypatch):
         share_secrets.throttle_keys("a" * 32, "b" * 64, True)
 
 
+DEV_PLACEHOLDER = "rounds-dev-key-DO-NOT-USE-IN-PROD"
+
+
+@pytest.mark.parametrize("opt_in", [None, "", "false", "0", "no"])
+def test_the_development_placeholder_derives_nothing_without_its_opt_in(monkeypatch, opt_in):
+    monkeypatch.setenv("AI_KEY_SECRET", DEV_PLACEHOLDER)
+    if opt_in is None:
+        monkeypatch.delenv("ROUNDS_ALLOW_DEV_KEY", raising=False)
+    else:
+        monkeypatch.setenv("ROUNDS_ALLOW_DEV_KEY", opt_in)
+    with pytest.raises(share_secrets.Unavailable):
+        share_secrets.digest(share_secrets.new_token())
+    with pytest.raises(share_secrets.Unavailable):
+        share_secrets.ip_pseudonym("203.0.113.7")
+
+
+@pytest.mark.parametrize("opt_in", ["true", "TRUE", "1", "yes"])
+def test_the_development_compose_files_opt_in_to_the_placeholder(monkeypatch, opt_in):
+    monkeypatch.setenv("AI_KEY_SECRET", DEV_PLACEHOLDER)
+    monkeypatch.setenv("ROUNDS_ALLOW_DEV_KEY", opt_in)
+    token = share_secrets.new_token()
+    want = hmac.new(_hkdf(b"rounds/share-digest/v1", DEV_PLACEHOLDER), token.encode("ascii"), hashlib.sha256).hexdigest()
+    assert share_secrets.digest(token) == want
+
+
 def test_the_labels_and_key_versions_are_pinned():
     assert share_secrets.KEY_ID == "sd1" and share_secrets.DIGEST_KEY_VERSION == 1
     assert share_secrets.DIGEST_INFO == b"rounds/share-digest/v1"
@@ -150,7 +175,8 @@ def test_every_key_from_the_secret_is_separate():
         "receipt": _hkdf(b"rounds/legacy-share-receipt/v1"),
         "obs": _hkdf(b"rounds/obs/account-pseudonym/v1"),
         "scan": _hkdf(b"rounds/legacy-snapshot-scan/v1"),
-        # app.crypto's AES key.
+        "credential": _hkdf(b"rounds/credential-wrap/v1"),
+        # The key provider keys saved before the keyring are wrapped under.
         "aes": hashlib.sha256(SECRET.encode()).digest(),
     }
     assert len(set(keys.values())) == len(keys)

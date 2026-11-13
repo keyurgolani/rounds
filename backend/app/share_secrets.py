@@ -7,19 +7,20 @@ under. Rounds stores only that digest, hex HMAC-SHA256 under a key HKDF-SHA256
 derives from ``AI_KEY_SECRET``. The bearer itself lives in runner memory and
 in the one response that issues it.
 
-Three labels share that secret, each apart from ``app.crypto``'s AES key and
-``app.obs``'s pseudonym key:
+The keyring (``app.provider_gateway.keyring``) derives these keys, each
+under its own label and apart from every other key it makes:
 
   rounds/share-digest/v1          the bearer digest, key version 1
   rounds/share-throttle/v1        the resolver throttle's keys
-  rounds/legacy-share-receipt/v1  reserved for ROUNDS-00B-L06
+  rounds/legacy-share-receipt/v1  ROUNDS-00B-L06's signed receipts
 
 The resolver throttle counts by keys made under the second label from a
 client address pseudonym and the submitted bearer's digest. So a throttle
 row holds neither an address nor a digest, and the throttle can count before
 any lookup, whether or not the bearer is live.
 
-Only the runner holds these keys. With ``AI_KEY_SECRET`` unset, every
+Only the runner holds these keys. With ``AI_KEY_SECRET`` unset, or set to
+the development placeholder without ``ROUNDS_ALLOW_DEV_KEY=true``, every
 derivation raises ``Unavailable``.
 """
 from __future__ import annotations
@@ -28,19 +29,12 @@ import base64
 import hashlib
 import hmac
 import ipaddress
-import logging
-import os
 import re
 import secrets
 
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from app.provider_gateway import keyring
 
-_log = logging.getLogger(__name__)
-
-SECRET_ENV = "AI_KEY_SECRET"
-# app.crypto's development placeholder: accepted with a warning, as there.
-_DEV_SECRET = "rounds-dev-key-DO-NOT-USE-IN-PROD"
+SECRET_ENV = keyring.SECRET_ENV
 
 # The current key id, and the key version its digests are stored under.
 KEY_ID = "sd1"
@@ -51,10 +45,10 @@ TOKEN_BYTES = 16
 WELL_FORMED = re.compile(r"sd[0-9]{1,3}_[A-Za-z0-9_-]{22}")
 DIGEST = re.compile(r"[0-9a-f]{64}")
 
-DIGEST_INFO = b"rounds/share-digest/v1"
-THROTTLE_INFO = b"rounds/share-throttle/v1"
-# Reserved for ROUNDS-00B-L06's receipts; nothing here derives it.
-LEGACY_RECEIPT_INFO = b"rounds/legacy-share-receipt/v1"
+DIGEST_INFO = keyring.SHARE_DIGEST
+THROTTLE_INFO = keyring.SHARE_THROTTLE
+# ROUNDS-00B-L06's receipts, which app.legacy_receipt signs.
+LEGACY_RECEIPT_INFO = keyring.LEGACY_SHARE_RECEIPT
 
 # The throttle's scopes, in the order the resolver counts them: a client's
 # resolves in a minute, its password tries on one bearer in 15 minutes, and a
@@ -69,8 +63,8 @@ PSEUDONYM = re.compile(r"[0-9a-f]{32}")
 IPV6_PREFIX_BYTES = 8
 
 
-class Unavailable(Exception):
-    """``AI_KEY_SECRET`` is unset, so no share key can be derived."""
+# No usable AI_KEY_SECRET, so no share key can be derived.
+Unavailable = keyring.Unavailable
 
 
 # ---------------------------------------------------------------------------
@@ -102,22 +96,8 @@ def current(value: object) -> bool:
 # Keys
 # ---------------------------------------------------------------------------
 
-_warned = False
-
-
-def _root() -> bytes:
-    global _warned
-    raw = os.environ.get(SECRET_ENV, "")
-    if not raw:
-        raise Unavailable
-    if raw == _DEV_SECRET and not _warned:
-        _log.warning("%s is the development placeholder, so share links made here work only with it.", SECRET_ENV)
-        _warned = True
-    return raw.encode("utf-8")
-
-
 def _derive(info: bytes) -> bytes:
-    return HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=info).derive(_root())
+    return keyring.derive(info)
 
 
 def digest(token: str) -> str:

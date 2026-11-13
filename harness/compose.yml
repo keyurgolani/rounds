@@ -113,6 +113,10 @@ services:
       # Phase 3o (ROUNDS-00B-L06) points both runners at the recorder.
       - POCKETBASE_URL=${RUNNER_POCKETBASE_URL:-http://pocketbase:8090}
       - AI_KEY_SECRET=${AI_KEY_SECRET:-rounds-dev-key-DO-NOT-USE-IN-PROD}
+      # The placeholder above is public, so it counts only where a compose
+      # file opts in, as the development and test ones do; elsewhere saved
+      # AI provider keys and share links answer that they're unavailable.
+      - ROUNDS_ALLOW_DEV_KEY=true
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL:-ops@harness.test}
       - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD:-harness-admin-pw-123}
       - ROUNDS_GATE_ENFORCE_IDEMPOTENCY=${ROUNDS_GATE_ENFORCE_IDEMPOTENCY:-}

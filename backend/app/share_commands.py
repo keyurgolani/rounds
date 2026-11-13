@@ -187,7 +187,7 @@ def _bearer() -> tuple[str, str]:
     try:
         return token, share_secrets.digest(token)
     except share_secrets.Unavailable:
-        _log.warning("share commands: %s is unset, so no share link can be made", share_secrets.SECRET_ENV)
+        _log.warning("share commands: %s isn't usable here, so no share link can be made", share_secrets.SECRET_ENV)
         raise TypedError("shares_unavailable") from None
 
 
