@@ -2,7 +2,7 @@
 # an internal one only PocketBase and the snapshot materializer share; only
 # the nginx-fronted frontend's port 80 is exposed. By default this
 # file pulls published Docker Hub images. Set ROUNDS_IMAGE_TAG or the
-# per-service image variables below to pin a release or use GHCR.
+# per-service image variables below to pin a release.
 #
 #   PB_ADMIN_EMAIL=ops@example.com PB_ADMIN_PASSWORD=<strong-password> \
 #     AI_KEY_SECRET=<random-32-byte-hex> \

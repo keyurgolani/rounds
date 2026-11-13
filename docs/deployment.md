@@ -28,17 +28,9 @@ The production compose file pulls published Docker Hub images by default:
 - `keyurgolani/rounds-pdf-renderer`
 - `keyurgolani/rounds-materializer`
 
-The same images are also published to GHCR:
-
-- `ghcr.io/keyurgolani/rounds-frontend`
-- `ghcr.io/keyurgolani/rounds-pocketbase`
-- `ghcr.io/keyurgolani/rounds-runner`
-- `ghcr.io/keyurgolani/rounds-pdf-renderer`
-- `ghcr.io/keyurgolani/rounds-materializer`
-
 Set `ROUNDS_IMAGE_TAG` to pin all services to a tag. Set `ROUNDS_FRONTEND_IMAGE`, `ROUNDS_POCKETBASE_IMAGE`, `ROUNDS_RUNNER_IMAGE`, `ROUNDS_PDF_RENDERER_IMAGE`, or `ROUNDS_MATERIALIZER_IMAGE` to use a different registry or per-service tag. Left unset, the tag is `latest`.
 
-Docker Hub publishing requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` GitHub repository secrets. GHCR publishing uses `GITHUB_TOKEN`.
+Docker Hub publishing requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` GitHub repository secrets.
 
 ## Image Tags
 
@@ -90,6 +82,8 @@ PocketBase applies migrations automatically:
 3. Optional admin bootstrap from `PB_ADMIN_EMAIL` and `PB_ADMIN_PASSWORD`.
 
 The admin UI isn't served on your domain. [PocketBase Admin Access](operations.md#pocketbase-admin-access) shows how to reach it.
+
+After the first start, open Settings > Application in the admin UI and set the application name and URL for your install, such as `Rounds` and `https://rounds.example.com`. Until you do, they're PocketBase's defaults, `Acme` and `http://localhost:8090`.
 
 ## Backups
 

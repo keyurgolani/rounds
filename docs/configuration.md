@@ -26,7 +26,7 @@ Dev compose publishes its three ports on `127.0.0.1` only, since its admin login
 
 ## Production Images
 
-`docker-compose.prod.yml` pulls published Docker Hub images by default. Equivalent GHCR images are available for users who prefer GitHub Packages.
+`docker-compose.prod.yml` pulls published Docker Hub images by default.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -34,14 +34,6 @@ Dev compose publishes its three ports on `127.0.0.1` only, since its admin login
 | `ROUNDS_FRONTEND_IMAGE` | `keyurgolani/rounds-frontend:${ROUNDS_IMAGE_TAG}` | Full frontend image override. |
 | `ROUNDS_POCKETBASE_IMAGE` | `keyurgolani/rounds-pocketbase:${ROUNDS_IMAGE_TAG}` | Full PocketBase image override. |
 | `ROUNDS_RUNNER_IMAGE` | `keyurgolani/rounds-runner:${ROUNDS_IMAGE_TAG}` | Full runner image override. |
-
-GHCR example:
-
-```env
-ROUNDS_FRONTEND_IMAGE=ghcr.io/keyurgolani/rounds-frontend:latest
-ROUNDS_POCKETBASE_IMAGE=ghcr.io/keyurgolani/rounds-pocketbase:latest
-ROUNDS_RUNNER_IMAGE=ghcr.io/keyurgolani/rounds-runner:latest
-```
 
 ## Runner
 

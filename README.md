@@ -109,8 +109,6 @@ Production compose pulls published images from Docker Hub by default:
 - `keyurgolani/rounds-pocketbase`
 - `keyurgolani/rounds-runner`
 
-Equivalent images are also published to GHCR as `ghcr.io/keyurgolani/rounds-frontend`, `ghcr.io/keyurgolani/rounds-pocketbase`, and `ghcr.io/keyurgolani/rounds-runner`.
-
 PocketBase data lives in the `pb_data` Docker volume. Back it up regularly.
 
 ## Signup Policy
