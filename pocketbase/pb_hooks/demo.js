@@ -411,8 +411,8 @@ function secondsOf(text) {
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : 0;
 }
 
-// The jobs a worker may hold: the filters the sweep and the reset's count
-// read them with, one state each.
+// The jobs a worker may hold, as the reset's count reads them, one state
+// each.
 const HELD = ["account = {:id} && state = 'leased'", "account = {:id} && state = 'started'"];
 
 // How many of the account's code-run jobs a worker may still hold, so the
@@ -427,8 +427,7 @@ function heldJobs(dao, accountId) {
 // oldest is past the cap, or none changed in the quiet window. A job a
 // worker may hold decides nothing until it ends. An account with no such
 // row is reset when its profile isn't the seeded one. One that still has
-// a sign-in other than its password is reset at once, since none can be
-// added any more.
+// a sign-in other than its password is reset at once.
 function sweepReason(dao, account, now) {
   if (dao.findAllExternalAuthsByRecord(account).length > 0) return "account";
   let newest = null;

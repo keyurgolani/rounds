@@ -1172,7 +1172,7 @@ def test_a_stuck_job_waits_out_the_sweeps_until_it_ends_and_the_next_sweep_clear
 
 def test_the_sweep_clears_what_an_empty_demo_account_still_holds():
     # Nothing else to clear and the seeded profile, but a sign-in besides
-    # its password: none can be added any more, so it goes at once.
+    # its password: it goes at once.
     seeded = owned_tables([])
     seeded["users"][0] = dict(SEEDED_DEMO, id=DEMO_ID)
     auths = [{"id": "sgn000000000001", "recordId": DEMO_ID}, {"id": "sgn000000000002", "recordId": USER_ID}]

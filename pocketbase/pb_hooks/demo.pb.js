@@ -45,8 +45,8 @@ onRecordBeforeAuthWithOAuth2Request((e) => {
   });
 }, "users");
 
-// 3. A demo caller changes only its profile, and can't delete its account
-// or change its email.
+// 3. A demo caller changes nothing on its own users record, its profile
+// included, and can't delete its account or change its email.
 onRecordBeforeUpdateRequest((e) => {
   require(`${__hooks}/demo.js`).guardAccountUpdate(e);
 }, "users");
