@@ -150,21 +150,28 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
   // another tab, or cleared by another visitor's sign-out on the shared
   // demo account), it runs the bootstrap again, so new rows never point
   // at a campaign that no longer exists. "All active" (no selection)
-  // stays as it is while any campaign is left.
-  const refresh = useCallback(async () => {
-    if (!user) return;
-    const list = await listCampaigns();
-    const current = currentIdRef.current;
-    if (list.length > 0 && (current === null || list.some((c) => c.id === current))) {
-      setCampaigns(list);
-      return;
-    }
-    const fresh = list.length > 0 ? list : await campaignsWithDefault();
-    const next = await selectFrom(fresh, null);
-    setCampaigns(fresh);
-    setCurrentIdState(next);
-    persistCurrent(next);
-  }, [user, persistCurrent]);
+  // stays as it is while any campaign is left. `replace` also takes the
+  // new list while the selection is still there (DataSection, after an
+  // import); the tab's own checks leave it, so a page that holds a
+  // campaign keeps what's being edited.
+  const reconcile = useCallback(
+    async (replace: boolean) => {
+      if (!user) return;
+      const list = await listCampaigns();
+      const current = currentIdRef.current;
+      if (list.length > 0 && (current === null || list.some((c) => c.id === current))) {
+        if (replace) setCampaigns(list);
+        return;
+      }
+      const fresh = list.length > 0 ? list : await campaignsWithDefault();
+      const next = await selectFrom(fresh, null);
+      setCampaigns(fresh);
+      setCurrentIdState(next);
+      persistCurrent(next);
+    },
+    [user, persistCurrent],
+  );
+  const refresh = useCallback(() => reconcile(true), [reconcile]);
 
   // Bootstrap on auth. Runs once per user session. The ref is flipped
   // to the user id only on successful completion so React's strict-mode
@@ -268,11 +275,12 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
   // run: when it comes back into view, and on the next click or key press
   // in it, at most every ACTION_CHECK_MS, since another visitor's sign-out
   // can clear the shared demo account's campaigns while a tab stays in view.
+  // While the campaign is still there, the check changes nothing.
   useEffect(() => {
     if (!user) return;
     const check = () => {
       if (bootstrappedRef.current !== user.id || document.visibilityState !== 'visible') return;
-      void refresh().catch(() => {
+      void reconcile(false).catch(() => {
         /* the next check tries again */
       });
     };
@@ -293,7 +301,7 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('pointerdown', onAction, true);
       window.removeEventListener('keydown', onAction, true);
     };
-  }, [user, refresh]);
+  }, [user, reconcile]);
 
   // Keep the module-level practice-status hooks in sync with the active
   // campaign so reads and writes land in the right slot.
