@@ -424,6 +424,40 @@ describe('authority: rules 1 to 12, one negative control each', () => {
       assert.deepEqual(run(fixture((d) => { bump(d); editJson(d, MATRIX, (m) => { row(m, 'view-state').revision = next; }); }), added), []);
     });
 
+    // A pull request's base is one revision back. A promotion's base can be
+    // several back, and a row keeps the revision it changed at.
+    describe('across several revisions', () => {
+      const current = repo(MATRIX).revision;
+      // The base branch at an older matrix revision, its rows at or below it.
+      const baseAt = (revision, fn = () => {}) => base((m) => {
+        m.revision = revision;
+        for (const r of m.rows) r.revision = Math.min(r.revision, revision);
+        fn(m);
+      });
+      const withoutViewState = (m) => { m.rows = m.rows.filter((r) => r.id !== 'view-state'); };
+      const changedAt = (revision) => editRow('offer', (r) => { Object.assign(r, { revision, storage: 'postgres:offers' }); });
+      const addedAt = (revision) => editRow('view-state', (r) => { r.revision = revision; });
+
+      it('passes a row changed at a revision between the base and the current one', () => {
+        assert.deepEqual(run(changedAt(2), baseAt(1)), []);
+      });
+
+      it('passes a row added at a revision between the base and the current one', () => {
+        assert.deepEqual(run(addedAt(2), baseAt(1, withoutViewState)), []);
+      });
+
+      it('fails a new or changed row at the base revision, or past the current one', () => {
+        only(run(changedAt(1), baseAt(1)), 'AUTH_REVISION_NOT_BUMPED');
+        only(run(addedAt(1), baseAt(1, withoutViewState)), 'AUTH_REVISION_NOT_BUMPED');
+        assert.deepEqual(codes(run(changedAt(current + 1), baseAt(1))), ['AUTH_REVISION_MISMATCH', 'AUTH_REVISION_NOT_BUMPED']);
+        assert.deepEqual(codes(run(addedAt(current + 1), baseAt(1, withoutViewState))), ['AUTH_REVISION_MISMATCH', 'AUTH_REVISION_NOT_BUMPED']);
+      });
+
+      it('fails a changed row a pull request leaves at its base revision', () => {
+        only(run(changedAt(current - 1), baseAt(current - 1)), 'AUTH_REVISION_NOT_BUMPED');
+      });
+    });
+
     it('checks the hand-written baseline store rows against the base', () => {
       const withStores = (fn) => {
         const st = repo(STORES);
