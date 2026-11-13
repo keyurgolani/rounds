@@ -12,17 +12,20 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Production compose starts three services:
+Production compose starts four services by default:
 
 - `frontend`: nginx serving the Vite build and reverse-proxying backend traffic.
 - `pocketbase`: auth, app data, migrations, hooks, SQLite, uploads.
 - `runner`: FastAPI code runner.
+- `pdf-renderer`: the headless-Chromium sidecar the runner sends PDF renders to.
+
+A fifth, `materializer`, renders Legacy Artifact Snapshots for PocketBase and starts only with the `materializer` profile; see [Legacy Artifact Snapshots](#legacy-artifact-snapshots).
 
 Only the frontend port is exposed on the host.
 
-Images are published to both Docker Hub and GHCR. Docker Hub is the default in `docker-compose.prod.yml`; set `ROUNDS_IMAGE_TAG` to pin a release, and the `ROUNDS_*_IMAGE` variables to use GHCR or per-service tags. Run a pinned release in production; see [Upgrades](#upgrades).
+`docker-compose.prod.yml` pulls published Docker Hub images by default; set `ROUNDS_IMAGE_TAG` to pin a release, and the `ROUNDS_*_IMAGE` variables to use a different registry or per-service tags. Run a pinned release in production; see [Upgrades](#upgrades).
 
-The publishing workflow always pushes GHCR images. Docker Hub publishing requires repository secrets named `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. A push to `main` publishes `edge` and `sha-<short>`. A `vX.Y.Z` tag publishes the release tags and `latest`, once CI has passed on that commit; [image tags](deployment.md#image-tags) has the details.
+Docker Hub publishing requires repository secrets named `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. A push to `main` publishes `edge` and `sha-<short>`. A `vX.Y.Z` tag publishes the release tags and `latest`, once CI has passed on that commit; [image tags](deployment.md#image-tags) has the details.
 
 ## Health Checks
 
