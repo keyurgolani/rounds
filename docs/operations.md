@@ -353,6 +353,8 @@ To stop everything, turn both off. No resume, variant, or version row is ever wr
 
 Each runner replica runs a worker that logs in as the `execution_service` record `execution-worker`, claims a queued job while it has a free slot (the same 4 as the admitted routes), and holds the job's lease for 30 seconds on PocketBase's clock, renewing it every 10. An account has at most 2 jobs leased or started at once. Accounts below that cap take turns by their oldest queued job, so one account's backlog never holds another's jobs back. A lease that runs out before its run starts puts the job back in the queue. Otherwise a job runs again only on a retry with the same key after a `worker-lost` or `infrastructure-degraded` attempt, and only while fewer than 3 attempts have started.
 
+While nothing is queued, a worker asks for work about once a second right after activity and backs off to once every 15 seconds. A job queued through a replica with a free slot is claimed there at once, and one it couldn't take waits up to those 15 seconds for another replica.
+
 **Before the upgrade.** Code runs need two settings that no release sets for you. Without either, every code run answers 503 `execution_disabled`, the pages say running code is turned off on this server and keep the draft, and each runner's start log names what's missing.
 
 1. Set `ROUNDS_EXECUTION_SECRET` to one value of 32 to 72 printable characters with no spaces, such as the output of `openssl rand -hex 32`, on PocketBase and every runner replica. On k8s it's a key in `rounds-runner-secrets` (`k8s/runner.yaml`, step 4), and PocketBase reads only that key. `ROUNDS_ADMISSION_SECRET` stays set as before.

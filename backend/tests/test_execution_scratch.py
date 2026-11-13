@@ -705,6 +705,22 @@ def test_a_runner_without_the_admission_secret_runs_a_job_another_replica_queued
     assert (job()["state"], job()["outcome_class"]) == ("completed", "passed")
 
 
+def test_a_job_this_replica_queues_is_claimed_at_once(runner, node, monkeypatch):
+    # The pause after the worker's first claim, which finds nothing, is 10
+    # s or more here, twice the wait below.
+    monkeypatch.setattr(worker_mod, "CLAIM_IDLE_S", 20.0)
+    client = runner()
+    time.sleep(0.3)
+    out = submitted(client.post("/api/run", json=RUN, headers=headers(node, key=new_key())))
+
+    def claimed() -> bool:
+        (job,) = [j for j in node.dump()["jobs"] if j["id"] == out["job_id"]]
+        return job["state"] != "queued"
+
+    _until(claimed, timeout=5, what="the claim")
+    assert settled(client, node, out["job_id"])["state"] == "completed"
+
+
 def test_a_run_is_a_job_answered_202_that_ends_with_its_envelope(runner, node, pocketbase, capsys):
     client = runner()
     assert not [x for x in obs_lines(capsys) if x.get("event") == "execution.scratch"]
