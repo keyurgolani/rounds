@@ -34,6 +34,8 @@ Dev compose publishes its three ports on `127.0.0.1` only, since its admin login
 | `ROUNDS_FRONTEND_IMAGE` | `keyurgolani/rounds-frontend:${ROUNDS_IMAGE_TAG}` | Full frontend image override. |
 | `ROUNDS_POCKETBASE_IMAGE` | `keyurgolani/rounds-pocketbase:${ROUNDS_IMAGE_TAG}` | Full PocketBase image override. |
 | `ROUNDS_RUNNER_IMAGE` | `keyurgolani/rounds-runner:${ROUNDS_IMAGE_TAG}` | Full runner image override. |
+| `ROUNDS_PDF_RENDERER_IMAGE` | `keyurgolani/rounds-pdf-renderer:${ROUNDS_IMAGE_TAG}` | Full PDF renderer image override. |
+| `ROUNDS_MATERIALIZER_IMAGE` | `keyurgolani/rounds-materializer:${ROUNDS_IMAGE_TAG}` | Full materializer image override, used only with the `materializer` profile. |
 
 ## Runner
 
