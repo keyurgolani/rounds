@@ -30,6 +30,32 @@
    "redirect": null
   },
   {
+   "collection": "ai_credentials",
+   "field": "provider",
+   "target": "ai_providers",
+   "required": true,
+   "cascade": true,
+   "multiple": false,
+   "since": "v1",
+   "relationType": null,
+   "role": null,
+   "tombstone": null,
+   "redirect": null
+  },
+  {
+   "collection": "ai_provider_models",
+   "field": "provider",
+   "target": "ai_providers",
+   "required": true,
+   "cascade": true,
+   "multiple": false,
+   "since": "v1",
+   "relationType": null,
+   "role": null,
+   "tombstone": null,
+   "redirect": null
+  },
+  {
    "collection": "ai_settings",
    "field": "text_provider",
    "target": "ai_providers",

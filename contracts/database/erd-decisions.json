@@ -2,7 +2,7 @@
   "$schema": "./erd-decisions.schema.json",
   "registry": "rounds-erd-decisions",
   "decisionRecord": "DR-0004",
-  "revision": 1,
+  "revision": 2,
   "description": "The written part of DR-0004's ERD, which the record ratifies: the delete and merge values, the stores, the groups, each entity's written fields (group, scope, rows, writers, purge, a partition the schema can't show, and its note), every planned or held table in full with its indexes, and each relation's merge behavior. node scripts/conformance/run.mjs --write builds contracts/database/erd.json from this file and contracts/database/schema-snapshot.json. A PR that changes a migration regenerates both, and needs a DR-0004 revision only when it changes a field here.",
   "semantics": {
     "onDelete": {
@@ -122,11 +122,27 @@
       "purge": "not account data"
     },
     {
+      "id": "ai_credentials",
+      "group": "account",
+      "scope": "account",
+      "rows": ["ai-provider-credential"],
+      "writers": "#73's AI hook routes only, for the runner with the caller's bearer and the runner key; the move migration at start",
+      "purge": "cascades with the account and with its provider"
+    },
+    {
+      "id": "ai_provider_models",
+      "group": "account",
+      "scope": "account",
+      "rows": ["ai-provider-credential"],
+      "writers": "#73's AI hook routes only, for the runner with the caller's bearer and the runner key; the move migration at start",
+      "purge": "cascades with the account and with its provider"
+    },
+    {
       "id": "ai_providers",
       "group": "account",
       "scope": "account",
       "rows": ["ai-provider-credential"],
-      "writers": "the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them",
+      "writers": "#73's AI hook routes, for the runner with the caller's bearer and the runner key; the owner deletes through REST under #9's rules",
       "purge": "cascades with the account"
     },
     {
@@ -134,7 +150,7 @@
       "group": "account",
       "scope": "account",
       "rows": ["ai-role-settings"],
-      "writers": "the SPA and the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them",
+      "writers": "the runner with the caller's token through REST under #9's rules",
       "purge": "cascades with the account"
     },
     {
@@ -692,6 +708,10 @@
     {"id":"ai_coding_drafts.campaign","merge":"none"},
     {"id":"ai_coding_drafts.round","merge":"none"},
     {"id":"ai_coding_drafts.user","merge":"n/a"},
+    {"id":"ai_credentials.provider","merge":"none"},
+    {"id":"ai_credentials.user","merge":"n/a"},
+    {"id":"ai_provider_models.provider","merge":"none"},
+    {"id":"ai_provider_models.user","merge":"n/a"},
     {"id":"ai_providers.user","merge":"n/a"},
     {"id":"ai_settings.text_provider","merge":"none"},
     {"id":"ai_settings.user","merge":"n/a"},

@@ -277,7 +277,7 @@ STANDARD_COLLECTIONS = [
     "experience_anecdotes", "experience_bullets", "exp_job_projects",
     "exp_job_anecdotes", "exp_job_bullets", "exp_project_anecdotes",
     "exp_project_bullets", "exp_anecdote_bullets", "legacy_artifact_snapshots",
-    "share_capabilities",
+    "share_capabilities", "ai_credentials", "ai_provider_models",
 ]
 
 

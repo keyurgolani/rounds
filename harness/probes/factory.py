@@ -9,6 +9,7 @@ user-owned collections can be exercised.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import secrets
 from dataclasses import dataclass, field
@@ -121,6 +122,25 @@ def capability_fields(snapshot_id: str, days: int = 30) -> dict[str, Any]:
         "bearer_digest": secrets.token_hex(32),
         "digest_key_version": 1,
     }
+
+
+def credential_fields(provider_id: str) -> dict[str, Any]:
+    """A saved key row over one of the harness's providers. Its ciphertext
+    is random bytes, not a wrapped key: the probes never open one."""
+    return {
+        "provider": provider_id,
+        "wrap": "aad-v1",
+        "key_version": 1,
+        "ciphertext": base64.b64encode(secrets.token_bytes(48)).decode("ascii"),
+        "nonce": base64.b64encode(secrets.token_bytes(12)).decode("ascii"),
+        "registered_host": "api.openai.com",
+        "registered_port": 443,
+        "status": "active",
+    }
+
+
+def model_fields(provider_id: str, model: str = "gpt-4o-mini") -> dict[str, Any]:
+    return {"provider": provider_id, "model": model, "verification": "registry"}
 
 
 def ensure_content_fixtures(pb: PBClient, admin_token: str) -> dict[str, str]:
@@ -244,8 +264,14 @@ def seed_account(pb: PBClient, acct: Account, content: dict[str, str], admin_tok
         if has("share_capabilities"):
             mk_admin("share_capabilities", capability_fields(rec["id"]))
 
-    mk("ai_providers", {"kind": "openai", "label": "provider"})
+    provider = mk("ai_providers", {"kind": "openai", "label": "provider"})
     mk("ai_settings", {})
+    # Only PocketBase's AI hook routes write saved keys and model lists
+    # (ROUNDS-14-L02), so these go in with the admin token, through the
+    # same owner triggers every writer meets.
+    if provider:
+        mk_admin("ai_credentials", credential_fields(provider))
+        mk_admin("ai_provider_models", model_fields(provider))
 
     mk("ai_coding_drafts", {"round": content["round"], "file_path": "a.py", "contents": "x=1"})
     mk("ai_coding_attempts", {"round": content["round"], "status": "in-progress", "current_checkpoint": 0})
@@ -341,6 +367,11 @@ def fresh_payload(
         "share_capabilities": capability_fields(a.ids.get("legacy_artifact_snapshots", "")),
         "ai_providers": {"kind": "openai", "label": "provider"},
         "ai_settings": {},
+        # Server-only (ROUNDS-14-L02): a client create is refused before any
+        # field is read, and the superuser relation probe points `provider`
+        # at another account's provider.
+        "ai_credentials": credential_fields(a.ids.get("ai_providers", "")),
+        "ai_provider_models": model_fields(a.ids.get("ai_providers", ""), f"probe-{s}"),
         "ai_coding_drafts": {"round": content["round"], "file_path": f"probe-{s}.py", "contents": "x=1"},
         "ai_coding_attempts": {"round": content["round"], "status": "in-progress", "current_checkpoint": 0},
         "take_home_drafts": {"assignment": content["assignment"], "file_path": f"probe-{s}.py", "contents": "x=1"},

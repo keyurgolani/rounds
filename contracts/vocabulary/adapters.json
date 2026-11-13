@@ -56,6 +56,24 @@
     },
     {
       "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700008800_ai_credentials.js", "lines": "86"},
+      "legacyName": "ai_credentials",
+      "termId": "ai-provider",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10",
+      "note": "Server-only store of AI provider credentials (#73): one wrapped key a provider, which only the AI hook routes write and only the runner opens. All rules null; never user-facing."
+    },
+    {
+      "kind": "collection",
+      "source": {"path": "pocketbase/pb_migrations/1700008800_ai_credentials.js", "lines": "125"},
+      "legacyName": "ai_provider_models",
+      "termId": "ai-provider",
+      "targetLabel": null,
+      "retiringLeaf": "ROUNDS-32-L10",
+      "note": "Server-only model list of each AI provider (#73), one row a model, which only the AI hook routes write. All rules null; an owner sees it as the provider's models."
+    },
+    {
+      "kind": "collection",
       "source": {"path": "pocketbase/pb_migrations/1700000800_ai_providers.js", "lines": "43"},
       "legacyName": "ai_providers",
       "termId": "ai-provider",

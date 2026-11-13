@@ -25,8 +25,8 @@ erDiagram
 
 | Entity | Status | Scope | Partition | Indexed | Writers | On account delete |
 | --- | --- | --- | --- | --- | --- | --- |
-| ai_providers | live | account | user (relation, cascade) | 1, partition first | the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
-| ai_settings | live | account | user (relation, cascade) | 1, partition first | the SPA and the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
+| ai_providers | live | account | user (relation, cascade) | 1, partition first | #73's AI hook routes, for the runner with the caller's bearer and the runner key; the owner deletes through REST under #9's rules | cascades with the account |
+| ai_settings | live | account | user (relation, cascade) | 1, partition first | the runner with the caller's token through REST under #9's rules | cascades with the account |
 | user_preferences | live | account | user (relation, cascade) | 1, partition first | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 | users | live | account | id (self, pocketbase) | primary key | PocketBase's own auth routes under its rules; the signup, demo, admission, and profile file hooks guard what a client may set | PocketBase deletes the account; every relation to it cascades, unsets, or restricts as listed |
 | account_system_state | planned (ROUNDS-00B-L07/S2) | account | user (relation, cascade) | 1, partition first | #177's state migration and its demo hooks | cascades with the account |

@@ -4,7 +4,7 @@
 
 | Record | Status | Owner | Approver | Approval | Leaf |
 | --- | --- | --- | --- | --- | --- |
-| DR-0004@1 | ratified | Domain Platform | rounds lane review (PR #222, r2), 2026-11-12 | PR #222 | ROUNDS-02-L01 |
+| DR-0004@2 | draft | Domain Platform | pending review | not ratified: not citable | ROUNDS-02-L01 |
 
 Issue #18 (ROUNDS-02-L01). Spec lines cite rounds-review's docs/superpowers/specs/2026-10-18-rounds-review-board-design.md. A citation path@62d4eae:L<a>-L<b> is lines at the audited revision; facts about next were read at fe01163. Alternative A was the starting point because every store next added since R0 already works that way, and the SQLite benchmark (contracts/database/benchmark.json, synthetic data only) decides whether it holds.
 
@@ -114,7 +114,7 @@ The command gateway is a set of PocketBase hook routes under /api/rounds/command
 
 - A route that doesn't register as a Caller row is an unrecorded writer; #19's registry check fails it.
 - A gateway-owned collection that keeps a REST write rule is a path around the gateway; DB4 nulls it at each transfer.
-- Until #73 lands, the runner's 7 provider and settings writes keep going around the gateway with the caller's token.
+- From #73's stage A the provider writes go through its hook routes; the 2 settings writes and the owner's provider delete keep going around the gateway with the caller's token, under #9's rules.
 
 **Limits**
 
@@ -131,7 +131,7 @@ Sources: spec 1206-1210; spec 1942-1951; frontend/nginx.conf; docs/security/serv
 
 ### DB4. Account authorization
 
-The account is the bearer's auth record, which the route reads inside its transaction; no command body names its account. Each record a command loads and each relation endpoint it writes is checked against that account in the same transaction with #10's predicate (pocketbase/pb_hooks/relation_endpoints.js), and #10's triggers stay as the backstop. Share capabilities keep #11's and #12's checks. #9's collection rules (docs/security/account-scope.v1.json) keep guarding legacy REST writes until each context transfers; the transfer leaf then sets that context's create, update, and delete rules to null, and #21's tables are born with null rules. #1's three writer kinds (Caller, Service, System) are ratified as they stand. Service identities are non-superuser auth collections whose login answers only under the collection's exact name: execution_service and share_resolvers today, ai_gateway (#73) and dispatcher_service (#22) planned. The gateway never authenticates as the superuser.
+The account is the bearer's auth record, which the route reads inside its transaction; no command body names its account. Each record a command loads and each relation endpoint it writes is checked against that account in the same transaction with #10's predicate (pocketbase/pb_hooks/relation_endpoints.js), and #10's triggers stay as the backstop. Share capabilities keep #11's and #12's checks. #9's collection rules (docs/security/account-scope.v1.json) keep guarding legacy REST writes until each context transfers; the transfer leaf then sets that context's create, update, and delete rules to null, and #21's tables are born with null rules. #1's three writer kinds (Caller, Service, System) are ratified as they stand. Service identities are non-superuser auth collections whose login answers only under the collection's exact name: execution_service and share_resolvers today, and dispatcher_service (#22) planned; #73's routes hold the caller's bearer and the runner key instead (DR-0004@2). The gateway never authenticates as the superuser.
 
 | Concern | Store | Owning process | Owning leaf | Status |
 | --- | --- | --- | --- | --- |
@@ -496,8 +496,10 @@ The snapshot gives each live table its partition relation, indexes, and rules; t
 
 | Table | Scope | Rows | Writers | Purge |
 | --- | --- | --- | --- | --- |
-| ai_providers | account | ai-provider-credential | the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
-| ai_settings | account | ai-role-settings | the SPA and the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them | cascades with the account |
+| ai_credentials | account | ai-provider-credential | #73's AI hook routes only, for the runner with the caller's bearer and the runner key; the move migration at start | cascades with the account and with its provider |
+| ai_provider_models | account | ai-provider-credential | #73's AI hook routes only, for the runner with the caller's bearer and the runner key; the move migration at start | cascades with the account and with its provider |
+| ai_providers | account | ai-provider-credential | #73's AI hook routes, for the runner with the caller's bearer and the runner key; the owner deletes through REST under #9's rules | cascades with the account |
+| ai_settings | account | ai-role-settings | the runner with the caller's token through REST under #9's rules | cascades with the account |
 | user_preferences | account | appearance, current-campaign | the SPA through PocketBase's REST API under #9's rules, until its context transfers to #19's gateway | cascades with the account |
 | users | account | authentication-identity, professional-identity, demo-state | PocketBase's own auth routes under its rules; the signup, demo, admission, and profile file hooks guard what a client may set | PocketBase deletes the account; every relation to it cascades, unsets, or restricts as listed |
 
@@ -591,8 +593,8 @@ The snapshot gives each live table its partition relation, indexes, and rules; t
 
 | Merge | Relations |
 | --- | --- |
-| n/a | admission_commands.account, admission_counters.account, admission_leases.account, ai_coding_attempts.user, ai_coding_drafts.user, ai_providers.user, ai_settings.user, applications.user, campaigns.user, code_drafts.user, execution_attempts.account, execution_envelopes.user, execution_jobs.account, exp_anecdote_bullets.user, exp_job_anecdotes.user, exp_job_bullets.user, exp_job_projects.user, exp_project_anecdotes.user, exp_project_bullets.user, experience_anecdotes.user, experience_bullets.user, experience_jobs.user, experience_projects.user, interview_rounds.user, legacy_artifact_snapshots.user, offers.user, question_timers.user, resume_share_links.user, resume_share_views.user, resume_variants.user, resume_versions.user, resumes.user, share_capabilities.user, take_home_attempts.user, take_home_drafts.user, todos.user, user_preferences.user, user_progress.user |
-| none | admission_commands.job, admission_leases.command, ai_coding_attempts.campaign, ai_coding_attempts.envelope, ai_coding_attempts.round, ai_coding_drafts.campaign, ai_coding_drafts.round, ai_settings.text_provider, ai_settings.vision_provider, applications.campaign, behavioral_questions.categories, code_drafts.campaign, execution_attempts.job, experience_anecdotes.categories, experience_anecdotes.linked_questions, interview_rounds.application, interview_rounds.campaign, offers.application, offers.previous_offer, resume_share_links.replaced_by, resume_share_links.resume, resume_share_links.variant, resume_share_views.link, resume_variants.application, resume_variants.resume, resume_versions.resume, resume_versions.variant, share_capabilities.snapshot, take_home_attempts.assignment, take_home_attempts.campaign, take_home_attempts.envelope, take_home_drafts.assignment, take_home_drafts.campaign, todos.campaign, user_preferences.current_campaign, user_progress.campaign |
+| n/a | admission_commands.account, admission_counters.account, admission_leases.account, ai_coding_attempts.user, ai_coding_drafts.user, ai_credentials.user, ai_provider_models.user, ai_providers.user, ai_settings.user, applications.user, campaigns.user, code_drafts.user, execution_attempts.account, execution_envelopes.user, execution_jobs.account, exp_anecdote_bullets.user, exp_job_anecdotes.user, exp_job_bullets.user, exp_job_projects.user, exp_project_anecdotes.user, exp_project_bullets.user, experience_anecdotes.user, experience_bullets.user, experience_jobs.user, experience_projects.user, interview_rounds.user, legacy_artifact_snapshots.user, offers.user, question_timers.user, resume_share_links.user, resume_share_views.user, resume_variants.user, resume_versions.user, resumes.user, share_capabilities.user, take_home_attempts.user, take_home_drafts.user, todos.user, user_preferences.user, user_progress.user |
+| none | admission_commands.job, admission_leases.command, ai_coding_attempts.campaign, ai_coding_attempts.envelope, ai_coding_attempts.round, ai_coding_drafts.campaign, ai_coding_drafts.round, ai_credentials.provider, ai_provider_models.provider, ai_settings.text_provider, ai_settings.vision_provider, applications.campaign, behavioral_questions.categories, code_drafts.campaign, execution_attempts.job, experience_anecdotes.categories, experience_anecdotes.linked_questions, interview_rounds.application, interview_rounds.campaign, offers.application, offers.previous_offer, resume_share_links.replaced_by, resume_share_links.resume, resume_share_links.variant, resume_share_views.link, resume_variants.application, resume_variants.resume, resume_versions.resume, resume_versions.variant, share_capabilities.snapshot, take_home_attempts.assignment, take_home_attempts.campaign, take_home_attempts.envelope, take_home_drafts.assignment, take_home_drafts.campaign, todos.campaign, user_preferences.current_campaign, user_progress.campaign |
 | repoint | exp_anecdote_bullets.child, exp_anecdote_bullets.parent, exp_job_anecdotes.child, exp_job_anecdotes.parent, exp_job_bullets.child, exp_job_bullets.parent, exp_job_projects.child, exp_job_projects.parent, exp_project_anecdotes.child, exp_project_anecdotes.parent, exp_project_bullets.child, exp_project_bullets.parent |
 
 - exp_anecdote_bullets.child, exp_anecdote_bullets.parent, exp_job_anecdotes.child, exp_job_anecdotes.parent, exp_job_bullets.child, exp_job_bullets.parent, exp_job_projects.child, exp_job_projects.parent, exp_project_anecdotes.child, exp_project_anecdotes.parent, exp_project_bullets.child, exp_project_bullets.parent: A merge of the target repoints the pair in the merge's transaction (typed-relation: merges redirect endpoints).
@@ -644,10 +646,10 @@ The snapshot gives each live table its partition relation, indexes, and rules; t
 | PocketBase superuser (PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD) | superuser | No runtime writer uses it. It keeps the bootstrap migration and operator use; #14 S3 removes the runner's unused admin helpers and PB_ADMIN_* from the runner. | ROUNDS-00B-L06 |
 | ROUNDS_EXECUTION_SECRET | execution_service | Kept: the execution worker's non-superuser identity, whose login answers only under its collection's exact name; #6 and #91 reuse it. | ROUNDS-00A-L03 |
 | ROUNDS_SHARE_RESOLVER_PASSWORD | share_resolvers | Kept: the share resolver's non-superuser identity, at class level. | ROUNDS-00B-L04 |
-| ROUNDS_AI_GATEWAY_SECRET | ai_gateway | Planned: #73's provider gateway identity, which takes over the runner's 7 provider and settings writes. | ROUNDS-14-L02 |
+| ROUNDS_AI_GATEWAY_SECRET | ai_gateway | Not made (DR-0004@2): #73's hook routes hold the caller's bearer and the runner key, ROUNDS_ADMISSION_SECRET, as #3's, #4's and #12's do. | ROUNDS-14-L02 |
 | ROUNDS_DISPATCHER_SECRET | dispatcher_service | Planned: #22's relay, job queue, and due-work identity. | ROUNDS-02-L05 |
 | ROUNDS_ADMISSION_SECRET | PocketBase and the runner | Kept: the shared key #1's routes require beside the caller's bearer; PocketBase checks it, the runner sends it, and no client holds it. | ROUNDS-00A-L01 |
-| AI_KEY_SECRET | the runner | Kept: the runner's key for what it seals or keys, stored provider keys among them (docs/operations.md), kept apart from the backups (DB8); #73's keyring takes over the provider keys. | ROUNDS-14-L02 |
+| AI_KEY_SECRET | the runner | Kept: the root of #73's keyring (backend/app/provider_gateway/keyring.py), which derives every key the runner seals or keys with, stored provider keys among them (docs/operations.md), kept apart from the backups (DB8). | ROUNDS-14-L02 |
 
 ## Changed authorities
 

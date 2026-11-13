@@ -2,7 +2,7 @@
   "$schema": "./erd.schema.json",
   "registry": "rounds-erd",
   "decisionRecord": "DR-0004",
-  "revision": 1,
+  "revision": 2,
   "description": "DR-0004's ERD, generated: every PocketBase collection and system table at the snapshot's revision, the platform tables and stores DR-0004 places, and every relation with its cardinality, account partition, delete behavior, merge behavior, and indexes. The written fields come from erd-decisions.json, which DR-0004 ratifies; the rest comes from schema-snapshot.json through node scripts/conformance/run.mjs --write.",
   "decisions": "contracts/database/erd-decisions.json",
   "snapshot": {
@@ -275,7 +275,7 @@
       "indexes": [{"name":"idx_ai_providers_user","unique":false,"columns":["ai_providers.user"]}],
       "rules": {"list":"expression","view":"expression","create":"expression","update":"expression","delete":"expression"},
       "rows": ["ai-provider-credential"],
-      "writers": "the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them",
+      "writers": "#73's AI hook routes, for the runner with the caller's bearer and the runner key; the owner deletes through REST under #9's rules",
       "purge": "cascades with the account"
     },
     {
@@ -293,7 +293,7 @@
       "indexes": [{"name":"idx_ai_settings_user","unique":true,"columns":["ai_settings.user"]}],
       "rules": {"list":"expression","view":"expression","create":"expression","update":"expression","delete":"expression"},
       "rows": ["ai-role-settings"],
-      "writers": "the SPA and the runner with the caller's token through REST under #9's rules, until #73's provider gateway takes them",
+      "writers": "the runner with the caller's token through REST under #9's rules",
       "purge": "cascades with the account"
     },
     {
