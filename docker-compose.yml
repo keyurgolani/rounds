@@ -100,6 +100,12 @@ services:
       # The proxies whose X-Real-IP the share throttle counts by. Empty
       # keeps loopback and the private ranges, where nginx sits here.
       - ROUNDS_TRUSTED_PROXY_CIDRS=${ROUNDS_TRUSTED_PROXY_CIDRS:-}
+      # Privacy settings (docs/configuration.md#privacy-and-retention-settings).
+      # Empty takes each default; a bad value stops the runner at startup,
+      # naming the setting.
+      - ROUNDS_LOG_RETENTION_DAYS=${ROUNDS_LOG_RETENTION_DAYS:-}
+      - ROUNDS_BACKUP_RETENTION_DAYS=${ROUNDS_BACKUP_RETENTION_DAYS:-}
+      - ROUNDS_AI_PRIVATE_ENDPOINTS=${ROUNDS_AI_PRIVATE_ENDPOINTS:-}
       # Gates (docs/configuration.md#gates). Empty keeps each written
       # default, and the runner logs every value at startup.
       - ROUNDS_GATE_RUN=${ROUNDS_GATE_RUN:-}

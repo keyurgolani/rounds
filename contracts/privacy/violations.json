@@ -1,0 +1,120 @@
+{
+  "$schema": "./policy.schema.json",
+  "registry": "rounds-privacy-violations",
+  "description": "Every known breach of the privacy policy (ROUNDS-14-L01): the rule it breaks, where it is, the leaf that owns the fix, and how it ends. A breach the privacy rule can see and that isn't listed here fails CI, and so does an open entry whose location no longer exists. Closing an entry names the PR that fixed it; the entry stays, so the register keeps its history.",
+  "entries": [
+    {
+      "id": 1, "status": "open",
+      "summary": "Session state sits in browser storage: the session token through the SDK's default store, and the session's idle clock.",
+      "rule": "secret.local-draft",
+      "location": { "fields": ["storage:pocketbase_auth", "storage:rounds:last-activity-at"] },
+      "detector": "secret-storage",
+      "owner": "ROUNDS-03-L04",
+      "exit": "ROUNDS-03-L04 keeps the session in memory or an httpOnly cookie, and the idle clock with it.",
+      "history": []
+    },
+    {
+      "id": 2, "status": "closed",
+      "summary": "Share views kept more about each viewer than the coarse time the policy allows.",
+      "rule": "share-view-telemetry",
+      "location": { "migrations": ["pocketbase/pb_migrations/1700008500_legacy_share_migration.js"] },
+      "owner": "ROUNDS-00B-L06",
+      "exit": "No writer remains and every stored view keeps the day only. Dropping the collection stays an optional later step of ROUNDS-00B-L06.",
+      "history": [{ "pr": 215, "closed": "the writer is gone and every stored view keeps the day only" }]
+    },
+    {
+      "id": 3, "status": "open",
+      "summary": "The ATS AI answer cache keeps entries for 90 days, and past sign-out for every account but the demo account.",
+      "rule": "browser-ai-caches",
+      "location": { "fields": ["storage:rounds.resume.ats.*.cache.ai.v2", "storage:rounds.demo.resume.ats.*.cache.ai.v2"], "anchors": [{ "path": "frontend/src/features/resume/studio/tabs/ATSTab.tsx", "text": "const TTL_MS = 90 * 24 * 60 * 60 * 1000;" }] },
+      "owner": "ROUNDS-14-L06",
+      "exit": "ROUNDS-14-L06 routes the call through the gateway and ROUNDS-14-L05 purges the cache on the draft row's schedule.",
+      "history": []
+    },
+    {
+      "id": 4, "status": "open",
+      "summary": "Provider output and fetched URLs reach the logs, and a provider's error text is kept in a rubric review.",
+      "rule": "logs-traces",
+      "location": {
+        "fields": ["pb:take_home_attempts.rubric_review#/reason", "pb:ai_coding_attempts.rubric_review#/reason"],
+        "anchors": [
+          { "path": "backend/routers/ai.py", "text": "_log.warning(\"ATS AI response had no usable scores: %r\", text[:400])" },
+          { "path": "backend/routers/ai.py", "text": "_log.exception(\"paper fetch failed for %s\", url)" },
+          { "path": "backend/routers/take_home.py", "text": "\"reason\": str(e)[:300]" },
+          { "path": "backend/routers/ai_coding.py", "text": "\"reason\": str(e)[:300]" }
+        ]
+      },
+      "owner": "ROUNDS-14-L06",
+      "exit": "ROUNDS-14-L06 routes these calls through the gateway, which logs no content, and ROUNDS-14-L05 purges what was kept.",
+      "history": [{ "pr": 216, "closed": "the rubric review on the job path keeps a fixed reason, never provider text" }]
+    },
+    {
+      "id": 5, "status": "open",
+      "summary": "Server-only grading material is readable through two practice-content collections.",
+      "rule": "server-only.client-read",
+      "location": { "fields": ["pb:ai_coding_rounds.checkpoints", "pb:take_home_assignments.harness_files"] },
+      "detector": "server-only-readable",
+      "owner": "ROUNDS-00A-L02",
+      "exit": "ROUNDS-00A-L02 makes the grading fields server-only.",
+      "history": []
+    },
+    {
+      "id": 6, "status": "closed",
+      "summary": "Data the shared demo account saved outlived its reset.",
+      "rule": "secrets",
+      "location": { "migrations": ["pocketbase/pb_migrations/1700006700_demo_contain.js"] },
+      "owner": "ROUNDS-00B-L07",
+      "exit": "Demo containment: the demo account keeps no secrets, as the decided secrets row says.",
+      "history": [{ "pr": 203, "closed": "the demo account's containment" }]
+    },
+    {
+      "id": 7, "status": "open",
+      "summary": "While turned on, ATS AI calls a provider again 1.5 seconds after each edit, with no request of its own.",
+      "rule": "consent.per-request",
+      "location": { "anchors": [{ "path": "frontend/src/features/resume/studio/tabs/ATSTab.tsx", "text": "const DEBOUNCE_MS = 1500;" }] },
+      "owner": "ROUNDS-14-L06",
+      "exit": "ROUNDS-14-L06 makes ATS AI an explicit trigger and ROUNDS-14-L04 shows its consent.",
+      "history": [{ "pr": 189, "closed": "ATS AI and GitHub enhance start off, and enhance takes at most 25 projects a call" }]
+    },
+    {
+      "id": 8, "status": "open",
+      "summary": "The \"local\" provider presets name localhost, one of them the runner's own port.",
+      "rule": "locations.never",
+      "location": { "anchors": [{ "path": "frontend/src/settings/aiProviderEndpoints.ts", "text": "base_url: 'http://localhost:8000/v1'," }] },
+      "owner": "ROUNDS-14-L04",
+      "exit": "ROUNDS-14-L04 blocks saved destinations with no location class and turns the presets into LAN templates.",
+      "history": [{ "pr": 189, "closed": "the runner refuses these destinations at dispatch" }]
+    },
+    {
+      "id": 9, "status": "open",
+      "summary": "The sixteen legacy purposes send without per-request consent, and the resume purposes send the contact fields their entries omit.",
+      "rule": "consent.legacy-implicit",
+      "location": { "purposes": ["provider.test", "provider.refresh_models", "resume.improve", "resume.guided_summary", "resume.tailor", "resume.cover_letter", "resume.import", "experience.import", "resume.ats_score", "github.enhance", "ai_coding.chat", "ai_coding.edit", "ai_coding.grade", "take_home.grade", "take_home.chat", "sd_practice.chat"] },
+      "detector": "legacy-consent",
+      "owner": "ROUNDS-14-L06",
+      "exit": "ROUNDS-14-L06 moves each purpose to current, with per-request consent, or retires it.",
+      "history": []
+    },
+    {
+      "id": 10, "status": "open",
+      "summary": "Browser drafts and caches stay after a standard account signs out. That includes the ATS AI cache, whose own lifetime is entry 3.",
+      "rule": "superseded-local-drafts",
+      "location": { "anchors": [{ "path": "frontend/src/auth/AuthProvider.tsx", "text": "const logout = useCallback(async () => {" }] },
+      "owner": "ROUNDS-08-L02",
+      "exit": "ROUNDS-08-L02's draft store purges on sign-out and account switch unless a draft is synced, and ROUNDS-14-L05 enforces the schedule.",
+      "history": []
+    },
+    {
+      "id": 11, "status": "open",
+      "summary": "Visible test cases are shown to the account by design, but the field map can't tell them from hidden ones, so it classes every stored case server-only.",
+      "rule": "server-only.client-read",
+      "location": {
+        "fields": ["def:test-definition#/cases"],
+        "anchors": [{ "path": "backend/routers/runner.py", "text": "visible = case.get(\"visibility\") == \"visible\"" }]
+      },
+      "owner": "ROUNDS-00A-L02",
+      "exit": "ROUNDS-00A-L02 gives a case's visibility a form the field map can name, so a visible case is authed-readable and a hidden one stays server-only.",
+      "history": []
+    }
+  ]
+}

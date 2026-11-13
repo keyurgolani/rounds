@@ -1,0 +1,944 @@
+{
+  "description": "The live schema at next 6c4a5a3: what PocketBase 0.22.22 leaves after `migrate up` over exactly these migrations, with the seed migration's row inserts left out. The privacy rule's migration interpreter must reproduce it; a later migration is caught by the field map's coverage check instead.",
+  "revision": "6c4a5a3",
+  "pocketbase": "0.22.22",
+  "migrations": [
+    "1700000000_init_collections.js",
+    "1700000100_seed_data.js",
+    "1700000500_bootstrap_admin.js",
+    "1700000600_demo_user.js",
+    "1700000700_resume_studio.js",
+    "1700000800_ai_providers.js",
+    "1700000900_share_links_resume_rel.js",
+    "1700001000_resume_share_public_read.js",
+    "1700001100_ai_coding.js",
+    "1700001200_ai_coding_seed.js",
+    "1700001300_experience_items.js",
+    "1700001300_take_home.js",
+    "1700001400_take_home_seed.js",
+    "1700001500_question_timers.js",
+    "1700001500_take_home_reseed_prompts.js",
+    "1700001600_interview_loops.js",
+    "1700001700_round_duration.js",
+    "1700001800_offer_chain.js",
+    "1700001900_experience_items.js",
+    "1700002000_experience_entities.js",
+    "1700003000_experience_connections.js",
+    "1700004000_anecdote_consolidation_fields.js",
+    "1700004100_drop_legacy_anecdotes.js",
+    "1700005000_resume_links.js",
+    "1700005100_drop_resume_bullets.js",
+    "1700006000_account_scope_rules.js",
+    "1700006100_admission.js",
+    "1700006200_definitions_expand.js",
+    "1700006700_demo_contain.js",
+    "1700007000_relation_endpoint_authz.js",
+    "1700007100_execution_jobs.js",
+    "1700008000_legacy_artifact_snapshots.js",
+    "1700008100_share_link_owner_rules.js",
+    "1700008200_share_capabilities.js",
+    "1700008300_share_secrets.js",
+    "1700008400_grading_review.js",
+    "1700008500_legacy_share_migration.js",
+    "1702134273_json_limits.js"
+  ],
+  "collections": [
+    {
+      "name": "admission_commands",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "fields": [
+        {"name":"account","type":"relation"},
+        {"name":"command_id","type":"text"},
+        {"name":"operation","type":"select"},
+        {"name":"fingerprint","type":"text"},
+        {"name":"state","type":"select"},
+        {"name":"wall_seconds","type":"number"},
+        {"name":"result","type":"json"},
+        {"name":"expires_at","type":"number"},
+        {"name":"job","type":"relation"},
+        {"name":"share_snapshot_command","type":"text"}
+      ]
+    },
+    {
+      "name": "admission_counters",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "fields": [
+        {"name":"bucket","type":"select"},
+        {"name":"account","type":"relation"},
+        {"name":"hour","type":"number"},
+        {"name":"requests","type":"number"},
+        {"name":"wall_seconds","type":"number"}
+      ]
+    },
+    {
+      "name": "admission_leases",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "fields": [
+        {"name":"account","type":"relation"},
+        {"name":"command","type":"relation"},
+        {"name":"operation","type":"select"},
+        {"name":"demo","type":"bool"},
+        {"name":"hour","type":"number"},
+        {"name":"wall_seconds","type":"number"},
+        {"name":"max_wall_seconds","type":"number"},
+        {"name":"settled","type":"bool"},
+        {"name":"counted","type":"bool"},
+        {"name":"token_hash","type":"text"},
+        {"name":"expires_at","type":"number"}
+      ]
+    },
+    {
+      "name": "ai_coding_attempts",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"campaign","type":"relation"},
+        {"name":"round","type":"relation"},
+        {"name":"current_checkpoint","type":"number"},
+        {"name":"ai_chats","type":"json"},
+        {"name":"test_results","type":"json"},
+        {"name":"rubric_review","type":"json"},
+        {"name":"status","type":"select"},
+        {"name":"duration_ms","type":"number"},
+        {"name":"envelope","type":"relation"}
+      ]
+    },
+    {
+      "name": "ai_coding_drafts",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"campaign","type":"relation"},
+        {"name":"round","type":"relation"},
+        {"name":"file_path","type":"text"},
+        {"name":"contents","type":"text"}
+      ]
+    },
+    {
+      "name": "ai_coding_rounds",
+      "type": "base",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "fields": [
+        {"name":"slug","type":"text"},
+        {"name":"title","type":"text"},
+        {"name":"difficulty","type":"text"},
+        {"name":"language","type":"text"},
+        {"name":"description","type":"editor"},
+        {"name":"starter_files","type":"json"},
+        {"name":"checkpoints","type":"json"},
+        {"name":"rubric","type":"json"},
+        {"name":"topics","type":"json"},
+        {"name":"companies","type":"json"},
+        {"name":"definition_version","type":"number"}
+      ]
+    },
+    {
+      "name": "ai_providers",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"kind","type":"select"},
+        {"name":"label","type":"text"},
+        {"name":"base_url","type":"text"},
+        {"name":"encrypted_key","type":"text"},
+        {"name":"key_iv","type":"text"},
+        {"name":"models_cache","type":"json"},
+        {"name":"models_cached_at","type":"text"}
+      ]
+    },
+    {
+      "name": "ai_settings",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"text_provider","type":"relation"},
+        {"name":"text_model","type":"text"},
+        {"name":"vision_provider","type":"relation"},
+        {"name":"vision_model","type":"text"}
+      ]
+    },
+    {
+      "name": "applications",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"company","type":"text"},
+        {"name":"role","type":"text"},
+        {"name":"status","type":"text"},
+        {"name":"applied_date","type":"text"},
+        {"name":"notes","type":"text"},
+        {"name":"resume_variant","type":"text"},
+        {"name":"url","type":"url"},
+        {"name":"job_description","type":"text"},
+        {"name":"campaign","type":"relation"},
+        {"name":"last_activity_at","type":"text"}
+      ]
+    },
+    {
+      "name": "behavioral_categories",
+      "type": "base",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "fields": [
+        {"name":"name","type":"text"},
+        {"name":"description","type":"text"},
+        {"name":"color","type":"text"},
+        {"name":"icon","type":"text"}
+      ]
+    },
+    {
+      "name": "behavioral_guides",
+      "type": "base",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "fields": [
+        {"name":"title","type":"text"},
+        {"name":"slug","type":"text"},
+        {"name":"description","type":"editor"},
+        {"name":"sections","type":"json"},
+        {"name":"checklists","type":"json"},
+        {"name":"resources","type":"json"}
+      ]
+    },
+    {
+      "name": "behavioral_questions",
+      "type": "base",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "fields": [
+        {"name":"title","type":"text"},
+        {"name":"slug","type":"text"},
+        {"name":"question_text","type":"text"},
+        {"name":"categories","type":"relation"},
+        {"name":"star_guide","type":"json"},
+        {"name":"sample_response","type":"json"},
+        {"name":"tips","type":"json"},
+        {"name":"common_pitfalls","type":"json"},
+        {"name":"follow_up_questions","type":"json"},
+        {"name":"what_interviewers_look_for","type":"json"},
+        {"name":"tags","type":"json"}
+      ]
+    },
+    {
+      "name": "campaigns",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"name","type":"text"},
+        {"name":"slug","type":"text"},
+        {"name":"description","type":"text"},
+        {"name":"target_role_level","type":"text"},
+        {"name":"target_companies","type":"json"},
+        {"name":"start_date","type":"text"},
+        {"name":"end_date","type":"text"},
+        {"name":"status","type":"select"},
+        {"name":"color","type":"text"},
+        {"name":"is_default","type":"bool"}
+      ]
+    },
+    {
+      "name": "code_drafts",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"campaign","type":"relation"},
+        {"name":"question","type":"text"},
+        {"name":"language","type":"text"},
+        {"name":"code","type":"text"}
+      ]
+    },
+    {
+      "name": "coding_guides",
+      "type": "base",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "fields": [
+        {"name":"title","type":"text"},
+        {"name":"slug","type":"text"},
+        {"name":"description","type":"editor"},
+        {"name":"sections","type":"json"},
+        {"name":"checklists","type":"json"},
+        {"name":"resources","type":"json"}
+      ]
+    },
+    {
+      "name": "coding_questions",
+      "type": "base",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "fields": [
+        {"name":"title","type":"text"},
+        {"name":"slug","type":"text"},
+        {"name":"difficulty","type":"text"},
+        {"name":"description","type":"editor"},
+        {"name":"hints","type":"json"},
+        {"name":"constraints","type":"json"},
+        {"name":"starter_code","type":"json"},
+        {"name":"boilerplate_code","type":"json"},
+        {"name":"test_cases","type":"json"},
+        {"name":"solutions","type":"json"},
+        {"name":"thought_process","type":"json"},
+        {"name":"tips","type":"json"},
+        {"name":"companies","type":"json"},
+        {"name":"topics","type":"json"},
+        {"name":"entry","type":"json"},
+        {"name":"time_complexity","type":"text"},
+        {"name":"space_complexity","type":"text"},
+        {"name":"definition_version","type":"number"},
+        {"name":"definition_case_ids","type":"json"}
+      ]
+    },
+    {
+      "name": "definition_migration_journal",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "fields": [
+        {"name":"migration","type":"text"},
+        {"name":"collection","type":"text"},
+        {"name":"record","type":"text"},
+        {"name":"slug","type":"text"},
+        {"name":"definition_track","type":"text"},
+        {"name":"definition_version","type":"number"},
+        {"name":"disposition","type":"text"}
+      ]
+    },
+    {
+      "name": "execution_attempts",
+      "type": "base",
+      "listRule": "@request.auth.collectionName = \"execution_service\"",
+      "viewRule": "@request.auth.collectionName = \"execution_service\"",
+      "fields": [
+        {"name":"job","type":"relation"},
+        {"name":"account","type":"relation"},
+        {"name":"attempt_number","type":"number"},
+        {"name":"token_hash","type":"text"},
+        {"name":"worker","type":"text"},
+        {"name":"state","type":"select"},
+        {"name":"outcome_class","type":"select"},
+        {"name":"budget_s","type":"number"},
+        {"name":"deadline_at","type":"number"},
+        {"name":"leased_at","type":"number"},
+        {"name":"lease_expires_at","type":"number"},
+        {"name":"started_at","type":"number"},
+        {"name":"heartbeat_at","type":"number"},
+        {"name":"finished_at","type":"number"},
+        {"name":"rejected_writes","type":"number"},
+        {"name":"cleanup","type":"select"},
+        {"name":"operator_view","type":"json"}
+      ]
+    },
+    {
+      "name": "execution_envelopes",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"job","type":"text"},
+        {"name":"attempt","type":"text"},
+        {"name":"version","type":"text"},
+        {"name":"state","type":"select"},
+        {"name":"outcome_class","type":"select"},
+        {"name":"authoritative","type":"bool"},
+        {"name":"user_view","type":"json"},
+        {"name":"graded_collection","type":"select"},
+        {"name":"graded_row","type":"text"}
+      ]
+    },
+    {
+      "name": "execution_jobs",
+      "type": "base",
+      "listRule": "@request.auth.collectionName = \"execution_service\"",
+      "viewRule": "@request.auth.collectionName = \"execution_service\"",
+      "fields": [
+        {"name":"account","type":"relation"},
+        {"name":"command_id","type":"text"},
+        {"name":"kind","type":"select"},
+        {"name":"purpose","type":"select"},
+        {"name":"definition","type":"json"},
+        {"name":"fingerprint","type":"text"},
+        {"name":"source_checksum","type":"text"},
+        {"name":"input_digest","type":"text"},
+        {"name":"input","type":"json"},
+        {"name":"state","type":"select"},
+        {"name":"outcome_class","type":"select"},
+        {"name":"attempts_started","type":"number"},
+        {"name":"attempts","type":"number"},
+        {"name":"cancel_requested","type":"bool"},
+        {"name":"cleanup","type":"select"},
+        {"name":"queued_at","type":"number"},
+        {"name":"finished_at","type":"number"}
+      ]
+    },
+    {"name":"execution_service","type":"auth","listRule":null,"viewRule":null,"fields":[]},
+    {
+      "name": "exp_anecdote_bullets",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [{"name":"user","type":"relation"},{"name":"parent","type":"relation"},{"name":"child","type":"relation"}]
+    },
+    {
+      "name": "exp_job_anecdotes",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [{"name":"user","type":"relation"},{"name":"parent","type":"relation"},{"name":"child","type":"relation"}]
+    },
+    {
+      "name": "exp_job_bullets",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [{"name":"user","type":"relation"},{"name":"parent","type":"relation"},{"name":"child","type":"relation"}]
+    },
+    {
+      "name": "exp_job_projects",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [{"name":"user","type":"relation"},{"name":"parent","type":"relation"},{"name":"child","type":"relation"}]
+    },
+    {
+      "name": "exp_project_anecdotes",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [{"name":"user","type":"relation"},{"name":"parent","type":"relation"},{"name":"child","type":"relation"}]
+    },
+    {
+      "name": "exp_project_bullets",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [{"name":"user","type":"relation"},{"name":"parent","type":"relation"},{"name":"child","type":"relation"}]
+    },
+    {
+      "name": "experience_anecdotes",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"title","type":"text"},
+        {"name":"situation","type":"text"},
+        {"name":"task","type":"text"},
+        {"name":"action","type":"text"},
+        {"name":"result","type":"text"},
+        {"name":"impact","type":"text"},
+        {"name":"company","type":"text"},
+        {"name":"project","type":"text"},
+        {"name":"date","type":"date"},
+        {"name":"tags","type":"json"},
+        {"name":"description","type":"text"},
+        {"name":"notes","type":"text"},
+        {"name":"categories","type":"relation"},
+        {"name":"linked_questions","type":"relation"}
+      ]
+    },
+    {
+      "name": "experience_bullets",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"title","type":"text"},
+        {"name":"impact","type":"text"},
+        {"name":"category","type":"select"},
+        {"name":"date","type":"date"},
+        {"name":"tags","type":"json"}
+      ]
+    },
+    {
+      "name": "experience_jobs",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"company","type":"text"},
+        {"name":"role","type":"text"},
+        {"name":"location","type":"text"},
+        {"name":"employment_type","type":"select"},
+        {"name":"start_date","type":"date"},
+        {"name":"end_date","type":"date"},
+        {"name":"description","type":"text"},
+        {"name":"tags","type":"json"}
+      ]
+    },
+    {
+      "name": "experience_projects",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"title","type":"text"},
+        {"name":"company","type":"text"},
+        {"name":"role","type":"text"},
+        {"name":"team_size","type":"number"},
+        {"name":"tech_stack","type":"json"},
+        {"name":"start_date","type":"date"},
+        {"name":"end_date","type":"date"},
+        {"name":"description","type":"text"},
+        {"name":"tags","type":"json"}
+      ]
+    },
+    {
+      "name": "interview_rounds",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"application","type":"relation"},
+        {"name":"round_type","type":"text"},
+        {"name":"date","type":"text"},
+        {"name":"interviewer","type":"text"},
+        {"name":"questions_asked","type":"json"},
+        {"name":"notes","type":"text"},
+        {"name":"result","type":"text"},
+        {"name":"campaign","type":"relation"},
+        {"name":"scheduled_status","type":"select"},
+        {"name":"preparation_notes","type":"text"},
+        {"name":"loop_label","type":"text"},
+        {"name":"duration_minutes","type":"number"}
+      ]
+    },
+    {
+      "name": "legacy_artifact_snapshots",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"source_kind","type":"text"},
+        {"name":"source_id","type":"text"},
+        {"name":"source_updated","type":"text"},
+        {"name":"parent_id","type":"text"},
+        {"name":"parent_updated","type":"text"},
+        {"name":"template_id","type":"text"},
+        {"name":"template_fallback","type":"bool"},
+        {"name":"design","type":"json"},
+        {"name":"data","type":"json"},
+        {"name":"markup","type":"file"},
+        {"name":"content_checksum","type":"text"},
+        {"name":"materializer_digest","type":"text"},
+        {"name":"sanitizer_version","type":"text"},
+        {"name":"font_families","type":"json"},
+        {"name":"size_bytes","type":"number"}
+      ]
+    },
+    {
+      "name": "legacy_share_migration",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "fields": [
+        {"name":"manifest","type":"text"},
+        {"name":"predicate_version","type":"number"},
+        {"name":"link","type":"text"},
+        {"name":"origin","type":"text"},
+        {"name":"quarantine_entry","type":"text"},
+        {"name":"outcome","type":"text"},
+        {"name":"reason","type":"text"},
+        {"name":"views","type":"number"},
+        {"name":"first_view_day","type":"text"},
+        {"name":"last_view_day","type":"text"},
+        {"name":"incident","type":"bool"}
+      ]
+    },
+    {
+      "name": "offers",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"application","type":"relation"},
+        {"name":"status","type":"select"},
+        {"name":"base_salary","type":"number"},
+        {"name":"equity_type","type":"text"},
+        {"name":"equity_amount","type":"text"},
+        {"name":"equity_vest_schedule","type":"text"},
+        {"name":"sign_on","type":"number"},
+        {"name":"annual_bonus_target_pct","type":"number"},
+        {"name":"relocation","type":"text"},
+        {"name":"visa_sponsorship","type":"select"},
+        {"name":"remote_policy","type":"text"},
+        {"name":"pto","type":"text"},
+        {"name":"decision_deadline","type":"text"},
+        {"name":"letter_url","type":"url"},
+        {"name":"notes","type":"text"},
+        {"name":"trail","type":"json"},
+        {"name":"previous_offer","type":"relation"}
+      ]
+    },
+    {
+      "name": "question_timers",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"question_type","type":"text"},
+        {"name":"question_slug","type":"text"},
+        {"name":"accumulated_ms","type":"number"},
+        {"name":"started_at","type":"text"}
+      ]
+    },
+    {
+      "name": "relation_quarantine",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "fields": [
+        {"name":"migration","type":"text"},
+        {"name":"report_checksum","type":"text"},
+        {"name":"source_collection","type":"text"},
+        {"name":"source_id","type":"text"},
+        {"name":"field","type":"text"},
+        {"name":"target_collection","type":"text"},
+        {"name":"target_id","type":"text"},
+        {"name":"kind","type":"text"},
+        {"name":"action","type":"text"},
+        {"name":"unique_fallback","type":"bool"},
+        {"name":"owner","type":"text"},
+        {"name":"target_owner","type":"text"},
+        {"name":"payload","type":"json"},
+        {"name":"status","type":"text"},
+        {"name":"quarantined_at","type":"text"}
+      ]
+    },
+    {
+      "name": "relation_quarantine_reports",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "fields": [
+        {"name":"report_kind","type":"text"},
+        {"name":"report_version","type":"text"},
+        {"name":"generated_at","type":"text"},
+        {"name":"expires_at","type":"text"},
+        {"name":"checksum","type":"text"},
+        {"name":"dry_run","type":"bool"},
+        {"name":"status","type":"text"},
+        {"name":"summary","type":"json"},
+        {"name":"relations","type":"json"},
+        {"name":"findings","type":"json"},
+        {"name":"outcomes","type":"json"}
+      ]
+    },
+    {
+      "name": "resume_share_links",
+      "type": "base",
+      "listRule": "legacy_status != \"revoked_ownership\" && user = @request.auth.id",
+      "viewRule": "legacy_status != \"revoked_ownership\" && user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"variant","type":"relation"},
+        {"name":"resume","type":"relation"},
+        {"name":"legacy_status","type":"text"},
+        {"name":"legacy_reason","type":"text"},
+        {"name":"turned_off_at","type":"date"},
+        {"name":"manifest_id","type":"text"},
+        {"name":"replaced_by","type":"relation"}
+      ]
+    },
+    {
+      "name": "resume_share_views",
+      "type": "base",
+      "listRule": "link.legacy_status != \"revoked_ownership\" && user = @request.auth.id",
+      "viewRule": "link.legacy_status != \"revoked_ownership\" && user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"link","type":"relation"},
+        {"name":"viewer_ip_hash","type":"text"},
+        {"name":"user_agent","type":"text"},
+        {"name":"viewed_at","type":"text"}
+      ]
+    },
+    {
+      "name": "resume_variants",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"resume","type":"relation"},
+        {"name":"name","type":"text"},
+        {"name":"target_company","type":"text"},
+        {"name":"job_title","type":"text"},
+        {"name":"job_description","type":"text"},
+        {"name":"tone","type":"text"},
+        {"name":"role_focus","type":"json"},
+        {"name":"data","type":"json"},
+        {"name":"ats_score","type":"number"},
+        {"name":"ats_breakdown","type":"json"},
+        {"name":"application","type":"relation"},
+        {"name":"links","type":"json"}
+      ]
+    },
+    {
+      "name": "resume_versions",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"resume","type":"relation"},
+        {"name":"variant","type":"relation"},
+        {"name":"data","type":"json"},
+        {"name":"label","type":"text"},
+        {"name":"is_auto","type":"bool"},
+        {"name":"links","type":"json"}
+      ]
+    },
+    {
+      "name": "resumes",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"name","type":"text"},
+        {"name":"slug","type":"text"},
+        {"name":"template_id","type":"text"},
+        {"name":"design","type":"json"},
+        {"name":"data","type":"json"},
+        {"name":"links","type":"json"}
+      ]
+    },
+    {
+      "name": "share_capabilities",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"target_kind","type":"text"},
+        {"name":"snapshot","type":"relation"},
+        {"name":"target_checksum","type":"text"},
+        {"name":"purpose","type":"text"},
+        {"name":"expires_at","type":"date"},
+        {"name":"password_policy_ref","type":"text"},
+        {"name":"view_policy","type":"text"},
+        {"name":"capability_version","type":"number"},
+        {"name":"status","type":"text"},
+        {"name":"revoked_at","type":"date"},
+        {"name":"revoked_reason","type":"text"},
+        {"name":"projection_version","type":"number"},
+        {"name":"bearer_digest","type":"text"},
+        {"name":"digest_key_version","type":"number"}
+      ]
+    },
+    {"name":"share_resolvers","type":"auth","listRule":null,"viewRule":null,"fields":[]},
+    {
+      "name": "share_throttle",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "fields": [
+        {"name":"key","type":"text"},
+        {"name":"scope","type":"text"},
+        {"name":"window_start","type":"number"},
+        {"name":"count","type":"number"}
+      ]
+    },
+    {
+      "name": "system_design_guides",
+      "type": "base",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "fields": [
+        {"name":"title","type":"text"},
+        {"name":"slug","type":"text"},
+        {"name":"description","type":"editor"},
+        {"name":"sections","type":"json"},
+        {"name":"checklists","type":"json"},
+        {"name":"resources","type":"json"}
+      ]
+    },
+    {
+      "name": "system_design_questions",
+      "type": "base",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "fields": [
+        {"name":"title","type":"text"},
+        {"name":"slug","type":"text"},
+        {"name":"difficulty","type":"text"},
+        {"name":"description","type":"editor"},
+        {"name":"hints","type":"json"},
+        {"name":"constraints","type":"json"},
+        {"name":"requirements_functional","type":"json"},
+        {"name":"requirements_nonfunctional","type":"json"},
+        {"name":"estimation","type":"json"},
+        {"name":"api_design","type":"json"},
+        {"name":"database_schema","type":"json"},
+        {"name":"high_level_design","type":"json"},
+        {"name":"detailed_design","type":"json"},
+        {"name":"trade_offs","type":"json"},
+        {"name":"tips","type":"json"},
+        {"name":"thought_process","type":"json"},
+        {"name":"tags","type":"json"},
+        {"name":"architecture_diagram","type":"json"},
+        {"name":"sequence_diagram","type":"text"},
+        {"name":"er_diagram","type":"text"},
+        {"name":"thought_flow","type":"text"},
+        {"name":"tradeoff_visual","type":"json"},
+        {"name":"senior_topics","type":"json"}
+      ]
+    },
+    {
+      "name": "take_home_assignments",
+      "type": "base",
+      "listRule": "@request.auth.id != \"\"",
+      "viewRule": "@request.auth.id != \"\"",
+      "fields": [
+        {"name":"slug","type":"text"},
+        {"name":"title","type":"text"},
+        {"name":"difficulty","type":"text"},
+        {"name":"language","type":"text"},
+        {"name":"entrypoint","type":"text"},
+        {"name":"time_budget_min","type":"number"},
+        {"name":"ai_policy","type":"select"},
+        {"name":"prompt_md","type":"editor"},
+        {"name":"starter_files","type":"json"},
+        {"name":"harness_files","type":"json"},
+        {"name":"rubric","type":"json"},
+        {"name":"topics","type":"json"},
+        {"name":"companies","type":"json"},
+        {"name":"definition_version","type":"number"}
+      ]
+    },
+    {
+      "name": "take_home_attempts",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"campaign","type":"relation"},
+        {"name":"assignment","type":"relation"},
+        {"name":"files","type":"json"},
+        {"name":"ai_assist_used","type":"bool"},
+        {"name":"ai_chats","type":"json"},
+        {"name":"notes","type":"text"},
+        {"name":"harness_output","type":"json"},
+        {"name":"rubric_review","type":"json"},
+        {"name":"status","type":"select"},
+        {"name":"started_at","type":"text"},
+        {"name":"submitted_at","type":"text"},
+        {"name":"duration_ms","type":"number"},
+        {"name":"envelope","type":"relation"}
+      ]
+    },
+    {
+      "name": "take_home_drafts",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"campaign","type":"relation"},
+        {"name":"assignment","type":"relation"},
+        {"name":"file_path","type":"text"},
+        {"name":"contents","type":"text"}
+      ]
+    },
+    {
+      "name": "todos",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"campaign","type":"relation"},
+        {"name":"body","type":"text"},
+        {"name":"mentions","type":"json"},
+        {"name":"due_date","type":"text"},
+        {"name":"priority","type":"select"},
+        {"name":"completed_at","type":"text"}
+      ]
+    },
+    {
+      "name": "user_preferences",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"theme","type":"text"},
+        {"name":"accent","type":"text"},
+        {"name":"type_variant","type":"text"},
+        {"name":"density","type":"text"},
+        {"name":"nav_style","type":"text"},
+        {"name":"card_treatment","type":"text"},
+        {"name":"sans_font","type":"text"},
+        {"name":"radius","type":"text"},
+        {"name":"shadow","type":"text"},
+        {"name":"card_accent","type":"text"},
+        {"name":"app_background","type":"text"},
+        {"name":"glass_transparency","type":"number"},
+        {"name":"glass_frost","type":"number"},
+        {"name":"glass_shadow","type":"number"},
+        {"name":"current_campaign","type":"relation"}
+      ]
+    },
+    {
+      "name": "user_progress",
+      "type": "base",
+      "listRule": "user = @request.auth.id",
+      "viewRule": "user = @request.auth.id",
+      "fields": [
+        {"name":"user","type":"relation"},
+        {"name":"question_type","type":"select"},
+        {"name":"question_slug","type":"text"},
+        {"name":"status","type":"select"},
+        {"name":"notes","type":"text"},
+        {"name":"confidence","type":"number"},
+        {"name":"completed_at","type":"date"},
+        {"name":"campaign","type":"relation"}
+      ]
+    },
+    {
+      "name": "users",
+      "type": "auth",
+      "listRule": "id = @request.auth.id",
+      "viewRule": "id = @request.auth.id",
+      "fields": [
+        {"name":"name","type":"text"},
+        {"name":"avatar","type":"file"},
+        {"name":"bio","type":"text"},
+        {"name":"target","type":"text"},
+        {"name":"is_demo","type":"bool"},
+        {"name":"demo_run_used","type":"bool"},
+        {"name":"demo_evaluate_used","type":"bool"}
+      ]
+    }
+  ]
+}

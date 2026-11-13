@@ -18,8 +18,8 @@ const LEDGER = 'contracts/authority/disposition-ledger.json';
 const CORRECTIONS = 'contracts/authority/owner-sentence-corrections.json';
 const DR = 'docs/decisions/DR-0002-authority-matrix.json';
 const AUDITED = '62d4eae';
-// DR-0002@2 is a draft until #222's r2 review passes; harness/bench/ratify.py
-// sets this to 'ratified' in the ratification commit.
+// #223 ratified DR-0002@3 over #222's revision 2. A later revision's PR
+// sets this to 'draft' until that revision is ratified.
 const DR_STATUS = 'ratified';
 // A rounds-review checkout, when one is named, for the verbatim checks.
 const ROUNDS_REVIEW = process.env.ROUNDS_REVIEW_ROOT || null;
@@ -212,8 +212,7 @@ describe('authority: matrix content', () => {
     assert.equal(new Set(c.entries.map((e) => e.issue)).size, 101);
     // The corrected sentences cite DR-0002@1; an additive revision keeps
     // them valid, so the corrections may trail the matrix.
-    assert.equal(c.matrixRevision, 1);
-    assert.ok(m.revision >= c.matrixRevision);
+    assert.ok(c.matrixRevision >= 1 && c.matrixRevision <= m.revision, `corrections cite matrix revision ${c.matrixRevision}`);
   });
 
   it('lists one package per spec service, plus D8\'s Provider Gateway, each at the path DR-0004 places it', () => {
@@ -456,7 +455,7 @@ describe('authority: rules 1 to 12, one negative control each', () => {
       const dr = repo(DR);
       assert.equal(dr.status, DR_STATUS);
       if (DR_STATUS === 'ratified') {
-        assert.match(dr.approver, /^rounds lane review \(PR #222, r\d+\), \d{4}-\d{2}-\d{2}$/);
+        assert.match(dr.approver, /^rounds lane review \(PR #223, r\d+\), \d{4}-\d{2}-\d{2}$/);
         assert.deepEqual(dr.approvalRef.governedFiles.map((g) => g.path), [MATRIX, PACKAGES, LABELS, STORES]);
       } else {
         assert.equal(dr.approvalRef, null);

@@ -5,11 +5,11 @@
   "leaf": "ROUNDS-01-L02",
   "status": "ratified",
   "owner": "Product Architecture",
-  "approver": "rounds lane review (PR #222, r2), 2026-11-12",
+  "approver": "rounds lane review (PR #223, r4), 2026-11-12",
   "approvalRef": {
-    "pr": 222,
+    "pr": 223,
     "governedFiles": [
-      {"path":"contracts/authority/matrix.json","sha256":"22fa5d701d7bb4e2881599530e236bdb77d489c208aa8c19deb5961756b970c9"},
+      {"path":"contracts/authority/matrix.json","sha256":"e60cf830034800e7abf56be38c168da202e243d29f19038b80f7b50b1168b253"},
       {"path":"contracts/authority/packages.json","sha256":"11823361bf1a222ea1b9551ce962adb02aac04a87bc7cf949791b3cb5283ff99"},
       {"path":"contracts/authority/owner-labels.json","sha256":"f260e1d2d3cc6572c9c9456bb0d4886483bf8b989c9ebaabe68d2e188e31d800"},
       {"path":"contracts/authority/baseline-stores.json","sha256":"a04b3674b6ce1445ca5ec27609f1f1b237fecf43b2d7d5494d75b34ef0913f11"}
@@ -17,9 +17,9 @@
   },
   "ratifiedOn": "2026-11-12",
   "compatibility": "additive",
-  "revision": 2,
-  "supersedes": "DR-0002@1",
-  "supersessionReason": "#18 (ROUNDS-02-L01) fills the cells revision 1 left pending that leaf: each row's storage, from DR-0004@1's stores, and each package's target_path. Filling a pending cell is additive, so every DR-0002@1 citation stays valid.",
+  "revision": 3,
+  "supersedes": "DR-0002@2",
+  "supersessionReason": "Revision 3 fills the field_map cells revision 1 left pending on ROUNDS-14-L01 with contracts/privacy/field-map.json, where each field takes one class or visibility no looser than its row's floor (DR-0005). It changes no owner, authority, floor, visibility, scope, storage, or package, so it is additive, and revision 2 was ratified as PR #222.",
   "consumers": [
     "ROUNDS-00A-L01",
     "ROUNDS-00A-L02",
@@ -394,6 +394,20 @@
       ],
       "consequences": "A row's storage and a package's path are citable as DR-0002@2. #19 (ROUNDS-02-L02) and each domain leaf build in the named directory.",
       "migrationImpact": "None. No stored data or code moves; the cells name where future work goes.",
+      "rollbackImpact": "Revert this unratified revision. Once ratified, a superseding revision changes a cell, additively when it fills or narrows one."
+    },
+    {
+      "id": "F1",
+      "title": "Field maps from DR-0005",
+      "status": "ratified",
+      "sources": ["DR-0005@1 decisions PRIV-1 and PRIV-9", "contracts/privacy/field-map.json"],
+      "decision": "Each row's field_map cell that revision 1 left pending on ROUNDS-14-L01 names contracts/privacy/field-map.json. There every field the row holds takes one class or visibility, no looser than the row's privacy_floor or visibility, and the privacy rule fails a field that is looser or unlisted. Some of these rows are planned and hold no field yet; their fields join the map when their stores land. The ten rows that hold no account fields keep n/a, and the login streak stays blocked:OD-5.",
+      "alternatives": [
+        {"option":"List each row's field ids in its own cell","reason":"The matrix would copy the field map and drift from it; one file gives each field one answer."},
+        {"option":"Leave the cells pending until each row's transfer leaf","reason":"Each leaf would classify its own fields, and a field could reach a sink before anyone classed it."}
+      ],
+      "consequences": "A row's field classes are citable through DR-0002@3 and the field map's ids. A new field fails conformance until it has a class.",
+      "migrationImpact": "None. No stored data or code moves; the cells name where each field's class lives.",
       "rollbackImpact": "Revert this unratified revision. Once ratified, a superseding revision changes a cell, additively when it fills or narrows one."
     }
   ],

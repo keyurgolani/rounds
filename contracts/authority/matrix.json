@@ -2,7 +2,7 @@
   "$schema": "./matrix.schema.json",
   "registry": "rounds-authority-matrix",
   "description": "Source-of-truth and package-boundary matrix (ROUNDS-01-L02, DR-0002). One row per durable concept or relation: its command owner, target authority, read projection, privacy floor or visibility, package, disposition, and transfer. Cells hold a value, pending:<leaf-id>, n/a:<reason>, or blocked:OD-<n>. Citations are lines at the audited revision.",
-  "revision": 2,
+  "revision": 3,
   "compatibility": "additive",
   "decisionRecord": "DR-0002",
   "auditedRevision": "62d4eae",
@@ -313,7 +313,7 @@
   "rows": [
     {
       "id": "authentication-identity",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 781,
@@ -370,13 +370,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "account-session",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Sign-in session",
@@ -429,13 +429,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "appearance",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Appearance and shell preferences",
@@ -506,13 +506,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "current-campaign",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 802,
@@ -566,13 +566,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "demo-state",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Hosted demo account state and quotas",
@@ -644,13 +644,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "ai-provider-credential",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 808,
@@ -712,13 +712,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "ai-role-settings",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "AI provider and model choice per role",
@@ -773,13 +773,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "account-export",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Account export request, job, and archive",
@@ -809,13 +809,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "account-restore",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Account restore into a fresh deployment",
@@ -842,13 +842,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "idempotency-record",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Command idempotency record",
@@ -875,13 +875,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "audit-entry-change-set",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Transaction change sets, revisions, and audit entries",
@@ -913,13 +913,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "domain-event",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Domain events in the transactional outbox",
@@ -946,13 +946,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "typed-relation",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Typed relations between records",
@@ -999,13 +999,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "professional-identity",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 782,
@@ -1064,13 +1064,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "pending:ROUNDS-12-L03",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "profile-contact-point",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 782,
@@ -1119,13 +1119,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "pending:ROUNDS-12-L03",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "person-contact-point",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 782,
@@ -1165,13 +1165,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "employment-facts",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 783,
@@ -1233,13 +1233,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "pending:ROUNDS-12-L03",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "project-facts",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 783,
@@ -1301,13 +1301,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "pending:ROUNDS-12-L03",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "education",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Education history",
@@ -1357,13 +1357,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "pending:ROUNDS-12-L03",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "publication",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Publications",
@@ -1413,13 +1413,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "pending:ROUNDS-12-L03",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "achievement",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Achievements and evidence statements",
@@ -1489,13 +1489,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "pending:ROUNDS-12-L03",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "story",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Professional stories and behavioral evidence",
@@ -1554,13 +1554,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "pending:ROUNDS-12-L03",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "skill",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Skills",
@@ -1610,13 +1610,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "pending:ROUNDS-12-L03",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "link",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Professional links and external profiles",
@@ -1666,13 +1666,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "pending:ROUNDS-12-L03",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "organization",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 784,
@@ -1712,13 +1712,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "person",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 785,
@@ -1758,13 +1758,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "person-role",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Contextual person roles and relationship history",
@@ -1795,13 +1795,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "opportunity",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 786,
@@ -1862,13 +1862,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "pursuit",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 787,
@@ -1929,7 +1929,7 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
@@ -2015,7 +2015,7 @@
     },
     {
       "id": "campaign-definition",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 792,
@@ -2072,13 +2072,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "campaign-membership",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 793,
@@ -2176,13 +2176,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "offer",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 791,
@@ -2241,13 +2241,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "referral",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Referrals",
@@ -2278,13 +2278,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "interview-process",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 788,
@@ -2333,13 +2333,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "career-activity-schedule",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 789,
@@ -2402,13 +2402,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "career-activity-outcome",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 790,
@@ -2457,7 +2457,7 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
@@ -2515,7 +2515,7 @@
     },
     {
       "id": "artifact-edition",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 794,
@@ -2573,13 +2573,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "resume-autosave",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Resume editor working copy and autosave",
@@ -2627,13 +2627,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "artifact-revision",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 795,
@@ -2680,13 +2680,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "legacy-artifact-snapshot",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 796,
@@ -2725,7 +2725,7 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
@@ -2783,7 +2783,7 @@
     },
     {
       "id": "ats-analysis",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "ATS analysis runs and results",
@@ -2839,13 +2839,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "practice-draft",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 798,
@@ -2925,13 +2925,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "practice-attempt",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 799,
@@ -2994,13 +2994,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "practice-progress",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Practice progress status and timers",
@@ -3072,13 +3072,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "draft-caches",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Browser draft journal for practice drafts",
@@ -3109,13 +3109,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "job-description-cache",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Pasted job descriptions cached by the ATS and Tailor tabs",
@@ -3171,7 +3171,7 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
@@ -3585,7 +3585,7 @@
     },
     {
       "id": "pack-activation",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 809,
@@ -3617,7 +3617,7 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
@@ -3680,7 +3680,7 @@
     },
     {
       "id": "action",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 797,
@@ -3739,13 +3739,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "action-mention",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Action references to other records",
@@ -3792,13 +3792,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "capture-item",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Capture Inbox items",
@@ -3829,13 +3829,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "source-document",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 803,
@@ -3868,13 +3868,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "processing-attempt",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Processing jobs and attempts",
@@ -3905,13 +3905,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "extracted-claim",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 804,
@@ -3943,13 +3943,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "generation-proposal",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 805,
@@ -3981,13 +3981,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "staged-provider-result",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 806,
@@ -4018,13 +4018,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "provider-invocation-receipt",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 807,
@@ -4057,13 +4057,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "share-capability-metadata",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 810,
@@ -4127,13 +4127,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "share-bearer-digest",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 810,
@@ -4181,13 +4181,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "share-projection",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 810,
@@ -4219,13 +4219,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "share-view",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Share view events",
@@ -4272,13 +4272,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "pending:ROUNDS-32-L01",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "execution-admission",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Execution and render admission, quotas, and idempotency keys",
@@ -4309,13 +4309,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "execution-attempt",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Execution attempts and result envelopes",
@@ -4346,13 +4346,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "n/a:no read model consumes it"
     },
     {
       "id": "recommendation",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 801,
@@ -4385,13 +4385,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "evidence-gap-map",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Opportunity-to-evidence gap maps",
@@ -4423,13 +4423,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "today-item-state",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Today hides and reminder acknowledgments",
@@ -4460,13 +4460,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "pending:ROUNDS-31-L01"
     },
     {
       "id": "today-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Today",
@@ -4504,13 +4504,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:derived",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "ROUNDS-30-L02"
     },
     {
       "id": "career-profile-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Career Profile overview",
@@ -4560,13 +4560,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:derived",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "ROUNDS-31-L02"
     },
     {
       "id": "pipeline-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Pipeline",
@@ -4604,13 +4604,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:derived",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "ROUNDS-31-L03"
     },
     {
       "id": "opportunity-workspace-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Opportunity Workspace",
@@ -4662,13 +4662,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:derived",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "ROUNDS-31-L04"
     },
     {
       "id": "material-use-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Material-use graph",
@@ -4721,13 +4721,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:derived",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "ROUNDS-31-L05"
     },
     {
       "id": "readiness",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 800,
@@ -4767,13 +4767,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "ROUNDS-31-L06"
     },
     {
       "id": "preparation-plan-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Preparation plan",
@@ -4811,13 +4811,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:derived",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "ROUNDS-31-L07"
     },
     {
       "id": "search-index",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "spec": {
         "line": 811,
@@ -4873,13 +4873,13 @@
       "health": "pending:ROUNDS-31-L09",
       "impact": "n/a:no downstream-effect preview",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "ROUNDS-31-L08"
     },
     {
       "id": "data-health-read-model",
-      "revision": 2,
+      "revision": 3,
       "compatibility": "additive",
       "summary": {
         "information": "Data Health",
@@ -4927,7 +4927,7 @@
       "health": "n/a:this row is Data Health",
       "impact": "n/a:derived",
       "authz": "pending:ROUNDS-34-L03",
-      "field_map": "pending:ROUNDS-14-L01",
+      "field_map": "contracts/privacy/field-map.json",
       "inventory": "n/a:no baseline store",
       "projector": "ROUNDS-31-L09"
     }

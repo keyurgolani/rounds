@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { parseArgs, runConformance } from '../run.mjs';
-import { REPO_ROOT, cleanup, codes, editJson, editText, fixture, tempDir } from './helpers.mjs';
+import { REPO_ROOT, cleanup, codes, editJson, editText, everyRuleFixture, fixture, readJson, tempDir } from './helpers.mjs';
 
 after(cleanup);
 
@@ -13,7 +13,7 @@ const allFindings = (results) => results.flatMap((r) => r.findings);
 describe('runner', () => {
   it('runs every rule clean on the repository with no drift', async () => {
     const results = await runConformance({ ...parseArgs([]), root: REPO_ROOT, base: 'none' });
-    assert.deepEqual(results.map((r) => r.id).sort(), ['authority', 'database-adr', 'decision-records', 'program', 'vocabulary']);
+    assert.deepEqual(results.map((r) => r.id).sort(), ['authority', 'database-adr', 'decision-records', 'privacy', 'program', 'vocabulary']);
     assert.deepEqual(allFindings(results), []);
     for (const r of results) assert.deepEqual(r.written, []);
   });
@@ -29,7 +29,7 @@ describe('runner', () => {
   });
 
   it('fails on drift in a generated file and --write repairs it', async () => {
-    const dir = fixture((d) => editText(d, 'docs/vocabulary.md', (s) => `${s}\nhand edit\n`));
+    const dir = everyRuleFixture((d) => editText(d, 'docs/vocabulary.md', (s) => `${s}\nhand edit\n`));
     const drift = await runConformance({ ...parseArgs([]), root: dir, base: 'none', treeRoot: REPO_ROOT });
     assert.deepEqual(codes(allFindings(drift)), ['CONFORMANCE_DRIFT']);
     fs.rmSync(path.join(dir, 'frontend/src/vocabulary/labels.ts'));
@@ -66,7 +66,8 @@ describe('runner', () => {
   it('prints the matrix revision, blocked rows with their decisions, and pending counts by leaf', async () => {
     const results = await runConformance({ ...parseArgs(['--rule', 'authority']), root: REPO_ROOT, base: 'none' });
     const summary = results[0].summary.join('\n');
-    assert.match(summary, /matrix revision 2 \(DR-0002@2 /);
+    const revision = readJson(REPO_ROOT, 'contracts/authority/matrix.json').revision;
+    assert.match(summary, new RegExp(`matrix revision ${revision} \\(DR-0002@${revision} `));
     assert.match(summary, /blocked rows: 1 \(OD-5: login-streak\)/);
     assert.match(summary, /pending cells by leaf \(\d+ cells, \d+ leaves\): /);
     // #18 (ROUNDS-02-L01) filled its storage and target_path cells.
@@ -96,7 +97,7 @@ describe('runner', () => {
     }
     assert.ok(failed, 'the run fails');
     assert.equal(failed.status, 2);
-    assert.match(failed.stderr, /unknown rule vocabulry; rules are authority, database-adr, decision-records, program, vocabulary/);
+    assert.match(failed.stderr, /unknown rule vocabulry; rules are authority, database-adr, decision-records, privacy, program, vocabulary/);
   });
 
   it('compares with the branch a pull request targets, and runs on pushes to next', () => {
@@ -113,7 +114,7 @@ describe('runner', () => {
   it('exits 1 with path:line findings and 0 when clean', () => {
     const script = path.join(REPO_ROOT, 'scripts/conformance/run.mjs');
     const ok = execFileSync(process.execPath, [script, '--base', 'none'], { cwd: REPO_ROOT, encoding: 'utf8', env: { ...process.env, GITHUB_ACTIONS: '' } });
-    assert.match(ok, /conformance: 5 rule\(s\), 0 finding\(s\)/);
+    assert.match(ok, /conformance: 6 rule\(s\), 0 finding\(s\)/);
     const dir = fixture((d) => editText(d, 'README.md', (s) => s.replace(/^Rounds is a self-hostable career command center.*$/m, 'Rounds is a tool.')));
     let failed = null;
     try {

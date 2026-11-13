@@ -8,6 +8,14 @@
 // and wrapper parameters: when a hook, function, or component passes its own
 // parameter or prop to storage, the key resolves at each of its call sites
 // (calls and JSX elements), up to a few levels deep. Node built-ins only.
+//
+// A call to `localKey(key, isDemo)` from frontend/src/lib/demoKeys.ts
+// resolves to both keys it can return: `key`, and the demo account's key,
+// which is the module's prefix followed by `key` without the leading text
+// the module drops (`rounds.` today). Both strings are read from the
+// module, and only while `localKey` keeps the shape below. If it changes,
+// or a key's start doesn't tell whether the text drops, the call is
+// unresolved.
 
 import path from 'node:path';
 import { readJsxOpeningElement, tokenize } from '../js-scan.mjs';
@@ -20,6 +28,12 @@ const METHODS = { getItem: 'read', setItem: 'write', removeItem: 'write' };
 // persists the session in a LocalAuthStore under this localStorage key.
 export const SDK_AUTH_KEY = 'pocketbase_auth';
 const MAX_DEPTH = 6;
+// The demo account's keys (ROUNDS-00B-L07). `localKey` must read token for
+// token as below, where K and D are its parameters, P is a module constant
+// holding the prefix, and S is the text a key drops before the prefix.
+export const DEMO_KEYS_MODULE = 'frontend/src/lib/demoKeys.ts';
+const LOCAL_KEY_SHAPE = tokenize('function localKey(K: string, D: boolean): string { if (!D) return K; return P + (K.startsWith(S) ? K.slice(S.length) : K); }');
+const SHAPE_SLOTS = { K: 'ident', D: 'ident', P: 'ident', S: 'string' };
 
 export function sourceFiles(tree) {
   return tree.files().filter((f) => SOURCE.test(f) && !TEST_PATH.test(f));
@@ -264,13 +278,59 @@ function returnRanges(info, fn) {
   return out;
 }
 
+// { prefix, strip } from the demo keys module, { unreadable: true } when
+// `localKey` isn't exported in LOCAL_KEY_SHAPE's shape, K, D and P don't
+// name three different things, or P isn't declared once, as a module
+// constant holding a string, and null when there is no such module.
+function readDemoKeys(info) {
+  if (!info) return null;
+  const { tokens } = info;
+  const fn = info.fns.find((f) => f.name === 'localKey' && tokens[f.start - 1]?.value === 'export');
+  const body = fn ? tokens.slice(fn.start, fn.bodyEnd + 1) : [];
+  if (body.length !== LOCAL_KEY_SHAPE.length) return { unreadable: true };
+  const bound = {};
+  for (let i = 0; i < body.length; i++) {
+    const want = LOCAL_KEY_SHAPE[i];
+    const got = body[i];
+    const slot = want.type === 'ident' && Object.hasOwn(SHAPE_SLOTS, want.value) ? SHAPE_SLOTS[want.value] : undefined;
+    if (!slot) {
+      if (got.type !== want.type || got.value !== want.value) return { unreadable: true };
+      continue;
+    }
+    if (got.type !== slot || (bound[want.value] !== undefined && bound[want.value] !== got.value)) return { unreadable: true };
+    bound[want.value] = got.value;
+  }
+  if (new Set([bound.K, bound.D, bound.P]).size !== 3 || !bound.S) return { unreadable: true };
+  const decls = info.consts.filter((c) => c.name === bound.P);
+  const prefix = decls.length === 1 && tokens[decls[0].at].value === 'const' && !enclosing(info, decls[0].at) ? decls[0] : null;
+  const init = prefix && prefix.initEnd === prefix.initStart + 1 ? tokens[prefix.initStart] : null;
+  if (!init || init.type !== 'string' || !init.value) return { unreadable: true };
+  return { prefix: init.value, strip: bound.S };
+}
+
 // ------------------------------------------------------------- resolution
 //
 // A key is an array of parts: { lit } text, { any: true } for a varying part,
 // or { param } for a wrapper parameter still to resolve at call sites.
+// UNKNOWN is a varying part the extractor can't vouch for, so a key holding
+// one is unresolved.
 
 const LIT = (v) => ({ lit: v });
 const ANY = { any: true };
+const UNKNOWN = { any: true, unknown: true };
+
+// The demo account's key for `key`: the prefix, then `key` without its
+// leading `strip` text. When the literal start of `key` can't tell whether
+// it begins with `strip`, the demo account's key is UNKNOWN.
+function demoKey(key, { prefix, strip }) {
+  let lead = '';
+  let i = 0;
+  while (i < key.length && key[i].lit !== undefined) lead += key[i++].lit;
+  const rest = key.slice(i);
+  if (lead.startsWith(strip)) return [LIT(prefix + lead.slice(strip.length)), ...rest];
+  if (rest.length && strip.startsWith(lead)) return [UNKNOWN];
+  return [LIT(prefix + lead), ...rest];
+}
 
 function stripRange(tokens, s, e) {
   let a = s;
@@ -298,7 +358,7 @@ function topLevel(tokens, s, e, pred) {
 }
 
 class Resolver {
-  constructor(infos) {
+  constructor(infos, demo = null) {
     this.infos = infos; // Map file -> info
     this.byName = new Map(); // function name -> [{ info, fn }]
     for (const info of infos.values()) {
@@ -309,6 +369,24 @@ class Resolver {
       }
     }
     this.callSiteCache = new Map();
+    this.demo = demo; // readDemoKeys' answer for DEMO_KEYS_MODULE
+    this.demoNames = new Map(); // file -> local names of the module's localKey
+  }
+
+  // Local names under which info's file imports localKey from the demo keys module.
+  localKeyNames(info) {
+    if (!this.demo || info.file === DEMO_KEYS_MODULE) return [];
+    if (!this.demoNames.has(info.file)) this.demoNames.set(info.file, importedNames(info, DEMO_KEYS_MODULE, { name: 'localKey', isDefault: false }));
+    return this.demoNames.get(info.file);
+  }
+
+  // localKey(key, isDemo), whatever isDemo is: `key`, and the demo account's key.
+  localKey(args, depth) {
+    const arg = args[0];
+    const keys = this.demo.prefix !== undefined && arg ? this.resolve(arg.info, arg.s, arg.e, depth + 1) : null;
+    if (!keys || !keys.length) return [[UNKNOWN]];
+    const out = keys.flatMap((key) => [key, demoKey(key, this.demo)]);
+    return out.length > 64 ? [[UNKNOWN]] : out;
   }
 
   // Resolves tokens[s, e) of info at scope index; returns keys or null.
@@ -419,8 +497,9 @@ class Resolver {
   }
 
   callWithArgs(info, name, args, depth) {
+    if (name === 'localKey' && info.file === DEMO_KEYS_MODULE && this.demo) return this.localKey(args, depth);
     const fn = info.fns.find((f) => f.name === name);
-    if (!fn) return null;
+    if (!fn) return this.localKeyNames(info).includes(name) ? this.localKey(args, depth) : null;
     let out = [];
     for (const [a, b] of returnRanges(info, fn)) {
       const keys = this.resolve(info, a, b, depth + 1);
@@ -452,7 +531,7 @@ class Resolver {
   // Expands wrapper parameters through every call site of the wrapper.
   expand(key, depth = 0, via = []) {
     const idx = key.findIndex((p) => p.param);
-    if (idx === -1) return [{ key, via }];
+    if (idx === -1) return [{ key, via, unresolved: key.some((p) => p.unknown) }];
     const { info: home, fn, pos, prop } = key[idx].param;
     if (depth > MAX_DEPTH || !fn.name) return [{ key: key.map((p) => (p.param ? ANY : p)), via, unresolved: true }];
     const sites = this.callSites(fn, home);
@@ -619,7 +698,7 @@ export function extractBrowserKeys(tree) {
     if (!/localStorage|sessionStorage|new PocketBase\(|usePersisted|storageKey|Storage/.test(text) && !/export/.test(text)) continue;
     infos.set(file, analyzeFile(file, text));
   }
-  const resolver = new Resolver(infos);
+  const resolver = new Resolver(infos, readDemoKeys(infos.get(DEMO_KEYS_MODULE)));
   const families = new Map();
   const purges = [];
   const unresolved = [];
@@ -662,7 +741,7 @@ export function extractBrowserKeys(tree) {
       for (const key of keys) {
         for (const { key: done, via, unresolved: partial } of resolver.expand(key)) {
           const family = familyOf(done);
-          if (!family || family === '*' || partial) { unresolved.push(via.length ? `${via[via.length - 1].info.file}:${via[via.length - 1].line}` : site); if (!family || family === '*') continue; }
+          if (!family || family === '*' || partial) { unresolved.push(via.length ? `${via[via.length - 1].info.file}:${via[via.length - 1].line}` : site); if (!family || family === '*' || done.some((p) => p.unknown)) continue; }
           const origin = via.length ? `${via[via.length - 1].info.file}:${via[via.length - 1].line}` : site;
           add(family, api, METHODS[method], origin);
           if (via.length) add(family, api, METHODS[method] === 'write' ? 'write' : 'read', site);
