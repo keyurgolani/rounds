@@ -5,7 +5,7 @@
   "leaf": "ROUNDS-01-L02",
   "status": "ratified",
   "owner": "Product Architecture",
-  "approver": "rounds lane review (PR #223, r3), 2026-11-12",
+  "approver": "rounds lane review (PR #223, r4), 2026-11-12",
   "approvalRef": {
     "pr": 223,
     "governedFiles": [

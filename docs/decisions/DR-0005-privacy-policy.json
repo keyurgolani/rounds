@@ -5,7 +5,7 @@
   "leaf": "ROUNDS-14-L01",
   "status": "ratified",
   "owner": "AI Trust Platform",
-  "approver": "rounds lane review (PR #223, r3), 2026-11-12",
+  "approver": "rounds lane review (PR #223, r4), 2026-11-12",
   "approvalRef": {
     "pr": 223,
     "governedFiles": [
