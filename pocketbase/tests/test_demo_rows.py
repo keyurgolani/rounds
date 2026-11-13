@@ -72,6 +72,8 @@ def make_db(path: Path, *, execution: bool = True) -> Path:
             ("job000000000002", DEMO, "c2", "started"),
             ("job000000000003", DEMO, "c5", "queued"),
             ("job000000000004", STANDARD, "c3", "completed"),
+            ("job000000000005", DEMO, "c6", "leased"),
+            ("job000000000006", STANDARD, "c7", "started"),
         ])
         conn.execute("CREATE TABLE execution_envelopes (id TEXT PRIMARY KEY, job TEXT, user TEXT)")
         conn.executemany("INSERT INTO execution_envelopes VALUES (?, ?, ?)", [
@@ -112,7 +114,9 @@ def test_it_counts_what_the_reset_would_clear_for_the_demo_accounts_alone(tmp_pa
     # command that names it, and both of the demo's other sign-ins; the
     # started job and what it holds, and a command no job names, stay.
     expected.update(execution_jobs=2, execution_envelopes=1, admission_commands=1, external_auths=2)
-    assert out == {"version": "demo-rows/v1", "demo_accounts": 1, "deleted": expected}
+    # The demo's started and leased jobs a worker may hold, which a reset
+    # leaves; the standard account's started job isn't counted.
+    assert out == {"version": "demo-rows/v1", "demo_accounts": 1, "deleted": expected, "held_jobs": 2}
     assert list(out["deleted"]) == reset + extra
 
 
@@ -133,7 +137,7 @@ def test_a_database_from_before_the_execution_store_counts_zero_there_and_says_s
     res = run_tool("--db", str(db))
     assert res.returncode == 0, res.stderr
     out = json.loads(res.stdout)
-    assert out["deleted"]["execution_jobs"] == out["deleted"]["admission_commands"] == 0
+    assert out["deleted"]["execution_jobs"] == out["deleted"]["admission_commands"] == out["held_jobs"] == 0
     assert out["missing"] == ["admission_commands", "execution_envelopes", "execution_jobs"]
 
 
@@ -144,7 +148,7 @@ def test_with_no_demo_account_every_count_is_zero(tmp_path):
     conn.commit()
     conn.close()
     out = json.loads(run_tool("--db", str(db)).stdout)
-    assert out["demo_accounts"] == 0 and set(out["deleted"].values()) == {0}
+    assert out["demo_accounts"] == 0 and set(out["deleted"].values()) == {0} and out["held_jobs"] == 0
 
 
 def test_a_database_it_cant_read_exits_2(tmp_path):

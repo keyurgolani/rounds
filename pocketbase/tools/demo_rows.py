@@ -13,9 +13,12 @@ network request.
 It prints one JSON object: how many demo accounts (``users`` with
 ``is_demo`` set) the database holds, and, per collection the reset clears,
 how many of their rows it would delete, under the names the reset's
-``demo_reset`` log line counts in ``deleted``. The first such line after a
-deploy can be compared with it; several demo accounts log one line each,
-which add up to these totals. It holds no id, email, or value.
+``demo_reset`` log line counts in ``deleted``. Beside those, ``held_jobs``
+counts their code-run jobs a worker may still hold (leased or started),
+which a reset leaves until they end, as the line's own ``held_jobs`` does.
+The first such line after a deploy can be compared with it; several demo
+accounts log one line each, which add up to these totals. It holds no id,
+email, or value.
 
 Exit status: 0 with the counts, 2 when the database can't be read.
 """
@@ -49,6 +52,8 @@ RESET_EXTRA = ("execution_jobs", "execution_envelopes", "admission_commands", "e
 # The jobs execution.js purgeAccount takes, none a worker may hold, as a
 # filter on the jobs table under the alias `j`.
 _PURGEABLE = "j.account IN ({ids}) AND j.state NOT IN ('leased', 'started')"
+# The jobs a worker may hold, which a reset leaves and counts as held_jobs.
+_HELD = "j.account IN ({ids}) AND j.state IN ('leased', 'started')"
 
 
 def _tables(conn) -> set[str]:
@@ -92,7 +97,8 @@ def count(conn) -> dict:
         "SELECT COUNT(*) FROM _externalAuths WHERE collectionId = (SELECT id FROM _collections WHERE name = 'users')"
         f" AND recordId IN ({marks})",
         "_externalAuths", "_collections")
-    out = {"version": VERSION, "demo_accounts": len(ids), "deleted": deleted}
+    held = one(f"SELECT COUNT(*) FROM execution_jobs j WHERE {_HELD.format(ids=marks)}", "execution_jobs")
+    out = {"version": VERSION, "demo_accounts": len(ids), "deleted": deleted, "held_jobs": held}
     if missing:
         out["missing"] = sorted(set(missing))
     return out
