@@ -157,6 +157,8 @@ DENIED_ROUTES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("deployment.proxy.legacy-snapshot-hook.denied", "/api/rounds/Legacy-Snapshots", ("POST",)),
     ("deployment.proxy.share-hooks.denied", "/api/rounds/share/capabilities", ("GET", "POST")),
     ("deployment.proxy.share-hooks.denied", "/api/rounds/Share/capabilities", ("GET",)),
+    ("deployment.proxy.ai-hooks.denied", "/api/rounds/ai/credentials/read", ("GET", "POST")),
+    ("deployment.proxy.ai-hooks.denied", "/api/rounds/AI/providers/list", ("POST",)),
 )
 
 # Every check id this tool can report, with the guarantee it states. The
@@ -187,6 +189,8 @@ CHECKS: dict[str, str] = {
     "deployment.proxy.share-read.uniform": "a public share read of a malformed or unknown token answers one byte-identical 404 with no-store, noindex, no-referrer, nosniff, DENY framing, and the resolver CSP",
     "deployment.proxy.share-hooks.denied":
         "the share capability hook routes, which only the runner calls, are not reachable at the public URL",
+    "deployment.proxy.ai-hooks.denied":
+        "the AI provider custody hook routes, which only the runner calls, are not reachable at the public URL",
     "deployment.proxy.share-resolve.uniform": "a share capability resolve with a malformed or unknown token answers one byte-identical 404 with no-store, noindex, no-referrer, nosniff, DENY framing, and the resolver CSP",
     "deployment.credentials.defaults.rejected": "no shipped default login authenticates as an admin",
     "deployment.credentials.admin-passwords.rejected": "no admin account accepts a shipped default password",
