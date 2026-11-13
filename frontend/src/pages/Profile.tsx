@@ -296,7 +296,14 @@ function ProfileBody() {
             <ArrowRight size={14} strokeWidth={1.7} />
           </div>
           <div
-            style={{ fontSize: 11.5, color: 'var(--text-4)', marginTop: 3, fontWeight: 400 }}
+            style={{
+              fontSize: 11.5,
+              // The demo's line says a sign-out clears everyone's work, so
+              // it reads at full body contrast.
+              color: user.isDemo ? 'var(--text-2)' : 'var(--text-4)',
+              marginTop: 3,
+              fontWeight: 400,
+            }}
           >
             {user.isDemo
               ? 'Signs you out and clears what everyone added to the demo account.'

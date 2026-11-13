@@ -46,7 +46,7 @@ function renderShellAs(user: User) {
 describe('the signed-in shell', () => {
   it('opens every page with the demo notice while the demo account is signed in', () => {
     renderShellAs({ ...USER, isDemo: true });
-    const notice = screen.getByRole('complementary', { name: 'Demo account' });
+    const notice = screen.getByRole('note', { name: 'Demo account' });
     expect(within(notice).getByText('Shared demo account.')).toBeTruthy();
     expect(notice.textContent).toContain("so don't enter real personal details");
     expect(notice.textContent).toContain('Any sign-out, the 30-minute idle one included, clears what everyone added.');
@@ -60,6 +60,7 @@ describe('the signed-in shell', () => {
   it('shows no demo notice to any other account', () => {
     renderShellAs({ ...USER, name: 'Ada', isDemo: false });
     expect(screen.queryByTestId('demo-notice')).toBeNull();
+    expect(screen.queryByRole('note', { name: 'Demo account' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'The page' })).toBeTruthy();
   });
 });

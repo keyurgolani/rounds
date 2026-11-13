@@ -44,6 +44,8 @@ interface CampaignContextValue {
 const CampaignContext = createContext<CampaignContextValue | null>(null);
 
 const CURRENT_ID_KEY = 'rounds.currentCampaign.v1';
+// How often a click or key press in a tab may check its campaign again.
+const ACTION_CHECK_MS = 15_000;
 
 function slugify(s: string): string {
   return s
@@ -262,8 +264,10 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
     ]);
   }, []);
 
-  // A tab that comes back into view checks that its campaign still
-  // exists, once the bootstrap has run.
+  // A tab checks that its campaign still exists, once the bootstrap has
+  // run: when it comes back into view, and on the next click or key press
+  // in it, at most every ACTION_CHECK_MS, since another visitor's sign-out
+  // can clear the shared demo account's campaigns while a tab stays in view.
   useEffect(() => {
     if (!user) return;
     const check = () => {
@@ -272,11 +276,22 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
         /* the next check tries again */
       });
     };
+    let lastAction = Date.now();
+    const onAction = () => {
+      const now = Date.now();
+      if (now - lastAction < ACTION_CHECK_MS) return;
+      lastAction = now;
+      check();
+    };
     window.addEventListener('focus', check);
     document.addEventListener('visibilitychange', check);
+    window.addEventListener('pointerdown', onAction, true);
+    window.addEventListener('keydown', onAction, true);
     return () => {
       window.removeEventListener('focus', check);
       document.removeEventListener('visibilitychange', check);
+      window.removeEventListener('pointerdown', onAction, true);
+      window.removeEventListener('keydown', onAction, true);
     };
   }, [user, refresh]);
 

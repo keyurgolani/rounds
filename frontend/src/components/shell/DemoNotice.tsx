@@ -3,10 +3,12 @@ import { Users } from 'lucide-react';
 // The demo account's notice (ROUNDS-00B-L07), above every signed-in page
 // while the demo account is signed in. Visitors share that account, so
 // what one adds is visible to the others until a sign-out clears it. It
-// sits in the page flow, wraps on a phone, and never takes focus.
+// sits in the page flow, wraps on a phone, and never takes focus. It's a
+// note, not a landmark, since it sits inside the main one.
 export default function DemoNotice() {
   return (
-    <aside
+    <section
+      role="note"
       aria-label="Demo account"
       data-testid="demo-notice"
       className="flex items-start gap-2.5 px-5 sm:px-8 py-2.5"
@@ -30,6 +32,6 @@ export default function DemoNotice() {
         Other visitors can see what you add while it lasts, so don't enter real personal details. Any
         sign-out, the 30-minute idle one included, clears what everyone added.
       </p>
-    </aside>
+    </section>
   );
 }

@@ -120,4 +120,32 @@ describe('the campaign bootstrap', () => {
     expect(seen.currentId).toBe(two.id);
     expect(api.createCampaign).not.toHaveBeenCalled();
   });
+
+  it('runs again on the next action in a tab that stays in view, at most every 15 seconds', async () => {
+    const first = campaign('camp00000000001', { slug: 'default', is_default: true });
+    const next = campaign('camp00000000009', { slug: 'default', is_default: true });
+    let clock = 1_000_000;
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => clock);
+    try {
+      api.listCampaigns.mockResolvedValueOnce([first]);
+      renderProvider();
+      await waitFor(() => expect(seen.currentId).toBe(first.id));
+      // Another visitor's sign-out cleared the shared account's campaigns.
+      api.listCampaigns.mockResolvedValue([]);
+      api.createCampaign.mockResolvedValueOnce(next);
+      // Too soon after the bootstrap: the click checks nothing.
+      await act(async () => {
+        window.dispatchEvent(new Event('pointerdown'));
+      });
+      expect(api.listCampaigns).toHaveBeenCalledTimes(1);
+      clock += 15_000;
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+      });
+      await waitFor(() => expect(seen.currentId).toBe(next.id));
+      expect(seen.ids).toEqual([next.id]);
+    } finally {
+      now.mockRestore();
+    }
+  });
 });
