@@ -7,7 +7,7 @@
   "decisions": "contracts/database/erd-decisions.json",
   "snapshot": {
     "path": "contracts/database/schema-snapshot.json",
-    "revision": "988653cec5bc60fc06a862be1be308b03b890f64",
+    "revision": "2b3a1b3b69ed9f5e195b7235ed42e369f5ce5a09",
     "pocketbaseVersion": "0.22.22"
   },
   "semantics": {
@@ -261,6 +261,48 @@
       "purge": "not account data"
     },
     {
+      "id": "ai_credentials",
+      "status": "live",
+      "kind": "collection",
+      "type": "base",
+      "store": "sqlite-data",
+      "bytes": false,
+      "group": "account",
+      "scope": "account",
+      "partition": {"field":"user","kind":"relation","onAccountDelete":"cascade"},
+      "partitionIndexed": true,
+      "fields": 11,
+      "indexes": [
+        {"name":"idx_ai_credentials_provider","unique":true,"columns":["ai_credentials.provider"]},
+        {"name":"idx_ai_credentials_user","unique":false,"columns":["ai_credentials.user"]}
+      ],
+      "rules": {"list":"null","view":"null","create":"null","update":"null","delete":"null"},
+      "rows": ["ai-provider-credential"],
+      "writers": "#73's AI hook routes only, for the runner with the caller's bearer and the runner key; the move migration at start",
+      "purge": "cascades with the account and with its provider"
+    },
+    {
+      "id": "ai_provider_models",
+      "status": "live",
+      "kind": "collection",
+      "type": "base",
+      "store": "sqlite-data",
+      "bytes": false,
+      "group": "account",
+      "scope": "account",
+      "partition": {"field":"user","kind":"relation","onAccountDelete":"cascade"},
+      "partitionIndexed": true,
+      "fields": 4,
+      "indexes": [
+        {"name":"idx_ai_provider_models_model","unique":true,"columns":["ai_provider_models.provider","ai_provider_models.model"]},
+        {"name":"idx_ai_provider_models_user","unique":false,"columns":["ai_provider_models.user"]}
+      ],
+      "rules": {"list":"null","view":"null","create":"null","update":"null","delete":"null"},
+      "rows": ["ai-provider-credential"],
+      "writers": "#73's AI hook routes only, for the runner with the caller's bearer and the runner key; the move migration at start",
+      "purge": "cascades with the account and with its provider"
+    },
+    {
       "id": "ai_providers",
       "status": "live",
       "kind": "collection",
@@ -273,7 +315,7 @@
       "partitionIndexed": true,
       "fields": 8,
       "indexes": [{"name":"idx_ai_providers_user","unique":false,"columns":["ai_providers.user"]}],
-      "rules": {"list":"expression","view":"expression","create":"expression","update":"expression","delete":"expression"},
+      "rules": {"list":"expression","view":"expression","create":"null","update":"null","delete":"expression"},
       "rows": ["ai-provider-credential"],
       "writers": "#73's AI hook routes, for the runner with the caller's bearer and the runner key; the owner deletes through REST under #9's rules",
       "purge": "cascades with the account"
@@ -1577,6 +1619,58 @@
       "id": "ai_coding_drafts.user",
       "status": "live",
       "from": "ai_coding_drafts",
+      "field": "user",
+      "to": "users",
+      "cardinality": "many-to-one",
+      "required": true,
+      "cascadeDelete": true,
+      "onDelete": "cascade",
+      "merge": "n/a",
+      "authorization": "owner"
+    },
+    {
+      "id": "ai_credentials.provider",
+      "status": "live",
+      "from": "ai_credentials",
+      "field": "provider",
+      "to": "ai_providers",
+      "cardinality": "many-to-one",
+      "required": true,
+      "cascadeDelete": true,
+      "onDelete": "cascade",
+      "merge": "none",
+      "authorization": "relation-endpoint"
+    },
+    {
+      "id": "ai_credentials.user",
+      "status": "live",
+      "from": "ai_credentials",
+      "field": "user",
+      "to": "users",
+      "cardinality": "many-to-one",
+      "required": true,
+      "cascadeDelete": true,
+      "onDelete": "cascade",
+      "merge": "n/a",
+      "authorization": "owner"
+    },
+    {
+      "id": "ai_provider_models.provider",
+      "status": "live",
+      "from": "ai_provider_models",
+      "field": "provider",
+      "to": "ai_providers",
+      "cardinality": "many-to-one",
+      "required": true,
+      "cascadeDelete": true,
+      "onDelete": "cascade",
+      "merge": "none",
+      "authorization": "relation-endpoint"
+    },
+    {
+      "id": "ai_provider_models.user",
+      "status": "live",
+      "from": "ai_provider_models",
       "field": "user",
       "to": "users",
       "cardinality": "many-to-one",
