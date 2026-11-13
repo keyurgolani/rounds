@@ -206,6 +206,9 @@ def _endpoint_error(endpoint: Any) -> str | None:
         return "endpoint.credential"
     if not _optional(credential, "field", str):
         return "endpoint.credential.field"
+    # The credential's id takes the same forms as every other field id.
+    if credential.get("field") is not None and _malformed_id(credential["field"]):
+        return "endpoint.credential.field"
     registered = credential.get("registeredFor")
     if registered is None:
         return None
