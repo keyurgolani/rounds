@@ -42,7 +42,8 @@ RESET = (
     "campaigns",
 )
 # pb_hooks/demo.js RESET_EXTRA: the code-run jobs no worker holds, their
-# envelopes, the admission commands that name them, and the OAuth2 links.
+# envelopes, the admission commands that name them, and every sign-in the
+# account holds besides its password.
 RESET_EXTRA = ("execution_jobs", "execution_envelopes", "admission_commands", "external_auths")
 
 # The jobs execution.js purgeAccount takes, none a worker may hold, as a

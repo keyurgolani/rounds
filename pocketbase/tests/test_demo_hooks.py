@@ -13,6 +13,7 @@ import json
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -118,10 +119,10 @@ function exec(step) {
     }
     case "guardSignIn":
       return outcome(() => demo.guardSignIn({ record: step.record === null ? null : record(step.record) }, step.env));
-    case "guardOAuth2SignIn":
-      // PocketBase's OAuth2 event: the record it would sign in to, if any,
-      // and the request's own session, if it carried one.
-      return outcome(() => demo.guardOAuth2SignIn({
+    case "guardPasswordOnly":
+      // A sign-in event: the record it would sign in to, if any, and the
+      // request's own session, if it carried one.
+      return outcome(() => demo.guardPasswordOnly({
         httpContext: ctx(step), record: step.record ? record(step.record) : null,
       }, step.env));
     case "guardAccountUpdate":
@@ -244,22 +245,91 @@ def test_a_failed_save_is_counted_and_the_start_goes_on():
 
 
 def test_the_demo_account_signs_in_with_its_password_only():
-    # On or off: an OAuth2 sign-in to a demo account, and one a demo
-    # session sends, get the answer a failed sign-in gets.
+    # On or off: any other sign-in to a demo account, or from a demo
+    # session, gets the answer a failed sign-in gets.
     assert run(
-        {"call": "guardOAuth2SignIn", "env": ON, "record": DEMO},
-        {"call": "guardOAuth2SignIn", "env": OFF, "record": DEMO},
-        {"call": "guardOAuth2SignIn", "env": ON, "record": None, "auth": DEMO},
-        {"call": "guardOAuth2SignIn", "env": ON, "record": STANDARD, "auth": DEMO},
+        {"call": "guardPasswordOnly", "env": ON, "record": DEMO},
+        {"call": "guardPasswordOnly", "env": OFF, "record": DEMO},
+        {"call": "guardPasswordOnly", "env": ON, "record": None, "auth": DEMO},
+        {"call": "guardPasswordOnly", "env": ON, "record": STANDARD, "auth": DEMO},
     ) == [SIGN_IN_FAILED] * 4
 
 
-def test_other_accounts_still_sign_in_with_oauth2():
+def test_other_accounts_keep_their_other_sign_in_methods():
     assert run(
-        {"call": "guardOAuth2SignIn", "env": ON, "record": STANDARD},
-        {"call": "guardOAuth2SignIn", "env": OFF, "record": STANDARD, "auth": STANDARD},
-        {"call": "guardOAuth2SignIn", "env": ON, "record": None},
+        {"call": "guardPasswordOnly", "env": ON, "record": STANDARD},
+        {"call": "guardPasswordOnly", "env": OFF, "record": STANDARD, "auth": STANDARD},
+        {"call": "guardPasswordOnly", "env": ON, "record": None},
     ) == [{"allowed": True}] * 3
+
+
+# demo.pb.js's own sign-in registrations, driven as PocketBase calls them,
+# so a hook wired to the wrong guard, or not at all, fails here too.
+SIGN_IN_HOOKS = r"""
+const path = require("path");
+const [hooksDir, raw] = process.argv.slice(1);
+globalThis.__hooks = hooksDir;
+class ApiError extends Error { constructor(s, m) { super(m); this.status = s; } }
+globalThis.BadRequestError = class extends ApiError { constructor(m) { super(400, m); } };
+globalThis.ForbiddenError = class extends ApiError { constructor(m) { super(403, m); } };
+globalThis.UnauthorizedError = class extends ApiError { constructor(m) { super(401, m); } };
+globalThis.ValidationError = class { constructor(c, m) { this.code = c; this.message = m; } };
+globalThis.$apis = { requestInfo: (c) => c.info };
+console.log = () => {};
+let env = {};
+globalThis.$os = { getenv: (name) => env[name] || "" };
+const hooks = {};
+for (const name of ["onAfterBootstrap", "routerUse", "onRecordBeforeAuthWithPasswordRequest",
+                    "onRecordBeforeAuthWithOAuth2Request", "onRecordBeforeUpdateRequest",
+                    "onRecordBeforeDeleteRequest", "onRecordBeforeRequestEmailChangeRequest",
+                    "onRecordBeforeCreateRequest", "onModelBeforeCreate", "onModelBeforeUpdate",
+                    "routerAdd", "cronAdd"]) {
+  globalThis[name] = (fn) => { (hooks[name] = hooks[name] || []).push(fn); };
+}
+require(path.join(hooksDir, "demo.pb.js"));
+const rec = (f) => ({ getBool: (k) => f[k] === true, getString: () => "" });
+process.stdout.write(JSON.stringify(JSON.parse(raw).map((step) => {
+  env = step.env;
+  try {
+    (hooks[step.hook] || []).forEach((fn) => fn({
+      record: step.record ? rec(step.record) : null,
+      httpContext: { info: { authRecord: step.auth ? rec(step.auth) : null } },
+    }));
+    return "allowed";
+  } catch (err) {
+    return err.message;
+  }
+})));
+"""
+PASSWORD_HOOK = "onRecordBeforeAuthWithPasswordRequest"
+# PocketBase 0.22's hook for every other way to sign in to a users record.
+OTHER_SIGN_IN_HOOK = "onRecordBeforeAuthWithOAuth2Request"
+
+
+def sign_in_run(*steps: dict) -> list:
+    node = shutil.which("node")
+    assert node, "node is required for the PocketBase hook checks; CI installs it"
+    res = subprocess.run([node, "-e", SIGN_IN_HOOKS, str(HOOKS), json.dumps(list(steps))], capture_output=True,
+                         text=True, timeout=60)
+    assert res.returncode == 0, res.stderr
+    return json.loads(res.stdout)
+
+
+def test_the_registered_sign_in_hooks_hold_the_demo_account_to_its_password():
+    failed = SIGN_IN_FAILED["message"]
+    assert sign_in_run(
+        {"hook": OTHER_SIGN_IN_HOOK, "env": ON, "record": DEMO},
+        {"hook": OTHER_SIGN_IN_HOOK, "env": OFF, "record": DEMO},
+        {"hook": OTHER_SIGN_IN_HOOK, "env": ON, "record": None, "auth": DEMO},
+        {"hook": OTHER_SIGN_IN_HOOK, "env": ON, "record": STANDARD, "auth": DEMO},
+        {"hook": PASSWORD_HOOK, "env": OFF, "record": DEMO},
+    ) == [failed] * 5
+    assert sign_in_run(
+        {"hook": PASSWORD_HOOK, "env": ON, "record": DEMO},
+        {"hook": OTHER_SIGN_IN_HOOK, "env": ON, "record": STANDARD},
+        {"hook": OTHER_SIGN_IN_HOOK, "env": OFF, "record": STANDARD, "auth": STANDARD},
+        {"hook": OTHER_SIGN_IN_HOOK, "env": ON, "record": None},
+    ) == ["allowed"] * 4
 
 
 def test_with_the_demo_off_a_demo_sign_in_fails_as_a_wrong_password_does():
@@ -534,6 +604,8 @@ def test_each_denial_logs_one_line_without_an_id_or_a_value():
                                     "fields": {"user": "demo00000000001", "table": "ai_providers"}}},
         {"call": "logged", "step": {"call": "guardContainedModel", "users": USERS,
                                     "fields": {"user": "demo00000000001", "table": "ai_settings"}}},
+        {"call": "logged", "step": {"call": "guardPasswordOnly", "env": ON, "record": DEMO}},
+        {"call": "logged", "step": {"call": "guardPasswordOnly", "env": OFF, "record": None, "auth": DEMO}},
     )
     assert [r["logs"] for r in results] == [
         [dict(line, code="demo_off", on="sign_in", collection="users")],
@@ -542,6 +614,8 @@ def test_each_denial_logs_one_line_without_an_id_or_a_value():
         [dict(line, code="demo_not_permitted", on="email_change", collection="users")],
         [dict(line, code="demo_not_permitted", on="save", collection="ai_providers")],
         [dict(line, code="demo_not_permitted", on="model_save", collection="ai_settings")],
+        [dict(line, code="demo_not_permitted", on="sign_in", collection="users")],
+        [dict(line, code="demo_off", on="sign_in", collection="users")],
     ]
     assert "demo00000000001" not in json.dumps(results[4]["logs"] + results[5]["logs"])
 
@@ -553,9 +627,10 @@ def test_an_allowed_write_logs_nothing():
                                     "data": dict(SEEDED)}},
         {"call": "logged", "step": {"call": "guardContainedModel", "users": USERS,
                                     "fields": {"user": "user00000000001", "table": "ai_settings"}}},
+        {"call": "logged", "step": {"call": "guardPasswordOnly", "env": ON, "record": STANDARD}},
     )
-    assert [r["result"] for r in results] == [{"allowed": True}] * 3
-    assert [r["logs"] for r in results] == [[], [], []]
+    assert [r["result"] for r in results] == [{"allowed": True}] * 4
+    assert [r["logs"] for r in results] == [[], [], [], []]
 
 
 # Collections the OWNERS map names before their leaf adds them. The leaf
@@ -590,9 +665,10 @@ def test_every_contained_collection_names_its_owner_in_its_schema():
 # ---- 5 and 6. the reset, the sign-out route, and the sweep -----------------------------------------------
 
 # The reset runs on a table-backed Dao: filters of the forms the hooks
-# send, transactions that roll back on a throw, the two cascades the
-# execution store relies on (a job's attempts, a command's leases), and
-# OAuth2 links. `failOn` makes deletes in one collection throw.
+# send, transactions that roll back on a throw and count every row they
+# delete, the two cascades the execution store relies on (a job's
+# attempts, a command's leases), and the sign-ins an account holds besides
+# its password (`auths`). `failOn` makes deletes in one collection throw.
 RESET_RUNNER = r"""
 const path = require("path");
 const [hooksDir] = process.argv.slice(1);
@@ -618,7 +694,7 @@ const demo = require(path.join(hooksDir, "demo.js"));
 const step = JSON.parse(raw);
 
 let tables = JSON.parse(JSON.stringify(step.tables || {}));
-let links = JSON.parse(JSON.stringify(step.links || []));
+let auths = JSON.parse(JSON.stringify(step.auths || []));
 const stats = { transactions: 0, perTransaction: [], order: [], saves: 0 };
 let current = 0;
 
@@ -669,26 +745,30 @@ const dao = {
     stats.order.push(table);
     current += 1;
     const cascade = CASCADES[table];
-    if (cascade) tables[cascade[0]] = (tables[cascade[0]] || []).filter((r) => r[cascade[1]] !== record.id);
+    if (cascade) {
+      const kept = (tables[cascade[0]] || []).filter((r) => r[cascade[1]] !== record.id);
+      current += (tables[cascade[0]] || []).length - kept.length;
+      tables[cascade[0]] = kept;
+    }
   },
   saveRecord: (record) => {
     if (step.failOn === "users") throw new Error("save failed");
     stats.saves += 1;
   },
-  findAllExternalAuthsByRecord: (record) => links.filter((l) => l.recordId === record.id).map((l) => ({ id: l.id })),
-  deleteExternalAuth: (link) => {
+  findAllExternalAuthsByRecord: (record) => auths.filter((a) => a.recordId === record.id).map((a) => ({ id: a.id })),
+  deleteExternalAuth: (auth) => {
     if (step.failOn === "external_auths") throw new Error("delete failed");
-    links = links.filter((l) => l.id !== link.id);
+    auths = auths.filter((a) => a.id !== auth.id);
     current += 1;
   },
   runInTransaction: (fn) => {
-    const before = JSON.stringify({ tables, links });
+    const before = JSON.stringify({ tables, auths });
     stats.transactions += 1;
     current = 0;
     try {
       fn(dao);
     } catch (err) {
-      ({ tables, links } = JSON.parse(before));
+      ({ tables, auths } = JSON.parse(before));
       throw err;
     } finally {
       stats.perTransaction.push(current);
@@ -712,12 +792,30 @@ function context() {
   };
 }
 
+// demo.pb.js's own cron job, as PocketBase runs it: its callback, the
+// gate it reads, and the clock.
+function cron() {
+  let job = null;
+  for (const name of ["onAfterBootstrap", "routerUse", "onRecordBeforeAuthWithPasswordRequest",
+                      "onRecordBeforeAuthWithOAuth2Request", "onRecordBeforeUpdateRequest",
+                      "onRecordBeforeDeleteRequest", "onRecordBeforeRequestEmailChangeRequest",
+                      "onRecordBeforeCreateRequest", "onModelBeforeCreate", "onModelBeforeUpdate", "routerAdd"]) {
+    globalThis[name] = () => undefined;
+  }
+  globalThis.cronAdd = (id, schedule, fn) => { if (id === "rounds_demo_reset") job = fn; };
+  globalThis.$os = { getenv: (name) => (step.env || {})[name] || "" };
+  require(path.join(hooksDir, "demo.pb.js"));
+  job();
+  return "ran";
+}
+
 let result;
 if (step.call === "reset") result = demo.resetAccount($app, step.account, step.trigger || "end", step.reason || "");
 else if (step.call === "end") result = outcome(() => demo.handleEnd(context(), step.env));
 else if (step.call === "sweep") result = demo.sweep($app, step.env, step.now);
+else if (step.call === "cron") result = cron();
 else throw new Error("unknown call " + step.call);
-process.stdout.write(JSON.stringify({ result, tables, links, stats, logs: out.logs, errors: out.errors }));
+process.stdout.write(JSON.stringify({ result, tables, auths, stats, logs: out.logs, errors: out.errors }));
 """
 
 DEMO_ID = "demo00000000001"
@@ -828,13 +926,41 @@ def test_the_reset_takes_code_run_jobs_no_worker_holds_and_keeps_the_limits():
     assert ids["admission_counters"] == ["ctr000000000001"]
     deleted = out["result"]["deleted"]
     assert (deleted["execution_jobs"], deleted["execution_envelopes"], deleted["admission_commands"]) == (1, 1, 1)
+    # The started job it couldn't take is counted, never named.
+    (line,) = out["logs"]
+    assert out["result"]["held_jobs"] == 1 and line["held_jobs"] == 1
+    assert "job000000000002" not in json.dumps(line)
 
 
-def test_the_reset_removes_the_demo_accounts_oauth2_links():
-    links = [{"id": "ext000000000001", "recordId": DEMO_ID}, {"id": "ext000000000002", "recordId": DEMO_ID},
-             {"id": "ext000000000003", "recordId": USER_ID}]
-    out = reset_run({"call": "reset", "account": DEMO_ID, "tables": owned_tables([]), "links": links})
-    assert out["links"] == [{"id": "ext000000000003", "recordId": USER_ID}]
+def test_the_code_run_stage_holds_to_the_batch_with_everything_a_job_takes_along():
+    # 200 ended jobs, each with three attempts, their envelopes, its command,
+    # and that command's lease: nine rows a job, cascades included.
+    tables = owned_tables([])
+    jobs, attempts, envelopes, commands, leases = [], [], [], [], []
+    for i in range(200):
+        job, command = f"job{i:012d}", f"cmd{i:012d}"
+        jobs.append({"id": job, "account": DEMO_ID, "command_id": f"c{i}", "state": "completed", "queued_at": i})
+        for n in range(3):
+            attempts.append({"id": f"att{i:09d}{n:03d}", "job": job, "account": DEMO_ID})
+            envelopes.append({"id": f"env{i:09d}{n:03d}", "job": job, "attempt": f"att{i:09d}{n:03d}", "user": DEMO_ID})
+        commands.append({"id": command, "account": DEMO_ID, "command_id": f"c{i}", "job": job})
+        leases.append({"id": f"lse{i:012d}", "command": command, "account": DEMO_ID})
+    tables.update(execution_jobs=jobs, execution_attempts=attempts, execution_envelopes=envelopes,
+                  admission_commands=commands, admission_leases=leases)
+    out = reset_run({"call": "reset", "account": DEMO_ID, "tables": tables})
+    assert max(out["stats"]["perTransaction"]) <= 500
+    for name in ("execution_jobs", "execution_attempts", "execution_envelopes", "admission_commands",
+                 "admission_leases"):
+        assert out["tables"][name] == [], name
+    deleted = out["result"]["deleted"]
+    assert (deleted["execution_jobs"], deleted["execution_envelopes"], deleted["admission_commands"]) == (200, 600, 200)
+
+
+def test_the_reset_leaves_the_demo_account_only_its_password():
+    auths = [{"id": "sgn000000000001", "recordId": DEMO_ID}, {"id": "sgn000000000002", "recordId": DEMO_ID},
+             {"id": "sgn000000000003", "recordId": USER_ID}]
+    out = reset_run({"call": "reset", "account": DEMO_ID, "tables": owned_tables([]), "auths": auths})
+    assert out["auths"] == [{"id": "sgn000000000003", "recordId": USER_ID}]
     assert out["result"]["deleted"]["external_auths"] == 2
 
 
@@ -866,8 +992,8 @@ def test_the_reset_never_touches_a_standard_account():
 ])
 def test_a_stage_that_fails_rolls_its_transaction_back_and_logs_one_error_line_naming_it(fail_on, stage, collection):
     tables = execution_tables()
-    links = [{"id": "ext000000000001", "recordId": DEMO_ID}]
-    out = reset_run({"call": "reset", "account": DEMO_ID, "tables": tables, "links": links, "failOn": fail_on,
+    auths = [{"id": "sgn000000000001", "recordId": DEMO_ID}]
+    out = reset_run({"call": "reset", "account": DEMO_ID, "tables": tables, "auths": auths, "failOn": fail_on,
                      "trigger": "sweep"})
     assert out["result"] is None
     line = {"v": "obs/v1", "event": "demo_reset", "service": "pocketbase", "trigger": "sweep", "stage": stage,
@@ -897,9 +1023,10 @@ def test_each_reset_logs_one_line_with_counts_and_no_id():
     out = reset_run({"call": "reset", "account": DEMO_ID, "tables": owned_tables(demo_constants()["reset"]),
                      "trigger": "sweep", "reason": "quiet"})
     (line,) = out["logs"]
-    assert set(line) == {"v", "event", "service", "trigger", "deleted", "profile", "reason"}
+    assert set(line) == {"v", "event", "service", "trigger", "deleted", "held_jobs", "profile", "reason"}
     assert (line["event"], line["trigger"], line["reason"], line["profile"]) == ("demo_reset", "sweep", "quiet",
                                                                                  "restored")
+    assert line["held_jobs"] == 0
     assert DEMO_ID not in json.dumps(line) and USER_ID not in json.dumps(line)
 
 
@@ -977,6 +1104,102 @@ def test_the_sweep_skips_an_empty_demo_account_that_holds_the_seeded_profile():
     assert drifted["logs"][0]["reason"] == "profile"
 
 
+def held_tables(*, job_state: str = "started", job_created: int, job_updated: int, todo_age: int | None) -> dict:
+    """The seeded demo account with one code-run job, and a todo made
+    `todo_age` seconds ago unless that's None."""
+    tables = owned_tables([])
+    tables["users"][0] = dict(SEEDED_DEMO, id=DEMO_ID)
+    tables["execution_jobs"] = [{"id": "job000000000009", "account": DEMO_ID, "command_id": "c9", "state": job_state,
+                                 "queued_at": 9, "created": stamp(job_created), "updated": stamp(job_updated)}]
+    if todo_age is not None:
+        tables["todos"] = [{"id": "row000000000001", "user": DEMO_ID, "created": stamp(NOW - todo_age),
+                            "updated": stamp(NOW - todo_age)}]
+    return tables
+
+
+def test_a_job_a_worker_may_hold_never_caps_or_resets_the_demo_account_by_itself():
+    # A started job a day old beside a todo made a minute ago, and then the
+    # job alone: the reset can't take it, so it decides nothing.
+    beside = reset_run({"call": "sweep", "env": ON, "now": NOW,
+                        "tables": held_tables(job_created=NOW - 25 * 3600, job_updated=NOW - 25 * 3600, todo_age=60)})
+    assert beside["result"] == {"checked": 1, "reset": 0, "failed": 0} and beside["logs"] == []
+    alone = reset_run({"call": "sweep", "env": ON, "now": NOW,
+                       "tables": held_tables(job_created=NOW - 25 * 3600, job_updated=NOW - 25 * 3600, todo_age=None)})
+    assert alone["result"] == {"checked": 1, "reset": 0, "failed": 0} and alone["logs"] == []
+    assert alone["stats"]["transactions"] == 0
+
+
+def test_the_cap_still_fires_for_an_old_row_the_reset_can_clear():
+    # The same day-old job, ended: now the reset can take it, so it's the
+    # oldest row that counts, and the fresh todo goes with it.
+    out = reset_run({"call": "sweep", "env": ON, "now": NOW,
+                     "tables": held_tables(job_state="completed", job_created=NOW - 24 * 3600, job_updated=NOW - 60,
+                                           todo_age=60)})
+    assert out["result"] == {"checked": 1, "reset": 1, "failed": 0}
+    (line,) = out["logs"]
+    assert line["reason"] == "cap" and line["held_jobs"] == 0
+    assert (line["deleted"]["execution_jobs"], line["deleted"]["todos"]) == (1, 1)
+
+
+def test_the_quiet_rule_counts_only_rows_the_reset_can_clear():
+    # A todo untouched for two hours beside a started job a worker
+    # touched a minute ago: the job doesn't keep the account busy.
+    out = reset_run({"call": "sweep", "env": ON, "now": NOW,
+                     "tables": held_tables(job_created=NOW - 3 * 3600, job_updated=NOW - 60, todo_age=2 * 3600)})
+    assert out["result"] == {"checked": 1, "reset": 1, "failed": 0}
+    (line,) = out["logs"]
+    assert (line["reason"], line["deleted"]["todos"], line["deleted"]["execution_jobs"]) == ("quiet", 1, 0)
+    assert line["held_jobs"] == 1
+    assert [job["id"] for job in out["tables"]["execution_jobs"]] == ["job000000000009"]
+
+
+def test_a_stuck_job_waits_out_the_sweeps_until_it_ends_and_the_next_sweep_clears_it():
+    tables = held_tables(job_created=NOW - 25 * 3600, job_updated=NOW - 25 * 3600, todo_age=60)
+    # Two sweeps five minutes apart: neither wipes the account.
+    for now in (NOW, NOW + 300):
+        out = reset_run({"call": "sweep", "env": ON, "now": now, "tables": tables})
+        assert out["result"] == {"checked": 1, "reset": 0, "failed": 0} and out["logs"] == []
+        tables = out["tables"]
+    assert [row["id"] for row in tables["todos"]] == ["row000000000001"]
+    # A worker's reap ends the job; the next sweep clears it through the cap.
+    tables["execution_jobs"][0].update(state="failed", updated=stamp(NOW + 400))
+    out = reset_run({"call": "sweep", "env": ON, "now": NOW + 600, "tables": tables})
+    assert out["result"] == {"checked": 1, "reset": 1, "failed": 0}
+    (line,) = out["logs"]
+    assert (line["reason"], line["deleted"]["execution_jobs"], line["held_jobs"]) == ("cap", 1, 0)
+    assert out["tables"]["execution_jobs"] == []
+
+
+def test_the_sweep_clears_what_an_empty_demo_account_still_holds():
+    # Nothing else to clear and the seeded profile, but a sign-in besides
+    # its password: none can be added any more, so it goes at once.
+    seeded = owned_tables([])
+    seeded["users"][0] = dict(SEEDED_DEMO, id=DEMO_ID)
+    auths = [{"id": "sgn000000000001", "recordId": DEMO_ID}, {"id": "sgn000000000002", "recordId": USER_ID}]
+    out = reset_run({"call": "sweep", "env": ON, "now": NOW, "tables": seeded, "auths": auths})
+    assert out["result"] == {"checked": 1, "reset": 1, "failed": 0}
+    (line,) = out["logs"]
+    assert (line["reason"], line["deleted"]["external_auths"]) == ("account", 1)
+    assert out["auths"] == [{"id": "sgn000000000002", "recordId": USER_ID}]
+    # The same on a busy account: it doesn't wait for the cap.
+    busy = reset_run({"call": "sweep", "env": ON, "now": NOW, "auths": auths,
+                      "tables": held_tables(job_state="completed", job_created=NOW - 60, job_updated=NOW - 60,
+                                            todo_age=60)})
+    assert busy["logs"][0]["reason"] == "account" and busy["auths"] == [{"id": "sgn000000000002", "recordId": USER_ID}]
+
+
+def test_the_sweeps_cron_job_runs_the_sweep():
+    # demo.pb.js's own callback, as PocketBase runs it on its clock: with the
+    # demo on it resets a demo account past the cap; off, it does nothing.
+    now = int(time.time())
+    tables = sweep_tables(updated=now - 600, created=now - 25 * 3600)
+    on = reset_run({"call": "cron", "env": ON, "tables": tables})
+    assert [(line["trigger"], line["reason"]) for line in on["logs"]] == [("sweep", "cap")]
+    assert counts(on["tables"], DEMO_ID)[demo_constants()["reset"][0]] == 0
+    off = reset_run({"call": "cron", "env": OFF, "tables": tables})
+    assert off["logs"] == [] and off["stats"]["transactions"] == 0
+
+
 def test_the_sweep_does_nothing_with_the_demo_off():
     out = reset_run({"call": "sweep", "env": OFF, "now": NOW,
                      "tables": sweep_tables(updated=NOW - 30 * 3600, created=NOW - 30 * 3600)})
@@ -1037,45 +1260,67 @@ def test_every_collection_with_an_account_field_is_reset_refused_or_kept():
 
 # ---- registration --------------------------------------------------------------------------------------
 
+# Each registration, and the demo.js exports its callback calls: demo.js is
+# a stand-in whose every export records its own name, and each callback
+# runs once on an empty event.
 REGISTRATION = r"""
 const path = require("path");
+const Module = require("module");
 const [hooksDir] = process.argv.slice(1);
-const seen = [];
 globalThis.__hooks = hooksDir;
-for (const name of ["onAfterBootstrap", "routerUse", "onRecordBeforeAuthWithPasswordRequest", "onRecordBeforeAuthWithOAuth2Request",
+globalThis.$os = { getenv: () => "" };
+globalThis.$app = { dao: () => ({}) };
+console.log = () => {};
+console.error = () => {};
+let called = [];
+const target = require.resolve(path.join(hooksDir, "demo.js"));
+const standIn = new Module(target);
+standIn.filename = target;
+standIn.loaded = true;
+standIn.exports = new Proxy({}, {
+  get: (_, name) => (typeof name === "string" ? () => { called.push(name); } : undefined),
+});
+require.cache[target] = standIn;
+const seen = [];
+for (const name of ["onAfterBootstrap", "onRecordBeforeAuthWithPasswordRequest", "onRecordBeforeAuthWithOAuth2Request",
                     "onRecordBeforeUpdateRequest", "onRecordBeforeDeleteRequest", "onRecordBeforeRequestEmailChangeRequest",
                     "onRecordBeforeCreateRequest", "onModelBeforeCreate", "onModelBeforeUpdate"]) {
-  globalThis[name] = (fn, ...tags) => seen.push({ name, tags });
+  globalThis[name] = (fn, ...tags) => seen.push({ name, tags, run: () => fn({}) });
 }
+globalThis.routerUse = (fn) => seen.push({ name: "routerUse", tags: [], run: () => fn(() => undefined)({}) });
 // A route's method and path, a cron job's id and schedule.
-globalThis.routerAdd = (method, route) => seen.push({ name: "routerAdd", tags: [method, route] });
-globalThis.cronAdd = (id, schedule) => seen.push({ name: "cronAdd", tags: [id, schedule] });
+globalThis.routerAdd = (method, route, fn) => seen.push({ name: "routerAdd", tags: [method, route], run: () => fn({}) });
+globalThis.cronAdd = (id, schedule, fn) => seen.push({ name: "cronAdd", tags: [id, schedule], run: () => fn() });
 require(path.join(hooksDir, "demo.pb.js"));
-process.stdout.write(JSON.stringify(seen));
+process.stdout.write(JSON.stringify(seen.map((entry) => {
+  called = [];
+  entry.run();
+  return { name: entry.name, tags: entry.tags, calls: called };
+})));
 """
 
 CONTAINED = ["resume_share_links", "share_capabilities", "ai_providers", "ai_credentials", "ai_provider_models",
              "ai_settings"]
 
 
-def test_demo_pb_js_registers_each_hook_on_its_collections():
+def test_demo_pb_js_registers_each_hook_on_its_collections_and_calls_its_export():
     node = shutil.which("node")
     assert node
     res = subprocess.run([node, "-e", REGISTRATION, str(HOOKS)], capture_output=True, text=True, timeout=60, check=True)
     assert json.loads(res.stdout) == [
-        {"name": "onAfterBootstrap", "tags": []},
-        {"name": "routerUse", "tags": []},
-        {"name": "onRecordBeforeAuthWithPasswordRequest", "tags": ["users"]},
-        {"name": "onRecordBeforeAuthWithOAuth2Request", "tags": ["users"]},
-        {"name": "onRecordBeforeUpdateRequest", "tags": ["users"]},
-        {"name": "onRecordBeforeDeleteRequest", "tags": ["users"]},
-        {"name": "onRecordBeforeRequestEmailChangeRequest", "tags": ["users"]},
-        {"name": "onRecordBeforeCreateRequest", "tags": CONTAINED},
-        {"name": "onRecordBeforeUpdateRequest", "tags": CONTAINED},
-        {"name": "onModelBeforeCreate", "tags": CONTAINED},
-        {"name": "onModelBeforeUpdate", "tags": CONTAINED},
-        {"name": "routerAdd", "tags": ["POST", "/api/rounds/demo/sessions/end"]},
-        {"name": "cronAdd", "tags": ["rounds_demo_reset", "*/5 * * * *"]},
+        {"name": "onAfterBootstrap", "tags": [], "calls": ["lockAll", "lockFailed"]},
+        {"name": "routerUse", "tags": [], "calls": ["guardSession"]},
+        {"name": "onRecordBeforeAuthWithPasswordRequest", "tags": ["users"], "calls": ["guardSignIn"]},
+        {"name": "onRecordBeforeAuthWithOAuth2Request", "tags": ["users"], "calls": ["guardPasswordOnly"]},
+        {"name": "onRecordBeforeUpdateRequest", "tags": ["users"], "calls": ["guardAccountUpdate"]},
+        {"name": "onRecordBeforeDeleteRequest", "tags": ["users"], "calls": ["guardAccountDelete"]},
+        {"name": "onRecordBeforeRequestEmailChangeRequest", "tags": ["users"], "calls": ["guardEmailChange"]},
+        {"name": "onRecordBeforeCreateRequest", "tags": CONTAINED, "calls": ["guardContainedRequest"]},
+        {"name": "onRecordBeforeUpdateRequest", "tags": CONTAINED, "calls": ["guardContainedRequest"]},
+        {"name": "onModelBeforeCreate", "tags": CONTAINED, "calls": ["guardContainedModel"]},
+        {"name": "onModelBeforeUpdate", "tags": CONTAINED, "calls": ["guardContainedModel"]},
+        {"name": "routerAdd", "tags": ["POST", "/api/rounds/demo/sessions/end"], "calls": ["handleEnd"]},
+        {"name": "cronAdd", "tags": ["rounds_demo_reset", "*/5 * * * *"], "calls": ["sweepNow"]},
     ]
 
 

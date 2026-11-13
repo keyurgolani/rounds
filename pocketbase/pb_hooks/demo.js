@@ -126,14 +126,13 @@ function guardSignIn(e, env) {
   }
 }
 
-// 2. The demo account signs in with its password only. An OAuth2 sign-in
-// to a demo account, or one a demo session sends, gets the answer a
-// failed sign-in gets, whether the demo is on or off; with it off, as for
-// a password, the refusal is logged.
-function guardOAuth2SignIn(e, env) {
+// 2. The demo account signs in with its password only, whether the demo
+// is on or off: any other sign-in to it, or from its session, gets the
+// answer a failed sign-in gets, and logs one demo_denied line.
+function guardPasswordOnly(e, env) {
   const caller = e.httpContext ? $apis.requestInfo(e.httpContext).authRecord : null;
   if (!(e.record && isDemo(e.record)) && !isDemo(caller)) return;
-  if (!enabled(env)) logDenied("demo_off", "sign_in", "users");
+  logDenied(enabled(env) ? NOT_PERMITTED : "demo_off", "sign_in", "users");
   throw new BadRequestError(SIGN_IN_FAILED);
 }
 
@@ -260,7 +259,8 @@ const RESET = [
 // What else the reset removes, by the names its demo_reset line counts:
 // the account's code-run jobs no worker holds, with their envelopes and
 // the admission commands that name them (execution.js purgeAccount; their
-// attempts and the commands' leases cascade), and its OAuth2 links.
+// attempts and the commands' leases cascade). It also leaves the demo
+// account no sign-in but its password.
 const RESET_EXTRA = ["execution_jobs", "execution_envelopes", "admission_commands", "external_auths"];
 // Collections with an account field the reset leaves: OWNERS' rows no
 // demo account can own, rows only an owner of those can cause, and the
@@ -268,8 +268,9 @@ const RESET_EXTRA = ["execution_jobs", "execution_envelopes", "admission_command
 // leases, and the counters), which expire within a day.
 const NOT_DEMO_WRITABLE = ["resume_share_views", "legacy_artifact_snapshots"];
 const KEPT = ["admission_commands", "admission_counters", "admission_leases"];
-// The sweep resets a demo account none of whose rows changed in QUIET_S,
-// and one whose oldest row is CAP_S old, even while it's busy.
+// The sweep resets a demo account none of whose rows the reset can clear
+// changed in QUIET_S, and one whose oldest such row is CAP_S old, even
+// while it's busy.
 const QUIET_S = 2 * 3600;
 const CAP_S = 24 * 3600;
 // A reset stops, and logs a failure, after this many transactions.
@@ -295,8 +296,8 @@ function logResetFailure(trigger, stage, collection) {
 }
 
 // One pass in one transaction: at most a batch of rows, leaf first. The
-// code-run jobs and the OAuth2 links go only once every RESET collection
-// is empty. Returns what it deleted.
+// code-run jobs, and any sign-in but the password, go only once every
+// RESET collection is empty. Returns what it deleted.
 function resetPass(tx, accountId, batch, state) {
   const deleted = {};
   const account = demoAccount(tx, accountId);
@@ -310,33 +311,38 @@ function resetPass(tx, accountId, batch, state) {
     left -= rows.length;
   }
   state.collection = "";
-  if (left > 0) {
+  const execution = require(`${__hooks}/execution.js`);
+  // The most rows a job takes with it: itself, its attempts and their
+  // envelopes, its command, and the command's leases. A job starts only
+  // when that many still fit in the batch; the next pass takes the rest.
+  const perJob = 2 * execution.MAX_ATTEMPTS + 4;
+  if (left >= perJob) {
     state.stage = "execution";
-    const execution = require(`${__hooks}/execution.js`);
-    // A job goes with its envelopes, attempts, command, and leases.
-    const out = execution.purgeAccount(execution.pbStore(tx), accountId, Math.max(1, Math.floor(left / 4)));
+    const out = execution.purgeAccount(execution.pbStore(tx), accountId, Math.floor(left / perJob));
     if (out.jobs > 0) deleted.execution_jobs = out.jobs;
     if (out.envelopes > 0) deleted.execution_envelopes = out.envelopes;
     if (out.commands > 0) deleted.admission_commands = out.commands;
-    left -= out.jobs + out.envelopes + out.commands;
+    left -= out.jobs * perJob;
   }
   if (left > 0) {
     state.stage = "external_auths";
-    const links = tx.findAllExternalAuthsByRecord(account).slice(0, left);
-    links.forEach((link) => tx.deleteExternalAuth(link));
-    if (links.length > 0) deleted.external_auths = links.length;
+    const auths = tx.findAllExternalAuthsByRecord(account).slice(0, left);
+    auths.forEach((auth) => tx.deleteExternalAuth(auth));
+    if (auths.length > 0) deleted.external_auths = auths.length;
   }
   state.stage = "rows";
   return deleted;
 }
 
-// Clears one demo account: every row it wrote itself, its code-run jobs
-// no worker holds with what they left, and its OAuth2 links, at most a
-// batch of rows a transaction, until a pass finds nothing; then it puts
-// the seeded profile back, saving only when a value differs (a
-// superuser's edit included). A standard account is never touched.
-// Returns the counts, or null when a stage failed, which it logs at error
-// level by name; what earlier passes deleted stays deleted.
+// Clears one demo account: every row it wrote itself and its code-run
+// jobs no worker holds with what they left, at most a batch of rows a
+// transaction, until a pass finds nothing, and leaves it no sign-in but
+// its password; then it puts the seeded profile back, saving only when a
+// value differs (a superuser's edit included). A standard account is
+// never touched. Its line also counts the jobs a worker may still hold,
+// which it left. Returns the counts, or null when a stage failed, which
+// it logs at error level by name; what earlier passes deleted stays
+// deleted.
 function resetAccount(app, accountId, trigger, reason) {
   const batch = require(`${__hooks}/admission.js`).SWEEP_BATCH;
   const deleted = {};
@@ -345,6 +351,7 @@ function resetAccount(app, accountId, trigger, reason) {
   });
   const state = { stage: "rows", collection: "" };
   let profile = "kept";
+  let held = 0;
   try {
     for (let pass = 0; ; pass += 1) {
       if (pass >= RESET_PASSES) {
@@ -369,14 +376,16 @@ function resetAccount(app, accountId, trigger, reason) {
       tx.saveRecord(account);
       profile = "restored";
     });
+    state.stage = "execution";
+    held = heldJobs(app.dao(), accountId);
   } catch (_) {
     logResetFailure(trigger, state.stage, state.collection);
     return null;
   }
-  const line = { v: "obs/v1", event: "demo_reset", service: "pocketbase", trigger, deleted, profile };
+  const line = { v: "obs/v1", event: "demo_reset", service: "pocketbase", trigger, deleted, held_jobs: held, profile };
   if (reason) line.reason = reason;
   console.log(JSON.stringify(line));
-  return { deleted, profile };
+  return { deleted, held_jobs: held, profile };
 }
 
 // 5. POST /api/rounds/demo/sessions/end, the demo's sign-out: a demo
@@ -402,27 +411,44 @@ function secondsOf(text) {
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : 0;
 }
 
-// Why the sweep resets this demo account now, or "" to leave it: its
-// oldest row is past the cap, none changed in the quiet window, or it
-// holds no row but a profile other than the seeded one.
+// The jobs a worker may hold: the filters the sweep and the reset's count
+// read them with, one state each.
+const HELD = ["account = {:id} && state = 'leased'", "account = {:id} && state = 'started'"];
+
+// How many of the account's code-run jobs a worker may still hold, so the
+// reset left them; each one goes at the first reset after it ends.
+function heldJobs(dao, accountId) {
+  return HELD.reduce((n, filter) => n + dao.findRecordsByFilter("execution_jobs", filter, "", 0, 0, { id: accountId })
+    .length, 0);
+}
+
+// Why the sweep resets this demo account now, or "" to leave it. Only
+// rows the reset can delete decide, so each of them goes within a day: the
+// oldest is past the cap, or none changed in the quiet window. A job a
+// worker may hold decides nothing until it ends. An account with no such
+// row is reset when its profile isn't the seeded one. One that still has
+// a sign-in other than its password is reset at once, since none can be
+// added any more.
 function sweepReason(dao, account, now) {
+  if (dao.findAllExternalAuthsByRecord(account).length > 0) return "account";
   let newest = null;
   let oldest = null;
-  const consider = (record) => {
-    const updated = secondsOf(record.getString("updated"));
-    const created = secondsOf(record.getString("created"));
-    if (newest === null || updated > newest) newest = updated;
-    if (oldest === null || created < oldest) oldest = created;
+  const params = { id: account.id };
+  const scan = (name, filter) => {
+    dao.findRecordsByFilter(name, filter, "-updated", 1, 0, params).forEach((record) => {
+      const updated = secondsOf(record.getString("updated"));
+      if (newest === null || updated > newest) newest = updated;
+    });
+    dao.findRecordsByFilter(name, filter, "created", 1, 0, params).forEach((record) => {
+      const created = secondsOf(record.getString("created"));
+      if (oldest === null || created < oldest) oldest = created;
+    });
   };
-  const scan = (name, field) => {
-    const params = { id: account.id };
-    dao.findRecordsByFilter(name, `${field} = {:id}`, "-updated", 1, 0, params).forEach(consider);
-    dao.findRecordsByFilter(name, `${field} = {:id}`, "created", 1, 0, params).forEach(consider);
-  };
-  RESET.forEach((name) => scan(name, "user"));
-  scan("execution_envelopes", "user");
-  scan("execution_jobs", "account");
-  if (newest === null) return seededProfile(account) ? "" : "profile";
+  RESET.forEach((name) => scan(name, "user = {:id}"));
+  // A job's attempts, envelopes, command, and leases go with it, none
+  // made more than moments before it, so its age stands for theirs.
+  scan("execution_jobs", "account = {:id} && state != 'leased' && state != 'started'");
+  if (oldest === null) return seededProfile(account) ? "" : "profile";
   if (oldest <= now - CAP_S) return "cap";
   if (newest <= now - QUIET_S) return "quiet";
   return "";
@@ -487,7 +513,7 @@ module.exports = {
   lockAll,
   lockFailed,
   guardSignIn,
-  guardOAuth2SignIn,
+  guardPasswordOnly,
   guardSession,
   guardAccountUpdate,
   guardAccountDelete,

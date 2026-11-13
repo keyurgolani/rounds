@@ -50,7 +50,8 @@ def literal(path: Path, name: str):
 def make_db(path: Path, *, execution: bool = True) -> Path:
     """A database with PocketBase's layout for what the tool reads: one
     demo and one standard account, each with rows in every reset
-    collection, and the demo's code-run rows and OAuth2 links."""
+    collection, and the demo's code-run rows and the sign-ins it holds
+    besides its password."""
     reset, _extra = reset_lists()
     conn = sqlite3.connect(path)
     conn.execute("CREATE TABLE _collections (id TEXT PRIMARY KEY, name TEXT)")
@@ -87,9 +88,9 @@ def make_db(path: Path, *, execution: bool = True) -> Path:
         ])
     conn.execute("CREATE TABLE _externalAuths (id TEXT PRIMARY KEY, collectionId TEXT, recordId TEXT)")
     conn.executemany("INSERT INTO _externalAuths VALUES (?, ?, ?)", [
-        ("ext000000000001", "_pb_users_auth_", DEMO),
-        ("ext000000000002", "_pb_users_auth_", DEMO),
-        ("ext000000000003", "_pb_users_auth_", STANDARD),
+        ("sgn000000000001", "_pb_users_auth_", DEMO),
+        ("sgn000000000002", "_pb_users_auth_", DEMO),
+        ("sgn000000000003", "_pb_users_auth_", STANDARD),
     ])
     conn.commit()
     conn.close()
@@ -108,8 +109,8 @@ def test_it_counts_what_the_reset_would_clear_for_the_demo_accounts_alone(tmp_pa
     reset, extra = reset_lists()
     expected = {name: 2 if name == "resumes" else 1 for name in reset}
     # The ended and the queued job, the ended one's envelope and the
-    # command that names it, and both OAuth2 links; the started job and
-    # what it holds, and a command no job names, stay.
+    # command that names it, and both of the demo's other sign-ins; the
+    # started job and what it holds, and a command no job names, stay.
     expected.update(execution_jobs=2, execution_envelopes=1, admission_commands=1, external_auths=2)
     assert out == {"version": "demo-rows/v1", "demo_accounts": 1, "deleted": expected}
     assert list(out["deleted"]) == reset + extra

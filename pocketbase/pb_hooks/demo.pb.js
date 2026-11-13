@@ -39,7 +39,7 @@ onRecordBeforeAuthWithPasswordRequest((e) => {
 
 // The demo account signs in with its password only, on or off.
 onRecordBeforeAuthWithOAuth2Request((e) => {
-  require(`${__hooks}/demo.js`).guardOAuth2SignIn(e, {
+  require(`${__hooks}/demo.js`).guardPasswordOnly(e, {
     ROUNDS_GATE_DEMO: $os.getenv("ROUNDS_GATE_DEMO"),
     ROUNDS_ENABLE_DEMO: $os.getenv("ROUNDS_ENABLE_DEMO"),
   });
@@ -89,7 +89,8 @@ routerAdd("POST", "/api/rounds/demo/sessions/end", (c) => {
 });
 
 // 6. Every 5 minutes with the demo on: the same reset for a demo account
-// that's been quiet for 2 hours, or whose oldest row is a day old.
+// none of whose rows the reset can clear changed in 2 hours, or whose
+// oldest such row is a day old.
 cronAdd("rounds_demo_reset", "*/5 * * * *", () => {
   require(`${__hooks}/demo.js`).sweepNow({
     ROUNDS_GATE_DEMO: $os.getenv("ROUNDS_GATE_DEMO"),
