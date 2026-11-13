@@ -123,6 +123,12 @@ describe('browser keys: the demo account\'s prefix', () => {
     assert.deepEqual(families(absent), {});
     assert.deepEqual(absent.unresolved, [`${TAB}:4`]);
   });
+
+  it('follows the module\'s own calls to localKey', () => {
+    const own = extract({ [DEMO]: `${demoKeys()}export const remember = (isDemo: boolean) => localStorage.setItem(localKey('rounds.notes', isDemo), '1');\n` });
+    assert.deepEqual(Object.keys(families(own)), ['rounds.demo.notes', 'rounds.notes']);
+    assert.deepEqual(own.unresolved, []);
+  });
 });
 
 describe('browser keys: the audited revision', () => {

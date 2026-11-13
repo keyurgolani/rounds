@@ -494,6 +494,7 @@ class Resolver {
   }
 
   callWithArgs(info, name, args, depth) {
+    if (name === 'localKey' && info.file === DEMO_KEYS_MODULE && this.demo) return this.localKey(args, depth);
     const fn = info.fns.find((f) => f.name === name);
     if (!fn) return this.localKeyNames(info).includes(name) ? this.localKey(args, depth) : null;
     let out = [];
